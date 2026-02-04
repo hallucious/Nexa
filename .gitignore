@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Env
+.env
+.venv/
+venv/
+.env.*
+
+# Artifacts (기본은 추적 제외 권장)
+runs/
+baseline/history/
+obsidian/logs/
+
+# OS
+.DS_Store
+Thumbs.db
