@@ -16,13 +16,14 @@ from src.pipeline.runner import PipelineRunner
 from src.gates.g1_design import gate_g1_design
 from src.gates.g2_continuity import gate_g2_continuity
 from src.gates.g3_fact_audit import gate_g3_fact_audit
+from src.gates.g4_self_check import gate_g4_self_check
 from src.gates.mock_gate_v2 import make_contract_pass_gate
 from src.utils.time import now_seoul
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="7-Gate Pipeline Runner (Step 6: G1~G3 real, stdlib-only)"
+        description="7-Gate Pipeline Runner (Step 7: G1~G4 real, stdlib-only)"
     )
     p.add_argument("--request", required=True, help="Path to a markdown file containing user request")
     p.add_argument("--run-id", default=None, help="Optional run id YYYY-MM-DD_HHMM")
@@ -50,30 +51,25 @@ def main() -> int:
         print(f"ERROR: run-id already exists: runs/{args.run_id}")
         return 3
 
-    # write request
     artifacts.write_text("00_USER_REQUEST.md", read_request_text(request_path))
 
-    # init meta
     meta = RunMeta(
         run_id=artifacts.run_id,
         created_at=now_seoul().isoformat(),
         baseline_version_id=None,
-        providers={
-            "gpt": "stub",
-            "gemini": "stub",
-            "perplexity": "stub",
-            "codex": "stub",
-        },
+        providers={"gpt": "stub", "gemini": "stub", "perplexity": "stub", "codex": "stub"},
     )
     artifacts.write_meta(meta)
 
     runner = PipelineRunner(meta=meta, run_dir=str(artifacts.run_dir))
 
-    # Gates (G1~G3 real)
+    # Real gates: G1~G4
     runner.register(GateId.G1, gate_g1_design)
     runner.register(GateId.G2, gate_g2_continuity)
     runner.register(GateId.G3, gate_g3_fact_audit)
-    runner.register(GateId.G4, make_contract_pass_gate("G4", "Self-check OK (mock)"))
+    runner.register(GateId.G4, gate_g4_self_check)
+
+    # Remaining gates are still contract mocks
     runner.register(GateId.G5, make_contract_pass_gate("G5", "Implementation OK (mock)"))
     runner.register(GateId.G6, make_contract_pass_gate("G6", "Counterfactual OK (mock)"))
     runner.register(GateId.G7, make_contract_pass_gate("G7", "Final review OK (mock)"))
