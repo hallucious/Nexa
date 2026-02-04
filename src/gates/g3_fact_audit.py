@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List
@@ -9,9 +10,9 @@ from src.models.decision_models import GateResult, Decision
 from src.pipeline.runner import GateContext
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
+from src.utils.env import load_dotenv
+from src.providers.perplexity_provider import PerplexityProvider
 
-
-# --- Heuristic extractors (deterministic, no AI) ---
 
 FACT_PATTERNS = [
     r"\b(always|never|guarantee|guaranteed)\b",
@@ -22,88 +23,112 @@ FACT_PATTERNS = [
 
 
 def _flatten_text(obj: Any) -> List[str]:
-    """
-    Collect text leaves from JSON-like object.
-    """
-    texts: List[str] = []
+    out: List[str] = []
     if isinstance(obj, dict):
         for v in obj.values():
-            texts.extend(_flatten_text(v))
+            out.extend(_flatten_text(v))
     elif isinstance(obj, list):
         for v in obj:
-            texts.extend(_flatten_text(v))
+            out.extend(_flatten_text(v))
     elif isinstance(obj, str):
-        texts.append(obj)
-    return texts
+        out.append(obj)
+    return out
 
 
 def _extract_fact_candidates(g1: Dict[str, Any]) -> List[str]:
     texts = _flatten_text(g1)
-    candidates: List[str] = []
+    cands: List[str] = []
     for t in texts:
         for pat in FACT_PATTERNS:
             if re.search(pat, t, flags=re.IGNORECASE):
-                candidates.append(t)
+                cands.append(t)
                 break
-    return sorted(set(candidates))
+    return sorted(set(cands))
 
 
 def _rule_based_audit(statement: str) -> Dict[str, Any]:
-    """
-    Deterministic audit without web access.
-    Labels:
-      - ERROR: provably false by internal contradiction keywords (rare)
-      - WARN: unverifiable / absolute claims
-      - OK: neutral / design intent
-    """
     s = statement.lower()
     if "always" in s and "except" in s:
         return {"label": "ERROR", "reason": "Self-contradictory absolute claim."}
-    if any(k in s for k in ["always", "never", "guarantee", "guaranteed", "only", "best"]):
-        return {"label": "WARN", "reason": "Absolute or marketing-like claim; needs external verification."}
-    return {"label": "OK", "reason": "Design intent or non-factual statement."}
+    if any(k in s for k in ["always", "never", "guarantee", "only", "best"]):
+        return {"label": "WARN", "reason": "Absolute claim; needs verification."}
+    return {"label": "OK", "reason": "Design intent / neutral."}
 
 
 def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
+    # Load .env once per gate execution (cheap, safe)
+    load_dotenv()
+
     run_dir = Path(ctx.run_dir)
     g1_path = run_dir / "G1_OUTPUT.json"
     if not g1_path.exists():
-        raise FileNotFoundError("G1_OUTPUT.json not found (Gate3 requires Gate1 output)")
+        raise FileNotFoundError("G1_OUTPUT.json not found")
 
     g1 = json.loads(g1_path.read_text(encoding="utf-8"))
     candidates = _extract_fact_candidates(g1)
 
-    audited: List[Dict[str, Any]] = []
+    provider = None
+    api_key = os.getenv("PERPLEXITY_API_KEY")
+    if api_key:
+        try:
+            provider = PerplexityProvider(api_key)
+        except Exception:
+            provider = None
+
+    results: List[Dict[str, Any]] = []
     fail_reasons: List[str] = []
 
-    for c in candidates:
-        res = _rule_based_audit(c)
-        audited.append({"statement": c, **res})
-        if res["label"] == "ERROR":
-            fail_reasons.append(f"Provable error: {c}")
+    for stmt in candidates:
+        if provider:
+            try:
+                r = provider.verify(stmt)
+                label = r["verdict"]
+                result = {
+                    "statement": stmt,
+                    "label": label,
+                    "engine": "perplexity",
+                    "confidence": r.get("confidence"),
+                    "citations": r.get("citations"),
+                    "summary": r.get("summary"),
+                }
+            except Exception as e:
+                rb = _rule_based_audit(stmt)
+                result = {
+                    "statement": stmt,
+                    "label": rb["label"],
+                    "engine": "rule_fallback",
+                    "reason": rb["reason"],
+                    "error": str(e),
+                }
+        else:
+            rb = _rule_based_audit(stmt)
+            result = {
+                "statement": stmt,
+                "label": rb["label"],
+                "engine": "rule_only",
+                "reason": rb["reason"],
+            }
+
+        results.append(result)
+        if result["label"] == "ERROR":
+            fail_reasons.append(stmt)
 
     decision = Decision.FAIL if fail_reasons else Decision.PASS
 
-    # --- write artifacts ---
-    decision_md = (
+    (run_dir / "G3_DECISION.md").write_text(
         "# G3 FACT AUDIT DECISION\n\n"
         f"Decision: {decision.value}\n\n"
-        "## Summary\n"
-        f"- Candidates audited: {len(audited)}\n\n"
         "## Fail reasons\n"
-        + (("\n".join([f"- {r}" for r in fail_reasons]) + "\n") if fail_reasons else "- None\n")
+        + ("\n".join([f"- {s}" for s in fail_reasons]) if fail_reasons else "- None\n"),
+        encoding="utf-8",
     )
-    (run_dir / "G3_DECISION.md").write_text(decision_md, encoding="utf-8")
 
     output = {
         "gate": "G3",
-        "mode": "fact_audit_stub",
+        "mode": "fact_audit_perplexity_if_available",
+        "engine_used": "perplexity" if provider else "rule_only",
         "candidates": candidates,
-        "results": audited,
-        "notes": [
-            "No external search performed.",
-            "Labels are heuristic and deterministic.",
-        ],
+        "results": results,
     }
     (run_dir / "G3_OUTPUT.json").write_text(
         json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -113,8 +138,7 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
         "gate": "G3",
         "decision": decision.value,
         "at": now_seoul().isoformat(),
-        "attempt": ctx.meta.attempts.get("G3", 1),
-        "inputs": {"G1_OUTPUT.json": "G1_OUTPUT.json"},
+        "engine": "perplexity" if provider else "rule_only",
     }
     (run_dir / "G3_META.json").write_text(
         json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -129,7 +153,7 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
 
     return GateResult(
         decision=decision,
-        message="Fact audit completed (stub)",
+        message="Fact audit completed",
         outputs=outputs,
-        meta={"fail_reasons": fail_reasons},
+        meta={"engine": meta["engine"], "fail_count": len(fail_reasons)},
     )
