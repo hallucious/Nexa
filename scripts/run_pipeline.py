@@ -4,33 +4,30 @@ import argparse
 import sys
 from pathlib import Path
 
-# --- BOOTSTRAP: ensure repo root is on sys.path so "import src.*" works ---
+# bootstrap import path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-# ------------------------------------------------------------------------
 
 from dotenv import load_dotenv
 from rich import print
 
 from src.pipeline.artifacts import Artifacts
-from src.pipeline.state import RunMeta
+from src.pipeline.state import RunMeta, GateId
+from src.pipeline.runner import PipelineRunner
+from src.gates.mock_gate import make_pass_gate, make_info_gate
 from src.utils.time import now_seoul
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="7-Gate Pipeline Runner (Step-1 skeleton)")
-    p.add_argument("--request", required=True, help="Path to a markdown file containing user request")
-    p.add_argument("--run-id", default=None, help="Optional run id YYYY-MM-DD_HHMM")
-    p.add_argument("--dry-run", action="store_true", help="Only create run folder + META + 00_USER_REQUEST")
+    p = argparse.ArgumentParser(description="7-Gate Pipeline Runner (Step 2)")
+    p.add_argument("--request", required=True)
+    p.add_argument("--run-id")
+    p.add_argument("--dry-run", action="store_true")
     return p.parse_args()
 
 
 def read_request_text(path: Path) -> str:
-    """
-    Robust text reader for Windows/PowerShell artifacts.
-    Tries UTF-8 first, then UTF-16 (common for PS redirection).
-    """
     try:
         return path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
@@ -39,46 +36,41 @@ def read_request_text(path: Path) -> str:
 
 def main() -> int:
     load_dotenv()
-
     args = parse_args()
+
     request_path = Path(args.request).resolve()
-
     if not request_path.exists():
-        print(f"[red]ERROR[/red] request file not found: {request_path}")
-        return 2
+        raise FileNotFoundError(request_path)
 
-    try:
-        artifacts = Artifacts.create_new(repo_root=REPO_ROOT, run_id=args.run_id)
-    except FileExistsError:
-        print(f"[red]ERROR[/red] run-id already exists: runs/{args.run_id}")
-        return 3
-
-    # --- robust read ---
-    req_text = read_request_text(request_path)
-    artifacts.write_text("00_USER_REQUEST.md", req_text)
+    artifacts = Artifacts.create_new(repo_root=REPO_ROOT, run_id=args.run_id)
+    artifacts.write_text("00_USER_REQUEST.md", read_request_text(request_path))
 
     meta = RunMeta(
         run_id=artifacts.run_id,
         created_at=now_seoul().isoformat(),
-        baseline_version_id=None,
-        providers={
-            "gpt": "stub",
-            "gemini": "stub",
-            "perplexity": "stub",
-            "codex": "stub",
-        },
+        providers={"gpt": "mock", "gemini": "mock", "perplexity": "mock", "codex": "mock"},
     )
     artifacts.write_meta(meta)
 
-    print(f"[green]OK[/green] created run: {artifacts.run_dir}")
-    print(" - 00_USER_REQUEST.md")
-    print(" - META.json")
+    runner = PipelineRunner(meta=meta, run_dir=str(artifacts.run_dir))
 
-    if args.dry_run:
-        print("[yellow]DRY-RUN[/yellow] stopping after initialization (Step 1).")
-        return 0
+    # register mock gates
+    runner.register(GateId.G1, make_pass_gate("G1 PASS"))
+    runner.register(GateId.G2, make_pass_gate("G2 PASS"))
+    runner.register(GateId.G3, make_pass_gate("G3 PASS"))
+    runner.register(GateId.G4, make_pass_gate("G4 PASS"))
+    runner.register(GateId.G5, make_pass_gate("G5 PASS"))
+    runner.register(GateId.G6, make_info_gate("G6 INFO"))
+    runner.register(GateId.G7, make_pass_gate("G7 PASS"))
 
-    print("[yellow]NOTE[/yellow] Step 2 runner/state-machine not implemented yet.")
+    runner.run()
+    artifacts.write_meta(meta)
+
+    print(f"[green]Pipeline finished[/green] status={meta.status.value}")
+    print("Transitions:")
+    for t in meta.transitions:
+        print(f" - {t.from_gate} -> {t.to_gate} ({t.decision})")
+
     return 0
 
 
