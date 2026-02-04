@@ -18,13 +18,14 @@ from src.gates.g2_continuity import gate_g2_continuity
 from src.gates.g3_fact_audit import gate_g3_fact_audit
 from src.gates.g4_self_check import gate_g4_self_check
 from src.gates.g5_implement_test import gate_g5_implement_and_test
+from src.gates.g6_counterfactual import gate_g6_counterfactual_review
 from src.gates.mock_gate_v2 import make_contract_pass_gate
 from src.utils.time import now_seoul
 
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
-        description="7-Gate Pipeline Runner (Step 8: G1~G5 real, stdlib-only)"
+        description="7-Gate Pipeline Runner (Step 9: G1~G6 real, stdlib-only)"
     )
     p.add_argument("--request", required=True, help="Path to a markdown file containing user request")
     p.add_argument("--run-id", default=None, help="Optional run id YYYY-MM-DD_HHMM")
@@ -64,15 +65,15 @@ def main() -> int:
 
     runner = PipelineRunner(meta=meta, run_dir=str(artifacts.run_dir))
 
-    # Real gates: G1~G5
+    # Real gates: G1~G6
     runner.register(GateId.G1, gate_g1_design)
     runner.register(GateId.G2, gate_g2_continuity)
     runner.register(GateId.G3, gate_g3_fact_audit)
     runner.register(GateId.G4, gate_g4_self_check)
     runner.register(GateId.G5, gate_g5_implement_and_test)
+    runner.register(GateId.G6, gate_g6_counterfactual_review)
 
-    # Remaining gates are still contract mocks
-    runner.register(GateId.G6, make_contract_pass_gate("G6", "Counterfactual OK (mock)"))
+    # Gate7 remains contract mock for now
     runner.register(GateId.G7, make_contract_pass_gate("G7", "Final review OK (mock)"))
 
     runner.run()
