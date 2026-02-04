@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Dict, Callable
 
 from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
+from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
 
 
@@ -21,7 +21,7 @@ GateExecutor = Callable[[GateContext], GateResult]
 class PipelineRunner:
     """
     Executes a 7-Gate state machine.
-    Gate logic itself is injected (mock or real).
+    Enforces artifact contracts per gate.
     """
 
     def __init__(self, meta: RunMeta, run_dir: str):
@@ -44,27 +44,18 @@ class PipelineRunner:
         self.meta.current_gate = to_gate
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
-        """
-        Transition table (Step 2 fixed)
-        """
         if gate == GateId.G1:
             return GateId.G2 if decision == Decision.PASS else GateId.STOP
-
         if gate == GateId.G2:
             return GateId.G3 if decision == Decision.PASS else GateId.G1
-
         if gate == GateId.G3:
             return GateId.G4 if decision == Decision.PASS else GateId.G1
-
         if gate == GateId.G4:
             return GateId.G5 if decision == Decision.PASS else GateId.G1
-
         if gate == GateId.G5:
             return GateId.G6 if decision == Decision.PASS else GateId.G4
-
         if gate == GateId.G6:
-            return GateId.G7  # info-only gate
-
+            return GateId.G7
         if gate == GateId.G7:
             if decision == Decision.PASS:
                 self.meta.status = RunStatus.PASS
@@ -74,14 +65,9 @@ class PipelineRunner:
                 return GateId.G5
             self.meta.status = RunStatus.STOP
             return GateId.STOP
-
         return GateId.STOP
 
     def step(self) -> bool:
-        """
-        Execute one gate.
-        Returns False if pipeline should stop.
-        """
         gate = self.meta.current_gate
         if gate in (GateId.DONE, GateId.STOP):
             return False
@@ -96,15 +82,16 @@ class PipelineRunner:
         ctx = GateContext(meta=self.meta, run_dir=self.run_dir)
         result = executor(ctx)
 
+        # --- enforce artifact contract ---
+        spec = standard_spec(gate.value)
+        spec.validate(result.outputs)
+        # ---------------------------------
+
         next_gate = self._next_gate(gate, result.decision)
         self._record_transition(gate, next_gate, result.decision)
-
         return next_gate not in (GateId.DONE, GateId.STOP)
 
     def run(self) -> RunMeta:
-        """
-        Run until DONE or STOP.
-        """
         self.meta.status = RunStatus.RUNNING
         while self.step():
             pass
