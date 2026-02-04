@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Callable
+from typing import Dict, Callable, Optional
 
 from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
@@ -22,12 +22,23 @@ class PipelineRunner:
     """
     Executes a 7-Gate state machine.
     Enforces artifact contracts per gate.
+    Includes safety stops to prevent infinite loops.
     """
 
-    def __init__(self, meta: RunMeta, run_dir: str):
+    def __init__(
+        self,
+        meta: RunMeta,
+        run_dir: str,
+        *,
+        max_total_steps: int = 50,
+        max_attempts_per_gate: int = 3,
+    ):
         self.meta = meta
         self.run_dir = run_dir
         self.executors: Dict[GateId, GateExecutor] = {}
+        self.max_total_steps = max_total_steps
+        self.max_attempts_per_gate = max_attempts_per_gate
+        self._steps_executed = 0
 
     def register(self, gate_id: GateId, executor: GateExecutor) -> None:
         self.executors[gate_id] = executor
@@ -42,6 +53,14 @@ class PipelineRunner:
             )
         )
         self.meta.current_gate = to_gate
+
+    def _stop_run(self, reason: str) -> None:
+        # Mark STOP and move to STOP gate
+        self.meta.status = RunStatus.STOP
+        # keep current gate for traceability, but set to STOP as terminal
+        self.meta.current_gate = GateId.STOP
+        # Optionally, you could write reason somewhere later; for now keep in attempts
+        self.meta.attempts["STOP_REASON"] = reason  # lightweight trace
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
         if gate == GateId.G1:
@@ -68,6 +87,15 @@ class PipelineRunner:
         return GateId.STOP
 
     def step(self) -> bool:
+        """
+        Execute one gate.
+        Returns False if pipeline should stop.
+        """
+        # total-step safety
+        if self._steps_executed >= self.max_total_steps:
+            self._stop_run(f"max_total_steps exceeded: {self.max_total_steps}")
+            return False
+
         gate = self.meta.current_gate
         if gate in (GateId.DONE, GateId.STOP):
             return False
@@ -79,19 +107,28 @@ class PipelineRunner:
         # attempt count
         self.meta.attempts[gate.value] = self.meta.attempts.get(gate.value, 0) + 1
 
+        # per-gate safety (prevents infinite loops like G2 FAIL -> G1 -> G2 FAIL ...)
+        if self.meta.attempts[gate.value] > self.max_attempts_per_gate:
+            self._stop_run(f"max_attempts_per_gate exceeded: {gate.value} > {self.max_attempts_per_gate}")
+            return False
+
         ctx = GateContext(meta=self.meta, run_dir=self.run_dir)
         result = executor(ctx)
 
-        # --- enforce artifact contract ---
+        # enforce artifact contract
         spec = standard_spec(gate.value)
         spec.validate(result.outputs)
-        # ---------------------------------
 
         next_gate = self._next_gate(gate, result.decision)
         self._record_transition(gate, next_gate, result.decision)
+
+        self._steps_executed += 1
         return next_gate not in (GateId.DONE, GateId.STOP)
 
     def run(self) -> RunMeta:
+        """
+        Run until DONE or STOP (including safety stop).
+        """
         self.meta.status = RunStatus.RUNNING
         while self.step():
             pass

@@ -17,12 +17,13 @@ from src.pipeline.artifacts import Artifacts
 from src.pipeline.state import RunMeta, GateId
 from src.pipeline.runner import PipelineRunner
 from src.gates.g1_design import gate_g1_design
+from src.gates.g2_continuity import gate_g2_continuity
 from src.gates.mock_gate_v2 import make_contract_pass_gate
 from src.utils.time import now_seoul
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="7-Gate Pipeline Runner (Step 4: G1 real, others mock)")
+    p = argparse.ArgumentParser(description="7-Gate Pipeline Runner (Step 5: G1+G2 real, others mock)")
     p.add_argument("--request", required=True, help="Path to a markdown file containing user request")
     p.add_argument("--run-id", default=None, help="Optional run id YYYY-MM-DD_HHMM")
     return p.parse_args()
@@ -62,23 +63,22 @@ def main() -> int:
         run_id=artifacts.run_id,
         created_at=now_seoul().isoformat(),
         baseline_version_id=None,
-        providers={"gpt": "mock", "gemini": "mock", "perplexity": "mock", "codex": "mock"},
+        providers={"gpt": "stub", "gemini": "stub", "perplexity": "stub", "codex": "stub"},
     )
     artifacts.write_meta(meta)
 
     # Runner + gates
     runner = PipelineRunner(meta=meta, run_dir=str(artifacts.run_dir))
 
-    # Step 4: G1 is real (design skeleton); others are contract mocks
+    # Step 5: G1 + G2 real; others contract mocks
     runner.register(GateId.G1, gate_g1_design)
-    runner.register(GateId.G2, make_contract_pass_gate("G2", "Consistency OK (mock)"))
+    runner.register(GateId.G2, gate_g2_continuity)
     runner.register(GateId.G3, make_contract_pass_gate("G3", "Facts OK (mock)"))
     runner.register(GateId.G4, make_contract_pass_gate("G4", "Self-check OK (mock)"))
     runner.register(GateId.G5, make_contract_pass_gate("G5", "Implementation OK (mock)"))
     runner.register(GateId.G6, make_contract_pass_gate("G6", "Counterfactual OK (mock)"))
     runner.register(GateId.G7, make_contract_pass_gate("G7", "Final review OK (mock)"))
 
-    # Run + persist META
     runner.run()
     artifacts.write_meta(meta)
 
