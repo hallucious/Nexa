@@ -18,16 +18,30 @@ class GeminiProvider:
     """
     Stdlib-only Gemini client.
 
-    - Uses env:
-        GEMINI_API_KEY
-        GEMINI_MODEL (optional, default: "gemini-1.5-pro")
-    - Network call is made ONLY when GEMINI_API_KEY exists.
-    - Returns a structured verdict JSON to keep Gate2 deterministic when disabled.
+    Policy:
+    - Network call is made ONLY when:
+        (1) GEMINI_API_KEY exists, AND
+        (2) caller explicitly enables the feature (Gate-level switch)
+
+    Env:
+      GEMINI_API_KEY
+      GEMINI_MODEL (default: "gemini-1.5-pro")
+      GEMINI_API_URL (optional override; if omitted use official endpoint)
+      GEMINI_TIMEOUT_SEC (default: 30)
     """
 
-    def __init__(self, api_key: str, *, model: str = "gemini-1.5-pro") -> None:
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        model: str = "gemini-1.5-pro",
+        api_url: Optional[str] = None,
+        timeout_sec: int = 30,
+    ) -> None:
         self.api_key = api_key.strip()
         self.model = (model or "gemini-1.5-pro").strip()
+        self.api_url_override = (api_url or "").strip() or None
+        self.timeout_sec = int(timeout_sec) if int(timeout_sec) > 0 else 30
 
     @staticmethod
     def from_env() -> Optional["GeminiProvider"]:
@@ -35,7 +49,19 @@ class GeminiProvider:
         if not api_key:
             return None
         model = os.getenv("GEMINI_MODEL", "gemini-1.5-pro").strip()
-        return GeminiProvider(api_key, model=model)
+        api_url = os.getenv("GEMINI_API_URL", "").strip() or None
+        timeout_sec = int(os.getenv("GEMINI_TIMEOUT_SEC", "30").strip() or "30")
+        return GeminiProvider(api_key, model=model, api_url=api_url, timeout_sec=timeout_sec)
+
+    def _build_url(self) -> str:
+        if self.api_url_override:
+            # If user provided a full URL (including key or not), we respect it as-is.
+            # If they provided base url, they must include key handling themselves.
+            return self.api_url_override
+        return (
+            "https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{self.model}:generateContent?key={self.api_key}"
+        )
 
     def judge_continuity(self, *, pic_text: str, current_text: str) -> GeminiResult:
         """
@@ -60,10 +86,7 @@ class GeminiProvider:
             f"{current_text}\n"
         )
 
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent?key={self.api_key}"
-        )
+        url = self._build_url()
 
         payload = {
             "contents": [
@@ -85,14 +108,22 @@ class GeminiProvider:
             method="POST",
         )
 
+        request_meta = {
+            "provider": "gemini",
+            "model": self.model,
+            "api_url_override": bool(self.api_url_override),
+            "timeout_sec": self.timeout_sec,
+            "generationConfig": payload.get("generationConfig", {}),
+        }
+
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
                 raw = json.loads(resp.read().decode("utf-8", errors="replace"))
         except Exception as e:
             return GeminiResult(
                 verdict="UNKNOWN",
                 rationale=f"Gemini call failed: {type(e).__name__}: {e}",
-                raw={"error": str(e)},
+                raw={"error": str(e), "request": request_meta},
             )
 
         # Extract model text
@@ -114,10 +145,14 @@ class GeminiProvider:
             rationale = str(parsed.get("rationale", "")).strip()
             if verdict not in ("SAME", "DRIFT", "VIOLATION"):
                 verdict = "UNKNOWN"
-            return GeminiResult(verdict=verdict, rationale=rationale, raw={"api": raw, "model_text": text})
+            return GeminiResult(
+                verdict=verdict,
+                rationale=rationale,
+                raw={"api": raw, "model_text": text, "request": request_meta},
+            )
         except Exception as e:
             return GeminiResult(
                 verdict="UNKNOWN",
                 rationale=f"Model output not valid JSON: {type(e).__name__}: {e}",
-                raw={"api": raw, "model_text": text},
+                raw={"api": raw, "model_text": text, "request": request_meta},
             )

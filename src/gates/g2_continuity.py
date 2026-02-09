@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -204,8 +205,12 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     pic_text, pic_src = _load_pic_text(repo_root, run_dir)
     cur_text, cur_src = _load_current_text(run_dir)
 
+    # Semantic continuity is OFF by default for determinism.
+    # Even if GEMINI_API_KEY exists, we only call the network when explicitly enabled.
+    semantic_enabled = os.getenv("G2_SEMANTIC_ENABLED", "0").strip() == "1"
+
     provider = None
-    if GeminiProvider is not None:
+    if semantic_enabled and GeminiProvider is not None:
         try:
             provider = GeminiProvider.from_env()
         except Exception:
@@ -214,15 +219,18 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     gemini_used = provider is not None
     gemini_verdict = "UNKNOWN"
     gemini_rationale = ""
+    gemini_raw: Dict[str, Any] = {}
 
     if provider is not None and pic_text and cur_text:
         try:
             res = provider.judge_continuity(pic_text=pic_text, current_text=cur_text)
             gemini_verdict = getattr(res, "verdict", "UNKNOWN")
             gemini_rationale = getattr(res, "rationale", "") or ""
+            gemini_raw = getattr(res, "raw", {}) or {}
         except Exception:
             gemini_verdict = "UNKNOWN"
             gemini_rationale = ""
+            gemini_raw = {"error": "exception_in_gate_g2"}
 
     # Decision rule (fixed)
     structure_removed = bool(diff.get("removed"))
@@ -238,6 +246,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         f"- Current source: {cur_src}\n"
         f"- Structure diff is audit + ENFORCEMENT for 'removed' only.\n"
         f"- Semantic verdict is ENFORCEMENT for DRIFT/VIOLATION.\n"
+        f"- If semantic is disabled, Gemini is NOT called even if keys exist.\n"
         f"- If Gemini verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but pipeline is not blocked."
     )
 
@@ -257,6 +266,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         "created_at": now_seoul().isoformat(),
         "mode": "structure_diff + gemini_semantic_pic",
         "baseline_present": baseline_present,
+        "semantic_enabled": semantic_enabled,
         "gemini_used": gemini_used,
         "gemini_verdict": gemini_verdict,
         "pic_source": pic_src,
@@ -274,9 +284,11 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         "semantic": {
             "pic_source": pic_src,
             "current_source": cur_src,
+            "semantic_enabled": semantic_enabled,
             "gemini_used": gemini_used,
             "verdict": gemini_verdict,
             "rationale": gemini_rationale,
+            "raw": gemini_raw,
         },
     }
 

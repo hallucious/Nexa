@@ -1,0 +1,20 @@
+{
+  "summary": "Initial system design (skeleton)",
+  "requirements": [
+    "Test",
+    "request"
+  ],
+  "interfaces": [
+    "pipeline runner",
+    "gate contracts"
+  ],
+  "constraints": [
+    "file-based artifacts only",
+    "no side effects outside run_dir",
+    "contracts enforced"
+  ],
+  "acceptance_criteria": [
+    "all gates produce standard artifacts",
+    "state machine enforces transitions"
+  ]
+}

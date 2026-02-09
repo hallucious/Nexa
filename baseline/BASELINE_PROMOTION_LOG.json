@@ -1,0 +1,12 @@
+{
+  "at": "2026-02-09T20:32:45.517568+09:00",
+  "promoted_from_run": "2026-02-08_2352",
+  "repo_root": "C:\\Users\\hallicious\\Desktop\\HAI",
+  "artifacts": [
+    {
+      "src": "C:\\Users\\hallicious\\Desktop\\HAI\\runs\\2026-02-08_2352\\G1_OUTPUT.json",
+      "dst": "C:\\Users\\hallicious\\Desktop\\HAI\\baseline\\BASELINE_G1_OUTPUT.json",
+      "kind": "json"
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 from typing import Any, Dict, List
@@ -67,13 +66,7 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     g1 = json.loads(g1_path.read_text(encoding="utf-8"))
     candidates = _extract_fact_candidates(g1)
 
-    provider = None
-    api_key = os.getenv("PERPLEXITY_API_KEY")
-    if api_key:
-        try:
-            provider = PerplexityProvider(api_key)
-        except Exception:
-            provider = None
+    provider = PerplexityProvider.from_env()
 
     results: List[Dict[str, Any]] = []
     fail_reasons: List[str] = []
@@ -88,8 +81,10 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
                     "label": label,
                     "engine": "perplexity",
                     "confidence": r.get("confidence"),
-                    "citations": r.get("citations"),
                     "summary": r.get("summary"),
+                    "citations": r.get("citations"),
+                    "raw": r.get("raw"),
+                    "request": r.get("request"),
                 }
             except Exception as e:
                 rb = _rule_based_audit(stmt)
