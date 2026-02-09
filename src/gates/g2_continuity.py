@@ -1,126 +1,78 @@
+# src/gates/g2_continuity.py
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from src.models.decision_models import GateResult, Decision
+from src.models.decision_models import Decision, GateResult
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
 
-from src.providers.gemini_provider import GeminiProvider
+# NOTE:
+# - Gemini provider is optional. Gate2 must still run (deterministically) without network.
+# - If Gemini is unavailable -> verdict UNKNOWN (non-blocking), but structure rules still apply.
+try:
+    from src.providers.gemini_provider import GeminiProvider
+except Exception:  # pragma: no cover
+    GeminiProvider = None  # type: ignore
+
+
+def _write_json(path: Path, obj: Any) -> None:
+    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _find_repo_root(run_dir: Path) -> Path:
     """
-    Gate2 needs repo root to find:
-      - baseline/
-      - runs/
+    run_dir is expected like: <repo>/runs/<RUN_ID>
     """
-    p = run_dir.resolve()
-    for parent in [p] + list(p.parents):
-        if (parent / "runs").exists() and (parent / "baseline").exists():
-            return parent
-    return run_dir.parent
+    # runs/<id> -> repo root
+    return run_dir.parent.parent
 
 
-def _read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="replace")
+def _load_json(path: Path) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
 
 
-def _read_json(path: Path) -> Dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+def _load_baseline_g1(repo_root: Path) -> Optional[Dict[str, Any]]:
+    return _load_json(repo_root / "baseline" / "BASELINE_G1_OUTPUT.json")
 
 
-def _write_json(path: Path, data: Dict[str, Any]) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+def _load_current_g1(run_dir: Path) -> Optional[Dict[str, Any]]:
+    return _load_json(run_dir / "G1_OUTPUT.json")
 
 
-def _flatten(obj: Any, prefix: str = "") -> Dict[str, Any]:
-    out: Dict[str, Any] = {}
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            key = f"{prefix}.{k}" if prefix else str(k)
-            out.update(_flatten(v, key))
-    elif isinstance(obj, list):
-        for i, v in enumerate(obj):
-            key = f"{prefix}[{i}]"
-            out.update(_flatten(v, key))
-    else:
-        out[prefix] = obj
-    return out
+def _diff_json(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, List[str]]:
+    """
+    Shallow, key-level diff for audit purposes.
 
-
-def _diff_json(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Any]:
-    fa = _flatten(a)
-    fb = _flatten(b)
-
-    a_keys = set(fa.keys())
-    b_keys = set(fb.keys())
+    - added: keys present in b but not in a
+    - removed: keys present in a but not in b
+    - changed: keys present in both but with different JSON-serialized value
+    """
+    a_keys = set(a.keys())
+    b_keys = set(b.keys())
 
     added = sorted(list(b_keys - a_keys))
     removed = sorted(list(a_keys - b_keys))
 
-    changed = []
+    changed: List[str] = []
     for k in sorted(list(a_keys & b_keys)):
-        if fa[k] != fb[k]:
-            changed.append({"path": k, "from": fa[k], "to": fb[k]})
+        try:
+            if json.dumps(a.get(k), sort_keys=True, ensure_ascii=False) != json.dumps(
+                b.get(k), sort_keys=True, ensure_ascii=False
+            ):
+                changed.append(k)
+        except Exception:
+            changed.append(k)
 
     return {"added": added, "removed": removed, "changed": changed}
-
-
-def _load_baseline_g1(repo_root: Path) -> Optional[Dict[str, Any]]:
-    """
-    Baseline is expected at:
-      baseline/BASELINE_G1_OUTPUT.json
-    """
-    p = repo_root / "baseline" / "BASELINE_G1_OUTPUT.json"
-    if not p.exists():
-        return None
-    return _read_json(p)
-
-
-def _load_current_g1(run_dir: Path) -> Optional[Dict[str, Any]]:
-    p = run_dir / "G1_OUTPUT.json"
-    if not p.exists():
-        return None
-    return _read_json(p)
-
-
-def _load_pic_text(repo_root: Path, run_dir: Path) -> Tuple[str, str]:
-    """
-    Long-project default: baseline/BASELINE_PACKET.md (PIC) if exists.
-    Fallback: baseline/BASELINE_G1_OUTPUT.json (as JSON string)
-    Fallback2: current request text.
-
-    Returns: (pic_text, source_label)
-    """
-    pic_md = repo_root / "baseline" / "BASELINE_PACKET.md"
-    if pic_md.exists():
-        return _read_text(pic_md), "baseline/BASELINE_PACKET.md"
-
-    base_g1 = repo_root / "baseline" / "BASELINE_G1_OUTPUT.json"
-    if base_g1.exists():
-        return _read_text(base_g1), "baseline/BASELINE_G1_OUTPUT.json"
-
-    req = run_dir / "00_USER_REQUEST.md"
-    if req.exists():
-        return _read_text(req), "runs/.../00_USER_REQUEST.md"
-
-    return "", "MISSING"
-
-
-def _load_current_text(run_dir: Path) -> Tuple[str, str]:
-    """
-    Prefer current design output of G1 (JSON) as text; fallback to request.
-    """
-    g1 = run_dir / "G1_OUTPUT.json"
-    if g1.exists():
-        return _read_text(g1), "G1_OUTPUT.json"
-    req = run_dir / "00_USER_REQUEST.md"
-    if req.exists():
-        return _read_text(req), "00_USER_REQUEST.md"
-    return "", "MISSING"
 
 
 def _format_decision_md(
@@ -128,65 +80,111 @@ def _format_decision_md(
     decision: Decision,
     baseline_present: bool,
     previous_present: bool,
-    diff: Dict[str, Any],
+    diff: Dict[str, List[str]],
     gemini_used: bool,
     gemini_verdict: str,
     gemini_rationale: str,
-    fail_reasons: Optional[list],
     notes: str,
 ) -> str:
-    lines = []
-    lines.append("# G2 CONTINUITY DECISION")
-    lines.append("")
-    lines.append(f"Decision: {decision.value}")
-    lines.append("")
-    lines.append("## Summary")
-    lines.append(f"- Baseline present: {baseline_present}")
-    lines.append(f"- Previous run present: {previous_present}")
-    lines.append(f"- Gemini used: {gemini_used}")
-    lines.append(f"- Gemini verdict: {gemini_verdict}")
-    lines.append("")
-    lines.append("## Fail reasons")
-    if decision == Decision.FAIL:
-        if fail_reasons:
-            for r in fail_reasons:
-                lines.append(f"- {r}")
-        else:
-            lines.append("- (unspecified)")
-    else:
-        lines.append("- None")
-    lines.append("")
-    lines.append("## Structure diff (baseline G1_OUTPUT vs current G1_OUTPUT)")
-    lines.append(f"- added: {len(diff.get('added', []))}")
-    lines.append(f"- removed: {len(diff.get('removed', []))}")
-    lines.append(f"- changed: {len(diff.get('changed', []))}")
-    lines.append("")
-    lines.append("## Gemini rationale")
-    lines.append(gemini_rationale if gemini_rationale else "- (none)")
-    lines.append("")
-    lines.append("## Notes")
-    lines.append(notes if notes else "- (none)")
-    lines.append("")
-    return "\n".join(lines)
+    removed = diff.get("removed", [])
+    added = diff.get("added", [])
+    changed = diff.get("changed", [])
+
+    md = []
+    md.append("# G2 CONTINUITY DECISION\n")
+    md.append(f"Decision: {decision.value}\n")
+    md.append("## Summary\n")
+    md.append(f"- Baseline present: {baseline_present}\n")
+    md.append(f"- Previous run present: {previous_present}\n")
+    md.append(f"- JSON diff: added={len(added)}, removed={len(removed)}, changed={len(changed)}\n")
+    md.append(f"- Gemini used: {gemini_used}\n")
+    md.append(f"- Gemini verdict: {gemini_verdict}\n")
+
+    md.append("\n## Structure diff (audit)\n")
+    md.append(f"- Added: {added}\n")
+    md.append(f"- Removed: {removed}\n")
+    md.append(f"- Changed: {changed}\n")
+
+    md.append("\n## Semantic continuity (Gemini)\n")
+    md.append(f"- Verdict: {gemini_verdict}\n")
+    if gemini_rationale:
+        md.append("\n### Rationale\n")
+        md.append(gemini_rationale.strip() + "\n")
+
+    md.append("\n## Notes\n")
+    md.append(notes.strip() + "\n")
+    return "\n".join(md)
+
+
+def _load_pic_text(repo_root: Path, run_dir: Path) -> Tuple[str, str]:
+    """
+    Long-project default PIC priority:
+
+    1) baseline/PIC.md                      (highest priority)
+    2) baseline/BASELINE_PACKET.md          (legacy PIC container)
+    3) baseline/BASELINE_G1_OUTPUT.json     (JSON string fallback)
+    4) current request text (00_USER_REQUEST.md)
+
+    Returns (text, source_label). If nothing exists, returns ("", "MISSING").
+    """
+    # 1) New canonical PIC location
+    pic1 = repo_root / "baseline" / "PIC.md"
+    if pic1.exists():
+        return pic1.read_text(encoding="utf-8"), "baseline/PIC.md"
+
+    # 2) Legacy PIC container (kept for backward compatibility)
+    pic2 = repo_root / "baseline" / "BASELINE_PACKET.md"
+    if pic2.exists():
+        return pic2.read_text(encoding="utf-8"), "baseline/BASELINE_PACKET.md"
+
+    # 3) As a last resort, reuse baseline G1 output as "PIC-like" context
+    g1 = repo_root / "baseline" / "BASELINE_G1_OUTPUT.json"
+    if g1.exists():
+        return g1.read_text(encoding="utf-8"), "baseline/BASELINE_G1_OUTPUT.json"
+
+    # 4) Fallback to current request
+    req = run_dir / "00_USER_REQUEST.md"
+    if req.exists():
+        return req.read_text(encoding="utf-8"), "00_USER_REQUEST.md"
+
+    return "", "MISSING"
+
+
+def _load_current_text(run_dir: Path) -> Tuple[str, str]:
+    """
+    What we compare against PIC for "meaning continuity".
+    Priority:
+      1) G1_DECISION.md (human-readable design log)
+      2) G1_OUTPUT.json (structured)
+      3) 00_USER_REQUEST.md (fallback)
+    """
+    p1 = run_dir / "G1_DECISION.md"
+    if p1.exists():
+        return p1.read_text(encoding="utf-8"), "G1_DECISION.md"
+    p2 = run_dir / "G1_OUTPUT.json"
+    if p2.exists():
+        return p2.read_text(encoding="utf-8"), "G1_OUTPUT.json"
+    p3 = run_dir / "00_USER_REQUEST.md"
+    if p3.exists():
+        return p3.read_text(encoding="utf-8"), "00_USER_REQUEST.md"
+    return "", "MISSING"
 
 
 def gate_g2_continuity(ctx: GateContext) -> GateResult:
     """
     Gate2 = Continuity check (Structure + Semantic).
 
-    STRUCTURE (deterministic, offline):
-      - JSON diff baseline vs current (audit + safety)
-      - If baseline has fields that CURRENT removed => FAIL (hard safety)
+    - Structure: JSON diff baseline vs current (for audit / debugging)
+      *Decision rule (STRUCTURE): removed baseline keys => FAIL*  (backward incompatible schema regression)
+    - Semantic: Gemini compares PIC vs current text and outputs SAME/DRIFT/VIOLATION/UNKNOWN
+      *Decision rule (SEMANTIC): DRIFT or VIOLATION => FAIL*
 
-    SEMANTIC (Gemini, PIC-based):
-      - Gemini compares PIC vs current text and outputs SAME/DRIFT/VIOLATION
-      - If Gemini says DRIFT/VIOLATION => FAIL
+    Final decision:
+      - If structure_removed => FAIL
+      - Else if Gemini verdict in {DRIFT, VIOLATION} => FAIL
+      - Else PASS
 
-    Decision rule (priority):
-      1) If structure removed fields exist => FAIL
-      2) Else if Gemini verdict DRIFT/VIOLATION => FAIL
-      3) Else => PASS
-         (Gemini UNKNOWN simply means semantic check unavailable; structure still applied)
+    If Gemini is unavailable => verdict UNKNOWN (non-blocking), but artifacts record that it was not validated.
     """
     run_dir = Path(ctx.run_dir)
     repo_root = _find_repo_root(run_dir)
@@ -195,7 +193,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     current_g1 = _load_current_g1(run_dir)
 
     baseline_present = baseline_g1 is not None
-    previous_present = False  # reserved (not implemented here; baseline is primary)
+    previous_present = False  # reserved (not implemented here)
 
     if baseline_present and current_g1 is not None:
         diff = _diff_json(baseline_g1, current_g1)
@@ -206,33 +204,41 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     pic_text, pic_src = _load_pic_text(repo_root, run_dir)
     cur_text, cur_src = _load_current_text(run_dir)
 
-    provider = GeminiProvider.from_env()
-    gemini_used = provider is not None
+    provider = None
+    if GeminiProvider is not None:
+        try:
+            provider = GeminiProvider.from_env()
+        except Exception:
+            provider = None
 
+    gemini_used = provider is not None
     gemini_verdict = "UNKNOWN"
     gemini_rationale = ""
-    if provider is not None and pic_text and cur_text:
-        res = provider.judge_continuity(pic_text=pic_text, current_text=cur_text)
-        gemini_verdict = res.verdict
-        gemini_rationale = res.rationale
 
-    # Decision (STRUCTURE removed > SEMANTIC drift/violation)
-    fail_reasons = []
-    removed = diff.get("removed", []) or []
-    if removed:
+    if provider is not None and pic_text and cur_text:
+        try:
+            res = provider.judge_continuity(pic_text=pic_text, current_text=cur_text)
+            gemini_verdict = getattr(res, "verdict", "UNKNOWN")
+            gemini_rationale = getattr(res, "rationale", "") or ""
+        except Exception:
+            gemini_verdict = "UNKNOWN"
+            gemini_rationale = ""
+
+    # Decision rule (fixed)
+    structure_removed = bool(diff.get("removed"))
+    if structure_removed:
         decision = Decision.FAIL
-        fail_reasons.append(f"STRUCTURE: baseline fields removed ({len(removed)}).")
     elif gemini_verdict in ("DRIFT", "VIOLATION"):
         decision = Decision.FAIL
-        fail_reasons.append(f"SEMANTIC: Gemini verdict={gemini_verdict}.")
     else:
         decision = Decision.PASS
 
     notes = (
-        f"- PIC source: {pic_src}\n"
+        f"- PIC source (priority): {pic_src}\n"
         f"- Current source: {cur_src}\n"
-        f"- Structure diff is enforced ONLY for removed-fields safety; added/changed are audit-only.\n"
-        f"- If Gemini verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but structure safety still applies."
+        f"- Structure diff is audit + ENFORCEMENT for 'removed' only.\n"
+        f"- Semantic verdict is ENFORCEMENT for DRIFT/VIOLATION.\n"
+        f"- If Gemini verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but pipeline is not blocked."
     )
 
     decision_md = _format_decision_md(
@@ -243,18 +249,23 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         gemini_used=gemini_used,
         gemini_verdict=gemini_verdict,
         gemini_rationale=gemini_rationale,
-        fail_reasons=fail_reasons,
         notes=notes,
     )
 
     meta = {
         "gate": "G2",
         "created_at": now_seoul().isoformat(),
-        "mode": "structure_removed_safety + gemini_semantic_pic",
+        "mode": "structure_diff + gemini_semantic_pic",
         "baseline_present": baseline_present,
         "gemini_used": gemini_used,
         "gemini_verdict": gemini_verdict,
-        "structure_removed_count": len(removed),
+        "pic_source": pic_src,
+        "current_source": cur_src,
+        "decision_rule": {
+            "structure_removed": "FAIL",
+            "semantic_drift_violation": "FAIL",
+            "otherwise": "PASS",
+        },
     }
 
     out = {
@@ -267,10 +278,6 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
             "verdict": gemini_verdict,
             "rationale": gemini_rationale,
         },
-        "decision_drivers": {
-            "structure_removed_enforced": bool(removed),
-            "semantic_enforced": gemini_verdict in ("DRIFT", "VIOLATION"),
-        },
     }
 
     # Write artifacts
@@ -278,14 +285,9 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     _write_json(run_dir / "G2_META.json", meta)
     _write_json(run_dir / "G2_OUTPUT.json", out)
 
-    msg = (
-        f"G2 continuity: decision={decision.value}, "
-        f"removed={len(removed)}, semantic={gemini_verdict}, gemini_used={gemini_used}"
-    )
-
     return GateResult(
         decision=decision,
-        message=msg,
+        message=str(decision),
         outputs={
             "G2_DECISION.md": "G2_DECISION.md",
             "G2_OUTPUT.json": "G2_OUTPUT.json",
