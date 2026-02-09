@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 from src.models.decision_models import GateResult, Decision
 from src.pipeline.runner import GateContext
@@ -35,7 +35,13 @@ def _summarize_g5(g5: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _derive_counterfactuals(g1: Dict[str, Any], g2: Dict[str, Any], g3: Dict[str, Any], g4: Dict[str, Any], g5: Dict[str, Any]) -> List[Dict[str, Any]]:
+def _derive_counterfactuals(
+    g1: Dict[str, Any],
+    g2: Dict[str, Any],
+    g3: Dict[str, Any],
+    g4: Dict[str, Any],
+    g5: Dict[str, Any],
+) -> List[Dict[str, Any]]:
     """
     Deterministic alternative/counterfactual scenarios.
     No AI. Produces a list of 'what-if' changes + predicted impact.
@@ -55,7 +61,7 @@ def _derive_counterfactuals(g1: Dict[str, Any], g2: Dict[str, Any], g3: Dict[str
             }
         )
 
-    # CF2: If Gate3 produced WARNs, what if we force proof requirements?
+    # CF2/3: Gate3 WARN/ERROR policy alternatives
     g3_results = g3.get("results") or []
     warn_cnt = 0
     err_cnt = 0
@@ -74,7 +80,7 @@ def _derive_counterfactuals(g1: Dict[str, Any], g2: Dict[str, Any], g3: Dict[str
                 "what_if": "If we require citations/evidence for each Gate3 WARN statement before Gate5 implementation.",
                 "expected_benefit": "Reduces hallucination-driven design commitments.",
                 "risk": "Slower iteration; may block on hard-to-verify items.",
-                "action": "In future Perplexity-connected Gate3, promote WARN->FAIL based on severity tags.",
+                "action": "In Perplexity-connected Gate3, optionally promote WARN->FAIL based on severity tags.",
                 "observed": {"g3_warn_count": warn_cnt},
             }
         )
@@ -86,12 +92,12 @@ def _derive_counterfactuals(g1: Dict[str, Any], g2: Dict[str, Any], g3: Dict[str
                 "what_if": "If any Gate3 ERROR occurs, we hard-stop the pipeline before Gate4/G5.",
                 "expected_benefit": "Prevents implementation based on provably wrong assumptions.",
                 "risk": "May over-trigger if ERROR heuristic is too strict.",
-                "action": "Adjust state machine or Gate3 to mark ERROR as FAIL and enforce STOP/rollback.",
+                "action": "Keep Gate3=FAIL on ERROR and consider STOP/rollback rule (policy discussion).",
                 "observed": {"g3_error_count": err_cnt},
             }
         )
 
-    # CF4: If tests fail in Gate5, what if we capture richer diagnostics?
+    # CF4: Diagnostics if Gate5 tests fail
     g5_sum = _summarize_g5(g5)
     if g5_sum.get("returncode") not in (0, None):
         counterfactuals.append(
@@ -100,12 +106,12 @@ def _derive_counterfactuals(g1: Dict[str, Any], g2: Dict[str, Any], g3: Dict[str
                 "what_if": "If Gate5 tests fail, we auto-attach failing test names + short traceback summary.",
                 "expected_benefit": "Faster debugging and less copy/paste.",
                 "risk": "More code; must avoid leaking huge logs.",
-                "action": "Parse pytest output or run pytest with -q plus a failure-summary mode.",
+                "action": "Parse pytest output or run pytest with a failure-summary mode and truncate safely.",
                 "observed": {"g5": g5_sum},
             }
         )
 
-    # CF5: If minimality is WARN, what if we enforce trimming?
+    # CF5: If minimality is WARN, enforce trimming
     checks = g4.get("checks") or []
     minimality = next((c for c in checks if isinstance(c, dict) and c.get("check") == "minimality"), None)
     if minimality and minimality.get("label") == "WARN":
@@ -115,19 +121,19 @@ def _derive_counterfactuals(g1: Dict[str, Any], g2: Dict[str, Any], g3: Dict[str
                 "what_if": "If minimality is WARN, we enforce a reduction pass before proceeding.",
                 "expected_benefit": "Less complexity → lower bug surface area.",
                 "risk": "May remove useful constraints prematurely.",
-                "action": "Add a 'simplification pass' gate or enforce max counts in G1.",
+                "action": "Add a 'simplification pass' or enforce max counts in G1 outputs (policy).",
                 "observed": {"minimality_reasons": minimality.get("reasons")},
             }
         )
 
-    # Always include a generic counterfactual: swap tooling roles
+    # CF6: Role/tooling swap (always include for comparison)
     counterfactuals.append(
         {
             "id": "CF6_ROLE_SWAP",
             "what_if": "If Gemini/Codex roles are swapped (Gemini implements, Codex reviews), how would failure modes change?",
             "expected_benefit": "May improve implementation quality or review sharpness depending on model strengths.",
             "risk": "May reduce continuity/review effectiveness if memory/context handling differs.",
-            "action": "Keep current ordering but add an optional 'implementation alternative' branch for comparison.",
+            "action": "Keep current ordering, but allow an optional alternative-implementation branch for comparison.",
         }
     )
 
@@ -137,9 +143,9 @@ def _derive_counterfactuals(g1: Dict[str, Any], g2: Dict[str, Any], g3: Dict[str
 def _detect_conflicts(g2: Dict[str, Any], g4: Dict[str, Any], g5: Dict[str, Any]) -> List[str]:
     """
     Deterministic conflict flags (not web/AI):
-    - If baseline present and Gate2 indicates removed fields (backward risk), flag.
-    - If Gate4 decision rule indicates ERROR (should have failed already), flag.
-    - If Gate5 failed tests but pipeline continued, flag (state machine allows; we still record).
+    - If baseline present and Gate2 indicates removed fields, flag.
+    - If Gate4 has any ERROR-labeled check, flag.
+    - If Gate5 tests failed/timed out, flag.
     """
     conflicts: List[str] = []
 
@@ -150,22 +156,44 @@ def _detect_conflicts(g2: Dict[str, Any], g4: Dict[str, Any], g5: Dict[str, Any]
         if removed:
             conflicts.append(f"G2 baseline removed fields detected: {len(removed)} removed")
 
-    # Gate4 checks
     checks = g4.get("checks") or []
     for c in checks:
         if isinstance(c, dict) and (c.get("label") == "ERROR"):
             conflicts.append(f"G4 self-check ERROR: {c.get('check')}")
 
-    # Gate5 result
     res = g5.get("result") or {}
     rc = res.get("returncode")
     if rc not in (0, None):
         conflicts.append(f"G5 tests failed (returncode={rc})")
-
     if res.get("timeout") is True:
         conflicts.append("G5 tests timed out")
 
     return conflicts
+
+
+def _format_counterfactuals_md(counterfactuals: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    lines.append("## Counterfactual comparisons (what-if)\n")
+    for cf in counterfactuals:
+        cid = cf.get("id", "UNKNOWN")
+        what_if = cf.get("what_if", "")
+        benefit = cf.get("expected_benefit", "")
+        risk = cf.get("risk", "")
+        action = cf.get("action", "")
+        observed = cf.get("observed")
+
+        lines.append(f"### {cid}")
+        lines.append(f"- What-if: {what_if}")
+        if benefit:
+            lines.append(f"- Expected benefit: {benefit}")
+        if risk:
+            lines.append(f"- Risk: {risk}")
+        if action:
+            lines.append(f"- Action: {action}")
+        if observed is not None:
+            lines.append(f"- Observed context: `{json.dumps(observed, ensure_ascii=False)}`")
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
@@ -192,23 +220,26 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
     conflicts = _detect_conflicts(g2, g4, g5)
 
     # Decision: Gate6 is advisory by design; never FAIL here.
-    # We keep PASS but record conflicts to inform Gate7.
     decision = Decision.PASS
+
+    cf_md = _format_counterfactuals_md(counterfactuals)
 
     decision_md = (
         "# G6 COUNTERFACTUAL REVIEW DECISION\n\n"
         f"Decision: {decision.value}\n\n"
+        "## Purpose\n"
+        "- Provide comparison info: what would change if different choices/policies were applied.\n"
+        "- Advisory only (does not block pipeline).\n\n"
         "## Conflicts flagged\n"
         + (("\n".join([f"- {c}" for c in conflicts]) + "\n") if conflicts else "- None\n")
-        + "\n## Counterfactuals generated\n"
-        + "\n".join([f"- {cf.get('id')}: {cf.get('what_if')}" for cf in counterfactuals])
         + "\n"
+        + cf_md
     )
     (run_dir / "G6_DECISION.md").write_text(decision_md, encoding="utf-8")
 
     output = {
         "gate": "G6",
-        "mode": "counterfactual_review_stub",
+        "mode": "counterfactual_review_deterministic",
         "inputs": {
             "G1_OUTPUT.json": "G1_OUTPUT.json",
             "G2_OUTPUT.json": "G2_OUTPUT.json",
@@ -218,9 +249,10 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
         },
         "conflicts": conflicts,
         "counterfactuals": counterfactuals,
+        "counterfactuals_md": cf_md,
         "notes": [
             "No AI used. Deterministic rule-based counterfactual generation.",
-            "Gate6 is advisory; decision is always PASS in stub.",
+            "Gate6 is advisory; decision is always PASS.",
         ],
     }
     (run_dir / "G6_OUTPUT.json").write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -242,7 +274,7 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
 
     return GateResult(
         decision=decision,
-        message="Counterfactual review completed (stub)",
+        message="Counterfactual review completed (deterministic)",
         outputs=outputs,
         meta={"conflicts_count": len(conflicts), "counterfactuals_count": len(counterfactuals)},
     )
