@@ -14,33 +14,11 @@ def _read_json(path: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _safe_read_text(path: Path) -> str:
-    return path.read_text(encoding="utf-8", errors="ignore")
-
-
-def _flatten_strings(obj: Any) -> List[str]:
-    """
-    Collect string leaves from JSON-like object.
-    """
-    out: List[str] = []
-    if isinstance(obj, dict):
-        for v in obj.values():
-            out.extend(_flatten_strings(v))
-    elif isinstance(obj, list):
-        for v in obj:
-            out.extend(_flatten_strings(v))
-    elif isinstance(obj, str):
-        out.append(obj)
-    return out
+def _write_json(path: Path, obj: Any) -> None:
+    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _heuristic_minimality(design: Dict[str, Any]) -> Tuple[str, List[str]]:
-    """
-    Minimality heuristic (deterministic):
-    - Too many constraints/interfaces/acceptance criteria is a smell.
-    - Excessively long requirement list is a smell.
-    Returns (label, reasons) where label in {"OK","WARN","ERROR"}.
-    """
     reasons: List[str] = []
     reqs = design.get("requirements") or []
     interfaces = design.get("interfaces") or []
@@ -62,11 +40,6 @@ def _heuristic_minimality(design: Dict[str, Any]) -> Tuple[str, List[str]]:
 
 
 def _heuristic_actionability(design: Dict[str, Any]) -> Tuple[str, List[str]]:
-    """
-    Actionability heuristic:
-    - Must have concrete interfaces + acceptance criteria.
-    - Each acceptance criterion should be "testable-ish" (contains verbs / measurable).
-    """
     reasons: List[str] = []
     interfaces = design.get("interfaces") or []
     ac = design.get("acceptance_criteria") or []
@@ -76,14 +49,12 @@ def _heuristic_actionability(design: Dict[str, Any]) -> Tuple[str, List[str]]:
     if not ac or not isinstance(ac, list):
         reasons.append("acceptance_criteria missing or not a list")
 
-    # If present, check for low-quality AC lines
     if isinstance(ac, list) and ac:
         weak = []
         for line in ac:
             if not isinstance(line, str) or len(line.strip()) < 6:
                 weak.append(str(line))
                 continue
-            # simple testability hint: contains keywords like "must/should/exists/pass/fail"
             l = line.lower()
             if not any(k in l for k in ["must", "should", "pass", "fail", "exists", "returns", "status"]):
                 weak.append(line)
@@ -91,17 +62,11 @@ def _heuristic_actionability(design: Dict[str, Any]) -> Tuple[str, List[str]]:
             reasons.append(f"acceptance_criteria appear weak/non-testable (>=3): {weak[:3]}")
 
     if reasons:
-        # still not a "provable error", but it's a self-check failure for this gate
         return "WARN", reasons
     return "OK", []
 
 
 def _heuristic_overconfidence(g3_output: Dict[str, Any]) -> Tuple[str, List[str]]:
-    """
-    Overconfidence heuristic:
-    - If Gate3 contains WARN statements, we mark this as WARN (not FAIL).
-    - If Gate3 contains ERROR statements, mark ERROR (FAIL).
-    """
     reasons: List[str] = []
     results = g3_output.get("results") or []
     if not isinstance(results, list):
@@ -129,6 +94,71 @@ def _heuristic_overconfidence(g3_output: Dict[str, Any]) -> Tuple[str, List[str]
     return "OK", []
 
 
+def _execution_plan_md(run_dir: Path) -> str:
+    # Deterministic, no-network instructions.
+    return (
+        "## G5 Execution instructions\n"
+        "\n"
+        "Gate5 is responsible for implementing changes and running tests.\n"
+        "\n"
+        "1. Make code changes in the repo working tree (src/, tests/ as needed).\n"
+        "2. Run the test command:\n"
+        f"   - cwd: {run_dir}\n"
+        "   - cmd: python -m pytest -q\n"
+        "3. If tests fail, fix deterministically (no network required) and re-run.\n"
+    )
+
+
+def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResult:
+    decision = Decision.FAIL
+    exec_md = _execution_plan_md(run_dir)
+
+    decision_md = (
+        "# G4 SELF CHECK DECISION\n\n"
+        f"Decision: {decision.value}\n\n"
+        "Upstream artifacts missing\n\n"
+        "## ERROR\n"
+        + "\n".join([f"- missing prerequisite artifact: {m}" for m in missing])
+        + "\n\n## WARN\n- None\n\n## Notes\n- Gate4 cannot proceed without upstream artifacts.\n\n"
+        + exec_md
+    )
+    (run_dir / "G4_DECISION.md").write_text(decision_md, encoding="utf-8")
+
+    output = {
+        "gate": "G4",
+        "mode": "self_check_stub",
+        "prereq_ok": False,
+        "missing_prerequisites": missing,
+        "checks": [],
+        "notes": ["Gate4 cannot proceed without upstream artifacts."],
+        "execution_plan_md": exec_md,
+    }
+    _write_json(run_dir / "G4_OUTPUT.json", output)
+
+    meta = {
+        "gate": "G4",
+        "decision": decision.value,
+        "at": now_seoul().isoformat(),
+        "prereq_ok": False,
+        "missing_prerequisites": missing,
+    }
+    _write_json(run_dir / "G4_META.json", meta)
+
+    outputs = {
+        "G4_DECISION.md": "G4_DECISION.md",
+        "G4_OUTPUT.json": "G4_OUTPUT.json",
+        "G4_META.json": "G4_META.json",
+    }
+    standard_spec("G4").validate(outputs)
+
+    return GateResult(
+        decision=decision,
+        message=f"Upstream artifacts missing: {missing}",
+        outputs=outputs,
+        meta={"prereq_ok": False, "missing": missing},
+    )
+
+
 def gate_g4_self_check(ctx: GateContext) -> GateResult:
     run_dir = Path(ctx.run_dir).resolve()
 
@@ -136,18 +166,24 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
     g2_path = run_dir / "G2_OUTPUT.json"
     g3_path = run_dir / "G3_OUTPUT.json"
 
+    missing: List[str] = []
     if not g1_path.exists():
-        raise FileNotFoundError("G1_OUTPUT.json not found (Gate4 requires Gate1 output)")
+        missing.append("G1_OUTPUT.json")
     if not g2_path.exists():
-        raise FileNotFoundError("G2_OUTPUT.json not found (Gate4 requires Gate2 output)")
+        missing.append("G2_OUTPUT.json")
     if not g3_path.exists():
-        raise FileNotFoundError("G3_OUTPUT.json not found (Gate4 requires Gate3 output)")
+        missing.append("G3_OUTPUT.json")
+
+    # IMPORTANT: do not raise; write artifacts and return FAIL
+    if missing:
+        return _write_prereq_fail_artifacts(run_dir, missing)
 
     g1 = _read_json(g1_path)
     g2 = _read_json(g2_path)
     g3 = _read_json(g3_path)
 
     checks: List[Dict[str, Any]] = []
+    notes: List[str] = []
 
     # 1) Minimality
     label, reasons = _heuristic_minimality(g1)
@@ -158,8 +194,6 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
     checks.append({"check": "actionability", "label": label2, "reasons": reasons2})
 
     # 3) Continuity awareness (Gate2)
-    # If baseline missing, that's not a fail, but warn because continuity can't be verified.
-    notes: List[str] = []
     baseline_present = bool(g2.get("baseline_present", False))
     if not baseline_present:
         notes.append("Baseline missing in G2; continuity vs baseline not verifiable (WARN).")
@@ -167,25 +201,24 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
     else:
         checks.append({"check": "continuity_baseline", "label": "OK", "reasons": []})
 
-    # 4) Overconfidence / fact audit linkage (Gate3)
+    # 4) Fact audit alignment (Gate3)
     label3, reasons3 = _heuristic_overconfidence(g3)
     checks.append({"check": "fact_audit_alignment", "label": label3, "reasons": reasons3})
 
-    # Decision rule (deterministic):
-    # - FAIL if any check label == ERROR
-    # - Otherwise PASS (even if WARN), but WARNs are recorded
+    # Decision rule (deterministic)
     has_error = any(c.get("label") == "ERROR" for c in checks)
     decision = Decision.FAIL if has_error else Decision.PASS
 
-    # Write artifacts
-    warn_lines = []
-    err_lines = []
+    warn_lines: List[str] = []
+    err_lines: List[str] = []
     for c in checks:
         lab = c.get("label")
         if lab == "WARN":
             warn_lines.append(f"- {c['check']}: {c.get('reasons')}")
         if lab == "ERROR":
             err_lines.append(f"- {c['check']}: {c.get('reasons')}")
+
+    exec_md = _execution_plan_md(run_dir)
 
     decision_md = (
         "# G4 SELF CHECK DECISION\n\n"
@@ -196,12 +229,15 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         + ("\n".join(warn_lines) + "\n" if warn_lines else "- None\n")
         + "\n## Notes\n"
         + ("\n".join([f"- {n}" for n in notes]) + "\n" if notes else "- None\n")
+        + "\n"
+        + exec_md
     )
     (run_dir / "G4_DECISION.md").write_text(decision_md, encoding="utf-8")
 
     output = {
         "gate": "G4",
         "mode": "self_check_stub",
+        "prereq_ok": True,
         "inputs": {
             "G1_OUTPUT.json": "G1_OUTPUT.json",
             "G2_OUTPUT.json": "G2_OUTPUT.json",
@@ -210,16 +246,18 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         "checks": checks,
         "notes": notes,
         "decision_rule": "FAIL if any ERROR else PASS (WARNs recorded)",
+        "execution_plan_md": exec_md,
     }
-    (run_dir / "G4_OUTPUT.json").write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_json(run_dir / "G4_OUTPUT.json", output)
 
     meta = {
         "gate": "G4",
         "decision": decision.value,
         "at": now_seoul().isoformat(),
         "attempt": ctx.meta.attempts.get("G4", 1),
+        "prereq_ok": True,
     }
-    (run_dir / "G4_META.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_json(run_dir / "G4_META.json", meta)
 
     outputs = {
         "G4_DECISION.md": "G4_DECISION.md",
@@ -232,5 +270,5 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         decision=decision,
         message="Self-check completed (stub)",
         outputs=outputs,
-        meta={"has_error": has_error},
+        meta={"has_error": has_error, "prereq_ok": True},
     )
