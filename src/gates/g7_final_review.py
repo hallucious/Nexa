@@ -1,3 +1,4 @@
+# src/gates/g7_final_review.py
 from __future__ import annotations
 
 import json
@@ -27,7 +28,7 @@ def _summarize_gate_decision(md_path: Path) -> str:
 def _gate_fail_reason_hints(run_dir: Path) -> List[str]:
     hints: List[str] = []
 
-    # G2 removed fields => continuity failure
+    # G2 removed fields => continuity failure signal
     g2_path = run_dir / "G2_OUTPUT.json"
     if g2_path.exists():
         g2 = _read_json(g2_path)
@@ -69,9 +70,8 @@ def _gate_fail_reason_hints(run_dir: Path) -> List[str]:
 
 def _baseline_update_recommendation(run_dir: Path) -> Tuple[bool, str]:
     """
-    Suggest baseline update if:
-    - G2 baseline missing AND overall pipeline PASS
-    We don't auto-write baseline here (that will be a controlled step later).
+    Recommend baseline update if baseline is missing.
+    (No auto-write here; updating baseline is a controlled step.)
     """
     g2_path = run_dir / "G2_OUTPUT.json"
     baseline_present = False
@@ -100,13 +100,12 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
             raise FileNotFoundError(f"{name} not found (Gate7 requires G1~G6 outputs)")
 
     # Read decisions from DECISION.md
-    decisions = {}
+    decisions: Dict[str, str] = {}
     for gid in ["G1", "G2", "G3", "G4", "G5", "G6"]:
         decisions[gid] = _summarize_gate_decision(run_dir / f"{gid}_DECISION.md")
 
     # Deterministic final decision rules:
     # - FAIL if any of G1~G5 decision == FAIL
-    # - STOP if runner status indicates STOP (not available here), so we don't implement STOP here.
     # - Otherwise PASS
     hard_fail = any(decisions[g] == "FAIL" for g in ["G1", "G2", "G3", "G4", "G5"])
     decision = Decision.FAIL if hard_fail else Decision.PASS
@@ -134,20 +133,27 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
     )
     (run_dir / "G7_DECISION.md").write_text(decision_md, encoding="utf-8")
 
-    output = {
+    # IMPORTANT: baseline_recommendation MUST be a dict with boolean recommend_update
+    output: Dict[str, Any] = {
         "gate": "G7",
         "mode": "final_review_stub",
         "decisions_observed": decisions,
         "final_decision_rule": "FAIL if any of G1~G5 is FAIL else PASS",
         "fail_hints": fail_hints,
         "gate6_conflicts": conflicts,
-        "baseline_recommendation": {"recommend_update": baseline_reco, "note": baseline_msg},
+        "baseline_recommendation": {
+            "recommend_update": bool(baseline_reco),
+            "note": baseline_msg,
+        },
         "notes": [
             "No AI used. Deterministic aggregation review.",
             "Future GPT integration can add narrative + risk scoring, but must not change rule outputs silently.",
         ],
     }
-    (run_dir / "G7_OUTPUT.json").write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    (run_dir / "G7_OUTPUT.json").write_text(
+        json.dumps(output, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     meta = {
         "gate": "G7",
