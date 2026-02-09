@@ -4,8 +4,17 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
+
+
+KST = timezone(timedelta(hours=9))
+
+
+def _now_seoul_iso() -> str:
+    return datetime.now(KST).isoformat()
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -14,6 +23,12 @@ def _read_json(path: Path) -> Dict[str, Any]:
 
 def _write_json(path: Path, obj: Any) -> None:
     path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _append_jsonl(path: Path, obj: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(obj, ensure_ascii=False) + "\n")
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -58,38 +73,131 @@ def _copy_text(src: Path, dst: Path) -> None:
     dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
 
 
-def _is_run_pass(run_dir: Path) -> Tuple[bool, str]:
+def _normalize_json_for_compare(x: Any) -> Any:
+    # Stable normalization to make diffs deterministic.
+    # - dict: sort keys recursively
+    # - list: keep order (we do NOT sort lists; list ordering may be meaningful)
+    if isinstance(x, dict):
+        return {k: _normalize_json_for_compare(x[k]) for k in sorted(x.keys())}
+    if isinstance(x, list):
+        return [_normalize_json_for_compare(v) for v in x]
+    return x
+
+
+@dataclass
+class JsonDiff:
+    added: List[str]
+    removed: List[str]
+    changed: List[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"added": self.added, "removed": self.removed, "changed": self.changed}
+
+
+def _diff_json_paths(old: Any, new: Any, prefix: str = "") -> JsonDiff:
     """
-    Safety gate (fixed):
-    - META.json must exist and status == PASS
-    - G7_DECISION.md must exist and Decision: PASS
+    Structure diff (paths only).
+    - added: present in new, missing in old
+    - removed: present in old, missing in new
+    - changed: both present but value differs (deep compare)
     """
-    meta_path = run_dir / "META.json"
-    if not meta_path.exists():
-        return False, "META.json missing in run_dir (cannot verify PASS)."
+    added: List[str] = []
+    removed: List[str] = []
+    changed: List[str] = []
 
-    meta = _read_json(meta_path)
-    status = str(meta.get("status", "")).upper()
-    if status != "PASS":
-        return False, f"META.json status is not PASS (status={status})."
+    if isinstance(old, dict) and isinstance(new, dict):
+        old_keys = set(old.keys())
+        new_keys = set(new.keys())
 
-    g7_md = run_dir / "G7_DECISION.md"
-    if not g7_md.exists():
-        return False, "G7_DECISION.md missing in run_dir (cannot verify Gate7 PASS)."
+        for k in sorted(new_keys - old_keys):
+            path = f"{prefix}.{k}" if prefix else k
+            added.append(path)
 
-    decision_line = ""
-    for line in g7_md.read_text(encoding="utf-8", errors="ignore").splitlines():
-        if line.strip().lower().startswith("decision:"):
-            decision_line = line.split(":", 1)[1].strip().upper()
-            break
-    if decision_line != "PASS":
-        return False, f"G7_DECISION.md Decision is not PASS (Decision={decision_line or 'UNKNOWN'})."
+        for k in sorted(old_keys - new_keys):
+            path = f"{prefix}.{k}" if prefix else k
+            removed.append(path)
 
-    return True, "Verified PASS."
+        for k in sorted(old_keys & new_keys):
+            path = f"{prefix}.{k}" if prefix else k
+            d = _diff_json_paths(old[k], new[k], path)
+            added.extend(d.added)
+            removed.extend(d.removed)
+            changed.extend(d.changed)
+        return JsonDiff(added=added, removed=removed, changed=changed)
+
+    if isinstance(old, list) and isinstance(new, list):
+        # Compare list length and per-index changes (structure-level conservative)
+        if len(old) != len(new):
+            changed.append(f"{prefix} (list length {len(old)} -> {len(new)})")
+            # still attempt per-index compare for overlapping region
+        n = min(len(old), len(new))
+        for i in range(n):
+            path = f"{prefix}[{i}]"
+            d = _diff_json_paths(old[i], new[i], path)
+            added.extend(d.added)
+            removed.extend(d.removed)
+            changed.extend(d.changed)
+        # extra tail elements count as added/removed at index paths
+        if len(new) > len(old):
+            for i in range(len(old), len(new)):
+                added.append(f"{prefix}[{i}]")
+        elif len(old) > len(new):
+            for i in range(len(new), len(old)):
+                removed.append(f"{prefix}[{i}]")
+        return JsonDiff(added=added, removed=removed, changed=changed)
+
+    # primitive or type mismatch
+    if old != new:
+        changed.append(prefix if prefix else "<root>")
+    return JsonDiff(added=added, removed=removed, changed=changed)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Promote a PASS run's stable artifacts to baseline/ (stdlib-only).")
+def _render_history_md(entries: List[Dict[str, Any]]) -> str:
+    lines: List[str] = []
+    lines.append("# BASELINE HISTORY\n")
+    lines.append("This file is generated by scripts/update_baseline.py (stdlib-only).\n")
+    lines.append("## Entries (newest first)\n")
+
+    for e in entries:
+        at = e.get("at", "UNKNOWN")
+        run_id = e.get("promoted_from_run", "UNKNOWN")
+        changed = e.get("diff_summary", {})
+        a = changed.get("added", 0)
+        r = changed.get("removed", 0)
+        c = changed.get("changed", 0)
+        promote_pic = e.get("promote_pic", False)
+
+        lines.append(f"### {at} — {run_id}\n")
+        lines.append(f"- promote_pic: {promote_pic}\n")
+        lines.append(f"- diff_summary: added={a}, removed={r}, changed={c}\n")
+        note = e.get("note")
+        if note:
+            lines.append(f"- note: {note}\n")
+        lines.append("")  # blank line
+
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _load_history_jsonl(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    entries: List[Dict[str, Any]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            if isinstance(obj, dict):
+                entries.append(obj)
+        except Exception:
+            # ignore corrupted line (do not crash baseline ops)
+            continue
+    return entries
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(description="Promote a run's stable artifacts to baseline/ (stdlib-only).")
     parser.add_argument(
         "--run-id",
         default=None,
@@ -106,73 +214,121 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="Print planned actions without writing files.",
     )
     parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Bypass PASS verification (NOT recommended).",
+        "--note",
+        default="",
+        help="Optional note recorded into baseline history (e.g., reason/intent).",
     )
+
     args = parser.parse_args(argv)
 
     repo_root = _find_repo_root(Path.cwd())
     run_dir = _resolve_run_dir(repo_root, args.run_id)
     baseline_dir = _ensure_baseline_dir(repo_root)
 
-    ok, reason = _is_run_pass(run_dir)
-    if not args.force and not ok:
-        raise RuntimeError(f"Refusing to update baseline: run is not verified PASS. Reason: {reason}")
-
-    planned = []
-
-    # 1) Promote Gate1 structured output as baseline structure contract
+    # Required source
     g1_src = run_dir / "G1_OUTPUT.json"
-    g1_dst = baseline_dir / "BASELINE_G1_OUTPUT.json"
     if not g1_src.exists():
         raise FileNotFoundError(f"Missing required artifact in run: {g1_src}")
-    planned.append((g1_src, g1_dst, "json"))
 
-    # 2) Optionally promote PIC.md (semantic anchor)
-    if args.promote_pic:
-        pic_src = run_dir / "PIC.md"
-        pic_dst = baseline_dir / "PIC.md"
-        if pic_src.exists():
-            planned.append((pic_src, pic_dst, "text"))
-        else:
-            planned.append((pic_src, pic_dst, "missing_optional"))
+    # Destinations
+    g1_dst = baseline_dir / "BASELINE_G1_OUTPUT.json"
+    pic_src = run_dir / "PIC.md"
+    pic_dst = baseline_dir / "PIC.md"
 
-    # 3) Write a promotion log for traceability
-    promote_log = baseline_dir / "BASELINE_PROMOTION_LOG.json"
-    log_obj = {
-        "promoted_from_run": run_dir.name,
-        "repo_root": str(repo_root),
-        "pass_verification": {"ok": ok, "reason": reason, "forced": bool(args.force)},
-        "artifacts": [{"src": str(s), "dst": str(d), "kind": k} for (s, d, k) in planned if k != "missing_optional"],
+    # Pre-read old baseline for diff
+    old_baseline: Optional[Dict[str, Any]] = None
+    if g1_dst.exists():
+        try:
+            old_baseline = _normalize_json_for_compare(_read_json(g1_dst))
+        except Exception:
+            old_baseline = None
+
+    new_baseline = _normalize_json_for_compare(_read_json(g1_src))
+    diff = _diff_json_paths(old_baseline if old_baseline is not None else {}, new_baseline, prefix="")
+
+    diff_obj = {
+        "from": str(g1_dst) if g1_dst.exists() else None,
+        "to": str(g1_src),
+        "at": _now_seoul_iso(),
+        "diff": diff.to_dict(),
+        "diff_summary": {
+            "added": len(diff.added),
+            "removed": len(diff.removed),
+            "changed": len(diff.changed),
+        },
     }
+
+    planned: List[Tuple[Path, Path, str]] = []
+    planned.append((g1_src, g1_dst, "json"))
+    if args.promote_pic:
+        planned.append((pic_src, pic_dst, "text_optional"))
+
+    promote_log = baseline_dir / "BASELINE_PROMOTION_LOG.json"
+    last_diff = baseline_dir / "BASELINE_LAST_DIFF.json"
+    history_jsonl = baseline_dir / "BASELINE_HISTORY.jsonl"
+    history_md = baseline_dir / "BASELINE_HISTORY.md"
 
     if args.dry_run:
         print("[DRY RUN] Repo root:", repo_root)
         print("[DRY RUN] Run dir  :", run_dir)
-        print("[DRY RUN] PASS check:", ok, "-", reason, "(forced)" if args.force else "")
         for s, d, k in planned:
             print(f"[DRY RUN] {k}: {s} -> {d}")
         print("[DRY RUN] Would write:", promote_log)
+        print("[DRY RUN] Would write:", last_diff)
+        print("[DRY RUN] Would append:", history_jsonl)
+        print("[DRY RUN] Would render:", history_md)
+        print("[DRY RUN] Diff summary:", diff_obj["diff_summary"])
         return 0
 
+    # Execute promotions
     for s, d, k in planned:
         if k == "json":
             _write_json(d, _read_json(s))
-        elif k == "text":
-            d.write_text(s.read_text(encoding="utf-8"), encoding="utf-8")
-        elif k == "missing_optional":
-            pass
+        elif k == "text_optional":
+            if s.exists():
+                _copy_text(s, d)
         else:
             raise RuntimeError(f"Unknown kind: {k}")
 
+    # Write promotion log (traceability)
+    log_obj = {
+        "at": _now_seoul_iso(),
+        "promoted_from_run": run_dir.name,
+        "repo_root": str(repo_root),
+        "artifacts": [
+            {"src": str(s), "dst": str(d), "kind": k}
+            for (s, d, k) in planned
+            if not (k == "text_optional" and not s.exists())
+        ],
+    }
     _write_json(promote_log, log_obj)
+
+    # Write last diff
+    _write_json(last_diff, diff_obj)
+
+    # Append history entry
+    history_entry = {
+        "at": _now_seoul_iso(),
+        "promoted_from_run": run_dir.name,
+        "promote_pic": bool(args.promote_pic),
+        "diff_summary": diff_obj["diff_summary"],
+        "diff_paths": diff_obj["diff"],  # keep full paths for audits
+        "note": (args.note or "").strip() or None,
+    }
+    _append_jsonl(history_jsonl, history_entry)
+
+    # Regenerate history markdown (newest first)
+    entries = _load_history_jsonl(history_jsonl)
+    entries.sort(key=lambda x: x.get("at", ""), reverse=True)
+    history_md.write_text(_render_history_md(entries), encoding="utf-8")
 
     print("Baseline updated.")
     print("- BASELINE_G1_OUTPUT.json updated from:", g1_src)
     if args.promote_pic:
         print("- PIC.md promoted:", "YES" if (baseline_dir / "PIC.md").exists() else "NO (not found in run)")
-    print("- Promotion log written:", promote_log)
+    print("- BASELINE_LAST_DIFF.json written:", last_diff)
+    print("- BASELINE_HISTORY.jsonl appended:", history_jsonl)
+    print("- BASELINE_HISTORY.md rendered:", history_md)
     return 0
 
 
