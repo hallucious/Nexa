@@ -7,6 +7,39 @@ from dataclasses import dataclass
 from typing import Callable, Optional, Tuple, List, Sequence, Any
 
 
+# --- SAFE_MODE linkage controls -------------------------------------------------
+# Gate2 can optionally consume SAFE_MODE metadata to explain (or refine) continuity decisions.
+# Modes:
+#   OFF   : no extra meta (default: OFF unless HAI_SAFE_MODE_LINK_MODE is set)
+#   LIGHT : small, stable meta (used/category/stage + meaning_preserved + counts)
+#   FULL  : includes before/after prompt and extracted anchors (can be large)
+#
+# Set via env:
+#   HAI_SAFE_MODE_LINK_MODE=OFF|LIGHT|FULL
+# -------------------------------------------------------------------------------
+
+_LAST_SAFE_MODE_RESULT: Optional["SafeModeResult"] = None
+
+
+def get_safe_mode_link_mode() -> str:
+    return (os.environ.get("HAI_SAFE_MODE_LINK_MODE") or "OFF").strip().upper()
+
+
+def get_last_safe_mode_result() -> Optional["SafeModeResult"]:
+    """Return last SAFE_MODE result produced in this process (best-effort)."""
+    return _LAST_SAFE_MODE_RESULT
+
+
+def clear_last_safe_mode_result() -> None:
+    global _LAST_SAFE_MODE_RESULT
+    _LAST_SAFE_MODE_RESULT = None
+
+
+def _set_last_safe_mode_result(r: "SafeModeResult") -> None:
+    global _LAST_SAFE_MODE_RESULT
+    _LAST_SAFE_MODE_RESULT = r
+
+
 SAFE_PREFIX = """[SAFE MODE ENABLED]
 You must comply with platform safety policies.
 
@@ -26,6 +59,8 @@ class SafeModeResult:
     used: bool
     stage: str
     category: str
+    # Optional metadata (for Gate linkage / auditing). Always keep backward compatibility.
+    meta: Optional[dict] = None
 
 
 def _env(key: str, default: str = "") -> str:
@@ -314,6 +349,46 @@ def run_safe_mode(
     stage = "NORMAL"
     category = "OK"
 
+    link_mode = get_safe_mode_link_mode()
+
+    def _build_meta(*, prompt_before: str, prompt_after: str, anchors: List[str], covered: int) -> Optional[dict]:
+        if link_mode == "OFF":
+            return None
+
+        required = len(anchors)
+        meaning_preserved = True
+        if required > 0:
+            meaning_preserved = (covered / required) >= 0.8  # conservative threshold
+
+        base = {
+            "link_mode": link_mode,
+            "prompt_before_len": len(prompt_before or ""),
+            "prompt_after_len": len(prompt_after or ""),
+            "anchors_required": required,
+            "anchors_covered": covered,
+            "meaning_preserved": meaning_preserved,
+        }
+        if link_mode == "FULL":
+            base.update(
+                {
+                    "prompt_before": prompt_before,
+                    "prompt_after": prompt_after,
+                    "anchors": anchors,
+                }
+            )
+        return base
+
+    def _return(text: str, *, used: bool, stage: str, category: str, prompt_before: str, prompt_after: str, anchors: List[str], covered: int) -> SafeModeResult:
+        r = SafeModeResult(
+            text=text,
+            used=used,
+            stage=stage,
+            category=category,
+            meta=_build_meta(prompt_before=prompt_before, prompt_after=prompt_after, anchors=anchors, covered=covered),
+        )
+        _set_last_safe_mode_result(r)
+        return r
+
     def _try(fn: Callable[[str], str], p: str) -> Tuple[bool, str, str]:
         try:
             return True, fn(p), "OK"
@@ -321,9 +396,11 @@ def run_safe_mode(
             return False, str(e), classify_error(e)
 
     # Stage 0: normal
-    ok, out, cat = _try(call_fn, apply_safe_mode_prefix(prompt))
+    prompt_before = prompt
+    anchors = extract_anchors(prompt_before)
+    ok, out, cat = _try(call_fn, apply_safe_mode_prefix(prompt_before))
     if ok:
-        return SafeModeResult(text=out, used=False, stage=stage, category=category)
+        return _return(out, used=False, stage=stage, category=category, prompt_before=prompt_before, prompt_after=apply_safe_mode_prefix(prompt_before), anchors=anchors, covered=len(anchors))
 
     used = True
     category = cat
@@ -334,16 +411,20 @@ def run_safe_mode(
         last_err = out
         for _ in range(retries_transient):
             time.sleep(max(0.0, backoff_seconds))
-            ok, out, cat = _try(call_fn, apply_safe_mode_prefix(prompt))
+            ok, out, cat = _try(call_fn, apply_safe_mode_prefix(prompt_before))
             if ok:
-                return SafeModeResult(text=out, used=True, stage=stage, category=category)
+                pa = apply_safe_mode_prefix(prompt_before)
+                cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+                return _return(out, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
             last_err = out
 
         if fallback_call_fn is not None:
             stage = "FALLBACK_MODEL"
-            ok, out, cat = _try(fallback_call_fn, apply_safe_mode_prefix(prompt))
+            ok, out, cat = _try(fallback_call_fn, apply_safe_mode_prefix(prompt_before))
             if ok:
-                return SafeModeResult(text=out, used=True, stage=stage, category=category)
+                pa = apply_safe_mode_prefix(prompt_before)
+                cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+                return _return(out, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         raise RuntimeError(f"SAFE_MODE failed: category={category}; last_error={last_err}")
 
@@ -352,52 +433,75 @@ def run_safe_mode(
         severity = _policy_severity_hint(out)
         stage = "POLICY_REWRITE" if severity == "SOFT" else "POLICY_REWRITE"
 
-        ok, out2, cat2 = _try(call_fn, apply_safe_mode_prefix(preprocess_for_policy(prompt, severity=severity)))
+        rewritten = preprocess_for_policy(prompt_before, severity=severity)
+        ok, out2, cat2 = _try(call_fn, apply_safe_mode_prefix(rewritten))
         if ok:
-            return SafeModeResult(text=out2, used=True, stage=stage, category=category)
+            pa = apply_safe_mode_prefix(rewritten)
+            cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+            return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         # Escalate once: SOFT -> HARD
         if severity == "SOFT":
             stage = "POLICY_REWRITE"
-            ok, out3, cat3 = _try(call_fn, apply_safe_mode_prefix(preprocess_for_policy(prompt, severity="HARD")))
+            rewritten3 = preprocess_for_policy(prompt_before, severity="HARD")
+            ok, out3, cat3 = _try(call_fn, apply_safe_mode_prefix(rewritten3))
             if ok:
-                return SafeModeResult(text=out3, used=True, stage=stage, category=category)
+                pa = apply_safe_mode_prefix(rewritten3)
+                cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+                return _return(out3, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         if fallback_call_fn is not None:
             stage = "FALLBACK_MODEL"
-            ok, out4, cat4 = _try(fallback_call_fn, apply_safe_mode_prefix(preprocess_for_policy(prompt, severity="HARD")))
+            rewritten4 = preprocess_for_policy(prompt_before, severity="HARD")
+            ok, out4, cat4 = _try(fallback_call_fn, apply_safe_mode_prefix(rewritten4))
             if ok:
-                return SafeModeResult(text=out4, used=True, stage=stage, category=category)
+                pa = apply_safe_mode_prefix(rewritten4)
+                cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+                return _return(out4, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         # Final safe fallback without additional API calls.
-        return SafeModeResult(text=_canned_policy_fallback(prompt), used=True, stage="CANNED_POLICY_FALLBACK", category=category)
+        pa = apply_safe_mode_prefix(prompt_before)
+        cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+        return _return(_canned_policy_fallback(prompt_before), used=True, stage="CANNED_POLICY_FALLBACK", category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
     # Stage 3: invalid request format retry (and fallback)
     if category == "INVALID_REQUEST":
         stage = "FORMAT_RETRY"
-        ok, out2, cat2 = _try(call_fn, apply_safe_mode_prefix(preprocess_for_invalid_request(prompt)))
+        rewritten = preprocess_for_invalid_request(prompt_before)
+        ok, out2, cat2 = _try(call_fn, apply_safe_mode_prefix(rewritten))
         if ok:
-            return SafeModeResult(text=out2, used=True, stage=stage, category=category)
+            pa = apply_safe_mode_prefix(rewritten)
+            cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+            return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         if fallback_call_fn is not None:
             stage = "FALLBACK_MODEL"
-            ok, out3, cat3 = _try(fallback_call_fn, apply_safe_mode_prefix(preprocess_for_invalid_request(prompt)))
+            rewritten3 = preprocess_for_invalid_request(prompt_before)
+            ok, out3, cat3 = _try(fallback_call_fn, apply_safe_mode_prefix(rewritten3))
             if ok:
-                return SafeModeResult(text=out3, used=True, stage=stage, category=category)
+                pa = apply_safe_mode_prefix(rewritten3)
+                cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+                return _return(out3, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
-        return SafeModeResult(text=_canned_invalid_fallback(prompt), used=True, stage="CANNED_INVALID_FALLBACK", category=category)
+        pa = apply_safe_mode_prefix(prompt_before)
+        cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+        return _return(_canned_invalid_fallback(prompt_before), used=True, stage="CANNED_INVALID_FALLBACK", category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
     # Stage 4: too long chunk/aggregate (anchors + fallback)
     if category == "TOO_LONG":
         stage = "CHUNK_AGGREGATE"
         try:
-            out2 = chunk_and_aggregate(prompt, lambda p: call_fn(apply_safe_mode_prefix(p)))
-            return SafeModeResult(text=out2, used=True, stage=stage, category=category)
+            out2 = chunk_and_aggregate(prompt_before, lambda p: call_fn(apply_safe_mode_prefix(p)))
+            pa = "<CHUNKED>"
+            cov = int(round(anchors_coverage(out2, anchors) * len(anchors)))
+            return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
         except Exception as e:  # noqa: BLE001
             if fallback_call_fn is not None:
                 try:
-                    out3 = chunk_and_aggregate(prompt, lambda p: fallback_call_fn(apply_safe_mode_prefix(p)))
-                    return SafeModeResult(text=out3, used=True, stage="CHUNK_AGGREGATE_FALLBACK", category=category)
+                    out3 = chunk_and_aggregate(prompt_before, lambda p: fallback_call_fn(apply_safe_mode_prefix(p)))
+                    pa = "<CHUNKED_FALLBACK>"
+                    cov = int(round(anchors_coverage(out3, anchors) * len(anchors)))
+                    return _return(out3, used=True, stage="CHUNK_AGGREGATE_FALLBACK", category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
                 except Exception:
                     pass
             raise
@@ -405,8 +509,10 @@ def run_safe_mode(
     # Unknown: try fallback once, else raise
     if fallback_call_fn is not None:
         stage = "FALLBACK_MODEL"
-        ok, out2, cat2 = _try(fallback_call_fn, apply_safe_mode_prefix(prompt))
+        ok, out2, cat2 = _try(fallback_call_fn, apply_safe_mode_prefix(prompt_before))
         if ok:
-            return SafeModeResult(text=out2, used=True, stage=stage, category=category)
+            pa = apply_safe_mode_prefix(prompt_before)
+            cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+            return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
     raise RuntimeError(f"SAFE_MODE failed: category={category}; last_error={out}")

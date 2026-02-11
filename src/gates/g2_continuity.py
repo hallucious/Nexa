@@ -19,6 +19,14 @@ except Exception:  # pragma: no cover
     GeminiProvider = None  # type: ignore
 
 
+# SAFE_MODE linkage (optional): Gate2 can explain continuity decisions when SAFE_MODE rewrites/chunks prompts.
+try:
+    from src.providers.safe_mode import get_last_safe_mode_result, get_safe_mode_link_mode
+except Exception:  # pragma: no cover
+    get_last_safe_mode_result = None  # type: ignore
+    get_safe_mode_link_mode = None  # type: ignore
+
+
 def _write_json(path: Path, obj: Any) -> None:
     path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -85,6 +93,8 @@ def _format_decision_md(
     gemini_verdict: str,
     gemini_rationale: str,
     notes: str,
+    safe_mode_link: str,
+    safe_mode_last: Optional[Dict[str, Any]],
 ) -> str:
     removed = diff.get("removed", [])
     added = diff.get("added", [])
@@ -99,6 +109,15 @@ def _format_decision_md(
     md.append(f"- JSON diff: added={len(added)}, removed={len(removed)}, changed={len(changed)}\n")
     md.append(f"- Gemini used: {gemini_used}\n")
     md.append(f"- Gemini verdict: {gemini_verdict}\n")
+
+    md.append(f"- SAFE_MODE link mode: {safe_mode_link}\n")
+    if safe_mode_last:
+        md.append(f"- SAFE_MODE used: {safe_mode_last.get('used')}\n")
+        md.append(f"- SAFE_MODE category: {safe_mode_last.get('category')}\n")
+        md.append(f"- SAFE_MODE stage: {safe_mode_last.get('stage')}\n")
+        smm = safe_mode_last.get('meta') or {}
+        if smm:
+            md.append(f"- SAFE_MODE meaning_preserved: {smm.get('meaning_preserved')} (anchors_covered={smm.get('anchors_covered')}/{smm.get('anchors_required')})\n")
 
     md.append("\n## Structure diff (audit)\n")
     md.append(f"- Added: {added}\n")
@@ -224,6 +243,28 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
             gemini_verdict = "UNKNOWN"
             gemini_rationale = ""
 
+
+    # SAFE_MODE linkage snapshot (best-effort, in-process only)
+    safe_mode_link = "OFF"
+    safe_mode_last: Optional[Dict[str, Any]] = None
+    if get_safe_mode_link_mode is not None:
+        try:
+            safe_mode_link = str(get_safe_mode_link_mode())
+        except Exception:
+            safe_mode_link = "OFF"
+    if get_last_safe_mode_result is not None:
+        try:
+            r = get_last_safe_mode_result()
+            if r is not None:
+                safe_mode_last = {
+                    "used": getattr(r, "used", None),
+                    "category": getattr(r, "category", None),
+                    "stage": getattr(r, "stage", None),
+                    "meta": getattr(r, "meta", None),
+                }
+        except Exception:
+            safe_mode_last = None
+
     # Decision rule (fixed)
     structure_removed = bool(diff.get("removed"))
     if structure_removed:
@@ -238,7 +279,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         f"- Current source: {cur_src}\n"
         f"- Structure diff is audit + ENFORCEMENT for 'removed' only.\n"
         f"- Semantic verdict is ENFORCEMENT for DRIFT/VIOLATION.\n"
-        f"- If Gemini verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but pipeline is not blocked."
+        f"- If Gemini verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but pipeline is not blocked.\n- SAFE_MODE link is informational unless you explicitly change decision rules."
     )
 
     decision_md = _format_decision_md(
@@ -250,6 +291,8 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         gemini_verdict=gemini_verdict,
         gemini_rationale=gemini_rationale,
         notes=notes,
+        safe_mode_link=safe_mode_link,
+        safe_mode_last=safe_mode_last,
     )
 
     meta = {
@@ -261,6 +304,8 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         "gemini_verdict": gemini_verdict,
         "pic_source": pic_src,
         "current_source": cur_src,
+        "safe_mode_link_mode": safe_mode_link,
+        "safe_mode_last": safe_mode_last,
         "decision_rule": {
             "structure_removed": "FAIL",
             "semantic_drift_violation": "FAIL",
@@ -269,6 +314,8 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     }
 
     out = {
+        "safe_mode_link_mode": safe_mode_link,
+        "safe_mode_last": safe_mode_last,
         "baseline_present": baseline_present,
         "structure_diff": diff,
         "semantic": {
