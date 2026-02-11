@@ -35,21 +35,33 @@ class Artifacts:
         p.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         return p
 
-    def write_meta(self, meta: RunMeta) -> Path:
-        data = asdict(meta)
+    def write_meta(self, meta) -> Path:
+        """Write META.json.
 
-        # normalize enums
-        data["current_gate"] = str(meta.current_gate.value)
-        data["status"] = str(meta.status.value)
+        Tolerant serializer: RunMeta may gain new fields over time.
+        We serialize core fields plus optional observability fields when present.
+        """
+        meta_path = self.run_dir / "META.json"
 
-        data["transitions"] = [
-            {
-                "from_gate": t.from_gate,
-                "to_gate": t.to_gate,
-                "decision": str(t.decision.value),
-                "at": t.at,
-            }
-            for t in meta.transitions
-        ]
+        data = {
+            "run_id": getattr(meta, "run_id", None),
+            "created_at": getattr(meta, "created_at", None),
+            "status": getattr(meta, "status", "RUNNING"),
+            "transitions": getattr(meta, "transitions", []) or [],
+        }
 
-        return self.write_json("META.json", data)
+        # Optional fields for long-term observability (C: Gate metrics to META)
+        for key in (
+            "gate_metrics",
+            "safe_mode_summary",
+            "auto_tuning_hints",
+            "warnings",
+            "errors",
+        ):
+            if hasattr(meta, key):
+                val = getattr(meta, key)
+                if val is not None:
+                    data[key] = val
+
+        meta_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        return meta_path
