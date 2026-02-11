@@ -4,7 +4,29 @@ import json
 import os
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
+
+
+# --- SAFE_MODE integration (provider-agnostic) ---
+# We try to import the project's canonical helpers. If unavailable (older repo),
+# we fall back to no-op behavior to keep imports/test collection stable.
+try:
+    from src.providers.safe_mode import apply_safe_mode_text, safe_mode_reason  # type: ignore
+except Exception:  # pragma: no cover
+    def apply_safe_mode_text(text: str) -> str:
+        return text
+
+    def safe_mode_reason() -> str:
+        return ""
+
+
+def split_into_chunks(text: str, *, max_chars: int) -> list[str]:
+    """Deterministic chunking (lossless)."""
+    if not text:
+        return [""]
+    if max_chars <= 0:
+        return [text]
+    return [text[i : i + max_chars] for i in range(0, len(text), max_chars)]
 
 
 @dataclass
@@ -26,7 +48,7 @@ class GeminiProvider:
     """
 
     def __init__(self, api_key: str, *, model: str = "gemini-1.5-pro") -> None:
-        self.api_key = api_key.strip()
+        self.api_key = (api_key or "").strip()
         self.model = (model or "gemini-1.5-pro").strip()
 
     @staticmethod
@@ -38,101 +60,104 @@ class GeminiProvider:
         return GeminiProvider(api_key, model=model)
 
     def judge_continuity(self, *, pic_text: str, current_text: str) -> GeminiResult:
-    """
-    Semantic continuity judgement.
+        """
+        Semantic continuity judgement.
 
-    - Lossless preprocessing for TOO_LONG:
-      Split CURRENT into deterministic chunks and evaluate each chunk against PIC.
-      Aggregate the worst verdict (VIOLATION > DRIFT > SAME).
-    """
+        - Lossless preprocessing for TOO_LONG:
+          Split CURRENT into deterministic chunks and evaluate each chunk against PIC.
+          Aggregate the worst verdict (VIOLATION > DRIFT > SAME). If any chunk fails,
+          verdict becomes UNKNOWN unless a stronger verdict is found.
+        """
 
-    def _build_prompt(cur: str) -> str:
-        base = (
-            "You are a strict reviewer for project semantic continuity.\n"
-            "Given a Project Identity Contract (PIC) and the current design text, "
-            "decide whether the current work is still the same project.\n\n"
-            "Return ONLY valid JSON with keys: verdict, rationale.\n"
-            "verdict must be one of: SAME, DRIFT, VIOLATION.\n\n"
-            "=== PIC ===\n"
-            f"{pic_text}\n\n"
-            "=== CURRENT ===\n"
-            f"{cur}\n"
-        )
-        return apply_safe_mode_text(base)
+        def build_prompt(cur: str) -> str:
+            base = (
+                "You are a strict reviewer for project semantic continuity.\n"
+                "Given a Project Identity Contract (PIC) and the current design text, "
+                "decide whether the current work is still the same project.\n\n"
+                "Return ONLY valid JSON with keys: verdict, rationale.\n"
+                "verdict must be one of: SAME, DRIFT, VIOLATION.\n\n"
+                "=== PIC ===\n"
+                f"{pic_text}\n\n"
+                "=== CURRENT ===\n"
+                f"{cur}\n"
+            )
+            return apply_safe_mode_text(base)
 
-    reason = safe_mode_reason().upper()
+        reason = (safe_mode_reason() or "").upper()
 
-    if reason == "TOO_LONG" or len(current_text) > 24000:
-        chunks = split_into_chunks(current_text, max_chars=8000)
-        order = {"SAME": 0, "DRIFT": 1, "VIOLATION": 2, "UNKNOWN": 3}
-        worst = "SAME"
-        rationales = []
-        raw_chunks = []
+        # Heuristic guard: large inputs often trigger context issues. We treat that as TOO_LONG policy.
+        if reason == "TOO_LONG" or len(current_text) > 24000:
+            chunks = split_into_chunks(current_text, max_chars=8000)
+            order = {"SAME": 0, "DRIFT": 1, "VIOLATION": 2, "UNKNOWN": 3}
+            worst = "SAME"
+            rationales: list[str] = []
+            raw_chunks: list[dict] = []
 
-        for i, chunk in enumerate(chunks, start=1):
-            prompt = _build_prompt(chunk)
-            text, raw, err = self.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=512)
-            raw_chunks.append({"chunk_index": i, "chunk_len": len(chunk), "raw": raw, "error": str(err) if err else None})
+            for i, chunk in enumerate(chunks, start=1):
+                prompt = build_prompt(chunk)
+                text, raw, err = self.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=512)
+                raw_chunks.append(
+                    {
+                        "chunk_index": i,
+                        "chunk_len": len(chunk),
+                        "raw": raw,
+                        "error": str(err) if err else None,
+                    }
+                )
 
-            if err is not None:
-                worst = "UNKNOWN"
-                rationales.append(f"[chunk {i}/{len(chunks)}] call failed: {type(err).__name__}: {err}")
-                continue
+                if err is not None:
+                    worst = "UNKNOWN"
+                    rationales.append(f"[chunk {i}/{len(chunks)}] call failed: {type(err).__name__}: {err}")
+                    continue
 
-            try:
-                parsed = json.loads(text)
-                verdict = str(parsed.get("verdict", "")).strip().upper()
-                rationale = str(parsed.get("rationale", "")).strip()
-            except Exception:
-                verdict = "UNKNOWN"
-                rationale = "Model did not return valid JSON"
+                verdict, rationale = self._parse_verdict(text)
+                rationales.append(f"[chunk {i}/{len(chunks)}] {verdict}: {rationale}")
+                if order.get(verdict, 3) > order.get(worst, 0):
+                    worst = verdict
 
-            if verdict not in ("SAME", "DRIFT", "VIOLATION"):
-                verdict = "UNKNOWN"
+                if worst == "VIOLATION":
+                    break
 
-            rationales.append(f"[chunk {i}/{len(chunks)}] {verdict}: {rationale}")
-            if order.get(verdict, 3) > order.get(worst, 0):
-                worst = verdict
+            return GeminiResult(
+                verdict=worst,
+                rationale="\n".join(rationales).strip(),
+                raw={"mode": "chunked", "chunks": raw_chunks},
+            )
 
-            if worst == "VIOLATION":
-                break
+        # Normal path (single call)
+        prompt = build_prompt(current_text)
+        text, raw, err = self.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=512)
+        if err is not None:
+            return GeminiResult(
+                verdict="UNKNOWN",
+                rationale=f"Gemini call failed: {type(err).__name__}: {err}",
+                raw={"error": str(err), "raw": raw},
+            )
 
-        return GeminiResult(verdict=worst, rationale="\n".join(rationales).strip(), raw={"mode": "chunked", "chunks": raw_chunks})
+        verdict, rationale = self._parse_verdict(text)
+        return GeminiResult(verdict=verdict, rationale=rationale, raw=raw)
 
-    # Normal path (single call)
-    prompt = _build_prompt(current_text)
-    text, raw, err = self.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=512)
-    if err is not None:
-        return GeminiResult(
-            verdict="UNKNOWN",
-            rationale=f"Gemini call failed: {type(err).__name__}: {err}",
-            raw={"error": str(err)},
-        )
+    @staticmethod
+    def _parse_verdict(text: str) -> Tuple[str, str]:
+        try:
+            parsed = json.loads(text)
+            verdict = str(parsed.get("verdict", "")).strip().upper()
+            rationale = str(parsed.get("rationale", "")).strip()
+        except Exception:
+            return ("UNKNOWN", "Model did not return valid JSON")
 
-    try:
-        parsed = json.loads(text)
-        verdict = str(parsed.get("verdict", "")).strip().upper()
-        rationale = str(parsed.get("rationale", "")).strip()
         if verdict not in ("SAME", "DRIFT", "VIOLATION"):
             verdict = "UNKNOWN"
-    except Exception:
-        return GeminiResult(
-            verdict="UNKNOWN",
-            rationale=f"Model did not return valid JSON: {text[:200]}",
-            raw={"text": text, "raw": raw},
-        )
+        return (verdict, rationale)
 
-    return GeminiResult(verdict=verdict, rationale=rationale, raw=raw)
-
-
-def generate_text(
+    def generate_text(
         self,
         *,
         prompt: str,
         temperature: float = 0.0,
         max_output_tokens: int = 512,
         timeout_sec: int = 30,
-    ) -> tuple[str, Dict[str, Any], Optional[Exception]]:
+    ) -> Tuple[str, Dict[str, Any], Optional[Exception]]:
         """Generic text generation helper.
 
         Returns (text, raw_response, error).
@@ -142,6 +167,11 @@ def generate_text(
         - Caller is responsible for JSON parsing if needed.
         """
 
+        # If key is missing, do not call the network. Keep behavior deterministic for tests.
+        if not self.api_key:
+            dummy = {"verdict": "UNKNOWN", "rationale": "GEMINI_API_KEY missing (network disabled)"}
+            return (json.dumps(dummy), {"disabled": True}, None)
+
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
             f"{self.model}:generateContent?key={self.api_key}"
@@ -150,12 +180,7 @@ def generate_text(
         prompt = apply_safe_mode_text(prompt)
 
         payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": prompt}],
-                }
-            ],
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {
                 "temperature": float(temperature),
                 "maxOutputTokens": int(max_output_tokens),

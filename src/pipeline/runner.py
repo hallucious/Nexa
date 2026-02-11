@@ -148,24 +148,24 @@ class PipelineRunner:
             encoding="utf-8",
         )
 
+    def _record_safe_mode_event(self, gate: GateId, category: str) -> None:
+        """Persist a minimal 'SAFE_MODE fired' signal for post-run inspection."""
+        # Best-effort: store on meta.attempts so it likely lands in META.json
+        self.meta.attempts["SAFE_MODE_TRIGGERED"] = True
+        self.meta.attempts["SAFE_MODE_REASON"] = category
+        self.meta.attempts["SAFE_MODE_GATE"] = gate.value
 
-def _record_safe_mode_event(self, gate: GateId, category: str) -> None:
-    """Persist a minimal 'SAFE_MODE fired' signal for post-run inspection."""
-    # Best-effort: store on meta.attempts so it likely lands in META.json
-    self.meta.attempts["SAFE_MODE_TRIGGERED"] = True
-    self.meta.attempts["SAFE_MODE_REASON"] = category
-    self.meta.attempts["SAFE_MODE_GATE"] = gate.value
+        # Also write a dedicated artifact for guaranteed visibility
+        run_dir = Path(self.run_dir)
+        payload = {
+            "at": now_seoul().isoformat(),
+            "gate": gate.value,
+            "reason": category,
+        }
+        (run_dir / "SAFE_MODE_EVENT.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
-    # Also write a dedicated artifact for guaranteed visibility
-    run_dir = Path(self.run_dir)
-    payload = {
-        "at": now_seoul().isoformat(),
-        "gate": gate.value,
-        "reason": category,
-    }
-    (run_dir / "SAFE_MODE_EVENT.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
         if gate == GateId.G1:
             return GateId.G2 if decision == Decision.PASS else GateId.STOP
@@ -241,8 +241,6 @@ def _record_safe_mode_event(self, gate: GateId, category: str) -> None:
                 if retries_left > 0 and self._should_autoretry(category):
                     retries_left -= 1
 
-                    # Global hint for providers/gates.
-                    # If ignored, retry is harmless; if honored, enables safe-mode re-ask.
                     os.environ["HAI_SAFE_MODE"] = "1"
                     os.environ["HAI_SAFE_MODE_REASON"] = category
                     os.environ["HAI_SAFE_MODE_GATE"] = gate.value
