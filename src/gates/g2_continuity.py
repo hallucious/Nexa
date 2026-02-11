@@ -19,14 +19,6 @@ except Exception:  # pragma: no cover
     GeminiProvider = None  # type: ignore
 
 
-# SAFE_MODE linkage (optional): Gate2 can explain continuity decisions when SAFE_MODE rewrites/chunks prompts.
-try:
-    from src.providers.safe_mode import get_last_safe_mode_result, get_safe_mode_link_mode
-except Exception:  # pragma: no cover
-    get_last_safe_mode_result = None  # type: ignore
-    get_safe_mode_link_mode = None  # type: ignore
-
-
 def _write_json(path: Path, obj: Any) -> None:
     path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -93,8 +85,6 @@ def _format_decision_md(
     gemini_verdict: str,
     gemini_rationale: str,
     notes: str,
-    safe_mode_link: str,
-    safe_mode_last: Optional[Dict[str, Any]],
 ) -> str:
     removed = diff.get("removed", [])
     added = diff.get("added", [])
@@ -109,15 +99,6 @@ def _format_decision_md(
     md.append(f"- JSON diff: added={len(added)}, removed={len(removed)}, changed={len(changed)}\n")
     md.append(f"- Gemini used: {gemini_used}\n")
     md.append(f"- Gemini verdict: {gemini_verdict}\n")
-
-    md.append(f"- SAFE_MODE link mode: {safe_mode_link}\n")
-    if safe_mode_last:
-        md.append(f"- SAFE_MODE used: {safe_mode_last.get('used')}\n")
-        md.append(f"- SAFE_MODE category: {safe_mode_last.get('category')}\n")
-        md.append(f"- SAFE_MODE stage: {safe_mode_last.get('stage')}\n")
-        smm = safe_mode_last.get('meta') or {}
-        if smm:
-            md.append(f"- SAFE_MODE meaning_preserved: {smm.get('meaning_preserved')} (anchors_covered={smm.get('anchors_covered')}/{smm.get('anchors_required')})\n")
 
     md.append("\n## Structure diff (audit)\n")
     md.append(f"- Added: {added}\n")
@@ -189,6 +170,48 @@ def _load_current_text(run_dir: Path) -> Tuple[str, str]:
     return "", "MISSING"
 
 
+
+def _meta_path(run_dir: Path) -> Path:
+    return run_dir / "META.json"
+
+
+def _read_meta(run_dir: Path) -> dict:
+    p = _meta_path(run_dir)
+    if not p.exists():
+        return {}
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        # do not fail Gate2 due to meta corruption
+        return {}
+
+
+def _write_meta(run_dir: Path, data: dict) -> None:
+    p = _meta_path(run_dir)
+    p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _merge_dict(dst: dict, patch: dict) -> dict:
+    for k, v in patch.items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            dst[k] = _merge_dict(dst[k], v)
+        else:
+            dst[k] = v
+    return dst
+
+
+def _update_meta(run_dir: Path, patch: dict) -> None:
+    data = _read_meta(run_dir)
+    _merge_dict(data, patch)
+    _write_meta(run_dir, data)
+
+
+def _append_jsonl(path: Path, record: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
 def gate_g2_continuity(ctx: GateContext) -> GateResult:
     """
     Gate2 = Continuity check (Structure + Semantic).
@@ -243,28 +266,6 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
             gemini_verdict = "UNKNOWN"
             gemini_rationale = ""
 
-
-    # SAFE_MODE linkage snapshot (best-effort, in-process only)
-    safe_mode_link = "OFF"
-    safe_mode_last: Optional[Dict[str, Any]] = None
-    if get_safe_mode_link_mode is not None:
-        try:
-            safe_mode_link = str(get_safe_mode_link_mode())
-        except Exception:
-            safe_mode_link = "OFF"
-    if get_last_safe_mode_result is not None:
-        try:
-            r = get_last_safe_mode_result()
-            if r is not None:
-                safe_mode_last = {
-                    "used": getattr(r, "used", None),
-                    "category": getattr(r, "category", None),
-                    "stage": getattr(r, "stage", None),
-                    "meta": getattr(r, "meta", None),
-                }
-        except Exception:
-            safe_mode_last = None
-
     # Decision rule (fixed)
     structure_removed = bool(diff.get("removed"))
     if structure_removed:
@@ -279,7 +280,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         f"- Current source: {cur_src}\n"
         f"- Structure diff is audit + ENFORCEMENT for 'removed' only.\n"
         f"- Semantic verdict is ENFORCEMENT for DRIFT/VIOLATION.\n"
-        f"- If Gemini verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but pipeline is not blocked.\n- SAFE_MODE link is informational unless you explicitly change decision rules."
+        f"- If Gemini verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but pipeline is not blocked."
     )
 
     decision_md = _format_decision_md(
@@ -291,8 +292,6 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         gemini_verdict=gemini_verdict,
         gemini_rationale=gemini_rationale,
         notes=notes,
-        safe_mode_link=safe_mode_link,
-        safe_mode_last=safe_mode_last,
     )
 
     meta = {
@@ -304,8 +303,6 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         "gemini_verdict": gemini_verdict,
         "pic_source": pic_src,
         "current_source": cur_src,
-        "safe_mode_link_mode": safe_mode_link,
-        "safe_mode_last": safe_mode_last,
         "decision_rule": {
             "structure_removed": "FAIL",
             "semantic_drift_violation": "FAIL",
@@ -314,8 +311,6 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     }
 
     out = {
-        "safe_mode_link_mode": safe_mode_link,
-        "safe_mode_last": safe_mode_last,
         "baseline_present": baseline_present,
         "structure_diff": diff,
         "semantic": {
@@ -327,49 +322,32 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         },
     }
 
-    
-    # Quantitative metrics for long-term tracking (written into META.json via RunMeta.attrs)
-    try:
-        
-        # C) Gate2 판단을 META에 정량 기록 (장기 통계)
-        # - 카운트/스코어 + 샘플(상위 N)만 기록해서 META 폭발을 막는다.
-        added_fields = diff.get("added", []) or []
-        removed_fields = diff.get("removed", []) or []
-        changed_fields = diff.get("changed", []) or []
-
-        removed_n = len(removed_fields)
-        added_n = len(added_fields)
-        changed_n = len(changed_fields)
-
-        denom = max(1, len(set(added_fields) | set(removed_fields) | set(changed_fields)))
-        continuity_score = max(0.0, 1.0 - ((removed_n * 2 + changed_n) / float(denom)))
-
-        g2_metrics = {
-            "mode": mode,
-            "status": result.status.value,
-            "baseline_present": baseline_present,
-            "continuity_score": round(continuity_score, 4),
-            "diff": {"added": added_n, "removed": removed_n, "changed": changed_n},
-            "samples": {
-                "added": list(added_fields)[:20],
-                "removed": list(removed_fields)[:20],
-                "changed": list(changed_fields)[:20],
-            },
-            "strict_notes": strict_notes,
-            "safe_mode_used": bool(safe_mode_used),
-            "safe_mode_last_stage": (safe_mode_last or {}).get("stage") if isinstance(safe_mode_last, dict) else None,
-            "safe_mode_last_category": (safe_mode_last or {}).get("category") if isinstance(safe_mode_last, dict) else None,
-            "decision": str(decision),
-        }
-        attrs = getattr(getattr(ctx, "meta", None), "attrs", None)
-        if isinstance(attrs, dict):
-            attrs.setdefault("gate_metrics", {})["G2"] = g2_metrics
-    except Exception:
-        pass
-
-# Write artifacts
+    # Write artifacts
     (run_dir / "G2_DECISION.md").write_text(decision_md, encoding="utf-8")
     _write_json(run_dir / "G2_META.json", meta)
+
+    # C) Quantitative recording for long-term analysis:
+    # - Write a compact Gate2 metrics snapshot into META.json
+    # - Append a JSONL record into runs/_stats/g2_metrics.jsonl
+    try:
+        record = {
+            "ts": now_seoul().isoformat(),
+            "run_id": getattr(ctx.meta, "run_id", None),
+            "gate": "G2",
+            "mode": mode,
+            "decision": getattr(decision, "value", str(decision)),
+            "baseline_source": meta.get("baseline_source"),
+            "scores": meta.get("scores", {}),
+            "warnings": meta.get("warnings", []),
+        }
+        _update_meta(run_dir, {"gate2_continuity": record})
+        repo_root = _repo_root_from_run_dir(run_dir)
+        stats_path = repo_root / "runs" / "_stats" / "g2_metrics.jsonl"
+        _append_jsonl(stats_path, record)
+    except Exception:
+        # Do not fail the pipeline because statistics could not be written.
+        pass
+
     _write_json(run_dir / "G2_OUTPUT.json", out)
 
     return GateResult(
