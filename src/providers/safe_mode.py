@@ -1,6 +1,4 @@
 from __future__ import annotations
-import json
-from datetime import datetime, timezone, timedelta
 
 import os
 import re
@@ -26,6 +24,17 @@ _LAST_SAFE_MODE_RESULT: Optional["SafeModeResult"] = None
 def get_safe_mode_link_mode() -> str:
     return (os.environ.get("HAI_SAFE_MODE_LINK_MODE") or "OFF").strip().upper()
 
+
+
+def get_safe_mode_strict_recovery_enabled() -> bool:
+    """Whether STRICT recovery loop is enabled.
+
+    When enabled, SAFE_MODE may perform an additional retry if a rewrite step
+    appears to have dropped MUST-KEEP anchors (meaning-preservation failure).
+    This is OFF by default to keep behavior stable and tests deterministic.
+    """
+    v = (os.environ.get("HAI_SAFE_MODE_STRICT_RECOVERY") or "0").strip().lower()
+    return v in ("1", "true", "yes", "on")
 
 def get_last_safe_mode_result() -> Optional["SafeModeResult"]:
     """Return last SAFE_MODE result produced in this process (best-effort)."""
@@ -54,108 +63,6 @@ Instead, provide:
 Always stay within allowed content.
 """
 
-
-# -------------------------------------------------------------------------------------------------
-# Global SAFE_MODE context + metrics (used for auto-tuning and for writing META summaries).
-#
-# Design intent:
-# - Providers can stay simple: they just call run_safe_mode / apply_safe_mode_prefix.
-# - Orchestrators (PipelineRunner today, CircuitRunner later) can set the "current gate"
-#   before executing a gate so SAFE_MODE can attribute metrics by gate without changing
-#   every provider signature.
-# -------------------------------------------------------------------------------------------------
-
-_CURRENT_GATE_ID = None  # type: Optional[str]
-_PROMPT_HINT = None  # type: Optional[str]
-
-# Metrics schema:
-# {
-#   "total": int,
-#   "by_category": { "<CATEGORY>": int, ... },
-#   "by_gate": {
-#       "<GATE_ID>": {
-#           "total": int,
-#           "by_category": { "<CATEGORY>": int, ... },
-#           "last_stage": "<STAGE>",
-#           "last_at": "<ISO8601>",
-#       },
-#       ...
-#   }
-# }
-_SAFE_MODE_METRICS = {"total": 0, "by_category": {}, "by_gate": {}}
-
-def set_current_gate(gate_id):
-    """Set current gate id for SAFE_MODE attribution (runner should call this per gate)."""
-    global _CURRENT_GATE_ID
-    _CURRENT_GATE_ID = str(gate_id) if gate_id is not None else None
-
-def set_prompt_hint(hint):
-    """Set a transient prompt hint to be injected by apply_safe_mode_prefix."""
-    global _PROMPT_HINT
-    hint = (hint or "").strip()
-    _PROMPT_HINT = hint if hint else None
-
-def clear_prompt_hint():
-    global _PROMPT_HINT
-    _PROMPT_HINT = None
-
-def _inc(d, k, n=1):
-    d[k] = int(d.get(k, 0)) + int(n)
-
-def _record_metrics(result):
-    try:
-        category = getattr(result, "category", None) or "UNKNOWN"
-        stage = getattr(result, "stage", None) or "UNKNOWN"
-        _SAFE_MODE_METRICS["total"] = int(_SAFE_MODE_METRICS.get("total", 0)) + 1
-        _inc(_SAFE_MODE_METRICS.setdefault("by_category", {}), category, 1)
-
-        gid = _CURRENT_GATE_ID
-        if gid:
-            bg = _SAFE_MODE_METRICS.setdefault("by_gate", {}).setdefault(
-                gid, {"total": 0, "by_category": {}, "last_stage": None, "last_at": None}
-            )
-            bg["total"] = int(bg.get("total", 0)) + 1
-            _inc(bg.setdefault("by_category", {}), category, 1)
-            bg["last_stage"] = stage
-            bg["last_at"] = datetime.now(timezone(timedelta(hours=9))).isoformat()
-    except Exception:
-        # Metrics must never break pipeline execution.
-        pass
-
-def get_safe_mode_metrics_snapshot():
-    """Return a deep-copied snapshot safe to serialize into META.json."""
-    return json.loads(json.dumps(_SAFE_MODE_METRICS))
-
-def _build_hint_from_counts(by_category):
-    # Conservative, meaning-preserving hints. These do NOT change requirements; they only
-    # nudge formatting / safety / brevity to reduce refusal probability.
-    parts = []
-    if by_category.get("TOO_LONG", 0) > 0:
-        parts.append("Keep output concise. Prefer bullet points. Avoid long preambles.")
-    if by_category.get("INVALID", 0) > 0:
-        parts.append("Follow the requested output format strictly (valid JSON if asked).")
-    if by_category.get("POLICY_REFUSAL", 0) > 0:
-        parts.append("Avoid unsafe instructions. If a request is disallowed, propose a safe alternative.")
-    if by_category.get("TRANSIENT", 0) > 0:
-        parts.append("Be deterministic; avoid excessive verbosity that can trigger timeouts.")
-    return "\n".join(parts).strip() or None
-
-def get_auto_tuning_hints():
-    """Compute per-gate hint strings from accumulated SAFE_MODE metrics."""
-    hints = {}
-    bg = _SAFE_MODE_METRICS.get("by_gate", {}) or {}
-    for gid, info in bg.items():
-        by_cat = info.get("by_category", {}) or {}
-        hint = _build_hint_from_counts(by_cat)
-        if hint:
-            hints[gid] = hint
-    return hints
-
-def get_auto_tuning_hint_for_gate(gate_id):
-    gid = str(gate_id) if gate_id is not None else None
-    if not gid:
-        return None
-    return get_auto_tuning_hints().get(gid)
 
 @dataclass
 class SafeModeResult:
@@ -224,24 +131,10 @@ def classify_error(err: BaseException) -> str:
 
 
 def apply_safe_mode_prefix(prompt: str) -> str:
-    """
-    Prepend SAFE_MODE guardrails (and optional auto-tuning hints) to a prompt.
+    if _env("HAI_SAFE_MODE", "0") == "1":
+        return SAFE_PREFIX + "\n\n" + prompt
+    return prompt
 
-    Notes:
-    - SAFE_MODE prefixing is controlled by env HAI_SAFE_MODE ("1" enables).
-    - Auto-tuning hints (if any) are injected when env HAI_AUTO_TUNING != "0".
-    """
-    prompt = prompt or ""
-
-    # Optional: meaning-preserving auto-tuning hints for high-refusal gates.
-    hint = _PROMPT_HINT
-    if hint and os.getenv("HAI_AUTO_TUNING", "1") != "0":
-        prompt = f"[AUTO_TUNING_HINT]\n{hint}\n\n" + prompt
-
-    if os.getenv("HAI_SAFE_MODE", "0") != "1":
-        return prompt
-
-    return SAFE_MODE_PREFIX + prompt
 
 def _policy_severity_hint(error_text: str) -> str:
     """Return a coarse severity hint for policy handling.
@@ -366,6 +259,19 @@ def anchors_coverage(text: str, anchors: Sequence[str]) -> float:
     return hit / max(1, len(anchors))
 
 
+
+def enforce_anchors(text: str, anchors: Sequence[str]) -> str:
+    """Append a MUST-KEEP block to increase anchor retention during retries."""
+    if not anchors:
+        return text
+    block = "\n".join(f"- {a}" for a in anchors)
+    return (
+        (text or "")
+        + "\n\n[STRICT-ANCHORS]\n"
+        + "The following anchors MUST remain verbatim (do not remove or rewrite):\n"
+        + block
+    )
+
 def _canned_policy_fallback(prompt: str) -> str:
     return (
         "I can't help with that request as stated.\n\n"
@@ -453,6 +359,8 @@ def run_safe_mode(
     retries_transient: int = 2,
     backoff_seconds: float = 1.0,
     fallback_call_fn: Optional[Callable[[str], str]] = None,
+    strict_recovery: Optional[bool] = None,
+    strict_min_anchor_coverage: float = 1.0,
 ) -> SafeModeResult:
     """One-stop safe execution wrapper implementing:
 
@@ -516,6 +424,8 @@ def run_safe_mode(
     # Stage 0: normal
     prompt_before = prompt
     anchors = extract_anchors(prompt_before)
+    if strict_recovery is None:
+        strict_recovery = get_safe_mode_strict_recovery_enabled()
     ok, out, cat = _try(call_fn, apply_safe_mode_prefix(prompt_before))
     if ok:
         return _return(out, used=False, stage=stage, category=category, prompt_before=prompt_before, prompt_after=apply_safe_mode_prefix(prompt_before), anchors=anchors, covered=len(anchors))
@@ -556,6 +466,13 @@ def run_safe_mode(
         if ok:
             pa = apply_safe_mode_prefix(rewritten)
             cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+            if strict_recovery and anchors:
+                if anchors_coverage(pa, anchors) < strict_min_anchor_coverage:
+                    enforced = enforce_anchors(pa, anchors)
+                    ok_s, out_s, cat_s = _try(call_fn, enforced)
+                    if ok_s:
+                        cov_s = int(round(anchors_coverage(enforced, anchors) * len(anchors)))
+                        return _return(out_s, used=True, stage=stage, category=cat_s or category, prompt_before=prompt_before, prompt_after=enforced, anchors=anchors, covered=cov_s)
             return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         # Escalate once: SOFT -> HARD
@@ -566,6 +483,13 @@ def run_safe_mode(
             if ok:
                 pa = apply_safe_mode_prefix(rewritten3)
                 cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+            if strict_recovery and anchors:
+                if anchors_coverage(pa, anchors) < strict_min_anchor_coverage:
+                    enforced = enforce_anchors(pa, anchors)
+                    ok_s, out_s, cat_s = _try(call_fn, enforced)
+                    if ok_s:
+                        cov_s = int(round(anchors_coverage(enforced, anchors) * len(anchors)))
+                        return _return(out_s, used=True, stage=stage, category=cat_s or category, prompt_before=prompt_before, prompt_after=enforced, anchors=anchors, covered=cov_s)
                 return _return(out3, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         if fallback_call_fn is not None:
@@ -590,6 +514,13 @@ def run_safe_mode(
         if ok:
             pa = apply_safe_mode_prefix(rewritten)
             cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+            if strict_recovery and anchors:
+                if anchors_coverage(pa, anchors) < strict_min_anchor_coverage:
+                    enforced = enforce_anchors(pa, anchors)
+                    ok_s, out_s, cat_s = _try(call_fn, enforced)
+                    if ok_s:
+                        cov_s = int(round(anchors_coverage(enforced, anchors) * len(anchors)))
+                        return _return(out_s, used=True, stage=stage, category=cat_s or category, prompt_before=prompt_before, prompt_after=enforced, anchors=anchors, covered=cov_s)
             return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         if fallback_call_fn is not None:
@@ -599,6 +530,13 @@ def run_safe_mode(
             if ok:
                 pa = apply_safe_mode_prefix(rewritten3)
                 cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
+            if strict_recovery and anchors:
+                if anchors_coverage(pa, anchors) < strict_min_anchor_coverage:
+                    enforced = enforce_anchors(pa, anchors)
+                    ok_s, out_s, cat_s = _try(call_fn, enforced)
+                    if ok_s:
+                        cov_s = int(round(anchors_coverage(enforced, anchors) * len(anchors)))
+                        return _return(out_s, used=True, stage=stage, category=cat_s or category, prompt_before=prompt_before, prompt_after=enforced, anchors=anchors, covered=cov_s)
                 return _return(out3, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         pa = apply_safe_mode_prefix(prompt_before)
