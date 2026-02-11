@@ -327,7 +327,28 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         },
     }
 
-    # Write artifacts
+    
+    # Quantitative metrics for long-term tracking (written into META.json via RunMeta.attrs)
+    try:
+        g2_metrics = {
+            "baseline_present": baseline_present,
+            "added": len(diff.get("added", []) or []),
+            "removed": len(diff.get("removed", []) or []),
+            "changed": len(diff.get("changed", []) or []),
+            "gemini_used": bool(gemini_used),
+            "gemini_verdict": gemini_verdict,
+            "safe_mode_link_mode": safe_mode_link,
+            "safe_mode_last_used": (safe_mode_last or {}).get("used") if isinstance(safe_mode_last, dict) else None,
+            "safe_mode_last_category": (safe_mode_last or {}).get("category") if isinstance(safe_mode_last, dict) else None,
+            "decision": str(decision),
+        }
+        attrs = getattr(getattr(ctx, "meta", None), "attrs", None)
+        if isinstance(attrs, dict):
+            attrs.setdefault("gate_metrics", {})["G2"] = g2_metrics
+    except Exception:
+        pass
+
+# Write artifacts
     (run_dir / "G2_DECISION.md").write_text(decision_md, encoding="utf-8")
     _write_json(run_dir / "G2_META.json", meta)
     _write_json(run_dir / "G2_OUTPUT.json", out)

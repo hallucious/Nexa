@@ -173,3 +173,33 @@ class PipelineRunner:
         while self.step():
             pass
         return self.meta
+        # Auto-tuning hints (best-effort): based on SAFE_MODE metrics accumulated during this run.
+        # This does not change behavior automatically; it records actionable suggestions in META.json.
+        try:
+            attrs = getattr(self.meta, "attrs", None)
+            if isinstance(attrs, dict):
+                sm = attrs.get("safe_mode_metrics") or {}
+                by_gate = sm.get("by_gate") if isinstance(sm, dict) else None
+                by_category = sm.get("by_category") if isinstance(sm, dict) else None
+                if isinstance(by_gate, dict) and by_gate:
+                    worst_gate, worst_n = max(by_gate.items(), key=lambda kv: int(kv[1] or 0))
+                    worst_n = int(worst_n or 0)
+                    if worst_n > 0:
+                        rec = []
+                        if isinstance(by_category, dict) and by_category.get("POLICY_REFUSAL"):
+                            rec.append("POLICY_REFUSAL: clarify legitimate intent; add safe framing; remove disallowed details.")
+                        if isinstance(by_category, dict) and by_category.get("TOO_LONG"):
+                            rec.append("TOO_LONG: reduce prompt size; prefer structured JSON; move long context to files and summarize.")
+                        if isinstance(by_category, dict) and by_category.get("INVALID_REQUEST"):
+                            rec.append("INVALID_REQUEST: enforce JSON schema; add examples; validate before send.")
+                        if not rec:
+                            rec = ["Review the hotspot gate prompt and inputs; simplify and add structure."]
+                        attrs["auto_tuning"] = {
+                            "hotspot_gate": worst_gate,
+                            "hotspot_count": worst_n,
+                            "recommendations": rec,
+                        }
+        except Exception:
+            pass
+
+

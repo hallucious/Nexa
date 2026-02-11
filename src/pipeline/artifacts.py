@@ -82,5 +82,13 @@ class Artifacts:
         safe_summary = self._build_safe_mode_summary(meta)
         if safe_summary is not None:
             data["safe_mode_summary"] = safe_summary
+            # Convenience: surface Gate2 metrics at top-level if present (for longitudinal analysis)
+            try:
+                g2m = (data.get("attrs") or {}).get("gate_metrics", {}).get("G2")
+                if isinstance(g2m, dict):
+                    data["g2_metrics"] = g2m
+            except Exception:
+                pass
+
 
         return self.write_json("META.json", data)
