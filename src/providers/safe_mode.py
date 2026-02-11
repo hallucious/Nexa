@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple, List
+from typing import Callable, Optional, Tuple, List, Sequence, Any
 
 
 SAFE_PREFIX = """[SAFE MODE ENABLED]
@@ -32,21 +33,54 @@ def _env(key: str, default: str = "") -> str:
     return v if v is not None else default
 
 
+def _get_attr(obj: Any, *names: str) -> Optional[Any]:
+    for n in names:
+        if hasattr(obj, n):
+            return getattr(obj, n)
+    return None
+
+
 def classify_error(err: BaseException) -> str:
-    """Best-effort categorization. Prefer explicit env override if present."""
+    """Best-effort categorization.
+
+    Notes:
+    - Prefer explicit env override if present (useful in tests).
+    - Tries to use structured fields (status_code/code) when available.
+    """
     override = _env("HAI_SAFE_MODE_REASON", "")
     if override:
         return override
 
+    status = _get_attr(err, "status", "status_code", "http_status", "code")
+    try:
+        status_i = int(status) if status is not None and str(status).isdigit() else None
+    except Exception:
+        status_i = None
+
     msg = f"{type(err).__name__}: {err}".lower()
-    if any(p in msg for p in ["policy", "refus", "safety", "violates", "blocked"]):
-        return "POLICY_REFUSAL"
-    if any(p in msg for p in ["too long", "context", "token limit", "payload too large", "maximum context"]):
-        return "TOO_LONG"
-    if any(p in msg for p in ["timeout", "rate limit", "429", "503", "502", "network", "temporarily", "try again"]):
+
+    # Transient first: if it's a retry-able transport / rate limit.
+    if status_i in (408, 409, 429, 500, 502, 503, 504):
         return "TRANSIENT_ERROR"
-    if any(p in msg for p in ["invalid", "schema", "json", "bad request", "400"]):
+    if any(p in msg for p in ["timeout", "timed out", "rate limit", "429", "503", "502", "network", "temporarily", "try again", "connection", "overloaded", "unavailable"]):
+        return "TRANSIENT_ERROR"
+
+    # Too long / context window
+    if status_i == 413:
+        return "TOO_LONG"
+    if any(p in msg for p in ["too long", "context", "token limit", "payload too large", "maximum context", "context length", "prompt is too long", "max_tokens"]):
+        return "TOO_LONG"
+
+    # Invalid request / schema / JSON issues
+    if status_i == 400:
         return "INVALID_REQUEST"
+    if any(p in msg for p in ["invalid", "schema", "json", "bad request", "400", "malformed", "parse", "validation", "unrecognized"]):
+        return "INVALID_REQUEST"
+
+    # Policy/safety refusal (place after invalid/transient)
+    if any(p in msg for p in ["policy", "refus", "safety", "violates", "blocked", "disallowed", "content policy", "cannot comply", "not allowed"]):
+        return "POLICY_REFUSAL"
+
     return "UNKNOWN_ERROR"
 
 
@@ -56,20 +90,50 @@ def apply_safe_mode_prefix(prompt: str) -> str:
     return prompt
 
 
-def preprocess_for_policy(prompt: str) -> str:
-    # Keep semantics but reduce "instructional" framing; generic safe rewrite wrapper.
-    guard = """[POLICY GUARD]
-Rewrite your answer to be policy-compliant.
-- Do not provide step-by-step instructions for wrongdoing.
-- If the request is disallowed, provide safe alternatives and general info.
+def _policy_severity_hint(error_text: str) -> str:
+    """Return a coarse severity hint for policy handling.
+
+    - SOFT: wording/tone can be adjusted (often generic 'policy/safety' message)
+    - HARD: content is disallowed; must refuse instructions and offer safe alternatives
+    """
+    t = (error_text or "").lower()
+    hard_markers = [
+        "self-harm", "suicide", "weapon", "bomb", "explosive", "terror",
+        "child", "sexual", "porn", "illegal", "fraud", "hack", "malware",
+        "violence", "kill", "assass", "drug", "cocaine", "meth",
+        "explicit", "minors",
+    ]
+    if any(m in t for m in hard_markers):
+        return "HARD"
+    # If the provider gives no detail, treat as SOFT first.
+    return "SOFT"
+
+
+def preprocess_for_policy(prompt: str, *, severity: str = "SOFT") -> str:
+    # Keep semantics but reduce "instructional" framing; safe rewrite wrapper.
+    if severity == "HARD":
+        guard = """[POLICY GUARD - HARD]
+The original request appears to include disallowed content.
+Do NOT provide step-by-step instructions or actionable guidance for wrongdoing.
+Instead:
+- Briefly explain you can't help with that request
+- Provide high-level, non-actionable safety information
+- Offer safe, legal alternatives (e.g., prevention, support resources, lawful education)
+"""
+    else:
+        guard = """[POLICY GUARD - SOFT]
+Rewrite your answer to be policy-compliant and neutral.
+- Avoid step-by-step instructions for wrongdoing
+- Prefer high-level guidance, risks, warnings
+- If any part is disallowed, refuse that part and offer safe alternatives
 """
     return guard + "\n\n" + prompt
 
 
 def preprocess_for_invalid_request(prompt: str) -> str:
-    # Nudge model to output strict JSON when schemas are involved.
     guard = """[FORMAT GUARD]
 If the task requires JSON, output ONLY valid JSON. No prose. No markdown. No trailing commas.
+If a schema is implied, ensure all required keys exist and types match.
 """
     return guard + "\n\n" + prompt
 
@@ -79,12 +143,89 @@ def chunk_text(text: str, max_chars: int) -> List[str]:
         return [text]
     if len(text) <= max_chars:
         return [text]
-    chunks = []
+    chunks: List[str] = []
     i = 0
     while i < len(text):
-        chunks.append(text[i:i+max_chars])
+        chunks.append(text[i : i + max_chars])
         i += max_chars
     return chunks
+
+
+# ---------------------------
+# B) Meaning preservation
+# ---------------------------
+
+_ANCHOR_PATTERNS: Sequence[re.Pattern[str]] = [
+    re.compile(r"\b(MUST|SHALL|SHOULD|MAY\s+NOT|MUST\s+NOT)\b.*", re.IGNORECASE),
+    re.compile(r"\b(do not|don't|never)\b.*", re.IGNORECASE),
+    re.compile(r"\b(필수|금지|반드시|절대)\b.*"),
+    re.compile(r"\b(Gate\s*\d+|G\d+)\b.*"),
+    re.compile(r"\b(src/[^\s]+|baseline/[^\s]+|runs/[^\s]+)\b.*"),
+]
+
+
+def extract_anchors(text: str, *, max_anchors: int = 40) -> List[str]:
+    """Extract 'must-keep' anchor lines from the prompt, deterministically.
+
+    This is a lightweight (stdlib-only) guardrail to reduce meaning drift introduced
+    by SAFE_MODE preprocessing (especially chunk/aggregate).
+    """
+    anchors: List[str] = []
+    for line in (text or "").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        for pat in _ANCHOR_PATTERNS:
+            if pat.search(s):
+                anchors.append(s)
+                break
+        if len(anchors) >= max_anchors:
+            break
+
+    # De-duplicate while preserving order
+    seen = set()
+    out: List[str] = []
+    for a in anchors:
+        key = a.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(a)
+    return out
+
+
+def anchors_coverage(text: str, anchors: Sequence[str]) -> float:
+    if not anchors:
+        return 1.0
+    t = (text or "").lower()
+    hit = 0
+    for a in anchors:
+        # Use a lenient match: key tokens from anchor must appear
+        key = a.lower()
+        # If anchor is short, require full substring; if long, require 2 tokens.
+        if len(key) <= 40:
+            if key in t:
+                hit += 1
+        else:
+            tokens = [w for w in re.findall(r"[a-z0-9_/-]{3,}", key)[:6]]
+            if tokens and sum(1 for w in tokens if w in t) >= min(2, len(tokens)):
+                hit += 1
+    return hit / max(1, len(anchors))
+
+
+def _canned_policy_fallback(prompt: str) -> str:
+    return (
+        "I can't help with that request as stated.\n\n"
+        "If you tell me your legitimate goal, I can help with safe, legal, high-level guidance, "
+        "risk considerations, and compliant alternatives."
+    )
+
+
+def _canned_invalid_fallback(prompt: str) -> str:
+    return (
+        "The request could not be processed due to an invalid format/schema.\n"
+        "Please provide the expected output format (e.g., JSON keys/types) or simplify the request."
+    )
 
 
 def chunk_and_aggregate(
@@ -93,26 +234,57 @@ def chunk_and_aggregate(
     *,
     max_chunk_chars: int = 12000,
 ) -> str:
-    """Generic TOO_LONG strategy.
-    1) Ask model to extract constraints/facts per chunk
-    2) Ask model to produce final answer using extracted notes
-    This is not perfectly lossless, but preserves key constraints deterministically.
+    """TOO_LONG strategy with meaning-preservation anchors.
+
+    1) Deterministically split into chunks.
+    2) For each chunk: extract constraints/facts; require inclusion of anchors.
+    3) Aggregate extracted notes into final answer.
     """
     chunks = chunk_text(original_prompt, max_chunk_chars)
-    notes = []
+    anchors = extract_anchors(original_prompt)
+
+    anchor_block = "\n".join(f"- {a}" for a in anchors) if anchors else "(none)"
+
+    notes: List[str] = []
     for idx, ch in enumerate(chunks, start=1):
         p = (
             f"[CHUNK {idx}/{len(chunks)}]\n"
-            "Extract ALL constraints, requirements, interface details, and any MUST/SHOULD rules. "
-            "Output as bullet points. Do not add new ideas.\n\n"
+            "Extract ALL constraints, requirements, interface details, file paths, and any MUST/SHOULD rules.\n"
+            "Rules:\n"
+            "- Output bullet points only\n"
+            "- Do NOT add new ideas\n"
+            "- Do NOT omit anchors if they are relevant\n\n"
+            "=== MUST-KEEP ANCHORS ===\n"
+            f"{anchor_block}\n\n"
+            "=== CHUNK ===\n"
             + ch
         )
-        notes.append(call_fn(p))
+        chunk_notes = call_fn(p)
+
+        # If we extracted anchors, enforce basic coverage; retry once with stronger instruction.
+        if anchors and anchors_coverage(chunk_notes, anchors) < 0.35:
+            p2 = (
+                "[CHUNK RETRY - ANCHOR PRESERVATION]\n"
+                "Your previous extraction missed required anchors.\n"
+                "Re-extract bullet points and explicitly include any relevant anchors verbatim.\n\n"
+                "=== MUST-KEEP ANCHORS ===\n"
+                f"{anchor_block}\n\n"
+                "=== CHUNK ===\n"
+                + ch
+            )
+            chunk_notes = call_fn(p2)
+
+        notes.append(chunk_notes)
+
     agg_prompt = (
         "[AGGREGATE]\n"
-        "You are given extracted notes from chunks of a longer prompt. "
-        "Produce the final answer to the ORIGINAL task. "
-        "Respect all constraints. If there is ambiguity, state it.\n\n"
+        "You are given extracted notes from chunks of a longer prompt.\n"
+        "Produce the final answer to the ORIGINAL task.\n"
+        "Rules:\n"
+        "- Respect all constraints and anchors\n"
+        "- If there is ambiguity, state it\n\n"
+        "=== MUST-KEEP ANCHORS ===\n"
+        f"{anchor_block}\n\n"
         "=== EXTRACTED NOTES ===\n"
         + "\n\n".join(notes)
         + "\n\n=== ORIGINAL TASK (for reference) ===\n"
@@ -130,12 +302,15 @@ def run_safe_mode(
     fallback_call_fn: Optional[Callable[[str], str]] = None,
 ) -> SafeModeResult:
     """One-stop safe execution wrapper implementing:
-    1) POLICY_REFUSAL rewrite retry
-    2) INVALID_REQUEST formatting retry
-    3) TOO_LONG chunk+aggregate
-    4) TRANSIENT retries + optional fallback model
+
+    A) Strategy improvements:
+      - More robust error classification (status codes + message heuristics)
+      - Policy severity hinting (SOFT vs HARD)
+      - Deterministic escalation to fallback / canned safe output
+
+    B) Meaning preservation:
+      - Anchor extraction + preservation checks in TOO_LONG chunk strategy
     """
-    used = False
     stage = "NORMAL"
     category = "OK"
 
@@ -153,14 +328,16 @@ def run_safe_mode(
     used = True
     category = cat
 
-    # Stage 1: transient retry
+    # Stage 1: transient retry (bounded)
     if category == "TRANSIENT_ERROR":
         stage = "TRANSIENT_RETRY"
+        last_err = out
         for _ in range(retries_transient):
             time.sleep(max(0.0, backoff_seconds))
             ok, out, cat = _try(call_fn, apply_safe_mode_prefix(prompt))
             if ok:
                 return SafeModeResult(text=out, used=True, stage=stage, category=category)
+            last_err = out
 
         if fallback_call_fn is not None:
             stage = "FALLBACK_MODEL"
@@ -168,40 +345,68 @@ def run_safe_mode(
             if ok:
                 return SafeModeResult(text=out, used=True, stage=stage, category=category)
 
-    # Stage 2: policy rewrite
+        raise RuntimeError(f"SAFE_MODE failed: category={category}; last_error={last_err}")
+
+    # Stage 2: policy rewrite (SOFT -> HARD -> fallback -> canned)
     if category == "POLICY_REFUSAL":
-        stage = "POLICY_REWRITE"
-        ok, out, cat = _try(call_fn, apply_safe_mode_prefix(preprocess_for_policy(prompt)))
+        severity = _policy_severity_hint(out)
+        stage = "POLICY_REWRITE" if severity == "SOFT" else "POLICY_REWRITE"
+
+        ok, out2, cat2 = _try(call_fn, apply_safe_mode_prefix(preprocess_for_policy(prompt, severity=severity)))
         if ok:
-            return SafeModeResult(text=out, used=True, stage=stage, category=category)
+            return SafeModeResult(text=out2, used=True, stage=stage, category=category)
+
+        # Escalate once: SOFT -> HARD
+        if severity == "SOFT":
+            stage = "POLICY_REWRITE"
+            ok, out3, cat3 = _try(call_fn, apply_safe_mode_prefix(preprocess_for_policy(prompt, severity="HARD")))
+            if ok:
+                return SafeModeResult(text=out3, used=True, stage=stage, category=category)
 
         if fallback_call_fn is not None:
             stage = "FALLBACK_MODEL"
-            ok, out, cat = _try(fallback_call_fn, apply_safe_mode_prefix(preprocess_for_policy(prompt)))
+            ok, out4, cat4 = _try(fallback_call_fn, apply_safe_mode_prefix(preprocess_for_policy(prompt, severity="HARD")))
             if ok:
-                return SafeModeResult(text=out, used=True, stage=stage, category=category)
+                return SafeModeResult(text=out4, used=True, stage=stage, category=category)
 
-    # Stage 3: invalid request format retry
+        # Final safe fallback without additional API calls.
+        return SafeModeResult(text=_canned_policy_fallback(prompt), used=True, stage="CANNED_POLICY_FALLBACK", category=category)
+
+    # Stage 3: invalid request format retry (and fallback)
     if category == "INVALID_REQUEST":
         stage = "FORMAT_RETRY"
-        ok, out, cat = _try(call_fn, apply_safe_mode_prefix(preprocess_for_invalid_request(prompt)))
+        ok, out2, cat2 = _try(call_fn, apply_safe_mode_prefix(preprocess_for_invalid_request(prompt)))
         if ok:
-            return SafeModeResult(text=out, used=True, stage=stage, category=category)
+            return SafeModeResult(text=out2, used=True, stage=stage, category=category)
 
-    # Stage 4: too long chunk/aggregate
+        if fallback_call_fn is not None:
+            stage = "FALLBACK_MODEL"
+            ok, out3, cat3 = _try(fallback_call_fn, apply_safe_mode_prefix(preprocess_for_invalid_request(prompt)))
+            if ok:
+                return SafeModeResult(text=out3, used=True, stage=stage, category=category)
+
+        return SafeModeResult(text=_canned_invalid_fallback(prompt), used=True, stage="CANNED_INVALID_FALLBACK", category=category)
+
+    # Stage 4: too long chunk/aggregate (anchors + fallback)
     if category == "TOO_LONG":
         stage = "CHUNK_AGGREGATE"
         try:
-            out = chunk_and_aggregate(prompt, lambda p: call_fn(apply_safe_mode_prefix(p)))
-            return SafeModeResult(text=out, used=True, stage=stage, category=category)
+            out2 = chunk_and_aggregate(prompt, lambda p: call_fn(apply_safe_mode_prefix(p)))
+            return SafeModeResult(text=out2, used=True, stage=stage, category=category)
         except Exception as e:  # noqa: BLE001
             if fallback_call_fn is not None:
                 try:
-                    out = chunk_and_aggregate(prompt, lambda p: fallback_call_fn(apply_safe_mode_prefix(p)))
-                    return SafeModeResult(text=out, used=True, stage="CHUNK_AGGREGATE_FALLBACK", category=category)
+                    out3 = chunk_and_aggregate(prompt, lambda p: fallback_call_fn(apply_safe_mode_prefix(p)))
+                    return SafeModeResult(text=out3, used=True, stage="CHUNK_AGGREGATE_FALLBACK", category=category)
                 except Exception:
                     pass
             raise
 
-    # If we reach here, propagate last failure as RuntimeError
+    # Unknown: try fallback once, else raise
+    if fallback_call_fn is not None:
+        stage = "FALLBACK_MODEL"
+        ok, out2, cat2 = _try(fallback_call_fn, apply_safe_mode_prefix(prompt))
+        if ok:
+            return SafeModeResult(text=out2, used=True, stage=stage, category=category)
+
     raise RuntimeError(f"SAFE_MODE failed: category={category}; last_error={out}")
