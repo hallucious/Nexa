@@ -1,8 +1,7 @@
-# openai_provider.py (Gate2)
-# Placeholder scaffold: wire this into your existing Provider interface.
-# Intentionally minimal here because project interfaces may differ by repo version.
-#
-# Expected behavior:
-# - Call OpenAI with model "gpt-4.1" (Responses API recommended)
-# - Input: prompt + baseline packet + current input
-# - Output: raw text + parsed JSON (if you enforce JSON schema)
+from src.providers.safe_mode import apply_safe_mode
+
+class OpenAIProvider:
+    def generate(self, prompt: str) -> str:
+        prompt = apply_safe_mode(prompt)
+        # existing OpenAI GPT-4.1 call here
+        return "<openai-response>"

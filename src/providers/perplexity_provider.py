@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import os
 import urllib.request
+
+from src.providers.safe_mode import apply_safe_mode_text
 from typing import Any, Dict, List
 
 
@@ -34,7 +36,7 @@ class PerplexityProvider:
             "messages": [
                 {
                     "role": "system",
-                    "content": (
+                    "content": apply_safe_mode_text(
                         "You are a fact-checking assistant. "
                         "Classify the statement as OK, WARN, or ERROR. "
                         "Provide a short justification and cite sources."
