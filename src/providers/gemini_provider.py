@@ -6,27 +6,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
-
-# --- SAFE_MODE integration (provider-agnostic) ---
-# We try to import the project's canonical helpers. If unavailable (older repo),
-# we fall back to no-op behavior to keep imports/test collection stable.
-try:
-    from src.providers.safe_mode import apply_safe_mode_text, safe_mode_reason  # type: ignore
-except Exception:  # pragma: no cover
-    def apply_safe_mode_text(text: str) -> str:
-        return text
-
-    def safe_mode_reason() -> str:
-        return ""
-
-
-def split_into_chunks(text: str, *, max_chars: int) -> list[str]:
-    """Deterministic chunking (lossless)."""
-    if not text:
-        return [""]
-    if max_chars <= 0:
-        return [text]
-    return [text[i : i + max_chars] for i in range(0, len(text), max_chars)]
+from src.providers.safe_mode import run_safe_mode, apply_safe_mode_prefix
 
 
 @dataclass
@@ -37,150 +17,89 @@ class GeminiResult:
 
 
 class GeminiProvider:
-    """
-    Stdlib-only Gemini client.
+    """Stdlib-only Gemini client (compat + SAFE_MODE v2).
 
-    - Uses env:
-        GEMINI_API_KEY
-        GEMINI_MODEL (optional, default: "gemini-1.5-pro")
-    - Network call is made ONLY when GEMINI_API_KEY exists.
-    - Returns a structured verdict JSON to keep Gate2 deterministic when disabled.
+    Compatibility guarantees (required by existing code/tests):
+    - Exports GeminiResult
+    - Provides judge_continuity(pic_text, current_text) -> GeminiResult
+    - Provides generate_text(prompt=..., temperature=..., max_output_tokens=...) -> (text, raw, err)
+
+    SAFE_MODE capabilities (provider-level):
+    - TRANSIENT retries + optional fallback model
+    - POLICY_REFUSAL guarded retry
+    - INVALID_REQUEST format-guard retry
+    - TOO_LONG chunk+aggregate (generic)
     """
 
     def __init__(self, api_key: str, *, model: str = "gemini-1.5-pro") -> None:
         self.api_key = (api_key or "").strip()
         self.model = (model or "gemini-1.5-pro").strip()
+        self.fallback_model = (os.environ.get("GEMINI_FALLBACK_MODEL") or "").strip() or None
 
     @staticmethod
-    def from_env() -> Optional["GeminiProvider"]:
-        api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        if not api_key:
-            return None
-        model = os.getenv("GEMINI_MODEL", "gemini-1.5-pro").strip()
+    def from_env() -> "GeminiProvider":
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        model = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro")
         return GeminiProvider(api_key, model=model)
 
     def judge_continuity(self, *, pic_text: str, current_text: str) -> GeminiResult:
-        """
-        Semantic continuity judgement.
+        prompt = (
+            "You are a strict reviewer for project semantic continuity.\n"
+            "Given a Project Identity Contract (PIC) and the current design text, "
+            "decide whether the current work is still the same project.\n\n"
+            "Return ONLY valid JSON with keys: verdict, rationale.\n"
+            "verdict must be one of: SAME, DRIFT, VIOLATION.\n\n"
+            "=== PIC ===\n"
+            f"{pic_text}\n\n"
+            "=== CURRENT ===\n"
+            f"{current_text}\n"
+        )
 
-        - Lossless preprocessing for TOO_LONG:
-          Split CURRENT into deterministic chunks and evaluate each chunk against PIC.
-          Aggregate the worst verdict (VIOLATION > DRIFT > SAME). If any chunk fails,
-          verdict becomes UNKNOWN unless a stronger verdict is found.
-        """
-
-        def build_prompt(cur: str) -> str:
-            base = (
-                "You are a strict reviewer for project semantic continuity.\n"
-                "Given a Project Identity Contract (PIC) and the current design text, "
-                "decide whether the current work is still the same project.\n\n"
-                "Return ONLY valid JSON with keys: verdict, rationale.\n"
-                "verdict must be one of: SAME, DRIFT, VIOLATION.\n\n"
-                "=== PIC ===\n"
-                f"{pic_text}\n\n"
-                "=== CURRENT ===\n"
-                f"{cur}\n"
-            )
-            return apply_safe_mode_text(base)
-
-        reason = (safe_mode_reason() or "").upper()
-
-        # Heuristic guard: large inputs often trigger context issues. We treat that as TOO_LONG policy.
-        if reason == "TOO_LONG" or len(current_text) > 24000:
-            chunks = split_into_chunks(current_text, max_chars=8000)
-            order = {"SAME": 0, "DRIFT": 1, "VIOLATION": 2, "UNKNOWN": 3}
-            worst = "SAME"
-            rationales: list[str] = []
-            raw_chunks: list[dict] = []
-
-            for i, chunk in enumerate(chunks, start=1):
-                prompt = build_prompt(chunk)
-                text, raw, err = self.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=512)
-                raw_chunks.append(
-                    {
-                        "chunk_index": i,
-                        "chunk_len": len(chunk),
-                        "raw": raw,
-                        "error": str(err) if err else None,
-                    }
-                )
-
-                if err is not None:
-                    worst = "UNKNOWN"
-                    rationales.append(f"[chunk {i}/{len(chunks)}] call failed: {type(err).__name__}: {err}")
-                    continue
-
-                verdict, rationale = self._parse_verdict(text)
-                rationales.append(f"[chunk {i}/{len(chunks)}] {verdict}: {rationale}")
-                if order.get(verdict, 3) > order.get(worst, 0):
-                    worst = verdict
-
-                if worst == "VIOLATION":
-                    break
-
-            return GeminiResult(
-                verdict=worst,
-                rationale="\n".join(rationales).strip(),
-                raw={"mode": "chunked", "chunks": raw_chunks},
-            )
-
-        # Normal path (single call)
-        prompt = build_prompt(current_text)
         text, raw, err = self.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=512)
         if err is not None:
             return GeminiResult(
                 verdict="UNKNOWN",
                 rationale=f"Gemini call failed: {type(err).__name__}: {err}",
-                raw={"error": str(err), "raw": raw},
+                raw={"error": str(err)},
             )
 
-        verdict, rationale = self._parse_verdict(text)
-        return GeminiResult(verdict=verdict, rationale=rationale, raw=raw)
-
-    @staticmethod
-    def _parse_verdict(text: str) -> Tuple[str, str]:
         try:
             parsed = json.loads(text)
             verdict = str(parsed.get("verdict", "")).strip().upper()
             rationale = str(parsed.get("rationale", "")).strip()
-        except Exception:
-            return ("UNKNOWN", "Model did not return valid JSON")
+            if verdict not in ("SAME", "DRIFT", "VIOLATION"):
+                verdict = "UNKNOWN"
+            return GeminiResult(verdict=verdict, rationale=rationale, raw={"api": raw, "model_text": text})
+        except Exception as e:  # noqa: BLE001
+            return GeminiResult(
+                verdict="UNKNOWN",
+                rationale=f"Could not parse JSON: {type(e).__name__}: {e}",
+                raw={"api": raw, "model_text": text},
+            )
 
-        if verdict not in ("SAME", "DRIFT", "VIOLATION"):
-            verdict = "UNKNOWN"
-        return (verdict, rationale)
-
-    def generate_text(
+    def _call_once(
         self,
         *,
         prompt: str,
-        temperature: float = 0.0,
-        max_output_tokens: int = 512,
-        timeout_sec: int = 30,
-    ) -> Tuple[str, Dict[str, Any], Optional[Exception]]:
-        """Generic text generation helper.
-
-        Returns (text, raw_response, error).
-
-        Notes:
-        - Stdlib-only.
-        - Caller is responsible for JSON parsing if needed.
-        """
-
-        # If key is missing, do not call the network. Keep behavior deterministic for tests.
+        temperature: float,
+        max_output_tokens: int,
+        timeout_sec: int,
+        model: Optional[str] = None,
+    ) -> Tuple[str, Dict[str, Any]]:
         if not self.api_key:
-            dummy = {"verdict": "UNKNOWN", "rationale": "GEMINI_API_KEY missing (network disabled)"}
-            return (json.dumps(dummy), {"disabled": True}, None)
+            raise RuntimeError("INVALID_REQUEST: GEMINI_API_KEY is missing")
+
+        use_model = (model or self.model).strip()
 
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self.model}:generateContent?key={self.api_key}"
+            f"{use_model}:generateContent?key={self.api_key}"
         )
 
-        prompt = apply_safe_mode_text(prompt)
-
         payload = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            "contents": [
+                {"role": "user", "parts": [{"text": prompt}]}
+            ],
             "generationConfig": {
                 "temperature": float(temperature),
                 "maxOutputTokens": int(max_output_tokens),
@@ -195,20 +114,78 @@ class GeminiProvider:
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=int(timeout_sec)) as resp:
-                raw = json.loads(resp.read().decode("utf-8", errors="replace"))
-        except Exception as e:
-            return ("", {"error": str(e)}, e)
+            with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+                raw_bytes = resp.read()
+        except Exception as e:  # noqa: BLE001
+            # Let SAFE_MODE classify this
+            raise RuntimeError(str(e)) from e
 
-        text = ""
+        raw_text = raw_bytes.decode("utf-8", errors="replace")
+        raw = json.loads(raw_text)
+
+        # Extract text (best-effort; Gemini returns candidates->content->parts)
+        text_out = ""
         try:
             candidates = raw.get("candidates", [])
             if candidates:
-                content = candidates[0].get("content", {})
-                parts = content.get("parts", [])
-                if parts and isinstance(parts[0], dict):
-                    text = str(parts[0].get("text", "")).strip()
+                parts = candidates[0].get("content", {}).get("parts", [])
+                if parts and isinstance(parts, list):
+                    text_out = str(parts[0].get("text", ""))
         except Exception:
-            text = ""
+            text_out = ""
 
-        return (text, raw, None)
+        return text_out, raw
+
+    def generate_text(
+        self,
+        *,
+        prompt: str,
+        temperature: float = 0.0,
+        max_output_tokens: int = 512,
+        timeout_sec: int = 30,
+    ) -> Tuple[str, Dict[str, Any], Optional[Exception]]:
+        """Return (text, raw_response, error).
+
+        - If API key missing: returns ("", {}, Exception)
+        - Otherwise uses SAFE_MODE v2 to retry/preprocess.
+        """
+        if not self.api_key:
+            return "", {}, RuntimeError("GEMINI_API_KEY is missing")
+
+        def call_fn(p: str) -> str:
+            # We only return text to SAFE_MODE; raw is captured separately via closure.
+            t, _raw = self._call_once(
+                prompt=p,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens,
+                timeout_sec=timeout_sec,
+                model=self.model,
+            )
+            call_fn.last_raw = _raw  # type: ignore[attr-defined]
+            return t
+
+        call_fn.last_raw = {}  # type: ignore[attr-defined]
+
+        fallback_fn = None
+        if self.fallback_model:
+            def fb(p: str) -> str:
+                t, _raw = self._call_once(
+                    prompt=p,
+                    temperature=temperature,
+                    max_output_tokens=max_output_tokens,
+                    timeout_sec=timeout_sec,
+                    model=self.fallback_model,
+                )
+                fb.last_raw = _raw  # type: ignore[attr-defined]
+                return t
+            fb.last_raw = {}  # type: ignore[attr-defined]
+            fallback_fn = fb
+
+        try:
+            res = run_safe_mode(apply_safe_mode_prefix(prompt), call_fn, fallback_call_fn=fallback_fn)
+            raw = getattr(call_fn, "last_raw", {}) or {}
+            if fallback_fn is not None and res.stage.startswith("FALLBACK"):
+                raw = getattr(fallback_fn, "last_raw", {}) or {}
+            return res.text, raw, None
+        except Exception as e:  # noqa: BLE001
+            return "", {}, e
