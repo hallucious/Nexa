@@ -229,6 +229,22 @@ def extract_anchors(text: str, *, max_anchors: int = 40) -> List[str]:
     return out
 
 
+
+def apply_anchor_lock(prompt: str, anchors: List[str]) -> str:
+    """Prepend an 'anchor lock' block to keep critical strings verbatim.
+
+    This is used in STRICT mode to prevent preprocessing from dropping or mutating
+    safety/contract anchors that must remain semantically stable across retries.
+    """
+    if not anchors:
+        return prompt
+    locked = "\n".join(f"- {a}" for a in anchors)
+    return (
+        "ANCHOR_LOCK (do not remove / do not paraphrase):\n"
+        f"{locked}\n\n"
+        + prompt
+    )
+
 def anchors_coverage(text: str, anchors: Sequence[str]) -> float:
     if not anchors:
         return 1.0
@@ -398,9 +414,15 @@ def run_safe_mode(
     # Stage 0: normal
     prompt_before = prompt
     anchors = extract_anchors(prompt_before)
-    ok, out, cat = _try(call_fn, apply_safe_mode_prefix(prompt_before))
+    def _prepare(p: str) -> str:
+        pa = apply_safe_mode_prefix(p)
+        if link_mode == "STRICT":
+            pa = apply_anchor_lock(pa, anchors)
+        return pa
+
+    ok, out, cat = _try(call_fn, _prepare(prompt_before))
     if ok:
-        return _return(out, used=False, stage=stage, category=category, prompt_before=prompt_before, prompt_after=apply_safe_mode_prefix(prompt_before), anchors=anchors, covered=len(anchors))
+        return _return(out, used=False, stage=stage, category=category, prompt_before=prompt_before, prompt_after=_prepare(prompt_before), anchors=anchors, covered=len(anchors))
 
     used = True
     category = cat
@@ -411,18 +433,18 @@ def run_safe_mode(
         last_err = out
         for _ in range(retries_transient):
             time.sleep(max(0.0, backoff_seconds))
-            ok, out, cat = _try(call_fn, apply_safe_mode_prefix(prompt_before))
+            ok, out, cat = _try(call_fn, _prepare(prompt_before))
             if ok:
-                pa = apply_safe_mode_prefix(prompt_before)
+                pa = _prepare(prompt_before)
                 cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
                 return _return(out, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
             last_err = out
 
         if fallback_call_fn is not None:
             stage = "FALLBACK_MODEL"
-            ok, out, cat = _try(fallback_call_fn, apply_safe_mode_prefix(prompt_before))
+            ok, out, cat = _try(fallback_call_fn, _prepare(prompt_before))
             if ok:
-                pa = apply_safe_mode_prefix(prompt_before)
+                pa = _prepare(prompt_before)
                 cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
                 return _return(out, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
@@ -434,9 +456,9 @@ def run_safe_mode(
         stage = "POLICY_REWRITE" if severity == "SOFT" else "POLICY_REWRITE"
 
         rewritten = preprocess_for_policy(prompt_before, severity=severity)
-        ok, out2, cat2 = _try(call_fn, apply_safe_mode_prefix(rewritten))
+        ok, out2, cat2 = _try(call_fn, _prepare(rewritten))
         if ok:
-            pa = apply_safe_mode_prefix(rewritten)
+            pa = _prepare(rewritten)
             cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
             return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
@@ -460,7 +482,7 @@ def run_safe_mode(
                 return _return(out4, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
         # Final safe fallback without additional API calls.
-        pa = apply_safe_mode_prefix(prompt_before)
+        pa = _prepare(prompt_before)
         cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
         return _return(_canned_policy_fallback(prompt_before), used=True, stage="CANNED_POLICY_FALLBACK", category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
@@ -468,9 +490,9 @@ def run_safe_mode(
     if category == "INVALID_REQUEST":
         stage = "FORMAT_RETRY"
         rewritten = preprocess_for_invalid_request(prompt_before)
-        ok, out2, cat2 = _try(call_fn, apply_safe_mode_prefix(rewritten))
+        ok, out2, cat2 = _try(call_fn, _prepare(rewritten))
         if ok:
-            pa = apply_safe_mode_prefix(rewritten)
+            pa = _prepare(rewritten)
             cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
             return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
@@ -483,7 +505,7 @@ def run_safe_mode(
                 cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
                 return _return(out3, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
-        pa = apply_safe_mode_prefix(prompt_before)
+        pa = _prepare(prompt_before)
         cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
         return _return(_canned_invalid_fallback(prompt_before), used=True, stage="CANNED_INVALID_FALLBACK", category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 
@@ -509,9 +531,9 @@ def run_safe_mode(
     # Unknown: try fallback once, else raise
     if fallback_call_fn is not None:
         stage = "FALLBACK_MODEL"
-        ok, out2, cat2 = _try(fallback_call_fn, apply_safe_mode_prefix(prompt_before))
+        ok, out2, cat2 = _try(fallback_call_fn, _prepare(prompt_before))
         if ok:
-            pa = apply_safe_mode_prefix(prompt_before)
+            pa = _prepare(prompt_before)
             cov = int(round(anchors_coverage(pa, anchors) * len(anchors)))
             return _return(out2, used=True, stage=stage, category=category, prompt_before=prompt_before, prompt_after=pa, anchors=anchors, covered=cov)
 

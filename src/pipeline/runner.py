@@ -1,14 +1,7 @@
-# SAFE_MODE metrics enhanced runner
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Callable
-
-import json
-import os
-import traceback
-import time
-from pathlib import Path
+from typing import Dict, Callable, Optional
 
 from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
@@ -26,6 +19,11 @@ GateExecutor = Callable[[GateContext], GateResult]
 
 
 class PipelineRunner:
+    """
+    Executes a 7-Gate state machine.
+    Enforces artifact contracts per gate.
+    Includes safety stops to prevent infinite loops.
+    """
 
     def __init__(
         self,
@@ -34,10 +32,6 @@ class PipelineRunner:
         *,
         max_total_steps: int = 50,
         max_attempts_per_gate: int = 3,
-        auto_retry_policy_refusal: bool = True,
-        auto_retry_too_long: bool = True,
-        auto_retry_transient: bool = True,
-        retry_backoff_seconds: float = 1.0,
     ):
         self.meta = meta
         self.run_dir = run_dir
@@ -46,26 +40,8 @@ class PipelineRunner:
         self.max_attempts_per_gate = max_attempts_per_gate
         self._steps_executed = 0
 
-        self.auto_retry_policy_refusal = auto_retry_policy_refusal
-        self.auto_retry_too_long = auto_retry_too_long
-        self.auto_retry_transient = auto_retry_transient
-        self.retry_backoff_seconds = retry_backoff_seconds
-
-        if not hasattr(self.meta, "safe_mode_metrics"):
-            self.meta.safe_mode_metrics = {
-                "total": 0,
-                "by_gate": {},
-                "by_category": {}
-            }
-
     def register(self, gate_id: GateId, executor: GateExecutor) -> None:
         self.executors[gate_id] = executor
-
-    def _record_safe_mode_metrics(self, gate: GateId, category: str):
-        metrics = self.meta.safe_mode_metrics
-        metrics["total"] += 1
-        metrics["by_gate"][gate.value] = metrics["by_gate"].get(gate.value, 0) + 1
-        metrics["by_category"][category] = metrics["by_category"].get(category, 0) + 1
 
     def _record_transition(self, from_gate: GateId, to_gate: GateId, decision: Decision) -> None:
         self.meta.transitions.append(
@@ -79,30 +55,12 @@ class PipelineRunner:
         self.meta.current_gate = to_gate
 
     def _stop_run(self, reason: str) -> None:
+        # Mark STOP and move to STOP gate
         self.meta.status = RunStatus.STOP
+        # keep current gate for traceability, but set to STOP as terminal
         self.meta.current_gate = GateId.STOP
-        self.meta.attempts["STOP_REASON"] = reason
-
-    def _classify_error(self, err: BaseException) -> str:
-        msg = f"{type(err).__name__}: {err}".lower()
-        if any(p in msg for p in ["policy", "refus", "safety", "violates"]):
-            return "POLICY_REFUSAL"
-        if any(p in msg for p in ["too long", "context", "token limit"]):
-            return "TOO_LONG"
-        if any(p in msg for p in ["timeout", "rate limit", "503", "network"]):
-            return "TRANSIENT_ERROR"
-        if any(p in msg for p in ["invalid", "schema", "json"]):
-            return "INVALID_REQUEST"
-        return "UNKNOWN_ERROR"
-
-    def _should_autoretry(self, category: str) -> bool:
-        if category == "POLICY_REFUSAL":
-            return self.auto_retry_policy_refusal
-        if category == "TOO_LONG":
-            return self.auto_retry_too_long
-        if category == "TRANSIENT_ERROR":
-            return self.auto_retry_transient
-        return False
+        # Optionally, you could write reason somewhere later; for now keep in attempts
+        self.meta.attempts["STOP_REASON"] = reason  # lightweight trace
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
         if gate == GateId.G1:
@@ -129,8 +87,13 @@ class PipelineRunner:
         return GateId.STOP
 
     def step(self) -> bool:
+        """
+        Execute one gate.
+        Returns False if pipeline should stop.
+        """
+        # total-step safety
         if self._steps_executed >= self.max_total_steps:
-            self._stop_run("max_total_steps exceeded")
+            self._stop_run(f"max_total_steps exceeded: {self.max_total_steps}")
             return False
 
         gate = self.meta.current_gate
@@ -141,65 +104,32 @@ class PipelineRunner:
         if executor is None:
             raise RuntimeError(f"No executor registered for gate {gate}")
 
+        # attempt count
         self.meta.attempts[gate.value] = self.meta.attempts.get(gate.value, 0) + 1
+
+        # per-gate safety (prevents infinite loops like G2 FAIL -> G1 -> G2 FAIL ...)
+        if self.meta.attempts[gate.value] > self.max_attempts_per_gate:
+            self._stop_run(f"max_attempts_per_gate exceeded: {gate.value} > {self.max_attempts_per_gate}")
+            return False
+
         ctx = GateContext(meta=self.meta, run_dir=self.run_dir)
+        result = executor(ctx)
 
-        retries_left = 1
-
-        while True:
-            try:
-                result = executor(ctx)
-                spec = standard_spec(gate.value)
-                spec.validate(result.outputs)
-                break
-            except Exception as err:
-                category = self._classify_error(err)
-                if retries_left > 0 and self._should_autoretry(category):
-                    retries_left -= 1
-                    self._record_safe_mode_metrics(gate, category)
-                    if category == "TRANSIENT_ERROR":
-                        time.sleep(self.retry_backoff_seconds)
-                    continue
-                self._stop_run(f"{category}: {err}")
-                return False
+        # enforce artifact contract
+        spec = standard_spec(gate.value)
+        spec.validate(result.outputs)
 
         next_gate = self._next_gate(gate, result.decision)
         self._record_transition(gate, next_gate, result.decision)
+
         self._steps_executed += 1
         return next_gate not in (GateId.DONE, GateId.STOP)
 
     def run(self) -> RunMeta:
+        """
+        Run until DONE or STOP (including safety stop).
+        """
         self.meta.status = RunStatus.RUNNING
         while self.step():
             pass
         return self.meta
-        # Auto-tuning hints (best-effort): based on SAFE_MODE metrics accumulated during this run.
-        # This does not change behavior automatically; it records actionable suggestions in META.json.
-        try:
-            attrs = getattr(self.meta, "attrs", None)
-            if isinstance(attrs, dict):
-                sm = attrs.get("safe_mode_metrics") or {}
-                by_gate = sm.get("by_gate") if isinstance(sm, dict) else None
-                by_category = sm.get("by_category") if isinstance(sm, dict) else None
-                if isinstance(by_gate, dict) and by_gate:
-                    worst_gate, worst_n = max(by_gate.items(), key=lambda kv: int(kv[1] or 0))
-                    worst_n = int(worst_n or 0)
-                    if worst_n > 0:
-                        rec = []
-                        if isinstance(by_category, dict) and by_category.get("POLICY_REFUSAL"):
-                            rec.append("POLICY_REFUSAL: clarify legitimate intent; add safe framing; remove disallowed details.")
-                        if isinstance(by_category, dict) and by_category.get("TOO_LONG"):
-                            rec.append("TOO_LONG: reduce prompt size; prefer structured JSON; move long context to files and summarize.")
-                        if isinstance(by_category, dict) and by_category.get("INVALID_REQUEST"):
-                            rec.append("INVALID_REQUEST: enforce JSON schema; add examples; validate before send.")
-                        if not rec:
-                            rec = ["Review the hotspot gate prompt and inputs; simplify and add structure."]
-                        attrs["auto_tuning"] = {
-                            "hotspot_gate": worst_gate,
-                            "hotspot_count": worst_n,
-                            "recommendations": rec,
-                        }
-        except Exception:
-            pass
-
-
