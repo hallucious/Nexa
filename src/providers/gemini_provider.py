@@ -9,6 +9,18 @@ from typing import Any, Dict, Optional, Tuple
 from src.providers.safe_mode import run_safe_mode, apply_safe_mode_prefix
 
 
+def _parse_optional_int(v: Optional[str]) -> Optional[int]:
+    try:
+        if v is None:
+            return None
+        s = str(v).strip()
+        if s == "":
+            return None
+        return int(s)
+    except Exception:
+        return None
+
+
 @dataclass
 class GeminiResult:
     verdict: str  # "SAME" | "DRIFT" | "VIOLATION" | "UNKNOWN"
@@ -35,6 +47,7 @@ class GeminiProvider:
         self.api_key = (api_key or "").strip()
         self.model = (model or "gemini-1.5-pro").strip()
         self.fallback_model = (os.environ.get("GEMINI_FALLBACK_MODEL") or "").strip() or None
+        self.thinking_budget = _parse_optional_int(os.environ.get("GEMINI_THINKING_BUDGET"))
 
     @staticmethod
     def from_env() -> "GeminiProvider":
@@ -91,6 +104,26 @@ class GeminiProvider:
 
         use_model = (model or self.model).strip()
 
+        # Gemini 2.5 "thinking" tokens are billed/limited separately but still count
+        # against maxOutputTokens in practice. If maxOutputTokens is too low, the model
+        # may consume the entire budget on thinking and return no text parts.
+        #
+        # Strategy:
+        # - If user configured GEMINI_THINKING_BUDGET, pass it through.
+        # - Otherwise, for 2.5 Pro default to a conservative 128 thinking budget.
+        # - Ensure maxOutputTokens is at least thinkingBudget + 64 (room for output).
+        eff_thinking_budget: Optional[int] = self.thinking_budget
+        if eff_thinking_budget is None and "gemini-2.5-pro" in use_model:
+            eff_thinking_budget = 128
+
+        eff_max_tokens = int(max_output_tokens)
+        if eff_thinking_budget is not None:
+            # Keep a small buffer so we actually get visible output.
+            eff_max_tokens = max(eff_max_tokens, int(eff_thinking_budget) + 64)
+        # Safety floor for 2.5 Pro; avoids empty outputs on trivial prompts.
+        if "gemini-2.5-pro" in use_model:
+            eff_max_tokens = max(eff_max_tokens, 256)
+
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
             f"{use_model}:generateContent?key={self.api_key}"
@@ -102,7 +135,12 @@ class GeminiProvider:
             ],
             "generationConfig": {
                 "temperature": float(temperature),
-                "maxOutputTokens": int(max_output_tokens),
+                "maxOutputTokens": int(eff_max_tokens),
+                **(
+                    {"thinkingConfig": {"thinkingBudget": int(eff_thinking_budget)}}
+                    if eff_thinking_budget is not None
+                    else {}
+                ),
             },
         }
 
@@ -123,14 +161,18 @@ class GeminiProvider:
         raw_text = raw_bytes.decode("utf-8", errors="replace")
         raw = json.loads(raw_text)
 
-        # Extract text (best-effort; Gemini returns candidates->content->parts)
+        # Extract text (best-effort; Gemini returns candidates -> content -> parts).
         text_out = ""
         try:
             candidates = raw.get("candidates", [])
             if candidates:
                 parts = candidates[0].get("content", {}).get("parts", [])
-                if parts and isinstance(parts, list):
-                    text_out = str(parts[0].get("text", ""))
+                if isinstance(parts, list) and parts:
+                    chunks = []
+                    for pt in parts:
+                        if isinstance(pt, dict) and "text" in pt and pt.get("text") is not None:
+                            chunks.append(str(pt.get("text")))
+                    text_out = "".join(chunks)
         except Exception:
             text_out = ""
 
