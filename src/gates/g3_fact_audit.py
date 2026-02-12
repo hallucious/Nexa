@@ -68,8 +68,11 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     candidates = _extract_fact_candidates(g1)
 
     provider = None
+    # IMPORTANT: do not make real external calls during unit tests by default.
+    # Enable Perplexity-based verification only when explicitly requested.
+    enable_pplx = os.getenv("ENABLE_PERPLEXITY_FACT_AUDIT", "0").strip() in ("1", "true", "True", "yes", "YES")
     api_key = os.getenv("PERPLEXITY_API_KEY")
-    if api_key:
+    if enable_pplx and api_key:
         try:
             provider = PerplexityProvider(api_key)
         except Exception:
