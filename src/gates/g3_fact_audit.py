@@ -70,7 +70,12 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     provider = None
     # IMPORTANT: do not make real external calls during unit tests by default.
     # Enable Perplexity-based verification only when explicitly requested.
-    enable_pplx = os.getenv("ENABLE_PERPLEXITY_FACT_AUDIT", "0").strip() in ("1", "true", "True", "yes", "YES")
+    is_pytest = os.getenv("PYTEST_CURRENT_TEST") is not None
+    enable_flag = os.getenv("ENABLE_PERPLEXITY_FACT_AUDIT", "0").strip() in ("1", "true", "True", "yes", "YES")
+    # Default behavior:
+    # - Normal pipeline runs: external evidence check ON (intended role of G3)
+    # - Pytest runs: external calls OFF unless explicitly enabled (keeps unit tests deterministic)
+    enable_pplx = (not is_pytest) or enable_flag
     api_key = os.getenv("PERPLEXITY_API_KEY")
     if enable_pplx and api_key:
         try:
