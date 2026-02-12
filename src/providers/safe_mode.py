@@ -111,6 +111,13 @@ def classify_error(err: BaseException) -> str:
     if any(p in msg for p in ["timeout", "timed out", "rate limit", "429", "503", "502", "network", "temporarily", "try again", "connection", "overloaded", "unavailable"]):
         return "TRANSIENT_ERROR"
 
+    # Auth / Not found (model or endpoint)
+    if status_i in (401, 403, 404):
+        return "INVALID_REQUEST"
+    if any(p in msg for p in ["unauthorized", "forbidden", "not found", " 401", " 403", " 404", "http error 401", "http error 403", "http error 404"]):
+        return "INVALID_REQUEST"
+
+
     # Too long / context window
     if status_i == 413:
         return "TOO_LONG"

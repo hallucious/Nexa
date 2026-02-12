@@ -85,30 +85,24 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
 
     results: List[Dict[str, Any]] = []
     fail_reasons: List[str] = []
+    stop_error: str = ""
+
+    def _extract_category(err: BaseException) -> str:
+        m = re.search(r"category=([A-Z_]+)", str(err))
+        return m.group(1) if m else "UNKNOWN_ERROR"
+
+    # If external evidence checking is required (normal pipeline run) but provider is unavailable, STOP.
+    provider_required = bool(enable_pplx) and (not is_pytest)
+
+    if provider_required and provider is None:
+        stop_error = "UNKNOWN_ERROR: Perplexity provider unavailable (missing key or init failure)"
 
     for stmt in candidates:
-        if provider:
-            try:
-                r = provider.verify(stmt)
-                label = r["verdict"]
-                result = {
-                    "statement": stmt,
-                    "label": label,
-                    "engine": "perplexity",
-                    "confidence": r.get("confidence"),
-                    "citations": r.get("citations"),
-                    "summary": r.get("summary"),
-                }
-            except Exception as e:
-                rb = _rule_based_audit(stmt)
-                result = {
-                    "statement": stmt,
-                    "label": rb["label"],
-                    "engine": "rule_fallback",
-                    "reason": rb["reason"],
-                    "error": str(e),
-                }
-        else:
+        if stop_error:
+            break
+
+        # If Perplexity is disabled (pytest default) we can only do local rule checks.
+        if provider is None:
             rb = _rule_based_audit(stmt)
             result = {
                 "statement": stmt,
@@ -116,25 +110,73 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
                 "engine": "rule_only",
                 "reason": rb["reason"],
             }
+            results.append(result)
+            if result["label"] == "ERROR":
+                fail_reasons.append(stmt)
+            continue
 
-        results.append(result)
-        if result["label"] == "ERROR":
-            fail_reasons.append(stmt)
+        # Normal pipeline: Perplexity-based evidence check is non-optional.
+        try:
+            r = provider.verify(stmt)
+            label = r.get("verdict", "UNKNOWN")
+            result = {
+                "statement": stmt,
+                "label": label,
+                "engine": "perplexity",
+                "confidence": r.get("confidence"),
+                "citations": r.get("citations"),
+                "summary": r.get("summary"),
+            }
+            results.append(result)
 
-    decision = Decision.FAIL if fail_reasons else Decision.PASS
+            if label == "ERROR":
+                fail_reasons.append(stmt)
+
+        except Exception as e:  # noqa: BLE001
+            cat = _extract_category(e)
+
+            # If we cannot execute verification due to system instability, we STOP.
+            if cat in ("UNKNOWN_ERROR", "TRANSIENT_ERROR"):
+                stop_error = f"{cat}: {e}"
+                break
+
+            # If the request itself is invalid/policy/too-long, treat as FAIL.
+            if cat in ("POLICY_REFUSAL", "INVALID_REQUEST", "TOO_LONG"):
+                result = {
+                    "statement": stmt,
+                    "label": "ERROR",
+                    "engine": "perplexity_error",
+                    "category": cat,
+                    "error": str(e),
+                }
+                results.append(result)
+                fail_reasons.append(stmt)
+                continue
+
+            stop_error = f"{cat}: {e}"
+            break
+
+    # Decide
+    if stop_error:
+        decision = Decision.STOP
+    else:
+        decision = Decision.FAIL if fail_reasons else Decision.PASS
 
     (run_dir / "G3_DECISION.md").write_text(
         "# G3 FACT AUDIT DECISION\n\n"
         f"Decision: {decision.value}\n\n"
         "## Fail reasons\n"
-        + ("\n".join([f"- {s}" for s in fail_reasons]) if fail_reasons else "- None\n"),
+        + ("\n".join([f"- {s}" for s in fail_reasons]) if fail_reasons else "- None\n")
+        + "\n\n## Stop reason\n"
+        + (f"- {stop_error}\n" if decision == Decision.STOP else "- None\n"),
         encoding="utf-8",
     )
 
     output = {
         "gate": "G3",
-        "mode": "fact_audit_perplexity_if_available",
-        "engine_used": "perplexity" if provider else "rule_only",
+        "mode": "fact_audit_perplexity",
+        "engine_used": "perplexity" if provider is not None else "rule_only",
+        "stop_error": stop_error,
         "candidates": candidates,
         "results": results,
     }

@@ -43,16 +43,16 @@ class GeminiProvider:
     - TOO_LONG chunk+aggregate (generic)
     """
 
-    def __init__(self, api_key: str, *, model: str = "gemini-1.5-pro") -> None:
+    def __init__(self, api_key: str, *, model: str = "gemini-2.5-pro") -> None:
         self.api_key = (api_key or "").strip()
-        self.model = (model or "gemini-1.5-pro").strip()
+        self.model = (model or "gemini-2.5-pro").strip()
         self.fallback_model = (os.environ.get("GEMINI_FALLBACK_MODEL") or "").strip() or None
         self.thinking_budget = _parse_optional_int(os.environ.get("GEMINI_THINKING_BUDGET"))
 
     @staticmethod
     def from_env() -> "GeminiProvider":
         api_key = os.environ.get("GEMINI_API_KEY", "")
-        model = os.environ.get("GEMINI_MODEL", "gemini-1.5-pro")
+        model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
         return GeminiProvider(api_key, model=model)
 
     def judge_continuity(self, *, pic_text: str, current_text: str) -> GeminiResult:
