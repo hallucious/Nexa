@@ -11,8 +11,8 @@ from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
 
 # NOTE:
-# - Gemini provider is optional. Gate2 must still run (deterministically) without network.
-# - If Gemini is unavailable -> verdict UNKNOWN (non-blocking), but structure rules still apply.
+# - GPT provider is optional. Gate2 must still run (deterministically) without network.
+# - If GPT is unavailable -> verdict UNKNOWN (non-blocking), but structure rules still apply.
 try:
     from src.providers.gemini_provider import GeminiProvider
 except Exception:  # pragma: no cover
@@ -81,9 +81,9 @@ def _format_decision_md(
     baseline_present: bool,
     previous_present: bool,
     diff: Dict[str, List[str]],
-    gemini_used: bool,
-    gemini_verdict: str,
-    gemini_rationale: str,
+    llm_used: bool,
+    llm_verdict: str,
+    llm_rationale: str,
     notes: str,
 ) -> str:
     removed = diff.get("removed", [])
@@ -97,19 +97,19 @@ def _format_decision_md(
     md.append(f"- Baseline present: {baseline_present}\n")
     md.append(f"- Previous run present: {previous_present}\n")
     md.append(f"- JSON diff: added={len(added)}, removed={len(removed)}, changed={len(changed)}\n")
-    md.append(f"- Gemini used: {gemini_used}\n")
-    md.append(f"- Gemini verdict: {gemini_verdict}\n")
+    md.append(f"- GPT used: {llm_used}\n")
+    md.append(f"- GPT verdict: {llm_verdict}\n")
 
     md.append("\n## Structure diff (audit)\n")
     md.append(f"- Added: {added}\n")
     md.append(f"- Removed: {removed}\n")
     md.append(f"- Changed: {changed}\n")
 
-    md.append("\n## Semantic continuity (Gemini)\n")
-    md.append(f"- Verdict: {gemini_verdict}\n")
-    if gemini_rationale:
+    md.append("\n## Semantic continuity (GPT)\n")
+    md.append(f"- Verdict: {llm_verdict}\n")
+    if llm_rationale:
         md.append("\n### Rationale\n")
-        md.append(gemini_rationale.strip() + "\n")
+        md.append(llm_rationale.strip() + "\n")
 
     md.append("\n## Notes\n")
     md.append(notes.strip() + "\n")
@@ -170,63 +170,21 @@ def _load_current_text(run_dir: Path) -> Tuple[str, str]:
     return "", "MISSING"
 
 
-
-def _meta_path(run_dir: Path) -> Path:
-    return run_dir / "META.json"
-
-
-def _read_meta(run_dir: Path) -> dict:
-    p = _meta_path(run_dir)
-    if not p.exists():
-        return {}
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except Exception:
-        # do not fail Gate2 due to meta corruption
-        return {}
-
-
-def _write_meta(run_dir: Path, data: dict) -> None:
-    p = _meta_path(run_dir)
-    p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-
-
-def _merge_dict(dst: dict, patch: dict) -> dict:
-    for k, v in patch.items():
-        if isinstance(v, dict) and isinstance(dst.get(k), dict):
-            dst[k] = _merge_dict(dst[k], v)
-        else:
-            dst[k] = v
-    return dst
-
-
-def _update_meta(run_dir: Path, patch: dict) -> None:
-    data = _read_meta(run_dir)
-    _merge_dict(data, patch)
-    _write_meta(run_dir, data)
-
-
-def _append_jsonl(path: Path, record: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
-
-
 def gate_g2_continuity(ctx: GateContext) -> GateResult:
     """
     Gate2 = Continuity check (Structure + Semantic).
 
     - Structure: JSON diff baseline vs current (for audit / debugging)
       *Decision rule (STRUCTURE): removed baseline keys => FAIL*  (backward incompatible schema regression)
-    - Semantic: Gemini compares PIC vs current text and outputs SAME/DRIFT/VIOLATION/UNKNOWN
+    - Semantic: GPT compares PIC vs current text and outputs SAME/DRIFT/VIOLATION/UNKNOWN
       *Decision rule (SEMANTIC): DRIFT or VIOLATION => FAIL*
 
     Final decision:
       - If structure_removed => FAIL
-      - Else if Gemini verdict in {DRIFT, VIOLATION} => FAIL
+      - Else if GPT verdict in {DRIFT, VIOLATION} => FAIL
       - Else PASS
 
-    If Gemini is unavailable => verdict UNKNOWN (non-blocking), but artifacts record that it was not validated.
+    If GPT is unavailable => verdict UNKNOWN (non-blocking), but artifacts record that it was not validated.
     """
     run_dir = Path(ctx.run_dir)
     repo_root = _find_repo_root(run_dir)
@@ -242,35 +200,35 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     else:
         diff = {"added": [], "removed": [], "changed": []}
 
-    # Semantic continuity via Gemini (PIC vs current)
+    # Semantic continuity via GPT (PIC vs current)
     pic_text, pic_src = _load_pic_text(repo_root, run_dir)
     cur_text, cur_src = _load_current_text(run_dir)
 
     provider = None
     if GeminiProvider is not None:
         try:
-            provider = GeminiProvider.from_env()
+            provider = OpenAIProvider.from_env()
         except Exception:
             provider = None
 
-    gemini_used = provider is not None
-    gemini_verdict = "UNKNOWN"
-    gemini_rationale = ""
+    llm_used = provider is not None
+    llm_verdict = "UNKNOWN"
+    llm_rationale = ""
 
     if provider is not None and pic_text and cur_text:
         try:
             res = provider.judge_continuity(pic_text=pic_text, current_text=cur_text)
-            gemini_verdict = getattr(res, "verdict", "UNKNOWN")
-            gemini_rationale = getattr(res, "rationale", "") or ""
+            llm_verdict = getattr(res, "verdict", "UNKNOWN")
+            llm_rationale = getattr(res, "rationale", "") or ""
         except Exception:
-            gemini_verdict = "UNKNOWN"
-            gemini_rationale = ""
+            llm_verdict = "UNKNOWN"
+            llm_rationale = ""
 
     # Decision rule (fixed)
     structure_removed = bool(diff.get("removed"))
     if structure_removed:
         decision = Decision.FAIL
-    elif gemini_verdict in ("DRIFT", "VIOLATION"):
+    elif llm_verdict in ("DRIFT", "VIOLATION"):
         decision = Decision.FAIL
     else:
         decision = Decision.PASS
@@ -280,7 +238,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         f"- Current source: {cur_src}\n"
         f"- Structure diff is audit + ENFORCEMENT for 'removed' only.\n"
         f"- Semantic verdict is ENFORCEMENT for DRIFT/VIOLATION.\n"
-        f"- If Gemini verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but pipeline is not blocked."
+        f"- If GPT verdict is UNKNOWN, semantic continuity is NOT validated (recorded), but pipeline is not blocked."
     )
 
     decision_md = _format_decision_md(
@@ -288,19 +246,19 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         baseline_present=baseline_present,
         previous_present=previous_present,
         diff=diff,
-        gemini_used=gemini_used,
-        gemini_verdict=gemini_verdict,
-        gemini_rationale=gemini_rationale,
+        llm_used=llm_used,
+        llm_verdict=llm_verdict,
+        llm_rationale=llm_rationale,
         notes=notes,
     )
 
     meta = {
         "gate": "G2",
         "created_at": now_seoul().isoformat(),
-        "mode": "structure_diff + gemini_semantic_pic",
+        "mode": "structure_diff + gpt_semantic_pic",
         "baseline_present": baseline_present,
-        "gemini_used": gemini_used,
-        "gemini_verdict": gemini_verdict,
+        "llm_used": llm_used,
+        "llm_verdict": llm_verdict,
         "pic_source": pic_src,
         "current_source": cur_src,
         "decision_rule": {
@@ -316,38 +274,15 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         "semantic": {
             "pic_source": pic_src,
             "current_source": cur_src,
-            "gemini_used": gemini_used,
-            "verdict": gemini_verdict,
-            "rationale": gemini_rationale,
+            "llm_used": llm_used,
+            "verdict": llm_verdict,
+            "rationale": llm_rationale,
         },
     }
 
     # Write artifacts
     (run_dir / "G2_DECISION.md").write_text(decision_md, encoding="utf-8")
     _write_json(run_dir / "G2_META.json", meta)
-
-    # C) Quantitative recording for long-term analysis:
-    # - Write a compact Gate2 metrics snapshot into META.json
-    # - Append a JSONL record into runs/_stats/g2_metrics.jsonl
-    try:
-        record = {
-            "ts": now_seoul().isoformat(),
-            "run_id": getattr(ctx.meta, "run_id", None),
-            "gate": "G2",
-            "mode": mode,
-            "decision": getattr(decision, "value", str(decision)),
-            "baseline_source": meta.get("baseline_source"),
-            "scores": meta.get("scores", {}),
-            "warnings": meta.get("warnings", []),
-        }
-        _update_meta(run_dir, {"gate2_continuity": record})
-        repo_root = _repo_root_from_run_dir(run_dir)
-        stats_path = repo_root / "runs" / "_stats" / "g2_metrics.jsonl"
-        _append_jsonl(stats_path, record)
-    except Exception:
-        # Do not fail the pipeline because statistics could not be written.
-        pass
-
     _write_json(run_dir / "G2_OUTPUT.json", out)
 
     return GateResult(
