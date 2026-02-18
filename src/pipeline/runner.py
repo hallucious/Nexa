@@ -61,15 +61,12 @@ class PipelineRunner:
         self.meta.attempts["STOP_REASON"] = reason  # lightweight trace
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
-        # STOP is terminal anywhere.
         if decision == Decision.STOP:
             self.meta.status = RunStatus.STOP
             return GateId.STOP
 
-        # 판단 루프는 G1~G6. (G7은 종료 리포트/산출물 제공만 담당)
-
+        # G1 is allowed to be retried; stopping is handled via max_attempts_per_gate.
         if gate == GateId.G1:
-            # Design 단계가 FAIL이면 즉시 종료하지 않고, G1에서 재시도한다.
             return GateId.G2 if decision == Decision.PASS else GateId.G1
         if gate == GateId.G2:
             return GateId.G3 if decision == Decision.PASS else GateId.G1
@@ -80,13 +77,14 @@ class PipelineRunner:
         if gate == GateId.G5:
             return GateId.G6 if decision == Decision.PASS else GateId.G4
         if gate == GateId.G6:
-            # G6에서 FAIL이면 구현/자기점검 쪽(G4)으로 되돌린다.
-            return GateId.G7 if decision == Decision.PASS else GateId.G4
+            return GateId.G7
         if gate == GateId.G7:
-            # G7은 루프를 만들지 않는다. PASS면 DONE, 그 외는 STOP으로 안전 종료.
             if decision == Decision.PASS:
                 self.meta.status = RunStatus.PASS
                 return GateId.DONE
+            if decision == Decision.FAIL:
+                self.meta.status = RunStatus.FAIL
+                return GateId.G5
             self.meta.status = RunStatus.STOP
             return GateId.STOP
         return GateId.STOP
@@ -135,6 +133,9 @@ class PipelineRunner:
         Run until DONE or STOP (including safety stop).
         """
         self.meta.status = RunStatus.RUNNING
+        # Defensive: a fresh run should start at G1.
+        if getattr(self.meta, 'current_gate', None) in (None, GateId.DONE, GateId.STOP):
+            self.meta.current_gate = GateId.G1
         while self.step():
             pass
         return self.meta
