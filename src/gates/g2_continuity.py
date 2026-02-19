@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.runner import GateContext
+from src.pipeline.artifacts import Artifacts
 from src.utils.time import now_seoul
 
 # NOTE:
@@ -229,6 +230,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     If Gemini is unavailable => verdict UNKNOWN (non-blocking), but artifacts record that it was not validated.
     """
     run_dir = Path(ctx.run_dir)
+    artifacts = Artifacts.from_run_dir(run_dir)
     repo_root = _find_repo_root(run_dir)
 
     baseline_g1 = _load_baseline_g1(repo_root)
@@ -323,8 +325,8 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     }
 
     # Write artifacts
-    (run_dir / "G2_DECISION.md").write_text(decision_md, encoding="utf-8")
-    _write_json(run_dir / "G2_META.json", meta)
+    artifacts.write_text("G2_DECISION.md", decision_md)
+    artifacts.write_json("G2_META.json", meta)
 
     # C) Quantitative recording for long-term analysis:
     # - Write a compact Gate2 metrics snapshot into META.json
@@ -340,7 +342,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
             "scores": meta.get("scores", {}),
             "warnings": meta.get("warnings", []),
         }
-        _update_meta(run_dir, {"gate2_continuity": record})
+        artifacts.update_json("META.json", {"gate2_continuity": record})
         repo_root = _repo_root_from_run_dir(run_dir)
         stats_path = repo_root / "runs" / "_stats" / "g2_metrics.jsonl"
         _append_jsonl(stats_path, record)
@@ -348,7 +350,7 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         # Do not fail the pipeline because statistics could not be written.
         pass
 
-    _write_json(run_dir / "G2_OUTPUT.json", out)
+    artifacts.write_json("G2_OUTPUT.json", out)
 
     return GateResult(
         decision=decision,

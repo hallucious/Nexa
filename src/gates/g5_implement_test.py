@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Tuple
 
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.state import RunMeta
+from src.pipeline.artifacts import Artifacts
 from src.utils.time import now_seoul
 
 
@@ -177,6 +178,7 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
       - FAIL on nonzero rc or timeout
     """
     run_dir = Path(ctx.run_dir).resolve()
+    artifacts = Artifacts.from_run_dir(run_dir)
     repo_root = _find_repo_root(run_dir)
 
     cmd = _choose_execution_command(run_dir)
@@ -266,9 +268,9 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
         },
     }
 
-    (run_dir / "G5_DECISION.md").write_text(decision_md, encoding="utf-8")
-    _write_json(run_dir / "G5_META.json", meta)
-    _write_json(run_dir / "G5_OUTPUT.json", output)
+    artifacts.write_text("G5_DECISION.md", decision_md)
+    artifacts.write_json("G5_META.json", meta)
+    artifacts.write_json("G5_OUTPUT.json", output)
 
     return GateResult(
         decision=decision,

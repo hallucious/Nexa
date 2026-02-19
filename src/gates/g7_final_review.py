@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Tuple
 
 from src.models.decision_models import GateResult, Decision
 from src.pipeline.runner import GateContext
+from src.pipeline.artifacts import Artifacts
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
 
@@ -112,6 +113,7 @@ def _baseline_update_recommendation(run_dir: Path, final_decision: Decision) -> 
 
 def gate_g7_final_review(ctx: GateContext) -> GateResult:
     run_dir = Path(ctx.run_dir).resolve()
+    artifacts = Artifacts.from_run_dir(run_dir)
 
     required = [
         "G1_OUTPUT.json",
@@ -159,7 +161,7 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
         + f"- note: {baseline_reco.get('note')}\n"
         + (f"- command: {baseline_reco.get('command')}\n" if baseline_reco.get("command") else "")
     )
-    (run_dir / "G7_DECISION.md").write_text(decision_md, encoding="utf-8")
+    artifacts.write_text("G7_DECISION.md", decision_md)
 
     output: Dict[str, Any] = {
         "gate": "G7",
@@ -179,10 +181,7 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
             "Gate7 never mutates baseline; it only emits a recommendation and a copy-paste command.",
         ],
     }
-    (run_dir / "G7_OUTPUT.json").write_text(
-        json.dumps(output, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    artifacts.write_json("G7_OUTPUT.json", output)
 
     meta = {
         "gate": "G7",
@@ -190,7 +189,7 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
         "at": now_seoul().isoformat(),
         "attempt": ctx.meta.attempts.get("G7", 1),
     }
-    (run_dir / "G7_META.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    artifacts.write_json("G7_META.json", meta)
 
     outputs = {
         "G7_DECISION.md": "G7_DECISION.md",

@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from src.models.decision_models import GateResult, Decision
 from src.pipeline.runner import GateContext
+from src.pipeline.artifacts import Artifacts
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
 
@@ -198,6 +199,7 @@ def _format_counterfactuals_md(counterfactuals: List[Dict[str, Any]]) -> str:
 
 def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
     run_dir = Path(ctx.run_dir).resolve()
+    artifacts = Artifacts.from_run_dir(run_dir)
 
     # Required inputs from prior real gates
     g1_path = run_dir / "G1_OUTPUT.json"
@@ -235,7 +237,7 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
         + "\n"
         + cf_md
     )
-    (run_dir / "G6_DECISION.md").write_text(decision_md, encoding="utf-8")
+    artifacts.write_text("G6_DECISION.md", decision_md)
 
     output = {
         "gate": "G6",
@@ -255,7 +257,7 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
             "Gate6 is advisory; decision is always PASS.",
         ],
     }
-    (run_dir / "G6_OUTPUT.json").write_text(json.dumps(output, ensure_ascii=False, indent=2), encoding="utf-8")
+    artifacts.write_json("G6_OUTPUT.json", output)
 
     meta = {
         "gate": "G6",
@@ -263,7 +265,7 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
         "at": now_seoul().isoformat(),
         "attempt": ctx.meta.attempts.get("G6", 1),
     }
-    (run_dir / "G6_META.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+    artifacts.write_json("G6_META.json", meta)
 
     outputs = {
         "G6_DECISION.md": "G6_DECISION.md",

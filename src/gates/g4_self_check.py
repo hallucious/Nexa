@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Tuple
 
 from src.models.decision_models import GateResult, Decision
 from src.pipeline.runner import GateContext
+from src.pipeline.artifacts import Artifacts
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
 
@@ -110,6 +111,7 @@ def _execution_plan_md(run_dir: Path) -> str:
 
 
 def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResult:
+    artifacts = Artifacts.from_run_dir(run_dir)
     decision = Decision.FAIL
     exec_md = _execution_plan_md(run_dir)
 
@@ -122,7 +124,7 @@ def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResul
         + "\n\n## WARN\n- None\n\n## Notes\n- Gate4 cannot proceed without upstream artifacts.\n\n"
         + exec_md
     )
-    (run_dir / "G4_DECISION.md").write_text(decision_md, encoding="utf-8")
+    artifacts.write_text("G4_DECISION.md", decision_md)
 
     output = {
         "gate": "G4",
@@ -133,7 +135,7 @@ def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResul
         "notes": ["Gate4 cannot proceed without upstream artifacts."],
         "execution_plan_md": exec_md,
     }
-    _write_json(run_dir / "G4_OUTPUT.json", output)
+    artifacts.write_json("G4_OUTPUT.json", output)
 
     meta = {
         "gate": "G4",
@@ -142,7 +144,7 @@ def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResul
         "prereq_ok": False,
         "missing_prerequisites": missing,
     }
-    _write_json(run_dir / "G4_META.json", meta)
+    artifacts.write_json("G4_META.json", meta)
 
     outputs = {
         "G4_DECISION.md": "G4_DECISION.md",
@@ -161,6 +163,7 @@ def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResul
 
 def gate_g4_self_check(ctx: GateContext) -> GateResult:
     run_dir = Path(ctx.run_dir).resolve()
+    artifacts = Artifacts.from_run_dir(run_dir)
 
     g1_path = run_dir / "G1_OUTPUT.json"
     g2_path = run_dir / "G2_OUTPUT.json"
@@ -232,7 +235,7 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         + "\n"
         + exec_md
     )
-    (run_dir / "G4_DECISION.md").write_text(decision_md, encoding="utf-8")
+    artifacts.write_text("G4_DECISION.md", decision_md)
 
     output = {
         "gate": "G4",
@@ -248,7 +251,7 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         "decision_rule": "FAIL if any ERROR else PASS (WARNs recorded)",
         "execution_plan_md": exec_md,
     }
-    _write_json(run_dir / "G4_OUTPUT.json", output)
+    artifacts.write_json("G4_OUTPUT.json", output)
 
     meta = {
         "gate": "G4",
@@ -257,7 +260,7 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         "attempt": ctx.meta.attempts.get("G4", 1),
         "prereq_ok": True,
     }
-    _write_json(run_dir / "G4_META.json", meta)
+    artifacts.write_json("G4_META.json", meta)
 
     outputs = {
         "G4_DECISION.md": "G4_DECISION.md",
