@@ -10,6 +10,18 @@ class Decision(str, Enum):
     FAIL = "FAIL"
     STOP = "STOP"
 
+    @property
+    def is_pass(self) -> bool:
+        return self is Decision.PASS
+
+    @property
+    def is_fail(self) -> bool:
+        return self is Decision.FAIL
+
+    @property
+    def is_stop(self) -> bool:
+        return self is Decision.STOP
+
 
 @dataclass(frozen=True)
 class Transition:

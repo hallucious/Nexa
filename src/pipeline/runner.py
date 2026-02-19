@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Callable, Optional
+from typing import Dict, Callable
 
 from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
@@ -61,32 +61,36 @@ class PipelineRunner:
         self.meta.attempts["STOP_REASON"] = reason  # lightweight trace
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
-        if decision == Decision.STOP:
+        # Hard terminal: STOP always ends the run.
+        if decision.is_stop:
             self.meta.status = RunStatus.STOP
             return GateId.STOP
 
-        # G1 is allowed to be retried; stopping is handled via max_attempts_per_gate.
-        if gate == GateId.G1:
-            return GateId.G2 if decision == Decision.PASS else GateId.G1
-        if gate == GateId.G2:
-            return GateId.G3 if decision == Decision.PASS else GateId.G1
-        if gate == GateId.G3:
-            return GateId.G4 if decision == Decision.PASS else GateId.G1
-        if gate == GateId.G4:
-            return GateId.G5 if decision == Decision.PASS else GateId.G1
-        if gate == GateId.G5:
-            return GateId.G6 if decision == Decision.PASS else GateId.G4
-        if gate == GateId.G6:
-            return GateId.G7
+        # Deterministic transition table (keeps behavior identical, improves clarity).
+        linear_transitions: Dict[GateId, Dict[Decision, GateId]] = {
+            GateId.G1: {Decision.PASS: GateId.G2, Decision.FAIL: GateId.G1},
+            GateId.G2: {Decision.PASS: GateId.G3, Decision.FAIL: GateId.G1},
+            GateId.G3: {Decision.PASS: GateId.G4, Decision.FAIL: GateId.G1},
+            GateId.G4: {Decision.PASS: GateId.G5, Decision.FAIL: GateId.G1},
+            GateId.G5: {Decision.PASS: GateId.G6, Decision.FAIL: GateId.G4},
+            # Gate6 is advisory by design; it should never FAIL, but we keep a safe fallback.
+            GateId.G6: {Decision.PASS: GateId.G7, Decision.FAIL: GateId.G7},
+        }
+
+        if gate in linear_transitions:
+            return linear_transitions[gate].get(decision, GateId.STOP)
+
         if gate == GateId.G7:
-            if decision == Decision.PASS:
+            if decision.is_pass:
                 self.meta.status = RunStatus.PASS
                 return GateId.DONE
-            if decision == Decision.FAIL:
+            if decision.is_fail:
                 self.meta.status = RunStatus.FAIL
                 return GateId.G5
+            # Defensive fallback (should be unreachable with the current Decision enum).
             self.meta.status = RunStatus.STOP
             return GateId.STOP
+
         return GateId.STOP
 
     def step(self) -> bool:
