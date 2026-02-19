@@ -61,36 +61,37 @@ class PipelineRunner:
         self.meta.attempts["STOP_REASON"] = reason  # lightweight trace
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
-        # Hard terminal: STOP always ends the run.
-        if decision.is_stop:
+        # Safety: treat anything unexpected as STOP (handover policy: UNKNOWN == STOP)
+        if not isinstance(decision, Decision):
             self.meta.status = RunStatus.STOP
             return GateId.STOP
 
-        # Deterministic transition table (keeps behavior identical, improves clarity).
-        linear_transitions: Dict[GateId, Dict[Decision, GateId]] = {
-            GateId.G1: {Decision.PASS: GateId.G2, Decision.FAIL: GateId.G1},
-            GateId.G2: {Decision.PASS: GateId.G3, Decision.FAIL: GateId.G1},
-            GateId.G3: {Decision.PASS: GateId.G4, Decision.FAIL: GateId.G1},
-            GateId.G4: {Decision.PASS: GateId.G5, Decision.FAIL: GateId.G1},
-            GateId.G5: {Decision.PASS: GateId.G6, Decision.FAIL: GateId.G4},
-            # Gate6 is advisory by design; it should never FAIL, but we keep a safe fallback.
-            GateId.G6: {Decision.PASS: GateId.G7, Decision.FAIL: GateId.G4},
-        }
+        if decision == Decision.STOP:
+            self.meta.status = RunStatus.STOP
+            return GateId.STOP
 
-        if gate in linear_transitions:
-            return linear_transitions[gate].get(decision, GateId.STOP)
-
+        # G1 is allowed to be retried; stopping is handled via max_attempts_per_gate.
+        if gate == GateId.G1:
+            return GateId.G2 if decision == Decision.PASS else GateId.G1
+        if gate == GateId.G2:
+            return GateId.G3 if decision == Decision.PASS else GateId.G1
+        if gate == GateId.G3:
+            return GateId.G4 if decision == Decision.PASS else GateId.G1
+        if gate == GateId.G4:
+            return GateId.G5 if decision == Decision.PASS else GateId.G1
+        if gate == GateId.G5:
+            return GateId.G6 if decision == Decision.PASS else GateId.G4
+        if gate == GateId.G6:
+            # Handover policy invariant: G6 FAIL must return control to G4.
+            return GateId.G7 if decision == Decision.PASS else GateId.G4
         if gate == GateId.G7:
-            if decision.is_pass:
+            if decision == Decision.PASS:
                 self.meta.status = RunStatus.PASS
                 return GateId.DONE
-            if decision.is_fail:
-                self.meta.status = RunStatus.FAIL
-                return GateId.G5
-            # Defensive fallback (should be unreachable with the current Decision enum).
+            # Final gate: anything other than PASS is treated as STOP
+            # (handover policy: meta.status final is PASS/STOP)
             self.meta.status = RunStatus.STOP
             return GateId.STOP
-
         return GateId.STOP
 
     def step(self) -> bool:
@@ -120,7 +121,20 @@ class PipelineRunner:
             return False
 
         ctx = GateContext(meta=self.meta, run_dir=self.run_dir)
-        result = executor(ctx)
+        try:
+            result = executor(ctx)
+        except Exception as e:  # noqa: BLE001
+            self._stop_run(f"gate executor raised: {gate.value}: {type(e).__name__}: {e}")
+            self._record_transition(gate, GateId.STOP, Decision.STOP)
+            self._steps_executed += 1
+            return False
+
+        # Defensive: treat invalid decisions as STOP rather than crashing.
+        if not isinstance(result.decision, Decision):
+            self._stop_run(f"invalid decision type from {gate.value}: {type(result.decision).__name__}")
+            self._record_transition(gate, GateId.STOP, Decision.STOP)
+            self._steps_executed += 1
+            return False
 
         # enforce artifact contract
         spec = standard_spec(gate.value)
