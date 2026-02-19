@@ -6,6 +6,18 @@ from src.models.decision_models import Decision, Transition, GateResult
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
 
+LINEAR_TRANSITIONS: Dict[GateId, Dict[Decision, GateId]] = {
+GateId.G1: {Decision.PASS: GateId.G2, Decision.FAIL: GateId.G1},
+GateId.G2: {Decision.PASS: GateId.G3, Decision.FAIL: GateId.G1},
+GateId.G3: {Decision.PASS: GateId.G4, Decision.FAIL: GateId.G1},
+GateId.G4: {Decision.PASS: GateId.G5, Decision.FAIL: GateId.G1},
+GateId.G5: {Decision.PASS: GateId.G6, Decision.FAIL: GateId.G4},
+# Gate6 is advisory by design; it should never FAIL, but we keep a safe fallback.
+GateId.G6: {Decision.PASS: GateId.G7, Decision.FAIL: GateId.G7},
+}
+
+
+
 
 @dataclass
 class GateContext:
@@ -57,28 +69,20 @@ class PipelineRunner:
         self.meta.status = RunStatus.STOP
         # keep current gate for traceability, but set to STOP as terminal
         self.meta.current_gate = GateId.STOP
-        # Optionally, you could write reason somewhere later; for now keep in attempts
+        # Optionally, you could write reason sosomewhere later; for now keep in attempts
         self.meta.attempts["STOP_REASON"] = reason  # lightweight trace
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
+        """Return the next gate id given the current gate and a 3-state Decision."""
         # Hard terminal: STOP always ends the run.
         if decision.is_stop:
             self.meta.status = RunStatus.STOP
             return GateId.STOP
 
-        # Deterministic transition table (keeps behavior identical, improves clarity).
-        linear_transitions: Dict[GateId, Dict[Decision, GateId]] = {
-            GateId.G1: {Decision.PASS: GateId.G2, Decision.FAIL: GateId.G1},
-            GateId.G2: {Decision.PASS: GateId.G3, Decision.FAIL: GateId.G1},
-            GateId.G3: {Decision.PASS: GateId.G4, Decision.FAIL: GateId.G1},
-            GateId.G4: {Decision.PASS: GateId.G5, Decision.FAIL: GateId.G1},
-            GateId.G5: {Decision.PASS: GateId.G6, Decision.FAIL: GateId.G4},
-            # Gate6 is advisory by design; it should never FAIL, but we keep a safe fallback.
-            GateId.G6: {Decision.PASS: GateId.G7, Decision.FAIL: GateId.G7},
-        }
 
-        if gate in linear_transitions:
-            return linear_transitions[gate].get(decision, GateId.STOP)
+        # Deterministic transition table (keeps behavior identical, improves clarity).
+        if gate in LINEAR_TRANSITIONS:
+            return LINEAR_TRANSITIONS[gate].get(decision, GateId.STOP)
 
         if gate == GateId.G7:
             if decision.is_pass:
