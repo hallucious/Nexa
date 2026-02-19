@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from src.models.decision_models import GateResult, Decision
 from src.pipeline.runner import GateContext
-from src.pipeline.artifacts import Artifacts
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
+
+try:
+    from src.providers.gpt_provider import GPTProvider
+except Exception:  # pragma: no cover
+    GPTProvider = None  # type: ignore
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -111,9 +116,14 @@ def _execution_plan_md(run_dir: Path) -> str:
 
 
 def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResult:
-    artifacts = Artifacts.from_run_dir(run_dir)
     decision = Decision.FAIL
     exec_md = _execution_plan_md(run_dir)
+
+    # AI section is present in artifacts for schema stability; prereq-fail path never calls GPT.
+    gpt_used = False
+    gpt_error = ""
+    gpt_raw = {}
+    gpt_text = ""
 
     decision_md = (
         "# G4 SELF CHECK DECISION\n\n"
@@ -124,7 +134,7 @@ def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResul
         + "\n\n## WARN\n- None\n\n## Notes\n- Gate4 cannot proceed without upstream artifacts.\n\n"
         + exec_md
     )
-    artifacts.write_text("G4_DECISION.md", decision_md)
+    (run_dir / "G4_DECISION.md").write_text(decision_md, encoding="utf-8")
 
     output = {
         "gate": "G4",
@@ -134,8 +144,16 @@ def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResul
         "checks": [],
         "notes": ["Gate4 cannot proceed without upstream artifacts."],
         "execution_plan_md": exec_md,
+        "ai": {
+            "engine": "gpt",
+            "used": gpt_used,
+            "model": (os.getenv("GPT_MODEL", "") or "gpt-5.2").strip(),
+            "error": gpt_error,
+            "raw": gpt_raw,
+            "text": gpt_text,
+        },
     }
-    artifacts.write_json("G4_OUTPUT.json", output)
+    _write_json(run_dir / "G4_OUTPUT.json", output)
 
     meta = {
         "gate": "G4",
@@ -144,7 +162,7 @@ def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResul
         "prereq_ok": False,
         "missing_prerequisites": missing,
     }
-    artifacts.write_json("G4_META.json", meta)
+    _write_json(run_dir / "G4_META.json", meta)
 
     outputs = {
         "G4_DECISION.md": "G4_DECISION.md",
@@ -163,7 +181,12 @@ def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResul
 
 def gate_g4_self_check(ctx: GateContext) -> GateResult:
     run_dir = Path(ctx.run_dir).resolve()
-    artifacts = Artifacts.from_run_dir(run_dir)
+
+    # GPT self-check variables (defined early for both prereq paths)
+    gpt_used = False
+    gpt_error = ""
+    gpt_raw = {}
+    gpt_text = ""
 
     g1_path = run_dir / "G1_OUTPUT.json"
     g2_path = run_dir / "G2_OUTPUT.json"
@@ -235,7 +258,32 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         + "\n"
         + exec_md
     )
-    artifacts.write_text("G4_DECISION.md", decision_md)
+    (run_dir / "G4_DECISION.md").write_text(decision_md, encoding="utf-8")
+
+    # GPT self-check (optional in pytest; best-effort)
+    gpt_used = False
+    gpt_error = ""
+    gpt_raw = {}
+    gpt_text = ""
+    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))) and GPTProvider is not None:
+        try:
+            provider = GPTProvider.from_env()
+            gpt_used = True
+            prompt = (
+                "You are Gate4 (Self-check). Review the gate outputs below and list any issues or risks. "
+                "Return plain text with bullet points.\n\n"
+                "G1 (Design) summary:\n"
+                f"{g1_output.get('design', g1_output) if isinstance(g1_output, dict) else str(g1_output)}\n\n"
+                "G2 (Continuity) summary:\n"
+                f"{g2_output}\n\n"
+                "G3 (Fact audit) summary:\n"
+                f"{g3_output}\n"
+            )
+            gpt_text, gpt_raw, err = provider.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=800)
+            if err is not None:
+                gpt_error = f"{type(err).__name__}: {err}"
+        except Exception as e:
+            gpt_error = f"{type(e).__name__}: {e}"
 
     output = {
         "gate": "G4",
@@ -250,8 +298,16 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         "notes": notes,
         "decision_rule": "FAIL if any ERROR else PASS (WARNs recorded)",
         "execution_plan_md": exec_md,
+        "ai": {
+            "engine": "gpt",
+            "used": gpt_used,
+            "model": (os.getenv("GPT_MODEL", "") or "gpt-5.2").strip(),
+            "error": gpt_error,
+            "raw": gpt_raw,
+            "text": gpt_text,
+        },
     }
-    artifacts.write_json("G4_OUTPUT.json", output)
+    _write_json(run_dir / "G4_OUTPUT.json", output)
 
     meta = {
         "gate": "G4",
@@ -260,7 +316,7 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         "attempt": ctx.meta.attempts.get("G4", 1),
         "prereq_ok": True,
     }
-    artifacts.write_json("G4_META.json", meta)
+    _write_json(run_dir / "G4_META.json", meta)
 
     outputs = {
         "G4_DECISION.md": "G4_DECISION.md",

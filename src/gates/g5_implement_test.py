@@ -7,12 +7,16 @@ import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.state import RunMeta
-from src.pipeline.artifacts import Artifacts
 from src.utils.time import now_seoul
+
+try:
+    from src.providers.codex_provider import CodexProvider
+except Exception:  # pragma: no cover
+    CodexProvider = None  # type: ignore
 
 
 @dataclass
@@ -126,40 +130,6 @@ def _choose_execution_command(run_dir: Path) -> List[str]:
 
     return ["python", "-m", "pytest", "-q"]
 
-def _run_command(
-    *, cmd: List[str], cwd: Path, timeout_sec: int
-) -> Tuple[Optional[int], str, str, bool, float]:
-    """Run a local command with timeout and capture output.
-
-    Returns: (returncode, stdout, stderr, timed_out, duration_sec)
-    """
-    started = now_seoul()
-    timed_out = False
-    rc: Optional[int] = None
-    out_s = ""
-    err_s = ""
-
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-        )
-        rc = proc.returncode
-        out_s = proc.stdout or ""
-        err_s = proc.stderr or ""
-    except subprocess.TimeoutExpired as e:
-        timed_out = True
-        # TimeoutExpired.stdout/stderr may be bytes or str depending on Python version and args
-        out_s = e.stdout.decode(errors="replace") if isinstance(e.stdout, (bytes, bytearray)) else (e.stdout or "")
-        err_s = e.stderr.decode(errors="replace") if isinstance(e.stderr, (bytes, bytearray)) else (e.stderr or "")
-        err_s = (err_s + "\n" if err_s else "") + f"TIMEOUT: command exceeded {timeout_sec}s\n"
-
-    duration = (now_seoul() - started).total_seconds()
-    return rc, out_s, err_s, timed_out, duration
-
 
 def _format_decision_md(
     *,
@@ -212,20 +182,36 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
       - FAIL on nonzero rc or timeout
     """
     run_dir = Path(ctx.run_dir).resolve()
-    artifacts = Artifacts.from_run_dir(run_dir)
     repo_root = _find_repo_root(run_dir)
 
     cmd = _choose_execution_command(run_dir)
 
-
     timeout_sec = _env_int("HAI_PYTEST_TIMEOUT_SEC", 120)
 
-    rc, out_s, err_s, timed_out, duration = _run_command(
-        cmd=cmd,
-        cwd=repo_root,
-        timeout_sec=timeout_sec,
-    )
+    started = now_seoul()
+    timed_out = False
+    rc: Optional[int] = None
+    out_s = ""
+    err_s = ""
 
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+        )
+        rc = proc.returncode
+        out_s = proc.stdout or ""
+        err_s = proc.stderr or ""
+    except subprocess.TimeoutExpired as e:
+        timed_out = True
+        out_s = (e.stdout or "") if isinstance(e.stdout, str) else ""
+        err_s = (e.stderr or "") if isinstance(e.stderr, str) else ""
+        err_s = (err_s + "\n" if err_s else "") + f"TIMEOUT: command exceeded {timeout_sec}s\n"
+
+    duration = (now_seoul() - started).total_seconds()
 
     if (not timed_out) and rc == 0:
         decision = Decision.PASS
@@ -266,10 +252,44 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
         "duration_sec": duration,
     }
 
+
+    # CODEX advisory (best-effort; does not modify code automatically)
+    codex_used = False
+    codex_error = ""
+    codex_raw = {}
+    codex_text = ""
+    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))) and CodexProvider is not None:
+        try:
+            provider = CodexProvider.from_env()
+            codex_used = True
+            prompt = (
+                "You are Gate5 (Implement/Test) using a Codex-optimized model. "
+                "Given the command and its stdout/stderr, suggest the MOST LIKELY root cause(s) and concrete next steps. "
+                "Do NOT invent file contents. Prefer short actionable steps.\n\n"
+                f"CMD: {cmd}\n\n"
+                "STDOUT:\n"
+                f"{out_s[-8000:]}\n\n"
+                "STDERR:\n"
+                f"{err_s[-8000:]}"
+            )
+            codex_text, codex_raw, err = provider.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=900)
+            if err is not None:
+                codex_error = f"{type(err).__name__}: {err}"
+        except Exception as e:
+            codex_error = f"{type(e).__name__}: {e}"
+
     output = {
         "gate": "G5",
         "decision": decision.value,
         "message": msg,
+        "ai": {
+            "engine": "codex",
+            "used": codex_used,
+            "model": (os.getenv("CODEX_MODEL", "") or "gpt-5.2-codex").strip(),
+            "error": codex_error,
+            "raw": codex_raw,
+            "text": codex_text,
+        },
         "command": {"cwd": str(repo_root), "cmd": cmd},
         "result": {
             "timeout": timed_out,
@@ -285,9 +305,9 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
         },
     }
 
-    artifacts.write_text("G5_DECISION.md", decision_md)
-    artifacts.write_json("G5_META.json", meta)
-    artifacts.write_json("G5_OUTPUT.json", output)
+    (run_dir / "G5_DECISION.md").write_text(decision_md, encoding="utf-8")
+    _write_json(run_dir / "G5_META.json", meta)
+    _write_json(run_dir / "G5_OUTPUT.json", output)
 
     return GateResult(
         decision=decision,

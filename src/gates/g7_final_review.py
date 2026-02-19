@@ -2,14 +2,19 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from src.models.decision_models import GateResult, Decision
 from src.pipeline.runner import GateContext
-from src.pipeline.artifacts import Artifacts
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
+
+try:
+    from src.providers.gpt_provider import GPTProvider
+except Exception:  # pragma: no cover
+    GPTProvider = None  # type: ignore
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -113,7 +118,6 @@ def _baseline_update_recommendation(run_dir: Path, final_decision: Decision) -> 
 
 def gate_g7_final_review(ctx: GateContext) -> GateResult:
     run_dir = Path(ctx.run_dir).resolve()
-    artifacts = Artifacts.from_run_dir(run_dir)
 
     required = [
         "G1_OUTPUT.json",
@@ -161,11 +165,41 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
         + f"- note: {baseline_reco.get('note')}\n"
         + (f"- command: {baseline_reco.get('command')}\n" if baseline_reco.get("command") else "")
     )
-    artifacts.write_text("G7_DECISION.md", decision_md)
+    (run_dir / "G7_DECISION.md").write_text(decision_md, encoding="utf-8")
+
+
+    # GPT final review (best-effort; does not override deterministic decision logic)
+    gpt_used = False
+    gpt_error = ""
+    gpt_raw = {}
+    gpt_text = ""
+    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))) and GPTProvider is not None:
+        try:
+            provider = GPTProvider.from_env()
+            gpt_used = True
+            prompt = (
+                "You are Gate7 (Final Review). Given the gate decisions and key notes, write a short final summary and "
+                "a go/no-go recommendation. Return plain text.\n\n"
+                f"Decisions: {decisions}\n"
+                f"Notes: {notes}\n"
+            )
+            gpt_text, gpt_raw, err = provider.generate_text(prompt=prompt, temperature=0.2, max_output_tokens=900)
+            if err is not None:
+                gpt_error = f"{type(err).__name__}: {err}"
+        except Exception as e:
+            gpt_error = f"{type(e).__name__}: {e}"
 
     output: Dict[str, Any] = {
         "gate": "G7",
-        "mode": "final_review_stub",
+        "mode": "final_review_gpt",
+        "ai": {
+            "engine": "gpt",
+            "used": gpt_used,
+            "model": (os.getenv("GPT_MODEL", "") or "gpt-5.2").strip(),
+            "error": gpt_error,
+            "raw": gpt_raw,
+            "text": gpt_text,
+        },
         "decisions_observed": decisions,
         "final_decision_rule": "FAIL if any of G1~G5 is FAIL else PASS",
         "fail_hints": fail_hints,
@@ -177,11 +211,15 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
             "eligibility": baseline_reco.get("eligibility", {}),
         },
         "notes": [
-            "No AI used. Deterministic aggregation review.",
+            "Deterministic aggregation review (policy).",
+            "GPT advisory included in output.ai.text (best-effort).",
             "Gate7 never mutates baseline; it only emits a recommendation and a copy-paste command.",
         ],
     }
-    artifacts.write_json("G7_OUTPUT.json", output)
+    (run_dir / "G7_OUTPUT.json").write_text(
+        json.dumps(output, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
     meta = {
         "gate": "G7",
@@ -189,7 +227,7 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
         "at": now_seoul().isoformat(),
         "attempt": ctx.meta.attempts.get("G7", 1),
     }
-    artifacts.write_json("G7_META.json", meta)
+    (run_dir / "G7_META.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
     outputs = {
         "G7_DECISION.md": "G7_DECISION.md",
