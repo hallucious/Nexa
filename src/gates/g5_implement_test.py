@@ -7,7 +7,7 @@ import shlex
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.state import RunMeta
@@ -126,6 +126,40 @@ def _choose_execution_command(run_dir: Path) -> List[str]:
 
     return ["python", "-m", "pytest", "-q"]
 
+def _run_command(
+    *, cmd: List[str], cwd: Path, timeout_sec: int
+) -> Tuple[Optional[int], str, str, bool, float]:
+    """Run a local command with timeout and capture output.
+
+    Returns: (returncode, stdout, stderr, timed_out, duration_sec)
+    """
+    started = now_seoul()
+    timed_out = False
+    rc: Optional[int] = None
+    out_s = ""
+    err_s = ""
+
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+        )
+        rc = proc.returncode
+        out_s = proc.stdout or ""
+        err_s = proc.stderr or ""
+    except subprocess.TimeoutExpired as e:
+        timed_out = True
+        # TimeoutExpired.stdout/stderr may be bytes or str depending on Python version and args
+        out_s = e.stdout.decode(errors="replace") if isinstance(e.stdout, (bytes, bytearray)) else (e.stdout or "")
+        err_s = e.stderr.decode(errors="replace") if isinstance(e.stderr, (bytes, bytearray)) else (e.stderr or "")
+        err_s = (err_s + "\n" if err_s else "") + f"TIMEOUT: command exceeded {timeout_sec}s\n"
+
+    duration = (now_seoul() - started).total_seconds()
+    return rc, out_s, err_s, timed_out, duration
+
 
 def _format_decision_md(
     *,
@@ -183,32 +217,15 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
 
     cmd = _choose_execution_command(run_dir)
 
+
     timeout_sec = _env_int("HAI_PYTEST_TIMEOUT_SEC", 120)
 
-    started = now_seoul()
-    timed_out = False
-    rc: Optional[int] = None
-    out_s = ""
-    err_s = ""
+    rc, out_s, err_s, timed_out, duration = _run_command(
+        cmd=cmd,
+        cwd=repo_root,
+        timeout_sec=timeout_sec,
+    )
 
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            timeout=timeout_sec,
-        )
-        rc = proc.returncode
-        out_s = proc.stdout or ""
-        err_s = proc.stderr or ""
-    except subprocess.TimeoutExpired as e:
-        timed_out = True
-        out_s = (e.stdout or "") if isinstance(e.stdout, str) else ""
-        err_s = (e.stderr or "") if isinstance(e.stderr, str) else ""
-        err_s = (err_s + "\n" if err_s else "") + f"TIMEOUT: command exceeded {timeout_sec}s\n"
-
-    duration = (now_seoul() - started).total_seconds()
 
     if (not timed_out) and rc == 0:
         decision = Decision.PASS
