@@ -36,3 +36,4 @@ class RunMeta:
     transitions: List[Transition] = field(default_factory=list)
     attempts: Dict[str, int] = field(default_factory=dict)
     providers: Dict[str, str] = field(default_factory=dict)  # e.g. {"gpt":"stub", ...}
+    stop_reason: Optional[str] = None  # terminal STOP reason (if any)

@@ -19,8 +19,10 @@ GateExecutor = Callable[[GateContext], GateResult]
 class PipelineRunner:
     """
     Executes a 7-Gate state machine.
-    Enforces artifact contracts per gate.
-    Includes safety stops to prevent infinite loops.
+
+    - Enforces artifact contracts per gate.
+    - Converts gate crashes/contract violations into STOP (never crash the runner).
+    - Includes safety stops to prevent infinite loops.
     """
 
     def __init__(
@@ -53,24 +55,18 @@ class PipelineRunner:
         self.meta.current_gate = to_gate
 
     def _stop_run(self, reason: str) -> None:
-        # Mark STOP and move to STOP gate
         self.meta.status = RunStatus.STOP
-        # keep current gate for traceability, but set to STOP as terminal
         self.meta.current_gate = GateId.STOP
-        # Optionally, you could write reason somewhere later; for now keep in attempts
-        self.meta.attempts["STOP_REASON"] = reason  # lightweight trace
+        self.meta.stop_reason = reason
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
-        # Safety: treat anything unexpected as STOP (handover policy: UNKNOWN == STOP)
-        if not isinstance(decision, Decision):
-            self.meta.status = RunStatus.STOP
-            return GateId.STOP
-
+        # Gate-requested STOP
         if decision == Decision.STOP:
+            if not self.meta.stop_reason:
+                self.meta.stop_reason = "STOP requested by gate"
             self.meta.status = RunStatus.STOP
             return GateId.STOP
 
-        # G1 is allowed to be retried; stopping is handled via max_attempts_per_gate.
         if gate == GateId.G1:
             return GateId.G2 if decision == Decision.PASS else GateId.G1
         if gate == GateId.G2:
@@ -82,23 +78,25 @@ class PipelineRunner:
         if gate == GateId.G5:
             return GateId.G6 if decision == Decision.PASS else GateId.G4
         if gate == GateId.G6:
-            # Handover policy invariant: G6 FAIL must return control to G4.
-            return GateId.G7 if decision == Decision.PASS else GateId.G4
+            # Policy invariant: G6 FAIL must return control to G4 (handover).
+            if decision == Decision.FAIL:
+                return GateId.G4
+            return GateId.G7
         if gate == GateId.G7:
             if decision == Decision.PASS:
                 self.meta.status = RunStatus.PASS
                 return GateId.DONE
-            # Final gate: anything other than PASS is treated as STOP
-            # (handover policy: meta.status final is PASS/STOP)
+            if decision == Decision.FAIL:
+                self.meta.status = RunStatus.FAIL
+                return GateId.G5
             self.meta.status = RunStatus.STOP
+            if not self.meta.stop_reason:
+                self.meta.stop_reason = "STOP requested by gate"
             return GateId.STOP
         return GateId.STOP
 
     def step(self) -> bool:
-        """
-        Execute one gate.
-        Returns False if pipeline should stop.
-        """
+        """Execute one gate. Returns False if pipeline should stop."""
         # total-step safety
         if self._steps_executed >= self.max_total_steps:
             self._stop_run(f"max_total_steps exceeded: {self.max_total_steps}")
@@ -110,35 +108,40 @@ class PipelineRunner:
 
         executor = self.executors.get(gate)
         if executor is None:
-            raise RuntimeError(f"No executor registered for gate {gate}")
+            # This is a developer error; STOP instead of raising to keep invariants.
+            self._stop_run(f"NO_EXECUTOR: {gate.value}")
+            return False
 
         # attempt count
         self.meta.attempts[gate.value] = self.meta.attempts.get(gate.value, 0) + 1
 
-        # per-gate safety (prevents infinite loops like G2 FAIL -> G1 -> G2 FAIL ...)
+        # per-gate safety
         if self.meta.attempts[gate.value] > self.max_attempts_per_gate:
             self._stop_run(f"max_attempts_per_gate exceeded: {gate.value} > {self.max_attempts_per_gate}")
+            # record terminal transition
+            self._record_transition(gate, GateId.STOP, Decision.STOP)
             return False
 
         ctx = GateContext(meta=self.meta, run_dir=self.run_dir)
+
+        # Execute gate safely: any crash becomes STOP.
         try:
             result = executor(ctx)
         except Exception as e:  # noqa: BLE001
-            self._stop_run(f"gate executor raised: {gate.value}: {type(e).__name__}: {e}")
+            self._stop_run(f"GATE_EXCEPTION: {gate.value}: {type(e).__name__}: {e}")
             self._record_transition(gate, GateId.STOP, Decision.STOP)
             self._steps_executed += 1
             return False
 
-        # Defensive: treat invalid decisions as STOP rather than crashing.
-        if not isinstance(result.decision, Decision):
-            self._stop_run(f"invalid decision type from {gate.value}: {type(result.decision).__name__}")
+        # Enforce artifact contract safely: contract violations become STOP.
+        try:
+            spec = standard_spec(gate.value)
+            spec.validate(result.outputs)
+        except Exception as e:  # noqa: BLE001
+            self._stop_run(f"CONTRACT_VIOLATION: {gate.value}: {type(e).__name__}: {e}")
             self._record_transition(gate, GateId.STOP, Decision.STOP)
             self._steps_executed += 1
             return False
-
-        # enforce artifact contract
-        spec = standard_spec(gate.value)
-        spec.validate(result.outputs)
 
         next_gate = self._next_gate(gate, result.decision)
         self._record_transition(gate, next_gate, result.decision)
@@ -147,12 +150,9 @@ class PipelineRunner:
         return next_gate not in (GateId.DONE, GateId.STOP)
 
     def run(self) -> RunMeta:
-        """
-        Run until DONE or STOP (including safety stop).
-        """
+        """Run until DONE or STOP."""
         self.meta.status = RunStatus.RUNNING
-        # Defensive: a fresh run should start at G1.
-        if getattr(self.meta, 'current_gate', None) in (None, GateId.DONE, GateId.STOP):
+        if getattr(self.meta, "current_gate", None) in (None, GateId.DONE, GateId.STOP):
             self.meta.current_gate = GateId.G1
         while self.step():
             pass

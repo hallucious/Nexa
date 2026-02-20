@@ -13,11 +13,6 @@ from src.models.decision_models import Decision, GateResult
 from src.pipeline.state import RunMeta
 from src.utils.time import now_seoul
 
-try:
-    from src.providers.codex_provider import CodexProvider
-except Exception:  # pragma: no cover
-    CodexProvider = None  # type: ignore
-
 
 @dataclass
 class GateContext:
@@ -186,6 +181,32 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
 
     cmd = _choose_execution_command(run_dir)
 
+    # Parallel-run hardening: isolate pytest base temp and cache per run.
+    # This avoids cross-process contention when multiple pipelines run simultaneously.
+    if "pytest" in " ".join(cmd).lower():
+        basetemp = str(run_dir / ".pytest_basetemp")
+        if "--basetemp" not in cmd:
+            cmd += ["--basetemp", basetemp]
+        # Explicitly disable cache provider; we already set PYTEST_CACHE_DIR, but this makes it robust.
+        if "-p" not in cmd and "no:cacheprovider" not in " ".join(cmd):
+            cmd += ["-p", "no:cacheprovider"]
+
+    # Parallel-run hardening: isolate pytest cache per run to avoid cross-process contention.
+    # (pytest otherwise writes .pytest_cache under repo root, which can race under concurrency.)
+    env = os.environ.copy()
+
+    # Determinism hardening: when Gate5 runs pytest inside a real pipeline run,
+    # unit tests must not make real network/API calls just because API keys exist.
+    for k in ("OPENAI_API_KEY", "GEMINI_API_KEY", "PERPLEXITY_API_KEY", "PPLX_API_KEY"):
+        env[k] = ""
+
+    # Disable external-evidence mode during pytest runs (tests must remain offline/deterministic).
+    env["ENABLE_PERPLEXITY_FACT_AUDIT"] = "0"
+
+    # Reduce influence of user/global pytest plugins (can vary per machine).
+    env.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
+    env.setdefault('PYTEST_CACHE_DIR', str(run_dir / '.pytest_cache'))
+
     timeout_sec = _env_int("HAI_PYTEST_TIMEOUT_SEC", 120)
 
     started = now_seoul()
@@ -200,6 +221,7 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
             cwd=str(repo_root),
             capture_output=True,
             text=True,
+            env=env,
             timeout=timeout_sec,
         )
         rc = proc.returncode
@@ -252,44 +274,10 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
         "duration_sec": duration,
     }
 
-
-    # CODEX advisory (best-effort; does not modify code automatically)
-    codex_used = False
-    codex_error = ""
-    codex_raw = {}
-    codex_text = ""
-    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))) and CodexProvider is not None:
-        try:
-            provider = CodexProvider.from_env()
-            codex_used = True
-            prompt = (
-                "You are Gate5 (Implement/Test) using a Codex-optimized model. "
-                "Given the command and its stdout/stderr, suggest the MOST LIKELY root cause(s) and concrete next steps. "
-                "Do NOT invent file contents. Prefer short actionable steps.\n\n"
-                f"CMD: {cmd}\n\n"
-                "STDOUT:\n"
-                f"{out_s[-8000:]}\n\n"
-                "STDERR:\n"
-                f"{err_s[-8000:]}"
-            )
-            codex_text, codex_raw, err = provider.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=900)
-            if err is not None:
-                codex_error = f"{type(err).__name__}: {err}"
-        except Exception as e:
-            codex_error = f"{type(e).__name__}: {e}"
-
     output = {
         "gate": "G5",
         "decision": decision.value,
         "message": msg,
-        "ai": {
-            "engine": "codex",
-            "used": codex_used,
-            "model": (os.getenv("CODEX_MODEL", "") or "gpt-5.2-codex").strip(),
-            "error": codex_error,
-            "raw": codex_raw,
-            "text": codex_text,
-        },
         "command": {"cwd": str(repo_root), "cmd": cmd},
         "result": {
             "timeout": timed_out,
