@@ -10,6 +10,34 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 # -----------------
 
+import os
+
+def load_dotenv(path: Path) -> None:
+    """Load a .env file into os.environ (best-effort, stdlib-only).
+
+    - Ignores blank lines and comments (#)
+    - Supports KEY=VALUE, with optional surrounding quotes on VALUE
+    - Does NOT override already-set environment variables
+    """
+    if not path.exists():
+        return
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            s = line.strip()
+            if not s or s.startswith("#") or "=" not in s:
+                continue
+            key, val = s.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = val
+    except Exception:
+        # Never fail pipeline boot due to dotenv issues.
+        return
+
+# Load .env from repo root early (keys for OpenAI/Perplexity/Gemini)
+load_dotenv(REPO_ROOT / ".env")
+
 from src.pipeline.artifacts import Artifacts
 from src.pipeline.state import RunMeta, GateId
 from src.pipeline.runner import PipelineRunner

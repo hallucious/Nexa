@@ -2,24 +2,24 @@ from __future__ import annotations
 
 import json
 import os
-import urllib.request
-from typing import Any, Dict, List, Optional, Tuple
+import time
+from typing import Any, Dict, Optional, Tuple
 
-from src.providers.safe_mode import run_safe_mode, apply_safe_mode_prefix
+import requests
+
+from src.providers.safe_mode import apply_safe_mode_prefix
+from src.providers.schema_utils import parse_json_object
+from src.providers.result_models import PerplexityVerifyResult
 
 
 class PerplexityProvider:
-    """Minimal Perplexity Sonar API client (OpenAI-compatible Chat Completions).
+    """
+    Minimal Perplexity Sonar API client (OpenAI-compatible Chat Completions).
 
-    Compatibility guarantees (required by existing pipeline code/tests):
-    - Provides generate_text(prompt=..., temperature=..., max_output_tokens=...) -> (text, raw, err)
-    - Provides from_env() constructor
-    - Keeps verify(statement) helper for evidence-checking use cases
-
-    SAFE_MODE support (provider-level):
-    - TRANSIENT retries
-    - TOO_LONG chunk+aggregate
-    - POLICY/INVALID_REQUEST guarded retries (best-effort)
+    SaaS stability:
+    - verify() returns a hybrid Mapping (PerplexityVerifyResult) so Gate code can use `.get(...)`
+    - Best-effort JSON extraction
+    - One retry on non-JSON / schema drift
     """
 
     API_URL = "https://api.perplexity.ai/chat/completions"
@@ -30,13 +30,15 @@ class PerplexityProvider:
         *,
         model: str = "sonar-pro",
         fallback_model: Optional[str] = None,
-        timeout_sec: int = 60,
+        timeout_sec: int = 40,
     ) -> None:
-        if not (api_key or "").strip():
+        api_key = (api_key or "").strip()
+        if not api_key:
             raise ValueError("Perplexity API key is required")
-        self.api_key = api_key.strip()
+
+        self.api_key = api_key
         self.model = (model or "sonar-pro").strip()
-        self.fallback_model = (fallback_model or os.environ.get("PERPLEXITY_FALLBACK_MODEL") or os.environ.get("PPLX_FALLBACK_MODEL") or "").strip() or None
+        self.fallback_model = (fallback_model or "").strip() or None
         self.timeout_sec = int(timeout_sec)
 
     @staticmethod
@@ -45,128 +47,153 @@ class PerplexityProvider:
         model = os.environ.get("PERPLEXITY_MODEL", "sonar-pro")
         fb = os.environ.get("PERPLEXITY_FALLBACK_MODEL", "") or os.environ.get("PPLX_FALLBACK_MODEL", "")
         timeout = os.environ.get("PERPLEXITY_TIMEOUT_SEC", "") or os.environ.get("PPLX_TIMEOUT_SEC", "")
-        try:
-            timeout_i = int(timeout) if str(timeout).strip() else 60
-        except Exception:
-            timeout_i = 60
+        timeout_i = int(timeout) if str(timeout).strip().isdigit() else 40
         return PerplexityProvider(api_key, model=model, fallback_model=(fb or None), timeout_sec=timeout_i)
-
-    def _http_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            self.API_URL,
-            data=data,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        with urllib.request.urlopen(req, timeout=self.timeout_sec) as resp:
-            raw = resp.read().decode("utf-8", errors="replace")
-        return json.loads(raw)
-
-    def _call(self, prompt: str, *, model: Optional[str] = None, temperature: float = 0.2, max_tokens: Optional[int] = None) -> Tuple[str, Dict[str, Any]]:
-        payload: Dict[str, Any] = {
-            "model": (model or self.model),
-            "messages": [
-                {"role": "system", "content": "You are a rigorous evidence checker. Return concise JSON only."},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": float(temperature),
-        }
-        # Perplexity Sonar follows OpenAI Chat Completions; use max_tokens when provided.
-        if max_tokens is not None:
-            payload["max_tokens"] = int(max_tokens)
-
-        data = self._http_call(payload)
-        # Perplexity returns choices[0].message.content
-        text = data.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
-        return text, data
 
     def generate_text(
         self,
         *,
         prompt: str,
         temperature: float = 0.0,
-        max_output_tokens: int = 512,
-    ) -> Tuple[str, Dict[str, Any], Optional[Exception]]:
-        """Return (text, raw_response, error)."""
-        if not self.api_key:
-            return "", {}, RuntimeError("PERPLEXITY_API_KEY is missing")
+        max_output_tokens: int = 700,
+        model_override: Optional[str] = None,
+    ) -> Tuple[str, Dict[str, Any], Optional[Exception], Optional[int]]:
+        """
+        Returns: (text, raw_json, err, http_status)
+        """
+        safe_prompt = apply_safe_mode_prefix(prompt)
 
-        def call_fn(p: str) -> str:
-            t, raw = self._call(p, model=self.model, temperature=temperature, max_tokens=max_output_tokens)
-            call_fn.last_raw = raw  # type: ignore[attr-defined]
-            return t
+        payload = {
+            "model": (model_override or self.model),
+            "messages": [
+                {"role": "system", "content": "You are a precise verifier. Follow formatting instructions exactly."},
+                {"role": "user", "content": safe_prompt},
+            ],
+            "temperature": float(temperature),
+            "max_tokens": int(max_output_tokens),
+        }
 
-        call_fn.last_raw = {}  # type: ignore[attr-defined]
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
 
-        fallback_fn = None
-        if self.fallback_model:
-
-            def fb(p: str) -> str:
-                t, raw = self._call(p, model=self.fallback_model, temperature=temperature, max_tokens=max_output_tokens)
-                fb.last_raw = raw  # type: ignore[attr-defined]
-                return t
-
-            fb.last_raw = {}  # type: ignore[attr-defined]
-            fallback_fn = fb
-
+        res = None
         try:
-            res = run_safe_mode(apply_safe_mode_prefix(prompt), call_fn, fallback_call_fn=fallback_fn)
-            raw = getattr(call_fn, "last_raw", {}) or {}
-            if fallback_fn is not None and res.stage.startswith("FALLBACK"):
-                raw = getattr(fallback_fn, "last_raw", {}) or {}
-            return res.text, raw, None
-        except Exception as e:  # noqa: BLE001
-            return "", {}, e
+            res = requests.post(self.API_URL, headers=headers, json=payload, timeout=self.timeout_sec)
+            status = int(res.status_code)
+            res.raise_for_status()
+            raw = res.json()
+            text = ""
+            try:
+                text = raw.get("choices", [{}])[0].get("message", {}).get("content", "") or ""
+            except Exception:
+                text = ""
+            return text, raw, None, status
+        except Exception as e:
+            status = int(res.status_code) if res is not None and getattr(res, "status_code", None) is not None else None
+            try:
+                raw = res.json() if res is not None else {}
+            except Exception:
+                raw = {}
+            return "", raw, e, status
 
-    def verify(self, statement: str) -> Dict[str, Any]:
-        """Verify a statement. Returns dict with verdict/confidence/citations/summary."""
-
-        def build_prompt(s: str) -> str:
-            return (
-                "Verify the following statement using web evidence.\n"
-                "Return ONLY valid JSON with keys: verdict(OK|WARN|ERROR), confidence(0-1), citations(list), summary.\n\n"
-                f"STATEMENT:\n{s}"
+    def verify(self, statement: str) -> PerplexityVerifyResult:
+        """
+        Gate3 contract expectation (dict-like):
+          - verdict: PASS | FAIL | WARN | ERROR
+          - confidence: optional float
+          - citations: optional list[str]
+          - summary: optional str
+        """
+        stmt = (statement or "").strip()
+        if not stmt:
+            return PerplexityVerifyResult(
+                verdict="WARN",
+                confidence=None,
+                citations=[],
+                summary="Empty statement; nothing to verify.",
+                raw={"statement": statement},
             )
 
-        def call_fn(p: str) -> str:
-            t, raw = self._call(p, model=self.model, temperature=0.2, max_tokens=512)
-            call_fn.last_raw = raw  # type: ignore[attr-defined]
-            return t
+        schema_hint = (
+            "Return ONLY a single JSON object (no markdown, no prose) matching:\n"
+            "{\n"
+            '  "verdict": "PASS" | "FAIL" | "WARN",\n'
+            '  "confidence": number | null,\n'
+            '  "summary": string,\n'
+            '  "citations": [string]\n'
+            "}\n"
+        )
 
-        call_fn.last_raw = {}  # type: ignore[attr-defined]
+        prompt = (
+            f"{schema_hint}\n"
+            "Task: verify the factual correctness of the following statement. "
+            "If it is unverifiable or ambiguous, use WARN.\n\n"
+            f"STATEMENT:\n{stmt}\n"
+        )
 
-        fallback_fn = None
-        if self.fallback_model:
+        text, raw, err, status = self.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=700)
 
-            def fb(p: str) -> str:
-                t, raw = self._call(p, model=self.fallback_model, temperature=0.2, max_tokens=512)
-                fb.last_raw = raw  # type: ignore[attr-defined]
-                return t
+        # Auth errors should surface clearly for Gate3 categorization.
+        if status == 401:
+            raise RuntimeError("INVALID_REQUEST: Perplexity 401 Unauthorized (check PERPLEXITY_API_KEY).")
 
-            fb.last_raw = {}  # type: ignore[attr-defined]
-            fallback_fn = fb
+        if err is not None and not text:
+            # For transient network/server errors, raise with a recognizable prefix for Gate3
+            raise RuntimeError(f"TRANSIENT_ERROR: Perplexity call failed: {type(err).__name__}: {err}")
 
-        res = run_safe_mode(build_prompt(statement), call_fn, fallback_call_fn=fallback_fn)
+        parsed = parse_json_object(text)
 
+        # One retry if not JSON or missing required keys
+        def _looks_valid(p: Optional[dict]) -> bool:
+            if not isinstance(p, dict):
+                return False
+            return "verdict" in p and "summary" in p and "citations" in p
+
+        if not _looks_valid(parsed):
+            retry_prompt = (
+                f"{schema_hint}\n"
+                "Your previous response was not valid JSON or did not match the schema. "
+                "Respond again with JSON only, exactly matching the schema.\n\n"
+                f"STATEMENT:\n{stmt}\n"
+            )
+            time.sleep(0.25)
+            text2, raw2, err2, status2 = self.generate_text(prompt=retry_prompt, temperature=0.0, max_output_tokens=700)
+            raw = {"first": raw, "second": raw2}
+            if status2 == 401:
+                raise RuntimeError("INVALID_REQUEST: Perplexity 401 Unauthorized (check PERPLEXITY_API_KEY).")
+            if err2 is not None and not text2:
+                raise RuntimeError(f"TRANSIENT_ERROR: Perplexity retry failed: {type(err2).__name__}: {err2}")
+            parsed = parse_json_object(text2)
+
+        if not _looks_valid(parsed):
+            # Keep Gate3 behavior deterministic: invalid provider output => INVALID_REQUEST
+            raise RuntimeError("INVALID_REQUEST: Perplexity returned non-JSON or schema-invalid response.")
+
+        verdict = str(parsed.get("verdict", "WARN")).strip().upper()
+        if verdict not in {"PASS", "FAIL", "WARN"}:
+            verdict = "WARN"
+
+        confidence = parsed.get("confidence", None)
         try:
-            obj = json.loads(res.text)
-        except Exception as e:  # noqa: BLE001
-            raise RuntimeError(f"INVALID_REQUEST: Perplexity returned non-JSON: {res.text[:200]}") from e
+            confidence = float(confidence) if confidence is not None else None
+        except Exception:
+            confidence = None
 
-        # Normalize citations (best-effort)
-        if "citations" in obj and isinstance(obj["citations"], list):
-            norm: List[Dict[str, str]] = []
-            for c in obj["citations"]:
-                if isinstance(c, dict):
-                    title = str(c.get("title", ""))
-                    url = str(c.get("url", ""))
-                    norm.append({"title": title, "url": url})
-                elif isinstance(c, str):
-                    norm.append({"title": "", "url": c})
-            obj["citations"] = norm
+        citations = parsed.get("citations", [])
+        if citations is None:
+            citations = []
+        if not isinstance(citations, list):
+            citations = [str(citations)]
+        citations = [str(x) for x in citations]
 
-        return obj
+        summary = str(parsed.get("summary", "") or "").strip()
+
+        return PerplexityVerifyResult(
+            verdict=verdict,
+            confidence=confidence,
+            citations=citations,
+            summary=summary,
+            raw={"api": raw, "model_text": text, "parsed": parsed, "statement": stmt},
+        )
