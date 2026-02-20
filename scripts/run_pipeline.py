@@ -56,7 +56,7 @@ def parse_args() -> argparse.Namespace:
         description="7-Gate Pipeline Runner (Step 10: G1~G7 real, stdlib-only)"
     )
     p.add_argument("--request", required=True, help="Path to a markdown file containing user request")
-    p.add_argument("--run-id", default=None, help="Optional run id YYYY-MM-DD_HHMM")
+    p.add_argument("--run-id", default=None, help="Optional run id. If omitted, an id is auto-generated.")
     return p.parse_args()
 
 
@@ -75,11 +75,29 @@ def main() -> int:
         print(f"ERROR: request file not found: {request_path}")
         return 2
 
-    try:
-        artifacts = Artifacts.create_new(repo_root=REPO_ROOT, run_id=args.run_id)
-    except FileExistsError:
-        print(f"ERROR: run-id already exists: runs/{args.run_id}")
-        return 3
+    # Ensure run_id is never None; auto-generate a unique id when not provided.
+    user_run_id = (args.run_id or "").strip() or None
+    run_id = user_run_id
+
+    # If user didn't provide a run_id, generate one. If collision occurs (extremely rare),
+    # regenerate a few times.
+    attempts = 0
+    while True:
+        if not run_id:
+            run_id = now_seoul().strftime("%Y-%m-%d_%H%M%S_%f")
+        try:
+            artifacts = Artifacts.create_new(repo_root=REPO_ROOT, run_id=run_id)
+            break
+        except FileExistsError:
+            attempts += 1
+            if user_run_id:
+                print(f"ERROR: run-id already exists: runs/{user_run_id}")
+                return 3
+            if attempts >= 5:
+                print("ERROR: failed to allocate a unique run-id after 5 attempts")
+                return 3
+            # regenerate and retry
+            run_id = None
 
     artifacts.write_text("00_USER_REQUEST.md", read_request_text(request_path))
 
