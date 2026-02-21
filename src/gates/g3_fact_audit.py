@@ -205,5 +205,5 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
         decision=decision,
         message="Fact audit completed",
         outputs=outputs,
-        meta={"engine": meta["engine"], "fail_count": len(fail_reasons)},
+        meta={"engine": meta["engine"], "fail_count": len(fail_reasons), "stop_error": stop_error},
     )

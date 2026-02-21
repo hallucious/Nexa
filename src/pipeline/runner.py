@@ -143,6 +143,21 @@ class PipelineRunner:
             self._steps_executed += 1
             return False
 
+
+        # Propagate detailed STOP reason from gate result into run-level META (observability).
+        if result.decision == Decision.STOP and not self.meta.stop_reason:
+            meta = result.meta or {}
+            # Prefer explicit stop_reason keys, then common variants.
+            reason = (
+                meta.get("stop_reason")
+                or meta.get("stop_error")
+                or meta.get("error")
+                or meta.get("reason")
+                or meta.get("message")
+            )
+            if isinstance(reason, str) and reason.strip():
+                self.meta.stop_reason = f"{gate.value}: {reason.strip()}"
+
         next_gate = self._next_gate(gate, result.decision)
         self._record_transition(gate, next_gate, result.decision)
 
