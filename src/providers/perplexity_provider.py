@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -29,24 +28,6 @@ class PerplexityProvider:
         timeout = (os.environ.get("PERPLEXITY_TIMEOUT_SEC") or os.environ.get("PPLX_TIMEOUT_SEC") or "").strip()
         timeout_i = int(timeout) if timeout.isdigit() else 45
         return cls(api_key=api_key, model=model, fallback_model=fb, timeout_sec=timeout_i)
-
-    @staticmethod
-    def _fault_mode() -> str:
-        return (os.environ.get("PPLX_FAULT_MODE") or os.environ.get("PERPLEXITY_FAULT_MODE") or "").strip().upper()
-
-    @classmethod
-    def _apply_fault_injection_verify_bypass(cls) -> None:
-        fm = cls._fault_mode()
-        if not fm:
-            return
-
-        if fm.startswith("AUTH") or fm in ("AUTH_401", "401", "UNAUTHORIZED", "AUTH_403", "403", "FORBIDDEN"):
-            code = "403" if ("403" in fm or fm in ("AUTH_403", "403", "FORBIDDEN")) else "401"
-            msg = "Unauthorized" if code == "401" else "Forbidden"
-            raise RuntimeError(f"category=HARD_ERROR code={code} message={msg} (simulated via {fm})")
-
-        if fm in ("SCHEMA_INVALID", "SCHEMA"):
-            raise RuntimeError(f"category=UNKNOWN_ERROR code=SCHEMA_INVALID message=Schema invalid (simulated via {fm})")
 
     def _http_call(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         data = json.dumps(payload).encode("utf-8")
@@ -79,21 +60,22 @@ class PerplexityProvider:
 
     @staticmethod
     def _clean_json_text(text: str) -> str:
-        text = text.strip()
+        original = text.strip()
 
         # Remove markdown fences
-        if text.startswith("```"):
-            text = text.strip("`")
-            if text.lower().startswith("json"):
-                text = text[4:].strip()
+        if original.startswith("```"):
+            stripped = original.strip("`").strip()
+            if stripped.lower().startswith("json"):
+                stripped = stripped[4:].strip()
+            original = stripped
 
-        # Extract first balanced JSON object if extra text exists
-        start = text.find("{")
-        end = text.rfind("}")
+        # Extract first balanced JSON object
+        start = original.find("{")
+        end = original.rfind("}")
         if start != -1 and end != -1 and end > start:
-            text = text[start:end + 1]
+            original = original[start:end + 1]
 
-        return text.strip()
+        return original.strip()
 
     def generate_text(
         self,
@@ -121,8 +103,6 @@ class PerplexityProvider:
             return "", {}, e
 
     def verify(self, statement: str) -> Dict[str, Any]:
-        self._apply_fault_injection_verify_bypass()
-
         def build_prompt(s: str) -> str:
             return (
                 "Verify the following statement using web evidence.\n"
@@ -138,18 +118,36 @@ class PerplexityProvider:
 
         res = run_safe_mode(build_prompt(statement), call_fn)
 
-        cleaned = self._clean_json_text(res.text)
+        raw_text = res.text.strip()
+        cleaned = self._clean_json_text(raw_text)
+
+        repair_applied = cleaned != raw_text
+        format_status = "REPAIRED" if repair_applied else "CLEAN"
 
         try:
             obj = json.loads(cleaned)
         except Exception as e:
-            raise RuntimeError(f"INVALID_REQUEST: Perplexity returned non-JSON: {res.text[:200]}") from e
+            format_status = "FAIL"
+            g3_metrics = {
+                "format_status": format_status,
+                "content_status": "ERROR",
+                "repair_applied": repair_applied,
+                "parse_attempts": 1
+            }
+            raise RuntimeError(f"INVALID_REQUEST: Perplexity returned non-JSON: {raw_text[:200]}") from e
 
         if not isinstance(obj, dict):
-            raise RuntimeError(f"INVALID_REQUEST: Perplexity JSON must be an object, got {type(obj).__name__}")
+            raise RuntimeError("INVALID_REQUEST: Perplexity JSON must be an object")
 
-        obj.setdefault("verdict", "ERROR")
-        obj.setdefault("confidence", 0.0)
-        obj.setdefault("citations", [])
-        obj.setdefault("summary", "")
+        verdict = obj.get("verdict", "ERROR")
+        content_status = verdict if verdict in ("OK", "WARN", "ERROR") else "ERROR"
+
+        g3_metrics = {
+            "format_status": format_status,
+            "content_status": content_status,
+            "repair_applied": repair_applied,
+            "parse_attempts": 1
+        }
+
+        obj["_g3_metrics"] = g3_metrics
         return obj
