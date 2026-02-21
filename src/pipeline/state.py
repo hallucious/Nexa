@@ -37,3 +37,6 @@ class RunMeta:
     attempts: Dict[str, int] = field(default_factory=dict)
     providers: Dict[str, str] = field(default_factory=dict)  # e.g. {"gpt":"stub", ...}
     stop_reason: Optional[str] = None  # terminal STOP reason (if any)
+
+    # A5: Quality/observability metrics per gate (e.g., G3 format/content metrics)
+    gate_metrics: Dict[str, Dict] = field(default_factory=dict)
