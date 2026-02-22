@@ -56,8 +56,12 @@ def _rule_based_audit(statement: str) -> Dict[str, Any]:
 
 
 def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
-    # Load .env once per gate execution (cheap, safe)
-    load_dotenv()
+    # Determine whether we're running under pytest.
+    is_pytest = os.getenv("PYTEST_CURRENT_TEST") is not None
+
+    # Load .env for normal runs only. Pytest must remain deterministic even if .env exists.
+    if not is_pytest:
+        load_dotenv()
 
     run_dir = Path(ctx.run_dir)
     g1_path = run_dir / "G1_OUTPUT.json"
@@ -69,13 +73,9 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
 
     provider = None
     # IMPORTANT: do not make real external calls during unit tests by default.
-    # Enable Perplexity-based verification only when explicitly requested.
-    is_pytest = os.getenv("PYTEST_CURRENT_TEST") is not None
-    enable_flag = os.getenv("ENABLE_PERPLEXITY_FACT_AUDIT", "0").strip() in ("1", "true", "True", "yes", "YES")
-    # Default behavior:
-    # - Normal pipeline runs: external evidence check ON (intended role of G3)
-    # - Pytest runs: external calls OFF unless explicitly enabled (keeps unit tests deterministic)
-    enable_pplx = (not is_pytest) or enable_flag
+    # If you *really* want Perplexity in pytest, set ENABLE_PERPLEXITY_FACT_AUDIT_TESTS=1 explicitly.
+    enable_tests_flag = os.getenv("ENABLE_PERPLEXITY_FACT_AUDIT_TESTS", "0").strip() in ("1", "true", "True", "yes", "YES")
+    enable_pplx = (not is_pytest) or enable_tests_flag
     api_key = os.getenv("PERPLEXITY_API_KEY")
     if enable_pplx and api_key:
         try:
