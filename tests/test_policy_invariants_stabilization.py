@@ -141,3 +141,35 @@ def test_gate_exception_is_converted_to_stop(tmp_path: Path):
 
     assert meta.status == RunStatus.STOP
     assert meta.current_gate == GateId.STOP
+def test_stop_requires_non_empty_stop_reason(tmp_path: Path):
+    """Invariant: if runner ends in STOP, meta.stop_reason must be non-empty."""
+    meta = RunMeta(run_id="TEST_STOP_REASON", created_at=now_seoul().isoformat())
+    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path))
+
+    # Force a STOP without providing stop_reason in GateResult.meta
+    runner.register(GateId.G1, make_contract_gate("G1", Decision.STOP))
+    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))  # should not run
+
+    runner.run()
+
+    assert meta.status == RunStatus.STOP
+    assert meta.current_gate == GateId.STOP
+    assert isinstance(meta.stop_reason, str) and meta.stop_reason.strip() != ""
+
+
+def test_max_attempts_per_gate_exceeded_stops_and_sets_reason(tmp_path: Path):
+    """Invariant: exceeding max_attempts_per_gate must STOP and set stop_reason."""
+    meta = RunMeta(run_id="TEST_MAX_ATTEMPTS", created_at=now_seoul().isoformat())
+    # Keep it small to make the test fast and deterministic.
+    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path), max_attempts_per_gate=2)
+
+    # G1 FAIL loops back to G1; after 3rd attempt, runner should STOP with reason.
+    runner.register(GateId.G1, make_contract_gate("G1", Decision.FAIL))
+    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))  # should not run
+
+    runner.run()
+
+    assert meta.status == RunStatus.STOP
+    assert meta.current_gate == GateId.STOP
+    assert isinstance(meta.stop_reason, str) and meta.stop_reason.strip() != ""
+    assert "max_attempts_per_gate exceeded" in meta.stop_reason
