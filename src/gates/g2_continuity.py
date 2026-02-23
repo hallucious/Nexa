@@ -11,10 +11,10 @@ from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
 
 # NOTE:
-# - GPT provider is optional in pytest. Gate2 must still run (deterministically) without network.
-# - If GPT is unavailable -> verdict UNKNOWN (non-blocking), but structure rules still apply.
+# - Gate2 uses an injected GPT provider (ctx.providers['gpt']) when available.
+# - Gate2 must still run deterministically without network; if no provider is injected -> verdict UNKNOWN (non-blocking).
 try:
-    from src.providers.gpt_provider import GPTProvider
+    from src.providers.gpt_provider import GPTProvider  # only for type checking / optional availability
 except Exception:  # pragma: no cover
     GPTProvider = None  # type: ignore
 
@@ -246,12 +246,12 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     pic_text, pic_src = _load_pic_text(repo_root, run_dir)
     cur_text, cur_src = _load_current_text(run_dir)
 
+        # Provider is injected by the runner / caller. Do not create providers inside the gate.
     provider = None
-    if GPTProvider is not None:
-        try:
-            provider = GPTProvider.from_env()
-        except Exception:
-            provider = None
+    try:
+        provider = (ctx.providers or {}).get("gpt")
+    except Exception:
+        provider = None
 
     gpt_used = provider is not None
     gpt_verdict = "UNKNOWN"
@@ -343,7 +343,8 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     (run_dir / "G2_DECISION.md").write_text(decision_md, encoding="utf-8")
     _write_json(run_dir / "G2_META.json", meta)
 
-    # C) Quantitative recording for long-term analysis:
+
+    # C) Quantitative recording for long-term analysis (best-effort; never blocks):
     # - Write a compact Gate2 metrics snapshot into META.json
     # - Append a JSONL record into runs/_stats/g2_metrics.jsonl
     try:
@@ -351,14 +352,22 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
             "ts": now_seoul().isoformat(),
             "run_id": getattr(ctx.meta, "run_id", None),
             "gate": "G2",
-            "mode": mode,
+            "mode": meta.get("mode", "structure_diff + gpt_semantic_pic"),
             "decision": getattr(decision, "value", str(decision)),
-            "baseline_source": meta.get("baseline_source"),
-            "scores": meta.get("scores", {}),
-            "warnings": meta.get("warnings", []),
+            "baseline_present": baseline_present,
+            "pic_source": pic_src,
+            "current_source": cur_src,
+            "structure_diff_counts": {
+                "added": len(diff.get("added", [])),
+                "removed": len(diff.get("removed", [])),
+                "changed": len(diff.get("changed", [])),
+            },
+            "gpt": {
+                "used": gpt_used,
+                "verdict": gpt_verdict,
+            },
         }
         _update_meta(run_dir, {"gate2_continuity": record})
-        repo_root = _repo_root_from_run_dir(run_dir)
         stats_path = repo_root / "runs" / "_stats" / "g2_metrics.jsonl"
         _append_jsonl(stats_path, record)
     except Exception:
