@@ -150,6 +150,14 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
 
     baseline_reco = _baseline_update_recommendation(run_dir, decision)
 
+    # Notes used in GPT advisory prompt (best-effort)
+    notes: List[str] = [
+        "Deterministic aggregation review (policy).",
+        "GPT advisory included in output.ai.text (best-effort).",
+        "Gate7 never mutates baseline; it only emits a recommendation and a copy-paste command.",
+    ]
+
+
     decision_md = (
         "# G7 FINAL REVIEW DECISION\n\n"
         f"Decision: {decision.value}\n\n"
@@ -173,21 +181,25 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
     gpt_error = ""
     gpt_raw = {}
     gpt_text = ""
-    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))) and GPTProvider is not None:
-        try:
-            provider = GPTProvider.from_env()
-            gpt_used = True
-            prompt = (
-                "You are Gate7 (Final Review). Given the gate decisions and key notes, write a short final summary and "
-                "a go/no-go recommendation. Return plain text.\n\n"
-                f"Decisions: {decisions}\n"
-                f"Notes: {notes}\n"
-            )
-            gpt_text, gpt_raw, err = provider.generate_text(prompt=prompt, temperature=0.2, max_output_tokens=900)
-            if err is not None:
-                gpt_error = f"{type(err).__name__}: {err}"
-        except Exception as e:
-            gpt_error = f"{type(e).__name__}: {e}"
+    # Provider injection: prefer ctx.providers['gpt']; do not instantiate provider inside the gate.
+    provider = ctx.providers.get('gpt')
+    if not bool(os.getenv('PYTEST_CURRENT_TEST')):
+        if provider is None:
+            gpt_error = "RuntimeError: GPT provider missing (inject via ctx.providers['gpt'])"
+        else:
+            try:
+                gpt_used = True
+                prompt = (
+                    "You are Gate7 (Final Review). Given the gate decisions and key notes, write a short final summary and "
+                    "a go/no-go recommendation. Return plain text.\n\n"
+                    f"Decisions: {decisions}\n"
+                    f"Notes: {notes}\n"
+                )
+                gpt_text, gpt_raw, err = provider.generate_text(prompt=prompt, temperature=0.2, max_output_tokens=900)
+                if err is not None:
+                    gpt_error = f"{type(err).__name__}: {err}"
+            except Exception as e:
+                gpt_error = f"{type(e).__name__}: {e}"
 
     output: Dict[str, Any] = {
         "gate": "G7",

@@ -5,19 +5,12 @@ import os
 import re
 import shlex
 import subprocess
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from src.models.decision_models import Decision, GateResult
-from src.pipeline.state import RunMeta
+from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
-
-
-@dataclass
-class GateContext:
-    meta: RunMeta
-    run_dir: str
 
 
 # -----------------------------
@@ -194,18 +187,9 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
     # Parallel-run hardening: isolate pytest cache per run to avoid cross-process contention.
     # (pytest otherwise writes .pytest_cache under repo root, which can race under concurrency.)
     env = os.environ.copy()
-
-    # Determinism hardening: when Gate5 runs pytest inside a real pipeline run,
-    # unit tests must not make real network/API calls just because API keys exist.
-    for k in ("OPENAI_API_KEY", "GEMINI_API_KEY", "PERPLEXITY_API_KEY", "PPLX_API_KEY"):
-        env[k] = ""
-
-    # Disable external-evidence mode during pytest runs (tests must remain offline/deterministic).
-    env["ENABLE_PERPLEXITY_FACT_AUDIT"] = "0"
-
     # Reduce influence of user/global pytest plugins (can vary per machine).
     env.setdefault("PYTEST_DISABLE_PLUGIN_AUTOLOAD", "1")
-    env.setdefault('PYTEST_CACHE_DIR', str(run_dir / '.pytest_cache'))
+    env.setdefault("PYTEST_CACHE_DIR", str(run_dir / ".pytest_cache"))
 
     timeout_sec = _env_int("HAI_PYTEST_TIMEOUT_SEC", 120)
 

@@ -10,10 +10,7 @@ from src.pipeline.runner import GateContext
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
 
-try:
-    from src.providers.gemini_provider import GeminiProvider
-except Exception:  # pragma: no cover
-    GeminiProvider = None  # type: ignore
+# Gemini provider is injected via ctx.providers["gemini"]; do not import/instantiate here.
 
 
 def _read_json(path: Path) -> Dict[str, Any]:
@@ -249,9 +246,9 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
     gemini_error = ""
     gemini_raw = {}
     gemini_text = ""
-    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))) and GeminiProvider is not None:
+    if not bool(os.getenv("PYTEST_CURRENT_TEST")):
         try:
-            provider = GeminiProvider.from_env()
+            provider = ctx.providers.get("gemini")
             gemini_used = True
             prompt = (
                 "You are Gate6 (Counterfactual) using Gemini. Provide 3 plausible failure modes and 3 mitigations "
@@ -262,7 +259,13 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
                 f"G4 checks: {g4_checks}\n"
                 f"G5 result: {g5_summary}\n"
             )
-            gemini_text, gemini_raw, err = provider.generate_text(prompt=prompt, temperature=0.2, max_output_tokens=900)
+            if provider is None:
+
+                gemini_error = "RuntimeError: Gemini provider missing (inject via ctx.providers['gemini'])"
+
+            else:
+
+                gemini_text, gemini_raw, err = provider.generate_text(prompt=prompt, temperature=0.2, max_output_tokens=900)
             if err is not None:
                 gemini_error = f"{type(err).__name__}: {err}"
         except Exception as e:

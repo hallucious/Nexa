@@ -265,19 +265,21 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
     gpt_error = ""
     gpt_raw = {}
     gpt_text = ""
-    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))) and GPTProvider is not None:
+    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))):
         try:
-            provider = GPTProvider.from_env()
+            provider = ctx.providers.get("gpt")
+            if provider is None:
+                raise RuntimeError("GPT provider not injected")
             gpt_used = True
             prompt = (
                 "You are Gate4 (Self-check). Review the gate outputs below and list any issues or risks. "
                 "Return plain text with bullet points.\n\n"
                 "G1 (Design) summary:\n"
-                f"{g1_output.get('design', g1_output) if isinstance(g1_output, dict) else str(g1_output)}\n\n"
+                f"{g1.get('design', g1) if isinstance(g1, dict) else str(g1)}\n\n"
                 "G2 (Continuity) summary:\n"
-                f"{g2_output}\n\n"
+                f"{g2}\n\n"
                 "G3 (Fact audit) summary:\n"
-                f"{g3_output}\n"
+                f"{g3}\n"
             )
             gpt_text, gpt_raw, err = provider.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=800)
             if err is not None:
