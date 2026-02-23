@@ -9,6 +9,7 @@ from typing import Any, Dict, List
 from src.models.decision_models import GateResult, Decision
 from src.pipeline.runner import GateContext
 from src.pipeline.contracts import standard_spec
+from src.pipeline.stop_reason import StopReason
 from src.utils.time import now_seoul
 from src.utils.env import load_dotenv
 
@@ -207,9 +208,18 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     }
     standard_spec("G3").validate(outputs)
 
+    gate_meta = {
+        "engine": meta["engine"],
+        "fail_count": len(fail_reasons),
+        "stop_error": stop_error,
+    }
+    if decision == Decision.STOP:
+        gate_meta["stop_reason"] = StopReason.PROVIDER_ERROR.value
+        gate_meta["stop_detail"] = stop_error
+
     return GateResult(
         decision=decision,
         message="Fact audit completed",
         outputs=outputs,
-        meta={"engine": meta["engine"], "fail_count": len(fail_reasons), "stop_error": stop_error},
+        meta=gate_meta,
     )

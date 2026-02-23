@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
+from src.pipeline.stop_reason import StopReason
 
 # NOTE:
 # - Gate2 uses an injected GPT provider (ctx.providers['gpt']) when available.
@@ -375,7 +376,13 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         }
         _update_meta(run_dir, {"gate2_continuity": record})
         if decision == Decision.STOP:
-            _update_meta(run_dir, {"stop_reason": "G2_SEMANTIC_UNKNOWN_WITH_PROVIDER"})
+            _update_meta(
+                run_dir,
+                {
+                    "stop_reason": StopReason.UNKNOWN.value,
+                    "stop_detail": "G2_SEMANTIC_UNKNOWN_WITH_PROVIDER",
+                },
+            )
         stats_path = repo_root / "runs" / "_stats" / "g2_metrics.jsonl"
         _append_jsonl(stats_path, record)
     except Exception:
@@ -383,6 +390,13 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
         pass
 
     _write_json(run_dir / "G2_OUTPUT.json", out)
+
+    gate_meta = {}
+    if decision == Decision.STOP:
+        gate_meta = {
+            "stop_reason": StopReason.UNKNOWN.value,
+            "stop_detail": "G2_SEMANTIC_UNKNOWN_WITH_PROVIDER",
+        }
 
     return GateResult(
         decision=decision,
@@ -392,4 +406,5 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
             "G2_OUTPUT.json": "G2_OUTPUT.json",
             "G2_META.json": "G2_META.json",
         },
+        meta=gate_meta or None,
     )

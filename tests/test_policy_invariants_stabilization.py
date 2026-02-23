@@ -172,4 +172,6 @@ def test_max_attempts_per_gate_exceeded_stops_and_sets_reason(tmp_path: Path):
     assert meta.status == RunStatus.STOP
     assert meta.current_gate == GateId.STOP
     assert isinstance(meta.stop_reason, str) and meta.stop_reason.strip() != ""
-    assert "max_attempts_per_gate exceeded" in meta.stop_reason
+    # B2: standardized STOP reasons (enum). Detail is recorded separately.
+    assert meta.stop_reason == "INTERNAL_ERROR"
+    assert "max_attempts_per_gate exceeded" in (meta.gate_metrics.get("_runner", {}) or {}).get("stop_detail", "")

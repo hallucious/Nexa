@@ -33,4 +33,6 @@ def test_g2_unknown_with_provider_triggers_stop(tmp_path, monkeypatch):
     assert res.decision.value == "STOP"
 
     meta_json = json.loads((run_dir / "META.json").read_text(encoding="utf-8"))
-    assert meta_json.get("stop_reason") == "G2_SEMANTIC_UNKNOWN_WITH_PROVIDER"
+    # B2: standardized STOP reasons (enum). Gate provides detail separately.
+    assert meta_json.get("stop_reason") == "UNKNOWN"
+    assert meta_json.get("stop_detail") == "G2_SEMANTIC_UNKNOWN_WITH_PROVIDER"

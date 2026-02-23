@@ -7,6 +7,7 @@ from typing import Dict, List, Any, Optional
 
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.contracts import standard_spec
+from src.pipeline.stop_reason import StopReason
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
 
@@ -141,19 +142,21 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
         encoding="utf-8",
     )
 
+    meta_payload = {
+        "gate": "G1",
+        "decision": decision.value,
+        "violations": violations,
+        "at": now_seoul().isoformat(),
+        "attempt": ctx.meta.attempts.get("G1", 1),
+        "ai": {"engine": "gpt", "used": gpt_used, "error": gpt_error},
+    }
+
+    if decision == Decision.STOP:
+        meta_payload["stop_reason"] = StopReason.PROVIDER_ERROR.value
+        meta_payload["stop_detail"] = "G1 missing injected provider"
+
     (run_dir / "G1_META.json").write_text(
-        json.dumps(
-            {
-                "gate": "G1",
-                "decision": decision.value,
-                "violations": violations,
-                "at": now_seoul().isoformat(),
-                "attempt": ctx.meta.attempts.get("G1", 1),
-                "ai": {"engine": "gpt", "used": gpt_used, "error": gpt_error},
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
+        json.dumps(meta_payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -169,4 +172,5 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
         decision=decision,
         message="Design skeleton generated",
         outputs=outputs,
+        meta=meta_payload,
     )

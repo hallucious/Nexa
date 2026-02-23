@@ -1,11 +1,13 @@
 from dataclasses import dataclass, asdict
 import json
+import time
 from typing import Dict, Callable, Any, Optional
 from pathlib import Path
 
 from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
 from src.pipeline.contracts import standard_spec
+from src.pipeline.stop_reason import StopReason, is_valid_stop_reason
 from src.utils.time import now_seoul
 from src.pipeline.registry import GateRegistry
 
@@ -97,16 +99,49 @@ class PipelineRunner:
             return
 
 
-    def _stop_run(self, reason: str) -> None:
+    def _stop_run(self, detail: str) -> None:
+        """Stop the run with a standardized reason code.
+
+        Internal/runner-triggered stops are categorized as INTERNAL_ERROR.
+        The human-readable detail is recorded into gate_metrics for audit.
+        """
+
         self.meta.status = RunStatus.STOP
         self.meta.current_gate = GateId.STOP
-        self.meta.stop_reason = reason
+        self.meta.stop_reason = StopReason.INTERNAL_ERROR.value
+        try:
+            self.meta.gate_metrics.setdefault("_runner", {})["stop_detail"] = str(detail)
+        except Exception:
+            pass
+
+
+    def _inject_observability(
+        self,
+        *,
+        gate_id: GateId,
+        result: GateResult,
+        started_at: str,
+        finished_at: str,
+        execution_time_ms: int,
+    ) -> None:
+        """Attach basic observability fields into GateResult.meta.
+
+        Contract:
+        - These fields are additive and must not affect PASS/FAIL/STOP semantics.
+        - provider_latency_ms is optional and may be set by gates/providers.
+        """
+        if result.meta is None:
+            result.meta = {}
+        if isinstance(result.meta, dict):
+            result.meta.setdefault("started_at", started_at)
+            result.meta.setdefault("finished_at", finished_at)
+            result.meta.setdefault("execution_time_ms", execution_time_ms)
 
     def _next_gate(self, gate: GateId, decision: Decision) -> GateId:
         # Gate-requested STOP
         if decision == Decision.STOP:
             if not self.meta.stop_reason:
-                self.meta.stop_reason = "STOP requested by gate"
+                self.meta.stop_reason = StopReason.STOP_REQUESTED.value
             self.meta.status = RunStatus.STOP
             return GateId.STOP
 
@@ -134,7 +169,7 @@ class PipelineRunner:
                 return GateId.G5
             self.meta.status = RunStatus.STOP
             if not self.meta.stop_reason:
-                self.meta.stop_reason = "STOP requested by gate"
+                self.meta.stop_reason = StopReason.STOP_REQUESTED.value
             return GateId.STOP
         return GateId.STOP
 
@@ -187,19 +222,27 @@ class PipelineRunner:
             return False
 
 
-        # Propagate detailed STOP reason from gate result into run-level META (observability).
+        # Propagate STOP reason from gate meta into run-level META (standardized enum).
         if result.decision == Decision.STOP and not self.meta.stop_reason:
             meta = result.meta or {}
-            # Prefer explicit stop_reason keys, then common variants.
-            reason = (
-                meta.get("stop_reason")
-                or meta.get("stop_error")
-                or meta.get("error")
-                or meta.get("reason")
-                or meta.get("message")
-            )
-            if isinstance(reason, str) and reason.strip():
-                self.meta.stop_reason = f"{gate.value}: {reason.strip()}"
+
+            raw_reason = meta.get("stop_reason")
+            raw_detail = meta.get("stop_detail") or meta.get("stop_error") or meta.get("error")
+
+            if is_valid_stop_reason(raw_reason):
+                self.meta.stop_reason = str(raw_reason)
+            else:
+                # Fallback to STOP_REQUESTED if gate didn't provide a valid code.
+                self.meta.stop_reason = StopReason.STOP_REQUESTED.value
+                # Preserve any provided detail for debugging.
+                if isinstance(raw_reason, str) and raw_reason.strip():
+                    raw_detail = raw_detail or raw_reason
+
+            if isinstance(raw_detail, str) and raw_detail.strip():
+                try:
+                    self.meta.gate_metrics.setdefault(gate.value, {})["stop_detail"] = raw_detail.strip()
+                except Exception:
+                    pass
 
         next_gate = self._next_gate(gate, result.decision)
         self._record_transition(gate, next_gate, result.decision)
