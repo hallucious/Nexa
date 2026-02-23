@@ -1,1 +1,1 @@
-from .plugin import Plugin, PluginResult, DummyEchoPlugin, FileWritePlugin
+from .worker import WorkerResult, ProviderTextWorker, wrap_text_provider
