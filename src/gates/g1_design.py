@@ -3,17 +3,12 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Any, Optional
 
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.contracts import standard_spec
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
-
-try:
-    from src.providers.gpt_provider import GPTProvider
-except Exception:  # pragma: no cover
-    GPTProvider = None  # type: ignore
 
 
 def _extract_requirements(text: str) -> List[str]:
@@ -21,9 +16,9 @@ def _extract_requirements(text: str) -> List[str]:
     return [line.strip() for line in text.splitlines() if line.strip()]
 
 
-def _self_check(design: Dict) -> List[str]:
+def _self_check(design: Dict[str, Any]) -> List[str]:
     """Returns list of violations. Empty list => PASS."""
-    violations = []
+    violations: List[str] = []
     if not design.get("interfaces"):
         violations.append("interfaces missing")
     if not design.get("constraints"):
@@ -31,6 +26,24 @@ def _self_check(design: Dict) -> List[str]:
     if not design.get("acceptance_criteria"):
         violations.append("acceptance_criteria missing")
     return violations
+
+
+def _get_injected_gpt(ctx: GateContext) -> Optional[Any]:
+    """Fetch an injected GPT provider from GateContext.
+
+    Supported shapes:
+      - ctx.context["providers"]["gpt"]
+      - ctx.context["gpt"]
+
+    The provider is expected to expose:
+      generate_text(prompt: str, temperature: float, max_output_tokens: int) -> (text, raw, err)
+    """
+    providers = ctx.context.get("providers")
+    if isinstance(providers, dict) and providers.get("gpt") is not None:
+        return providers.get("gpt")
+    if ctx.context.get("gpt") is not None:
+        return ctx.context.get("gpt")
+    return None
 
 
 def gate_g1_design(ctx: GateContext) -> GateResult:
@@ -42,16 +55,19 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
     req_text = req_path.read_text(encoding="utf-8", errors="ignore")
     requirements = _extract_requirements(req_text)
 
-    # GPT is REQUIRED for G1 in normal (non-pytest) pipeline runs.
+    # G1 requires GPT in normal (non-pytest) runs.
+    # In pytest we keep deterministic fallback, unless the test explicitly removes PYTEST_CURRENT_TEST.
     is_pytest = bool(os.getenv("PYTEST_CURRENT_TEST"))
+
     gpt_used = False
     gpt_error = ""
-    gpt_raw = {}
+    gpt_raw: Dict[str, Any] = {}
     gpt_text = ""
 
-    if (not is_pytest) and GPTProvider is not None:
+    provider = _get_injected_gpt(ctx)
+
+    if (not is_pytest) and provider is not None:
         try:
-            provider = GPTProvider.from_env()
             gpt_used = True
             prompt = (
                 "You are Gate1 (Design). Create a concise JSON design skeleton for the request below. "
@@ -67,12 +83,12 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
         except Exception as e:
             gpt_error = f"{type(e).__name__}: {e}"
 
-    if (not is_pytest) and (not gpt_used):
+    if (not is_pytest) and (provider is None):
         decision = Decision.STOP
-        violations = [f"GPT unavailable: {gpt_error or 'missing provider / key'}"]
-        design: Dict = {}
+        violations = ["GPT unavailable: missing injected provider"]
+        design: Dict[str, Any] = {}
     else:
-        # Local fallback skeleton (still deterministic for tests)
+        # Local fallback skeleton (deterministic for tests)
         design = {
             "summary": "Initial system design (skeleton)",
             "requirements": requirements,

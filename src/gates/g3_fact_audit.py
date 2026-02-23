@@ -11,7 +11,6 @@ from src.pipeline.runner import GateContext
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
 from src.utils.env import load_dotenv
-from src.providers.perplexity_provider import PerplexityProvider
 
 
 FACT_PATTERNS = [
@@ -72,16 +71,23 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     candidates = _extract_fact_candidates(g1)
 
     provider = None
+
+    # Provider selection (A7-4): prefer injected providers from GateContext.
+    # Gates must not instantiate providers directly.
+    injected = None
+    try:
+        injected = ctx.providers.get("perplexity") if getattr(ctx, "providers", None) else None
+    except Exception:
+        injected = None
+
+    # Determine whether external evidence checking is enabled.
     # IMPORTANT: do not make real external calls during unit tests by default.
     # If you *really* want Perplexity in pytest, set ENABLE_PERPLEXITY_FACT_AUDIT_TESTS=1 explicitly.
     enable_tests_flag = os.getenv("ENABLE_PERPLEXITY_FACT_AUDIT_TESTS", "0").strip() in ("1", "true", "True", "yes", "YES")
     enable_pplx = (not is_pytest) or enable_tests_flag
-    api_key = os.getenv("PERPLEXITY_API_KEY")
-    if enable_pplx and api_key:
-        try:
-            provider = PerplexityProvider(api_key)
-        except Exception:
-            provider = None
+
+    if enable_pplx and injected is not None:
+        provider = injected
 
     results: List[Dict[str, Any]] = []
     fail_reasons: List[str] = []
@@ -95,7 +101,7 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     provider_required = bool(enable_pplx) and (not is_pytest)
 
     if provider_required and provider is None:
-        stop_error = "UNKNOWN_ERROR: Perplexity provider unavailable (missing key or init failure)"
+        stop_error = "UNKNOWN_ERROR: Perplexity provider unavailable (inject ctx.providers['perplexity'] or configure CLI/provider wiring)"
 
     for stmt in candidates:
         if stop_error:
