@@ -287,6 +287,8 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     structure_removed = bool(diff.get("removed"))
     if structure_removed:
         decision = Decision.FAIL
+    elif gpt_used and gpt_verdict == "UNKNOWN":
+        decision = Decision.STOP
     elif gpt_verdict in ("DRIFT", "VIOLATION"):
         decision = Decision.FAIL
     else:
@@ -314,17 +316,21 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
     meta = {
         "gate": "G2",
         "created_at": now_seoul().isoformat(),
-        "mode": "structure_diff + gpt_semantic_pic",
-        "baseline_present": baseline_present,
-        "gpt_used": gpt_used,
-        "gpt_verdict": gpt_verdict,
-        "pic_source": pic_src,
-        "current_source": cur_src,
-        "decision_rule": {
-            "structure_removed": "FAIL",
-            "semantic_drift_violation": "FAIL",
-            "otherwise": "PASS",
+        "provider": {
+            "used": gpt_used,
+            "model_name": getattr(provider, "model", None) if gpt_used else None,
         },
+        "structure": {
+            "removed": diff.get("removed", []),
+            "added": diff.get("added", []),
+            "changed": diff.get("changed", []),
+        },
+        "semantic": {
+            "verdict": gpt_verdict,
+            "rationale": gpt_rationale,
+            "unknown_used": gpt_used and gpt_verdict == "UNKNOWN",
+        },
+        "final_decision": decision.value,
     }
 
     out = {
@@ -368,6 +374,8 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
             },
         }
         _update_meta(run_dir, {"gate2_continuity": record})
+        if decision == Decision.STOP:
+            _update_meta(run_dir, {"stop_reason": "G2_SEMANTIC_UNKNOWN_WITH_PROVIDER"})
         stats_path = repo_root / "runs" / "_stats" / "g2_metrics.jsonl"
         _append_jsonl(stats_path, record)
     except Exception:
