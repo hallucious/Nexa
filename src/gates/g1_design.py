@@ -3,22 +3,23 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.contracts import standard_spec
-from src.pipeline.stop_reason import StopReason
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
 
+from src.platform.prompt_spec import PromptSpec
+from src.platform.worker import wrap_text_provider, WorkerResult
+from src.platform.plugin import FileWritePlugin
+
 
 def _extract_requirements(text: str) -> List[str]:
-    # 최소 구현: 문단 단위 분해
     return [line.strip() for line in text.splitlines() if line.strip()]
 
 
 def _self_check(design: Dict[str, Any]) -> List[str]:
-    """Returns list of violations. Empty list => PASS."""
     violations: List[str] = []
     if not design.get("interfaces"):
         violations.append("interfaces missing")
@@ -30,21 +31,34 @@ def _self_check(design: Dict[str, Any]) -> List[str]:
 
 
 def _get_injected_gpt(ctx: GateContext) -> Optional[Any]:
-    """Fetch an injected GPT provider from GateContext.
+    if isinstance(getattr(ctx, "providers", None), dict) and ctx.providers.get("gpt") is not None:
+        return ctx.providers.get("gpt")
 
-    Supported shapes:
-      - ctx.context["providers"]["gpt"]
-      - ctx.context["gpt"]
-
-    The provider is expected to expose:
-      generate_text(prompt: str, temperature: float, max_output_tokens: int) -> (text, raw, err)
-    """
     providers = ctx.context.get("providers")
     if isinstance(providers, dict) and providers.get("gpt") is not None:
         return providers.get("gpt")
+
     if ctx.context.get("gpt") is not None:
         return ctx.context.get("gpt")
+
     return None
+
+
+_G1_PROMPT = PromptSpec(
+    id="g1_design/v1",
+    version="v1",
+    template=(
+        "You are Gate1 (Design). Create a concise JSON design skeleton for the request below. "
+        "Return ONLY valid JSON with keys: summary, requirements, interfaces, constraints, acceptance_criteria.\n\n"
+        "REQUEST:\n"
+        "{user_request}"
+    ),
+    inputs_schema={"user_request": str},
+)
+
+
+# Plugin (v0.1 contract): no ctor args; execute(path=..., content=...)
+_G1_FILE_WRITE = FileWritePlugin()
 
 
 def gate_g1_design(ctx: GateContext) -> GateResult:
@@ -56,8 +70,6 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
     req_text = req_path.read_text(encoding="utf-8", errors="ignore")
     requirements = _extract_requirements(req_text)
 
-    # G1 requires GPT in normal (non-pytest) runs.
-    # In pytest we keep deterministic fallback, unless the test explicitly removes PYTEST_CURRENT_TEST.
     is_pytest = bool(os.getenv("PYTEST_CURRENT_TEST"))
 
     gpt_used = False
@@ -67,29 +79,12 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
 
     provider = _get_injected_gpt(ctx)
 
-    if (not is_pytest) and provider is not None:
-        try:
-            gpt_used = True
-            prompt = (
-                "You are Gate1 (Design). Create a concise JSON design skeleton for the request below. "
-                "Return ONLY valid JSON with keys: summary, requirements, interfaces, constraints, acceptance_criteria.\n\n"
-                "REQUEST:\n"
-                f"{req_text.strip()[:8000]}"
-            )
-            gpt_text, gpt_raw, err = provider.generate_text(
-                prompt=prompt, temperature=0.0, max_output_tokens=2048
-            )
-            if err is not None:
-                gpt_error = f"{type(err).__name__}: {err}"
-        except Exception as e:
-            gpt_error = f"{type(e).__name__}: {e}"
-
     if (not is_pytest) and (provider is None):
         decision = Decision.STOP
         violations = ["GPT unavailable: missing injected provider"]
         design: Dict[str, Any] = {}
     else:
-        # Local fallback skeleton (deterministic for tests)
+        # Deterministic baseline (stable in tests)
         design = {
             "summary": "Initial system design (skeleton)",
             "requirements": requirements,
@@ -105,7 +100,30 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
             ],
         }
 
-        # If GPT returned JSON, try to adopt it.
+        # AI path only when NOT pytest (keeps test determinism)
+        if (not is_pytest) and (provider is not None):
+            try:
+                gpt_used = True
+                rendered = _G1_PROMPT.render({"user_request": req_text.strip()[:8000]})
+
+                if hasattr(provider, "generate_text") and callable(getattr(provider, "generate_text")):
+                    worker = wrap_text_provider(name="gpt", provider=provider)
+                    wr: WorkerResult = worker.generate_text(
+                        prompt=rendered,
+                        temperature=0.0,
+                        max_output_tokens=2048,
+                    )
+                    gpt_text = wr.text
+                    gpt_raw = wr.raw if isinstance(wr.raw, dict) else {}
+                    if (not wr.success) and wr.error:
+                        gpt_error = wr.error
+                else:
+                    gpt_error = "Provider missing generate_text()"
+
+            except Exception as e:
+                gpt_error = f"{type(e).__name__}: {e}"
+
+        # Adopt AI JSON if valid
         if gpt_text.strip():
             try:
                 candidate = json.loads(gpt_text)
@@ -117,7 +135,8 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
         violations = _self_check(design)
         decision = Decision.PASS if not violations else Decision.FAIL
 
-    # Write artifacts
+    # --- Standard contract artifacts (unchanged) ---
+
     (run_dir / "G1_DECISION.md").write_text(
         "# G1 DESIGN DECISION\n\n"
         f"Decision: {decision.value}\n\n"
@@ -142,35 +161,35 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
         encoding="utf-8",
     )
 
-    meta_payload = {
-        "gate": "G1",
-        "decision": decision.value,
-        "violations": violations,
-        "at": now_seoul().isoformat(),
-        "attempt": ctx.meta.attempts.get("G1", 1),
-        "ai": {"engine": "gpt", "used": gpt_used, "error": gpt_error},
-    }
-
-    if decision == Decision.STOP:
-        meta_payload["stop_reason"] = StopReason.PROVIDER_ERROR.value
-        meta_payload["stop_detail"] = "G1 missing injected provider"
-
     (run_dir / "G1_META.json").write_text(
-        json.dumps(meta_payload, ensure_ascii=False, indent=2),
+        json.dumps(
+            {
+                "gate": "G1",
+                "decision": decision.value,
+                "violations": violations,
+                "at": now_seoul().isoformat(),
+                "attempt": ctx.meta.attempts.get("G1", 1),
+                "ai": {"engine": "gpt", "used": gpt_used, "error": gpt_error},
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
         encoding="utf-8",
     )
+
+    # --- Additive artifact via Plugin (non-breaking) ---
+    design_md = "# G1 DESIGN\n\n" + json.dumps(design, ensure_ascii=False, indent=2)
+    _G1_FILE_WRITE.execute(path=run_dir / "G1_DESIGN.md", content=design_md)
 
     outputs = {
         "G1_DECISION.md": "G1_DECISION.md",
         "G1_OUTPUT.json": "G1_OUTPUT.json",
         "G1_META.json": "G1_META.json",
     }
-
     standard_spec("G1").validate(outputs)
 
     return GateResult(
         decision=decision,
         message="Design skeleton generated",
         outputs=outputs,
-        meta=meta_payload,
     )
