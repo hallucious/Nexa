@@ -202,6 +202,10 @@ class PipelineRunner:
 
         ctx = GateContext(meta=self.meta, run_dir=self.run_dir, context=self.context, providers=self.providers)
 
+        # Observability (C): measure execution time and attach timestamps.
+        started_at = now_seoul().isoformat()
+        t0 = time.perf_counter()
+
         # Execute gate safely: any crash becomes STOP.
         try:
             result = executor(ctx)
@@ -209,6 +213,52 @@ class PipelineRunner:
             self._stop_run(f"GATE_EXCEPTION: {gate.value}: {type(e).__name__}: {e}")
             self._record_transition(gate, GateId.STOP, Decision.STOP)
             self._steps_executed += 1
+            return False
+
+        finished_at = now_seoul().isoformat()
+        execution_time_ms = int((time.perf_counter() - t0) * 1000)
+
+        # Attach observability into result.meta (additive; never changes semantics).
+        if getattr(result, "meta", None) is None:
+            result.meta = {}
+        if isinstance(result.meta, dict):
+            result.meta.setdefault("started_at", started_at)
+            result.meta.setdefault("finished_at", finished_at)
+            result.meta.setdefault("execution_time_ms", execution_time_ms)
+
+        # Persist observability into run-level gate_metrics (for audit / debugging).
+        try:
+            gm = self.meta.gate_metrics.setdefault(gate.value, {})
+            if isinstance(gm, dict):
+                gm.setdefault("started_at", started_at)
+                gm.setdefault("finished_at", finished_at)
+                gm.setdefault("execution_time_ms", execution_time_ms)
+                # provider_latency_ms is optional; if gate provided it, keep it.
+                if isinstance(result.meta, dict) and "provider_latency_ms" in result.meta:
+                    gm.setdefault("provider_latency_ms", result.meta.get("provider_latency_ms"))
+        except Exception:
+            pass
+
+        # Best-effort: patch per-gate META.json artifact if it exists in outputs.
+        try:
+            meta_key = f"{gate.value}_META.json"
+            meta_file = None
+            if isinstance(result.outputs, dict):
+                meta_file = result.outputs.get(meta_key)
+            if isinstance(meta_file, str) and meta_file.strip():
+                meta_path = Path(self.run_dir) / meta_file
+                if meta_path.exists():
+                    payload = json.loads(meta_path.read_text(encoding="utf-8"))
+                    if isinstance(payload, dict):
+                        payload.setdefault("started_at", started_at)
+                        payload.setdefault("finished_at", finished_at)
+                        payload.setdefault("execution_time_ms", execution_time_ms)
+                        if isinstance(result.meta, dict) and "provider_latency_ms" in result.meta:
+                            payload.setdefault("provider_latency_ms", result.meta.get("provider_latency_ms"))
+                        meta_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
             return False
 
         # Enforce artifact contract safely: contract violations become STOP.

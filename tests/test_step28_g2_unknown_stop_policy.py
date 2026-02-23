@@ -36,3 +36,29 @@ def test_g2_unknown_with_provider_triggers_stop(tmp_path, monkeypatch):
     # B2: standardized STOP reasons (enum). Gate provides detail separately.
     assert meta_json.get("stop_reason") == "UNKNOWN"
     assert meta_json.get("stop_detail") == "G2_SEMANTIC_UNKNOWN_WITH_PROVIDER"
+
+def test_g2_unknown_without_provider_allows_pass(tmp_path, monkeypatch):
+    """RELAXED invariant: if no provider is injected, UNKNOWN must be non-blocking (PASS)."""
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+
+    repo = tmp_path / "repo"
+    run_dir = repo / "runs" / "2099-01-01_PASS"
+    baseline_dir = repo / "baseline"
+    run_dir.mkdir(parents=True)
+    baseline_dir.mkdir(parents=True)
+
+    (baseline_dir / "BASELINE_G1_OUTPUT.json").write_text('{"a":1}', encoding="utf-8")
+    (run_dir / "G1_OUTPUT.json").write_text('{"a":1}', encoding="utf-8")
+    (run_dir / "G1_DECISION.md").write_text("CURRENT", encoding="utf-8")
+    (baseline_dir / "PIC.md").write_text("PIC", encoding="utf-8")
+
+    meta = RunMeta(run_id="2099-01-01_PASS", created_at=now_seoul().isoformat())
+    # No providers injected -> gpt_used False, semantic verdict defaults UNKNOWN but must be non-blocking.
+    ctx = GateContext(meta=meta, run_dir=str(run_dir), providers={}, context={})
+
+    res = gate_g2_continuity(ctx)
+    assert res.decision.value == "PASS"
+
+    meta_json = json.loads((run_dir / "META.json").read_text(encoding="utf-8"))
+    assert meta_json.get("stop_reason") is None
+    assert meta_json.get("stop_detail") is None

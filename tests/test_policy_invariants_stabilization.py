@@ -175,3 +175,29 @@ def test_max_attempts_per_gate_exceeded_stops_and_sets_reason(tmp_path: Path):
     # B2: standardized STOP reasons (enum). Detail is recorded separately.
     assert meta.stop_reason == "INTERNAL_ERROR"
     assert "max_attempts_per_gate exceeded" in (meta.gate_metrics.get("_runner", {}) or {}).get("stop_detail", "")
+
+
+def test_max_attempts_strict_boundary_metrics(tmp_path: Path):
+    """Stable Core boundary invariant: attempt count and runner metrics must be consistent."""
+
+    meta = RunMeta(run_id="TEST_MAX_ATTEMPTS_BOUNDARY", created_at=now_seoul().isoformat())
+    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path), max_attempts_per_gate=2)
+
+    runner.register(GateId.G1, make_contract_gate("G1", Decision.FAIL))
+    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))  # should never execute
+
+    runner.run()
+
+    assert meta.status == RunStatus.STOP
+    assert meta.current_gate == GateId.STOP
+    assert meta.stop_reason == "INTERNAL_ERROR"
+
+    # attempts should exceed boundary by 1 (2 allowed → 3rd triggers STOP)
+    attempts = meta.attempts.get("G1", 0)
+    assert attempts == 3
+
+    runner_metrics = meta.gate_metrics.get("_runner", {}) or {}
+    assert "stop_detail" in runner_metrics
+    assert "max_attempts_per_gate exceeded" in runner_metrics["stop_detail"]
+
+    assert "G2" not in meta.attempts
