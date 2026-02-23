@@ -1,16 +1,20 @@
 from dataclasses import dataclass
-from typing import Dict, Callable
+from typing import Dict, Callable, Any, Optional
 
 from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
 from src.pipeline.contracts import standard_spec
 from src.utils.time import now_seoul
+from src.pipeline.registry import GateRegistry
 
 
 @dataclass
 class GateContext:
     meta: RunMeta
     run_dir: str
+    # Optional shared context for dependency injection (tools/providers/config).
+    # v0 contract: gates MUST NOT rely on this being non-empty.
+    context: Dict[str, Any]
 
 
 GateExecutor = Callable[[GateContext], GateResult]
@@ -30,18 +34,31 @@ class PipelineRunner:
         meta: RunMeta,
         run_dir: str,
         *,
+        context: Optional[Dict[str, Any]] = None,
         max_total_steps: int = 50,
         max_attempts_per_gate: int = 3,
     ):
         self.meta = meta
         self.run_dir = run_dir
-        self.executors: Dict[GateId, GateExecutor] = {}
+        self.registry = GateRegistry()
+        self.context: Dict[str, Any] = dict(context or {})
         self.max_total_steps = max_total_steps
         self.max_attempts_per_gate = max_attempts_per_gate
         self._steps_executed = 0
 
     def register(self, gate_id: GateId, executor: GateExecutor) -> None:
-        self.executors[gate_id] = executor
+        self.registry.register(gate_id, executor)
+
+    def registered_gates(self) -> Dict[str, str]:
+        """Return a human-friendly snapshot of registered gates.
+
+        v0 introspection only; not used for execution logic.
+        """
+
+        out: Dict[str, str] = {}
+        for gid, ex in self.registry.items():
+            out[gid.value] = getattr(ex, "__name__", ex.__class__.__name__)
+        return out
 
     def _record_transition(self, from_gate: GateId, to_gate: GateId, decision: Decision) -> None:
         self.meta.transitions.append(
@@ -106,7 +123,7 @@ class PipelineRunner:
         if gate in (GateId.DONE, GateId.STOP):
             return False
 
-        executor = self.executors.get(gate)
+        executor = self.registry.get(gate)
         if executor is None:
             # This is a developer error; STOP instead of raising to keep invariants.
             self._stop_run(f"NO_EXECUTOR: {gate.value}")
@@ -122,7 +139,7 @@ class PipelineRunner:
             self._record_transition(gate, GateId.STOP, Decision.STOP)
             return False
 
-        ctx = GateContext(meta=self.meta, run_dir=self.run_dir)
+        ctx = GateContext(meta=self.meta, run_dir=self.run_dir, context=self.context)
 
         # Execute gate safely: any crash becomes STOP.
         try:
