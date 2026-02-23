@@ -1,5 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+import json
 from typing import Dict, Callable, Any, Optional
+from pathlib import Path
 
 from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
@@ -70,6 +72,25 @@ class PipelineRunner:
             )
         )
         self.meta.current_gate = to_gate
+
+    def _write_meta_json(self) -> None:
+        """Persist run-level META.json for observability and reproducibility.
+
+        Must be written for any terminal status (PASS/FAIL/STOP). Best-effort: never raises.
+        """
+        try:
+            Path(self.run_dir).mkdir(parents=True, exist_ok=True)
+            meta_path = Path(self.run_dir) / "META.json"
+            payload = asdict(self.meta)
+            # Ensure enums are serialized as their value if present.
+            payload["status"] = getattr(self.meta.status, "value", self.meta.status)
+            payload["current_gate"] = getattr(self.meta.current_gate, "value", self.meta.current_gate)
+            with meta_path.open("w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False, indent=2)
+        except Exception:
+            # Never let metadata persistence crash the runner.
+            return
+
 
     def _stop_run(self, reason: str) -> None:
         self.meta.status = RunStatus.STOP
@@ -186,6 +207,10 @@ class PipelineRunner:
         self.meta.status = RunStatus.RUNNING
         if getattr(self.meta, "current_gate", None) in (None, GateId.DONE, GateId.STOP):
             self.meta.current_gate = GateId.G1
-        while self.step():
-            pass
-        return self.meta
+        try:
+            while self.step():
+                pass
+            return self.meta
+        finally:
+            # Always persist run-level metadata for CLI / batch / future circuit execution.
+            self._write_meta_json()
