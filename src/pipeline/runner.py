@@ -17,6 +17,9 @@ class GateContext:
     # Optional shared context for dependency injection (tools/providers/config).
     # v0 contract: gates MUST NOT rely on this being non-empty.
     context: Dict[str, Any]
+    # Optional provider bundle for external AI calls (gpt/gemini/claude/perplexity/codex).
+    # v0 contract: gates MUST NOT rely on specific keys being present.
+    providers: Dict[str, Any]
 
 
 GateExecutor = Callable[[GateContext], GateResult]
@@ -37,6 +40,7 @@ class PipelineRunner:
         run_dir: str,
         *,
         context: Optional[Dict[str, Any]] = None,
+        providers: Optional[Dict[str, Any]] = None,
         max_total_steps: int = 50,
         max_attempts_per_gate: int = 3,
     ):
@@ -44,6 +48,7 @@ class PipelineRunner:
         self.run_dir = run_dir
         self.registry = GateRegistry()
         self.context: Dict[str, Any] = dict(context or {})
+        self.providers: Dict[str, Any] = dict(providers or {})
         self.max_total_steps = max_total_steps
         self.max_attempts_per_gate = max_attempts_per_gate
         self._steps_executed = 0
@@ -160,7 +165,7 @@ class PipelineRunner:
             self._record_transition(gate, GateId.STOP, Decision.STOP)
             return False
 
-        ctx = GateContext(meta=self.meta, run_dir=self.run_dir, context=self.context)
+        ctx = GateContext(meta=self.meta, run_dir=self.run_dir, context=self.context, providers=self.providers)
 
         # Execute gate safely: any crash becomes STOP.
         try:
