@@ -213,7 +213,7 @@ def _append_jsonl(path: Path, record: dict) -> None:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def gate_g2_continuity(ctx: GateContext) -> GateResult:
+def _gate_g2_legacy(ctx: GateContext) -> GateResult:
     """
     Gate2 = Continuity check (Structure + Semantic).
 
@@ -407,4 +407,76 @@ def gate_g2_continuity(ctx: GateContext) -> GateResult:
             "G2_META.json": "G2_META.json",
         },
         meta=gate_meta or None,
+    )
+
+
+
+def gate_g2_continuity(ctx: GateContext) -> GateResult:
+    """Platform-safe wrapper.
+
+    Default behavior (no platform_mode): run the legacy Gate2 logic.
+    Opt-in behavior: if ctx.context.get("platform_mode") == "orchestrator", run via the platform orchestrator.
+    """
+    try:
+        mode = (ctx.context or {}).get("platform_mode")
+    except Exception:
+        mode = None
+
+    if mode != "orchestrator":
+        return _gate_g2_legacy(ctx)
+
+    # --- Orchestrator mode (opt-in) ---
+    # We still keep a safe fallback to legacy behavior to prevent contract drift in early platform rollout.
+    try:
+        from src.platform.orchestrator import GateOrchestrator
+        from src.platform.prompt_loader import PromptLoader
+        from src.platform.prompt_spec import PromptSpec
+        from src.platform.worker import ProviderTextWorker
+    except Exception:
+        return _gate_g2_legacy(ctx)
+
+    provider = None
+    try:
+        providers = ctx.providers or {}
+        provider = providers.get("gpt") or next(iter(providers.values()), None)
+    except Exception:
+        provider = None
+
+    if provider is None:
+        return _gate_g2_legacy(ctx)
+
+    loader = PromptLoader()
+    spec = PromptSpec(
+        id="g2_continuity_v1",
+        version="1",
+        gate_id="G2",
+        template_path="src/platform/prompts_g2_continuity_v1.md",
+        input_vars=("pic_text", "current_text"),
+        output_schema={
+            "type": "object",
+            "properties": {
+                "verdict": {"type": "string"},
+                "rationale": {"type": "string"},
+            },
+            "required": ["verdict", "rationale"],
+        },
+    )
+
+    worker = ProviderTextWorker(name="g2_worker", provider=provider)
+    orch = GateOrchestrator(loader=loader, worker=worker, fallback_executor=_gate_g2_legacy)
+
+    # Prepare inputs (same sources as legacy gate).
+    run_dir = Path(ctx.run_dir)
+    repo_root = _find_repo_root(run_dir)
+    pic_text, _ = _load_pic_text(repo_root, run_dir)
+    cur_text, _ = _load_current_text(run_dir)
+
+    return orch.run(
+        ctx=ctx,
+        spec=spec,
+        inputs={
+            "pic_text": pic_text or "",
+            "current_text": cur_text or "",
+        },
+        gate_prefix="G2",
     )
