@@ -1,6 +1,9 @@
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Optional
+
 from src.models.decision_models import Decision
 from src.pipeline.stop_reason import StopReason
 
@@ -14,6 +17,9 @@ class PolicyDecision:
     stop_detail: Optional[str] = None
 
 
+# -----------------------------
+# G2: Continuity
+# -----------------------------
 def evaluate_g2(
     *,
     structure_removed: bool,
@@ -50,6 +56,9 @@ def evaluate_g2(
     )
 
 
+# -----------------------------
+# G3: Fact audit
+# -----------------------------
 def evaluate_g3(
     *,
     stop_error: str,
@@ -74,5 +83,30 @@ def evaluate_g3(
     return PolicyDecision(
         decision=Decision.PASS,
         message="Fact audit completed",
+        reason_code="OK",
+    )
+
+
+# -----------------------------
+# G4: Self-check
+# -----------------------------
+def evaluate_g4(*, prereq_missing: bool, schema_ok: bool) -> PolicyDecision:
+    if prereq_missing:
+        return PolicyDecision(
+            decision=Decision.FAIL,
+            message="PREREQ_MISSING",
+            reason_code="G4_PREREQ_MISSING",
+        )
+
+    if not schema_ok:
+        return PolicyDecision(
+            decision=Decision.FAIL,
+            message="SCHEMA_INVALID",
+            reason_code="G4_SCHEMA_INVALID",
+        )
+
+    return PolicyDecision(
+        decision=Decision.PASS,
+        message="OK",
         reason_code="OK",
     )

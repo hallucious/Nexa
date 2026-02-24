@@ -10,6 +10,7 @@ from src.pipeline.runner import GateContext
 from src.gates.gate_common import write_standard_artifacts
 from src.prompts.store import PromptStore
 from src.prompts.renderer import PromptRenderer
+from src.policy.gate_policy import evaluate_g4
 
 
 
@@ -78,7 +79,8 @@ def _legacy_impl(ctx: GateContext) -> GateResult:
 
     missing = [p.name for p in _prereq_paths(run_dir) if not p.exists()]
     if missing:
-        decision = Decision.FAIL
+        policy = evaluate_g4(prereq_missing=True, schema_ok=False)
+        decision = policy.decision
         body = "Upstream artifacts missing:\n- " + "\n- ".join(missing)
         decision_md = _decision_md("G4", decision, body, include_exec=False)
 
@@ -103,7 +105,8 @@ def _legacy_impl(ctx: GateContext) -> GateResult:
     g1_out = _load_json(run_dir / "G1_OUTPUT.json")
     schema_ok = _schema_ok_from_g1(g1_out)
 
-    decision = Decision.PASS if schema_ok else Decision.FAIL
+    policy = evaluate_g4(prereq_missing=False, schema_ok=schema_ok)
+    decision = policy.decision
     body = "Schema check passed." if schema_ok else "Schema check failed."
     decision_md = _decision_md("G4", decision, body, include_exec=True)
 
@@ -139,7 +142,8 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
     run_dir = Path(ctx.run_dir).resolve()
     missing = [p.name for p in _prereq_paths(run_dir) if not p.exists()]
     if missing:
-        decision = Decision.FAIL
+        policy = evaluate_g4(prereq_missing=True, schema_ok=False)
+        decision = policy.decision
         body = "Upstream artifacts missing:\n- " + "\n- ".join(missing)
         decision_md = _decision_md("G4", decision, body, include_exec=False)
 
@@ -169,7 +173,8 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         text = _normalize_provider_text(ret)
     except Exception:
         text = ""
-    decision = Decision.PASS if schema_ok else Decision.FAIL
+    policy = evaluate_g4(prereq_missing=False, schema_ok=schema_ok)
+    decision = policy.decision
     body = "Schema check passed." if schema_ok else "Schema check failed."
     decision_md = _decision_md("G4", decision, body, include_exec=True)
 
