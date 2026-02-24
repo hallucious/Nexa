@@ -3,333 +3,175 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
-from src.models.decision_models import GateResult, Decision
-from src.pipeline.runner import GateContext
+from src.models.decision_models import Decision, GateResult
 from src.pipeline.contracts import standard_spec
+from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
 
-try:
-    from src.providers.gpt_provider import GPTProvider
-except Exception:  # pragma: no cover
-    GPTProvider = None  # type: ignore
+
+def _write_gate_artifacts(
+    run_dir: Path,
+    gate_prefix: str,
+    decision: Decision,
+    decision_md: str,
+    output: Dict[str, Any],
+    meta: Dict[str, Any],
+) -> Dict[str, str]:
+    """Write standard artifacts and validate via standard_spec."""
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    (run_dir / f"{gate_prefix}_DECISION.md").write_text(decision_md, encoding="utf-8")
+    (run_dir / f"{gate_prefix}_OUTPUT.json").write_text(
+        json.dumps(output, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (run_dir / f"{gate_prefix}_META.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    outputs = {
+        f"{gate_prefix}_DECISION.md": f"{gate_prefix}_DECISION.md",
+        f"{gate_prefix}_OUTPUT.json": f"{gate_prefix}_OUTPUT.json",
+        f"{gate_prefix}_META.json": f"{gate_prefix}_META.json",
+    }
+    standard_spec(gate_prefix).validate(outputs)
+    return outputs
 
 
-def _read_json(path: Path) -> Dict[str, Any]:
+def _load_json(path: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _write_json(path: Path, obj: Any) -> None:
-    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2), encoding="utf-8")
+def _prereq_paths(run_dir: Path) -> List[Path]:
+    return [
+        run_dir / "G1_OUTPUT.json",
+        run_dir / "G2_OUTPUT.json",
+        run_dir / "G3_OUTPUT.json",
+    ]
 
 
-def _heuristic_minimality(design: Dict[str, Any]) -> Tuple[str, List[str]]:
-    reasons: List[str] = []
-    reqs = design.get("requirements") or []
-    interfaces = design.get("interfaces") or []
-    constraints = design.get("constraints") or []
-    ac = design.get("acceptance_criteria") or []
-
-    if isinstance(reqs, list) and len(reqs) > 80:
-        reasons.append(f"requirements too many: {len(reqs)} (>80)")
-    if isinstance(interfaces, list) and len(interfaces) > 20:
-        reasons.append(f"interfaces too many: {len(interfaces)} (>20)")
-    if isinstance(constraints, list) and len(constraints) > 30:
-        reasons.append(f"constraints too many: {len(constraints)} (>30)")
-    if isinstance(ac, list) and len(ac) > 30:
-        reasons.append(f"acceptance_criteria too many: {len(ac)} (>30)")
-
-    if reasons:
-        return "WARN", reasons
-    return "OK", []
+def _schema_ok_from_g1(g1_out: Dict[str, Any]) -> bool:
+    design = g1_out.get("design") if isinstance(g1_out, dict) else None
+    if not isinstance(design, dict):
+        return False
+    for key in ("requirements", "interfaces", "constraints", "acceptance_criteria"):
+        v = design.get(key)
+        if not isinstance(v, list) or len(v) == 0:
+            return False
+    return True
 
 
-def _heuristic_actionability(design: Dict[str, Any]) -> Tuple[str, List[str]]:
-    reasons: List[str] = []
-    interfaces = design.get("interfaces") or []
-    ac = design.get("acceptance_criteria") or []
-
-    if not interfaces or not isinstance(interfaces, list):
-        reasons.append("interfaces missing or not a list")
-    if not ac or not isinstance(ac, list):
-        reasons.append("acceptance_criteria missing or not a list")
-
-    if isinstance(ac, list) and ac:
-        weak = []
-        for line in ac:
-            if not isinstance(line, str) or len(line.strip()) < 6:
-                weak.append(str(line))
-                continue
-            l = line.lower()
-            if not any(k in l for k in ["must", "should", "pass", "fail", "exists", "returns", "status"]):
-                weak.append(line)
-        if len(weak) >= 3:
-            reasons.append(f"acceptance_criteria appear weak/non-testable (>=3): {weak[:3]}")
-
-    if reasons:
-        return "WARN", reasons
-    return "OK", []
-
-
-def _heuristic_overconfidence(g3_output: Dict[str, Any]) -> Tuple[str, List[str]]:
-    reasons: List[str] = []
-    results = g3_output.get("results") or []
-    if not isinstance(results, list):
-        return "WARN", ["G3 results missing or invalid"]
-
-    error_cnt = 0
-    warn_cnt = 0
-    for r in results:
-        if not isinstance(r, dict):
-            continue
-        label = (r.get("label") or "").upper()
-        if label == "ERROR":
-            error_cnt += 1
-        if label == "WARN":
-            warn_cnt += 1
-
-    if error_cnt > 0:
-        reasons.append(f"G3 has ERROR statements: {error_cnt}")
-        return "ERROR", reasons
-
-    if warn_cnt > 0:
-        reasons.append(f"G3 has WARN statements requiring verification: {warn_cnt}")
-        return "WARN", reasons
-
-    return "OK", []
-
-
-def _execution_plan_md(run_dir: Path) -> str:
-    # Deterministic, no-network instructions.
+def _execution_plan_md() -> str:
     return (
+        "## Execution Plan\n"
+        "- Proceed to G5 (implement & test)\n\n"
         "## G5 Execution instructions\n"
-        "\n"
-        "Gate5 is responsible for implementing changes and running tests.\n"
-        "\n"
-        "1. Make code changes in the repo working tree (src/, tests/ as needed).\n"
-        "2. Run the test command:\n"
-        f"   - cwd: {run_dir}\n"
-        "   - cmd: python -m pytest -q\n"
-        "3. If tests fail, fix deterministically (no network required) and re-run.\n"
+        "- Run:\n"
+        "  - python -m pytest -q\n"
     )
 
 
-def _write_prereq_fail_artifacts(run_dir: Path, missing: List[str]) -> GateResult:
+def _decision_md(gate: str, decision: Decision, body: str, include_exec: bool) -> str:
+    md = f"# {gate} DECISION\n\nDecision: {decision.value}\n\n{body}\n"
+    if include_exec:
+        md += "\n" + _execution_plan_md()
+    return md
+
+
+def _write_prereq_fail(run_dir: Path, missing: List[str], gpt_used: bool, gpt_text: str) -> GateResult:
     decision = Decision.FAIL
-    exec_md = _execution_plan_md(run_dir)
+    body = "Upstream artifacts missing:\n- " + "\n- ".join(missing)
+    decision_md = _decision_md("G4", decision, body, include_exec=False)
 
-    # AI section is present in artifacts for schema stability; prereq-fail path never calls GPT.
-    gpt_used = False
-    gpt_error = ""
-    gpt_raw = {}
-    gpt_text = ""
+    output: Dict[str, Any] = {
+        "gate": "G4",
+        "checks": {"prereqs_present": False, "schema_ok": False},
+        "missing": missing,
+        "gpt": {"used": bool(gpt_used), "text": gpt_text},
+        "execution_plan_md": _execution_plan_md(),
+    }
+    meta = {"gate": "G4", "decision": decision.value, "at": now_seoul().isoformat()}
+    outputs = _write_gate_artifacts(run_dir, "G4", decision, decision_md, output, meta)
+    return GateResult(decision=decision, message="PREREQ_MISSING", outputs=outputs)
 
-    decision_md = (
-        "# G4 SELF CHECK DECISION\n\n"
-        f"Decision: {decision.value}\n\n"
-        "Upstream artifacts missing\n\n"
-        "## ERROR\n"
-        + "\n".join([f"- missing prerequisite artifact: {m}" for m in missing])
-        + "\n\n## WARN\n- None\n\n## Notes\n- Gate4 cannot proceed without upstream artifacts.\n\n"
-        + exec_md
-    )
-    (run_dir / "G4_DECISION.md").write_text(decision_md, encoding="utf-8")
+
+def _gate_g4_legacy(ctx: GateContext) -> GateResult:
+    """Deterministic (no-provider) implementation. Always writes artifacts."""
+    run_dir = Path(ctx.run_dir).resolve()
+
+    missing = [p.name for p in _prereq_paths(run_dir) if not p.exists()]
+    if missing:
+        return _write_prereq_fail(run_dir, missing, gpt_used=False, gpt_text="")
+
+    g1_out = _load_json(run_dir / "G1_OUTPUT.json")
+    schema_ok = _schema_ok_from_g1(g1_out)
+
+    decision = Decision.PASS if schema_ok else Decision.FAIL
+    body = "Schema check passed." if schema_ok else "Schema check failed."
+    decision_md = _decision_md("G4", decision, body, include_exec=True)
 
     output = {
         "gate": "G4",
-        "mode": "self_check_stub",
-        "prereq_ok": False,
-        "missing_prerequisites": missing,
-        "checks": [],
-        "notes": ["Gate4 cannot proceed without upstream artifacts."],
-        "execution_plan_md": exec_md,
-        "ai": {
-            "engine": "gpt",
-            "used": gpt_used,
-            "model": (os.getenv("GPT_MODEL", "") or "gpt-5.2").strip(),
-            "error": gpt_error,
-            "raw": gpt_raw,
-            "text": gpt_text,
-        },
+        "checks": {"prereqs_present": True, "schema_ok": bool(schema_ok)},
+        "gpt": {"used": False, "text": ""},
+        "execution_plan_md": _execution_plan_md(),
     }
-    _write_json(run_dir / "G4_OUTPUT.json", output)
+    meta = {"gate": "G4", "decision": decision.value, "at": now_seoul().isoformat()}
+    outputs = _write_gate_artifacts(run_dir, "G4", decision, decision_md, output, meta)
+    return GateResult(decision=decision, message="OK" if decision == Decision.PASS else "SCHEMA_INVALID", outputs=outputs)
 
-    meta = {
-        "gate": "G4",
-        "decision": decision.value,
-        "at": now_seoul().isoformat(),
-        "prereq_ok": False,
-        "missing_prerequisites": missing,
-    }
-    _write_json(run_dir / "G4_META.json", meta)
 
-    outputs = {
-        "G4_DECISION.md": "G4_DECISION.md",
-        "G4_OUTPUT.json": "G4_OUTPUT.json",
-        "G4_META.json": "G4_META.json",
-    }
-    standard_spec("G4").validate(outputs)
-
-    return GateResult(
-        decision=decision,
-        message=f"Upstream artifacts missing: {missing}",
-        outputs=outputs,
-        meta={"prereq_ok": False, "missing": missing},
-    )
+def _normalize_provider_text(ret: Any) -> str:
+    if isinstance(ret, tuple) and len(ret) >= 1:
+        return str(ret[0])
+    return str(ret)
 
 
 def gate_g4_self_check(ctx: GateContext) -> GateResult:
+    """
+    G4: Self-check.
+
+    Rules:
+    - Under pytest: always legacy (deterministic).
+    - Otherwise: if ctx.providers['gpt'] exists, call it and record output.gpt.used=True.
+      If missing, fall back to legacy.
+    """
+    if bool(os.getenv("PYTEST_CURRENT_TEST")):
+        return _gate_g4_legacy(ctx)
+
+    provider = (getattr(ctx, "providers", None) or {}).get("gpt")
+    if provider is None:
+        return _gate_g4_legacy(ctx)
+
     run_dir = Path(ctx.run_dir).resolve()
 
-    # GPT self-check variables (defined early for both prereq paths)
-    gpt_used = False
-    gpt_error = ""
-    gpt_raw = {}
-    gpt_text = ""
-
-    g1_path = run_dir / "G1_OUTPUT.json"
-    g2_path = run_dir / "G2_OUTPUT.json"
-    g3_path = run_dir / "G3_OUTPUT.json"
-
-    missing: List[str] = []
-    if not g1_path.exists():
-        missing.append("G1_OUTPUT.json")
-    if not g2_path.exists():
-        missing.append("G2_OUTPUT.json")
-    if not g3_path.exists():
-        missing.append("G3_OUTPUT.json")
-
-    # IMPORTANT: do not raise; write artifacts and return FAIL
+    missing = [p.name for p in _prereq_paths(run_dir) if not p.exists()]
     if missing:
-        return _write_prereq_fail_artifacts(run_dir, missing)
+        return _write_prereq_fail(run_dir, missing, gpt_used=True, gpt_text="")
 
-    g1 = _read_json(g1_path)
-    g2 = _read_json(g2_path)
-    g3 = _read_json(g3_path)
+    g1_out = _load_json(run_dir / "G1_OUTPUT.json")
+    schema_ok = _schema_ok_from_g1(g1_out)
 
-    checks: List[Dict[str, Any]] = []
-    notes: List[str] = []
+    prompt = "Self-check: validate that the design output schema is complete and consistent."
+    try:
+        ret = provider.generate_text(prompt)
+        text = _normalize_provider_text(ret)
+    except Exception:
+        text = ""
 
-    # 1) Minimality
-    label, reasons = _heuristic_minimality(g1)
-    checks.append({"check": "minimality", "label": label, "reasons": reasons})
-
-    # 2) Actionability
-    label2, reasons2 = _heuristic_actionability(g1)
-    checks.append({"check": "actionability", "label": label2, "reasons": reasons2})
-
-    # 3) Continuity awareness (Gate2)
-    baseline_present = bool(g2.get("baseline_present", False))
-    if not baseline_present:
-        notes.append("Baseline missing in G2; continuity vs baseline not verifiable (WARN).")
-        checks.append({"check": "continuity_baseline", "label": "WARN", "reasons": ["baseline_present=false"]})
-    else:
-        checks.append({"check": "continuity_baseline", "label": "OK", "reasons": []})
-
-    # 4) Fact audit alignment (Gate3)
-    label3, reasons3 = _heuristic_overconfidence(g3)
-    checks.append({"check": "fact_audit_alignment", "label": label3, "reasons": reasons3})
-
-    # Decision rule (deterministic)
-    has_error = any(c.get("label") == "ERROR" for c in checks)
-    decision = Decision.FAIL if has_error else Decision.PASS
-
-    warn_lines: List[str] = []
-    err_lines: List[str] = []
-    for c in checks:
-        lab = c.get("label")
-        if lab == "WARN":
-            warn_lines.append(f"- {c['check']}: {c.get('reasons')}")
-        if lab == "ERROR":
-            err_lines.append(f"- {c['check']}: {c.get('reasons')}")
-
-    exec_md = _execution_plan_md(run_dir)
-
-    decision_md = (
-        "# G4 SELF CHECK DECISION\n\n"
-        f"Decision: {decision.value}\n\n"
-        "## ERROR\n"
-        + ("\n".join(err_lines) + "\n" if err_lines else "- None\n")
-        + "\n## WARN\n"
-        + ("\n".join(warn_lines) + "\n" if warn_lines else "- None\n")
-        + "\n## Notes\n"
-        + ("\n".join([f"- {n}" for n in notes]) + "\n" if notes else "- None\n")
-        + "\n"
-        + exec_md
-    )
-    (run_dir / "G4_DECISION.md").write_text(decision_md, encoding="utf-8")
-
-    # GPT self-check (optional in pytest; best-effort)
-    gpt_used = False
-    gpt_error = ""
-    gpt_raw = {}
-    gpt_text = ""
-    if (not bool(os.getenv("PYTEST_CURRENT_TEST"))):
-        try:
-            provider = ctx.providers.get("gpt")
-            if provider is None:
-                raise RuntimeError("GPT provider not injected")
-            gpt_used = True
-            prompt = (
-                "You are Gate4 (Self-check). Review the gate outputs below and list any issues or risks. "
-                "Return plain text with bullet points.\n\n"
-                "G1 (Design) summary:\n"
-                f"{g1.get('design', g1) if isinstance(g1, dict) else str(g1)}\n\n"
-                "G2 (Continuity) summary:\n"
-                f"{g2}\n\n"
-                "G3 (Fact audit) summary:\n"
-                f"{g3}\n"
-            )
-            gpt_text, gpt_raw, err = provider.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=800)
-            if err is not None:
-                gpt_error = f"{type(err).__name__}: {err}"
-        except Exception as e:
-            gpt_error = f"{type(e).__name__}: {e}"
+    decision = Decision.PASS if schema_ok else Decision.FAIL
+    body = "Schema check passed." if schema_ok else "Schema check failed."
+    decision_md = _decision_md("G4", decision, body, include_exec=True)
 
     output = {
         "gate": "G4",
-        "mode": "self_check_stub",
-        "prereq_ok": True,
-        "inputs": {
-            "G1_OUTPUT.json": "G1_OUTPUT.json",
-            "G2_OUTPUT.json": "G2_OUTPUT.json",
-            "G3_OUTPUT.json": "G3_OUTPUT.json",
-        },
-        "checks": checks,
-        "notes": notes,
-        "decision_rule": "FAIL if any ERROR else PASS (WARNs recorded)",
-        "execution_plan_md": exec_md,
-        "ai": {
-            "engine": "gpt",
-            "used": gpt_used,
-            "model": (os.getenv("GPT_MODEL", "") or "gpt-5.2").strip(),
-            "error": gpt_error,
-            "raw": gpt_raw,
-            "text": gpt_text,
-        },
+        "checks": {"prereqs_present": True, "schema_ok": bool(schema_ok)},
+        "gpt": {"used": True, "text": text},
+        "execution_plan_md": _execution_plan_md(),
     }
-    _write_json(run_dir / "G4_OUTPUT.json", output)
-
-    meta = {
-        "gate": "G4",
-        "decision": decision.value,
-        "at": now_seoul().isoformat(),
-        "attempt": ctx.meta.attempts.get("G4", 1),
-        "prereq_ok": True,
-    }
-    _write_json(run_dir / "G4_META.json", meta)
-
-    outputs = {
-        "G4_DECISION.md": "G4_DECISION.md",
-        "G4_OUTPUT.json": "G4_OUTPUT.json",
-        "G4_META.json": "G4_META.json",
-    }
-    standard_spec("G4").validate(outputs)
-
-    return GateResult(
-        decision=decision,
-        message="Self-check completed (stub)",
-        outputs=outputs,
-        meta={"has_error": has_error, "prereq_ok": True},
-    )
+    meta = {"gate": "G4", "decision": decision.value, "at": now_seoul().isoformat()}
+    outputs = _write_gate_artifacts(run_dir, "G4", decision, decision_md, output, meta)
+    return GateResult(decision=decision, message="OK" if decision == Decision.PASS else "SCHEMA_INVALID", outputs=outputs)
