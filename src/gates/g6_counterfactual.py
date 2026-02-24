@@ -1,187 +1,231 @@
+# -*- coding: utf-8 -*-
 from __future__ import annotations
 
+"""
+Gate G6: Counterfactual review.
+
+Purpose
+- Provide a lightweight "what could go wrong?" check after implementation/tests.
+- Deterministic checks must remain stable under pytest.
+- Runtime-only provider call is best-effort; it must never change PASS/FAIL semantics.
+
+Artifacts
+- G6_DECISION.md
+- G6_OUTPUT.json
+- G6_META.json
+"""
+
+import re
+
+
 import json
-import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from src.models.decision_models import Decision, GateResult
-from src.pipeline.contracts import standard_spec
-from src.pipeline.runner import GateContext
-from src.utils.time import now_seoul
+from src.gates.gate_common import (
+    Decision,
+    GateContext,
+    GateResult,
+    format_standard_decision_md,
+    is_pytest,
+    now_seoul,
+    read_text_file,
+    stable_json_dumps,
+    write_standard_artifacts,
+)
 
 
-def _read_json(path: Path) -> Dict[str, Any]:
+def _read_json(path: Path) -> Optional[Dict[str, Any]]:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except Exception:
-        return {}
+        return None
 
 
-def _write_standard_artifacts(
-    run_dir: Path,
-    gate_prefix: str,
-    decision: Decision,
-    output_payload: Dict[str, Any],
-    meta_payload: Optional[Dict[str, Any]] = None,
-) -> Dict[str, str]:
-    """Write standard artifacts + contract-validate outputs mapping."""
-
-    spec = standard_spec(gate_prefix)
-
-    (run_dir / f"{gate_prefix}_DECISION.md").write_text(
-        f"# {gate_prefix} DECISION\n\n{decision.value}\n", encoding="utf-8"
-    )
-
-    (run_dir / f"{gate_prefix}_OUTPUT.json").write_text(
-        json.dumps(output_payload, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-    mp: Dict[str, Any] = {
-        "gate": gate_prefix,
-        "decision": decision.value,
-        "at": now_seoul().isoformat(),
-    }
-    if isinstance(meta_payload, dict):
-        mp.update(meta_payload)
-
-    (run_dir / f"{gate_prefix}_META.json").write_text(
-        json.dumps(mp, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
-    outputs = {
-        f"{gate_prefix}_DECISION.md": f"{gate_prefix}_DECISION.md",
-        f"{gate_prefix}_OUTPUT.json": f"{gate_prefix}_OUTPUT.json",
-        f"{gate_prefix}_META.json": f"{gate_prefix}_META.json",
-    }
-    spec.validate(outputs)
-    return outputs
-
-
-def _gate_g6_legacy(ctx: GateContext) -> GateResult:
-    """Deterministic test-safe implementation.
-
-    - Requires G1_OUTPUT.json, G2_OUTPUT.json, G3_OUTPUT.json, G4_OUTPUT.json, G5_OUTPUT.json.
-    - Always writes standard artifacts.
-    - PASS when prereqs exist; FAIL otherwise.
+def _find_repo_root(run_dir: Path) -> Path:
     """
+    Find repo root by walking upward until 'runs' exists.
+    Test harness creates: repo/runs/<run_id>. We start inside <run_id>.
+    """
+    p = run_dir.resolve()
+    for _ in range(6):
+        if (p / "runs").exists():
+            return p
+        p = p.parent
+    # Fallback: assume parent of run_dir is runs; then its parent is repo.
+    return run_dir.parent.parent
 
-    run_dir = Path(ctx.run_dir)
-    gate_prefix = "G6"
 
-    prereqs = [
-        "G1_OUTPUT.json",
-        "G2_OUTPUT.json",
-        "G3_OUTPUT.json",
-        "G4_OUTPUT.json",
-        "G5_OUTPUT.json",
-    ]
-    missing = [p for p in prereqs if not (run_dir / p).exists()]
+def _counterfactual_checks_from_request(request_text: str) -> List[Dict[str, Any]]:
+    """Lightweight, deterministic counterfactual checks over the user request.
 
-    if missing:
-        decision = Decision.FAIL
-        output = {
-            "gate": gate_prefix,
-            "counterfactuals": [],
-            "errors": [f"missing prereqs: {', '.join(missing)}"],
-        }
-        outputs = _write_standard_artifacts(run_dir, gate_prefix, decision, output)
-        return GateResult(decision=decision, message="prereq_missing", outputs=outputs)
+    Design intent for this project/test-suite:
+    - G6 should be conservative and *not* fail on marketing/superlative language like "best".
+      Those belong in G3 as WARN, not as a counterfactual FAIL.
+    - G6 should only FAIL on *hard impossibility / absolute guarantees* that are likely false
+      in real systems and often indicate mis-specified expectations.
+    """
+    if not request_text:
+        return []
 
-    g1 = _read_json(run_dir / "G1_OUTPUT.json")
-    g2 = _read_json(run_dir / "G2_OUTPUT.json")
-    g3 = _read_json(run_dir / "G3_OUTPUT.json")
-    g4 = _read_json(run_dir / "G4_OUTPUT.json")
-    g5 = _read_json(run_dir / "G5_OUTPUT.json")
+    text = request_text.strip()
+    t = text.lower()
 
-    counterfactuals = [
-        {
-            "id": "CF1",
-            "hypothesis": "If baseline is missing, continuity checks should not block PASS.",
-            "evidence": {"baseline_present": bool(g2.get("baseline_present", False))},
-        },
-        {
-            "id": "CF2",
-            "hypothesis": "If any required artifact is missing, the gate must FAIL deterministically.",
-            "evidence": {"prereqs_present": True},
-        },
+    patterns = [
+        # absolute guarantees / impossibilities
+        (r"\b(guarantee|guaranteed|100%|always)\b", "ABSOLUTE_GUARANTEE"),
+        (r"\b(impossible|cannot fail|can't fail|never fail|zero failure)\b", "IMPOSSIBLE_CLAIM"),
+        (r"\b(no bugs|bug[- ]free|perfect)\b", "PERFECTION_CLAIM"),
     ]
 
-    decision = Decision.PASS
-    output = {
-        "gate": gate_prefix,
-        "counterfactuals": counterfactuals,
-        "inputs": {
-            "g1": bool(g1),
-            "g2": bool(g2),
-            "g3": bool(g3),
-            "g4": bool(g4),
-            "g5": bool(g5),
-        },
-        "errors": [],
-    }
-    outputs = _write_standard_artifacts(run_dir, gate_prefix, decision, output)
-    return GateResult(decision=decision, message="counterfactual_review", outputs=outputs)
+    conflicts: List[Dict[str, Any]] = []
+    for pat, code in patterns:
+        m = re.search(pat, t)
+        if not m:
+            continue
+        conflicts.append({
+            "reason_code": code,
+            "snippet": _extract_snippet(text, m.start(), m.end()),
+            "detail": f"Request contains strong absolute claim: {m.group(0)!r}",
+        })
+
+    return conflicts
+def _extract_snippet(text: str, needle: str, radius: int = 40) -> str:
+    low = text.lower()
+    idx = low.find(needle.lower())
+    if idx < 0:
+        return ""
+    start = max(0, idx - radius)
+    end = min(len(text), idx + len(needle) + radius)
+    return text[start:end].replace("\n", " ").strip()
 
 
-def _try_platform_provider_call(ctx: GateContext) -> Dict[str, Any]:
-    """Best-effort runtime-only provider call. Never changes PASS/FAIL semantics."""
+def _provider_generate_text(provider: Any, prompt: str) -> Tuple[str, Dict[str, Any], Optional[str]]:
+    """
+    Normalize provider.generate_text across stubs/implementations.
+
+    Expected (preferred):
+      provider.generate_text(prompt=..., temperature=..., max_output_tokens=...) -> (text, meta, err)
+
+    Fallback:
+      provider.generate_text(prompt) -> str OR (text, meta, err) OR tuple-like
+    """
+    # Preferred signature
+    try:
+        res = provider.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=256)
+        if isinstance(res, tuple) and len(res) >= 1:
+            text = str(res[0] if res[0] is not None else "")
+            meta = res[1] if len(res) >= 2 and isinstance(res[1], dict) else {}
+            err = res[2] if len(res) >= 3 else None
+            return text, meta, err
+        return str(res), {}, None
+    except TypeError:
+        # Fallback: positional
+        res = provider.generate_text(prompt)
+        if isinstance(res, tuple) and len(res) >= 1:
+            text = str(res[0] if res[0] is not None else "")
+            meta = res[1] if len(res) >= 2 and isinstance(res[1], dict) else {}
+            err = res[2] if len(res) >= 3 else None
+            return text, meta, err
+        return str(res), {}, None
+    except Exception as e:  # noqa: BLE001
+        return "", {}, f"{type(e).__name__}: {e}"
+
+
+def _try_runtime_provider_call(ctx: GateContext) -> Dict[str, Any]:
+    """
+    Best-effort runtime-only provider call.
+    - Must NEVER change decision.
+    - Skipped under pytest to keep tests deterministic.
+    """
+    if is_pytest():
+        return {}
 
     providers = (ctx.providers or {})
     engine = "gemini" if "gemini" in providers else ("gpt" if "gpt" in providers else "")
     provider = providers.get(engine) if engine else None
     if provider is None:
-        return {}
+        return {"provider": {"used": False, "engine": None}}
 
     run_dir = Path(ctx.run_dir)
     g1 = _read_json(run_dir / "G1_OUTPUT.json")
+
     prompt = (
-        "Generate 2 short counterfactual checks for the following design summary. "
-        "Return plain text.\n\n"
-        f"G1_OUTPUT: {json.dumps(g1, ensure_ascii=False)}\n"
+        "You are Gate6 (Counterfactual Review). "
+        "Given the design summary (G1 output JSON), generate 2 short counterfactual checks.\n"
+        "- Output plain text (two bullet points is fine).\n\n"
+        f"G1_OUTPUT:\n{stable_json_dumps(g1 or {})}\n"
     )
 
-    try:
-        raw = provider.generate_text(prompt)
-        # Some stubs return (text, meta, error). Normalize to text.
-        text = raw[0] if isinstance(raw, tuple) and raw else raw
-        return {
-            "ai": {
-                "engine": engine,
-                "provider": getattr(provider, "name", type(provider).__name__),
-                "used": True,
-                "text": str(text),
-            }
+    text, meta, err = _provider_generate_text(provider, prompt)
+    used = (err is None) and bool(text.strip())
+
+    out: Dict[str, Any] = {
+        "provider": {
+            "used": used,
+            "engine": engine,
+            "model_name": getattr(provider, "model", None),
         }
-    except Exception as e:  # noqa: BLE001
-        return {
-            "ai": {
-                "engine": engine or None,
-                "used": False,
-                "error": f"{type(e).__name__}: {e}",
-            }
-        }
+    }
+    if used:
+        out["provider"]["text"] = text.strip()
+        out["provider"]["meta"] = meta
+    else:
+        out["provider"]["error"] = err or "empty_output"
+    return out
 
 
 def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
-    """G6: Counterfactual review gate.
+    run_dir = Path(ctx.run_dir)
 
-    - Pytest: deterministic legacy implementation (no provider/network).
-    - Runtime: legacy semantics + optional best-effort provider call (injected).
-    """
+    # Inputs
+    request_text = read_text_file(run_dir / "00_USER_REQUEST.md")
+    conflicts = _counterfactual_checks_from_request(request_text)
 
-    if bool(os.getenv("PYTEST_CURRENT_TEST")):
-        return _gate_g6_legacy(ctx)
+    decision = Decision.FAIL if conflicts else Decision.PASS
 
-    base = _gate_g6_legacy(ctx)
-    try:
-        run_dir = Path(ctx.run_dir)
-        out_path = run_dir / "G6_OUTPUT.json"
-        out = _read_json(out_path)
-        out.update(_try_platform_provider_call(ctx))
-        out_path.write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
-    except Exception:
-        pass
-    return base
+    # Runtime provider (optional)
+    provider_info = _try_runtime_provider_call(ctx)
+
+    summary = "No counterfactual issues detected." if decision == Decision.PASS else f"{len(conflicts)} issue(s) detected."
+
+    output = {
+        "gate": "G6",
+        "status": decision.value.lower(),
+        "summary": summary,
+        "counterfactuals": conflicts,
+        "conflicts": conflicts,  # legacy alias
+    }
+    output.update(provider_info)
+
+    decision_md = format_standard_decision_md(
+        gate_id="G6",
+        title="Counterfactual Review",
+        decision=decision,
+        summary=summary,
+        inputs={
+            "request_len": len(request_text or ""),
+        },
+        outputs={
+            "conflicts_count": len(conflicts),
+            "provider_used": bool(provider_info.get("provider", {}).get("used", False)),
+        },
+        notes=[
+            "Deterministic checks are heuristic and intentionally conservative.",
+            "Provider call (if any) is best-effort and does not affect PASS/FAIL.",
+        ],
+    )
+
+    artifacts = write_standard_artifacts(
+        ctx=ctx,
+        gate_id="G6",
+        decision=decision,
+        decision_md=decision_md,
+        output=output,
+    )
+
+    return GateResult(
+        decision=decision,
+        message=summary,
+        outputs=artifacts,
+    )
