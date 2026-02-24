@@ -6,10 +6,10 @@ from pathlib import Path
 
 from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
-from src.pipeline.contracts import standard_spec
 from src.pipeline.stop_reason import StopReason, is_valid_stop_reason
 from src.utils.time import now_seoul
 from src.pipeline.registry import GateRegistry
+from src.contracts.validator import ContractValidator
 
 
 @dataclass
@@ -261,10 +261,9 @@ class PipelineRunner:
 
             return False
 
-        # Enforce artifact contract safely: contract violations become STOP.
+        # Enforce artifact contract safely at Runner level.
         try:
-            spec = standard_spec(gate.value)
-            spec.validate(result.outputs)
+            ContractValidator.validate_gate_outputs(gate.value, result.outputs)
         except Exception as e:  # noqa: BLE001
             self._stop_run(f"CONTRACT_VIOLATION: {gate.value}: {type(e).__name__}: {e}")
             self._record_transition(gate, GateId.STOP, Decision.STOP)
