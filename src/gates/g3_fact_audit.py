@@ -121,10 +121,14 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
             stop_error = str(e)
             break
 
-    if stop_error:
-        decision = Decision.STOP
-    else:
-        decision = Decision.FAIL if fail_reasons else Decision.PASS
+    from src.policy.gate_policy import evaluate_g3
+
+    policy = evaluate_g3(
+        stop_error=stop_error,
+        fail_reasons_count=len(fail_reasons),
+    )
+
+    decision = policy.decision
 
     decision_md = (
         "# G3 FACT AUDIT DECISION\n\n"
@@ -151,9 +155,9 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
         "stop_error": stop_error,
     }
 
-    if decision == Decision.STOP:
-        meta["stop_reason"] = StopReason.PROVIDER_ERROR.value
-        meta["stop_detail"] = stop_error
+    if policy.stop_reason:
+        meta["stop_reason"] = policy.stop_reason
+        meta["stop_detail"] = policy.stop_detail
 
     return GateResult(
         decision=decision,

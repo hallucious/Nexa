@@ -2,6 +2,7 @@
 from dataclasses import dataclass
 from typing import Optional
 from src.models.decision_models import Decision
+from src.pipeline.stop_reason import StopReason
 
 
 @dataclass
@@ -45,5 +46,33 @@ def evaluate_g2(
     return PolicyDecision(
         decision=Decision.PASS,
         message="Continuity OK",
+        reason_code="OK",
+    )
+
+
+def evaluate_g3(
+    *,
+    stop_error: str,
+    fail_reasons_count: int,
+) -> PolicyDecision:
+    if stop_error:
+        return PolicyDecision(
+            decision=Decision.STOP,
+            message="Fact audit completed",
+            reason_code="G3_PROVIDER_ERROR",
+            stop_reason=StopReason.PROVIDER_ERROR.value,
+            stop_detail=stop_error,
+        )
+
+    if fail_reasons_count > 0:
+        return PolicyDecision(
+            decision=Decision.FAIL,
+            message="Fact audit completed",
+            reason_code="G3_FACT_ERROR",
+        )
+
+    return PolicyDecision(
+        decision=Decision.PASS,
+        message="Fact audit completed",
         reason_code="OK",
     )
