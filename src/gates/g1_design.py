@@ -88,7 +88,9 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
             pass
 
     violations = _self_check(design)
-    decision = Decision.PASS if not violations else Decision.FAIL
+    from src.policy.gate_policy import evaluate_g1
+    policy = evaluate_g1(violations_count=len(violations))
+    decision = policy.decision
 
     (run_dir / "G1_DECISION.md").write_text(
         "# G1 DESIGN DECISION\n\n"
@@ -147,6 +149,6 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
 
     return GateResult(
         decision=decision,
-        message="Design skeleton generated",
+        message=policy.message,
         outputs=outputs,
     )

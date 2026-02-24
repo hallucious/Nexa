@@ -18,6 +18,24 @@ class PolicyDecision:
 
 
 # -----------------------------
+# G1: Design
+# -----------------------------
+def evaluate_g1(*, violations_count: int) -> PolicyDecision:
+    if violations_count > 0:
+        return PolicyDecision(
+            decision=Decision.FAIL,
+            message="Design violations detected",
+            reason_code="G1_SELF_CHECK_FAILED",
+        )
+
+    return PolicyDecision(
+        decision=Decision.PASS,
+        message="Design skeleton generated",
+        reason_code="OK",
+    )
+
+
+# -----------------------------
 # G2: Continuity
 # -----------------------------
 def evaluate_g2(
