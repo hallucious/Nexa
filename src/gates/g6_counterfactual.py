@@ -182,12 +182,14 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
     request_text = read_text_file(run_dir / "00_USER_REQUEST.md")
     conflicts = _counterfactual_checks_from_request(request_text)
 
-    decision = Decision.FAIL if conflicts else Decision.PASS
+    from src.policy.gate_policy import evaluate_g6
+    policy = evaluate_g6(conflicts_count=len(conflicts))
+    decision = policy.decision
 
     # Runtime provider (optional)
     provider_info = _try_runtime_provider_call(ctx)
 
-    summary = "No counterfactual issues detected." if decision == Decision.PASS else f"{len(conflicts)} issue(s) detected."
+    summary = policy.message
 
     output = {
         "gate": "G6",

@@ -110,3 +110,21 @@ def evaluate_g4(*, prereq_missing: bool, schema_ok: bool) -> PolicyDecision:
         message="OK",
         reason_code="OK",
     )
+
+
+# -----------------------------
+# G6: Counterfactual review
+# -----------------------------
+def evaluate_g6(*, conflicts_count: int) -> PolicyDecision:
+    if conflicts_count > 0:
+        return PolicyDecision(
+            decision=Decision.FAIL,
+            message=f"{conflicts_count} issue(s) detected.",
+            reason_code="G6_COUNTERFACTUAL_CONFLICT",
+        )
+
+    return PolicyDecision(
+        decision=Decision.PASS,
+        message="No counterfactual issues detected.",
+        reason_code="OK",
+    )
