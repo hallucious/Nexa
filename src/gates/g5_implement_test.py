@@ -12,6 +12,7 @@ from src.models.decision_models import Decision, GateResult
 from src.pipeline.runner import GateContext
 from src.gates.gate_common import write_standard_artifacts
 from src.utils.time import now_seoul
+from src.policy.gate_policy import evaluate_g5
 
 
 def _truncate(s: str, max_chars: int = 4000) -> str:
@@ -75,12 +76,9 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
 
     duration = (now_seoul() - started).total_seconds()
 
-    if (not timed_out) and rc == 0:
-        decision = Decision.PASS
-        msg = "Tests passed."
-    else:
-        decision = Decision.FAIL
-        msg = "Tests timed out." if timed_out else f"Tests failed (rc={rc})."
+    policy = evaluate_g5(timed_out=timed_out, returncode=rc)
+    decision = policy.decision
+    msg = policy.message
 
     decision_md = (
         "# G5 IMPLEMENT & TEST DECISION\n\n"

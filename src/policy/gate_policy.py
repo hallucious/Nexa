@@ -131,6 +131,31 @@ def evaluate_g4(*, prereq_missing: bool, schema_ok: bool) -> PolicyDecision:
 
 
 # -----------------------------
+# G5: Implement & test
+# -----------------------------
+def evaluate_g5(*, timed_out: bool, returncode: int) -> PolicyDecision:
+    if (not timed_out) and returncode == 0:
+        return PolicyDecision(
+            decision=Decision.PASS,
+            message="Tests passed.",
+            reason_code="OK",
+        )
+
+    if timed_out:
+        return PolicyDecision(
+            decision=Decision.FAIL,
+            message="Tests timed out.",
+            reason_code="G5_TIMEOUT",
+        )
+
+    return PolicyDecision(
+        decision=Decision.FAIL,
+        message=f"Tests failed (rc={returncode}).",
+        reason_code="G5_TEST_FAILED",
+    )
+
+
+# -----------------------------
 # G6: Counterfactual review
 # -----------------------------
 def evaluate_g6(*, conflicts_count: int) -> PolicyDecision:
