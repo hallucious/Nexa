@@ -171,3 +171,21 @@ def evaluate_g6(*, conflicts_count: int) -> PolicyDecision:
         message="No counterfactual issues detected.",
         reason_code="OK",
     )
+
+
+# -----------------------------
+# G7: Final review
+# -----------------------------
+def evaluate_g7(*, prereq_missing: bool) -> PolicyDecision:
+    if prereq_missing:
+        return PolicyDecision(
+            decision=Decision.FAIL,
+            message="Final review prerequisite missing.",
+            reason_code="G7_PREREQ_MISSING",
+        )
+
+    return PolicyDecision(
+        decision=Decision.PASS,
+        message="Final review passed.",
+        reason_code="OK",
+    )
