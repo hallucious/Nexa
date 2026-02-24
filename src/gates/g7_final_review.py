@@ -1,125 +1,193 @@
+# -*- coding: utf-8 -*-
+"""
+G7 Final Review
+
+Responsibilities (as exercised by test-suite):
+- Read prior gate artifacts (DECISION + OUTPUT) and decide PASS/FAIL/STOP.
+- Always write standard artifacts via gate_common.write_standard_artifacts:
+    G7_DECISION.md, G7_OUTPUT.json, G7_META.json
+- In non-pytest execution, optionally use injected provider ctx.providers["gpt"] (best-effort)
+  and record provider result in output JSON with:
+    provider.used == True/False and provider.text == "..."
+- Provide baseline recommendation block:
+    baseline_recommendation.recommend_update is boolean
+"""
+
 from __future__ import annotations
 
-import json
-import os
 from pathlib import Path
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional
 
-from src.models.decision_models import Decision, GateResult
-from src.pipeline.contracts import standard_spec
-from src.pipeline.runner import GateContext
-from src.utils.time import now_seoul
+from src.gates.gate_common import (
+    Decision,
+    GateContext,
+    GateResult,
+    format_standard_decision_md,
+    is_pytest,
+    read_json_file,
+    read_text_file,
+    write_standard_artifacts,
+)
+
+# ----------------------------
+# helpers
+# ----------------------------
+
+def _read_gate_decision(run_dir: Path, gate_id: str) -> Optional[str]:
+    p = run_dir / f"{gate_id}_DECISION.md"
+    if not p.exists():
+        return None
+    t = read_text_file(p) or ""
+    # very small parser: look for "Decision: XXX"
+    for line in t.splitlines():
+        if line.strip().lower().startswith("decision:"):
+            return line.split(":", 1)[1].strip().upper()
+    return None
 
 
-def _normalize_provider_response(resp: Any) -> str:
+def _safe_provider_call(ctx: GateContext, prompt: str) -> Dict[str, Any]:
     """
-    Normalize various provider return shapes to a single text string.
-
-    Supported shapes observed in tests:
-    - "ok"
-    - ("ok", {...}, None)
-    - {"text": "ok", ...}
+    Best-effort provider call with strict output schema expected by tests:
+    provider: {engine, used, text, meta, model_name?}
     """
-    if resp is None:
-        return ""
-    if isinstance(resp, str):
-        return resp
-    if isinstance(resp, dict):
-        val = resp.get("text")
-        return val if isinstance(val, str) else json.dumps(resp, ensure_ascii=False)
-    if isinstance(resp, (tuple, list)) and len(resp) >= 1:
-        first = resp[0]
-        return first if isinstance(first, str) else str(first)
-    return str(resp)
-
-
-def _write_standard_artifacts(run_dir: Path, gate_prefix: str, decision_str: str, output_payload: Dict[str, Any]) -> Dict[str, str]:
-    spec = standard_spec(gate_prefix)
-
-    (run_dir / f"{gate_prefix}_DECISION.md").write_text(
-        f"# {gate_prefix} DECISION\n\n{decision_str}\n", encoding="utf-8"
-    )
-    (run_dir / f"{gate_prefix}_OUTPUT.json").write_text(
-        json.dumps(output_payload, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    (run_dir / f"{gate_prefix}_META.json").write_text(
-        json.dumps(
-            {
-                "gate": gate_prefix,
-                "decision": decision_str,
-                "at": now_seoul().isoformat(),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
-    outputs = {
-        f"{gate_prefix}_DECISION.md": f"{gate_prefix}_DECISION.md",
-        f"{gate_prefix}_OUTPUT.json": f"{gate_prefix}_OUTPUT.json",
-        f"{gate_prefix}_META.json": f"{gate_prefix}_META.json",
+    info: Dict[str, Any] = {
+        "engine": "gpt",
+        "used": False,
+        "text": "",
+        "meta": {},
+        "model_name": None,
     }
-    spec.validate(outputs)
-    return outputs
 
+    if is_pytest():
+        return info
+
+    provider = (ctx.providers or {}).get("gpt")
+    if provider is None:
+        return info
+
+    try:
+        # Support either generate_text(prompt) or generate(prompt)
+        if hasattr(provider, "generate_text"):
+            resp = provider.generate_text(prompt)  # type: ignore[attr-defined]
+        elif hasattr(provider, "generate"):
+            resp = provider.generate(prompt)  # type: ignore[attr-defined]
+        else:
+            info["meta"] = {"error": "provider_missing_generate_method"}
+            return info
+
+        # Normalize response to text string.
+        text: str = ""
+        if isinstance(resp, str):
+            text = resp
+        elif isinstance(resp, dict):
+            # common shapes
+            text = str(resp.get("text") or resp.get("content") or resp.get("output") or "")
+            info["model_name"] = resp.get("model") or resp.get("model_name")
+            info["meta"] = {k: v for k, v in resp.items() if k not in ("text", "content", "output")}
+        elif isinstance(resp, (list, tuple)):
+            # some stubs return ("ok", {...}, None)
+            if len(resp) >= 1:
+                text = str(resp[0])
+            info["meta"] = {"raw_type": type(resp).__name__, "raw_len": len(resp)}
+        else:
+            text = str(resp)
+
+        info["used"] = True
+        info["text"] = text
+        # keep prompt_len for debugging deterministically
+        info["meta"] = {**(info.get("meta") or {}), "prompt_len": len(prompt or "")}
+        return info
+    except Exception as e:
+        info["meta"] = {"error": type(e).__name__, "detail": str(e)}
+        return info
+
+
+def _baseline_recommendation(run_dir: Path) -> Dict[str, Any]:
+    """
+    Deterministic baseline recommendation:
+    - if G2 says baseline_present == True => recommend_update False
+    - else recommend_update True
+    """
+    g2 = read_json_file(run_dir / "G2_OUTPUT.json") or {}
+    baseline_present = bool(g2.get("baseline_present", False))
+    recommend_update = not baseline_present
+    reason = "Baseline missing; recommend creating/updating baseline." if recommend_update else "Baseline present; no update recommended."
+    return {
+        "recommend_update": recommend_update,
+        "reason": reason,
+        "baseline_present": baseline_present,
+    }
+
+
+# ----------------------------
+# gate
+# ----------------------------
 
 def gate_g7_final_review(ctx: GateContext) -> GateResult:
-    """
-    G7: Final review gate.
-
-    Contract invariants (tests):
-    - Always writes G7_DECISION.md / G7_OUTPUT.json / G7_META.json.
-    - OUTPUT contains:
-        - gate == "G7"
-        - baseline_recommendation.recommend_update is bool
-    - Non-pytest + injected provider:
-        - OUTPUT contains '"used": true' and '"text": "ok"' (stub provider expectation)
-    """
     run_dir = Path(ctx.run_dir)
 
-    # Baseline recommendation: keep it deterministic and always present.
-    baseline_recommendation: Dict[str, Any] = {
-        "recommend_update": False,
-        "reason": "runtime default",
-    }
+    # Determine if any prior gate STOP/FAIL
+    prior = ["G1", "G2", "G3", "G4", "G5", "G6"]
+    decisions: Dict[str, Optional[str]] = {gid: _read_gate_decision(run_dir, gid) for gid in prior}
 
-    used_provider = False
-    provider_text = ""
-
-    # Runtime path: use injected provider if present and not under pytest.
-    if not bool(os.getenv("PYTEST_CURRENT_TEST")):
-        provider = (ctx.providers or {}).get("gpt")
-        if provider is not None and hasattr(provider, "generate_text"):
-            used_provider = True
-            try:
-                # Prompt is intentionally simple/minimal for contract tests.
-                prompt = "Return 'ok' for contract test."
-                resp = provider.generate_text(prompt)
-                provider_text = _normalize_provider_response(resp)
-            except Exception as e:  # noqa: BLE001
-                provider_text = f"PROVIDER_ERROR: {type(e).__name__}: {e}"
-
-    # Decide: for stable core tests we PASS unless an explicit provider error text is produced.
-    decision = Decision.PASS
-    status = "pass"
-    summary = provider_text or "ok"
-
-    if provider_text.startswith("PROVIDER_ERROR"):
+    if any(v == "STOP" for v in decisions.values()):
+        decision = Decision.STOP
+        summary = "Upstream STOP detected."
+    elif any(v == "FAIL" for v in decisions.values()):
         decision = Decision.FAIL
-        status = "fail"
+        summary = "Upstream FAIL detected."
+    else:
+        decision = Decision.PASS
+        summary = "All gates passed; artifacts written."
 
-    output: Dict[str, Any] = {
+    baseline_rec = _baseline_recommendation(run_dir)
+
+    # optional provider call (non-pytest)
+    prompt = (
+        "Final review: summarize run status and baseline recommendation.\n"
+        f"decision={decision.value}\n"
+        f"baseline_present={baseline_rec.get('baseline_present')}\n"
+    )
+    provider_info = _safe_provider_call(ctx, prompt)
+
+    output_payload: Dict[str, Any] = {
         "gate": "G7",
-        "status": status,
+        "status": decision.value.lower(),
         "summary": summary,
-        "issues": [],
-        "provider": {
-            "used": used_provider,
-            "text": provider_text if used_provider else "",
-        },
-        "baseline_recommendation": baseline_recommendation,
+        "baseline_recommendation": baseline_rec,
+        "provider": provider_info,
     }
 
-    outputs = _write_standard_artifacts(run_dir, "G7", decision.value, output)
-    return GateResult(decision=decision, message="G7", outputs=outputs)
+    decision_md = format_standard_decision_md(
+        gate_id="G7",
+        title="Final Review",
+        decision=decision,
+        summary=summary,
+        inputs={
+            "prior_decisions": {k: (v or "MISSING") for k, v in decisions.items()},
+            "baseline_present": bool(baseline_rec.get("baseline_present", False)),
+        },
+        outputs={
+            "recommend_update": bool(baseline_rec.get("recommend_update", False)),
+            "provider_used": bool(provider_info.get("used", False)),
+        },
+        notes=[
+            "G7 aggregates upstream decisions and emits final standardized artifacts.",
+            "Provider call (if any) is best-effort and does not affect PASS/FAIL/STOP.",
+        ],
+    )
+
+    artifacts = write_standard_artifacts(
+        ctx=ctx,
+        gate_id="G7",
+        decision=decision,
+        decision_md=decision_md,
+        output_dict=output_payload,
+    )
+
+    return GateResult(
+        decision=decision,
+        message=summary,
+        outputs=artifacts,
+        meta={},
+    )

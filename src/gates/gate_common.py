@@ -24,6 +24,22 @@ def read_text_file(path: Path, *, encoding: str = "utf-8") -> str:
         return ""
 
 
+def read_json_file(path: Path, *, encoding: str = "utf-8") -> Any:
+    """Read JSON file safely.
+
+    - Returns parsed JSON value on success
+    - Returns {} if missing or invalid JSON
+    """
+    try:
+        raw = Path(path).read_text(encoding=encoding)
+    except FileNotFoundError:
+        return {}
+    try:
+        return json.loads(raw)
+    except Exception:
+        return {}
+
+
 from src.models.decision_models import Decision
 from src.pipeline.contracts import standard_spec
 from src.pipeline.runner import GateContext
