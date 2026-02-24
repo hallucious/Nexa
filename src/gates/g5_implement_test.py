@@ -5,11 +5,17 @@ import os
 import re
 import shlex
 import subprocess
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.runner import GateContext
+
+# Platform (optional runtime path)
+from src.platform.prompt_spec import PromptSpec
+from src.platform.worker import ProviderTextWorker
+
 from src.utils.time import now_seoul
 
 
@@ -258,6 +264,30 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
         "duration_sec": duration,
     }
 
+    # Optional (runtime only): ask injected provider for an implementation plan.
+    # - In pytest we keep deterministic behavior (no provider/network).
+    # - In runtime, this is additive observability only; it never changes PASS/FAIL semantics.
+    plan_text: Optional[str] = None
+    if not bool(os.getenv("PYTEST_CURRENT_TEST")):
+        provider = (ctx.providers or {}).get("gpt")
+        if provider is not None:
+            spec = PromptSpec(
+                name="g5_implement_and_test",
+                version="v1",
+                template_path="src/platform/prompts_g5_implement_and_test_v1.md",
+                required_vars=("run_id",),
+            )
+            try:
+                prompt = spec.format_from_repo(repo_root=repo_root, vars={"run_id": ctx.meta.run_id})
+                worker = ProviderTextWorker(name="g5_worker", provider=provider)
+                t0 = time.perf_counter()
+                plan_text = worker.generate_text(prompt)
+                meta["provider_latency_ms"] = int((time.perf_counter() - t0) * 1000)
+            except Exception as e:  # noqa: BLE001
+                meta.setdefault("warnings", []).append(
+                    f"provider_plan_failed: {type(e).__name__}: {e}"
+                )
+
     output = {
         "gate": "G5",
         "decision": decision.value,
@@ -271,6 +301,7 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
         },
         "stdout": _truncate(out_s),
         "stderr": _truncate(err_s),
+        "plan": plan_text,
         "inputs": {
             "G4_OUTPUT.json": "G4_OUTPUT.json" if (run_dir / "G4_OUTPUT.json").exists() else None,
             "G4_DECISION.md": "G4_DECISION.md" if (run_dir / "G4_DECISION.md").exists() else None,
