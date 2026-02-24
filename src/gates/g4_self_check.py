@@ -12,6 +12,20 @@ from src.prompts.store import PromptStore
 from src.prompts.renderer import PromptRenderer
 
 
+
+
+def _prompt_meta(prompt_ident):
+    if prompt_ident is None:
+        return None
+    return {
+        "prompt": {
+            "id": "g4_self_check@v1",
+            "name": prompt_ident.name,
+            "version": prompt_ident.version,
+            "sha256": prompt_ident.sha256_prefixed,
+        }
+    }
+
 def _load_json(path: Path) -> Dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -60,6 +74,7 @@ def _normalize_provider_text(ret: Any) -> str:
 
 def _legacy_impl(ctx: GateContext) -> GateResult:
     run_dir = Path(ctx.run_dir).resolve()
+    prompt_ident = None
 
     missing = [p.name for p in _prereq_paths(run_dir) if not p.exists()]
     if missing:
@@ -75,7 +90,14 @@ def _legacy_impl(ctx: GateContext) -> GateResult:
             "execution_plan_md": _execution_plan_md(),
         }
 
-        outputs = write_standard_artifacts("G4", decision, decision_md, output, ctx)
+        outputs = write_standard_artifacts(
+            gate_id="G4",
+            decision=decision,
+            decision_md=decision_md,
+            output_dict=output,
+            ctx=ctx,
+            meta_extra=_prompt_meta(prompt_ident),
+        )
         return GateResult(decision=decision, message="PREREQ_MISSING", outputs=outputs)
 
     g1_out = _load_json(run_dir / "G1_OUTPUT.json")
@@ -95,7 +117,14 @@ def _legacy_impl(ctx: GateContext) -> GateResult:
         "execution_plan_md": _execution_plan_md(),
     }
 
-    outputs = write_standard_artifacts("G4", decision, decision_md, output, ctx)
+    outputs = write_standard_artifacts(
+            gate_id="G4",
+            decision=decision,
+            decision_md=decision_md,
+            output_dict=output,
+            ctx=ctx,
+            meta_extra=_prompt_meta(prompt_ident),
+        )
     return GateResult(decision=decision, message="OK" if decision == Decision.PASS else "SCHEMA_INVALID", outputs=outputs)
 
 
@@ -122,13 +151,19 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
             "execution_plan_md": _execution_plan_md(),
         }
 
-        outputs = write_standard_artifacts("G4", decision, decision_md, output, ctx)
+        outputs = write_standard_artifacts(
+            gate_id="G4",
+            decision=decision,
+            decision_md=decision_md,
+            output_dict=output,
+            ctx=ctx,
+            meta_extra=_prompt_meta(prompt_ident),
+        )
         return GateResult(decision=decision, message="PREREQ_MISSING", outputs=outputs)
 
     g1_out = _load_json(run_dir / "G1_OUTPUT.json")
     schema_ok = _schema_ok_from_g1(g1_out)
-    template = PromptStore.load("g4_self_check@v1")
-    prompt = PromptRenderer.render_with_id("g4_self_check@v1", template)
+    prompt, prompt_ident = PromptRenderer.render_prompt("g4_self_check@v1")
     try:
         ret = provider.generate_text(prompt)
         text = _normalize_provider_text(ret)
@@ -148,5 +183,12 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
         "execution_plan_md": _execution_plan_md(),
     }
 
-    outputs = write_standard_artifacts("G4", decision, decision_md, output, ctx)
+    outputs = write_standard_artifacts(
+            gate_id="G4",
+            decision=decision,
+            decision_md=decision_md,
+            output_dict=output,
+            ctx=ctx,
+            meta_extra=_prompt_meta(prompt_ident),
+        )
     return GateResult(decision=decision, message="OK" if decision == Decision.PASS else "SCHEMA_INVALID", outputs=outputs)

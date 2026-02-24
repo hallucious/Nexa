@@ -45,11 +45,16 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
     gpt_error = ""
     gpt_text = ""
 
+    prompt_ident = None
+
     if (not is_pytest) and provider is not None:
+        prompt_ident = None
         try:
+            prompt, prompt_ident = PromptRenderer.render_prompt(
+                "g1_design@v1",
+                request_text=req_text.strip()[:8000],
+            )
             gpt_used = True
-            template = PromptStore.load("g1_design.prompt.txt")
-            prompt = PromptRenderer.render(template, request_text=req_text.strip()[:8000])
 
             gpt_text, _raw, err = provider.generate_text(
                 prompt=prompt, temperature=0.0, max_output_tokens=2048
@@ -116,6 +121,15 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
                 "at": now_seoul().isoformat(),
                 "attempt": ctx.meta.attempts.get("G1", 1),
                 "ai": {"engine": "gpt", "used": gpt_used, "error": gpt_error},
+                "prompt": (
+                    {
+                        "id": "g1_design@v1",
+                        "name": prompt_ident.name,
+                        "version": prompt_ident.version,
+                        "sha256": prompt_ident.sha256_prefixed,
+                    }
+                    if prompt_ident is not None else None
+                ),
             },
             ensure_ascii=False,
             indent=2,

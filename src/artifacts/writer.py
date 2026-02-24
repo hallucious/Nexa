@@ -20,6 +20,7 @@ class ArtifactWriter:
         decision_md: str,
         output_dict: dict,
         ctx: GateContext,
+        meta_extra: dict | None = None,
     ) -> Dict[str, str]:
 
         run_dir = Path(ctx.run_dir).resolve()
@@ -40,6 +41,10 @@ class ArtifactWriter:
             "at": now_seoul().isoformat(),
             "attempt": ctx.meta.attempts.get(gate_id, 1),
         }
+
+        if meta_extra:
+            # Shallow merge only; nested merges must be done by caller.
+            meta.update(meta_extra)
 
         meta_path.write_text(
             json.dumps(meta, ensure_ascii=False, indent=2),

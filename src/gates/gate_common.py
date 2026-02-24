@@ -120,6 +120,7 @@ def write_standard_artifacts(*args, **kwargs) -> Dict[str, str]:
     decision = kwargs.get("decision")
     decision_md = kwargs.get("decision_md")
     output_dict = kwargs.get("output_dict")
+    meta_extra = kwargs.get("meta_extra")
 
     if output_dict is None and "output" in kwargs:
         output_dict = kwargs.get("output")
@@ -135,4 +136,5 @@ def write_standard_artifacts(*args, **kwargs) -> Dict[str, str]:
         decision_md=str(decision_md),
         output_dict=output_dict,
         ctx=ctx,
+        meta_extra=meta_extra,
     )

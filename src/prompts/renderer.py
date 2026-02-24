@@ -1,49 +1,47 @@
+from __future__ import annotations
+
 import re
-from .registry import PROMPT_REGISTRY
+from typing import Any, Dict, Tuple
+
+from .prompt_schema import PromptDefinition, validate_render_input
+from .store import PromptStore
 
 
 class PromptRenderer:
     """Render {{placeholders}} in prompt templates.
 
-    Backward compatible with prior signature:
-      render(template, **kwargs) -> str
-
-    New optional strict path:
-      render_with_id(prompt_id, template, **kwargs) -> str
-      - validates required placeholders declared in registry
-      - validates that all placeholders in template have values
+    - Versioned prompt_id is mandatory for strict rendering.
+    - Before templating, validate_render_input() is called using prompt-declared input_schema.
     """
 
     PLACEHOLDER_PATTERN = re.compile(r"{{\s*(\w+)\s*}}")
 
     @classmethod
-    def _validate_all_placeholders_have_values(cls, template: str, kwargs):
+    def _validate_all_placeholders_have_values(cls, template: str, kwargs: Dict[str, Any]) -> None:
         placeholders = set(cls.PLACEHOLDER_PATTERN.findall(template))
         missing = sorted([ph for ph in placeholders if ph not in kwargs])
         if missing:
             raise ValueError(f"Template placeholders have no values: {missing}")
 
     @classmethod
-    def render(cls, template: str, **kwargs) -> str:
-        # Keep prior behavior but add safety: fail if template contains placeholders without values.
+    def render(cls, template: str, **kwargs: Any) -> str:
+        # Backward compatible rendering for legacy call-sites.
         cls._validate_all_placeholders_have_values(template, kwargs)
-
         result = template
         for k, v in kwargs.items():
-            # Support both {{k}} and {{ k }} forms via regex replace
             result = re.sub(r"{{\s*" + re.escape(k) + r"\s*}}", str(v), result)
         return result
 
     @classmethod
-    def render_with_id(cls, prompt_id: str, template: str, **kwargs) -> str:
-        if prompt_id not in PROMPT_REGISTRY:
-            raise ValueError(f"Unknown prompt id: {prompt_id}")
+    def render_definition(cls, defn: PromptDefinition, variables: Dict[str, Any]) -> str:
+        validate_render_input(defn, variables)
+        cls._validate_all_placeholders_have_values(defn.template, variables)
+        return cls.render(defn.template, **variables)
 
-        required = PROMPT_REGISTRY[prompt_id].get("required", [])
-        missing_required = sorted([k for k in required if k not in kwargs])
-        if missing_required:
-            raise ValueError(f"Missing required placeholders for {prompt_id}: {missing_required}")
-
-        cls._validate_all_placeholders_have_values(template, kwargs)
-
-        return cls.render(template, **kwargs)
+    @classmethod
+    def render_prompt(cls, prompt_id: str, **variables: Any) -> Tuple[str, Any]:
+        """Strict path: load PromptDefinition by id, validate inputs, render, and return (text, identity)."""
+        defn = PromptStore.get_definition(prompt_id)
+        identity = PromptStore.get_identity(prompt_id)
+        text = cls.render_definition(defn, variables)
+        return text, identity
