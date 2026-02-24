@@ -8,6 +8,8 @@ from typing import Any, Dict, List
 from src.models.decision_models import Decision, GateResult
 from src.pipeline.runner import GateContext
 from src.gates.gate_common import write_standard_artifacts
+from src.prompts.store import PromptStore
+from src.prompts.renderer import PromptRenderer
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -125,8 +127,8 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
 
     g1_out = _load_json(run_dir / "G1_OUTPUT.json")
     schema_ok = _schema_ok_from_g1(g1_out)
-
-    prompt = "Self-check: validate that the design output schema is complete and consistent."
+    template = PromptStore.load("g4_self_check.prompt.txt")
+    prompt = PromptRenderer.render(template)
     try:
         ret = provider.generate_text(prompt)
         text = _normalize_provider_text(ret)

@@ -29,6 +29,9 @@ from src.gates.gate_common import (
     write_standard_artifacts,
 )
 
+from src.prompts.store import PromptStore
+from src.prompts.renderer import PromptRenderer
+
 # ----------------------------
 # helpers
 # ----------------------------
@@ -143,12 +146,14 @@ def gate_g7_final_review(ctx: GateContext) -> GateResult:
     baseline_rec = _baseline_recommendation(run_dir)
 
     # optional provider call (non-pytest)
-    prompt = (
-        "Final review: summarize run status and baseline recommendation.\n"
-        f"decision={decision.value}\n"
-        f"baseline_present={baseline_rec.get('baseline_present')}\n"
+    template = PromptStore.load("g7_final_review.prompt.txt")
+    prompt = PromptRenderer.render(
+        template,
+        decision=decision.value,
+        baseline_present=str(bool(baseline_rec.get("baseline_present"))),
     )
     provider_info = _safe_provider_call(ctx, prompt)
+
 
     output_payload: Dict[str, Any] = {
         "gate": "G7",

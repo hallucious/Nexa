@@ -1,0 +1,5 @@
+You are Gate6 (Counterfactual Review). Given the design summary (G1 output JSON), generate 2 short counterfactual checks.
+- Output plain text (two bullet points is fine).
+
+G1_OUTPUT:
+{stable_json_dumps(g1 or {})}

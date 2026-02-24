@@ -9,6 +9,8 @@ from src.models.decision_models import Decision, GateResult
 from src.pipeline.contracts import standard_spec
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
+from src.prompts.store import PromptStore
+from src.prompts.renderer import PromptRenderer
 
 
 def _find_repo_root(run_dir: Path) -> Path:
@@ -157,13 +159,11 @@ def _run_semantic_check(provider: Any, pic_text: str, cur_text: str) -> Tuple[st
     """
     Returns (verdict, rationale). Verdict in SAME|DRIFT|VIOLATION|UNKNOWN.
     """
-    prompt = (
-        'You are Gate2 (Continuity). Compare the previous "PIC" text and the current text.\n'
-        'Return ONLY valid JSON: {"verdict":"SAME|DRIFT|VIOLATION|UNKNOWN","rationale":"..."}\n\n'
-        "PIC:\n"
-        f"{pic_text.strip()[:6000]}\n\n"
-        "CURRENT:\n"
-        f"{cur_text.strip()[:6000]}"
+    template = PromptStore.load("g2_continuity.prompt.txt")
+    prompt = PromptRenderer.render(
+        template,
+        pic_text=pic_text.strip()[:6000],
+        current_text=cur_text.strip()[:6000],
     )
 
     try:
