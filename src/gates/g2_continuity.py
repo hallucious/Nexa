@@ -9,8 +9,6 @@ from src.models.decision_models import Decision, GateResult
 from src.pipeline.contracts import standard_spec
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
-from src.prompts.store import PromptStore
-from src.prompts.renderer import PromptRenderer
 
 
 def _find_repo_root(run_dir: Path) -> Path:
@@ -159,11 +157,13 @@ def _run_semantic_check(provider: Any, pic_text: str, cur_text: str) -> Tuple[st
     """
     Returns (verdict, rationale). Verdict in SAME|DRIFT|VIOLATION|UNKNOWN.
     """
-    template = PromptStore.load("g2_continuity.prompt.txt")
-    prompt = PromptRenderer.render(
-        template,
-        pic_text=pic_text.strip()[:6000],
-        current_text=cur_text.strip()[:6000],
+    prompt = (
+        'You are Gate2 (Continuity). Compare the previous "PIC" text and the current text.\n'
+        'Return ONLY valid JSON: {"verdict":"SAME|DRIFT|VIOLATION|UNKNOWN","rationale":"..."}\n\n'
+        "PIC:\n"
+        f"{pic_text.strip()[:6000]}\n\n"
+        "CURRENT:\n"
+        f"{cur_text.strip()[:6000]}"
     )
 
     try:
@@ -212,7 +212,10 @@ def _gate_g2_impl(ctx: GateContext, *, allow_provider: bool) -> GateResult:
     gpt_verdict = "UNKNOWN"
     gpt_rationale = ""
 
+    semantic_attempted = False
+
     if provider is not None and pic_text and cur_text:
+        semantic_attempted = True
         gpt_verdict, gpt_rationale = _run_semantic_check(provider, pic_text, cur_text)
 
     # Decision rules (policy invariants)
@@ -220,7 +223,7 @@ def _gate_g2_impl(ctx: GateContext, *, allow_provider: bool) -> GateResult:
     if structure_removed:
         decision = Decision.FAIL
         msg = "Removed baseline fields"
-    elif gpt_used and gpt_verdict == "UNKNOWN":
+    elif semantic_attempted and gpt_verdict == "UNKNOWN":
         decision = Decision.STOP
         msg = "Provider available but semantic verdict UNKNOWN"
     elif gpt_verdict in ("DRIFT", "VIOLATION"):
@@ -273,7 +276,7 @@ def _gate_g2_impl(ctx: GateContext, *, allow_provider: bool) -> GateResult:
         "semantic": {
             "verdict": gpt_verdict,
             "rationale": gpt_rationale,
-            "unknown_used": bool(gpt_used and gpt_verdict == "UNKNOWN"),
+            "unknown_used": bool(semantic_attempted and gpt_verdict == "UNKNOWN"),
         },
         "final_decision": decision.value,
     }

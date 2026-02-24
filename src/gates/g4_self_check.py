@@ -127,14 +127,13 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
 
     g1_out = _load_json(run_dir / "G1_OUTPUT.json")
     schema_ok = _schema_ok_from_g1(g1_out)
-    template = PromptStore.load("g4_self_check.prompt.txt")
-    prompt = PromptRenderer.render(template)
+    template = PromptStore.load("g4_self_check@v1")
+    prompt = PromptRenderer.render_with_id("g4_self_check@v1", template)
     try:
         ret = provider.generate_text(prompt)
         text = _normalize_provider_text(ret)
     except Exception:
         text = ""
-
     decision = Decision.PASS if schema_ok else Decision.FAIL
     body = "Schema check passed." if schema_ok else "Schema check failed."
     decision_md = _decision_md("G4", decision, body, include_exec=True)

@@ -34,9 +34,6 @@ from src.gates.gate_common import (
     write_standard_artifacts,
 )
 
-from src.prompts.store import PromptStore
-from src.prompts.renderer import PromptRenderer
-
 
 def _read_json(path: Path) -> Optional[Dict[str, Any]]:
     try:
@@ -153,8 +150,12 @@ def _try_runtime_provider_call(ctx: GateContext) -> Dict[str, Any]:
     run_dir = Path(ctx.run_dir)
     g1 = _read_json(run_dir / "G1_OUTPUT.json")
 
-    template = PromptStore.load("g6_counterfactual.prompt.txt")
-    prompt = template
+    prompt = (
+        "You are Gate6 (Counterfactual Review). "
+        "Given the design summary (G1 output JSON), generate 2 short counterfactual checks.\n"
+        "- Output plain text (two bullet points is fine).\n\n"
+        f"G1_OUTPUT:\n{stable_json_dumps(g1 or {})}\n"
+    )
 
     text, meta, err = _provider_generate_text(provider, prompt)
     used = (err is None) and bool(text.strip())
