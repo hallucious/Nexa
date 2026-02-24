@@ -9,6 +9,7 @@ from src.models.decision_models import Decision, Transition, GateResult
 from src.pipeline.stop_reason import StopReason, is_valid_stop_reason
 from src.utils.time import now_seoul
 from src.pipeline.registry import GateRegistry
+from src.pipeline.run_summary import write_run_summary
 from src.contracts.validator import ContractValidator
 
 
@@ -55,6 +56,7 @@ class PipelineRunner:
         self.max_attempts_per_gate = max_attempts_per_gate
         self._steps_executed = 0
 
+        self._gate_summaries = []  # list[dict] for RUN_SUMMARY.json
     def register(self, gate_id: GateId, executor: GateExecutor) -> None:
         self.registry.register(gate_id, executor)
 
@@ -259,7 +261,6 @@ class PipelineRunner:
         except Exception:
             pass
 
-            return False
 
         # Enforce artifact contract safely at Runner level.
         try:
@@ -270,6 +271,32 @@ class PipelineRunner:
             self._steps_executed += 1
             return False
 
+
+
+        # Collect per-gate outcome summary for run-level aggregation (additive).
+        try:
+            reason_code = None
+            if isinstance(result.meta, dict):
+                reason_code = result.meta.get("reason_code")
+            if not reason_code and isinstance(result.outputs, dict):
+                # Best-effort fallback: read from gate META artifact if present.
+                meta_key = f"{gate.value}_META.json"
+                meta_file = result.outputs.get(meta_key)
+                if isinstance(meta_file, str) and meta_file.strip():
+                    meta_path = Path(self.run_dir) / meta_file
+                    if meta_path.exists():
+                        payload = json.loads(meta_path.read_text(encoding="utf-8"))
+                        if isinstance(payload, dict):
+                            reason_code = payload.get("reason_code")
+            self._gate_summaries.append(
+                {
+                    "gate": gate.value,
+                    "decision": result.decision.value if hasattr(result.decision, "value") else str(result.decision),
+                    "reason_code": str(reason_code) if reason_code is not None else None,
+                }
+            )
+        except Exception:
+            pass
 
         # Propagate STOP reason from gate meta into run-level META (standardized enum).
         if result.decision == Decision.STOP and not self.meta.stop_reason:
@@ -311,3 +338,7 @@ class PipelineRunner:
         finally:
             # Always persist run-level metadata for CLI / batch / future circuit execution.
             self._write_meta_json()
+            try:
+                write_run_summary(run_dir=self.run_dir, meta=self.meta, gate_summaries=self._gate_summaries)
+            except Exception:
+                pass
