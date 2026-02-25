@@ -1,24 +1,20 @@
 # HYPER-AI CODING PLAN
 
-Version: 2.6.0  
-Status: Stabilization lock-in (Post-Step35)  
+Version: 2.7.0  
+Status: Stabilization lock-in (Post-Step36)  
 Last Updated: 2026-02-25  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11–Step35
+Related Steps: Step11–Step36
 
 ---
 
-## Step35 (MINOR): Observability analysis layer
+## Step36 (MINOR): Policy trace
 
 Goal:
-- Provide a stable aggregation utility over `runs/<run_id>/OBSERVABILITY.jsonl`.
+- Record policy evaluation path as `reason_trace` for every decision (PASS 포함).
 
 Deliverables:
-- `src/pipeline/observability_report.py`
-  - read JSONL
-  - aggregate totals + per-gate stats (avg/p95)
-- `tests/test_step35_observability_report.py`
-
-Notes:
-- No changes to runner required.
-- Artifact remains the source of truth; analysis is derived.
+- Extend `PolicyDecision` with `reason_trace: list[str]`
+- Update `src/policy/gate_policy.py` evaluate_g* to populate `reason_trace`
+- Propagate into `OBSERVABILITY.jsonl` (runner event includes `reason_trace`)
+- Add test: `tests/test_step36_policy_trace_written.py`

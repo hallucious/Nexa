@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 from src.models.decision_models import Decision
 from src.pipeline.stop_reason import StopReason
@@ -15,6 +15,7 @@ class PolicyDecision:
     reason_code: str
     stop_reason: Optional[str] = None
     stop_detail: Optional[str] = None
+    reason_trace: List[str] = field(default_factory=list)
 
 
 # -----------------------------

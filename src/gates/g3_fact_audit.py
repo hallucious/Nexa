@@ -152,6 +152,7 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     outputs = write_standard_artifacts("G3", decision, decision_md, output, ctx)
 
     meta = {
+        "reason_trace": getattr(policy, "reason_trace", []),
         "engine": "perplexity" if (fact_check is not None and enable_pplx) else "rule_only",
         "fail_count": len(fail_reasons),
         "stop_error": stop_error,
