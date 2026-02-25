@@ -87,3 +87,38 @@ class G4SelfCheckPlugin:
             }
 
         return G4SelfCheckPluginResult(decision=policy.decision, output=output, meta=meta)
+
+
+# ---------------------------------------------------------------------------
+# Compatibility shim (used by src.gates.g4_self_check)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class G4SelfCheckAIShim:
+    used: bool
+    error: Optional[str]
+    text: str
+    raw: Dict[str, Any]
+
+
+def run_g4_self_check_plugin(
+    *, provider: Any, prompt_text: str, prompt_ident: Any, is_pytest: bool
+) -> G4SelfCheckAIShim:
+    """Call the injected provider using the repo provider contract.
+
+    Returns a stable structure for the gate wrapper.
+    """
+
+    if is_pytest:
+        return G4SelfCheckAIShim(used=False, error=None, text="", raw={})
+
+    try:
+        text, raw, err = provider.generate_text(
+            prompt=prompt_text,
+            temperature=0.0,
+            max_output_tokens=512,
+        )
+        return G4SelfCheckAIShim(used=True, error=err, text=str(text), raw=raw or {})
+    except Exception as e:
+        return G4SelfCheckAIShim(used=True, error=str(e), text="", raw={})

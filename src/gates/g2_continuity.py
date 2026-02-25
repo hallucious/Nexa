@@ -9,6 +9,7 @@ from src.models.decision_models import Decision, GateResult
 from src.pipeline.contracts import standard_spec
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
+from src.platform.g2_continuity_plugin import resolve_g2_continuity_plugin
 
 
 def _find_repo_root(run_dir: Path) -> Path:
@@ -153,38 +154,29 @@ def _write_gate_artifacts(
     return outputs
 
 
-def _run_semantic_check(provider: Any, pic_text: str, cur_text: str) -> Tuple[str, str]:
-    """
-    Returns (verdict, rationale). Verdict in SAME|DRIFT|VIOLATION|UNKNOWN.
-    """
-    prompt = (
-        'You are Gate2 (Continuity). Compare the previous "PIC" text and the current text.\n'
-        'Return ONLY valid JSON: {"verdict":"SAME|DRIFT|VIOLATION|UNKNOWN","rationale":"..."}\n\n'
-        "PIC:\n"
-        f"{pic_text.strip()[:6000]}\n\n"
-        "CURRENT:\n"
-        f"{cur_text.strip()[:6000]}"
-    )
+def _run_semantic_check(ctx: GateContext, pic_text: str, cur_text: str) -> Tuple[str, str]:
+    """Returns (verdict, rationale). Verdict in SAME|DRIFT|VIOLATION|UNKNOWN."""
+    plugin = resolve_g2_continuity_plugin(ctx.providers)
+    ai = plugin.semantic_check(pic_context=pic_text, current_request=cur_text)
+
+    if not ai.used:
+        return "UNKNOWN", ""
+    if ai.error is not None:
+        return "UNKNOWN", ""
+    if not (ai.text or "").strip():
+        return "UNKNOWN", ""
 
     try:
-        text, _raw, err = provider.generate_text(prompt=prompt, temperature=0.0, max_output_tokens=512)
-        if err is not None:
-            return "UNKNOWN", ""
-        if not (text or "").strip():
-            return "UNKNOWN", ""
-        try:
-            obj = json.loads(text)
-            if isinstance(obj, dict):
-                verdict = str(obj.get("verdict", "UNKNOWN")).upper()
-                rationale = str(obj.get("rationale", "") or "")
-                if verdict not in ("SAME", "DRIFT", "VIOLATION", "UNKNOWN"):
-                    verdict = "UNKNOWN"
-                return verdict, rationale
-            return "UNKNOWN", text.strip()[:2000]
-        except Exception:
-            return "UNKNOWN", text.strip()[:2000]
+        obj = json.loads(ai.text)
+        if isinstance(obj, dict):
+            verdict = str(obj.get("verdict", "UNKNOWN")).upper()
+            rationale = str(obj.get("rationale", "") or "")
+            if verdict not in ("SAME", "DRIFT", "VIOLATION", "UNKNOWN"):
+                verdict = "UNKNOWN"
+            return verdict, rationale
+        return "UNKNOWN", str(ai.text).strip()[:2000]
     except Exception:
-        return "UNKNOWN", ""
+        return "UNKNOWN", str(ai.text).strip()[:2000]
 
 
 def _gate_g2_impl(ctx: GateContext, *, allow_provider: bool) -> GateResult:
@@ -216,7 +208,7 @@ def _gate_g2_impl(ctx: GateContext, *, allow_provider: bool) -> GateResult:
 
     if provider is not None and pic_text and cur_text:
         semantic_attempted = True
-        gpt_verdict, gpt_rationale = _run_semantic_check(provider, pic_text, cur_text)
+        gpt_verdict, gpt_rationale = _run_semantic_check(ctx, pic_text, cur_text)
 
     # Decision rules (policy invariants)
     structure_removed = bool(diff.get("removed"))

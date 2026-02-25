@@ -10,6 +10,7 @@ from src.pipeline.runner import GateContext
 from src.gates.gate_common import write_standard_artifacts
 from src.prompts.store import PromptStore
 from src.prompts.renderer import PromptRenderer
+from src.platform.g4_self_check_plugin import run_g4_self_check_plugin
 
 
 
@@ -164,11 +165,13 @@ def gate_g4_self_check(ctx: GateContext) -> GateResult:
     g1_out = _load_json(run_dir / "G1_OUTPUT.json")
     schema_ok = _schema_ok_from_g1(g1_out)
     prompt, prompt_ident = PromptRenderer.render_prompt("g4_self_check@v1")
-    try:
-        ret = provider.generate_text(prompt)
-        text = _normalize_provider_text(ret)
-    except Exception:
-        text = ""
+    ai = run_g4_self_check_plugin(
+        provider=provider,
+        prompt_text=prompt,
+        prompt_ident=prompt_ident,
+        is_pytest=False,
+    )
+    text = _normalize_provider_text(ai.text)
     decision = Decision.PASS if schema_ok else Decision.FAIL
     body = "Schema check passed." if schema_ok else "Schema check failed."
     decision_md = _decision_md("G4", decision, body, include_exec=True)

@@ -13,6 +13,7 @@ from src.pipeline.runner import GateContext
 from src.gates.gate_common import write_standard_artifacts
 from src.utils.time import now_seoul
 from src.policy.gate_policy import evaluate_g5
+from src.platform.g5_implement_test_plugin import resolve_g5_exec_plugin
 
 
 def _truncate(s: str, max_chars: int = 4000) -> str:
@@ -57,7 +58,7 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
     err_s = ""
 
     try:
-        exec_plugin = getattr(ctx, "plugins", {}).get("exec") if hasattr(ctx, "plugins") else None
+        exec_plugin = resolve_g5_exec_plugin(ctx)
         if exec_plugin is not None and hasattr(exec_plugin, "execute"):
             pr = exec_plugin.execute(cmd, cwd=str(repo_root), env=env, timeout_s=timeout_sec)
             if not getattr(pr, "success", False) or not getattr(pr, "output", None):

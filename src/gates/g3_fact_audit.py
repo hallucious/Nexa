@@ -11,7 +11,7 @@ from src.pipeline.runner import GateContext
 from src.gates.gate_common import write_standard_artifacts
 from src.pipeline.stop_reason import StopReason
 from src.utils.env import load_dotenv
-from src.platform.fact_check_plugin import resolve_fact_check_plugin
+from src.platform.g3_fact_audit_plugin import resolve_fact_check_plugin
 
 
 FACT_PATTERNS = [
