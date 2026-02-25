@@ -218,19 +218,20 @@ def _gate_g2_impl(ctx: GateContext, *, allow_provider: bool) -> GateResult:
         semantic_attempted = True
         gpt_verdict, gpt_rationale = _run_semantic_check(provider, pic_text, cur_text)
 
-    # Decision rules delegated to Policy layer
+    # Decision rules (policy invariants)
     structure_removed = bool(diff.get("removed"))
-
-    from src.policy.gate_policy import evaluate_g2
-
-    policy = evaluate_g2(
-        structure_removed=structure_removed,
-        semantic_attempted=semantic_attempted,
-        semantic_verdict=gpt_verdict,
-    )
-
-    decision = policy.decision
-    msg = policy.message
+    if structure_removed:
+        decision = Decision.FAIL
+        msg = "Removed baseline fields"
+    elif semantic_attempted and gpt_verdict == "UNKNOWN":
+        decision = Decision.STOP
+        msg = "Provider available but semantic verdict UNKNOWN"
+    elif gpt_verdict in ("DRIFT", "VIOLATION"):
+        decision = Decision.FAIL
+        msg = f"Semantic continuity failed: {gpt_verdict}"
+    else:
+        decision = Decision.PASS
+        msg = "Continuity OK"
 
     decision_md = _format_decision_md(
         decision=decision,
@@ -279,9 +280,9 @@ def _gate_g2_impl(ctx: GateContext, *, allow_provider: bool) -> GateResult:
         },
         "final_decision": decision.value,
     }
-    if policy.stop_reason:
-        meta["stop_reason"] = policy.stop_reason
-        meta["stop_detail"] = policy.stop_detail
+    if decision == Decision.STOP:
+        meta["stop_reason"] = "UNKNOWN"
+        meta["stop_detail"] = "G2_SEMANTIC_UNKNOWN_WITH_PROVIDER"
 
     outputs = _write_gate_artifacts(
         run_dir=run_dir,
