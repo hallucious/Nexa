@@ -8,6 +8,7 @@ from src.pipeline.state import RunMeta, GateId, RunStatus
 from src.models.decision_models import Decision, Transition, GateResult
 from src.pipeline.stop_reason import StopReason, is_valid_stop_reason
 from src.utils.time import now_seoul
+from src.pipeline.observability import append_observability_event
 from src.pipeline.registry import GateRegistry
 from src.pipeline.run_summary import write_run_summary
 from src.contracts.validator import ContractValidator
@@ -217,6 +218,27 @@ class PipelineRunner:
         except Exception as e:  # noqa: BLE001
             self._stop_run(f"GATE_EXCEPTION: {gate.value}: {type(e).__name__}: {e}")
             self._record_transition(gate, GateId.STOP, Decision.STOP)
+
+            # Step34 Observability: record crash as a STOP event (best-effort).
+            try:
+                finished_at = now_seoul().isoformat()
+                execution_time_ms = int((time.perf_counter() - t0) * 1000)
+                event = {
+                    "run_id": getattr(self.meta, "run_id", None),
+                    "gate": gate.value,
+                    "decision": Decision.STOP.value,
+                    "source": gate.value,
+                    "provider": "none",
+                    "vendor": "none",
+                    "reason_code": "INTERNAL_ERROR",
+                    "detail_code": f"exception:{type(e).__name__}",
+                    "started_at": started_at,
+                    "finished_at": finished_at,
+                    "execution_time_ms": execution_time_ms,
+                }
+                append_observability_event(run_dir=self.run_dir, event=event)
+            except Exception:
+                pass
             self._steps_executed += 1
             return False
 
@@ -241,6 +263,26 @@ class PipelineRunner:
                 # provider_latency_ms is optional; if gate provided it, keep it.
                 if isinstance(result.meta, dict) and "provider_latency_ms" in result.meta:
                     gm.setdefault("provider_latency_ms", result.meta.get("provider_latency_ms"))
+        except Exception:
+            pass
+
+        # Step34 Observability (run_dir artifact): always append one event per gate execution.
+        try:
+            m = result.meta if isinstance(getattr(result, "meta", None), dict) else {}
+            event = {
+                "run_id": getattr(self.meta, "run_id", None),
+                "gate": gate.value,
+                "decision": result.decision.value if hasattr(result.decision, "value") else str(result.decision),
+                "source": (m.get("source") if isinstance(m, dict) else None) or gate.value,
+                "provider": (m.get("provider") if isinstance(m, dict) else None) or "none",
+                "vendor": (m.get("vendor") if isinstance(m, dict) else None) or "none",
+                "reason_code": (m.get("reason_code") if isinstance(m, dict) else None),
+                "detail_code": (m.get("detail_code") if isinstance(m, dict) else None),
+                "started_at": started_at,
+                "finished_at": finished_at,
+                "execution_time_ms": execution_time_ms,
+            }
+            append_observability_event(run_dir=self.run_dir, event=event)
         except Exception:
             pass
 
@@ -271,6 +313,27 @@ class PipelineRunner:
         except Exception as e:  # noqa: BLE001
             self._stop_run(f"CONTRACT_VIOLATION: {gate.value}: {type(e).__name__}: {e}")
             self._record_transition(gate, GateId.STOP, Decision.STOP)
+
+            # Step34 Observability: record crash as a STOP event (best-effort).
+            try:
+                finished_at = now_seoul().isoformat()
+                execution_time_ms = int((time.perf_counter() - t0) * 1000)
+                event = {
+                    "run_id": getattr(self.meta, "run_id", None),
+                    "gate": gate.value,
+                    "decision": Decision.STOP.value,
+                    "source": gate.value,
+                    "provider": "none",
+                    "vendor": "none",
+                    "reason_code": "INTERNAL_ERROR",
+                    "detail_code": f"exception:{type(e).__name__}",
+                    "started_at": started_at,
+                    "finished_at": finished_at,
+                    "execution_time_ms": execution_time_ms,
+                }
+                append_observability_event(run_dir=self.run_dir, event=event)
+            except Exception:
+                pass
             self._steps_executed += 1
             return False
 

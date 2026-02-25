@@ -1,48 +1,36 @@
 # HYPER-AI CODING PLAN
 
-Version: 2.4.0\
-Status: Stabilization lock-in (Post-Step33)\
+Version: 2.5.0\
+Status: Stabilization lock-in (Post-Step34)\
 Last Updated: 2026-02-25\
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text
 fix)\
-Related Steps: Step11, Step29, Step30, Step31, Step32, Step33
+Related Steps: Step11, Step29, Step30, Step31, Step32, Step33, Step34
 
 ------------------------------------------------------------------------
 
 ## Current status
 
--   Step11: Hybrid registry/discovery contract locked.
--   Step29: Unified `resolve(ctx)` entrypoint locked.
--   Step30: Meta required keys + ReasonCode locked.
--   Step31: ProviderKey (routing key) enum locked.
--   Step32: VendorKey (vendor identity) enum locked.
--   Step33: Failure catalog taxonomy (ReasonCode policy) locked.
--   pytest baseline: 76 passed, 3 skipped (post-step32).
+-   Step11--Step33 complete (contracts stabilized).
+-   Step34: run_dir observability artifact added (OBSERVABILITY.jsonl).
+-   pytest baseline: 78 passed, 3 skipped (post-step33).
 
 ------------------------------------------------------------------------
 
-## Phase: Stabilization lock-in
+## P6 (Current; MINOR -- Step34)
 
-### P0--P4 (Done)
+Goal: Persist observability as a single run artifact (source of truth).
 
--   Step11--Step32 complete (registry/discovery, resolve(ctx), meta
-    keys, provider/vendor).
-
-### P5 (Current; MINOR -- Step33)
-
-Goal: Prevent ReasonCode drift by fixing a stable taxonomy and expansion
-policy.
-
-Deliverables: - Add `POLICY_REJECTED` to `ReasonCode` enum. - Preserve
-backward compatibility (`infer_reason_code` kept). - Add
-`tests/test_step33_reason_code_policy_rejected.py` to assert enum
-contains POLICY_REJECTED. - Docs: define ReasonCode as top-level
-categories + expansion policy, and recommend `detail_code`.
+Deliverables: - Add `src/pipeline/observability.py` -
+`append_observability_event(run_dir, event)` (best-effort) - Update
+`src/pipeline/runner.py` - Append exactly 1 event per gate execution -
+Also append on gate crash (exception path) - Add
+`tests/test_step34_observability_run_dir_artifact.py` - Assert
+OBSERVABILITY.jsonl exists and has \>= 1 line per gate
 
 ------------------------------------------------------------------------
 
-## Hard contract rules (post-step33)
+## Hard rule
 
-1.  ReasonCode is a stable, high-level category set.
-2.  Concrete causes go to `detail_code` and/or `error`.
-3.  Adding a new ReasonCode requires docs MINOR bump + tests.
+Console logging is optional; the run_dir artifact is the source of
+truth.
