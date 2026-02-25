@@ -11,6 +11,7 @@ from src.pipeline.runner import GateContext
 from src.gates.gate_common import write_standard_artifacts
 from src.pipeline.stop_reason import StopReason
 from src.utils.env import load_dotenv
+from src.platform.fact_check_plugin import resolve_fact_check_plugin
 
 
 FACT_PATTERNS = [
@@ -68,16 +69,20 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     g1 = json.loads(g1_path.read_text(encoding="utf-8"))
     candidates = _extract_fact_candidates(g1)
 
-    injected = None
+    injected_provider = None
     try:
-        injected = ctx.providers.get("perplexity") if getattr(ctx, "providers", None) else None
+        injected_provider = ctx.providers.get("perplexity") if getattr(ctx, "providers", None) else None
     except Exception:
-        injected = None
+        injected_provider = None
 
     enable_tests_flag = os.getenv("ENABLE_PERPLEXITY_FACT_AUDIT_TESTS", "0").strip() in ("1", "true", "True", "yes", "YES")
     enable_pplx = (not is_pytest) or enable_tests_flag
 
-    provider = injected if (enable_pplx and injected is not None) else None
+    plugins = ctx.context.get("plugins") if isinstance(ctx.context, dict) else None
+    fact_check = resolve_fact_check_plugin(
+        plugins=plugins,
+        provider=(injected_provider if enable_pplx else None),
+    )
 
     results: List[Dict[str, Any]] = []
     fail_reasons: List[str] = []
@@ -85,14 +90,14 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
 
     provider_required = bool(enable_pplx) and (not is_pytest)
 
-    if provider_required and provider is None:
-        stop_error = "Perplexity provider unavailable"
+    if provider_required and fact_check is None:
+        stop_error = "Fact-check plugin/provider unavailable"
 
     for stmt in candidates:
         if stop_error:
             break
 
-        if provider is None:
+        if fact_check is None:
             rb = _rule_based_audit(stmt)
             results.append({
                 "statement": stmt,
@@ -105,12 +110,12 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
             continue
 
         try:
-            r = provider.verify(stmt)
+            r = fact_check.verify(stmt)
             label = r.get("verdict", "UNKNOWN")
             results.append({
                 "statement": stmt,
                 "label": label,
-                "engine": "perplexity",
+                "engine": ("plugin" if plugins and isinstance(plugins, dict) and plugins.get("fact_check") is not None else "perplexity"),
                 "confidence": r.get("confidence"),
                 "citations": r.get("citations"),
                 "summary": r.get("summary"),
@@ -141,7 +146,7 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
 
     output = {
         "gate": "G3",
-        "engine_used": "perplexity" if provider else "rule_only",
+        "engine_used": "perplexity" if (fact_check is not None and enable_pplx) else "rule_only",
         "stop_error": stop_error,
         "candidates": candidates,
         "results": results,
@@ -150,7 +155,7 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     outputs = write_standard_artifacts("G3", decision, decision_md, output, ctx)
 
     meta = {
-        "engine": "perplexity" if provider else "rule_only",
+        "engine": "perplexity" if (fact_check is not None and enable_pplx) else "rule_only",
         "fail_count": len(fail_reasons),
         "stop_error": stop_error,
     }
