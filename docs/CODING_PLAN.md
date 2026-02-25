@@ -1,21 +1,23 @@
 # HYPER-AI CODING PLAN
 
-Version: 2.1.1\
-Status: Stabilization lock-in (Post-Step29 / Step30)\
+Version: 2.3.0\
+Status: Stabilization lock-in (Post-Step32)\
 Last Updated: 2026-02-25\
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text
 fix)\
-Related Steps: Step11, Step29, Step30
+Related Steps: Step11, Step29, Step30, Step31, Step32
 
 ------------------------------------------------------------------------
 
 ## Current status
 
 -   Step11: Hybrid registry/discovery contract locked.
--   Step29: Platform plugin unified entrypoint `resolve(ctx)` locked.
--   Step30: Meta contract locked for plugin flows returning
-    `meta: dict`.
--   pytest baseline: **72 passed, 3 skipped (post-step30).**
+-   Step29: Unified `resolve(ctx)` entrypoint locked.
+-   Step30: Meta required keys + ReasonCode locked.
+-   Step31: ProviderKey (routing key) enum locked.
+-   Step32: Vendor identity enum introduced (separates vendor/model from
+    ProviderKey).
+-   pytest baseline: 74 passed, 3 skipped (post-step31).
 
 ------------------------------------------------------------------------
 
@@ -23,51 +25,47 @@ Related Steps: Step11, Step29, Step30
 
 ### P0 (Done)
 
--   Hybrid registry + discovery comparison (orphan/missing detection).
+Hybrid registry + discovery comparison.
 
 ### P1 (Done)
 
--   Unify platform plugin entrypoint to `resolve(ctx)`.
--   Update gates to call platform plugins only via `resolve(ctx)`.
+resolve(ctx) unification.
 
-### P2 (Done; MINOR)
+### P2 (Done; MINOR -- Step30)
 
-Goal: Standardize plugin `meta` payload for observability and stable
-failure cataloging.
+Meta contract standardization.
 
-Deliverables: - `src/platform/plugin_contract.py` - `ReasonCode` enum -
-`CONTRACT_VERSION` - `normalize_meta()` helper - Updated platform
-plugins returning `meta: dict` (e.g., G4/G6/G7). -
-`tests/test_step30_plugin_meta_contract.py` - Enforce required meta keys
-and allowed reason_code values.
+### P3 (Done; MINOR -- Step31)
 
-------------------------------------------------------------------------
+ProviderKey enum + provider normalization.
 
-## Hard contract rules (post-step30)
+### P4 (Current; MINOR -- Step32)
 
-### Entry point
+Goal: Standardize vendor identity for observability without bloating
+ProviderKey.
 
-1.  All platform plugins expose `resolve(ctx)`.
-2.  Gates call platform plugins only through `resolve(ctx)`.
-
-### Meta contract (when meta exists)
-
-3.  Any plugin output that includes `meta: dict` MUST include:
-    -   `reason_code`, `provider`, `source`, `contract_version`
-4.  `reason_code` MUST be one of `ReasonCode` enum values.
-5.  Contract violations MUST fail pytest.
+Deliverables: - Extend `src/platform/plugin_contract.py` - `VendorKey`
+enum - `normalize_meta(..., vendor=...)` support (or `normalize_vendor`
+helper) - Update plugins that emit `meta: dict` to include `vendor` (and
+optionally product/model/tool). - Add
+`tests/test_step32_vendor_key_contract.py` - Enforce allowed vendor
+values when meta exists.
 
 ------------------------------------------------------------------------
 
-## Follow-ups (next)
+## Hard Contract Rules (post-step32)
 
-### P3: Provider key / source standardization
+1.  All plugins expose `resolve(ctx)`.
+2.  When meta exists, required keys include: `reason_code`, `provider`,
+    `source`, `contract_version`, `vendor`.
+3.  `reason_code` must be ReasonCode enum.
+4.  `provider` must be ProviderKey enum (routing key).
+5.  `vendor` must be VendorKey enum (vendor identity).
+6.  Contract violations fail pytest.
 
--   Standardize provider naming across plugins.
--   Add log hook to record loaded plugin ids and providers.
+------------------------------------------------------------------------
 
-### P4: Failure catalog
+## Next
 
--   Expand ReasonCode taxonomy only when repeated failure patterns are
-    observed.
--   Keep ReasonCode set small and stable.
+-   Failure catalog strategy (ReasonCode evolution policy).
+-   Optional: formalize product/model fields if/when needed.

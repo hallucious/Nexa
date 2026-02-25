@@ -1,99 +1,103 @@
 # HYPER-AI BLUEPRINT
 
-Version: 2.1.0  
-Status: Stabilized (Post-Step29)  
-Last Updated: 2026-02-25  
-Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11 (Hybrid registry/discovery contract), Step29 (Unified resolve(ctx) entrypoint), Step30 (Meta contract)
+Version: 2.3.0\
+Status: Stabilization lock-in (Post-Step32 Vendor contract)\
+Last Updated: 2026-02-25\
+Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text
+fix)\
+Related Steps: Step11, Step29, Step30, Step31, Step32
+
+------------------------------------------------------------------------
 
 ## Core Objective
-- Build a framework that structurally minimizes bug probability via AI collaboration.
-- Priority order: **Reproducibility > Contract stability > Test evidence > Expandability**.
 
----
+-   Build a framework that structurally minimizes bug probability via AI
+    collaboration.
+-   Priority: Reproducibility \> Contract stability \> Test evidence \>
+    Expandability.
+
+------------------------------------------------------------------------
 
 ## Platform Plugin Architecture (Step29)
 
-### 1) Single entrypoint
-All platform plugins must expose **one** entrypoint:
+### Single entrypoint
 
-- `resolve(ctx: GateContext) -> Optional[PluginObject]`
+All platform plugins expose:
 
-Gates must call platform plugins **only** through `resolve(ctx)`.
+`resolve(ctx: GateContext) -> Optional[PluginObject]`
 
-> Legacy `resolve_<gate>_plugin(...)` entrypoints are deprecated and must not be used.
+Legacy `resolve_*` entrypoints are deprecated.
 
-### 2) PluginObject contract
-`resolve(ctx)` returns `None` or an object that satisfies its gate-specific protocol.
-
-For plugins that return a `meta: dict` (e.g., G4/G6/G7 flows), meta is standardized by Step30.
-
----
-
-## Hybrid Registry + Discovery (Step11)
-
-### 3) Discovery (scan)
-- Discover candidate plugins by scanning:
-  - `src/platform/*_plugin.py`
-
-### 4) Registry (official list)
-- Maintain a central registry of **official** plugins.
-- Only registry-approved plugins are considered “in-system.”
-
-### 5) Hybrid contract
-- Any registry entry must be importable.
-- Any discovered `*_plugin.py` that is **not** in the registry is treated as **orphan** and should fail CI (stability-first).
-- Any plugin missing `resolve(ctx)` fails CI.
-
----
+------------------------------------------------------------------------
 
 ## Meta contract (Step30)
 
-### Scope
-Applies to any platform plugin output that includes a `meta: dict`.
+Any plugin returning `meta: dict` must include:
 
-### Required keys
-Every such `meta` must include:
-
-- `reason_code` (enum string)
-- `provider` (string)
-- `source` (string)
-- `contract_version` (string)
+-   `reason_code`
+-   `provider`
+-   `source`
+-   `contract_version`
 
 Additional keys are allowed.
 
-### Allowed `reason_code` values
-- `SUCCESS`
-- `SKIPPED`
-- `PROVIDER_MISSING`
-- `PROVIDER_ERROR`
-- `CONTRACT_VIOLATION`
-- `INTERNAL_ERROR`
+------------------------------------------------------------------------
 
-### Why it exists
-- Makes logs comparable across gates/plugins.
-- Enables stable failure cataloging and regression analysis.
-- Prevents silent drift in meta payloads.
+## ProviderKey contract (Step31)
 
----
+### Meaning of `provider`
 
-## Gate ↔ Platform boundary
+`meta["provider"]` represents the **routing/engine key** inside this
+system (how the call was routed), not the vendor/model identity.
 
-Gates should only do:
+Allowed values (minimal set): - `gpt` - `gemini` - `local` - `none`
 
-1) `plugin = resolve(ctx)`
-2) if `plugin is None`: handle gracefully
-3) else: call the plugin protocol (gate-specific)
+Rules: 1. `meta["provider"]` MUST be one of the allowed ProviderKey
+values. 2. Provider normalization occurs in
+`plugin_contract.normalize_meta`. 3. Violations fail pytest.
 
-Gates must **not**:
-- depend on provider internals
-- call alternate plugin entrypoints
-- assume plugin file presence implies activation (registry defines activation)
+------------------------------------------------------------------------
 
----
+## Vendor identity contract (Step32)
 
-## Stabilization goals
-- Remove implicit behavior.
-- Enforce a single entrypoint.
-- Lock contracts via tests.
-- Make structural regression immediately fail in `pytest`.
+### Why Step32 exists
+
+ProviderKey is intentionally small and stable. Vendor/model identity is
+separated to prevent enum drift while preserving observability.
+
+### Required vendor key (when meta exists)
+
+Any plugin output that includes `meta: dict` MUST also include:
+
+-   `vendor` (enum string)
+
+### Allowed `vendor` values
+
+-   `openai`
+-   `google`
+-   `anthropic`
+-   `perplexity`
+-   `local`
+-   `none`
+
+### Optional identity fields
+
+The following fields are optional (strings) and may be present when
+useful: - `product` (e.g., `codex`, `sonar`) - `model` (e.g.,
+`gpt-5-codex`, `sonar-pro`) - `tool` (e.g., `codex-cli`)
+
+### Rules
+
+1.  `meta["vendor"]` MUST be one of the allowed vendor values when meta
+    exists.
+2.  `vendor` normalization must occur in
+    `plugin_contract.normalize_meta` (or a sibling helper).
+3.  Violations fail pytest.
+
+------------------------------------------------------------------------
+
+## Stabilization Goals
+
+-   Eliminate implicit behavior.
+-   Enforce contract-first evolution.
+-   Lock structural invariants via tests.
