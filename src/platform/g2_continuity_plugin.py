@@ -1,13 +1,22 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
 
 @dataclass
 class G2ContinuityAI:
+    """Result of the optional semantic continuity check.
+
+    - used=False means no provider was available (noop).
+    - verdict is one of: SAME|DRIFT|VIOLATION|UNKNOWN
+    """
+
     used: bool
     error: Optional[str]
+    verdict: str
+    rationale: str
     text: str
     raw: Dict[str, Any]
     prompt: str
@@ -31,8 +40,8 @@ class GPTContinuityPlugin:
         prompt = (
             'You are Gate2 (Continuity). Compare the previous "PIC" text and the current text.\n'
             'Return ONLY valid JSON: {"verdict":"SAME|DRIFT|VIOLATION|UNKNOWN","rationale":"..."}\n\n'
-            f"PIC:\n{pic_context.strip()[:6000]}\n\n"
-            f"CURRENT:\n{current_request.strip()[:6000]}"
+            f"PIC:\n{(pic_context or '').strip()[:6000]}\n\n"
+            f"CURRENT:\n{(current_request or '').strip()[:6000]}"
         )
 
         try:
@@ -42,17 +51,37 @@ class GPTContinuityPlugin:
         except Exception as e:
             return G2ContinuityAI(
                 used=True,
-                error=str(e),
+                error=f"provider error: {type(e).__name__}: {e}",
+                verdict="UNKNOWN",
+                rationale="",
                 text="",
                 raw={},
                 prompt=prompt,
             )
 
+        verdict = "UNKNOWN"
+        rationale = ""
+
+        # Best-effort JSON parse; do not raise.
+        try:
+            obj = json.loads((text or "").strip())
+            if isinstance(obj, dict):
+                v = obj.get("verdict")
+                r = obj.get("rationale")
+                if isinstance(v, str) and v:
+                    verdict = v
+                if isinstance(r, str):
+                    rationale = r
+        except Exception:
+            pass
+
         return G2ContinuityAI(
             used=True,
             error=err,
-            text=text,
-            raw=raw,
+            verdict=verdict,
+            rationale=rationale,
+            text=text or "",
+            raw=raw or {},
             prompt=prompt,
         )
 
@@ -62,6 +91,8 @@ class NoopContinuityPlugin:
         return G2ContinuityAI(
             used=False,
             error=None,
+            verdict="UNKNOWN",
+            rationale="",
             text="",
             raw={},
             prompt="",
@@ -69,6 +100,12 @@ class NoopContinuityPlugin:
 
 
 def resolve_g2_continuity_plugin(providers: Optional[Dict[str, Any]]) -> G2ContinuityPlugin:
+    """Resolve G2 plugin.
+
+    Contract:
+    - If providers['gpt'] exists -> GPTContinuityPlugin
+    - Else -> NoopContinuityPlugin
+    """
     p = (providers or {}).get("gpt")
     if p is None:
         return NoopContinuityPlugin()
