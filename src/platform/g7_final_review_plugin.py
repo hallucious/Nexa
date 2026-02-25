@@ -62,3 +62,7 @@ def resolve_g7_final_review_plugin(ctx: GateContext) -> Optional[G7FinalReviewPl
         return _GPTAdapter(gpt)
 
     return None
+
+def resolve(ctx: GateContext) -> Optional[G7FinalReviewPlugin]:
+    """Unified entrypoint: resolve(ctx) -> optional final review plugin."""
+    return resolve_g7_final_review_plugin(ctx)

@@ -38,3 +38,7 @@ def resolve_g5_exec_plugin(ctx: GateContext) -> Optional[G5ExecPlugin]:
         return p  # type: ignore[return-value]
 
     return None
+
+def resolve(ctx: GateContext) -> Optional[G5ExecPlugin]:
+    """Unified entrypoint: resolve(ctx) -> optional exec plugin."""
+    return resolve_g5_exec_plugin(ctx)

@@ -9,7 +9,7 @@ from src.models.decision_models import Decision, GateResult
 from src.pipeline.contracts import standard_spec
 from src.pipeline.runner import GateContext
 from src.utils.time import now_seoul
-from src.platform.g2_continuity_plugin import resolve_g2_continuity_plugin
+from src.platform import g2_continuity_plugin
 
 
 def _find_repo_root(run_dir: Path) -> Path:
@@ -156,7 +156,7 @@ def _write_gate_artifacts(
 
 def _run_semantic_check(ctx: GateContext, pic_text: str, cur_text: str) -> Tuple[str, str]:
     """Returns (verdict, rationale). Verdict in SAME|DRIFT|VIOLATION|UNKNOWN."""
-    plugin = resolve_g2_continuity_plugin(ctx.providers)
+    plugin = g2_continuity_plugin.resolve(ctx)
     ai = plugin.semantic_check(pic_context=pic_text, current_request=cur_text)
 
     if not ai.used:

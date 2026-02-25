@@ -77,3 +77,7 @@ def resolve_g6_counterfactual_plugin(ctx: GateContext) -> CounterfactualPlugin:
         if plug is not None:
             return plug  # type: ignore[return-value]
     return ProviderCounterfactualPlugin()
+
+def resolve(ctx: GateContext) -> Optional[CounterfactualPlugin]:
+    """Unified entrypoint: resolve(ctx) -> optional counterfactual plugin."""
+    return resolve_g6_counterfactual_plugin(ctx)

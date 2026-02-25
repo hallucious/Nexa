@@ -28,7 +28,7 @@ from src.gates.gate_common import (
     read_text_file,
     write_standard_artifacts,
 )
-from src.platform.g7_final_review_plugin import resolve_g7_final_review_plugin
+from src.platform import g7_final_review_plugin
 
 # ----------------------------
 # helpers
@@ -60,7 +60,7 @@ def _safe_provider_call(ctx: GateContext, prompt: str) -> Dict[str, Any]:
     if is_pytest():
         return info
 
-    plugin = resolve_g7_final_review_plugin(ctx)
+    plugin = g7_final_review_plugin.resolve(ctx)
     if plugin is None:
         return info
 

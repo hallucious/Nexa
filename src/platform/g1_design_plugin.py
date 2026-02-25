@@ -13,6 +13,8 @@ import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from src.pipeline.runner import GateContext
+from typing import Protocol
 from src.prompts.renderer import PromptRenderer
 
 
@@ -70,3 +72,21 @@ def parse_design_json(text: str) -> Optional[dict]:
     except Exception:
         return None
     return candidate if isinstance(candidate, dict) else None
+
+class G1DesignRunner(Protocol):
+    def run(self, request_text: str, *, is_pytest: bool) -> G1DesignAI:
+        ...
+
+
+@dataclass(frozen=True)
+class _G1DesignRunnerImpl:
+    provider: Optional[Any]
+
+    def run(self, request_text: str, *, is_pytest: bool) -> G1DesignAI:
+        return run_g1_design_plugin(request_text=request_text, provider=self.provider, is_pytest=is_pytest)
+
+
+def resolve(ctx: "GateContext") -> G1DesignRunner:
+    """Unified entrypoint: resolve(ctx) -> runner."""
+    providers = getattr(ctx, "providers", None) or {}
+    return _G1DesignRunnerImpl(provider=providers.get("gpt"))

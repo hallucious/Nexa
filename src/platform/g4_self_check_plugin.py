@@ -5,6 +5,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
+from typing import Protocol
 from src.models.decision_models import Decision
 from src.pipeline.runner import GateContext
 from src.prompts.renderer import PromptRenderer
@@ -122,3 +123,28 @@ def run_g4_self_check_plugin(
         return G4SelfCheckAIShim(used=True, error=err, text=str(text), raw=raw or {})
     except Exception as e:
         return G4SelfCheckAIShim(used=True, error=str(e), text="", raw={})
+
+class G4AIProviderRunner(Protocol):
+    def generate(self, *, prompt_text: str, prompt_ident: Any, is_pytest: bool) -> "G4SelfCheckAIShim":
+        ...
+
+
+@dataclass
+class _G4AIProviderRunnerImpl:
+    provider: Any
+
+    def generate(self, *, prompt_text: str, prompt_ident: Any, is_pytest: bool) -> "G4SelfCheckAIShim":
+        return run_g4_self_check_plugin(
+            provider=self.provider,
+            prompt_text=prompt_text,
+            prompt_ident=prompt_ident,
+            is_pytest=is_pytest,
+        )
+
+
+def resolve(ctx: GateContext) -> Optional[G4AIProviderRunner]:
+    """Unified entrypoint: resolve(ctx) -> optional runner."""
+    provider = (getattr(ctx, "providers", None) or {}).get("gpt")
+    if provider is None:
+        return None
+    return _G4AIProviderRunnerImpl(provider=provider)

@@ -13,7 +13,7 @@ from src.prompts.store import PromptStore
 from src.prompts.renderer import PromptRenderer
 from src.pipeline.contracts import standard_spec
 
-from src.platform.g1_design_plugin import run_g1_design_plugin
+from src.platform import g1_design_plugin
 
 
 def _extract_requirements(text: str):
@@ -43,7 +43,7 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
     is_pytest = bool(os.getenv("PYTEST_CURRENT_TEST"))
     provider = (ctx.providers or {}).get("gpt")
 
-    ai = run_g1_design_plugin(request_text=req_text, provider=provider, is_pytest=is_pytest)
+    ai = g1_design_plugin.resolve(ctx).run(req_text, is_pytest=is_pytest)
     gpt_used = ai.used
     gpt_error = ai.error
     gpt_text = ai.text

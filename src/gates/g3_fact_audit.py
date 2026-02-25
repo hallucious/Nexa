@@ -11,7 +11,7 @@ from src.pipeline.runner import GateContext
 from src.gates.gate_common import write_standard_artifacts
 from src.pipeline.stop_reason import StopReason
 from src.utils.env import load_dotenv
-from src.platform.g3_fact_audit_plugin import resolve_fact_check_plugin
+from src.platform import g3_fact_audit_plugin
 
 
 FACT_PATTERNS = [
@@ -79,10 +79,7 @@ def gate_g3_fact_audit(ctx: GateContext) -> GateResult:
     enable_pplx = (not is_pytest) or enable_tests_flag
 
     plugins = ctx.context.get("plugins") if isinstance(ctx.context, dict) else None
-    fact_check = resolve_fact_check_plugin(
-        plugins=plugins,
-        provider=(injected_provider if enable_pplx else None),
-    )
+    fact_check = g3_fact_audit_plugin.resolve(ctx) if enable_pplx else None
 
     results: List[Dict[str, Any]] = []
     fail_reasons: List[str] = []

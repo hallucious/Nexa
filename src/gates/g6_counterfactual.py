@@ -33,7 +33,7 @@ from src.gates.gate_common import (
     stable_json_dumps,
     write_standard_artifacts,
 )
-from src.platform.g6_counterfactual_plugin import resolve_g6_counterfactual_plugin
+from src.platform import g6_counterfactual_plugin
 
 
 def _read_json(path: Path) -> Optional[Dict[str, Any]]:
@@ -142,7 +142,7 @@ def _try_runtime_provider_call(ctx: GateContext) -> Dict[str, Any]:
     if is_pytest():
         return {}
 
-    plugin = resolve_g6_counterfactual_plugin(ctx)
+    plugin = g6_counterfactual_plugin.resolve(ctx)
 
     run_dir = Path(ctx.run_dir)
     g1 = _read_json(run_dir / "G1_OUTPUT.json")

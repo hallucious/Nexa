@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
+from src.pipeline.runner import GateContext
 
 @dataclass
 class G2ContinuityAI:
@@ -110,3 +111,10 @@ def resolve_g2_continuity_plugin(providers: Optional[Dict[str, Any]]) -> G2Conti
     if p is None:
         return NoopContinuityPlugin()
     return GPTContinuityPlugin(p)  # type: ignore[arg-type]
+
+def resolve(ctx: "GateContext") -> "G2ContinuityPlugin":
+    """Unified entrypoint: resolve(ctx) -> plugin.
+
+    Preserves legacy behavior of resolve_g2_continuity_plugin(providers).
+    """
+    return resolve_g2_continuity_plugin(getattr(ctx, "providers", None))
