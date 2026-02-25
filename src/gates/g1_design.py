@@ -13,6 +13,8 @@ from src.prompts.store import PromptStore
 from src.prompts.renderer import PromptRenderer
 from src.pipeline.contracts import standard_spec
 
+from src.platform.g1_design_plugin import run_g1_design_plugin
+
 
 def _extract_requirements(text: str):
     return [line.strip() for line in text.splitlines() if line.strip()]
@@ -41,28 +43,11 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
     is_pytest = bool(os.getenv("PYTEST_CURRENT_TEST"))
     provider = (ctx.providers or {}).get("gpt")
 
-    gpt_used = False
-    gpt_error = ""
-    gpt_text = ""
-
-    prompt_ident = None
-
-    if (not is_pytest) and provider is not None:
-        prompt_ident = None
-        try:
-            prompt, prompt_ident = PromptRenderer.render_prompt(
-                "g1_design@v1",
-                request_text=req_text.strip()[:8000],
-            )
-            gpt_used = True
-
-            gpt_text, _raw, err = provider.generate_text(
-                prompt=prompt, temperature=0.0, max_output_tokens=2048
-            )
-            if err is not None:
-                gpt_error = f"{type(err).__name__}: {err}"
-        except Exception as e:
-            gpt_error = f"{type(e).__name__}: {e}"
+    ai = run_g1_design_plugin(request_text=req_text, provider=provider, is_pytest=is_pytest)
+    gpt_used = ai.used
+    gpt_error = ai.error
+    gpt_text = ai.text
+    prompt_ident = ai.prompt_ident
 
     design = {
         "summary": "Initial system design (skeleton)",
@@ -88,9 +73,7 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
             pass
 
     violations = _self_check(design)
-    from src.policy.gate_policy import evaluate_g1
-    policy = evaluate_g1(violations_count=len(violations))
-    decision = policy.decision
+    decision = Decision.PASS if not violations else Decision.FAIL
 
     (run_dir / "G1_DECISION.md").write_text(
         "# G1 DESIGN DECISION\n\n"
@@ -149,6 +132,6 @@ def gate_g1_design(ctx: GateContext) -> GateResult:
 
     return GateResult(
         decision=decision,
-        message=policy.message,
+        message="Design skeleton generated",
         outputs=outputs,
     )
