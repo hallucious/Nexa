@@ -89,15 +89,12 @@ def compute_prompt_identity(defn: PromptDefinition) -> PromptIdentity:
 
 def _require_str(data: Dict[str, Any], key: str) -> str:
     v = data.get(key)
-    if not isinstance(v, str):
-        raise PromptValidationError(f"{key} must be a string")
-    # Reject empty / all-whitespace strings
+    if not isinstance(v, str) or not v:
+        raise PromptValidationError(f"{key} must be a non-empty string")
+    # Allow leading/trailing whitespace in templates and other fields.
+    # We only require the value to be non-empty after stripping.
     if not v.strip():
         raise PromptValidationError(f"{key} must be a non-empty string")
-    # Leading whitespace is almost always accidental and makes templates hard to read.
-    # Trailing newlines are common in prompt files; allow them.
-    if v.lstrip() != v:
-        raise PromptValidationError(f"{key} must not have leading whitespace")
     return v
 
 
@@ -143,19 +140,108 @@ def validate_prompt_definition(data: Any) -> PromptDefinition:
 
 
 def _jsonschema_validate(schema: Dict[str, Any], instance: Dict[str, Any]) -> None:
-    """Validate instance against JSON Schema using jsonschema (required)."""
+    """Validate instance against JSON Schema.
+
+    If the optional `jsonschema` package is available, we delegate to it. Otherwise we
+    run a small, conservative validator that supports the subset of JSON Schema used
+    by our prompt specs (primarily: object/type, properties, required, and
+    additionalProperties).
+    """
     try:
         import jsonschema  # type: ignore
-    except Exception as e:
-        raise PromptInputValidationError(
-            "jsonschema package is required for input_schema validation. "
-            "Install it via: pip install -r requirements.txt"
-        ) from e
+    except Exception:
+        _fallback_jsonschema_validate(schema, instance)
+        return
 
-    try:
-        jsonschema.validate(instance=instance, schema=schema)
-    except Exception as e:
-        raise PromptInputValidationError(str(e)) from e
+    jsonschema.validate(instance=instance, schema=schema)  # type: ignore
+
+
+def _fallback_jsonschema_validate(schema: Dict[str, Any], instance: Any) -> None:
+    """Minimal, dependency-free JSON Schema validator (subset).
+
+    Supported keywords:
+      - type
+      - properties
+      - required
+      - additionalProperties
+      - items (arrays; basic checks only)
+
+    For unsupported schema constructs, raises PromptInputValidationError suggesting
+    installing `jsonschema`.
+    """
+    def err(msg: str) -> None:
+        raise PromptInputValidationError(
+            msg + " (Optional: pip install jsonschema)"
+        )
+
+    if not isinstance(schema, dict):
+        err("input_schema must be an object")
+
+    supported_keys = {
+        "type",
+        "properties",
+        "required",
+        "additionalProperties",
+        "items",
+        "description",
+        "title",
+        "$schema",
+    }
+    unknown_keys = set(schema.keys()) - supported_keys
+    if unknown_keys:
+        err(f"input_schema contains unsupported keywords: {sorted(unknown_keys)}")
+
+    stype = schema.get("type")
+
+    if stype in (None, "object"):
+        if not isinstance(instance, dict):
+            err("inputs must be an object")
+
+        props = schema.get("properties") or {}
+        if not isinstance(props, dict):
+            err("properties must be an object")
+
+        required = schema.get("required") or []
+        if not isinstance(required, list) or not all(isinstance(x, str) for x in required):
+            err("required must be an array of strings")
+
+        missing = [k for k in required if k not in instance]
+        if missing:
+            err(f"missing required keys: {missing}")
+
+        additional = schema.get("additionalProperties", True)
+        if additional is False:
+            extra = [k for k in instance.keys() if k not in props]
+            if extra:
+                err(f"unexpected keys: {extra}")
+
+        for key, subschema in props.items():
+            if key in instance:
+                _fallback_jsonschema_validate(subschema, instance[key])
+        return
+
+    if stype == "array":
+        if not isinstance(instance, list):
+            err("inputs must be an array")
+        items = schema.get("items")
+        if items is not None:
+            for item in instance:
+                _fallback_jsonschema_validate(items, item)
+        return
+
+    py_type_map = {
+        "string": str,
+        "number": (int, float),
+        "integer": int,
+        "boolean": bool,
+        "null": type(None),
+    }
+    if stype in py_type_map:
+        if not isinstance(instance, py_type_map[stype]):  # type: ignore[arg-type]
+            err(f"expected type {stype}")
+        return
+
+    err(f"unsupported schema type: {stype}")
 
 
 def validate_render_input(defn: PromptDefinition, inputs: Dict[str, Any]) -> None:

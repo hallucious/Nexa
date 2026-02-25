@@ -57,17 +57,29 @@ def gate_g5_implement_and_test(ctx: GateContext) -> GateResult:
     err_s = ""
 
     try:
-        proc = subprocess.run(
-            cmd,
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            env=env,
-            timeout=timeout_sec,
-        )
-        rc = proc.returncode
-        out_s = proc.stdout or ""
-        err_s = proc.stderr or ""
+        exec_plugin = getattr(ctx, "plugins", {}).get("exec") if hasattr(ctx, "plugins") else None
+        if exec_plugin is not None and hasattr(exec_plugin, "execute"):
+            pr = exec_plugin.execute(cmd, cwd=str(repo_root), env=env, timeout_s=timeout_sec)
+            if not getattr(pr, "success", False) or not getattr(pr, "output", None):
+                raise RuntimeError(getattr(pr, "error", None) or "Execution plugin failed")
+            rc = int(pr.output.get("returncode", 1))
+            stdout = str(pr.output.get("stdout", ""))
+            stderr = str(pr.output.get("stderr", ""))
+        else:
+            proc = subprocess.run(
+                cmd,
+                cwd=str(repo_root),
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=timeout_sec,
+                check=False,
+            )
+            rc = proc.returncode
+            stdout = proc.stdout
+            stderr = proc.stderr
+        out_s = stdout or ""
+        err_s = stderr or ""
     except subprocess.TimeoutExpired as e:
         timed_out = True
         out_s = (e.stdout or "") if isinstance(e.stdout, str) else ""

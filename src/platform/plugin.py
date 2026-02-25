@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -88,5 +89,75 @@ class FileWritePlugin(Plugin):
             success = False
             error = f"{type(e).__name__}: {e}"
 
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return PluginResult(success=success, output=result, error=error, latency_ms=latency_ms)
+
+class ExecutionPlugin(Plugin):
+    """Executes a subprocess command and returns captured stdout/stderr.
+
+    Purpose: make gate execution side-effects injectable/mocked in tests and swappable in future.
+    """
+
+    def __init__(self) -> None:
+        self.name = "exec"
+
+    def execute(
+        self,
+        cmd: Any,
+        cwd: Optional[str] = None,
+        env: Optional[Dict[str, str]] = None,
+        timeout_s: Optional[float] = None,
+        shell: bool = False,
+        text_mode: bool = True,
+    ) -> PluginResult:
+        started = time.perf_counter()
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=cwd,
+                env=env,
+                timeout=timeout_s,
+                shell=shell,
+                text=text_mode,
+                capture_output=True,
+            )
+            result = {
+                "args": getattr(proc, "args", cmd),
+                "returncode": proc.returncode,
+                "stdout": proc.stdout if proc.stdout is not None else "",
+                "stderr": proc.stderr if proc.stderr is not None else "",
+            }
+            success = True
+            error = None
+        except Exception as e:
+            result = None
+            success = False
+            error = f"{type(e).__name__}: {e}"
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        return PluginResult(success=success, output=result, error=error, latency_ms=latency_ms)
+
+
+class EvidencePlugin(Plugin):
+    """Stores/returns evidence objects for later inspection.
+
+    This is intentionally minimal (v0.1): it doesn't fetch the web. Gates can pass
+    structured evidence items, and the plugin returns them unchanged.
+    """
+
+    def __init__(self) -> None:
+        self.name = "evidence"
+
+    def execute(self, items: Any) -> PluginResult:
+        started = time.perf_counter()
+        try:
+            if not isinstance(items, list):
+                raise TypeError("items must be a list")
+            result = {"items": items}
+            success = True
+            error = None
+        except Exception as e:
+            result = None
+            success = False
+            error = f"{type(e).__name__}: {e}"
         latency_ms = int((time.perf_counter() - started) * 1000)
         return PluginResult(success=success, output=result, error=error, latency_ms=latency_ms)
