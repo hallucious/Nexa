@@ -1,11 +1,11 @@
 # HYPER-AI BLUEPRINT
 
-Version: 2.3.0\
-Status: Stabilization lock-in (Post-Step32 Vendor contract)\
+Version: 2.4.0\
+Status: Stabilization lock-in (Post-Step33 ReasonCode policy taxonomy)\
 Last Updated: 2026-02-25\
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text
 fix)\
-Related Steps: Step11, Step29, Step30, Step31, Step32
+Related Steps: Step11, Step29, Step30, Step31, Step32, Step33
 
 ------------------------------------------------------------------------
 
@@ -20,84 +20,86 @@ Related Steps: Step11, Step29, Step30, Step31, Step32
 
 ## Platform Plugin Architecture (Step29)
 
-### Single entrypoint
-
-All platform plugins expose:
+All platform plugins expose a single entrypoint:
 
 `resolve(ctx: GateContext) -> Optional[PluginObject]`
-
-Legacy `resolve_*` entrypoints are deprecated.
 
 ------------------------------------------------------------------------
 
 ## Meta contract (Step30)
 
-Any plugin returning `meta: dict` must include:
+When a plugin returns `meta: dict`, required keys include:
 
 -   `reason_code`
 -   `provider`
+-   `vendor`
 -   `source`
 -   `contract_version`
-
-Additional keys are allowed.
 
 ------------------------------------------------------------------------
 
 ## ProviderKey contract (Step31)
 
-### Meaning of `provider`
+`meta["provider"]` is the **routing/engine key** (how the call was
+routed), not vendor/model identity.
 
-`meta["provider"]` represents the **routing/engine key** inside this
-system (how the call was routed), not the vendor/model identity.
-
-Allowed values (minimal set): - `gpt` - `gemini` - `local` - `none`
-
-Rules: 1. `meta["provider"]` MUST be one of the allowed ProviderKey
-values. 2. Provider normalization occurs in
-`plugin_contract.normalize_meta`. 3. Violations fail pytest.
+Allowed values: - `gpt` - `gemini` - `local` - `none`
 
 ------------------------------------------------------------------------
 
 ## Vendor identity contract (Step32)
 
-### Why Step32 exists
+`meta["vendor"]` captures vendor identity (separate from ProviderKey).
 
-ProviderKey is intentionally small and stable. Vendor/model identity is
-separated to prevent enum drift while preserving observability.
+Allowed values: - `openai` - `google` - `anthropic` - `perplexity` -
+`local` - `none`
 
-### Required vendor key (when meta exists)
-
-Any plugin output that includes `meta: dict` MUST also include:
-
--   `vendor` (enum string)
-
-### Allowed `vendor` values
-
--   `openai`
--   `google`
--   `anthropic`
--   `perplexity`
--   `local`
--   `none`
-
-### Optional identity fields
-
-The following fields are optional (strings) and may be present when
-useful: - `product` (e.g., `codex`, `sonar`) - `model` (e.g.,
-`gpt-5-codex`, `sonar-pro`) - `tool` (e.g., `codex-cli`)
-
-### Rules
-
-1.  `meta["vendor"]` MUST be one of the allowed vendor values when meta
-    exists.
-2.  `vendor` normalization must occur in
-    `plugin_contract.normalize_meta` (or a sibling helper).
-3.  Violations fail pytest.
+Optional identity fields: - `product`, `model`, `tool` (strings)
 
 ------------------------------------------------------------------------
 
-## Stabilization Goals
+## Failure catalog taxonomy (Step33)
 
--   Eliminate implicit behavior.
--   Enforce contract-first evolution.
--   Lock structural invariants via tests.
+### Why Step33 exists
+
+Reason codes must stay **small and stable**. If reason_code grows
+without policy, the contract drifts and becomes un-analyzable.
+
+### ReasonCode is a top-level category
+
+`meta["reason_code"]` MUST represent a **high-level category** only.
+
+Concrete causes MUST be expressed via: - `meta["detail_code"]` (short
+machine-friendly token), and/or - `meta["error"]` (human-readable
+string)
+
+### Approved top-level ReasonCode set
+
+ReasonCode is intentionally limited to these categories:
+
+-   `SUCCESS`
+-   `SKIPPED`
+-   `PROVIDER_MISSING`
+-   `PROVIDER_ERROR`
+-   `CONTRACT_VIOLATION`
+-   `POLICY_REJECTED`
+-   `INTERNAL_ERROR`
+
+### Expansion policy (hard rule)
+
+A new ReasonCode may be added only if ALL are true: 1. The failure
+pattern repeats (\>= 3 occurrences) in real runs. 2. The category
+meaning cannot be expressed safely via `detail_code`. 3. The category
+has a stable, system-level interpretation across gates. 4. A regression
+test and docs MINOR bump are included.
+
+Otherwise, use `detail_code`.
+
+Example:
+
+``` json
+{
+  "reason_code": "PROVIDER_ERROR",
+  "detail_code": "timeout"
+}
+```

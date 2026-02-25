@@ -2,46 +2,34 @@ from __future__ import annotations
 
 """Platform plugin contract helpers.
 
-This module standardizes the *meta* payload produced by platform plugins.
-
-Step30:
-- Required meta keys + ReasonCode enum.
-- infer_reason_code helper (kept for backward compatibility).
-
-Step31:
-- ProviderKey enum (minimal set) and validation/normalization.
-
-Step32:
-- VendorKey enum (vendor identity) separated from ProviderKey to avoid enum drift.
-  Vendor defaults to 'none' if not specified.
+Step30: required meta keys + ReasonCode.
+Step31: ProviderKey (routing key) + validation.
+Step32: VendorKey (vendor identity) + validation.
+Step33: Failure catalog taxonomy update: add POLICY_REJECTED (top-level category).
 
 Compatibility guarantees:
 - infer_reason_code is preserved.
-- normalize_meta keeps the previous call shape and adds optional vendor support.
+- normalize_meta keeps call shape; vendor is optional with default 'none'.
 """
 
 import os
 from enum import Enum
 from typing import Any, Dict, Optional, Union
 
-# Contract version for meta payloads (mirrors doc minor version for contract changes).
-CONTRACT_VERSION: str = "2.3"
+CONTRACT_VERSION: str = "2.4"
 
 
 class ReasonCode(str, Enum):
-    """Allowed reason codes for plugin meta."""
-
     SUCCESS = "SUCCESS"
     SKIPPED = "SKIPPED"
     PROVIDER_MISSING = "PROVIDER_MISSING"
     PROVIDER_ERROR = "PROVIDER_ERROR"
     CONTRACT_VIOLATION = "CONTRACT_VIOLATION"
+    POLICY_REJECTED = "POLICY_REJECTED"
     INTERNAL_ERROR = "INTERNAL_ERROR"
 
 
 class ProviderKey(str, Enum):
-    """Routing/engine key (minimal set)."""
-
     GPT = "gpt"
     GEMINI = "gemini"
     LOCAL = "local"
@@ -49,8 +37,6 @@ class ProviderKey(str, Enum):
 
 
 class VendorKey(str, Enum):
-    """Vendor identity (separate from ProviderKey)."""
-
     OPENAI = "openai"
     GOOGLE = "google"
     ANTHROPIC = "anthropic"
@@ -59,7 +45,6 @@ class VendorKey(str, Enum):
     NONE = "none"
 
 
-# Required keys for any meta produced via normalize_meta.
 REQUIRED_META_KEYS = ("reason_code", "provider", "vendor", "source", "contract_version")
 
 
@@ -80,13 +65,11 @@ def _normalize_enum(value: Union[str, Enum], enum_cls: Any, field_name: str) -> 
 
     v = _as_str(value).strip()
     if not v:
-        # All our enums include "none"
         return enum_cls("none")
 
     try:
         return enum_cls(v)
     except Exception:
-        # Stability-first: fail fast under pytest
         if _is_pytest():
             raise ValueError(f"{field_name}_invalid: {v}")
         return enum_cls("none")
@@ -103,16 +86,12 @@ def normalize_meta(
     product: Optional[str] = None,
     model: Optional[str] = None,
     tool: Optional[str] = None,
+    detail_code: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return a meta dict that satisfies the required contract.
 
-    Notes:
-    - provider: routing/engine key (ProviderKey).
-    - vendor: vendor identity (VendorKey), defaults to 'none'.
-    - product/model/tool are optional identity fields (strings).
-
-    Under pytest:
-    - invalid provider/vendor values raise ValueError.
+    - reason_code: top-level category (stable taxonomy).
+    - detail_code: optional, concrete machine-friendly cause (Step33 recommendation).
     """
 
     out: Dict[str, Any] = dict(meta or {})
@@ -120,18 +99,18 @@ def normalize_meta(
     provider_key = _normalize_enum(provider, ProviderKey, "provider_key")
     vendor_key = _normalize_enum(vendor, VendorKey, "vendor_key")
 
-    # Required keys
     out["reason_code"] = _as_str(reason_code.value)
     out["provider"] = _as_str(provider_key.value)
     out["vendor"] = _as_str(vendor_key.value)
     out["source"] = _as_str(source)
     out["contract_version"] = CONTRACT_VERSION
 
-    # Optional canonical error key
     if error:
         out.setdefault("error", _as_str(error))
 
-    # Optional identity fields
+    if detail_code is not None:
+        out["detail_code"] = _as_str(detail_code)
+
     if product is not None:
         out["product"] = _as_str(product)
     if model is not None:
@@ -145,13 +124,15 @@ def normalize_meta(
 def infer_reason_code(*, meta: Optional[Dict[str, Any]] = None, error: Optional[str] = None) -> ReasonCode:
     """Infer a ReasonCode from existing meta/error.
 
-    This helper is preserved for backward compatibility with earlier plugins.
+    Backward-compatible heuristic. Gate/policy layers may override with POLICY_REJECTED.
     """
 
     if error:
         e = error.lower()
         if "missing" in e:
             return ReasonCode.PROVIDER_MISSING
+        if "policy" in e or "rejected" in e or "deny" in e:
+            return ReasonCode.POLICY_REJECTED
         if "contract" in e or "provider_key_invalid" in e or "vendor_key_invalid" in e:
             return ReasonCode.CONTRACT_VIOLATION
         return ReasonCode.PROVIDER_ERROR
@@ -162,8 +143,17 @@ def infer_reason_code(*, meta: Optional[Dict[str, Any]] = None, error: Optional[
             e = e0.lower()
             if "missing" in e:
                 return ReasonCode.PROVIDER_MISSING
+            if "policy" in e or "rejected" in e or "deny" in e:
+                return ReasonCode.POLICY_REJECTED
             if "contract" in e or "provider_key_invalid" in e or "vendor_key_invalid" in e:
                 return ReasonCode.CONTRACT_VIOLATION
             return ReasonCode.PROVIDER_ERROR
+
+        # If an upstream sets detail_code
+        d = meta.get("detail_code")
+        if isinstance(d, str) and d.strip():
+            dl = d.lower()
+            if dl.startswith("policy"):
+                return ReasonCode.POLICY_REJECTED
 
     return ReasonCode.SUCCESS
