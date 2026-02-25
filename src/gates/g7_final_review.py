@@ -28,8 +28,7 @@ from src.gates.gate_common import (
     read_text_file,
     write_standard_artifacts,
 )
-from src.prompts.store import PromptStore
-from src.prompts.renderer import PromptRenderer
+from src.platform.g7_final_review_plugin import resolve_g7_final_review_plugin
 
 # ----------------------------
 # helpers
@@ -48,10 +47,8 @@ def _read_gate_decision(run_dir: Path, gate_id: str) -> Optional[str]:
 
 
 def _safe_provider_call(ctx: GateContext, prompt: str) -> Dict[str, Any]:
-    """
-    Best-effort provider call with strict output schema expected by tests:
-    provider: {engine, used, text, meta, model_name?}
-    """
+    """Best-effort provider call (non-pytest) via plugin resolver."""
+
     info: Dict[str, Any] = {
         "engine": "gpt",
         "used": False,
@@ -63,41 +60,19 @@ def _safe_provider_call(ctx: GateContext, prompt: str) -> Dict[str, Any]:
     if is_pytest():
         return info
 
-    provider = (ctx.providers or {}).get("gpt")
-    if provider is None:
+    plugin = resolve_g7_final_review_plugin(ctx)
+    if plugin is None:
         return info
 
     try:
-        # Support either generate_text(prompt) or generate(prompt)
-        if hasattr(provider, "generate_text"):
-            resp = provider.generate_text(prompt)  # type: ignore[attr-defined]
-        elif hasattr(provider, "generate"):
-            resp = provider.generate(prompt)  # type: ignore[attr-defined]
-        else:
-            info["meta"] = {"error": "provider_missing_generate_method"}
-            return info
-
-        # Normalize response to text string.
-        text: str = ""
-        if isinstance(resp, str):
-            text = resp
-        elif isinstance(resp, dict):
-            # common shapes
-            text = str(resp.get("text") or resp.get("content") or resp.get("output") or "")
-            info["model_name"] = resp.get("model") or resp.get("model_name")
-            info["meta"] = {k: v for k, v in resp.items() if k not in ("text", "content", "output")}
-        elif isinstance(resp, (list, tuple)):
-            # some stubs return ("ok", {...}, None)
-            if len(resp) >= 1:
-                text = str(resp[0])
-            info["meta"] = {"raw_type": type(resp).__name__, "raw_len": len(resp)}
-        else:
-            text = str(resp)
-
+        text, meta = plugin.generate(prompt)
         info["used"] = True
-        info["text"] = text
-        # keep prompt_len for debugging deterministically
-        info["meta"] = {**(info.get("meta") or {}), "prompt_len": len(prompt or "")}
+        info["text"] = str(text or "")
+        info["meta"] = {
+            **(meta or {}),
+            "prompt_len": len(prompt or ""),
+        }
+        info["model_name"] = (meta or {}).get("model") or (meta or {}).get("model_name")
         return info
     except Exception as e:
         info["meta"] = {"error": type(e).__name__, "detail": str(e)}

@@ -33,6 +33,7 @@ from src.gates.gate_common import (
     stable_json_dumps,
     write_standard_artifacts,
 )
+from src.platform.g6_counterfactual_plugin import resolve_g6_counterfactual_plugin
 
 
 def _read_json(path: Path) -> Optional[Dict[str, Any]]:
@@ -141,11 +142,7 @@ def _try_runtime_provider_call(ctx: GateContext) -> Dict[str, Any]:
     if is_pytest():
         return {}
 
-    providers = (ctx.providers or {})
-    engine = "gemini" if "gemini" in providers else ("gpt" if "gpt" in providers else "")
-    provider = providers.get(engine) if engine else None
-    if provider is None:
-        return {"provider": {"used": False, "engine": None}}
+    plugin = resolve_g6_counterfactual_plugin(ctx)
 
     run_dir = Path(ctx.run_dir)
     g1 = _read_json(run_dir / "G1_OUTPUT.json")
@@ -157,14 +154,16 @@ def _try_runtime_provider_call(ctx: GateContext) -> Dict[str, Any]:
         f"G1_OUTPUT:\n{stable_json_dumps(g1 or {})}\n"
     )
 
-    text, meta, err = _provider_generate_text(provider, prompt)
+    text, meta, err, engine = plugin.generate(ctx, prompt, temperature=0.0, max_output_tokens=1200)
+    if err is not None and err.startswith("provider missing"):
+        return {"provider": {"used": False, "engine": None}}
     used = (err is None) and bool(text.strip())
 
     out: Dict[str, Any] = {
         "provider": {
             "used": used,
             "engine": engine,
-            "model_name": getattr(provider, "model", None),
+            "model_name": (meta.get("model") if isinstance(meta, dict) else None),
         }
     }
     if used:
@@ -182,14 +181,12 @@ def gate_g6_counterfactual_review(ctx: GateContext) -> GateResult:
     request_text = read_text_file(run_dir / "00_USER_REQUEST.md")
     conflicts = _counterfactual_checks_from_request(request_text)
 
-    from src.policy.gate_policy import evaluate_g6
-    policy = evaluate_g6(conflicts_count=len(conflicts))
-    decision = policy.decision
+    decision = Decision.FAIL if conflicts else Decision.PASS
 
     # Runtime provider (optional)
     provider_info = _try_runtime_provider_call(ctx)
 
-    summary = policy.message
+    summary = "No counterfactual issues detected." if decision == Decision.PASS else f"{len(conflicts)} issue(s) detected."
 
     output = {
         "gate": "G6",
