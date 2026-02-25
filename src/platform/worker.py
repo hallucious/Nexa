@@ -4,6 +4,8 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
+from .safe_exec import safe_call
+
 
 @dataclass
 class WorkerResult:
@@ -25,12 +27,16 @@ class TextWorker(Protocol):
         temperature: float = 0.0,
         max_output_tokens: int = 1024,
         instructions: Optional[str] = None,
+        timeout_ms: Optional[int] = None,
     ) -> WorkerResult:
         ...
 
 
 class ProviderTextWorker:
-    """Adapter that wraps an existing provider with a generate_text(...) -> (text, raw, err) signature."""
+    """Adapter that wraps an existing provider with a generate_text(...) -> (text, raw, err) signature.
+
+    Step37: add soft timeout + crash containment via safe_call().
+    """
 
     def __init__(self, *, name: str, provider: Any) -> None:
         self.name = str(name)
@@ -43,36 +49,46 @@ class ProviderTextWorker:
         temperature: float = 0.0,
         max_output_tokens: int = 1024,
         instructions: Optional[str] = None,
+        timeout_ms: Optional[int] = None,
     ) -> WorkerResult:
-        started = time.perf_counter()
-        try:
+        def _call_provider() -> Tuple[Any, Any, Any]:
             # Provider contract (existing codebase):
             #   generate_text(prompt=..., temperature=..., max_output_tokens=..., instructions=...) -> (text, raw, err)
-            text, raw, err = self._provider.generate_text(
+            return self._provider.generate_text(
                 prompt=prompt,
                 temperature=float(temperature),
                 max_output_tokens=int(max_output_tokens),
                 instructions=instructions,
             )
-            success = err is None
-            error = None if err is None else f"{type(err).__name__}: {err}"
-            if not isinstance(raw, dict):
+
+        res = safe_call(fn=_call_provider, timeout_ms=timeout_ms)
+
+        if res.ok:
+            try:
+                text, raw, err = res.value  # type: ignore[misc]
+                success = err is None
+                error = None if err is None else f"{type(err).__name__}: {err}"
+                if not isinstance(raw, dict):
+                    raw = {}
+                if not isinstance(text, str):
+                    text = str(text)
+            except Exception as e:  # noqa: BLE001
+                text = ""
                 raw = {}
-            if not isinstance(text, str):
-                text = str(text)
-        except Exception as e:
+                success = False
+                error = f"{type(e).__name__}: {e}"
+        else:
             text = ""
             raw = {}
             success = False
-            error = f"{type(e).__name__}: {e}"
+            error = res.error
 
-        latency_ms = int((time.perf_counter() - started) * 1000)
         return WorkerResult(
             success=success,
             text=text,
             raw=raw,
             error=error,
-            latency_ms=latency_ms,
+            latency_ms=res.latency_ms,
             worker_name=self.name,
         )
 

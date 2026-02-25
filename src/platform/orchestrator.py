@@ -29,6 +29,8 @@ class GateBlueprint:
     prompt_spec: Optional[PromptSpec] = None
     worker: Optional[TextWorker] = None
     plugins: list[Plugin] = field(default_factory=list)
+    # Soft timeout for worker/plugin execution (Step37). None means no timeout.
+    timeout_ms: Optional[int] = None
     policy: Optional[str] = None
     fallback_executor: Optional[Callable[[GateContext], GateResult]] = None
 
@@ -58,7 +60,11 @@ class GateOrchestrator:
                 )
 
             # 2) Worker call
-            wr: WorkerResult = bp.worker.generate_text(prompt=rendered)
+            try:
+                wr: WorkerResult = bp.worker.generate_text(prompt=rendered, timeout_ms=bp.timeout_ms)
+            except TypeError:
+                # Backward-compatible: some TextWorker implementations may not accept timeout_ms.
+                wr = bp.worker.generate_text(prompt=rendered)
 
             # 3) Decide (v0.1)
             decision = Decision.PASS if wr.success else Decision.STOP

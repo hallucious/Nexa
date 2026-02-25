@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from .safe_exec import safe_call
+
 
 @dataclass
 class PluginResult:
@@ -161,3 +163,21 @@ class EvidencePlugin(Plugin):
             error = f"{type(e).__name__}: {e}"
         latency_ms = int((time.perf_counter() - started) * 1000)
         return PluginResult(success=success, output=result, error=error, latency_ms=latency_ms)
+
+
+def safe_execute_plugin(*, plugin: Plugin, timeout_ms: Optional[int], **kwargs: Any) -> PluginResult:
+    """Execute a plugin with best-effort timeout + exception containment."""
+    def _run() -> PluginResult:
+        return plugin.execute(**kwargs)
+
+    res = safe_call(fn=_run, timeout_ms=timeout_ms)
+    if res.ok and isinstance(res.value, PluginResult):
+        pr = res.value
+        # override latency with measured (outer) time for consistency
+        pr.latency_ms = res.latency_ms  # type: ignore[misc]
+        return pr
+
+    if res.timed_out:
+        return PluginResult(success=False, output=None, error="TIMEOUT", latency_ms=res.latency_ms)
+
+    return PluginResult(success=False, output=None, error=res.error or "UNKNOWN_ERROR", latency_ms=res.latency_ms)
