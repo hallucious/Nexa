@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+from pathlib import Path
+from dataclasses import dataclass, asdict, is_dataclass
 from typing import Any, Dict, Optional, Tuple
 
 from typing import Protocol
@@ -10,6 +11,44 @@ from src.models.decision_models import Decision
 from src.pipeline.runner import GateContext
 from src.prompts.renderer import PromptRenderer
 from src.policy.gate_policy import evaluate_g4
+from src.platform.plugin_contract import ReasonCode, normalize_meta
+
+
+def _policy_to_dict(policy: Any) -> Dict[str, Any]:
+    """Best-effort serialization for PolicyDecision across versions.
+
+    Avoids hard dependency on a specific helper like .to_dict().
+    """
+
+    to_dict = getattr(policy, "to_dict", None)
+    if callable(to_dict):
+        try:
+            v = to_dict()
+            if isinstance(v, dict):
+                return v
+        except Exception:
+            pass
+
+    if is_dataclass(policy):
+        try:
+            v = asdict(policy)
+            if isinstance(v, dict):
+                return v
+        except Exception:
+            pass
+
+    d = getattr(policy, "__dict__", None)
+    if isinstance(d, dict):
+        return dict(d)
+
+    try:
+        v = dict(policy)  # type: ignore[arg-type]
+        if isinstance(v, dict):
+            return v
+    except Exception:
+        pass
+
+    return {"value": str(policy)}
 
 
 @dataclass
@@ -59,10 +98,35 @@ class G4SelfCheckPlugin:
             except Exception:
                 model_json = None
 
-        policy = evaluate_g4(model_json or {})
+        # Compute local prereq/schema checks (aligned with src.policy.gate_policy.evaluate_g4 contract).
+        run_dir = Path(getattr(ctx, "run_dir", ".") or ".")
+        prereq_paths = [run_dir / "G1_OUTPUT.json", run_dir / "G2_OUTPUT.json", run_dir / "G3_OUTPUT.json"]
+        prereq_missing = any((not p.exists()) for p in prereq_paths)
+
+        def _schema_ok_from_g1(g1_out: Dict[str, Any]) -> bool:
+            design = g1_out.get("design") if isinstance(g1_out, dict) else None
+            if not isinstance(design, dict):
+                return False
+            for key in ("requirements", "interfaces", "constraints", "acceptance_criteria"):
+                v = design.get(key)
+                if not isinstance(v, list) or len(v) == 0:
+                    return False
+            return True
+
+        schema_ok = False
+        if not prereq_missing:
+            try:
+                g1_text = (run_dir / "G1_OUTPUT.json").read_text(encoding="utf-8")
+                g1_out = json.loads(g1_text)
+                if isinstance(g1_out, dict):
+                    schema_ok = _schema_ok_from_g1(g1_out)
+            except Exception:
+                schema_ok = False
+
+        policy = evaluate_g4(prereq_missing=prereq_missing, schema_ok=schema_ok)
 
         output = {
-            "policy": policy.to_dict(),
+            "policy": _policy_to_dict(policy),
             "ai": {
                 "engine": "gpt",
                 "used": gpt_used,
@@ -74,10 +138,13 @@ class G4SelfCheckPlugin:
         meta: Dict[str, Any] = {
             "gate": "G4",
             "decision": policy.decision.value,
-            "reason_code": getattr(policy, "reason_code", None),
+            "policy_reason_code": getattr(policy, "reason_code", None),
             "attempt": (ctx.meta.attempts or {}).get("G4", 1),
             "ai": {"engine": "gpt", "used": gpt_used, "error": gpt_error},
         }
+
+        op_rc = ReasonCode.SKIPPED if not gpt_used else (ReasonCode.PROVIDER_ERROR if gpt_error else ReasonCode.SUCCESS)
+        meta = normalize_meta(meta, reason_code=op_rc, provider="gpt", source="g4_self_check", error=(gpt_error or None))
 
         if prompt_ident is not None:
             meta["prompt"] = {

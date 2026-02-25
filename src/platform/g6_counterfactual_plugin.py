@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
 from src.pipeline.runner import GateContext
+from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
 
 
 class CounterfactualPlugin(Protocol):
@@ -51,7 +52,14 @@ class ProviderCounterfactualPlugin:
                 engine = "gpt"
 
         if provider is None:
-            return "", {}, "provider missing: expected ctx.providers['gemini'|'gpt']", engine
+            meta = normalize_meta(
+                {},
+                reason_code=ReasonCode.PROVIDER_MISSING,
+                provider=engine,
+                source="g6_counterfactual",
+                error="provider_missing",
+            )
+            return "", meta, "provider missing: expected ctx.providers['gemini'|'gpt']", engine
 
         try:
             text, meta, err = provider.generate_text(
@@ -59,10 +67,20 @@ class ProviderCounterfactualPlugin:
                 temperature=temperature,
                 max_output_tokens=max_output_tokens,
             )
-            # Some providers may return None meta; normalize to dict
-            return text or "", meta or {}, err, engine
+            m = meta if isinstance(meta, dict) else {}
+            rc = infer_reason_code(meta=m, error=err)
+            m = normalize_meta(m, reason_code=rc, provider=engine, source="g6_counterfactual", error=err)
+            return text or "", m, err, engine
         except Exception as e:
-            return "", {}, f"provider error: {type(e).__name__}: {e}", engine
+            err = f"provider error: {type(e).__name__}: {e}"
+            meta = normalize_meta(
+                {},
+                reason_code=ReasonCode.PROVIDER_ERROR,
+                provider=engine,
+                source="g6_counterfactual",
+                error=err,
+            )
+            return "", meta, err, engine
 
 
 def resolve_g6_counterfactual_plugin(ctx: GateContext) -> CounterfactualPlugin:
@@ -77,6 +95,7 @@ def resolve_g6_counterfactual_plugin(ctx: GateContext) -> CounterfactualPlugin:
         if plug is not None:
             return plug  # type: ignore[return-value]
     return ProviderCounterfactualPlugin()
+
 
 def resolve(ctx: GateContext) -> Optional[CounterfactualPlugin]:
     """Unified entrypoint: resolve(ctx) -> optional counterfactual plugin."""

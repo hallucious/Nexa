@@ -1,10 +1,10 @@
 # HYPER-AI BLUEPRINT
 
-Version: 2.0.0  
+Version: 2.1.0  
 Status: Stabilized (Post-Step29)  
 Last Updated: 2026-02-25  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11 (Hybrid registry/discovery contract), Step29 (Unified resolve(ctx) entrypoint)
+Related Steps: Step11 (Hybrid registry/discovery contract), Step29 (Unified resolve(ctx) entrypoint), Step30 (Meta contract)
 
 ## Core Objective
 - Build a framework that structurally minimizes bug probability via AI collaboration.
@@ -24,15 +24,9 @@ Gates must call platform plugins **only** through `resolve(ctx)`.
 > Legacy `resolve_<gate>_plugin(...)` entrypoints are deprecated and must not be used.
 
 ### 2) PluginObject contract
-`resolve(ctx)` returns `None` or an object that satisfies:
+`resolve(ctx)` returns `None` or an object that satisfies its gate-specific protocol.
 
-- `generate(prompt: str) -> tuple[str, dict]`
-
-Rules:
-- `text` must be `str`
-- `meta` must be `dict`
-- For normal operation, it must not raise.
-- Errors are expressed via `meta["error"]` (string code).
+For plugins that return a `meta: dict` (e.g., G4/G6/G7 flows), meta is standardized by Step30.
 
 ---
 
@@ -50,7 +44,36 @@ Rules:
 - Any registry entry must be importable.
 - Any discovered `*_plugin.py` that is **not** in the registry is treated as **orphan** and should fail CI (stability-first).
 - Any plugin missing `resolve(ctx)` fails CI.
-- Any plugin returning an object that violates the `generate()` contract fails CI.
+
+---
+
+## Meta contract (Step30)
+
+### Scope
+Applies to any platform plugin output that includes a `meta: dict`.
+
+### Required keys
+Every such `meta` must include:
+
+- `reason_code` (enum string)
+- `provider` (string)
+- `source` (string)
+- `contract_version` (string)
+
+Additional keys are allowed.
+
+### Allowed `reason_code` values
+- `SUCCESS`
+- `SKIPPED`
+- `PROVIDER_MISSING`
+- `PROVIDER_ERROR`
+- `CONTRACT_VIOLATION`
+- `INTERNAL_ERROR`
+
+### Why it exists
+- Makes logs comparable across gates/plugins.
+- Enables stable failure cataloging and regression analysis.
+- Prevents silent drift in meta payloads.
 
 ---
 
@@ -60,7 +83,7 @@ Gates should only do:
 
 1) `plugin = resolve(ctx)`
 2) if `plugin is None`: handle gracefully
-3) else: `text, meta = plugin.generate(prompt)`
+3) else: call the plugin protocol (gate-specific)
 
 Gates must **not**:
 - depend on provider internals
@@ -74,4 +97,3 @@ Gates must **not**:
 - Enforce a single entrypoint.
 - Lock contracts via tests.
 - Make structural regression immediately fail in `pytest`.
-

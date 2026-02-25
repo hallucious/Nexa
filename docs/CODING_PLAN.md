@@ -1,73 +1,64 @@
 # HYPER-AI CODING PLAN
 
-Version: 2.0.0  
-Status: Stabilized (Post-Step29)  
+Version: 2.1.0  
+Status: Stabilization lock-in (Post-Step29)  
 Last Updated: 2026-02-25  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11, Step29
-
-## Current Status
-- Step11: Hybrid registry/discovery contract locked (orphan + missing registration detection).
-- Step29: Platform plugin entrypoint unified to `resolve(ctx)`.
-- Test status: `69 passed, 3 skipped`.
+Related Steps: Step11, Step29, Step30
 
 ---
 
-## Phase: Stabilization Lock-In
+## Current status
+- Step11: Hybrid registry/discovery contract locked.
+- Step29: Platform plugin unified entrypoint `resolve(ctx)` locked.
+- Step30: Meta contract locked for plugin flows returning `meta: dict`.
+- pytest baseline: **69 passed, 3 skipped** (post-step29) / unchanged by step30 target.
+
+---
+
+## Phase: Stabilization lock-in
 
 ### P0 (Done)
-- Hybrid (registry + discovery) contract tests:
-  - detect orphan plugins
-  - detect missing registrations
-  - ensure determinism of discovery vs registry
+- Hybrid registry + discovery comparison (orphan/missing detection).
 
 ### P1 (Done)
-- Unify platform plugin entrypoint:
-  - all `src/platform/*_plugin.py` expose `resolve(ctx)`
-  - gates call platform plugins only through `resolve(ctx)`
-- Add Step29 contract test (`tests/test_step29_platform_unified_resolve.py`)
+- Unify platform plugin entrypoint to `resolve(ctx)`.
+- Update gates to call platform plugins only via `resolve(ctx)`.
+
+### P2 (This change; MINOR)
+**Goal:** Standardize plugin `meta` payload to enable observability and stable failure cataloging.
+
+Deliverables:
+- `src/platform/plugin_contract.py`
+  - `ReasonCode` enum
+  - `CONTRACT_VERSION`
+  - `normalize_meta()` helper
+- Update affected platform plugins that return `meta: dict` (e.g., G4/G6/G7) to always emit required meta keys.
+- `tests/test_step30_plugin_meta_contract.py`
+  - Enforce required meta keys and allowed reason_code values.
 
 ---
 
-## Next Work (P2)
-Objective: strengthen **PluginObject output contract** and **meta standards**.
+## Hard contract rules (post-step30)
 
-- Enforce return schema from `generate(prompt)`:
-  - `(text: str, meta: dict)` always
-- Standardize `meta` keys:
-  - `reason_code` (enum-like string)
-  - `provider` (string)
-  - `source` (string: explicit|adapter|fallback)
-  - `error` (string, optional)
-- Centralize provider injection keys (enum/constants) and validate them in tests.
+### Entry point
+1. All platform plugins expose `resolve(ctx)`.
+2. Gates call platform plugins only through `resolve(ctx)`.
 
----
-
-## Mid-term Stabilization (P3)
-- Observability:
-  - log loaded plugin name + source (registry vs adapter) per gate execution
-- Contract versioning:
-  - add optional `contract_version` field in meta or registry
-- Failure catalog:
-  - reason_code taxonomy and top-level categories
+### Meta contract (when meta exists)
+3. Any plugin output that includes `meta: dict` MUST include:
+   - `reason_code`, `provider`, `source`, `contract_version`
+4. `reason_code` MUST be one of `ReasonCode` enum values.
+5. Contract violations MUST fail pytest.
 
 ---
 
-## Hard Contract Rules (Must-Fail)
-1. Every platform plugin module must provide `resolve(ctx)`.
-2. `resolve(ctx)` returns `Optional[PluginObject]`.
-3. `PluginObject` must provide `generate(prompt) -> (text, meta)`.
-4. Contract violations **must fail** CI/pytest.
-5. Gates must not call any plugin entrypoint other than `resolve(ctx)`.
-6. Hybrid rules:
-   - discovered plugin file not in registry => **fail**
-   - registry entry not importable => **fail**
+## Follow-ups (next)
 
----
+### P3: Provider key / source standardization
+- Standardize provider naming across plugins (`gpt`, `gemini`, explicit plugin keys).
+- Add log hook to record loaded plugin ids and providers.
 
-## Long-Term Notes
-- Keep hybrid (scan + registry) until the system is mature and external plugin surfaces are designed.
-- Any architecture change requires:
-  - a new step-numbered test
-  - doc version bump per SemVer policy
-
+### P4: Failure catalog
+- Expand ReasonCode taxonomy only when repeated failure patterns are observed.
+- Keep ReasonCode set small and stable.
