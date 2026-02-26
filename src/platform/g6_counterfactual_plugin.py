@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
 from src.pipeline.runner import GateContext
+from src.platform.capability_negotiation import negotiate
 from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
 
 PLUGIN_MANIFEST = {
@@ -12,7 +13,7 @@ PLUGIN_MANIFEST = {
     "type": "gate_plugin",
     "entrypoint": "src.platform.g6_counterfactual_plugin:resolve",
     "inject": {"target": "providers", "key": "g6_counterfactual"},
-    "capabilities": [],
+    "capabilities": ["counterfactual_generation"],
     "requires": {"python": ">=3.8", "platform_api": ">=0.1,<2.0"},
     "determinism": {"required": True},
     "safety": {"timeout_ms": 120000}
@@ -50,19 +51,17 @@ class ProviderCounterfactualPlugin:
         temperature: float = 0.0,
         max_output_tokens: int = 1200,
     ) -> Tuple[str, Dict[str, Any], Optional[str], str]:
-        provider = None
-        engine = "none"
+        # Step41: centralize selection; keep same priority: gemini > gpt
+        sel = negotiate(
+            gate_id="G6",
+            capability="counterfactual_generation",
+            ctx=ctx,
+            priority_chain=[("providers", "gemini"), ("providers", "gpt")],
+            required=False,
+        )
 
-        # Preference order is part of the current contract:
-        # - If a gemini provider is injected, use it (tests rely on this)
-        # - Else use gpt if available
-        if isinstance(getattr(ctx, "providers", None), dict):
-            if "gemini" in ctx.providers:
-                provider = ctx.providers["gemini"]
-                engine = "gemini"
-            elif "gpt" in ctx.providers:
-                provider = ctx.providers["gpt"]
-                engine = "gpt"
+        provider = sel.selected
+        engine = sel.selected_key or "none"
 
         if provider is None:
             meta = normalize_meta(
@@ -103,10 +102,15 @@ def resolve_g6_counterfactual_plugin(ctx: GateContext) -> CounterfactualPlugin:
         ctx.providers["g6_counterfactual"]
     - Else fall back to ProviderCounterfactualPlugin.
     """
-    if isinstance(getattr(ctx, "providers", None), dict):
-        plug = ctx.providers.get("g6_counterfactual")
-        if plug is not None:
-            return plug  # type: ignore[return-value]
+    sel = negotiate(
+        gate_id="G6",
+        capability="counterfactual_generation",
+        ctx=ctx,
+        priority_chain=[("providers", "g6_counterfactual")],
+        required=False,
+    )
+    if sel.selected is not None:
+        return sel.selected  # type: ignore[return-value]
     return ProviderCounterfactualPlugin()
 
 

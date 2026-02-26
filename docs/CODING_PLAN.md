@@ -1,82 +1,97 @@
 # HYPER-AI CODING PLAN
 
-Version: 2.11.0
-Status: Stabilization lock-in (Post-Step38)  
+Version: 3.1.0  
+Status: Step41 planning (Capability Negotiation v1)  
 Last Updated: 2026-02-26  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11–Step39
+Related Steps: Step11–Step41
 
 ---
 
-## Step36 (MINOR): Policy trace
+## Step40: Plugin System v1 — Implemented
 
-Goal:
-- Record policy evaluation path as `reason_trace` for every decision (PASS 포함).
-
-Deliverables:
-- Extend `PolicyDecision` with `reason_trace: list[str]`
-- Update `src/policy/gate_policy.py` evaluate_g* to populate `reason_trace`
-- Propagate into `OBSERVABILITY.jsonl` (runner event includes `reason_trace`)
-- Add test: `tests/test_step36_policy_trace_written.py`
+Baseline for Step41:
+- In-tree plugins expose `PLUGIN_MANIFEST`
+- Discovery validates registry consistency and injection uniqueness
+- `PLATFORM_API_VERSION` enforced
+- pytest passing at Step40 baseline
 
 ---
 
-## Step37 (MINOR): Plugin/Worker isolation (timeout + crash containment)
+# Step41: Capability Negotiation v1 — Implementation Plan
 
-Goal:
-- Ensure pipeline survivability even when plugins/providers hang or crash.
+## Goal
+Centralize and standardize plugin/provider selection so that
+all gates follow the same deterministic, testable rules.
 
-Deliverables:
-- Add `src/platform/safe_exec.py` (`safe_call`)
-- Wrap provider calls in `ProviderTextWorker` with timeout support
-- Wrap plugin execution (`safe_execute_plugin`) with timeout support
-- Add tests: `tests/test_step37_plugin_isolation_timeout.py`
+This reduces scattered fallback logic and makes expansions safe.
 
 ---
 
-## Step38 (MINOR): Policy diff analyzer
+## Deliverables
 
-Goal:
-- Compare two runs using `reason_trace` and summarize divergences.
+1) New negotiation module
+- Add `src/platform/capability_negotiation.py`
+- Provide a single entrypoint:
+  - `negotiate(*, gate_id, capability, ctx, priority_chain, required=False) -> NegotiationResult`
 
-Deliverables:
-- Add `src/pipeline/policy_diff.py`
-- Add test with synthetic `OBSERVABILITY.jsonl`: `tests/test_step38_policy_diff_report.py`
+2) Negotiation result contract
+- fields:
+  - `selected_target` (providers/plugins/context.plugins)
+  - `selected_key`
+  - `selected_plugin_id` (from manifest if available)
+  - `missing` (bool)
+  - `priority_chain` (attempted order)
+  - `reason_code`:
+    - `CAPABILITY_MISSING` (optional missing)
+    - `CAPABILITY_REQUIRED_MISSING` (required missing)
+    - `CAPABILITY_SELECTED` (resolved)
 
-Acceptance:
-- Report identifies first divergence point (LCP) and decision/reason_code changes per gate.
+3) Gate integration (minimal change)
+- Replace scattered fallback logic with `negotiate(...)`
+- Keep behavior identical to existing priority rules:
+  - G3: context override → perplexity → missing
+  - G6: dedicated → gemini → gpt → missing
+  - G7: dedicated → gpt → missing
+  - G5: exec tool → subprocess fallback (still allowed)
 
+4) Observability integration
+- Append `CAPABILITY_NEGOTIATED` event per negotiation:
+  - `gate_id`, `capability`, `selected`, `missing`, `priority_chain`
 
-## Step39 (MINOR): CLI baseline run id
+5) Tests
+- Unit tests for negotiation:
+  - deterministic selection order
+  - optional missing → `CAPABILITY_MISSING`
+  - required missing → `CAPABILITY_REQUIRED_MISSING`
+  - context override wins for `fact_check`
+- Regression:
+  - Step37 timeout tests remain passing
+  - Step39 drift tests remain passing
+  - Step40 manifest tests remain passing
 
-Goal:
-- Allow users to specify a baseline run for drift / policy-diff comparison.
+---
 
-Deliverables:
-- Add CLI argument: `--baseline <run_id>`
-- Persist into `RunMeta.baseline_version_id`
-- Add/extend tests (if needed) to validate `baseline_version_id` is written into `runs/<run_id>/META.json`
+## Acceptance Criteria
+- All gates use negotiation module (single source of truth).
+- Selection is deterministic.
+- Missing capability behavior consistent and logged.
+- pytest fully passes.
 
-Validation:
-- `python -m src.pipeline.cli run --request "hello" --baseline <existing_run_id>`
-- Confirm `runs/<new_run_id>/META.json` contains `baseline_version_id`.
+---
 
+## Non-Goals
+- External plugin loading
+- Priority override policy beyond fixed chain
+- Runtime UI
 
-## Step39 (MINOR): Baseline drift detector (Phase2)
+---
 
-Goal:
-- After each run, automatically generate a deterministic drift report comparing the current run to the selected baseline.
-
-Deliverables:
-- New module: `src/pipeline/drift_detector.py`
-- CLI post-run hook in `src/pipeline/cli.py` to invoke drift detector when `--baseline` is provided and exists.
-- Write `runs/<current_run_id>/DRIFT_REPORT.json`.
-- Append `DRIFT_DETECTED` event into `runs/<current_run_id>/OBSERVABILITY.jsonl`.
-
-Acceptance:
-- Hard drift increments when decision or reason_code changes.
-- Trace-only differences are soft drift.
-- If baseline dir missing, skip gracefully with warning.
-
-Tests:
-- Add unit tests for hard/soft classification and report creation.
+## Implementation Order
+1) Add negotiation module + result types
+2) Add/extend reason_code enum entries if needed
+3) Add unit tests for negotiation
+4) Integrate in G6 + G3 first, run pytest
+5) Expand to other gates in small steps
+6) GitHub backup (main)
+7) Obsidian note (1:1 with commit)

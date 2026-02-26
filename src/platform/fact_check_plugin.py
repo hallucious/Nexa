@@ -3,13 +3,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol
 
+from src.pipeline.runner import GateContext
+from src.platform.capability_negotiation import negotiate
+
 PLUGIN_MANIFEST = {
     "manifest_version": "1.0",
     "id": "fact_check",
     "type": "gate_plugin",
     "entrypoint": "src.platform.fact_check_plugin:resolve_fact_check_plugin",
-    "inject": {"target": "context.plugins", "key": "fact_check"},
-    "capabilities": [],
+    "inject": {"target": "plugins", "key": "fact_check"},
+    "capabilities": ["fact_check"],
     "requires": {"python": ">=3.8", "platform_api": ">=0.1,<2.0"},
     "determinism": {"required": True},
     "safety": {"timeout_ms": 120000}
@@ -58,5 +61,35 @@ def resolve_fact_check_plugin(
 
     if provider is not None and hasattr(provider, "verify"):
         return ProviderBackedFactCheckPlugin(provider=provider)
+
+    return None
+
+
+def resolve_from_ctx(ctx: GateContext) -> Optional[FactCheckPlugin]:
+    """Step41: capability negotiation based resolver.
+
+    Precedence (deterministic):
+      1) plugins.fact_check
+      2) providers.perplexity (if it has verify()) wrapped
+      3) None
+    """
+    sel = negotiate(
+        gate_id="G3",
+        capability="fact_check",
+        ctx=ctx,
+        priority_chain=[("plugins", "fact_check"), ("providers", "perplexity")],
+        required=False,
+    )
+
+    obj = sel.selected
+    if obj is None:
+        return None
+
+    # If user injected a FactCheckPlugin, trust it.
+    if hasattr(obj, "verify") and callable(getattr(obj, "verify")):
+        # If it's a provider (perplexity) it also likely has verify; wrap to normalize.
+        if isinstance(getattr(ctx, "providers", None), dict) and ctx.providers.get("perplexity") is obj:
+            return ProviderBackedFactCheckPlugin(provider=obj)
+        return obj  # type: ignore[return-value]
 
     return None
