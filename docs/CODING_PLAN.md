@@ -1,10 +1,10 @@
 # HYPER-AI CODING PLAN
 
-Version: 2.9.0  
+Version: 2.10.0  
 Status: Stabilization lock-in (Post-Step38)  
 Last Updated: 2026-02-26  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11–Step38
+Related Steps: Step11–Step39
 
 ---
 
@@ -45,3 +45,18 @@ Deliverables:
 
 Acceptance:
 - Report identifies first divergence point (LCP) and decision/reason_code changes per gate.
+
+
+## Step39 (MINOR): CLI baseline run id
+
+Goal:
+- Allow users to specify a baseline run for drift / policy-diff comparison.
+
+Deliverables:
+- Add CLI argument: `--baseline <run_id>`
+- Persist into `RunMeta.baseline_version_id`
+- Add/extend tests (if needed) to validate `baseline_version_id` is written into `runs/<run_id>/META.json`
+
+Validation:
+- `python -m src.pipeline.cli run --request "hello" --baseline <existing_run_id>`
+- Confirm `runs/<new_run_id>/META.json` contains `baseline_version_id`.

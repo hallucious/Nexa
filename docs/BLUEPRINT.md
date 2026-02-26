@@ -1,10 +1,10 @@
 # HYPER-AI BLUEPRINT
 
-Version: 2.9.0  
+Version: 2.10.0  
 Status: Stabilization lock-in (Post-Step38 policy diff)  
 Last Updated: 2026-02-26  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11–Step38
+Related Steps: Step11–Step39
 
 ---
 
@@ -53,3 +53,16 @@ System MUST be able to compare two runs and detect where policy paths diverge.
 ### Output concept
 - Gate-level diff: decision/reason_code changes
 - Trace divergence index via Longest Common Prefix (LCP)
+
+
+## Step39: Baseline selection via CLI
+
+### Decision
+- Add `--baseline <run_id>` to `python -m src.pipeline.cli run`.
+- Store the value into `RunMeta.baseline_version_id` so downstream tools (policy diff/drift checks) can reference it.
+
+### Notes
+- If the baseline directory does not exist under `runs/<run_id>`, we continue with a warning; diff tooling may skip.
+
+### Location
+- `src/pipeline/cli.py` (run command arguments + RunMeta creation)

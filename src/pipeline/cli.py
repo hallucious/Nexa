@@ -122,7 +122,7 @@ def build_default_runner(*, run_dir: str, meta: RunMeta, context: Optional[dict]
     return runner
 
 
-def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_id: Optional[str]) -> int:
+def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_id: Optional[str], baseline: Optional[str]) -> int:
     if (request_file is None) == (request_text is None):
         print("ERROR: specify exactly one of --request-file or --request")
         return 2
@@ -159,7 +159,14 @@ def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_i
 
     (artifacts.run_dir / "00_USER_REQUEST.md").write_text(request_body, encoding="utf-8")
 
-    meta = RunMeta(run_id=artifacts.run_id, created_at=now_seoul().isoformat())
+
+    baseline_id = (baseline or "").strip() or None
+    if baseline_id is not None:
+        baseline_dir = Path.cwd() / "runs" / baseline_id
+        if not baseline_dir.exists():
+            print(f"WARNING: baseline run not found: runs/{baseline_id} (continuing; diff may be skipped)")
+
+    meta = RunMeta(run_id=artifacts.run_id, created_at=now_seoul().isoformat(), baseline_version_id=baseline_id)
     runner = build_default_runner(run_dir=str(artifacts.run_dir), meta=meta)
 
     runner.run()
@@ -194,6 +201,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     g.add_argument("--request-file", default=None, help="Path to markdown file containing user request")
     g.add_argument("--request", default=None, help="Inline request text (use PowerShell `n for newlines)")
     p_run.add_argument("--run-id", default=None, help="Optional run id")
+    p_run.add_argument("--baseline", default=None, help="Optional baseline run id (for drift/policy diff comparisons)")
 
     sub.add_parser("list-gates", help="List default registered gates")
 
@@ -208,7 +216,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.cmd == "run":
         req_file = Path(args.request_file) if args.request_file else None
-        return _cmd_run(request_file=req_file, request_text=args.request, run_id=args.run_id)
+        return _cmd_run(request_file=req_file, request_text=args.request, run_id=args.run_id, baseline=args.baseline)
 
     if args.cmd == "list-gates":
         return _cmd_list_gates()
