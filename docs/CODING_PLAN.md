@@ -1,10 +1,10 @@
 # HYPER-AI CODING PLAN
 
-Version: 2.8.0  
-Status: Stabilization lock-in (Post-Step36)  
-Last Updated: 2026-02-25  
+Version: 2.9.0  
+Status: Stabilization lock-in (Post-Step38)  
+Last Updated: 2026-02-26  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11–Step37
+Related Steps: Step11–Step38
 
 ---
 
@@ -19,22 +19,29 @@ Deliverables:
 - Propagate into `OBSERVABILITY.jsonl` (runner event includes `reason_trace`)
 - Add test: `tests/test_step36_policy_trace_written.py`
 
+---
+
+## Step37 (MINOR): Plugin/Worker isolation (timeout + crash containment)
+
+Goal:
+- Ensure pipeline survivability even when plugins/providers hang or crash.
+
+Deliverables:
+- Add `src/platform/safe_exec.py` (`safe_call`)
+- Wrap provider calls in `ProviderTextWorker` with timeout support
+- Wrap plugin execution (`safe_execute_plugin`) with timeout support
+- Add tests: `tests/test_step37_plugin_isolation_timeout.py`
 
 ---
 
-## Step37 (MINOR): Plugin isolation hardening
+## Step38 (MINOR): Policy diff analyzer
 
 Goal:
-- 플러그인/워커 실행이 timeout 또는 예외로 실패해도 파이프라인이 죽지 않도록 격리한다.
+- Compare two runs using `reason_trace` and summarize divergences.
 
 Deliverables:
-- `src/platform/safe_exec.py`: `safe_call(fn, timeout_ms)` 유틸
-- `GateBlueprint.timeout_ms` 추가 및 orchestrator가 worker 호출에 전달(호환 TypeError fallback)
-- `ProviderTextWorker.generate_text(..., timeout_ms=...)` 지원
-- `safe_execute_plugin(plugin, timeout_ms, **kwargs)` 헬퍼 제공
-- 테스트: timeout 발생 시 빠르게 반환하고 에러가 TIMEOUT으로 표준화됨
+- Add `src/pipeline/policy_diff.py`
+- Add test with synthetic `OBSERVABILITY.jsonl`: `tests/test_step38_policy_diff_report.py`
 
-Done checklist:
-- [ ] timeout/crash가 발생해도 pytest가 중단되지 않음
-- [ ] timeout 시 error='TIMEOUT'
-- [ ] GateBlueprint.timeout_ms로 gate별 설정 가능
+Acceptance:
+- Report identifies first divergence point (LCP) and decision/reason_code changes per gate.
