@@ -17,6 +17,8 @@ from src.pipeline.runner import GateContext
 from typing import Protocol
 from src.prompts.renderer import PromptRenderer
 
+from src.platform.capability_negotiation import negotiate
+
 PLUGIN_MANIFEST = {
     "manifest_version": "1.0",
     "id": "g1_design",
@@ -101,5 +103,11 @@ class _G1DesignRunnerImpl:
 
 def resolve(ctx: "GateContext") -> G1DesignRunner:
     """Unified entrypoint: resolve(ctx) -> runner."""
-    providers = getattr(ctx, "providers", None) or {}
-    return _G1DesignRunnerImpl(provider=providers.get("gpt"))
+    sel = negotiate(
+        gate_id="G1",
+        capability="text_generation",
+        ctx=ctx,
+        priority_chain=[("providers", "gpt")],
+        required=False,
+    )
+    return _G1DesignRunnerImpl(provider=sel.selected)

@@ -12,6 +12,7 @@ from src.pipeline.runner import GateContext
 from src.prompts.renderer import PromptRenderer
 from src.policy.gate_policy import evaluate_g4
 from src.platform.plugin_contract import ReasonCode, normalize_meta
+from src.platform.capability_negotiation import negotiate
 
 PLUGIN_MANIFEST = {
     "manifest_version": "1.0",
@@ -224,7 +225,13 @@ class _G4AIProviderRunnerImpl:
 
 def resolve(ctx: GateContext) -> Optional[G4AIProviderRunner]:
     """Unified entrypoint: resolve(ctx) -> optional runner."""
-    provider = (getattr(ctx, "providers", None) or {}).get("gpt")
-    if provider is None:
+    sel = negotiate(
+        gate_id="G4",
+        capability="self_check",
+        ctx=ctx,
+        priority_chain=[("providers", "gpt")],
+        required=False,
+    )
+    if sel.selected is None:
         return None
-    return _G4AIProviderRunnerImpl(provider=provider)
+    return _G4AIProviderRunnerImpl(provider=sel.selected)

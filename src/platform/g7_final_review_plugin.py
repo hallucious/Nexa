@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Protocol, Tuple
 
 from src.pipeline.runner import GateContext
 from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
+from src.platform.capability_negotiation import negotiate
 
 PLUGIN_MANIFEST = {
     "manifest_version": "1.0",
@@ -138,4 +139,20 @@ def resolve_g7_final_review_plugin(ctx: GateContext) -> Optional[G7FinalReviewPl
 
 def resolve(ctx: GateContext) -> Optional[G7FinalReviewPlugin]:
     """Unified entrypoint: resolve(ctx) -> optional final review plugin."""
-    return resolve_g7_final_review_plugin(ctx)
+    sel = negotiate(
+        gate_id="G7",
+        capability="final_review",
+        ctx=ctx,
+        priority_chain=[("providers", "g7_final_review"), ("providers", "gpt")],
+        required=False,
+    )
+
+    if sel.selected is None:
+        return None
+
+    # If we selected the dedicated plugin key, wrap it.
+    if sel.selected_key == "g7_final_review" and hasattr(sel.selected, "generate"):
+        return _WrappedPlugin(sel.selected, provider_key="g7_final_review", source="g7_final_review")  # type: ignore[return-value]
+
+    # Otherwise treat as GPT-like provider.
+    return _GPTAdapter(sel.selected, provider_key=str(sel.selected_key or "gpt"), source="g7_final_review")

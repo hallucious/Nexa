@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
 from src.pipeline.runner import GateContext
+from src.platform.capability_negotiation import negotiate
 
 PLUGIN_MANIFEST = {
     "manifest_version": "1.0",
@@ -130,4 +131,13 @@ def resolve(ctx: "GateContext") -> "G2ContinuityPlugin":
 
     Preserves legacy behavior of resolve_g2_continuity_plugin(providers).
     """
-    return resolve_g2_continuity_plugin(getattr(ctx, "providers", None))
+    sel = negotiate(
+        gate_id="G2",
+        capability="continuity_check",
+        ctx=ctx,
+        priority_chain=[("providers", "gpt")],
+        required=False,
+    )
+    if sel.selected is None:
+        return NoopContinuityPlugin()
+    return GPTContinuityPlugin(sel.selected)  # type: ignore[arg-type]

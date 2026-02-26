@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional, Protocol, Any, Dict
 
 from src.pipeline.runner import GateContext
+from src.platform.capability_negotiation import negotiate
 
 PLUGIN_MANIFEST = {
     "manifest_version": "1.0",
@@ -54,4 +55,16 @@ def resolve_g5_exec_plugin(ctx: GateContext) -> Optional[G5ExecPlugin]:
 
 def resolve(ctx: GateContext) -> Optional[G5ExecPlugin]:
     """Unified entrypoint: resolve(ctx) -> optional exec plugin."""
-    return resolve_g5_exec_plugin(ctx)
+    sel = negotiate(
+        gate_id="G5",
+        capability="exec_tool",
+        ctx=ctx,
+        priority_chain=[("plugins", "exec")],
+        required=False,
+    )
+    p = sel.selected
+    if p is None:
+        return None
+    if hasattr(p, "execute"):
+        return p  # type: ignore[return-value]
+    return None

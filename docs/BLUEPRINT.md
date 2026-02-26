@@ -1,229 +1,91 @@
 # HYPER-AI BLUEPRINT
 
-Version: 3.1.0  
-Status: Contract-driven extensible core (Plugin System + Capability Negotiation)  
-Last Updated: 2026-02-26  
-Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
-Related Steps: Step11–Step41
+Version: 3.2.1
+Status: Contract-driven extensible core (Policy-stable + Drift-blocking + Manifest-validated + Capability-negotiated)
+Last Updated: 2026-02-26
+Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)
 
 ---
 
-## Architectural Phases Overview
+## 0) One-liner 목적
+AI 협업으로 버그 발생 확률을 구조적으로 최소화(안정성 우선).
 
-- Step36: Policy trace (reason_trace)
-- Step37: Policy isolation layer
-- Step38: Baseline-aware policy diff
-- Step39: Baseline Drift Detector + Hard Drift Block
-- Step40: Plugin System v1 (Formal Manifest Contract)
-- Step41: Capability Negotiation v1 (Contract for Selecting Plugins)
+## 1) 품질 우선순위
+재현성 > 계약 안정성 > 테스트 증명 > 확장성.
 
 ---
 
 ## Step36: Policy trace (reason_trace)
-
-### Decision
-Every policy decision MUST include a human-readable trace of the evaluation path.
-
-### Location
-- `PolicyDecision.reason_trace: list[str]` (always present; may be empty)
-- Propagated into:
-  - `GateResult.meta["reason_trace"]` (where applicable)
-  - `runs/<run_id>/OBSERVABILITY.jsonl` events
-
----
+- 모든 정책 결정은 사람이 읽을 수 있는 `reason_trace`를 포함한다.
 
 ## Step37: Policy isolation layer
-
-### Decision
-Policy logic must be isolated from orchestration and IO.
-
-- Gates evaluate and return decisions.
-- Runner orchestrates gates and writes artifacts.
-- Plugins provide optional capabilities; gates must not hard-depend on external providers.
-
----
+- Gate는 정책 판단만, Runner/CLI는 실행/IO/아티팩트만 담당한다.
 
 ## Step38: Baseline-aware policy diff
+- 두 run 사이의 정책 스냅샷을 비교하는 deterministic diff를 제공한다.
 
-### Decision
-Provide a baseline-aware comparison tool between runs using policy decision snapshots.
+## Step39: Baseline Drift Detector + Hard drift block
+- `--baseline <run_id>` 지정 시 baseline vs current drift 비교를 수행한다.
+- Hard drift(decision/reason_code 변화) 발생 시 `--fail-on-hard-drift`로 non-zero exit(2) 가능.
 
-Constraints:
-- Deterministic output ordering
-- Trace-only changes are represented, not treated as hard drift by default
+## Step40: Plugin System v1 (Formal Manifest Contract)
+- in-tree 플러그인(`src/platform/*_plugin.py`)은 `PLUGIN_MANIFEST`를 노출한다.
+- Discovery == Registry를 테스트로 강제한다.
+- injection target/key 충돌은 에러로 처리한다.
+- `PLATFORM_API_VERSION` 호환성 검증을 수행한다.
 
----
+## Step41: Capability Negotiation v1
+### 목적
+Gate별 “필요 기능(capability)”과 “선택 우선순위(priority chain)”를 선언하고,
+플랫폼이 단일 negotiation 모듈에서 deterministic하게 plugin/provider를 선택한다.
 
-## Step39: Baseline drift detection + hard drift block
+### Canonical injection keys (Normative)
+- ctx.providers: gpt, gemini, perplexity, g6_counterfactual, g7_final_review
+- ctx.plugins: exec
+- ctx.context["plugins"]: fact_check (override)
 
-### Phase1 — Baseline selection
-- CLI supports `--baseline <run_id>`
-- Persist into `RunMeta.baseline_version_id`
-
-### Phase2 — Drift detector (post-run)
-After `runner.run()`:
-- Resolve baseline dir `runs/<baseline_id>` (if exists)
-- Compare baseline vs current via policy diff core
-- Write `runs/<current_run_id>/DRIFT_REPORT.json` (deterministic)
-- Append `DRIFT_DETECTED` event to `OBSERVABILITY.jsonl`
-
-### Hard vs Soft drift
-- Hard drift: `decision` changed OR `reason_code` changed
-- Soft drift: decision/reason_code unchanged; trace-only or meta-only change
-
-### Hard drift block
-- CLI option `--fail-on-hard-drift`:
-  - if hard_count > 0 → exit code 2
+### Observability (Normative)
+- negotiation마다 `CAPABILITY_NEGOTIATED` 이벤트를 OBSERVABILITY.jsonl에 기록한다.
 
 ---
 
-# Step40: Plugin System v1 (Formal Manifest Contract)
+## Step41-B: Required Promotion (Phase B) — **All gates unified**, required is policy table
 
-## Objective
-Elevate the existing key-based injection mechanism into a formal, versioned, validated plugin contract layer.
+### 핵심 결론(정본)
+- 모듈화의 핵심은 “required를 모두 true로”가 아니다.
+- **모든 gate가 동일한 방식으로 negotiation을 거치도록 통일**하는 것이 모듈화의 본질이다.
+- required/optional은 **정책 테이블**로 분리하며, gate/기능별로 다를 수 있다.
 
-Formalizes:
-- Injection keys
-- Plugin types (extension points)
-- Determinism requirements
-- Compatibility validation
-- Registry enforcement (allowlist)
+### B의 목적
+1) 모든 Gate가 **항상** negotiation 모듈을 통해 capability를 해석/선택하도록 통일한다.
+2) 그 위에 required 승격을 “정책 테이블”로 관리하여, 안정성 강화를 단계적으로 적용한다.
 
-## Extension Points
-- `provider`
-- `tool`
-- `gate_plugin`
-- `postprocessor`
+### Gate ↔ Capability 표준 형태(형식 통일)
+각 Gate는 최소 다음을 선언한다:
+- gate_id
+- capability (string)
+- required (bool)
+- priority_chain (시도 순서)
 
-## Injection Targets
-Plugins declare where they attach:
-- `ctx.providers[<key>]`
-- `ctx.plugins[<key>]`
-- `ctx.context["plugins"][<key>]`
+그리고 플랫폼은:
+- negotiate(...) → NegotiationResult 반환(선택/미싱/사유코드/priority_chain 포함)
 
-## Manifest Contract (Required)
-Each in-tree plugin file (`src/platform/*_plugin.py`) MUST expose `PLUGIN_MANIFEST` (dict) with at least:
-- `manifest_version: "1.0"`
-- `id`
-- `type`
-- `entrypoint: "module_path:symbol"`
-- `inject: {target, key}`
-- `requires.platform_api` range
-- `determinism.required: true` for policy-affecting plugins
+### Required 정책 테이블 (v1)
+초기(Phase B1)에는 required 승격을 최소화한다. (확장 안정성 확보 우선)
+- G5: exec_tool = REQUIRED (1차 승격)
+- 나머지 Gate capability는 OPTIONAL 유지(외부 provider 환경 의존성 때문)
 
-## Registry Enforcement
-`plugin_registry.py` is authoritative allowlist.
+> 이후 승격은 “운영 환경에서 항상 공급 가능한지”와 “없을 때 품질 붕괴 정도”를 기준으로 진행한다.
 
-Rule:
-- `discovered_plugin_ids == registry_plugin_ids`
-
-No orphan plugins. No implicit activation.
-
-## Compatibility Policy
-Platform exposes:
-- `PLATFORM_API_VERSION`
-- `PIPELINE_CONTRACT_VERSION`
-
-Loader MUST reject plugins if constraints fail.
-
-## Conflict Policy
-Two plugins claiming the same `(target, key)` is invalid (reject).
-
-## Scope (v1)
-In-tree plugins only. No external package loading.
+### Required Missing Policy (Normative)
+REQUIRED capability가 미싱이면:
+- Gate MUST return FAIL (안전 실패)
+- reason_code MUST be CAPABILITY_REQUIRED_MISSING
+- Pipeline status MUST be FAIL
+- 관측/드리프트(후처리)는 가능한 범위에서 계속 수행
 
 ---
 
-# Step41: Capability Negotiation v1 (Contract for Selecting Plugins)
-
-## Objective
-Make plugin selection predictable and testable by formalizing:
-- what each gate needs (capabilities)
-- how the system chooses among available plugins/providers
-- what happens when capabilities are missing (fail vs skip)
-- how selection/missing is recorded (reason_code + meta + observability)
-
-This step centralizes scattered fallback logic into a single deterministic rule set.
-
-## Core Concepts
-
-### Capability
-A named feature a plugin/provider can supply.
-Examples:
-- `text_generation`
-- `continuity_check`
-- `fact_check`
-- `counterfactual_generation`
-- `final_review`
-- `exec_tool`
-
-### Requirement Level
-- `required`: if missing → safe failure / stop condition
-- `optional`: if missing → continue with missing recorded
-
-### Negotiation
-Deterministic priority chain resolution:
-- explicit overrides > dedicated keys > general fallbacks
-- conflicts rejected by Step40
-- selection outcome logged
-
-## Canonical Injection Keys (Normative)
-### ctx.providers
-- `gpt`
-- `gemini`
-- `perplexity`
-- `g6_counterfactual`
-- `g7_final_review`
-
-### ctx.plugins
-- `exec`
-
-### ctx.context["plugins"]
-- `fact_check` (highest priority override)
-
-## Gate → Capability Requirements (Normative)
-- G1: `text_generation` (optional), order: `providers.gpt`
-- G2: `continuity_check` (optional), order: `providers.gpt`
-- G3: `fact_check` (optional), order:
-  1) `context.plugins.fact_check`
-  2) `providers.perplexity`
-  3) missing → skip (record missing)
-- G4: `self_check` (optional), order: `providers.gpt`
-- G5: `exec_tool` (optional), order:
-  1) `plugins.exec`
-  2) fallback to built-in subprocess path
-- G6: `counterfactual_generation` (optional by default), order:
-  1) `providers.g6_counterfactual`
-  2) `providers.gemini`
-  3) `providers.gpt`
-  4) missing → skip (record missing)
-- G7: `final_review` (optional), order:
-  1) `providers.g7_final_review`
-  2) `providers.gpt`
-  3) missing → skip
-
-## Missing Capability Policy (Normative)
-### Optional
-- Continue safely
-- Record:
-  - `reason_code`: `CAPABILITY_MISSING`
-  - `meta`: includes `missing_capability`, `requested_order`
-
-### Required (future upgrade)
-- Fail safely
-- Record:
-  - `reason_code`: `CAPABILITY_REQUIRED_MISSING`
-
-## Observability (Normative)
-Every negotiation MUST append to `OBSERVABILITY.jsonl`:
-- `event`: `CAPABILITY_NEGOTIATED`
-- `gate_id`, `capability`
-- `selected` (or null)
-- `missing` (bool)
-- `priority_chain` (attempted keys)
-
-## Determinism
-Negotiation must be deterministic:
-- stable priority order
-- stable serialization
-- no timestamps in negotiation artifacts
+## Out of scope (명시)
+- 외부 플러그인 패키지 로딩(다음 단계 A에서 다룸)
+- override priority(정책 확정 전 도입 금지)
