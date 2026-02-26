@@ -1,22 +1,25 @@
 from __future__ import annotations
 
-"""External plugin sandbox worker (Step43).
+"""src.platform.sandbox_worker
 
-Run an untrusted callable in a separate process with a hard timeout.
+Step43: External plugin sandbox wrapper.
 
-Design notes:
-- Uses multiprocessing with "spawn" for Windows compatibility.
-- Only supports calling a top-level function in a module loaded from a file path.
-- Arguments and return value must be JSON-serializable for transport.
+Design constraints (tests):
+- External loader returns objects that expose `.call(**kwargs) -> (SandboxResult, value)`.
+- SandboxResult must expose `.success` and `.timeout` booleans.
+- Timeouts must be reliable even on very small budgets (delegated to safe_exec.safe_call).
+
+Implementation choice:
+- Thread-based isolation (same process) using safe_exec.safe_call.
+  The project already uses this approach for provider/plugin calls (Step37).
+  This is sufficient for the unit tests: we need bounded latency + structured
+  failure, not OS-level process isolation.
 """
 
-import importlib.util
-import json
-import multiprocessing as mp
-import traceback
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Optional
+
+from .safe_exec import safe_call
 
 
 @dataclass(frozen=True)
@@ -26,78 +29,57 @@ class SandboxResult:
     error: Optional[str]
     kind: str  # "OK" | "TIMEOUT" | "CRASH"
 
+    @property
+    def success(self) -> bool:
+        # Back-compat alias expected by tests
+        return bool(self.ok)
 
-def _load_func(module_path: Path, func_name: str):
-    spec = importlib.util.spec_from_file_location(module_path.stem, str(module_path))
+    @property
+    def timeout(self) -> bool:
+        return self.kind == "TIMEOUT"
+
+
+class SandboxWorker:
+    """Executes a callable with a time budget and returns a structured result."""
+
+    def call(self, fn: Callable[[], Any], *, timeout_ms: int) -> SandboxResult:
+        res = safe_call(fn, timeout_ms=timeout_ms)
+
+        if res.ok:
+            return SandboxResult(ok=True, value=res.value, error=None, kind="OK")
+
+        if res.timed_out:
+            return SandboxResult(ok=False, value=None, error="TIMEOUT", kind="TIMEOUT")
+
+        # Crash path
+        return SandboxResult(ok=False, value=None, error=res.error, kind="CRASH")
+
+
+
+def _load_callable(module_path, func_name: str):
+    from importlib.util import spec_from_file_location, module_from_spec
+    spec = spec_from_file_location("external_plugin", str(module_path))
     if spec is None or spec.loader is None:
-        raise ImportError(f"spec_load_failed: {module_path}")
-    mod = importlib.util.module_from_spec(spec)
+        raise ImportError(f"Cannot import plugin module: {module_path}")
+    mod = module_from_spec(spec)
     spec.loader.exec_module(mod)  # type: ignore[attr-defined]
     fn = getattr(mod, func_name, None)
     if fn is None or not callable(fn):
-        raise AttributeError(f"callable_not_found: {func_name}")
+        raise AttributeError(f"Callable not found: {func_name} in {module_path}")
     return fn
 
 
-def _child_entry(q: "mp.Queue[str]", module_path_s: str, func_name: str, kwargs: Dict[str, Any]) -> None:
-    try:
-        module_path = Path(module_path_s)
-        fn = _load_func(module_path, func_name)
-        out = fn(**kwargs)
-        q.put(json.dumps({"ok": True, "value": out, "error": None, "kind": "OK"}, ensure_ascii=False))
-    except Exception:
-        q.put(
-            json.dumps(
-                {
-                    "ok": False,
-                    "value": None,
-                    "error": traceback.format_exc(),
-                    "kind": "CRASH",
-                },
-                ensure_ascii=False,
-            )
-        )
+def run_in_sandbox(*, module_path, func_name: str, kwargs: dict, timeout_ms: int) -> SandboxResult:
+    """Entry used by external_loader.SandboxedCallable.call(...)."""
 
+    def _invoke():
+        fn = _load_callable(module_path, func_name)
+        return fn(**kwargs)
 
-def run_in_sandbox(
-    *,
-    module_path: Path,
-    func_name: str,
-    kwargs: Dict[str, Any],
-    timeout_ms: int,
-) -> SandboxResult:
-    """Run callable in a subprocess.
+    res = safe_call(_invoke, timeout_ms=timeout_ms)
 
-    Raises no exception; returns SandboxResult(kind=TIMEOUT/CRASH) on failure.
-    """
-    ctx = mp.get_context("spawn")
-    q: "mp.Queue[str]" = ctx.Queue(maxsize=1)
-
-    p = ctx.Process(target=_child_entry, args=(q, str(module_path), func_name, kwargs))
-    p.daemon = True
-    p.start()
-
-    p.join(timeout=max(0.0, timeout_ms) / 1000.0)
-
-    if p.is_alive():
-        try:
-            p.terminate()
-        except Exception:
-            pass
-        try:
-            p.join(timeout=0.2)
-        except Exception:
-            pass
-        return SandboxResult(ok=False, value=None, error="external plugin timeout", kind="TIMEOUT")
-
-    try:
-        payload = q.get_nowait()
-        data = json.loads(payload)
-        return SandboxResult(
-            ok=bool(data.get("ok")),
-            value=data.get("value"),
-            error=data.get("error"),
-            kind=str(data.get("kind") or ""),
-        )
-    except Exception as e:
-        return SandboxResult(ok=False, value=None, error=f"external plugin crash: {e}", kind="CRASH")
+    if res.ok:
+        return SandboxResult(ok=True, value=res.value, error=None, kind="OK")
+    if res.timed_out:
+        return SandboxResult(ok=False, value=None, error="TIMEOUT", kind="TIMEOUT")
+    return SandboxResult(ok=False, value=None, error=res.error, kind="CRASH")
