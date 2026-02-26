@@ -2,34 +2,45 @@ from __future__ import annotations
 
 """Platform plugin contract helpers.
 
-Step30: required meta keys + ReasonCode.
-Step31: ProviderKey (routing key) + validation.
-Step32: VendorKey (vendor identity) + validation.
-Step33: Failure catalog taxonomy update: add POLICY_REJECTED (top-level category).
-
 Compatibility guarantees:
 - infer_reason_code is preserved.
 - normalize_meta keeps call shape; vendor is optional with default 'none'.
+
+Step41: capability negotiation reason codes added:
+  - CAPABILITY_SELECTED
+  - CAPABILITY_MISSING
+  - CAPABILITY_REQUIRED_MISSING
+
+Step43: external plugin sandbox reason codes added:
+  - EXTERNAL_PLUGIN_TIMEOUT
+  - EXTERNAL_PLUGIN_CRASH
 """
 
 import os
 from enum import Enum
 from typing import Any, Dict, Optional, Union
 
-CONTRACT_VERSION: str = "2.4"
+CONTRACT_VERSION: str = "2.5"
 
 
 class ReasonCode(str, Enum):
+    # existing taxonomy
     SUCCESS = "SUCCESS"
     SKIPPED = "SKIPPED"
-    CAPABILITY_SELECTED = "CAPABILITY_SELECTED"
-    CAPABILITY_MISSING = "CAPABILITY_MISSING"
-    CAPABILITY_REQUIRED_MISSING = "CAPABILITY_REQUIRED_MISSING"
     PROVIDER_MISSING = "PROVIDER_MISSING"
     PROVIDER_ERROR = "PROVIDER_ERROR"
     CONTRACT_VIOLATION = "CONTRACT_VIOLATION"
     POLICY_REJECTED = "POLICY_REJECTED"
     INTERNAL_ERROR = "INTERNAL_ERROR"
+
+    # Step41: negotiation
+    CAPABILITY_SELECTED = "CAPABILITY_SELECTED"
+    CAPABILITY_MISSING = "CAPABILITY_MISSING"
+    CAPABILITY_REQUIRED_MISSING = "CAPABILITY_REQUIRED_MISSING"
+
+    # Step43: external plugin sandbox
+    EXTERNAL_PLUGIN_TIMEOUT = "EXTERNAL_PLUGIN_TIMEOUT"
+    EXTERNAL_PLUGIN_CRASH = "EXTERNAL_PLUGIN_CRASH"
 
 
 class ProviderKey(str, Enum):
@@ -94,7 +105,7 @@ def normalize_meta(
     """Return a meta dict that satisfies the required contract.
 
     - reason_code: top-level category (stable taxonomy).
-    - detail_code: optional, concrete machine-friendly cause (Step33 recommendation).
+    - detail_code: optional, concrete machine-friendly cause.
     """
 
     out: Dict[str, Any] = dict(meta or {})
@@ -134,6 +145,10 @@ def infer_reason_code(*, meta: Optional[Dict[str, Any]] = None, error: Optional[
         e = error.lower()
         if "missing" in e:
             return ReasonCode.PROVIDER_MISSING
+        if "timeout" in e and "external" in e:
+            return ReasonCode.EXTERNAL_PLUGIN_TIMEOUT
+        if "crash" in e and "external" in e:
+            return ReasonCode.EXTERNAL_PLUGIN_CRASH
         if "policy" in e or "rejected" in e or "deny" in e:
             return ReasonCode.POLICY_REJECTED
         if "contract" in e or "provider_key_invalid" in e or "vendor_key_invalid" in e:
@@ -146,17 +161,24 @@ def infer_reason_code(*, meta: Optional[Dict[str, Any]] = None, error: Optional[
             e = e0.lower()
             if "missing" in e:
                 return ReasonCode.PROVIDER_MISSING
+            if "timeout" in e and "external" in e:
+                return ReasonCode.EXTERNAL_PLUGIN_TIMEOUT
+            if "crash" in e and "external" in e:
+                return ReasonCode.EXTERNAL_PLUGIN_CRASH
             if "policy" in e or "rejected" in e or "deny" in e:
                 return ReasonCode.POLICY_REJECTED
             if "contract" in e or "provider_key_invalid" in e or "vendor_key_invalid" in e:
                 return ReasonCode.CONTRACT_VIOLATION
             return ReasonCode.PROVIDER_ERROR
 
-        # If an upstream sets detail_code
         d = meta.get("detail_code")
         if isinstance(d, str) and d.strip():
             dl = d.lower()
             if dl.startswith("policy"):
                 return ReasonCode.POLICY_REJECTED
+            if dl.startswith("external_timeout"):
+                return ReasonCode.EXTERNAL_PLUGIN_TIMEOUT
+            if dl.startswith("external_crash"):
+                return ReasonCode.EXTERNAL_PLUGIN_CRASH
 
     return ReasonCode.SUCCESS

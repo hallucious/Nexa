@@ -1,7 +1,7 @@
 # HYPER-AI CODING PLAN
 
-Version: 3.3.0
-Status: Step42 Design: External Plugin Loading v1
+Version: 3.4.0
+Status: Step43 Design: External Plugin Sandbox v1
 Last Updated: 2026-02-26
 Doc Versioning: SemVer
 
@@ -130,3 +130,55 @@ Load plugins from a local `./plugins/` directory when explicitly enabled, using 
 5) pytest pass
 6) GitHub backup (main)
 7) Obsidian note (1:1 with commit)
+
+---
+
+## Step43: External Plugin Sandbox v1 — Implementation Plan
+
+### Goal
+Execute external plugins in an isolated process with hard timeout and strict IO contracts.
+
+### Deliverables
+1) Sandbox worker protocol (JSON over stdio)
+- Parent sends:
+  - `plugin_id`, `entrypoint`, `args`, `timeout_ms`, `seed`, `io_paths`
+- Child returns:
+  - `success`, `result`, `error`, `reason_code`, `latency_ms`
+
+2) New modules
+- `src/platform/sandbox_protocol.py` (types + encode/decode)
+- `src/platform/external_sandbox_runner.py` (parent-side)
+- `src/platform/external_sandbox_worker.py` (child-side CLI entry)
+
+3) Integration points
+- `external_loader` marks plugins as `origin="external"`
+- Negotiation returns selected plugin + origin
+- When origin is external:
+  - execution goes through sandbox runner
+- In-tree plugins bypass sandbox
+
+4) Reason codes (add if missing)
+- `CAPABILITY_TIMEOUT`
+- `PLUGIN_RUNTIME_ERROR`
+- `PLUGIN_INVALID_OUTPUT`
+- `SANDBOX_POLICY_UNAVAILABLE` (if host cannot enforce network/file policy)
+
+5) Tests
+- Unit: protocol round-trip, deterministic ordering
+- Integration:
+  - external plugin that sleeps -> timeout triggers
+  - external plugin that raises -> runtime error triggers
+  - external plugin returns malformed output -> invalid_output triggers
+  - external plugin normal -> success
+
+### Acceptance Criteria
+- External plugin execution is out-of-process.
+- Timeout is enforced (hard kill).
+- Failures are mapped to reason codes deterministically.
+- All existing tests continue to pass + new Step43 tests pass.
+
+### Non-Goals
+- Containerization
+- Signed plugins
+- Advanced policy engine
+

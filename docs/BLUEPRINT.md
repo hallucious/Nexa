@@ -1,7 +1,7 @@
 # HYPER-AI BLUEPRINT
 
-Version: 3.3.0
-Status: Step42 Design: External Plugin Loading v1
+Version: 3.4.0
+Status: Step43 Design: External Plugin Sandbox v1
 Last Updated: 2026-02-26
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)
 
@@ -169,3 +169,67 @@ On external loading attempt, append events to `OBSERVABILITY.jsonl`:
 - Signed plugins
 - Sandboxed filesystem/network (beyond existing timeouts)
 - Override priority rules
+
+---
+
+# Step43: External Plugin Sandbox v1 (Process Isolation)
+
+## Objective
+Enable **safe execution** of external plugins loaded from `./plugins/` by introducing an explicit sandbox boundary.
+The sandbox MUST reduce blast radius for:
+- hangs/timeouts
+- filesystem damage
+- unintended network calls
+- runaway CPU/memory usage
+
+This step focuses on **external plugins only**. In-tree plugins remain unchanged.
+
+## Scope (v1)
+### In scope
+- A *sandbox runner* that executes external plugin entrypoints out-of-process
+- Hard timeouts (wall-clock)
+- Minimal allowlist of environment variables
+- Structured error mapping back to `WorkerResult` / `PolicyDecision` meta
+- Deterministic behavior requirements preserved
+
+### Out of scope
+- Full VM/container orchestration
+- Cross-platform perfect parity (Windows/Linux differences allowed but documented)
+- Signed plugins / trust store
+- Marketplace
+
+## Sandbox Boundary (Normative)
+External plugin execution MUST occur in a separate process:
+- Parent process: pipeline/runner
+- Child process: plugin sandbox worker
+
+If the child process:
+- exceeds timeout -> killed, returns `CAPABILITY_TIMEOUT`
+- exits non-zero -> returns `PLUGIN_RUNTIME_ERROR`
+- writes invalid JSON contract -> returns `PLUGIN_INVALID_OUTPUT`
+
+## Safety Policy (Normative)
+External plugins are executed with:
+- Working directory: a dedicated temp dir under the current run directory
+- Filesystem:
+  - Read-only access to repo is NOT guaranteed in v1; instead:
+  - Provide explicit input files via temp dir copy (minimal surface)
+- Network:
+  - Default: **disabled** (best-effort). If not enforceable on the host, record `network_policy="unrestricted"` in meta.
+- Environment:
+  - Strip all variables except an allowlist (PATH, PYTHONPATH as needed)
+
+## Observability (Normative)
+For each external plugin execution, append to `OBSERVABILITY.jsonl`:
+- `event`: `EXTERNAL_PLUGIN_SANDBOX_RUN`
+- `plugin_id`, `entrypoint`, `timeout_ms`
+- `status`: `success|timeout|error|invalid_output`
+- `latency_ms`
+- `reason_code` (if failed)
+
+## Determinism (Normative)
+Sandbox must not introduce nondeterminism:
+- No timestamps in returned artifacts
+- Stable JSON serialization rules
+- All randomness must be explicitly seeded by the parent and passed into the sandbox
+
