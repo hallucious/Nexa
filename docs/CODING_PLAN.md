@@ -1,6 +1,6 @@
 # HYPER-AI CODING PLAN
 
-Version: 2.10.0  
+Version: 2.11.0
 Status: Stabilization lock-in (Post-Step38)  
 Last Updated: 2026-02-26  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
@@ -60,3 +60,23 @@ Deliverables:
 Validation:
 - `python -m src.pipeline.cli run --request "hello" --baseline <existing_run_id>`
 - Confirm `runs/<new_run_id>/META.json` contains `baseline_version_id`.
+
+
+## Step39 (MINOR): Baseline drift detector (Phase2)
+
+Goal:
+- After each run, automatically generate a deterministic drift report comparing the current run to the selected baseline.
+
+Deliverables:
+- New module: `src/pipeline/drift_detector.py`
+- CLI post-run hook in `src/pipeline/cli.py` to invoke drift detector when `--baseline` is provided and exists.
+- Write `runs/<current_run_id>/DRIFT_REPORT.json`.
+- Append `DRIFT_DETECTED` event into `runs/<current_run_id>/OBSERVABILITY.jsonl`.
+
+Acceptance:
+- Hard drift increments when decision or reason_code changes.
+- Trace-only differences are soft drift.
+- If baseline dir missing, skip gracefully with warning.
+
+Tests:
+- Add unit tests for hard/soft classification and report creation.

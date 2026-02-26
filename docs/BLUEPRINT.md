@@ -1,6 +1,6 @@
 # HYPER-AI BLUEPRINT
 
-Version: 2.10.0  
+Version: 2.11.0
 Status: Stabilization lock-in (Post-Step38 policy diff)  
 Last Updated: 2026-02-26  
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)  
@@ -66,3 +66,25 @@ System MUST be able to compare two runs and detect where policy paths diverge.
 
 ### Location
 - `src/pipeline/cli.py` (run command arguments + RunMeta creation)
+
+
+## Step39: Baseline drift detector (Phase2)
+
+### Decision
+- After `runner.run()` completes, if `baseline_version_id` resolves to an existing directory `runs/<baseline_id>`, run a baseline drift detector.
+- Drift detector compares policy snapshots between baseline run and current run using existing policy diff core.
+
+### Drift classification rules
+- **Hard drift**: `decision` changed OR `reason_code` changed.
+- **Soft drift**: `decision` and `reason_code` unchanged; only `reason_trace` differs.
+
+### Output contract
+- Create `runs/<current_run_id>/DRIFT_REPORT.json` (deterministic; stable ordering by `gate_id`).
+- Append to `runs/<current_run_id>/OBSERVABILITY.jsonl` one line event:
+  - `event`: `DRIFT_DETECTED`
+  - `baseline_id`, `current_id`
+  - `hard_count`, `soft_count`
+
+### Location
+- `src/pipeline/drift_detector.py` (new; post-run comparison + report writing)
+- `src/pipeline/cli.py` (calls drift detector immediately after `runner.run()`)

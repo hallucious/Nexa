@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.pipeline.artifacts import Artifacts
+from src.pipeline.drift_detector import run_drift_detector
 from src.pipeline.runner import PipelineRunner
 from src.pipeline.state import GateId, RunMeta
 from src.utils.time import now_seoul
@@ -170,6 +171,22 @@ def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_i
     runner = build_default_runner(run_dir=str(artifacts.run_dir), meta=meta)
 
     runner.run()
+
+    # Step39 Phase2: baseline drift detector (post-run)
+    if baseline_id is not None:
+        baseline_dir = Path.cwd() / "runs" / baseline_id
+        if baseline_dir.exists():
+            try:
+                run_drift_detector(
+                    baseline_run_dir=baseline_dir,
+                    current_run_dir=artifacts.run_dir,
+                    baseline_id=baseline_id,
+                    current_id=artifacts.run_id,
+                )
+            except Exception as e:
+                print(f"WARNING: drift detector failed: {e}")
+        else:
+            print(f"WARNING: baseline dir missing for drift detector: runs/{baseline_id} (skipping)")
 
     print(f"Pipeline finished status={meta.status.value}")
     print("Artifacts written:")
