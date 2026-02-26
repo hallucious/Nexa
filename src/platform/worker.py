@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
@@ -33,9 +32,9 @@ class TextWorker(Protocol):
 
 
 class ProviderTextWorker:
-    """Adapter that wraps an existing provider with a generate_text(...) -> (text, raw, err) signature.
+    """Adapter wrapping a provider with generate_text(...) -> (text, raw, err).
 
-    Step37: add soft timeout + crash containment via safe_call().
+    Step37: soft timeout + crash containment via safe_call(timeout_ms=...).
     """
 
     def __init__(self, *, name: str, provider: Any) -> None:
@@ -52,8 +51,6 @@ class ProviderTextWorker:
         timeout_ms: Optional[int] = None,
     ) -> WorkerResult:
         def _call_provider() -> Tuple[Any, Any, Any]:
-            # Provider contract (existing codebase):
-            #   generate_text(prompt=..., temperature=..., max_output_tokens=..., instructions=...) -> (text, raw, err)
             return self._provider.generate_text(
                 prompt=prompt,
                 temperature=float(temperature),
@@ -94,5 +91,4 @@ class ProviderTextWorker:
 
 
 def wrap_text_provider(*, name: str, provider: Any) -> TextWorker:
-    """Convenience helper to create a ProviderTextWorker."""
     return ProviderTextWorker(name=name, provider=provider)

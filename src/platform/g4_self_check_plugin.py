@@ -13,6 +13,19 @@ from src.prompts.renderer import PromptRenderer
 from src.policy.gate_policy import evaluate_g4
 from src.platform.plugin_contract import ReasonCode, normalize_meta
 
+PLUGIN_MANIFEST = {
+    "manifest_version": "1.0",
+    "id": "g4_self_check",
+    "type": "gate_plugin",
+    "entrypoint": "src.platform.g4_self_check_plugin:resolve",
+    "inject": {"target": "providers", "key": "gpt"},
+    "capabilities": [],
+    "requires": {"python": ">=3.8", "platform_api": ">=0.1,<2.0"},
+    "determinism": {"required": True},
+    "safety": {"timeout_ms": 120000}
+}
+
+
 
 def _policy_to_dict(policy: Any) -> Dict[str, Any]:
     """Best-effort serialization for PolicyDecision across versions.

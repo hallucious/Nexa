@@ -4,6 +4,19 @@ from typing import Optional, Protocol, Any, Dict
 
 from src.pipeline.runner import GateContext
 
+PLUGIN_MANIFEST = {
+    "manifest_version": "1.0",
+    "id": "g5_implement_test",
+    "type": "tool",
+    "entrypoint": "src.platform.g5_implement_test_plugin:resolve",
+    "inject": {"target": "plugins", "key": "exec"},
+    "capabilities": [],
+    "requires": {"python": ">=3.8", "platform_api": ">=0.1,<2.0"},
+    "determinism": {"required": True},
+    "safety": {"timeout_ms": 120000}
+}
+
+
 
 class G5ExecPlugin(Protocol):
     """Gate G5 plugin interface (execution)."""

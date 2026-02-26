@@ -6,6 +6,19 @@ from typing import Any, Dict, Optional, Protocol, Tuple
 from src.pipeline.runner import GateContext
 from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
 
+PLUGIN_MANIFEST = {
+    "manifest_version": "1.0",
+    "id": "g7_final_review",
+    "type": "gate_plugin",
+    "entrypoint": "src.platform.g7_final_review_plugin:resolve",
+    "inject": {"target": "providers", "key": "g7_final_review"},
+    "capabilities": [],
+    "requires": {"python": ">=3.8", "platform_api": ">=0.1,<2.0"},
+    "determinism": {"required": True},
+    "safety": {"timeout_ms": 120000}
+}
+
+
 
 class G7FinalReviewPlugin(Protocol):
     """Execution plugin for G7 final review."""

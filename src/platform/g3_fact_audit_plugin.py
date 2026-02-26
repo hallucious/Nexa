@@ -5,6 +5,19 @@ from typing import Any, Dict, Optional
 from src.pipeline.runner import GateContext
 from src.platform.fact_check_plugin import FactCheckPlugin, resolve_fact_check_plugin as _resolve_fact_check_plugin
 
+PLUGIN_MANIFEST = {
+    "manifest_version": "1.0",
+    "id": "g3_fact_audit",
+    "type": "gate_plugin",
+    "entrypoint": "src.platform.g3_fact_audit_plugin:resolve",
+    "inject": {"target": "providers", "key": "perplexity"},
+    "capabilities": [],
+    "requires": {"python": ">=3.8", "platform_api": ">=0.1,<2.0"},
+    "determinism": {"required": True},
+    "safety": {"timeout_ms": 120000}
+}
+
+
 
 def resolve_fact_check_plugin(*, plugins: Optional[Dict[str, Any]], provider: Any) -> FactCheckPlugin:
     """Gate G3 entrypoint for fact-check plugin resolution.

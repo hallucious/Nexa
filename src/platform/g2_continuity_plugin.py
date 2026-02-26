@@ -6,6 +6,19 @@ from typing import Any, Dict, Optional, Protocol, Tuple
 
 from src.pipeline.runner import GateContext
 
+PLUGIN_MANIFEST = {
+    "manifest_version": "1.0",
+    "id": "g2_continuity",
+    "type": "gate_plugin",
+    "entrypoint": "src.platform.g2_continuity_plugin:resolve",
+    "inject": {"target": "providers", "key": "gpt"},
+    "capabilities": [],
+    "requires": {"python": ">=3.8", "platform_api": ">=0.1,<2.0"},
+    "determinism": {"required": True},
+    "safety": {"timeout_ms": 120000}
+}
+
+
 @dataclass
 class G2ContinuityAI:
     """Result of the optional semantic continuity check.

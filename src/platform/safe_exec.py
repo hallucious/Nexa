@@ -18,14 +18,16 @@ class SafeCallResult:
 
 
 def safe_call(*, fn: Callable[[], Any], timeout_ms: Optional[int]) -> SafeCallResult:
-    """Run fn() with a best-effort timeout and exception containment.
+    """Run fn() with exception containment and a best-effort timeout.
+
+    Timeout semantics:
+    - timeout_ms is in *milliseconds*.
+    - If timeout_ms is None: no timeout, still exception-contained.
 
     Notes:
-    - Uses threads (portable on Windows, low structural impact).
-    - Timeout is "soft": we return immediately with timed_out=True, but cannot
-      forcibly kill Python code already running in the worker thread.
-    - Python 3.8 ThreadPoolExecutor.shutdown() has no cancel_futures argument.
-      We therefore use shutdown(wait=False) only.
+    - Uses threads (portable on Windows).
+    - Timeout is "soft": we return immediately with TIMEOUT, but cannot forcibly
+      kill Python code already running in the worker thread.
     """
 
     started = time.perf_counter()
@@ -46,9 +48,17 @@ def safe_call(*, fn: Callable[[], Any], timeout_ms: Optional[int]) -> SafeCallRe
                 latency_ms=latency_ms,
             )
 
-    timeout_s = max(0.0, float(timeout_ms) / 1000.0)
+    # Defensive: treat negative as 0ms.
+    timeout_ms_i = int(timeout_ms)
+    if timeout_ms_i < 0:
+        timeout_ms_i = 0
+
+    # Convert ms -> seconds for Future.result(timeout=...).
+    timeout_s = float(timeout_ms_i) / 1000.0
+
     ex = ThreadPoolExecutor(max_workers=1)
     fut = ex.submit(fn)
+
     try:
         v = fut.result(timeout=timeout_s)
         latency_ms = int((time.perf_counter() - started) * 1000)

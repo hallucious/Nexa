@@ -6,6 +6,19 @@ from typing import Any, Dict, Optional, Protocol, Tuple
 from src.pipeline.runner import GateContext
 from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
 
+PLUGIN_MANIFEST = {
+    "manifest_version": "1.0",
+    "id": "g6_counterfactual",
+    "type": "gate_plugin",
+    "entrypoint": "src.platform.g6_counterfactual_plugin:resolve",
+    "inject": {"target": "providers", "key": "g6_counterfactual"},
+    "capabilities": [],
+    "requires": {"python": ">=3.8", "platform_api": ">=0.1,<2.0"},
+    "determinism": {"required": True},
+    "safety": {"timeout_ms": 120000}
+}
+
+
 
 class CounterfactualPlugin(Protocol):
     """Pluggable execution surface for G6 counterfactual generation.
