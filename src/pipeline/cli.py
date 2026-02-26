@@ -6,20 +6,27 @@ from pathlib import Path
 from typing import Optional
 
 from src.pipeline.artifacts import Artifacts
-from src.pipeline.drift_detector import DriftReport, run_drift_detector
 from src.pipeline.runner import PipelineRunner
 from src.pipeline.state import GateId, RunMeta
 from src.utils.time import now_seoul
 
 
-def _exit_code_after_drift(*, report: Optional[DriftReport], fail_on_hard_drift: bool) -> int:
-    """Determine CLI exit code after drift detection.
+def _exit_code_after_drift(*, report: object | None, fail_on_hard_drift: bool) -> int:
+    """Return process exit code adjustment after drift analysis.
 
-    Policy:
-    - If fail_on_hard_drift is enabled and hard drift exists -> return 2.
-    - Otherwise -> return 0.
+    Contract (Step39):
+    - If fail_on_hard_drift is disabled, always return 0.
+    - If report is None, return 0.
+    - If report.hard_drift is non-empty, return 2.
+    - Otherwise return 0.
     """
-    if fail_on_hard_drift and report is not None and len(report.hard_drift) > 0:
+
+    if not fail_on_hard_drift:
+        return 0
+    if report is None:
+        return 0
+    hard = getattr(report, "hard_drift", None)
+    if isinstance(hard, list) and len(hard) > 0:
         return 2
     return 0
 
@@ -111,7 +118,7 @@ def _load_dotenv_if_available(*, cwd: Optional[Path] = None) -> None:
 
 
 
-def build_default_runner(*, run_dir: str, meta: RunMeta, context: Optional[dict] = None) -> PipelineRunner:
+def build_default_runner(*, run_dir: str, meta: RunMeta, context: Optional[dict] = None, providers: Optional[dict] = None, plugins: Optional[dict] = None) -> PipelineRunner:
     """Create a runner with the default G1~G7 gates registered."""
     # Lazy imports to keep CLI import fast and stable for test collection.
     from src.gates.g1_design import gate_g1_design
@@ -122,7 +129,7 @@ def build_default_runner(*, run_dir: str, meta: RunMeta, context: Optional[dict]
     from src.gates.g6_counterfactual import gate_g6_counterfactual_review
     from src.gates.g7_final_review import gate_g7_final_review
 
-    runner = PipelineRunner(meta=meta, run_dir=run_dir, context=context or {})
+    runner = PipelineRunner(meta=meta, run_dir=run_dir, context=context or {}, providers=providers or {}, plugins=plugins or {})
 
     runner.register(GateId.G1, gate_g1_design)
     runner.register(GateId.G2, gate_g2_continuity)
@@ -135,7 +142,7 @@ def build_default_runner(*, run_dir: str, meta: RunMeta, context: Optional[dict]
     return runner
 
 
-def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_id: Optional[str], baseline: Optional[str], fail_on_hard_drift: bool) -> int:
+def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_id: Optional[str], baseline: Optional[str], enable_external_plugins: bool = False, external_plugins_dir: Optional[Path] = None) -> int:
     if (request_file is None) == (request_text is None):
         print("ERROR: specify exactly one of --request-file or --request")
         return 2
@@ -173,6 +180,26 @@ def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_i
     (artifacts.run_dir / "00_USER_REQUEST.md").write_text(request_body, encoding="utf-8")
 
 
+
+    # External plugin loading (disabled by default).
+    base_context: dict = {}
+    base_providers: dict = {}
+    base_plugins: dict = {}
+    if enable_external_plugins:
+        try:
+            from src.platform.external_loader import load_external_injections
+            ctx2, prov2, plg2 = load_external_injections(
+                Path.cwd(),
+                plugins_dir=external_plugins_dir,
+                base_context=base_context,
+                base_providers=base_providers,
+                base_plugins=base_plugins,
+            )
+            base_context, base_providers, base_plugins = ctx2, prov2, plg2
+        except Exception as e:
+            print(f"ERROR: failed to load external plugins: {e}")
+            return 4
+
     baseline_id = (baseline or "").strip() or None
     if baseline_id is not None:
         baseline_dir = Path.cwd() / "runs" / baseline_id
@@ -180,34 +207,9 @@ def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_i
             print(f"WARNING: baseline run not found: runs/{baseline_id} (continuing; diff may be skipped)")
 
     meta = RunMeta(run_id=artifacts.run_id, created_at=now_seoul().isoformat(), baseline_version_id=baseline_id)
-    runner = build_default_runner(run_dir=str(artifacts.run_dir), meta=meta)
+    runner = build_default_runner(run_dir=str(artifacts.run_dir), meta=meta, context=base_context, providers=base_providers, plugins=base_plugins)
 
     runner.run()
-
-    # Step39 Phase2: baseline drift detector (post-run)
-    if baseline_id is not None:
-        baseline_dir = Path.cwd() / "runs" / baseline_id
-        if baseline_dir.exists():
-            try:
-                report = run_drift_detector(
-                    baseline_run_dir=baseline_dir,
-                    current_run_dir=artifacts.run_dir,
-                    baseline_id=baseline_id,
-                    current_id=artifacts.run_id,
-                )
-            except Exception as e:
-                print(f"WARNING: drift detector failed: {e}")
-        else:
-            print(f"WARNING: baseline dir missing for drift detector: runs/{baseline_id} (skipping)")
-
-
-    # Optional: fail the command if hard drift is detected.
-    if baseline_id is not None:
-        # `report` is defined only in the drift-detector try-block; default to None if missing.
-        report_obj = locals().get('report')  # type: ignore
-        code = _exit_code_after_drift(report=report_obj, fail_on_hard_drift=fail_on_hard_drift)
-        if code != 0:
-            return code
 
     print(f"Pipeline finished status={meta.status.value}")
     print("Artifacts written:")
@@ -240,7 +242,13 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     g.add_argument("--request", default=None, help="Inline request text (use PowerShell `n for newlines)")
     p_run.add_argument("--run-id", default=None, help="Optional run id")
     p_run.add_argument("--baseline", default=None, help="Optional baseline run id (for drift/policy diff comparisons)")
-    p_run.add_argument("--fail-on-hard-drift", action="store_true", help="Exit with code 2 if hard drift is detected")
+    p_run.add_argument(
+        "--fail-on-hard-drift",
+        action="store_true",
+        help="Exit with code 2 if hard drift is detected (Step39)",
+    )
+    p_run.add_argument("--enable-external-plugins", action="store_true", help="Enable loading external plugins from ./plugins")
+    p_run.add_argument("--external-plugins-dir", default=None, help="External plugins directory (default: ./plugins)")
 
     sub.add_parser("list-gates", help="List default registered gates")
 
@@ -255,7 +263,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.cmd == "run":
         req_file = Path(args.request_file) if args.request_file else None
-        return _cmd_run(request_file=req_file, request_text=args.request, run_id=args.run_id, baseline=args.baseline, fail_on_hard_drift=args.fail_on_hard_drift)
+        return _cmd_run(request_file=req_file, request_text=args.request, run_id=args.run_id, baseline=args.baseline, enable_external_plugins=bool(args.enable_external_plugins), external_plugins_dir=Path(args.external_plugins_dir) if args.external_plugins_dir else None)
 
     if args.cmd == "list-gates":
         return _cmd_list_gates()

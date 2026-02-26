@@ -1,7 +1,7 @@
 # HYPER-AI CODING PLAN
 
-Version: 3.2.1
-Status: Step41-B (Unified Negotiation + Policy-table Required Promotion)
+Version: 3.3.0
+Status: Step42 Design: External Plugin Loading v1
 Last Updated: 2026-02-26
 Doc Versioning: SemVer
 
@@ -74,3 +74,59 @@ B를 “G5만 required 구현”으로 축소하지 않는다.
 3) pytest pass
 4) GitHub main backup
 5) Obsidian note (1:1 with commit)
+
+---
+
+# Step42: External Plugin Loading v1 — Implementation Plan
+
+## Goal
+Load plugins from a local `./plugins/` directory when explicitly enabled, using the same manifest contract and negotiation pipeline.
+
+---
+
+## Deliverables
+
+1) CLI flags
+- `--enable-external-plugins` (default False)
+- `--plugins-dir <path>` (default `./plugins`)
+- allowlist control:
+  - `--allow-plugin <id>` (repeatable)
+  - and/or `plugins/ALLOWLIST.json`
+
+2) Loader module
+- Add `src/platform/external_plugin_loader.py`
+- Responsibilities:
+  - discover manifests (`manifest.json`)
+  - validate schema + platform_api range
+  - load entrypoint from `plugin.py`
+  - register into platform injection maps
+  - enforce conflicts (duplicate target/key → error)
+
+3) Integration point
+- Hook into platform initialization before gates run so negotiation sees external plugins.
+
+4) Tests
+- external plugin loaded when enabled + allowlisted
+- denied when not allowlisted
+- conflict with in-tree injection key → fail
+- invalid manifest_version → fail
+- version constraint mismatch → fail
+
+---
+
+## Acceptance Criteria
+- With flag enabled and allowlisted plugin present, negotiation can select it.
+- Without flag, behavior is unchanged.
+- Conflicts are rejected deterministically.
+- pytest fully passes.
+
+---
+
+## Implementation Order
+1) Add loader + minimal schema validation
+2) Add CLI wiring
+3) Add allowlist mechanism
+4) Add tests
+5) pytest pass
+6) GitHub backup (main)
+7) Obsidian note (1:1 with commit)

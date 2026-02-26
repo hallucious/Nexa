@@ -1,7 +1,7 @@
 # HYPER-AI BLUEPRINT
 
-Version: 3.2.1
-Status: Contract-driven extensible core (Policy-stable + Drift-blocking + Manifest-validated + Capability-negotiated)
+Version: 3.3.0
+Status: Step42 Design: External Plugin Loading v1
 Last Updated: 2026-02-26
 Doc Versioning: SemVer (MAJOR=structure, MINOR=rule add, PATCH=text fix)
 
@@ -89,3 +89,83 @@ REQUIRED capability가 미싱이면:
 ## Out of scope (명시)
 - 외부 플러그인 패키지 로딩(다음 단계 A에서 다룸)
 - override priority(정책 확정 전 도입 금지)
+
+---
+
+# Step42: External Plugin Loading v1 (In-Repo Plugins Directory)
+
+## Objective
+Enable loading plugins from an external, local directory (default: `./plugins/`) while preserving:
+- allowlist control
+- manifest validation (Step40)
+- deterministic negotiation (Step41/41-B)
+- conflict rejection (no overrides in v1)
+
+External loading is **disabled by default** and must be explicitly enabled.
+
+---
+
+## Activation (Normative)
+- CLI flag: `--enable-external-plugins`
+- Optional path: `--plugins-dir <path>` (default: `./plugins`)
+
+If not enabled, the system behaves exactly as Step40/41-B (in-tree only).
+
+---
+
+## External Plugin Layout (v1)
+Directory:
+- `plugins/<plugin_id>/plugin.py`
+- `plugins/<plugin_id>/manifest.json`
+
+`manifest.json` MUST match the Step40 manifest schema (manifest_version 1.0) and include:
+- `id`
+- `type`
+- `entrypoint`
+- `inject.target`, `inject.key`
+- `requires.platform_api` range
+- `determinism.required`
+
+---
+
+## Loading Policy (Normative)
+1) Scan plugins directory for `manifest.json`
+2) Validate manifest schema and version constraints
+3) Import entrypoint from `plugin.py` using module isolation (local import path only)
+4) Register injection mapping into the same internal structures as in-tree plugins
+5) Run the same conflict checks:
+   - duplicate `(target, key)` → FAIL
+   - registry/discovery mismatch is not used for external plugins (separate allowlist applies)
+
+---
+
+## Allowlist (Normative)
+External plugins require explicit allowlist:
+- `plugins/ALLOWLIST.json` (checked into repo) OR
+- CLI: `--allow-plugin <id>` repeated
+
+Default policy: deny-all.
+
+---
+
+## Conflict / Override Policy (v1)
+- If an external plugin claims an injection key already used by an in-tree plugin: **FAIL**
+- If two external plugins conflict: **FAIL**
+Override/priority is deferred to v2+.
+
+---
+
+## Observability (Normative)
+On external loading attempt, append events to `OBSERVABILITY.jsonl`:
+- `EXTERNAL_PLUGIN_SCAN_STARTED`
+- `EXTERNAL_PLUGIN_LOADED` (per plugin id)
+- `EXTERNAL_PLUGIN_REJECTED` (per plugin id, with reason)
+- `EXTERNAL_PLUGIN_SCAN_DONE` (counts)
+
+---
+
+## Scope (Explicit Non-Goals)
+- Remote download / marketplace
+- Signed plugins
+- Sandboxed filesystem/network (beyond existing timeouts)
+- Override priority rules
