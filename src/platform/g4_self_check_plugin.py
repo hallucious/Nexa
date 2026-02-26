@@ -13,6 +13,7 @@ from src.prompts.renderer import PromptRenderer
 from src.policy.gate_policy import evaluate_g4
 from src.platform.plugin_contract import ReasonCode, normalize_meta
 from src.platform.capability_negotiation import negotiate
+from src.platform.injection_registry import InjectionRegistry
 
 PLUGIN_MANIFEST = {
     "manifest_version": "1.0",
@@ -83,8 +84,13 @@ class G4SelfCheckPlugin:
 
     def run(self, ctx: GateContext) -> G4SelfCheckPluginResult:
         is_pytest = bool(os.getenv("PYTEST_CURRENT_TEST"))
-        provider = (ctx.providers or {}).get("gpt")
-
+        registry = InjectionRegistry.from_gate_context(ctx)
+        provider_handle = None
+        try:
+            provider_handle = registry.get(target="providers", key="gpt")
+        except Exception:
+            provider_handle = None
+        provider = provider_handle
         gpt_used = False
         gpt_error = ""
         gpt_text = ""
@@ -94,9 +100,15 @@ class G4SelfCheckPlugin:
             try:
                 prompt, prompt_ident = PromptRenderer.render_prompt(self.prompt_id)
                 gpt_used = True
-                gpt_text, _raw, err = provider.generate_text(
-                    prompt=prompt, temperature=0.0, max_output_tokens=2048
-                )
+                call_res, call_val = provider.call(prompt=prompt, temperature=0.0, max_output_tokens=2048)
+                if call_res.success and isinstance(call_val, tuple) and len(call_val) >= 1:
+                    gpt_text = str(call_val[0])
+                    _raw = call_val[1] if len(call_val) >= 2 and isinstance(call_val[1], dict) else {}
+                    err = call_val[2] if len(call_val) >= 3 else None
+                else:
+                    _raw = {}
+                    err = RuntimeError(call_res.error or (call_res.error_code or "unknown_error"))
+                    gpt_text = ""
                 if err is not None:
                     gpt_error = f"{type(err).__name__}: {err}"
             except Exception as e:

@@ -5,6 +5,7 @@ from typing import Any, Dict, Optional, Protocol, Tuple
 
 from src.pipeline.runner import GateContext
 from src.platform.capability_negotiation import negotiate
+from src.platform.injection_registry import InjectionRegistry, InjectionHandle, InjectionSpec
 from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
 
 PLUGIN_MANIFEST = {
@@ -74,11 +75,16 @@ class ProviderCounterfactualPlugin:
             return "", meta, "provider missing: expected ctx.providers['gemini'|'gpt']", engine
 
         try:
-            text, meta, err = provider.generate_text(
-                prompt,
-                temperature=temperature,
-                max_output_tokens=max_output_tokens,
-            )
+            handle = InjectionHandle(spec=InjectionSpec(target="providers", key=str(engine), version="0.0.0", determinism_required=True), impl=provider, run_dir=str(getattr(ctx, "run_dir", "") or ""))
+            call_res, call_val = handle.call(__args=(prompt,), temperature=temperature, max_output_tokens=max_output_tokens)
+            if call_res.success and isinstance(call_val, tuple) and len(call_val) >= 1:
+                text = str(call_val[0])
+                meta = call_val[1] if len(call_val) >= 2 and isinstance(call_val[1], dict) else {}
+                err = call_val[2] if len(call_val) >= 3 else None
+            else:
+                text = ""
+                meta = {}
+                err = call_res.error or (call_res.error_code or "unknown_error")
             m = meta if isinstance(meta, dict) else {}
             rc = infer_reason_code(meta=m, error=err)
             m = normalize_meta(m, reason_code=rc, provider=engine, source="g6_counterfactual", error=err)

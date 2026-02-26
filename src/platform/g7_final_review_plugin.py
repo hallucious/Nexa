@@ -6,6 +6,7 @@ from typing import Any, Dict, Optional, Protocol, Tuple
 from src.pipeline.runner import GateContext
 from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
 from src.platform.capability_negotiation import negotiate
+from src.platform.injection_registry import InjectionHandle, InjectionSpec
 
 PLUGIN_MANIFEST = {
     "manifest_version": "1.0",
@@ -33,11 +34,25 @@ class _GPTAdapter:
     provider: Any
     provider_key: str
     source: str
-
+    run_dir: Optional[str] = None
     def generate(self, prompt: str) -> Tuple[str, Dict[str, Any]]:
         # Support either generate_text(prompt) or generate(prompt)
         if hasattr(self.provider, "generate_text"):
-            resp = self.provider.generate_text(prompt)  # type: ignore[attr-defined]
+            handle = InjectionHandle(
+                spec=InjectionSpec(target="providers", key=str(self.provider_key), version="0.0.0", determinism_required=True),
+                impl=self.provider,
+                run_dir=self.run_dir,
+            )
+            call_res, call_val = handle.call(__args=(prompt,))
+            if not call_res.success:
+                meta = normalize_meta(
+                    {"error": call_res.error or (call_res.error_code or "provider_call_failed")},
+                    reason_code=ReasonCode.PROVIDER_ERROR,
+                    provider=self.provider_key,
+                    source=self.source,
+                )
+                return ("", meta)
+            resp = call_val[0] if (isinstance(call_val, tuple) and len(call_val) >= 1) else ""
         elif hasattr(self.provider, "generate"):
             resp = self.provider.generate(prompt)  # type: ignore[attr-defined]
         else:
@@ -93,7 +108,7 @@ class _WrappedPlugin:
     inner: Any
     provider_key: str
     source: str
-
+    run_dir: Optional[str] = None
     def generate(self, prompt: str) -> Tuple[str, Dict[str, Any]]:
         try:
             text, meta = self.inner.generate(prompt)
@@ -132,7 +147,7 @@ def resolve_g7_final_review_plugin(ctx: GateContext) -> Optional[G7FinalReviewPl
 
     gpt = providers.get("gpt")
     if gpt is not None:
-        return _GPTAdapter(gpt, provider_key="gpt", source="g7_final_review")
+        return _GPTAdapter(gpt, provider_key="gpt", source="g7_final_review", run_dir=str(getattr(ctx, "run_dir", "") or ""))
 
     return None
 
@@ -155,4 +170,4 @@ def resolve(ctx: GateContext) -> Optional[G7FinalReviewPlugin]:
         return _WrappedPlugin(sel.selected, provider_key="g7_final_review", source="g7_final_review")  # type: ignore[return-value]
 
     # Otherwise treat as GPT-like provider.
-    return _GPTAdapter(sel.selected, provider_key=str(sel.selected_key or "gpt"), source="g7_final_review")
+    return _GPTAdapter(sel.selected, provider_key=str(sel.selected_key or "gpt"), source="g7_final_review", run_dir=str(getattr(ctx, "run_dir", "") or ""))

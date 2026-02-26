@@ -1,7 +1,7 @@
 # HYPER-AI CODING PLAN
 
-Version: 3.4.0
-Status: Step43 Design: External Plugin Sandbox v1
+Version: 3.5.0
+Status: Step41-B2 Design: Injection Registry Contract v1 (Option B)
 Last Updated: 2026-02-26
 Doc Versioning: SemVer
 
@@ -181,4 +181,48 @@ Execute external plugins in an isolated process with hard timeout and strict IO 
 - Containerization
 - Signed plugins
 - Advanced policy engine
+---
+## Step41-B2: Implement Plan — Injection Registry Contract v1 (Option B)
 
+### 목표
+- 모든 Gate에서 Injection 호출 방식/실패 처리/관측성이 100% 동일하게 동작하도록 “계약 레이어”를 코드로 고정한다.
+
+### 산출물(반드시)
+1) `InjectionSpec` 도입(버전 포함)
+2) `RegistryValidator`(load-time 전수 검증)
+3) `WorkerResult` error_code enum 고정
+4) `InjectionHandle.call()` 공통 래퍼에서:
+   - timeout/crash/contract_error 분류 표준화
+   - `INJECTION_CALL` 관측 이벤트 기록 강제
+5) Gate들에서 직접 실행/개별 로그 제거 → 공통 레이어만 사용
+
+### 작업 순서(문서→코드→백업→Obsidian)
+1) (완료) 문서 업데이트: BLUEPRINT/CODING_PLAN에 Step41-B2 계약/계획 추가
+2) 코드 업데이트:
+   - `src/platform/injection/*` (또는 동등 경로)로 계약층 구성요소 집약
+   - 기존 sandbox/외부 플러그인 실행 경로를 InjectionHandle 내부로 수렴
+   - OBSERVABILITY는 공통 writer 함수 1곳만 사용
+3) 테스트:
+   - 기존 106 tests 회귀 확인
+   - 신규 테스트 추가(필수):
+     - 중복 등록 시 load 단계 실패
+     - version mismatch 시 load 단계 실패
+     - invalid output → contract_error
+     - timeout → timeout
+     - crash → crash
+     - determinism_required + success False → Gate FAIL 강제
+4) GitHub main 커밋/푸시
+5) Obsidian 1:1 로그 작성
+
+### Done 체크리스트
+- [ ] InjectionSpec(version 포함) 실제 타입으로 존재
+- [ ] Registry load 시점 전수 검증이 테스트로 증명됨
+- [ ] Gate가 직접 subprocess/import 실행하는 경로가 없음(검색으로 확인)
+- [ ] OBSERVABILITY.jsonl에 INJECTION_CALL 이벤트가 일관 포맷으로 기록됨
+- [ ] pytest: 106 passed 유지 + 신규 테스트 통과
+
+### 리스크/완화
+- 리스크: 기존 Gate별 예외 처리 미세 차이로 회귀 가능
+  - 완화: 공통 래퍼로 모두 수렴 + Golden sample 테스트(필요 시)
+- 리스크: Windows CRLF/경로 이슈
+  - 완화: path 처리 표준화 + `.gitattributes`는 별도 작업으로 분리(이번 단계 범위 밖)
