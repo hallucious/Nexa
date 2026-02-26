@@ -6,10 +6,22 @@ from pathlib import Path
 from typing import Optional
 
 from src.pipeline.artifacts import Artifacts
-from src.pipeline.drift_detector import run_drift_detector
+from src.pipeline.drift_detector import DriftReport, run_drift_detector
 from src.pipeline.runner import PipelineRunner
 from src.pipeline.state import GateId, RunMeta
 from src.utils.time import now_seoul
+
+
+def _exit_code_after_drift(*, report: Optional[DriftReport], fail_on_hard_drift: bool) -> int:
+    """Determine CLI exit code after drift detection.
+
+    Policy:
+    - If fail_on_hard_drift is enabled and hard drift exists -> return 2.
+    - Otherwise -> return 0.
+    """
+    if fail_on_hard_drift and report is not None and len(report.hard_drift) > 0:
+        return 2
+    return 0
 
 def _maybe_load_dotenv(repo_root: Optional[Path] = None) -> None:
     """Best-effort load of a .env file.
@@ -123,7 +135,7 @@ def build_default_runner(*, run_dir: str, meta: RunMeta, context: Optional[dict]
     return runner
 
 
-def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_id: Optional[str], baseline: Optional[str]) -> int:
+def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_id: Optional[str], baseline: Optional[str], fail_on_hard_drift: bool) -> int:
     if (request_file is None) == (request_text is None):
         print("ERROR: specify exactly one of --request-file or --request")
         return 2
@@ -177,7 +189,7 @@ def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_i
         baseline_dir = Path.cwd() / "runs" / baseline_id
         if baseline_dir.exists():
             try:
-                run_drift_detector(
+                report = run_drift_detector(
                     baseline_run_dir=baseline_dir,
                     current_run_dir=artifacts.run_dir,
                     baseline_id=baseline_id,
@@ -187,6 +199,15 @@ def _cmd_run(*, request_file: Optional[Path], request_text: Optional[str], run_i
                 print(f"WARNING: drift detector failed: {e}")
         else:
             print(f"WARNING: baseline dir missing for drift detector: runs/{baseline_id} (skipping)")
+
+
+    # Optional: fail the command if hard drift is detected.
+    if baseline_id is not None:
+        # `report` is defined only in the drift-detector try-block; default to None if missing.
+        report_obj = locals().get('report')  # type: ignore
+        code = _exit_code_after_drift(report=report_obj, fail_on_hard_drift=fail_on_hard_drift)
+        if code != 0:
+            return code
 
     print(f"Pipeline finished status={meta.status.value}")
     print("Artifacts written:")
@@ -219,6 +240,7 @@ def parse_args(argv: Optional[list[str]] = None) -> argparse.Namespace:
     g.add_argument("--request", default=None, help="Inline request text (use PowerShell `n for newlines)")
     p_run.add_argument("--run-id", default=None, help="Optional run id")
     p_run.add_argument("--baseline", default=None, help="Optional baseline run id (for drift/policy diff comparisons)")
+    p_run.add_argument("--fail-on-hard-drift", action="store_true", help="Exit with code 2 if hard drift is detected")
 
     sub.add_parser("list-gates", help="List default registered gates")
 
@@ -233,7 +255,7 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     if args.cmd == "run":
         req_file = Path(args.request_file) if args.request_file else None
-        return _cmd_run(request_file=req_file, request_text=args.request, run_id=args.run_id, baseline=args.baseline)
+        return _cmd_run(request_file=req_file, request_text=args.request, run_id=args.run_id, baseline=args.baseline, fail_on_hard_drift=args.fail_on_hard_drift)
 
     if args.cmd == "list-gates":
         return _cmd_list_gates()
