@@ -1,8 +1,8 @@
 # HYPER-AI CODING PLAN
 
-Version: 3.5.0
+Version: 3.6.0
 Status: Step41-B2 Design: Injection Registry Contract v1 (Option B)
-Last Updated: 2026-02-26
+Last Updated: 2026-02-28
 Doc Versioning: SemVer
 
 ---
@@ -226,3 +226,18 @@ Execute external plugins in an isolated process with hard timeout and strict IO 
   - 완화: 공통 래퍼로 모두 수렴 + Golden sample 테스트(필요 시)
 - 리스크: Windows CRLF/경로 이슈
   - 완화: path 처리 표준화 + `.gitattributes`는 별도 작업으로 분리(이번 단계 범위 밖)
+
+---
+
+## Step: Trace Contract Hardening (v1)
+
+목표:
+- ExecutionTrace/NodeTrace 데이터 모델 확정
+- Node Coverage Hard Requirement 자동 강제
+- Trace 불변성(immutable) 보장
+- Trace를 엔진의 공식 실행 증거로 승격
+
+완료 조건:
+- 관련 spec(`docs/specs/trace_model.md`) 갱신 및 버전 증가
+- Trace 모델 코드(`src/engine/trace.py`)가 coverage 누락 시 즉시 실패
+- pytest 전체 통과
