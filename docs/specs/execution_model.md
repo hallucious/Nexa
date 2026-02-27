@@ -1,42 +1,27 @@
-# Execution Model Specification (Sync-first)
-Version: 1.1.0
+# Execution Model Specification
+Version: 1.2.0
 Status: Official Contract
 
-Purpose:
-Engine 실행 모델(v1)을 정의한다.
-v1은 Sync-first이며, Validation 성공 시에만 실행이 진행된다.
+---------------------------------------------------------------------
+1) Minimal Execution Semantics (v1.1.0 유지)
+---------------------------------------------------------------------
+- Validation 성공 시 entry_node SUCCESS 마킹
+- 나머지 노드 NOT_REACHED 유지
 
-----------------------------------------------------------------------
-1) Model (v1)
-----------------------------------------------------------------------
+---------------------------------------------------------------------
+2) DAG 상태 전파 규칙 (v1.2.0)
+---------------------------------------------------------------------
 
-- Sync-first (Async/Parallel 금지)
-- 실행 전 Validation 필수(실패 시 실행 차단)
-- Entry부터 시작
-- Node는 Pre/Core/Post 파이프라인을 따른다
-- 실패 시 downstream은 skipped로 기록될 수 있다(향후 단계에서 확장)
+다중 부모 노드(B)가 A1, A2, ... 을 부모로 가질 때:
 
-----------------------------------------------------------------------
-2) Minimal Execution Semantics (v1.1.0)
-----------------------------------------------------------------------
+1. ALL_SUCCESS:
+   모든 부모 SUCCESS → B 실행
 
-v1.1.0에서는 “실제 Node 실행”을 아직 구현하지 않더라도,
-Engine.execute()가 최소 실행 의미를 Trace에 남겨야 한다.
+2. FAILURE 전파:
+   부모 중 하나라도 FAILURE → B는 SKIPPED
 
-- Validation 성공 시:
-  - entry_node는 SUCCESS로 기록한다.
-  - entry_node의 pre/core/post는 모두 SUCCESS로 기록한다.
-- 그 외 노드는 NOT_REACHED 유지한다.
-- Validation 실패 시:
-  - 모든 노드는 NOT_REACHED 유지한다.
-  - validation 결과(성공/위반 목록)는 Trace에 반드시 포함된다.
+3. NOT_REACHED:
+   부모 중 하나라도 NOT_REACHED → B는 NOT_REACHED
 
-----------------------------------------------------------------------
-3) Validation Mapping
-----------------------------------------------------------------------
-
-Enforced by rule_ids:
-- ENG-001..
-- NODE-001..
-- ENG-003
-- TRACE-001..004
+이 규칙은 deterministic execution을 보장한다.
+비동기/병렬/대기 모델은 v2 이후 단계에서 고려한다.
