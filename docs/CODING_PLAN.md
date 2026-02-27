@@ -1,6 +1,6 @@
 # HYPER-AI CODING PLAN
 
-Version: 3.6.0
+Version: 3.7.0
 Status: Step41-B2 Design: Injection Registry Contract v1 (Option B)
 Last Updated: 2026-02-28
 Doc Versioning: SemVer
@@ -240,4 +240,18 @@ Execute external plugins in an isolated process with hard timeout and strict IO 
 완료 조건:
 - 관련 spec(`docs/specs/trace_model.md`) 갱신 및 버전 증가
 - Trace 모델 코드(`src/engine/trace.py`)가 coverage 누락 시 즉시 실패
+- pytest 전체 통과
+
+---
+
+## Step44: Minimal Execution Semantics + Trace Marking (v1)
+
+범위:
+- Validation 성공 시 entry_node만 SUCCESS로 마킹(Pre/Core/Post 모두 SUCCESS)
+- 나머지 노드는 NOT_REACHED 유지
+- Validation 실패 시 마킹 없음(Trace에 validation 결과만 기록)
+
+완료 조건:
+- docs/specs/execution_model.md v1.1.0 갱신
+- Engine.execute()가 위 규칙대로 Trace를 반환
 - pytest 전체 통과
