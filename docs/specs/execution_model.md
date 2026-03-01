@@ -1,264 +1,82 @@
-# Execution Model Specification
-Version: 1.5.0
-Status: Official Contract
+# Execution Model Spec
 
----------------------------------------------------------------------
-1) Minimal Execution Semantics (v1.1.0 유지)
----------------------------------------------------------------------
-- Validation 성공 시 entry_node SUCCESS 마킹
-- 나머지 노드 NOT_REACHED 유지
+## 1. Status
 
----------------------------------------------------------------------
-2) DAG 상태 전파 규칙 (v1.2.0)
----------------------------------------------------------------------
+Spec ID: execution_model
 
-다중 부모 노드(B)가 A1, A2, ... 을 부모로 가질 때:
+Version: 1.6.0
 
-1. ALL_SUCCESS:
-   모든 부모 SUCCESS → B 실행
+Scope: `src/engine/*` minimal deterministic execution semantics
 
-2. ANY_SUCCESS (v1.3.0):
-   부모 중 하나라도 SUCCESS → B 실행
-   (단, FAILURE가 하나라도 있으면 FAILURE 전파 규칙이 우선)
+## 2. Core concepts
 
-3. FIRST_SUCCESS (v1.3.0):
-   부모 중 '최초로' SUCCESS가 관측되는 순간 B 실행
-   v1 최소 구현에서는 deterministic 처리 위해 ANY_SUCCESS와 동일하게 동작한다.
-   (비동기/병렬/대기 모델 도입 시 FIRST_SUCCESS는 별도 의미를 갖는다)
+### 2.1 Engine
 
-4. FAILURE 전파:
-   부모 중 하나라도 FAILURE → B는 SKIPPED
+An `Engine` is a directed graph defined by:
 
-5. NOT_REACHED:
-   부모가 모두 NOT_REACHED(또는 실행 조건 미충족) → B는 NOT_REACHED
+- `entry_node_id`: the starting node
+- `node_ids`: all nodes in the engine
+- `channels`: directed edges `src -> dst`
+- `flow`: per-node flow gating rules (`FlowRule`)
 
-2. FAILURE 전파:
-   부모 중 하나라도 FAILURE → B는 SKIPPED
+### 2.2 ExecutionTrace
 
-3. NOT_REACHED:
-   부모 중 하나라도 NOT_REACHED → B는 NOT_REACHED
+`Engine.execute(revision_id=...)` returns an `ExecutionTrace` that contains:
 
-이 규칙은 deterministic execution을 보장한다.
-비동기/병렬/대기 모델은 v2 이후 단계에서 고려한다.
+- `revision_id`, `fingerprint`
+- `validation_success` and `validation` details
+- `nodes[node_id] -> NodeTrace`
 
-## Node Handlers (v1)
-- Reached nodes execute an optional handler function.
-- Handler input is a merged snapshot of upstream outputs, namespaced by parent node_id.
-- Handler output is recorded as output_snapshot in the trace.
-- If a handler is missing, a no-op handler returns {}.
-- If a handler raises, node_status becomes FAILURE and downstream nodes are SKIPPED.
+## 3. NodeTrace status model
 
----
+Each node has:
 
-# Archived Initial Version (Preserved)
+- `node_status`: `NOT_REACHED | SUCCESS | FAILURE | SKIPPED`
+- stage statuses: `pre_status`, `core_status`, `post_status` (`NOT_RUN | SUCCESS | FAILURE | SKIPPED`)
 
-# Execution Model Specification
-Version: 1.5.0
-Status: Official Contract
+Pipeline contract (v1):
 
-Purpose:
-This document defines how an Engine is executed at runtime.
+1. `pre` runs first (if present)
+2. `core` runs next (if present), unless `pre` failed
+3. `post` runs last (if present), even if `pre` or `core` failed
+4. `post` may override the node output snapshot
 
-All runtime behavior must comply with this model.
+## 4. FlowPolicy reachability
 
-----------------------------------------------------------------------
+### 4.1 Policies
 
-1. Execution Type (v1 Constraint)
+`FlowPolicy` is defined as:
 
-Execution Model: Sync-first
+- `ALL_SUCCESS`: run when **all** parents are `SUCCESS`
+- `ANY_SUCCESS`: run when **any** parent is `SUCCESS`
+- `FIRST_SUCCESS`: v1 deterministic semantics treat this the same as `ANY_SUCCESS`
 
-Rules:
+Default policy for a node is `ALL_SUCCESS` if no `FlowRule` exists for that node.
 
-- All Nodes execute synchronously.
-- No parallel execution allowed in v1.
-- No asynchronous execution allowed in v1.
-- Execution order must be deterministic.
+### 4.2 Deterministic reachability rules
 
-----------------------------------------------------------------------
+Given a node `N` (not the entry) with parent set `P`:
 
-2. Execution Initialization
+1. Parents in `NOT_REACHED` are considered **pending**.
+2. A node runs when its policy is **satisfied** by current parent statuses.
+3. A node becomes `SKIPPED` only when its policy becomes **impossible** to satisfy given **terminal** parent statuses.
 
-When an Execution begins:
+Impossibility definition (v1):
 
-- A unique execution_id must be generated.
-- Input snapshot must be recorded.
-- Engine revision reference must be recorded.
-- Execution metadata container must be initialized.
+- For `ALL_SUCCESS`:
+  - if **any** parent is terminal non-success (`FAILURE` or `SKIPPED`), then `N` becomes `SKIPPED`.
+- For `ANY_SUCCESS` / `FIRST_SUCCESS`:
+  - if **no** parent is `SUCCESS` and **all** parents are terminal non-success (`FAILURE` or `SKIPPED`), then `N` becomes `SKIPPED`.
+- Otherwise the node remains `NOT_REACHED` (defer until more parents become terminal).
 
-----------------------------------------------------------------------
+## 5. Failure propagation
 
-3. Execution Order Determination
+Failure propagation is an effect of the reachability rules:
 
-Execution order must be derived from:
+- `ALL_SUCCESS` nodes are blocked by any upstream failure (impossible).
+- `ANY_SUCCESS` nodes are **not** blocked by one upstream failure if another parent can succeed.
 
-- Flow rules
-- Topological ordering (DAG constraint)
+Reason codes (minimal, informational):
 
-Rules:
-
-- Entry Node executes first.
-- Nodes execute only when all required inputs are available.
-- No speculative execution allowed.
-- No implicit parallel scheduling.
-
-----------------------------------------------------------------------
-
-4. Node Execution Lifecycle
-
-For each Node:
-
-1. Pre stage executes
-2. Core stage executes
-3. Post stage executes
-
-If Pre fails:
-- Core must not execute.
-- Post must still record failure metadata.
-
-If Core fails:
-- Post must record failure metadata.
-- Downstream Nodes must not execute.
-
-----------------------------------------------------------------------
-
-5. Failure Propagation
-
-If a Node fails:
-
-- All downstream dependent Nodes must be marked as skipped.
-- Execution status must be marked as failed.
-- Failure reason_code must be recorded.
-
-Silent failure is forbidden.
-
-----------------------------------------------------------------------
-
-6. Skip Semantics
-
-A Node is marked as skipped when:
-
-- Upstream dependency failed.
-- Flow condition evaluates to false.
-- Structural validation prevents execution.
-
-Skipped status must be explicitly recorded in Trace.
-
-----------------------------------------------------------------------
-
-7. Execution Completion
-
-Execution completes when:
-
-- All reachable Nodes have either:
-  - Executed successfully
-  - Failed
-  - Been skipped
-
-Completion must produce:
-
-- Final status (success/failure)
-- Final output (if defined)
-- Full Trace snapshot
-
-----------------------------------------------------------------------
-
-8. Determinism Recording
-
-For every Execution:
-
-- Random seeds must be recorded (if applicable).
-- AI model parameters must be recorded.
-- Temperature or stochastic settings must be recorded.
-- Runtime environment version must be recorded.
-
-Execution must be reproducible given identical conditions.
-
-----------------------------------------------------------------------
-
-9. No Runtime Structural Mutation
-
-During Execution:
-
-- Structure must remain immutable.
-- No dynamic Node insertion.
-- No dynamic Flow alteration.
-- No Channel rewiring.
-
-Violation invalidates Execution.
-
-----------------------------------------------------------------------
-
-10. Execution Result Object
-
-Execution must return a structured object containing:
-
-- execution_id
-- revision_id
-- status
-- final_output
-- execution_time
-- cost_metrics (if available)
-- trace_reference
-
-Raw primitive return values are forbidden.
-
-----------------------------------------------------------------------
-
-11. Validation Before Execution
-
-Before starting execution:
-
-- Structural validation must pass.
-- Schema validation must pass.
-- Entry validation must pass.
-- Determinism configuration must be verified.
-
-Execution without prior validation is forbidden.
-
-----------------------------------------------------------------------
-
-Contract Rule:
-
-Any runtime behavior that deviates from this specification
-is considered invalid and must be rejected.
-
-End of Execution Model Specification v1.0.0
-
-----------------------------------------------------------------------
-Validation Mapping
-----------------------------------------------------------------------
-Enforced by rule_ids:
-- NODE-004
-- PIPE-001
-- PIPE-002
-- PIPE-003
-- PIPE-004
-- DET-001
-- DET-002
-- DET-003
-- DET-004
-- DET-005
----------------------------------------------------------------------
-Pre/Core/Post Execution Pipeline (Step48)
----------------------------------------------------------------------
-- Every reached node executes in three stages: Pre → Core → Post.
-- Pre validates/normalizes input. If Pre fails: Core MUST NOT run, Post MUST run.
-- Core performs main work (legacy handler maps to Core).
-- Post finalizes and records. Post MUST run even if Pre/Core failed.
-- Node status resolution:
-  - SUCCESS only if Pre/Core/Post all succeed.
-  - FAILURE otherwise.
-
-Handler configuration (backward compatible):
-- handlers[node_id] may be:
-  (1) A single callable(input_snapshot) -> dict : treated as Core-only handler.
-  (2) A Pipeline dict: {"pre": fn, "core": fn, "post": fn} with any subset present.
-      - pre(input_snapshot) -> dict (optional; may return updated input_snapshot)
-      - core(input_snapshot) -> dict (optional; may return core output)
-      - post(ctx) -> dict (optional; may return final output_snapshot)
-        where ctx = {"input": ..., "core_output": ..., "pre_status": ..., "core_status": ...}
-
-Trace mapping:
-- input_snapshot: final input given to Core (after Pre, if Pre succeeded)
-- output_snapshot: final output after Post (or Core output if Post absent)
-- pre_status/core_status/post_status reflect stage outcomes.
+- `ENG-UPSTREAM-FAIL`: upstream failure prevents `ALL_SUCCESS`
+- `ENG-UPSTREAM-NO-SUCCESS`: no upstream success can satisfy `ANY_SUCCESS`

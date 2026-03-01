@@ -245,30 +245,55 @@ class Engine:
 
                     parent_statuses = [node_traces[p].node_status for p in parents]
 
-                    # FAILURE dominates: downstream is SKIPPED (v1 contract)
-                    if any(s == NodeStatus.FAILURE for s in parent_statuses):
+                    policy = flow_policy.get(node_id, FlowPolicy.ALL_SUCCESS)
+
+                    # v1 deterministic reachability rules:
+                    # - A node runs when its flow policy is satisfied.
+                    # - A node becomes SKIPPED only when the policy becomes *impossible* to satisfy
+                    #   given terminal upstream states.
+                    # - NOT_REACHED upstreams are treated as "pending".
+                    should_run = False
+                    should_skip = False
+                    skip_reason_code = None
+                    skip_message = None
+
+                    if policy == FlowPolicy.ALL_SUCCESS:
+                        # Any terminal non-success upstream makes ALL_SUCCESS impossible.
+                        if any(s in (NodeStatus.FAILURE, NodeStatus.SKIPPED) for s in parent_statuses):
+                            should_skip = True
+                            skip_reason_code = "ENG-UPSTREAM-FAIL"
+                            skip_message = "upstream failure prevents ALL_SUCCESS"
+                        elif all(s == NodeStatus.SUCCESS for s in parent_statuses):
+                            should_run = True
+                        else:
+                            # Some upstreams are still NOT_REACHED; defer.
+                            pass
+
+                    elif policy in (FlowPolicy.ANY_SUCCESS, FlowPolicy.FIRST_SUCCESS):
+                        # v1 minimal semantics: FIRST_SUCCESS behaves like ANY_SUCCESS
+                        if any(s == NodeStatus.SUCCESS for s in parent_statuses):
+                            should_run = True
+                        elif all(s in (NodeStatus.FAILURE, NodeStatus.SKIPPED) for s in parent_statuses):
+                            # No upstream can ever succeed.
+                            should_skip = True
+                            skip_reason_code = "ENG-UPSTREAM-NO-SUCCESS"
+                            skip_message = "no upstream success satisfies ANY_SUCCESS"
+                        else:
+                            # Pending upstreams remain NOT_REACHED; defer.
+                            pass
+
+                    if should_skip:
                         node_traces[node_id] = NodeTrace(
                             node_id=node_id,
                             node_status=NodeStatus.SKIPPED,
                             pre_status=StageStatus.SKIPPED,
                             core_status=StageStatus.SKIPPED,
                             post_status=StageStatus.SKIPPED,
-                            reason_code="ENG-UPSTREAM-FAIL",
-                            message="upstream failure",
+                            reason_code=skip_reason_code,
+                            message=skip_message,
                         )
                         changed = True
                         continue
-
-                    policy = flow_policy.get(node_id, FlowPolicy.ALL_SUCCESS)
-
-                    should_run = False
-                    if policy == FlowPolicy.ALL_SUCCESS:
-                        should_run = all(s == NodeStatus.SUCCESS for s in parent_statuses)
-                    elif policy == FlowPolicy.ANY_SUCCESS:
-                        should_run = any(s == NodeStatus.SUCCESS for s in parent_statuses)
-                    elif policy == FlowPolicy.FIRST_SUCCESS:
-                        # v1 minimal semantics: treat FIRST_SUCCESS as ANY_SUCCESS (no time model yet)
-                        should_run = any(s == NodeStatus.SUCCESS for s in parent_statuses)
 
                     if not should_run:
                         continue
