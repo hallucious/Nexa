@@ -1,5 +1,5 @@
 # Execution Model Specification
-Version: 1.4.0
+Version: 1.5.0
 Status: Official Contract
 
 ---------------------------------------------------------------------
@@ -53,7 +53,7 @@ Status: Official Contract
 # Archived Initial Version (Preserved)
 
 # Execution Model Specification
-Version: v1.0.0
+Version: 1.5.0
 Status: Official Contract
 
 Purpose:
@@ -238,3 +238,27 @@ Enforced by rule_ids:
 - DET-003
 - DET-004
 - DET-005
+---------------------------------------------------------------------
+Pre/Core/Post Execution Pipeline (Step48)
+---------------------------------------------------------------------
+- Every reached node executes in three stages: Pre → Core → Post.
+- Pre validates/normalizes input. If Pre fails: Core MUST NOT run, Post MUST run.
+- Core performs main work (legacy handler maps to Core).
+- Post finalizes and records. Post MUST run even if Pre/Core failed.
+- Node status resolution:
+  - SUCCESS only if Pre/Core/Post all succeed.
+  - FAILURE otherwise.
+
+Handler configuration (backward compatible):
+- handlers[node_id] may be:
+  (1) A single callable(input_snapshot) -> dict : treated as Core-only handler.
+  (2) A Pipeline dict: {"pre": fn, "core": fn, "post": fn} with any subset present.
+      - pre(input_snapshot) -> dict (optional; may return updated input_snapshot)
+      - core(input_snapshot) -> dict (optional; may return core output)
+      - post(ctx) -> dict (optional; may return final output_snapshot)
+        where ctx = {"input": ..., "core_output": ..., "pre_status": ..., "core_status": ...}
+
+Trace mapping:
+- input_snapshot: final input given to Core (after Pre, if Pre succeeded)
+- output_snapshot: final output after Post (or Core output if Post absent)
+- pre_status/core_status/post_status reflect stage outcomes.

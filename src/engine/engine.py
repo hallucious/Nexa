@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from .fingerprint import StructuralFingerprint, compute_fingerprint
 from .model import Channel, EngineStructure, FlowRule
@@ -12,11 +12,17 @@ from .trace import ExecutionTrace, NodeTrace
 from .types import FlowPolicy, NodeStatus, StageStatus
 
 
-# Minimal handler signature for v1 execution:
-# - input_data: merged upstream outputs (namespaced by parent node_id)
-# - output: dict that will be snapshotted into trace
-NodeHandler = Callable[[Dict[str, Any]], Dict[str, Any]]
+# Handler signatures for v1.5 execution (Step48):
+# - Core handler: input_snapshot -> output_snapshot
+# - Pipeline handler: dict with optional "pre"/"core"/"post" callables
+CoreHandler = Callable[[Dict[str, Any]], Dict[str, Any]]
+PreHandler = Callable[[Dict[str, Any]], Dict[str, Any]]
+PostHandler = Callable[[Dict[str, Any]], Dict[str, Any]]
 
+NodeHandler = CoreHandler  # backward-compatible alias
+
+def _is_pipeline_handler(obj: Any) -> bool:
+    return isinstance(obj, dict) and any(k in obj for k in ("pre", "core", "post"))
 
 @dataclass
 class Engine:
@@ -28,7 +34,7 @@ class Engine:
 
     # Node execution handlers (optional).
     # If a node is reached but no handler is registered, the engine uses a default no-op handler.
-    handlers: Dict[str, NodeHandler] = field(default_factory=dict, repr=False)
+    handlers: Dict[str, Union[NodeHandler, Dict[str, Any]]] = field(default_factory=dict, repr=False)
 
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
@@ -63,39 +69,121 @@ class Engine:
     def _noop_handler(self, _input: Dict[str, Any]) -> Dict[str, Any]:
         return {}
 
+
     def _run_node(self, *, node_id: str, input_snapshot: Dict[str, Any]) -> NodeTrace:
-        handler = self.handlers.get(node_id) or self._noop_handler
-        # pre/core/post pipeline is minimal in v1:
-        # - pre: SUCCESS
-        # - core: SUCCESS if handler returns; FAILURE if exception
-        # - post: SUCCESS if core SUCCESS, else SKIPPED
-        try:
-            output = handler(dict(input_snapshot))
-            if output is None:
-                output = {}
-            if not isinstance(output, dict):
-                raise TypeError(f"handler output must be dict, got {type(output).__name__}")
-            return NodeTrace(
-                node_id=node_id,
-                node_status=NodeStatus.SUCCESS,
-                pre_status=StageStatus.SUCCESS,
-                core_status=StageStatus.SUCCESS,
-                post_status=StageStatus.SUCCESS,
-                input_snapshot=dict(input_snapshot),
-                output_snapshot=dict(output),
-            )
-        except Exception as e:
+        """Run node using mandatory Pre → Core → Post pipeline.
+
+        Backward compatible:
+        - If handlers[node_id] is a callable: treated as Core handler.
+        - If handlers[node_id] is a dict with pre/core/post: pipeline handler.
+        """
+        handler_obj = self.handlers.get(node_id)
+
+        pre_fn: Optional[PreHandler] = None
+        core_fn: Optional[CoreHandler] = None
+        post_fn: Optional[PostHandler] = None
+
+        if handler_obj is None:
+            core_fn = self._noop_handler
+        elif callable(handler_obj):
+            core_fn = handler_obj  # type: ignore[assignment]
+        elif _is_pipeline_handler(handler_obj):
+            pre_fn = handler_obj.get("pre")
+            core_fn = handler_obj.get("core") or self._noop_handler
+            post_fn = handler_obj.get("post")
+        else:
             return NodeTrace(
                 node_id=node_id,
                 node_status=NodeStatus.FAILURE,
-                pre_status=StageStatus.SUCCESS,
-                core_status=StageStatus.FAILURE,
+                pre_status=StageStatus.FAILURE,
+                core_status=StageStatus.SKIPPED,
                 post_status=StageStatus.SKIPPED,
-                reason_code="ENG-EXC",
-                message=str(e),
+                reason_code="ENG-HANDLER-CONFIG",
+                message=f"invalid handler config for {node_id}",
                 input_snapshot=dict(input_snapshot),
                 output_snapshot=None,
             )
+
+        pre_status = StageStatus.SUCCESS
+        core_status = StageStatus.SKIPPED
+        post_status = StageStatus.SKIPPED
+
+        final_input = dict(input_snapshot)
+        reason_code: Optional[str] = None
+        message: Optional[str] = None
+
+        # Pre
+        try:
+            if pre_fn is not None:
+                pre_out = pre_fn(dict(final_input))
+                if pre_out is None:
+                    pre_out = {}
+                if not isinstance(pre_out, dict):
+                    raise TypeError(f"pre output must be dict, got {type(pre_out).__name__}")
+                final_input = dict(pre_out)
+        except Exception as e:
+            pre_status = StageStatus.FAILURE
+            reason_code = "ENG-PRE-EXC"
+            message = str(e)
+
+        core_output: Optional[Dict[str, Any]] = None
+
+        # Core (only if Pre succeeded)
+        if pre_status == StageStatus.SUCCESS:
+            try:
+                out_dict = core_fn(dict(final_input)) if core_fn is not None else {}
+                if out_dict is None:
+                    out_dict = {}
+                if not isinstance(out_dict, dict):
+                    raise TypeError(f"core output must be dict, got {type(out_dict).__name__}")
+                core_output = dict(out_dict)
+                core_status = StageStatus.SUCCESS
+            except Exception as e:
+                core_status = StageStatus.FAILURE
+                reason_code = reason_code or "ENG-CORE-EXC"
+                message = message or str(e)
+
+        # Post (always runs)
+        final_output: Optional[Dict[str, Any]] = core_output
+        try:
+            ctx = {
+                "input": dict(final_input),
+                "core_output": dict(core_output) if core_output is not None else None,
+                "pre_status": pre_status.value,
+                "core_status": core_status.value,
+            }
+            if post_fn is not None:
+                post_out = post_fn(ctx)
+                if post_out is None:
+                    post_out = {}
+                if not isinstance(post_out, dict):
+                    raise TypeError(f"post output must be dict, got {type(post_out).__name__}")
+                final_output = dict(post_out)
+            post_status = StageStatus.SUCCESS
+        except Exception as e:
+            post_status = StageStatus.FAILURE
+            reason_code = reason_code or "ENG-POST-EXC"
+            message = message or str(e)
+            final_output = None
+
+        node_success = (
+            pre_status == StageStatus.SUCCESS
+            and core_status == StageStatus.SUCCESS
+            and post_status == StageStatus.SUCCESS
+        )
+        node_status = NodeStatus.SUCCESS if node_success else NodeStatus.FAILURE
+
+        return NodeTrace(
+            node_id=node_id,
+            node_status=node_status,
+            pre_status=pre_status,
+            core_status=core_status,
+            post_status=post_status,
+            reason_code=reason_code,
+            message=message,
+            input_snapshot=dict(final_input),
+            output_snapshot=dict(final_output) if isinstance(final_output, dict) else None,
+        )
 
     def execute(self, *, revision_id: str) -> ExecutionTrace:
         """Step47: Execute reached nodes using handlers, then propagate reachability with FlowRule policies.
