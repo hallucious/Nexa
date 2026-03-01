@@ -3,13 +3,19 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from .fingerprint import StructuralFingerprint, compute_fingerprint
 from .model import Channel, EngineStructure, FlowRule
 from .revision import Revision
 from .trace import ExecutionTrace, NodeTrace
 from .types import FlowPolicy, NodeStatus, StageStatus
+
+
+# Minimal handler signature for v1 execution:
+# - input_data: merged upstream outputs (namespaced by parent node_id)
+# - output: dict that will be snapshotted into trace
+NodeHandler = Callable[[Dict[str, Any]], Dict[str, Any]]
 
 
 @dataclass
@@ -19,6 +25,10 @@ class Engine:
     channels: List[Channel] = field(default_factory=list)
     flow: List[FlowRule] = field(default_factory=list)
     meta: Dict[str, Any] = field(default_factory=dict)
+
+    # Node execution handlers (optional).
+    # If a node is reached but no handler is registered, the engine uses a default no-op handler.
+    handlers: Dict[str, NodeHandler] = field(default_factory=dict, repr=False)
 
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
@@ -50,8 +60,51 @@ class Engine:
                 reverse[ch.dst_node_id].append(ch.src_node_id)
         return reverse
 
+    def _noop_handler(self, _input: Dict[str, Any]) -> Dict[str, Any]:
+        return {}
+
+    def _run_node(self, *, node_id: str, input_snapshot: Dict[str, Any]) -> NodeTrace:
+        handler = self.handlers.get(node_id) or self._noop_handler
+        # pre/core/post pipeline is minimal in v1:
+        # - pre: SUCCESS
+        # - core: SUCCESS if handler returns; FAILURE if exception
+        # - post: SUCCESS if core SUCCESS, else SKIPPED
+        try:
+            output = handler(dict(input_snapshot))
+            if output is None:
+                output = {}
+            if not isinstance(output, dict):
+                raise TypeError(f"handler output must be dict, got {type(output).__name__}")
+            return NodeTrace(
+                node_id=node_id,
+                node_status=NodeStatus.SUCCESS,
+                pre_status=StageStatus.SUCCESS,
+                core_status=StageStatus.SUCCESS,
+                post_status=StageStatus.SUCCESS,
+                input_snapshot=dict(input_snapshot),
+                output_snapshot=dict(output),
+            )
+        except Exception as e:
+            return NodeTrace(
+                node_id=node_id,
+                node_status=NodeStatus.FAILURE,
+                pre_status=StageStatus.SUCCESS,
+                core_status=StageStatus.FAILURE,
+                post_status=StageStatus.SKIPPED,
+                reason_code="ENG-EXC",
+                message=str(e),
+                input_snapshot=dict(input_snapshot),
+                output_snapshot=None,
+            )
+
     def execute(self, *, revision_id: str) -> ExecutionTrace:
-        """Step46: DAG propagation with FlowRule policies (default ALL_SUCCESS)."""
+        """Step47: Execute reached nodes using handlers, then propagate reachability with FlowRule policies.
+
+        - Validation must pass for any execution.
+        - Entry node is executed first.
+        - Downstream nodes are executed when their FlowPolicy condition is satisfied.
+        - Failure on any upstream parent causes downstream nodes to be SKIPPED (v1 semantics).
+        """
         from .validation.validator import ValidationEngine
 
         started_at = datetime.utcnow()
@@ -66,59 +119,59 @@ class Engine:
                 pre_status=StageStatus.SKIPPED,
                 core_status=StageStatus.SKIPPED,
                 post_status=StageStatus.SKIPPED,
+                input_snapshot=None,
+                output_snapshot=None,
+                meta=None,
             )
             for nid in self.node_ids
         }
 
         if validation.success and self.entry_node_id in node_traces:
-            graph = self._build_graph()
             reverse = self._build_reverse_graph()
 
-            # Build node-level flow policy map (default ALL_SUCCESS)
+            # Node-level flow policy map (default ALL_SUCCESS)
             flow_policy: Dict[str, FlowPolicy] = {nid: FlowPolicy.ALL_SUCCESS for nid in self.node_ids}
             for fr in self.flow:
                 if fr.node_id in flow_policy:
                     flow_policy[fr.node_id] = fr.policy
 
-            # Mark entry SUCCESS
-            node_traces[self.entry_node_id] = NodeTrace(
-                node_id=self.entry_node_id,
-                node_status=NodeStatus.SUCCESS,
-                pre_status=StageStatus.SUCCESS,
-                core_status=StageStatus.SUCCESS,
-                post_status=StageStatus.SUCCESS,
-            )
-            # Propagation loop (deterministic, monotonic):
-            # NOT_REACHED -> (SUCCESS|SKIPPED) only, until fixpoint.
+            # Execute entry
+            node_traces[self.entry_node_id] = self._run_node(node_id=self.entry_node_id, input_snapshot={})
+
+            # Deterministic, monotonic fixpoint loop:
+            # NOT_REACHED -> (SUCCESS|FAILURE|SKIPPED) only, until no change.
             changed = True
             while changed:
                 changed = False
-                for child in self.node_ids:
-                    if child == self.entry_node_id:
-                        continue
-                    if child not in node_traces:
+                for node_id in self.node_ids:
+                    if node_id == self.entry_node_id:
                         continue
 
-                    parents = reverse.get(child, [])
+                    current = node_traces[node_id].node_status
+                    if current != NodeStatus.NOT_REACHED:
+                        continue
+
+                    parents = reverse.get(node_id, [])
                     if not parents:
                         continue
 
                     parent_statuses = [node_traces[p].node_status for p in parents]
 
-                    # FAILURE dominates (kept from v1.2.0 contract)
+                    # FAILURE dominates: downstream is SKIPPED (v1 contract)
                     if any(s == NodeStatus.FAILURE for s in parent_statuses):
-                        if node_traces[child].node_status != NodeStatus.SKIPPED:
-                            node_traces[child] = NodeTrace(
-                                node_id=child,
-                                node_status=NodeStatus.SKIPPED,
-                                pre_status=StageStatus.SKIPPED,
-                                core_status=StageStatus.SKIPPED,
-                                post_status=StageStatus.SKIPPED,
-                            )
-                            changed = True
+                        node_traces[node_id] = NodeTrace(
+                            node_id=node_id,
+                            node_status=NodeStatus.SKIPPED,
+                            pre_status=StageStatus.SKIPPED,
+                            core_status=StageStatus.SKIPPED,
+                            post_status=StageStatus.SKIPPED,
+                            reason_code="ENG-UPSTREAM-FAIL",
+                            message="upstream failure",
+                        )
+                        changed = True
                         continue
 
-                    policy = flow_policy.get(child, FlowPolicy.ALL_SUCCESS)
+                    policy = flow_policy.get(node_id, FlowPolicy.ALL_SUCCESS)
 
                     should_run = False
                     if policy == FlowPolicy.ALL_SUCCESS:
@@ -126,20 +179,21 @@ class Engine:
                     elif policy == FlowPolicy.ANY_SUCCESS:
                         should_run = any(s == NodeStatus.SUCCESS for s in parent_statuses)
                     elif policy == FlowPolicy.FIRST_SUCCESS:
-                        # v1 minimal semantics:
-                        # deterministically treat FIRST_SUCCESS as "any upstream success triggers"
+                        # v1 minimal semantics: treat FIRST_SUCCESS as ANY_SUCCESS (no time model yet)
                         should_run = any(s == NodeStatus.SUCCESS for s in parent_statuses)
 
-                    if should_run:
-                        if node_traces[child].node_status != NodeStatus.SUCCESS:
-                            node_traces[child] = NodeTrace(
-                                node_id=child,
-                                node_status=NodeStatus.SUCCESS,
-                                pre_status=StageStatus.SUCCESS,
-                                core_status=StageStatus.SUCCESS,
-                                post_status=StageStatus.SUCCESS,
-                            )
-                            changed = True
+                    if not should_run:
+                        continue
+
+                    # Build merged input snapshot from upstream outputs (namespaced by parent node_id).
+                    merged_input: Dict[str, Any] = {}
+                    for p in parents:
+                        out = node_traces[p].output_snapshot
+                        if out is not None:
+                            merged_input[p] = dict(out)
+
+                    node_traces[node_id] = self._run_node(node_id=node_id, input_snapshot=merged_input)
+                    changed = True
 
         finished_at = datetime.utcnow()
         duration_ms = int((finished_at - started_at).total_seconds() * 1000)

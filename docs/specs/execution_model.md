@@ -1,5 +1,5 @@
 # Execution Model Specification
-Version: 1.3.0
+Version: 1.4.0
 Status: Official Contract
 
 ---------------------------------------------------------------------
@@ -41,6 +41,12 @@ Status: Official Contract
 이 규칙은 deterministic execution을 보장한다.
 비동기/병렬/대기 모델은 v2 이후 단계에서 고려한다.
 
+## Node Handlers (v1)
+- Reached nodes execute an optional handler function.
+- Handler input is a merged snapshot of upstream outputs, namespaced by parent node_id.
+- Handler output is recorded as output_snapshot in the trace.
+- If a handler is missing, a no-op handler returns {}.
+- If a handler raises, node_status becomes FAILURE and downstream nodes are SKIPPED.
 
 ---
 
