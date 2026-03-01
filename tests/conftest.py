@@ -53,6 +53,10 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "integration: tests that make real external API calls (run only with --real-api)",
     )
+    config.addinivalue_line(
+        "markers",
+        "contract: internal contract tests (documentation/code invariants)",
+    )
 
     # When user explicitly requests real API tests, automatically load .env from repo root.
     if config.getoption("--real-api"):
