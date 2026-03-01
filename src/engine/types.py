@@ -18,6 +18,14 @@ class StageStatus(str, Enum):
     SKIPPED = "skipped"
 
 
+
+
+class FlowPolicy(str, Enum):
+    """DAG propagation gating policy for a node with multiple upstream parents."""
+    ALL_SUCCESS = "ALL_SUCCESS"
+    ANY_SUCCESS = "ANY_SUCCESS"
+    FIRST_SUCCESS = "FIRST_SUCCESS"
+
 @dataclass(frozen=True)
 class StageResult:
     status: StageStatus

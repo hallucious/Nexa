@@ -13,3 +13,23 @@ Step45: DAG 상태 전파 규칙 (ALL_SUCCESS)
 완료 조건:
 - execution_model.md v1.2.0 반영
 - 테스트 전략 정의
+
+
+---
+
+# Archived Initial Version (Preserved)
+
+# Hyper-AI CODING PLAN
+Version: v1.0.0
+
+Phase 1:
+- Core Engine Implementation
+- Constraint Enforcement System
+- Graph-based Trace Model
+
+Phase 2:
+- Statistical Analysis Layer
+- Proposal Engine
+
+Phase 3:
+- Guided UI Layer

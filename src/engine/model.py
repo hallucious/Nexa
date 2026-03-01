@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
+from .types import FlowPolicy
+
 
 @dataclass(frozen=True)
 class Channel:
@@ -19,18 +21,23 @@ class Channel:
 
 @dataclass(frozen=True)
 class FlowRule:
-    """Control rule placeholder.
+    """Node-level flow (propagation) policy.
 
-    v1 skeleton: Flow is present as a structural component.
-    Detailed control semantics are defined in future Flow spec iterations.
+    v1: FlowRule is applied per *destination node* (node_id).
+    If no FlowRule is provided for a node, the default policy is ALL_SUCCESS.
+
+    rule_id is kept for traceability and future governance.
+    payload remains as an explicit extension slot (no hidden logic).
     """
     rule_id: str
-    # Free-form rule payload (kept explicit, no hidden logic)
+    node_id: str
+    policy: FlowPolicy = FlowPolicy.ALL_SUCCESS
     payload: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class EngineStructure:
+
     """Immutable structural snapshot for revisioning."""
     entry_node_id: str
     node_ids: List[str]

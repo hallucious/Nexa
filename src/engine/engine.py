@@ -9,7 +9,7 @@ from .fingerprint import StructuralFingerprint, compute_fingerprint
 from .model import Channel, EngineStructure, FlowRule
 from .revision import Revision
 from .trace import ExecutionTrace, NodeTrace
-from .types import NodeStatus, StageStatus
+from .types import FlowPolicy, NodeStatus, StageStatus
 
 
 @dataclass
@@ -51,7 +51,7 @@ class Engine:
         return reverse
 
     def execute(self, *, revision_id: str) -> ExecutionTrace:
-        """Step45: DAG propagation (ALL_SUCCESS policy)."""
+        """Step46: DAG propagation with FlowRule policies (default ALL_SUCCESS)."""
         from .validation.validator import ValidationEngine
 
         started_at = datetime.utcnow()
@@ -74,6 +74,12 @@ class Engine:
             graph = self._build_graph()
             reverse = self._build_reverse_graph()
 
+            # Build node-level flow policy map (default ALL_SUCCESS)
+            flow_policy: Dict[str, FlowPolicy] = {nid: FlowPolicy.ALL_SUCCESS for nid in self.node_ids}
+            for fr in self.flow:
+                if fr.node_id in flow_policy:
+                    flow_policy[fr.node_id] = fr.policy
+
             # Mark entry SUCCESS
             node_traces[self.entry_node_id] = NodeTrace(
                 node_id=self.entry_node_id,
@@ -82,35 +88,58 @@ class Engine:
                 core_status=StageStatus.SUCCESS,
                 post_status=StageStatus.SUCCESS,
             )
+            # Propagation loop (deterministic, monotonic):
+            # NOT_REACHED -> (SUCCESS|SKIPPED) only, until fixpoint.
+            changed = True
+            while changed:
+                changed = False
+                for child in self.node_ids:
+                    if child == self.entry_node_id:
+                        continue
+                    if child not in node_traces:
+                        continue
 
-            # Simple BFS propagation under ALL_SUCCESS policy
-            queue = [self.entry_node_id]
-
-            while queue:
-                current = queue.pop(0)
-                for child in graph.get(current, []):
                     parents = reverse.get(child, [])
-                    parent_statuses = [
-                        node_traces[p].node_status for p in parents
-                    ]
+                    if not parents:
+                        continue
 
-                    if all(s == NodeStatus.SUCCESS for s in parent_statuses):
-                        node_traces[child] = NodeTrace(
-                            node_id=child,
-                            node_status=NodeStatus.SUCCESS,
-                            pre_status=StageStatus.SUCCESS,
-                            core_status=StageStatus.SUCCESS,
-                            post_status=StageStatus.SUCCESS,
-                        )
-                        queue.append(child)
-                    elif any(s == NodeStatus.FAILURE for s in parent_statuses):
-                        node_traces[child] = NodeTrace(
-                            node_id=child,
-                            node_status=NodeStatus.SKIPPED,
-                            pre_status=StageStatus.SKIPPED,
-                            core_status=StageStatus.SKIPPED,
-                            post_status=StageStatus.SKIPPED,
-                        )
+                    parent_statuses = [node_traces[p].node_status for p in parents]
+
+                    # FAILURE dominates (kept from v1.2.0 contract)
+                    if any(s == NodeStatus.FAILURE for s in parent_statuses):
+                        if node_traces[child].node_status != NodeStatus.SKIPPED:
+                            node_traces[child] = NodeTrace(
+                                node_id=child,
+                                node_status=NodeStatus.SKIPPED,
+                                pre_status=StageStatus.SKIPPED,
+                                core_status=StageStatus.SKIPPED,
+                                post_status=StageStatus.SKIPPED,
+                            )
+                            changed = True
+                        continue
+
+                    policy = flow_policy.get(child, FlowPolicy.ALL_SUCCESS)
+
+                    should_run = False
+                    if policy == FlowPolicy.ALL_SUCCESS:
+                        should_run = all(s == NodeStatus.SUCCESS for s in parent_statuses)
+                    elif policy == FlowPolicy.ANY_SUCCESS:
+                        should_run = any(s == NodeStatus.SUCCESS for s in parent_statuses)
+                    elif policy == FlowPolicy.FIRST_SUCCESS:
+                        # v1 minimal semantics:
+                        # deterministically treat FIRST_SUCCESS as "any upstream success triggers"
+                        should_run = any(s == NodeStatus.SUCCESS for s in parent_statuses)
+
+                    if should_run:
+                        if node_traces[child].node_status != NodeStatus.SUCCESS:
+                            node_traces[child] = NodeTrace(
+                                node_id=child,
+                                node_status=NodeStatus.SUCCESS,
+                                pre_status=StageStatus.SUCCESS,
+                                core_status=StageStatus.SUCCESS,
+                                post_status=StageStatus.SUCCESS,
+                            )
+                            changed = True
 
         finished_at = datetime.utcnow()
         duration_ms = int((finished_at - started_at).total_seconds() * 1000)

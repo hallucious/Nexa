@@ -97,3 +97,186 @@ Enforced by rule_ids:
 - TRACE-002
 - TRACE-003
 - TRACE-004
+
+
+---
+
+# Archived Initial Version (Preserved)
+
+# Trace Model Specification
+Version: v1.0.0
+Status: Official Contract
+
+Purpose:
+This document defines how execution results are recorded.
+Trace is the canonical runtime record of an Engine execution.
+
+Trace is immutable once finalized.
+
+----------------------------------------------------------------------
+
+1. Trace Definition
+
+Trace is a complete graph-based snapshot of an Execution.
+
+It must include:
+
+- Engine revision reference
+- execution_id
+- input snapshot
+- full Node state graph
+- execution metadata
+- final status
+
+Trace is not a linear log.
+Trace preserves structural topology.
+
+----------------------------------------------------------------------
+
+2. Graph Preservation Rule
+
+Trace must preserve:
+
+- All Nodes in the Engine (executed or not)
+- All Channels
+- Flow rules (reference)
+- Structural fingerprint reference
+
+Linear-only trace storage is forbidden.
+
+----------------------------------------------------------------------
+
+3. Node State Recording
+
+For every Node in the Engine,
+Trace must record:
+
+- node_id
+- execution status (success / failure / skipped / not_reached)
+- Pre/Core/Post stage status
+- start_time
+- end_time
+- duration
+- output snapshot (if allowed by policy)
+- error reason_code (if failure)
+
+Nodes that never executed must still appear in Trace.
+
+----------------------------------------------------------------------
+
+4. Execution Status Model
+
+Allowed Node statuses:
+
+- success
+- failure
+- skipped
+- not_reached
+
+Allowed Execution statuses:
+
+- success
+- failure
+
+Partial success state is forbidden in v1.
+
+----------------------------------------------------------------------
+
+5. Skip and Failure Semantics
+
+If a Node fails:
+
+- Downstream Nodes must be marked as skipped.
+- Failure propagation must be traceable.
+
+If Flow condition prevents execution:
+
+- Node must be marked as skipped.
+- Condition reference must be recorded.
+
+----------------------------------------------------------------------
+
+6. Metadata Recording
+
+Trace must include:
+
+- execution_id
+- revision_id
+- structural fingerprint
+- execution start timestamp
+- execution end timestamp
+- total duration
+- cost metrics (if applicable)
+- environment version
+- determinism parameters
+
+Missing metadata invalidates Trace.
+
+----------------------------------------------------------------------
+
+7. Immutability Rule
+
+Once Execution completes:
+
+- Trace must become immutable.
+- No modification allowed.
+- No patching allowed.
+- Corrections require new Execution.
+
+----------------------------------------------------------------------
+
+8. Trace Integrity Rule
+
+Trace must:
+
+- Be internally consistent.
+- Match the Engine revision used.
+- Match structural fingerprint.
+- Preserve Node execution ordering.
+
+Trace inconsistency invalidates execution record.
+
+----------------------------------------------------------------------
+
+9. Trace as Canonical Evidence
+
+Trace is:
+
+- The source of statistical analysis.
+- The source of proposal generation.
+- The source of audit and reproducibility.
+- The source of debugging.
+
+Any analysis must rely only on Trace.
+
+----------------------------------------------------------------------
+
+10. Storage Independence
+
+Trace format must:
+
+- Be serializable.
+- Be exportable.
+- Be storage backend independent.
+
+Persistence mechanism is implementation detail,
+but Trace schema must remain stable per version.
+
+----------------------------------------------------------------------
+
+Contract Rule:
+
+Execution without full Trace generation is forbidden.
+
+Trace is mandatory for every Execution.
+
+End of Trace Model Specification v1.0.0
+
+----------------------------------------------------------------------
+Validation Mapping
+----------------------------------------------------------------------
+Enforced by rule_ids:
+- TRACE-001
+- TRACE-002
+- TRACE-003
+- TRACE-004
