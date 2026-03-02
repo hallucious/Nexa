@@ -1,5 +1,5 @@
 # Validation Engine Contract
-Version: 1.1.0
+Version: 1.2.0
 Status: Official Contract
 
 Purpose:
@@ -184,3 +184,16 @@ Trace.validation_violations 스키마 (v1.1.0부터 강제):
 
 호환성:
 - tuple 형태 (rule_id, message) 기록은 더 이상 허용되지 않는다.
+
+
+## Validation Snapshot Obligation
+
+If validation is executed,
+engine MUST populate:
+
+trace.meta.validation.snapshot
+
+Engine MUST:
+- Deduplicate rule ids
+- Sort rule ids lexicographically
+- Produce stable JSON structure

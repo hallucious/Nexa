@@ -1,5 +1,5 @@
 # Trace Model Specification
-Version: 1.2.0
+Version: 1.3.0
 Status: Official Contract
 
 Purpose:
@@ -308,3 +308,22 @@ Enforced by rule_ids:
 4) Scope
 - This contract constrains *output determinism*, not internal storage.
 - The specific JSON string formatting is not mandated, but stable=True MUST be deterministic.
+
+----------------------------------------------------------------------
+8) Validation Snapshot (Optional)
+----------------------------------------------------------------------
+
+Location:
+trace.meta.validation.snapshot
+
+Structure:
+{
+  "snapshot_version": "1",
+  "applied_rules": ["<RULE_ID>", ...]
+}
+
+Rules:
+- applied_rules MUST be lexicographically sorted.
+- applied_rules MUST NOT contain duplicates.
+- snapshot MUST NOT be included in structural_fingerprint calculation.
+- snapshot is immutable once trace is finalized.

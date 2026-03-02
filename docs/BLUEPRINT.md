@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.1.0
+Version: 1.2.0
 
 ## 1. Foundation Layer (Canonical Architecture Memory)
 
@@ -217,3 +217,10 @@ End of Hyper-AI BLUEPRINT v1.0.0
     -   Shim → Legacy 위임 허용
 4)  Legacy Removal
     -   Legacy 영역 제거는 MAJOR 버전에서만 허용된다.
+
+
+## Validation Snapshot Layer
+
+Validation execution produces a canonical snapshot of applied rules.
+Snapshot is excluded from structural_fingerprint and serves forensic
+and replay integrity purposes.

@@ -348,6 +348,10 @@ class Engine:
                     "at": datetime.utcnow().isoformat(),
                     "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
                     "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
+                    "snapshot": {
+                        "snapshot_version": "1",
+                        "applied_rules": sorted(set(getattr(validation, "applied_rule_ids", []))),
+                    },
                 },
             },
             expected_node_ids=self.node_ids,

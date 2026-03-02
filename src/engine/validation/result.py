@@ -25,4 +25,5 @@ class ValidationResult:
     success: bool
     engine_revision: str
     structural_fingerprint: str
+    applied_rule_ids: List[str] = field(default_factory=list)
     violations: List[Violation] = field(default_factory=list)

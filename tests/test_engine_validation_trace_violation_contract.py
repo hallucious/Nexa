@@ -3,7 +3,7 @@ from __future__ import annotations
 """Step51: Validation → Trace Violation Structure Contract
 
 Invariant:
-- trace.validation_violations must be a list[dict] matching validation_engine_contract.md v1.1.0
+- trace.validation_violations must be a list[dict] matching validation_engine_contract.md v1.2.0
 - validation timestamp must be recorded in trace.meta.validation.at
 """
 

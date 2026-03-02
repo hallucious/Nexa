@@ -11,6 +11,9 @@ if TYPE_CHECKING:
     from ..engine import Engine
 
 
+APPLIED_RULE_IDS = ["CH-001", "ENG-001", "ENG-003", "NODE-001"]
+
+
 class ValidationEngine:
     """Structural Validation Engine (v1).
 
@@ -87,6 +90,7 @@ class ValidationEngine:
             success=success,
             engine_revision=revision_id,
             structural_fingerprint=fingerprint.value,
+            applied_rule_ids=list(APPLIED_RULE_IDS),
             violations=violations,
         )
 
