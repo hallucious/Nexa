@@ -61,6 +61,8 @@ Status: Canonical Foundation Index (Architecture Memory)
 # Layer 4. Product & Expansion (제품/UX/레지스트리/마이그레이션)
 | 문서 | 경로 | 상태 | 설명 | 관련 영역 |
 |---|---|---:|---|---|
+| Legacy Removal Plan (pipeline→engine cleanup) | docs/specs/legacy_removal_plan.md | Planned | legacy(pipeline/gates/orchestrator) 제거 설계 | 마이그레이션/정리 |
+| Pipeline Test Migration Plan | docs/specs/pipeline_test_migration_plan.md | Planned | legacy 테스트 전환 계획(Engine 중심) | 마이그레이션/테스트 |
 | SaaS Product Definition | docs/specs/SaaS Product Definition v1.0.md | Planned | SaaS 제품 정의(후순위) | 제품 |
 | Visual Editor Architecture | docs/specs/Visual Editor Architecture v0.1.md | Planned | 시각 편집기(후순위) | UX/UI |
 | User Profile (Preset) | docs/specs/User Profile (Preset) v0.1.md | Planned | 사용자 프리셋/프로필 | UX/제품 |

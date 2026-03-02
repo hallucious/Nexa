@@ -1,3 +1,20 @@
+"""
+DEPRECATED: Legacy Pipeline Entry
+
+This script is deprecated.
+Use Engine CLI instead:
+
+    python -m src.engine.cli
+
+Legacy pipeline remains temporarily for migration compatibility.
+"""
+
+import warnings
+warnings.warn(
+    "scripts/run_pipeline.py is deprecated. Use Engine CLI instead.",
+    DeprecationWarning,
+)
+
 from __future__ import annotations
 
 import argparse
