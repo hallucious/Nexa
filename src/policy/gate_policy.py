@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional
 
 from src.models.decision_models import Decision
-from src.pipeline.stop_reason import StopReason
+from src.policy.stop_reason import StopReason
 from src.policy.reason_codes import ReasonCode
 
 

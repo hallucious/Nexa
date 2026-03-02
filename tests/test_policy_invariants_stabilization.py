@@ -1,203 +1,26 @@
-from __future__ import annotations
+"""
+DEPRECATED (Legacy Pipeline Stabilization Invariants)
 
-import json
-from pathlib import Path
+This test suite is pipeline/runner/decision-artifact specific:
+- RunStatus PASS/STOP semantics
+- Decision artifacts (Gx_DECISION.md)
+- "UNKNOWN decision" policy
+- max_attempts_per_gate loop guard (runner retry loop)
+- stop_reason normalization (INTERNAL_ERROR)
+
+These concepts do NOT exist in Engine DAG execution (Engine executes a DAG; no gate-loop retry),
+and are replaced by Engine-level contracts:
+- Validation failure -> NOT_REACHED: tests/test_engine_validation_policy_contract.py
+- Handler exception -> FAILURE + downstream SKIPPED: tests/test_engine_node_handlers.py
+- Failure propagation -> SKIPPED: tests/test_engine_failure_policy_contract.py
+- Trace minimum contract: tests/test_engine_trace_min_contract.py
+
+Kept temporarily for migration traceability.
+"""
 
 import pytest
 
-from src.pipeline.runner import PipelineRunner, GateContext
-from src.pipeline.state import RunMeta, GateId, RunStatus
-from src.models.decision_models import GateResult, Decision
-from src.pipeline.contracts import standard_spec
-from src.utils.time import now_seoul
-
-
-def _write_standard_artifacts(run_dir: Path, gate_prefix: str, decision_str: str = "PASS") -> dict[str, str]:
-    """Write standard artifacts and return outputs mapping (contract key -> filename)."""
-    spec = standard_spec(gate_prefix)
-
-    (run_dir / f"{gate_prefix}_DECISION.md").write_text(
-        f"# {gate_prefix} DECISION\n\n{decision_str}\n", encoding="utf-8"
-    )
-    (run_dir / f"{gate_prefix}_OUTPUT.json").write_text(
-        json.dumps({"gate": gate_prefix}, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    (run_dir / f"{gate_prefix}_META.json").write_text(
-        json.dumps(
-            {
-                "gate": gate_prefix,
-                "decision": decision_str,
-                "at": now_seoul().isoformat(),
-            },
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
-    outputs = {
-        f"{gate_prefix}_DECISION.md": f"{gate_prefix}_DECISION.md",
-        f"{gate_prefix}_OUTPUT.json": f"{gate_prefix}_OUTPUT.json",
-        f"{gate_prefix}_META.json": f"{gate_prefix}_META.json",
-    }
-    spec.validate(outputs)
-    return outputs
-
-
-def make_contract_gate(gate_prefix: str, decision: Decision | object) -> callable:
-    """A minimal mock gate. Can intentionally return an invalid decision type for UNKNOWN policy tests."""
-
-    def _exec(ctx: GateContext) -> GateResult:
-        outputs = _write_standard_artifacts(Path(ctx.run_dir), gate_prefix, str(getattr(decision, "value", decision)))
-        # NOTE: GateResult typing says Decision, but we intentionally pass through 'decision' for robustness tests.
-        return GateResult(decision=decision, message=gate_prefix, outputs=outputs)  # type: ignore[arg-type]
-
-    return _exec
-
-
-def make_raising_gate(gate_prefix: str) -> callable:
-    def _exec(ctx: GateContext) -> GateResult:
-        _write_standard_artifacts(Path(ctx.run_dir), gate_prefix, "RAISE")
-        raise RuntimeError("boom")
-
-    return _exec
-
-
-def test_final_meta_status_is_pass_or_stop(tmp_path: Path):
-    """Handover invariant: meta.status final value must be PASS or STOP (no FAIL)."""
-    meta = RunMeta(run_id="TEST_FINAL_STATUS", created_at=now_seoul().isoformat())
-    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path))
-
-    # Pass everything until G7, then FAIL at G7 -> should STOP (not FAIL)
-    runner.register(GateId.G1, make_contract_gate("G1", Decision.PASS))
-    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))
-    runner.register(GateId.G3, make_contract_gate("G3", Decision.PASS))
-    runner.register(GateId.G4, make_contract_gate("G4", Decision.PASS))
-    runner.register(GateId.G5, make_contract_gate("G5", Decision.PASS))
-    runner.register(GateId.G6, make_contract_gate("G6", Decision.PASS))
-    runner.register(GateId.G7, make_contract_gate("G7", Decision.FAIL))
-
-    runner.run()
-
-    assert meta.status in (RunStatus.PASS, RunStatus.STOP)
-    assert meta.status == RunStatus.STOP
-    assert meta.current_gate == GateId.STOP
-
-
-def test_required_decision_artifacts_exist_for_key_gates(tmp_path: Path):
-    """Handover artifact invariant: G2/G4/G5/G6/G7 must produce Gx_DECISION.md."""
-    meta = RunMeta(run_id="TEST_ARTIFACTS", created_at=now_seoul().isoformat())
-    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path))
-
-    for gid in [GateId.G1, GateId.G2, GateId.G3, GateId.G4, GateId.G5, GateId.G6, GateId.G7]:
-        runner.register(gid, make_contract_gate(gid.value, Decision.PASS))
-
-    runner.run()
-
-    for gate_prefix in ("G2", "G4", "G5", "G6", "G7"):
-        assert (tmp_path / f"{gate_prefix}_DECISION.md").exists()
-
-
-def test_unknown_decision_is_treated_as_stop(tmp_path: Path):
-    """Handover invariant: UNKNOWN is treated as STOP (safety)."""
-    meta = RunMeta(run_id="TEST_UNKNOWN", created_at=now_seoul().isoformat())
-    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path))
-
-    runner.register(GateId.G1, make_contract_gate("G1", Decision.PASS))
-    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))
-    runner.register(GateId.G3, make_contract_gate("G3", Decision.PASS))
-
-    # Intentionally return an invalid decision type to simulate "UNKNOWN"
-    runner.register(GateId.G4, make_contract_gate("G4", "UNKNOWN"))
-
-    # The rest shouldn't run, but register anyway.
-    runner.register(GateId.G5, make_contract_gate("G5", Decision.PASS))
-    runner.register(GateId.G6, make_contract_gate("G6", Decision.PASS))
-    runner.register(GateId.G7, make_contract_gate("G7", Decision.PASS))
-
-    runner.run()
-
-    assert meta.status == RunStatus.STOP
-    assert meta.current_gate == GateId.STOP
-
-
-def test_gate_exception_is_converted_to_stop(tmp_path: Path):
-    """Safety: if a gate crashes, runner must STOP (not crash the whole process)."""
-    meta = RunMeta(run_id="TEST_EXCEPTION", created_at=now_seoul().isoformat())
-    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path))
-
-    runner.register(GateId.G1, make_contract_gate("G1", Decision.PASS))
-    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))
-
-    # G3 raises
-    runner.register(GateId.G3, make_raising_gate("G3"))
-
-    runner.register(GateId.G4, make_contract_gate("G4", Decision.PASS))
-    runner.register(GateId.G5, make_contract_gate("G5", Decision.PASS))
-    runner.register(GateId.G6, make_contract_gate("G6", Decision.PASS))
-    runner.register(GateId.G7, make_contract_gate("G7", Decision.PASS))
-
-    runner.run()
-
-    assert meta.status == RunStatus.STOP
-    assert meta.current_gate == GateId.STOP
-def test_stop_requires_non_empty_stop_reason(tmp_path: Path):
-    """Invariant: if runner ends in STOP, meta.stop_reason must be non-empty."""
-    meta = RunMeta(run_id="TEST_STOP_REASON", created_at=now_seoul().isoformat())
-    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path))
-
-    # Force a STOP without providing stop_reason in GateResult.meta
-    runner.register(GateId.G1, make_contract_gate("G1", Decision.STOP))
-    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))  # should not run
-
-    runner.run()
-
-    assert meta.status == RunStatus.STOP
-    assert meta.current_gate == GateId.STOP
-    assert isinstance(meta.stop_reason, str) and meta.stop_reason.strip() != ""
-
-
-def test_max_attempts_per_gate_exceeded_stops_and_sets_reason(tmp_path: Path):
-    """Invariant: exceeding max_attempts_per_gate must STOP and set stop_reason."""
-    meta = RunMeta(run_id="TEST_MAX_ATTEMPTS", created_at=now_seoul().isoformat())
-    # Keep it small to make the test fast and deterministic.
-    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path), max_attempts_per_gate=2)
-
-    # G1 FAIL loops back to G1; after 3rd attempt, runner should STOP with reason.
-    runner.register(GateId.G1, make_contract_gate("G1", Decision.FAIL))
-    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))  # should not run
-
-    runner.run()
-
-    assert meta.status == RunStatus.STOP
-    assert meta.current_gate == GateId.STOP
-    assert isinstance(meta.stop_reason, str) and meta.stop_reason.strip() != ""
-    # B2: standardized STOP reasons (enum). Detail is recorded separately.
-    assert meta.stop_reason == "INTERNAL_ERROR"
-    assert "max_attempts_per_gate exceeded" in (meta.gate_metrics.get("_runner", {}) or {}).get("stop_detail", "")
-
-
-def test_max_attempts_strict_boundary_metrics(tmp_path: Path):
-    """Stable Core boundary invariant: attempt count and runner metrics must be consistent."""
-
-    meta = RunMeta(run_id="TEST_MAX_ATTEMPTS_BOUNDARY", created_at=now_seoul().isoformat())
-    runner = PipelineRunner(meta=meta, run_dir=str(tmp_path), max_attempts_per_gate=2)
-
-    runner.register(GateId.G1, make_contract_gate("G1", Decision.FAIL))
-    runner.register(GateId.G2, make_contract_gate("G2", Decision.PASS))  # should never execute
-
-    runner.run()
-
-    assert meta.status == RunStatus.STOP
-    assert meta.current_gate == GateId.STOP
-    assert meta.stop_reason == "INTERNAL_ERROR"
-
-    # attempts should exceed boundary by 1 (2 allowed → 3rd triggers STOP)
-    attempts = meta.attempts.get("G1", 0)
-    assert attempts == 3
-
-    runner_metrics = meta.gate_metrics.get("_runner", {}) or {}
-    assert "stop_detail" in runner_metrics
-    assert "max_attempts_per_gate exceeded" in runner_metrics["stop_detail"]
-
-    assert "G2" not in meta.attempts
+pytest.skip(
+    "Deprecated legacy pipeline stabilization invariants. Engine DAG contracts cover the applicable safety semantics.",
+    allow_module_level=True,
+)

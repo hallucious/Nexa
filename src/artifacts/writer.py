@@ -4,11 +4,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict
-
 from src.utils.time import now_seoul
 from src.models.decision_models import Decision
-from src.pipeline.runner import GateContext
+from typing import Any, Mapping, Optional, Protocol
 
+
+class GateContextLike(Protocol):
+    run_dir: str
+    meta: Any  # expected to have .attempts mapping
 
 class ArtifactWriter:
     """Artifact/IO Layer for standard gate outputs (pure I/O)."""
@@ -19,8 +22,8 @@ class ArtifactWriter:
         decision: Decision,
         decision_md: str,
         output_dict: dict,
-        ctx: GateContext,
-        meta_extra: dict | None = None,
+        ctx: GateContextLike,
+        meta_extra: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, str]:
 
         run_dir = Path(ctx.run_dir).resolve()
@@ -39,7 +42,7 @@ class ArtifactWriter:
             "gate": gate_id,
             "decision": decision.value,
             "at": now_seoul().isoformat(),
-            "attempt": ctx.meta.attempts.get(gate_id, 1),
+            "attempt": getattr(getattr(ctx, "meta", None), "attempts", {}).get(gate_id, 1) if getattr(ctx, "meta", None) is not None else 1,
         }
 
         if meta_extra:
