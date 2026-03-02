@@ -1,5 +1,5 @@
 # Execution Environment Contract (No-IO v1)
-Version: 1.2.0
+Version: 1.3.0
 Status: Official Contract
 
 Purpose:
@@ -73,3 +73,20 @@ canonical_requirements_txt rules:
 - Hash via SHA256
 
 If requirements.txt is missing, dependency_fingerprint MUST be SHA256("") (empty payload).
+
+
+----------------------------------------------------------------------
+4) plugin_registry_fingerprint Contract
+----------------------------------------------------------------------
+
+Engine MUST compute plugin_registry_fingerprint based on:
+
+- Loaded plugin identifiers
+- Plugin file SHA256
+- Canonical lexicographic ordering
+
+Algorithm:
+1. For each plugin: "<plugin_id>:<file_sha256>"
+2. Sort entries lexicographically
+3. Join with '\n'
+4. SHA256 over joined string
