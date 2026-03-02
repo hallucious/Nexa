@@ -1,4 +1,5 @@
 from __future__ import annotations
+from src.utils.time import now_utc, now_utc_iso
 
 import uuid
 from dataclasses import dataclass, field
@@ -202,7 +203,7 @@ class Engine:
         """
         from .validation.validator import ValidationEngine
 
-        started_at = datetime.utcnow()
+        started_at = now_utc()
         execution_id = str(uuid.uuid4())
 
         validation = ValidationEngine().validate(self, revision_id=revision_id)
@@ -315,7 +316,7 @@ class Engine:
                     node_traces[node_id] = self._run_node(node_id=node_id, input_snapshot=merged_input)
                     changed = True
 
-        finished_at = datetime.utcnow()
+        finished_at = now_utc()
         duration_ms = int((finished_at - started_at).total_seconds() * 1000)
 
         trace = ExecutionTrace(
@@ -345,7 +346,7 @@ class Engine:
                     "trace_model": ENGINE_TRACE_MODEL_VERSION,
                 },
                 "validation": {
-                    "at": datetime.utcnow().isoformat(),
+                    "at": now_utc_iso(),
                     "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
                     "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
                     "snapshot": {

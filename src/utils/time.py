@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+def now_utc() -> datetime:
+    """Return timezone-aware UTC datetime."""
+    return datetime.now(timezone.utc)
+
+def now_utc_iso() -> str:
+    """Return ISO-8601 string for current UTC time."""
+    return now_utc().isoformat()
+
+
 from datetime import datetime, timezone, timedelta
 
 # Korea Standard Time is UTC+9
