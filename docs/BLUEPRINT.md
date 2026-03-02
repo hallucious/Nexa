@@ -232,5 +232,5 @@ Environment is now part of execution identity.
 execution_fingerprint determines semantic equality of runs.
 
 
-## Definition Language
-See docs/specs/definition_language_contract.md
+## Circuit
+See docs/specs/circuit_contract.md

@@ -1,4 +1,4 @@
-# Definition Language Contract (Node Circuit)
+# Circuit Contract (Node Circuit Definition Language)
 Version: 1.0.0
 
 Purpose:

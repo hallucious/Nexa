@@ -69,4 +69,4 @@ Status: Canonical Foundation Index (Architecture Memory)
 | Definition Registry | docs/specs/Definition Registry v0.1.md | Planned | 정의/엔진 저장/불러오기(레지스트리) | 저장/공유 |
 | Definition Versioning & Migration Strategy | docs/specs/Definition Versioning & Migration Strategy v0.1.md | Planned | 정의 버전/마이그레이션 전략 | 저장/공유 |
 
-- docs/specs/definition_language_contract.md (Node Circuit Definition Language v1.0.0)
+- docs/specs/circuit_contract.md (Circuit Definition Language v1.0.0)
