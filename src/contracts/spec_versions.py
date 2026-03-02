@@ -1,3 +1,8 @@
+
+SPEC_VERSIONS = {
+    'CT-TRACE': '1.0.0',
+}
+
 # Spec ↔ Code Version Sync Constants
 # This module belongs to the contracts layer (not runtime logic).
 
