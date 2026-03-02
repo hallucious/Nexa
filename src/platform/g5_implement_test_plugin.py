@@ -1,8 +1,9 @@
+
 from __future__ import annotations
 
+from src.platform.context import GateContextLike
 from typing import Optional, Protocol, Any, Dict
 
-from src.pipeline.runner import GateContext
 from src.platform.capability_negotiation import negotiate
 
 PLUGIN_MANIFEST = {
@@ -33,7 +34,7 @@ class G5ExecPlugin(Protocol):
         ...
 
 
-def resolve_g5_exec_plugin(ctx: GateContext) -> Optional[G5ExecPlugin]:
+def resolve_g5_exec_plugin(ctx: GateContextLike) -> Optional[G5ExecPlugin]:
     """Resolve the execution plugin for G5.
 
     Convention:
@@ -53,7 +54,7 @@ def resolve_g5_exec_plugin(ctx: GateContext) -> Optional[G5ExecPlugin]:
 
     return None
 
-def resolve(ctx: GateContext) -> Optional[G5ExecPlugin]:
+def resolve(ctx: GateContextLike) -> Optional[G5ExecPlugin]:
     """Unified entrypoint: resolve(ctx) -> optional exec plugin."""
     sel = negotiate(
         gate_id="G5",

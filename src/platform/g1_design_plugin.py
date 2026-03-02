@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from src.platform.context import GateContextLike
 """G1 Design plugin.
 
 Goal: isolate provider-facing logic (prompt rendering + model call + JSON parse)
@@ -7,13 +10,11 @@ Behavior: preserved. If provider is missing or tests are running, this plugin
 returns empty AI output and the caller keeps the skeleton design.
 """
 
-from __future__ import annotations
 
 import json
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from src.pipeline.runner import GateContext
 from typing import Protocol
 from src.prompts.renderer import PromptRenderer
 
@@ -101,7 +102,7 @@ class _G1DesignRunnerImpl:
         return run_g1_design_plugin(request_text=request_text, provider=self.provider, is_pytest=is_pytest)
 
 
-def resolve(ctx: "GateContext") -> G1DesignRunner:
+def resolve(ctx: "GateContextLike") -> G1DesignRunner:
     """Unified entrypoint: resolve(ctx) -> runner."""
     sel = negotiate(
         gate_id="G1",

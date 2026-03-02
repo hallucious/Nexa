@@ -1,10 +1,11 @@
+
 from __future__ import annotations
 
+from src.platform.context import GateContextLike
 import json
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
-from src.pipeline.runner import GateContext
 from src.platform.capability_negotiation import negotiate
 
 PLUGIN_MANIFEST = {
@@ -126,7 +127,7 @@ def resolve_g2_continuity_plugin(providers: Optional[Dict[str, Any]]) -> G2Conti
         return NoopContinuityPlugin()
     return GPTContinuityPlugin(p)  # type: ignore[arg-type]
 
-def resolve(ctx: "GateContext") -> "G2ContinuityPlugin":
+def resolve(ctx: "GateContextLike") -> "G2ContinuityPlugin":
     """Unified entrypoint: resolve(ctx) -> plugin.
 
     Preserves legacy behavior of resolve_g2_continuity_plugin(providers).

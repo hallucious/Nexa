@@ -1,11 +1,13 @@
+
 from __future__ import annotations
 
+from src.platform.context import GateContextLike
 """Capability Negotiation v1.
 
 Goal: centralize deterministic selection of plugins/providers by capability.
 
 This module does NOT load external plugins. It only selects from already-injected
-objects in GateContext:
+objects in GateContextLike:
   - ctx.providers
   - ctx.plugins
   - ctx.context["plugins"]
@@ -19,8 +21,7 @@ Step41 introduces a single source of truth for:
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from src.pipeline.observability import append_observability_event
-from src.pipeline.runner import GateContext
+from src.platform.observability import append_observability_event
 from src.platform.plugin_contract import ReasonCode
 
 
@@ -41,7 +42,7 @@ class NegotiationResult:
     priority_chain: List[PriorityItem]
 
 
-def _get_context_plugins(ctx: GateContext) -> Dict[str, Any]:
+def _get_context_plugins(ctx: GateContextLike) -> Dict[str, Any]:
     try:
         plugs = (ctx.context or {}).get("plugins")
         return plugs if isinstance(plugs, dict) else {}
@@ -49,7 +50,7 @@ def _get_context_plugins(ctx: GateContext) -> Dict[str, Any]:
         return {}
 
 
-def _lookup(ctx: GateContext, target: InjectTarget, key: str) -> Any:
+def _lookup(ctx: GateContextLike, target: InjectTarget, key: str) -> Any:
     if target == "providers":
         return (ctx.providers or {}).get(key)
     if target == "plugins":
@@ -63,7 +64,7 @@ def negotiate(
     *,
     gate_id: str,
     capability: str,
-    ctx: GateContext,
+    ctx: GateContextLike,
     priority_chain: Sequence[PriorityItem],
     required: bool = False,
     emit_observability: bool = True,

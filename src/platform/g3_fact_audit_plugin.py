@@ -1,8 +1,9 @@
+
 from __future__ import annotations
 
+from src.platform.context import GateContextLike
 from typing import Any, Dict, Optional
 
-from src.pipeline.runner import GateContext
 from src.platform.fact_check_plugin import FactCheckPlugin, resolve_fact_check_plugin as _resolve_fact_check_plugin, resolve_from_ctx
 
 PLUGIN_MANIFEST = {
@@ -27,6 +28,6 @@ def resolve_fact_check_plugin(*, plugins: Optional[Dict[str, Any]], provider: An
     """
     return _resolve_fact_check_plugin(plugins=plugins, provider=provider)
 
-def resolve(ctx: "GateContext") -> Optional[FactCheckPlugin]:
+def resolve(ctx: "GateContextLike") -> Optional[FactCheckPlugin]:
     """Unified entrypoint: resolve(ctx) -> optional fact-check plugin."""
     return resolve_from_ctx(ctx)

@@ -1,9 +1,10 @@
+
 from __future__ import annotations
 
+from src.platform.context import GateContextLike
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
-from src.pipeline.runner import GateContext
 from src.platform.capability_negotiation import negotiate
 from src.platform.injection_registry import InjectionRegistry, InjectionHandle, InjectionSpec
 from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
@@ -31,7 +32,7 @@ class CounterfactualPlugin(Protocol):
 
     def generate(
         self,
-        ctx: GateContext,
+        ctx: GateContextLike,
         prompt: str,
         *,
         temperature: float = 0.0,
@@ -46,7 +47,7 @@ class ProviderCounterfactualPlugin:
 
     def generate(
         self,
-        ctx: GateContext,
+        ctx: GateContextLike,
         prompt: str,
         *,
         temperature: float = 0.0,
@@ -101,7 +102,7 @@ class ProviderCounterfactualPlugin:
             return "", meta, err, engine
 
 
-def resolve_g6_counterfactual_plugin(ctx: GateContext) -> CounterfactualPlugin:
+def resolve_g6_counterfactual_plugin(ctx: GateContextLike) -> CounterfactualPlugin:
     """Resolve the plugin to use for G6.
 
     - If ctx.providers contains a dedicated key, prefer it:
@@ -120,6 +121,6 @@ def resolve_g6_counterfactual_plugin(ctx: GateContext) -> CounterfactualPlugin:
     return ProviderCounterfactualPlugin()
 
 
-def resolve(ctx: GateContext) -> Optional[CounterfactualPlugin]:
+def resolve(ctx: GateContextLike) -> Optional[CounterfactualPlugin]:
     """Unified entrypoint: resolve(ctx) -> optional counterfactual plugin."""
     return resolve_g6_counterfactual_plugin(ctx)

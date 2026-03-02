@@ -1,9 +1,10 @@
+
 from __future__ import annotations
 
+from src.platform.context import GateContextLike
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol
 
-from src.pipeline.runner import GateContext
 from src.platform.capability_negotiation import negotiate
 
 PLUGIN_MANIFEST = {
@@ -65,7 +66,7 @@ def resolve_fact_check_plugin(
     return None
 
 
-def resolve_from_ctx(ctx: GateContext) -> Optional[FactCheckPlugin]:
+def resolve_from_ctx(ctx: GateContextLike) -> Optional[FactCheckPlugin]:
     """Step41: capability negotiation based resolver.
 
     Precedence (deterministic):

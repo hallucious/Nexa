@@ -1,9 +1,10 @@
+
 from __future__ import annotations
 
+from src.platform.context import GateContextLike
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple
 
-from src.pipeline.runner import GateContext
 from src.platform.plugin_contract import ReasonCode, infer_reason_code, normalize_meta
 from src.platform.capability_negotiation import negotiate
 from src.platform.injection_registry import InjectionHandle, InjectionSpec
@@ -131,7 +132,7 @@ class _WrappedPlugin:
         return (str(text or ""), meta)
 
 
-def resolve_g7_final_review_plugin(ctx: GateContext) -> Optional[G7FinalReviewPlugin]:
+def resolve_g7_final_review_plugin(ctx: GateContextLike) -> Optional[G7FinalReviewPlugin]:
     """Resolve plugin in a stable order.
 
     Priority:
@@ -152,7 +153,7 @@ def resolve_g7_final_review_plugin(ctx: GateContext) -> Optional[G7FinalReviewPl
     return None
 
 
-def resolve(ctx: GateContext) -> Optional[G7FinalReviewPlugin]:
+def resolve(ctx: GateContextLike) -> Optional[G7FinalReviewPlugin]:
     """Unified entrypoint: resolve(ctx) -> optional final review plugin."""
     sel = negotiate(
         gate_id="G7",

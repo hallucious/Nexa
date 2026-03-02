@@ -1,7 +1,19 @@
 from __future__ import annotations
 
-# Export providers for convenience.
-from src.providers.gemini_provider import GeminiProvider, GeminiResult  # noqa: F401
+"""Legacy gates shim.
 
-from src.providers.gpt_provider import GPTProvider, GPTTextResult  # noqa: F401
-from src.providers.codex_provider import CodexProvider, CodexTextResult  # noqa: F401
+Canonical legacy implementation moved to:
+    src.legacy.gates.__init__
+
+Engine-native execution does not use gates directly.
+"""
+
+import importlib as _importlib
+
+_legacy = _importlib.import_module("src.legacy.gates.__init__")
+
+for _k, _v in _legacy.__dict__.items():
+    # Avoid overwriting module identity attributes (__file__, __spec__, etc.)
+    if _k.startswith("__") and _k.endswith("__"):
+        continue
+    globals()[_k] = _v

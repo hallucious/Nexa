@@ -1,25 +1,19 @@
 from __future__ import annotations
 
-from src.models.decision_models import GateResult, Decision
-from src.pipeline.state import GateId
-from src.pipeline.runner import GateContext
+"""Legacy gates shim.
 
+Canonical legacy implementation moved to:
+    src.legacy.gates.mock_gate
 
-def make_pass_gate(message: str):
-    def _exec(ctx: GateContext) -> GateResult:
-        return GateResult(
-            decision=Decision.PASS,
-            message=message,
-            outputs={},
-        )
-    return _exec
+Engine-native execution does not use gates directly.
+"""
 
+import importlib as _importlib
 
-def make_info_gate(message: str):
-    def _exec(ctx: GateContext) -> GateResult:
-        return GateResult(
-            decision=Decision.PASS,
-            message=message,
-            outputs={},
-        )
-    return _exec
+_legacy = _importlib.import_module("src.legacy.gates.mock_gate")
+
+for _k, _v in _legacy.__dict__.items():
+    # Avoid overwriting module identity attributes (__file__, __spec__, etc.)
+    if _k.startswith("__") and _k.endswith("__"):
+        continue
+    globals()[_k] = _v

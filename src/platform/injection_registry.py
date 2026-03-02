@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 """Injection Registry Contract v1 (Step41-B2, Option B).
@@ -17,7 +18,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple, Callable
 import time
 
-from src.pipeline.observability import append_observability_event
+from src.platform.observability import append_observability_event
 
 
 # -----------------------------------------------------------------------------

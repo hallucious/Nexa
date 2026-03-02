@@ -1,5 +1,7 @@
+
 from __future__ import annotations
 
+from src.platform.context import GateContextLike
 import json
 import os
 from pathlib import Path
@@ -8,7 +10,6 @@ from typing import Any, Dict, Optional, Tuple
 
 from typing import Protocol
 from src.models.decision_models import Decision
-from src.pipeline.runner import GateContext
 from src.prompts.renderer import PromptRenderer
 from src.policy.gate_policy import evaluate_g4
 from src.platform.plugin_contract import ReasonCode, normalize_meta
@@ -82,7 +83,7 @@ class G4SelfCheckPlugin:
 
     prompt_id: str = "g4_self_check@v1"
 
-    def run(self, ctx: GateContext) -> G4SelfCheckPluginResult:
+    def run(self, ctx: GateContextLike) -> G4SelfCheckPluginResult:
         is_pytest = bool(os.getenv("PYTEST_CURRENT_TEST"))
         registry = InjectionRegistry.from_gate_context(ctx)
         provider_handle = None
@@ -235,7 +236,7 @@ class _G4AIProviderRunnerImpl:
         )
 
 
-def resolve(ctx: GateContext) -> Optional[G4AIProviderRunner]:
+def resolve(ctx: GateContextLike) -> Optional[G4AIProviderRunner]:
     """Unified entrypoint: resolve(ctx) -> optional runner."""
     sel = negotiate(
         gate_id="G4",

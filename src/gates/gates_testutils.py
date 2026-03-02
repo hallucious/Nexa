@@ -1,20 +1,19 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
-"""
-Test helper re-exports.
+"""Legacy gates shim.
 
-Some tests import:
-  from src.gates.gates_testutils import make_contract_pass_gate
+Canonical legacy implementation moved to:
+    src.legacy.gates.gates_testutils
 
-But the actual implementation lives in mock gate modules.
-This file provides a stable import path for tests.
+Engine-native execution does not use gates directly.
 """
 
-from src.gates.mock_gate import make_pass_gate, make_info_gate
-from src.gates.mock_gate_v2 import make_contract_pass_gate
+import importlib as _importlib
 
-__all__ = [
-    "make_pass_gate",
-    "make_info_gate",
-    "make_contract_pass_gate",
-]
+_legacy = _importlib.import_module("src.legacy.gates.gates_testutils")
+
+for _k, _v in _legacy.__dict__.items():
+    # Avoid overwriting module identity attributes (__file__, __spec__, etc.)
+    if _k.startswith("__") and _k.endswith("__"):
+        continue
+    globals()[_k] = _v
