@@ -237,3 +237,6 @@ See docs/specs/circuit_contract.md
 
 ## Active Specs
 - CT-TRACE v1.0.0 (Circuit Trace Contract)
+
+## Active Specs
+- NODE-EXEC v1.0.0 (Node Execution Contract) — docs/specs/node_execution_contract.md

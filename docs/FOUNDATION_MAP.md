@@ -1,5 +1,5 @@
 # FOUNDATION_MAP
-Version: 1.0.0
+Version: 1.0.1
 Status: Canonical Foundation Index (Architecture Memory)
 
 ## 1. 목적
@@ -38,6 +38,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 |---|---|---:|---|---|
 | node_abstraction | docs/specs/node_abstraction.md | Partial | 노드 추상화/역할 | src/engine/* (계약 영향) |
 | node_execution_pipeline | docs/specs/node_execution_pipeline.md | Partial | 노드 실행 파이프라인(단계) | src/engine/engine.py (확장 예정) |
+| node_execution_contract | docs/specs/node_execution_contract.md | Active | Node 실행 계약(Pre/Core/Post, AI Core-only, Plugin all-stages, return-only mutation, orchestration default) | src/engine/*, src/circuit/* |
 | execution_model | docs/specs/execution_model.md | Active | 실행 의미(상태 전파 포함) | src/engine/engine.py |
 | trace_model | docs/specs/trace_model.md | Active | Trace 불변/커버리지 계약 | src/engine/trace.py |
 | Execution State Model | docs/specs/Execution State Model v0.1.md | Planned | 실행 상태 모델(확장) | 추후 |

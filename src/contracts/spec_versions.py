@@ -1,5 +1,7 @@
 
 SPEC_VERSIONS = {
+
+    'NODE-EXEC': '1.0.0',
     'CT-TRACE': '1.0.0',
 }
 
