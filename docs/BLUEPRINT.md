@@ -234,3 +234,6 @@ execution_fingerprint determines semantic equality of runs.
 
 ## Circuit
 See docs/specs/circuit_contract.md
+
+## Active Specs
+- CT-TRACE v1.0.0 (Circuit Trace Contract)
