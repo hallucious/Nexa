@@ -5,7 +5,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from src.contracts.spec_versions import ENGINE_EXECUTION_MODEL_VERSION, ENGINE_TRACE_MODEL_VERSION
+from src.contracts.spec_versions import (
+    ENGINE_EXECUTION_MODEL_VERSION,
+    ENGINE_TRACE_MODEL_VERSION,
+    VALIDATION_ENGINE_CONTRACT_VERSION,
+    VALIDATION_RULE_CATALOG_VERSION,
+)
 
 from .fingerprint import StructuralFingerprint, compute_fingerprint
 from .model import Channel, EngineStructure, FlowRule
@@ -321,13 +326,28 @@ class Engine:
             finished_at=finished_at,
             duration_ms=duration_ms,
             validation_success=validation.success,
-            validation_violations=[(v.rule_id, v.message) for v in validation.violations],
+            validation_violations=[
+                {
+                    "rule_id": v.rule_id,
+                    "rule_name": v.rule_name,
+                    "severity": v.severity.value,
+                    "location_type": v.location_type,
+                    "location_id": v.location_id,
+                    "message": v.message,
+                }
+                for v in validation.violations
+            ],
             nodes=node_traces,
             meta={
                 "engine_meta": self.meta,
                 "spec_versions": {
                     "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
                     "trace_model": ENGINE_TRACE_MODEL_VERSION,
+                },
+                "validation": {
+                    "at": datetime.utcnow().isoformat(),
+                    "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
+                    "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
                 },
             },
             expected_node_ids=self.node_ids,

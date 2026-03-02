@@ -1,5 +1,5 @@
 # Validation Engine Contract
-Version: 1.0.0
+Version: 1.1.0
 Status: Official Contract
 
 Purpose:
@@ -151,3 +151,36 @@ If validation detects a violation:
 - Proposal may be generated.
 
 End of Validation Engine Contract v1.0.0
+
+================================================================================
+11) Execution Behavior Clarification (Added in v1.1.0)
+================================================================================
+
+배경:
+- v1 Engine.execute()는 Validation 결과를 항상 Trace에 기록해야 한다.
+- "Execution 금지"의 의미는 "노드 실행 금지"를 의미한다.
+  (Trace 생성/반환 자체를 금지하는 의미가 아님)
+
+규칙:
+1) validation.success == false 인 경우:
+   - Engine은 어떤 노드도 실행하면 안 된다.
+   - Trace.nodes[*].node_status는 모두 NOT_REACHED 여야 한다.
+   - Trace.validation_success = false
+   - Trace.validation_violations는 violations[]를 *그대로* 기록해야 한다 (아래 스키마).
+2) Validation timestamp 기록:
+   - Trace.meta.validation.at 에 ISO-8601 문자열로 기록해야 한다.
+
+Trace.validation_violations 스키마 (v1.1.0부터 강제):
+- violations: [
+    {
+      "rule_id": str,
+      "rule_name": str,
+      "severity": "error" | "warning",
+      "location_type": "engine" | "node" | "channel" | "flow",
+      "location_id": str | null,
+      "message": str
+    }
+  ]
+
+호환성:
+- tuple 형태 (rule_id, message) 기록은 더 이상 허용되지 않는다.

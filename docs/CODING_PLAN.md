@@ -124,3 +124,28 @@ Step50: Trace Serialization Stability Contract
 완료 조건:
 - python -m pytest -q 전체 통과
 - 반복 직렬화 결과 완전 동일
+
+---------------------------------------------------------------------
+Step51: Validation → Trace Violation Structure Contract
+---------------------------------------------------------------------
+목표:
+- Validation 실패/경고(violations)를 Trace에 표준 dict 구조로 기록한다.
+- Validation timestamp를 Trace.meta.validation.at에 기록한다.
+- spec-version sync: VALIDATION_ENGINE_CONTRACT_VERSION을 1.1.0으로 올리고, 코드/테스트로 강제한다.
+
+변경:
+- docs/specs/validation_engine_contract.md: 1.0.0 → 1.1.0 (MINOR)
+  - "Execution 금지" 의미를 "노드 실행 금지"로 명확화 (Trace 반환은 허용)
+  - Trace.validation_violations를 dict 스키마로 강제
+  - Trace.meta.validation.at timestamp 기록 강제
+- src/engine/engine.py
+  - trace.validation_violations: list[dict]로 기록
+  - trace.meta.validation: {at, contract_version, rule_catalog_version} 기록
+- src/contracts/spec_versions.py
+  - VALIDATION_ENGINE_CONTRACT_VERSION = "1.1.0"
+- tests/test_engine_validation_trace_violation_contract.py 추가
+  - 위 계약 강제
+
+완료 조건:
+- python -m pytest -q 전체 통과
+- validation 실패 케이스에서 violations dict 구조 + timestamp 존재
