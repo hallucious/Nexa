@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-"""Legacy pipeline CLI shim.
+"""Legacy pipeline shim.
 
 Canonical legacy implementation moved to:
-    src.legacy.pipeline_cli
+    src.legacy.pipeline.cli
 
 Engine-native execution entrypoint is:
     src.engine.cli
@@ -11,7 +11,9 @@ Engine-native execution entrypoint is:
 
 import importlib as _importlib
 
-_legacy = _importlib.import_module("src.legacy.pipeline_cli")
+_legacy = _importlib.import_module("src.legacy.pipeline.cli")
 
-# Re-export everything (including private symbols used by tests)
-globals().update(_legacy.__dict__)
+for _k, _v in _legacy.__dict__.items():
+    if _k.startswith("__") and _k.endswith("__"):
+        continue
+    globals()[_k] = _v

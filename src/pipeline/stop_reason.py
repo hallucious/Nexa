@@ -1,5 +1,19 @@
 from __future__ import annotations
 
-# Backward-compatibility shim (legacy pipeline)
-# New canonical location: src.policy.stop_reason
-from src.policy.stop_reason import StopReason, is_valid_stop_reason  # noqa: F401
+"""Legacy pipeline shim.
+
+Canonical legacy implementation moved to:
+    src.legacy.pipeline.stop_reason
+
+Engine-native execution entrypoint is:
+    src.engine.cli
+"""
+
+import importlib as _importlib
+
+_legacy = _importlib.import_module("src.legacy.pipeline.stop_reason")
+
+for _k, _v in _legacy.__dict__.items():
+    if _k.startswith("__") and _k.endswith("__"):
+        continue
+    globals()[_k] = _v

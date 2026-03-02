@@ -1,9 +1,19 @@
 from __future__ import annotations
 
-# Backward-compatibility shim (legacy pipeline)
-# New canonical location: src.platform.observability
-from src.platform.observability import (  # noqa: F401
-    OBS_FILE_NAME,
-    append_observability_event,
-    read_observability_events,
-)
+"""Legacy pipeline shim.
+
+Canonical legacy implementation moved to:
+    src.legacy.pipeline.observability
+
+Engine-native execution entrypoint is:
+    src.engine.cli
+"""
+
+import importlib as _importlib
+
+_legacy = _importlib.import_module("src.legacy.pipeline.observability")
+
+for _k, _v in _legacy.__dict__.items():
+    if _k.startswith("__") and _k.endswith("__"):
+        continue
+    globals()[_k] = _v

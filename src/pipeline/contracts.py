@@ -1,5 +1,19 @@
 from __future__ import annotations
 
-# Backward-compatibility shim (legacy pipeline)
-# New canonical location: src.contracts.standard_spec
-from src.contracts.standard_spec import GateArtifactSpec, standard_spec  # noqa: F401
+"""Legacy pipeline shim.
+
+Canonical legacy implementation moved to:
+    src.legacy.pipeline.contracts
+
+Engine-native execution entrypoint is:
+    src.engine.cli
+"""
+
+import importlib as _importlib
+
+_legacy = _importlib.import_module("src.legacy.pipeline.contracts")
+
+for _k, _v in _legacy.__dict__.items():
+    if _k.startswith("__") and _k.endswith("__"):
+        continue
+    globals()[_k] = _v
