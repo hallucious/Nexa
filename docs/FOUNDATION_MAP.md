@@ -68,3 +68,5 @@ Status: Canonical Foundation Index (Architecture Memory)
 | User Profile (Preset) | docs/specs/User Profile (Preset) v0.1.md | Planned | 사용자 프리셋/프로필 | UX/제품 |
 | Definition Registry | docs/specs/Definition Registry v0.1.md | Planned | 정의/엔진 저장/불러오기(레지스트리) | 저장/공유 |
 | Definition Versioning & Migration Strategy | docs/specs/Definition Versioning & Migration Strategy v0.1.md | Planned | 정의 버전/마이그레이션 전략 | 저장/공유 |
+
+- docs/specs/definition_language_contract.md (Node Circuit Definition Language v1.0.0)
