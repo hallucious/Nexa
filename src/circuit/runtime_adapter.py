@@ -21,7 +21,7 @@ def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[st
     trace = None
     NodeTrace = SelectedEdge = ConditionResult = None  # type: ignore
     if _trace_enabled(model):
-        from .trace import CircuitTrace, NodeTrace, SelectedEdge, ConditionResult  # local import
+        from .trace import CircuitTrace, NodeTrace, SelectedEdge, ConditionResult, now_iso  # local import
         trace = model.raw.get("trace")
         if trace is None:
             trace = CircuitTrace(circuit_id=model.circuit_id)
@@ -38,14 +38,14 @@ def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[st
 
         node_trace = None
         if trace is not None:
-            node_trace = NodeTrace(node_id=current_id, entered_at=trace.started_at)
+            node_trace = NodeTrace(node_id=current_id, entered_at=now_iso())
             trace.nodes.append(node_trace)
 
         node = model.nodes[current_id]
         last_result = engine_executor(current_id, node.raw)
 
         if node_trace is not None:
-            node_trace.exited_at = trace.started_at
+            node_trace.exited_at = now_iso()
             node_trace.status = "success"
 
         edges_from = [e for e in model.edges if e.from_id == current_id]
@@ -107,7 +107,7 @@ def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[st
             if chosen is None:
                 if trace is not None:
                     trace.final_status = "success"
-                    trace.finished_at = trace.started_at
+                    trace.finished_at = now_iso()
                 return last_result
 
             if node_trace is not None:
@@ -122,5 +122,5 @@ def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[st
 
         if trace is not None:
             trace.final_status = "success"
-            trace.finished_at = trace.started_at
+            trace.finished_at = now_iso()
         return last_result
