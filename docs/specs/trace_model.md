@@ -1,5 +1,5 @@
 # Trace Model Specification
-Version: 1.3.0
+Version: 1.4.0
 Status: Official Contract
 
 Purpose:
@@ -327,3 +327,18 @@ Rules:
 - applied_rules MUST NOT contain duplicates.
 - snapshot MUST NOT be included in structural_fingerprint calculation.
 - snapshot is immutable once trace is finalized.
+
+
+----------------------------------------------------------------------
+9) Execution Fingerprint
+----------------------------------------------------------------------
+
+trace.execution_fingerprint MUST exist.
+
+Definition:
+execution_fingerprint =
+SHA256(structural_fingerprint + ":" + environment_fingerprint)
+
+Rules:
+- structural_fingerprint MUST remain environment invariant.
+- execution_fingerprint MUST change if environment_fingerprint changes.

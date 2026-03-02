@@ -358,3 +358,12 @@ class Engine:
         )
 
         return trace
+
+
+# --- ExecutionEnvironment v2 integration ---
+from src.engine.environment_fingerprint import compute_environment_fingerprint
+import hashlib
+
+def _compute_execution_fingerprint(structural_fingerprint, env_fp):
+    raw = f"{structural_fingerprint}:{env_fp}"
+    return hashlib.sha256(raw.encode()).hexdigest()

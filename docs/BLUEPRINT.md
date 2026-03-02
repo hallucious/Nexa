@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.2.0
+Version: 1.3.0
 
 ## 1. Foundation Layer (Canonical Architecture Memory)
 
@@ -224,3 +224,9 @@ End of Hyper-AI BLUEPRINT v1.0.0
 Validation execution produces a canonical snapshot of applied rules.
 Snapshot is excluded from structural_fingerprint and serves forensic
 and replay integrity purposes.
+
+
+## ExecutionEnvironment v2
+
+Environment is now part of execution identity.
+execution_fingerprint determines semantic equality of runs.
