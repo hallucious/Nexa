@@ -1,5 +1,5 @@
 # Trace Model Specification
-Version: 1.1.0
+Version: 1.2.0
 Status: Official Contract
 
 Purpose:
@@ -280,3 +280,31 @@ Enforced by rule_ids:
 - TRACE-002
 - TRACE-003
 - TRACE-004
+
+================================================================================
+8) Serialization Contract (Added in v1.2.0)
+================================================================================
+
+1) Purpose
+- ExecutionTrace must provide a deterministic serialization API suitable for:
+  - artifact storage
+  - diffing
+  - replay/audit
+  - policy comparison
+
+2) Required APIs
+- ExecutionTrace.to_dict(stable: bool = True) -> dict
+- ExecutionTrace.to_json(stable: bool = True, ensure_ascii: bool = False, indent: int | None = None) -> str
+
+3) Determinism Requirements (stable=True)
+- Repeated calls MUST produce identical output for the same trace instance.
+- nodes MUST be emitted in deterministic order (node_id sorted).
+- datetime values MUST be emitted as ISO-8601 strings (datetime.isoformat()).
+- enum values MUST be emitted as their .value string.
+- meta / input_snapshot / output_snapshot MUST be JSON-safe:
+  - allowed: dict (string keys only), list/tuple, str, int, float, bool, None
+  - any non-JSON-safe type MUST raise TypeError (contract violation).
+
+4) Scope
+- This contract constrains *output determinism*, not internal storage.
+- The specific JSON string formatting is not mandated, but stable=True MUST be deterministic.

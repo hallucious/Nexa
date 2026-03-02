@@ -1,6 +1,6 @@
 # Hyper-AI CODING PLAN
 
-Version: 1.8.0
+Version: 1.9.0
 
   ------------------------------------------
   Step45: DAG 상태 전파 규칙 (ALL_SUCCESS)
@@ -92,3 +92,35 @@ Step49: Engine Trace에 Spec-Version Stamp 추가 (Execution Artifact Sync)
 완료 조건:
 - python -m pytest -q 전체 통과
 - trace.meta.spec_versions가 상수와 정확히 일치
+
+
+---------------------------------------------------------------------
+Step50: Trace Serialization Stability Contract
+---------------------------------------------------------------------
+목표:
+- ExecutionTrace가 공식 직렬화 API를 제공해야 함 (to_dict / to_json)
+- 동일 Trace 인스턴스에 대해 stable 직렬화 결과는 반복 호출 시 100% 동일해야 함
+- meta / snapshot은 JSON-safe 강제를 통과해야 함 (비-JSON 타입은 계약 위반)
+
+추가 사항:
+- src/engine/trace.py
+  - ExecutionTrace.to_dict(stable=True) / to_json(stable=True) 추가
+  - stable=True일 때 nodes는 node_id 정렬 기반으로 결정적 출력
+  - enum -> .value, datetime -> isoformat() 문자열
+  - meta/input_snapshot/output_snapshot JSON-safe 강제 (TypeError on violation)
+- tests/test_trace_serialization_stability_contract.py 추가
+  - trace.to_json(stable=True) 반복 호출 결과 동일성 검증
+
+완료 조건:
+- python -m pytest -q 전체 통과
+- stable=True 직렬화 결과 반복 호출 시 완전 동일
+
+
+추가 사항:
+- tests/test_trace_serialization_stability_contract.py 추가
+  - trace.to_dict() 기반 JSON 비교
+  - sort_keys=True로 안정성 강제
+
+완료 조건:
+- python -m pytest -q 전체 통과
+- 반복 직렬화 결과 완전 동일
