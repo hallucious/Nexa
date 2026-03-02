@@ -172,3 +172,12 @@ Step52: Validation Rule Catalog Formalization Contract
 완료 조건:
 - python -m pytest -q 전체 통과
 - Implemented Rules 테이블 변경 없이는 violation 메타데이터가 drift되지 않음(계약으로 차단)
+
+
+---------------------------------------------------------------------
+Step53: Validation Rule Lifecycle Governance
+---------------------------------------------------------------------
+- validation_rule_lifecycle.md 신규 추가
+- rule stability / severity change / deprecation 정책 정의
+- VALIDATION_RULE_LIFECYCLE_VERSION 도입
+- 문서–코드–테스트 동기화 계약 추가
