@@ -1,9 +1,32 @@
-from typing import Callable, Dict, Any
+from typing import Callable, Dict, Any, Optional
 from .model import CircuitModel
 from .condition_eval import evaluate
 
+# --- CT-TRACE v1.0.0: minimal integration (signature unchanged) ---
+# Trace is stored in model.raw to avoid changing execute_circuit() signature.
+# Enable by setting: model.raw["trace_enabled"] = True
+#
+# When enabled, this function will create (or reuse) a CircuitTrace instance
+# under: model.raw["trace"]
+
+
+def _trace_enabled(model: CircuitModel) -> bool:
+    try:
+        return bool(getattr(model, "raw", {}).get("trace_enabled") is True)
+    except Exception:
+        return False
+
 
 def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[str, Any]], Dict[str, Any]]) -> Dict[str, Any]:
+    trace = None
+    NodeTrace = SelectedEdge = ConditionResult = None  # type: ignore
+    if _trace_enabled(model):
+        from .trace import CircuitTrace, NodeTrace, SelectedEdge, ConditionResult  # local import
+        trace = model.raw.get("trace")
+        if trace is None:
+            trace = CircuitTrace(circuit_id=model.circuit_id)
+            model.raw["trace"] = trace
+
     current_id = model.entry_node_id
     visited = set()
     last_result: Dict[str, Any] = {}
@@ -13,8 +36,17 @@ def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[st
             raise ValueError("Unexpected cycle during execution")
         visited.add(current_id)
 
+        node_trace = None
+        if trace is not None:
+            node_trace = NodeTrace(node_id=current_id, entered_at=trace.started_at)
+            trace.nodes.append(node_trace)
+
         node = model.nodes[current_id]
         last_result = engine_executor(current_id, node.raw)
+
+        if node_trace is not None:
+            node_trace.exited_at = trace.started_at
+            node_trace.status = "success"
 
         edges_from = [e for e in model.edges if e.from_id == current_id]
 
@@ -29,6 +61,13 @@ def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[st
             raise ValueError("Multiple next edges not supported")
 
         if next_edges:
+            if node_trace is not None:
+                node_trace.selected_edge = SelectedEdge(
+                    from_node_id=current_id,
+                    to_node_id=next_edges[0].to_id,
+                    edge_id=None,
+                    priority=None,
+                )
             current_id = next_edges[0].to_id
             continue
 
@@ -40,16 +79,48 @@ def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[st
 
             conditional_edges = sorted(conditional_edges, key=lambda e: e.raw["priority"])
 
+            chosen = None
             for e in conditional_edges:
                 cond = e.raw.get("condition", {})
                 expr = cond.get("expr")
                 if expr is None:
                     raise ValueError("Conditional edge missing expr")
-                if evaluate(expr, last_result):
-                    current_id = e.to_id
+
+                ok: Optional[bool] = None
+                err: Optional[str] = None
+                try:
+                    ok = evaluate(expr, last_result)
+                except Exception as ex:
+                    err = str(ex)
+                    # record best-effort, then re-raise to preserve existing behavior
+                    if node_trace is not None:
+                        node_trace.condition_result = ConditionResult(expression=expr, value=ok, error=err)
+                    raise
+                else:
+                    if node_trace is not None:
+                        node_trace.condition_result = ConditionResult(expression=expr, value=ok, error=err)
+
+                if ok:
+                    chosen = e
                     break
-            else:
+
+            if chosen is None:
+                if trace is not None:
+                    trace.final_status = "success"
+                    trace.finished_at = trace.started_at
                 return last_result
+
+            if node_trace is not None:
+                node_trace.selected_edge = SelectedEdge(
+                    from_node_id=current_id,
+                    to_node_id=chosen.to_id,
+                    edge_id=None,
+                    priority=chosen.raw.get("priority"),
+                )
+            current_id = chosen.to_id
             continue
 
+        if trace is not None:
+            trace.final_status = "success"
+            trace.finished_at = trace.started_at
         return last_result
