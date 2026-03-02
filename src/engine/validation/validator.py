@@ -18,6 +18,7 @@ class ValidationEngine:
     - ENG-001: Missing Entry
     - NODE-001: Duplicate node_id
     - ENG-003: Cycle (DAG violation)
+    - CH-001: Channel References Missing Node
     """
 
     def validate(self, engine: "Engine", *, revision_id: str) -> ValidationResult:
@@ -51,6 +52,21 @@ class ValidationEngine:
                     message="Duplicate node_id detected in EngineStructure.",
                 )
             )
+
+        # CH-001: Channel References Missing Node
+        node_id_set = set(structure.node_ids)
+        for ch in structure.channels:
+            if ch.src_node_id not in node_id_set or ch.dst_node_id not in node_id_set:
+                violations.append(
+                    Violation(
+                        rule_id="CH-001",
+                        rule_name="Channel References Missing Node",
+                        severity=Severity.ERROR,
+                        location_type="engine",
+                        location_id=None,
+                        message="Channel references undefined src or dst node_id.",
+                    )
+                )
 
         # ENG-003: Cycle detection (DAG validation)
         if self._has_cycle(structure):

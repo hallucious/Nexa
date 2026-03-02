@@ -150,43 +150,11 @@ Step51: Validation → Trace Violation Structure Contract
 - python -m pytest -q 전체 통과
 - validation 실패 케이스에서 violations dict 구조 + timestamp 존재
 
----------------------------------------------------------------------
-Step52: Validation Rule Catalog Formalization Contract
----------------------------------------------------------------------
-목표:
-- validation_rule_catalog.md를 “머신 파싱 가능한(계약 검증 가능한)” 정본 섹션으로 정식화한다.
-- ValidationEngine이 실제로 방출하는 (rule_id, rule_name, severity, location_type)이
-  Catalog Implemented Rules 테이블과 완전히 일치하도록 계약 테스트로 고정한다.
-- VALIDATION_RULE_CATALOG_VERSION을 SemVer 규칙에 따라 갱신하고 spec-version sync를 통과시킨다.
-
-변경(예정):
-- docs/specs/validation_rule_catalog.md: 1.0.0 → 1.1.0 (MINOR)
-  - Canonical Catalog (Machine-Parseable) 섹션 추가
-  - Implemented Rules (Authoritative) 테이블 추가
-  - Reserved Ranges는 비-정본으로 유지
-- src/contracts/spec_versions.py
-  - VALIDATION_RULE_CATALOG_VERSION = "1.1.0"
-- tests/test_validation_rule_catalog_contract.py (신규)
-  - Implemented Rules 테이블과 실제 방출 violations의 메타데이터 일치 계약
-
-완료 조건:
-- python -m pytest -q 전체 통과
-- Implemented Rules 테이블 변경 없이는 violation 메타데이터가 drift되지 않음(계약으로 차단)
-
 
 ---------------------------------------------------------------------
-Step53: Validation Rule Lifecycle Governance
+Step55: Channel Validation Expansion (CH-001)
 ---------------------------------------------------------------------
-- validation_rule_lifecycle.md 신규 추가
-- rule stability / severity change / deprecation 정책 정의
-- VALIDATION_RULE_LIFECYCLE_VERSION 도입
-- 문서–코드–테스트 동기화 계약 추가
-
-
----------------------------------------------------------------------
-Step54: Execution Environment Contract (No-IO v1)
----------------------------------------------------------------------
-- execution_environment_contract.md 신규 추가
-- No-IO / side-effect prohibition 정책 정의
-- EXECUTION_ENVIRONMENT_CONTRACT_VERSION 도입
-- version sync 계약 테스트 추가
+- ValidationEngine에 CH-001 추가 (channel src/dst node_id 존재성 검증)
+- validation_rule_catalog.md Implemented Rules(Authoritative) 섹션 추가 및 버전 1.1.0 bump
+- spec_versions.py VALIDATION_RULE_CATALOG_VERSION 동기화
+- test_ch_001_contract.py 신규 추가

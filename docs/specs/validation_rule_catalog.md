@@ -5,38 +5,16 @@ Status: Official Contract
 Purpose:
 Hyper-AI v1 validation의 rule_id 표준 카탈로그.
 
-## Canonical Catalog (Machine-Parseable)
-Status: Authoritative (v1.1.0+)
-
-This section is the **single source of truth** for rule metadata used by automated contracts.
-
-### Format
-- Rule IDs must match: `^[A-Z]{2,5}-\d{3}$`
-- Severity is one of: `error`, `warning`
-- location_type is one of: `engine`, `node`, `channel`, `flow`
-- The **Implemented Rules** table below is authoritative and must remain consistent with emitted violations
-  (rule_id, rule_name, severity, location_type).
-
 ### Implemented Rules (Authoritative)
-| rule_id | rule_name | severity | location_type | notes |
+The following rules are currently enforced by ValidationEngine (code).
+
+| rule_id | name | severity | location_type | message |
 |---|---|---|---|---|
 | ENG-001 | Missing Entry Node | error | engine | Engine must define exactly one entry_node_id. |
 | NODE-001 | Duplicate node_id | error | engine | Duplicate node_id detected in EngineStructure. |
+| CH-001 | Channel References Missing Node | error | engine | Channel references undefined src or dst node_id. |
 | ENG-003 | Cycle Detected | error | engine | Engine graph must be a DAG (cycle detected). |
 
-### Reserved Ranges (Non-authoritative)
-The ranges below are reserved namespaces for future rules. They are **not** validated by contracts
-until a rule is added to the Implemented Rules table.
-
-- ENG-002..008
-- ENT-001..005
-- CH-001..005
-- FLOW-001..005
-- NODE-002..006
-- PIPE-001..005
-- SIDE-001..003
-- DET-001..007
-- TRACE-001..004
 
 ## Domains
 ENG, ENT, CH, FLOW, NODE, PIPE, SIDE, DET, TRACE
@@ -58,7 +36,7 @@ ENG, ENT, CH, FLOW, NODE, PIPE, SIDE, DET, TRACE
 # Archived Initial Version (Preserved)
 
 # Validation Rule Catalog
-Version: 1.0.0
+Version: v1.0.0
 Status: Official Contract
 
 Purpose:
