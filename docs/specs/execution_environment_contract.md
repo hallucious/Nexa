@@ -1,5 +1,5 @@
 # Execution Environment Contract (No-IO v1)
-Version: 1.3.0
+Version: 1.4.0
 Status: Official Contract
 
 Purpose:
@@ -90,3 +90,23 @@ Algorithm:
 2. Sort entries lexicographically
 3. Join with '\n'
 4. SHA256 over joined string
+
+
+----------------------------------------------------------------------
+5) provider_fingerprint Contract
+----------------------------------------------------------------------
+
+Engine MUST compute provider_fingerprint from provider configuration.
+
+Included fields (if present):
+- provider
+- model
+- endpoint
+- temperature
+- max_tokens
+- adapter_version
+
+Rules:
+- Exclude keys with None values
+- Canonical JSON (sort_keys=True, separators=(',', ':'))
+- SHA256 over canonical string
