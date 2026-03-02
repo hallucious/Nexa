@@ -1,5 +1,5 @@
 # Execution Environment Contract (No-IO v1)
-Version: 1.1.0
+Version: 1.2.0
 Status: Official Contract
 
 Purpose:
@@ -53,3 +53,23 @@ environment_fingerprint MUST be calculated using canonical JSON
 serialization (sorted keys) and hashed via SHA256.
 
 If environment differs, execution MUST be considered different.
+
+
+----------------------------------------------------------------------
+3) dependency_fingerprint Contract
+----------------------------------------------------------------------
+
+If requirements.txt exists at repo root, engine MUST compute:
+
+dependency_fingerprint = SHA256(canonical_requirements_txt)
+
+canonical_requirements_txt rules:
+- Split into lines
+- Strip whitespace
+- Remove empty lines
+- Remove comment lines starting with '#'
+- Sort lines lexicographically
+- Join with '\n'
+- Hash via SHA256
+
+If requirements.txt is missing, dependency_fingerprint MUST be SHA256("") (empty payload).
