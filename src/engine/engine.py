@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Union
 
+from src.contracts.spec_versions import ENGINE_EXECUTION_MODEL_VERSION, ENGINE_TRACE_MODEL_VERSION
+
 from .fingerprint import StructuralFingerprint, compute_fingerprint
 from .model import Channel, EngineStructure, FlowRule
 from .revision import Revision
@@ -321,7 +323,13 @@ class Engine:
             validation_success=validation.success,
             validation_violations=[(v.rule_id, v.message) for v in validation.violations],
             nodes=node_traces,
-            meta={"engine_meta": self.meta},
+            meta={
+                "engine_meta": self.meta,
+                "spec_versions": {
+                    "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
+                    "trace_model": ENGINE_TRACE_MODEL_VERSION,
+                },
+            },
             expected_node_ids=self.node_ids,
         )
 

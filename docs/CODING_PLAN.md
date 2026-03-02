@@ -1,6 +1,6 @@
 # Hyper-AI CODING PLAN
 
-Version: 1.6.0
+Version: 1.8.0
 
   ------------------------------------------
   Step45: DAG 상태 전파 규칙 (ALL_SUCCESS)
@@ -54,3 +54,41 @@ Step47: Engine Determinism Contract 강화 (T1)
 완료 조건:
 - python -m pytest -q 전체 통과
 - 50회 반복 실행에서 signature 동일
+
+
+---------------------------------------------------------------------
+Step48: Trace Immutability Contract 강화
+---------------------------------------------------------------------
+
+목표:
+- Engine 실행 완료 후 반환된 Trace 객체는 외부에서 변경 불가능해야 함
+
+추가/변경 사항:
+- tests/test_trace_immutability_contract.py 추가
+  - structural_fingerprint 변경 시 예외 발생
+  - node_status 변경 시 예외 발생
+
+완료 조건:
+- python -m pytest -q 전체 통과
+- Trace 객체 외부 변조 시도 시 예외 발생
+
+
+---------------------------------------------------------------------
+Step49: Engine Trace에 Spec-Version Stamp 추가 (Execution Artifact Sync)
+---------------------------------------------------------------------
+
+목표:
+- Engine 실행 결과(ExecutionTrace.meta)에 활성 spec 버전을 함께 기록하여,
+  spec-version sync를 실행 산출물 레벨까지 강화
+
+추가/변경 사항:
+- src/engine/engine.py
+  - ExecutionTrace.meta에 spec_versions 필드 추가
+    - execution_model: ENGINE_EXECUTION_MODEL_VERSION
+    - trace_model: ENGINE_TRACE_MODEL_VERSION
+- tests/test_engine_spec_version_in_trace_contract.py 추가
+  - trace.meta.spec_versions 값이 contracts/spec_versions.py와 일치하는지 검증
+
+완료 조건:
+- python -m pytest -q 전체 통과
+- trace.meta.spec_versions가 상수와 정확히 일치
