@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Protocol, Tuple
+from typing import Any, Dict, Optional, Protocol, Tuple, Union
 
 from .safe_exec import safe_call
+from src.providers.provider_contract import ProviderResult
 
 
 @dataclass
@@ -50,7 +51,7 @@ class ProviderTextWorker:
         instructions: Optional[str] = None,
         timeout_ms: Optional[int] = None,
     ) -> WorkerResult:
-        def _call_provider() -> Tuple[Any, Any, Any]:
+        def _call_provider() -> Any:
             return self._provider.generate_text(
                 prompt=prompt,
                 temperature=float(temperature),
@@ -62,13 +63,22 @@ class ProviderTextWorker:
 
         if res.ok:
             try:
-                text, raw, err = res.value  # type: ignore[misc]
-                success = err is None
-                error = None if err is None else f"{type(err).__name__}: {err}"
-                if not isinstance(raw, dict):
-                    raw = {}
-                if not isinstance(text, str):
-                    text = str(text)
+                v = res.value  # type: ignore[misc]
+                if isinstance(v, ProviderResult):
+                    # New AI-PROVIDER envelope
+                    success = bool(v.success)
+                    text = "" if v.text is None else str(v.text)
+                    raw = v.raw if isinstance(v.raw, dict) else {}
+                    error = None if v.success else (v.error or v.reason_code or "provider_error")
+                else:
+                    # Legacy provider contract: (text, raw, err)
+                    text, raw, err = v  # type: ignore[misc]
+                    success = err is None
+                    error = None if err is None else f"{type(err).__name__}: {err}"
+                    if not isinstance(raw, dict):
+                        raw = {}
+                    if not isinstance(text, str):
+                        text = str(text)
             except Exception as e:  # noqa: BLE001
                 text = ""
                 raw = {}

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from src.providers.provider_contract import ProviderResult, make_failure, make_success, map_exception_to_reason_code
 import json
 import os
 import urllib.request
@@ -185,7 +187,7 @@ class GeminiProvider:
         temperature: float = 0.0,
         max_output_tokens: int = 512,
         timeout_sec: int = 30,
-    ) -> Tuple[str, Dict[str, Any], Optional[Exception]]:
+    ) -> ProviderResult:
         """Return (text, raw_response, error).
 
         - If API key missing: returns ("", {}, Exception)
@@ -230,4 +232,4 @@ class GeminiProvider:
                 raw = getattr(fallback_fn, "last_raw", {}) or {}
             return res.text, raw, None
         except Exception as e:  # noqa: BLE001
-            return "", {}, e
+            return make_failure(error=f"{type(e).__name__}: {e}", raw={}, reason_code=map_exception_to_reason_code(e), latency_ms=latency_ms)

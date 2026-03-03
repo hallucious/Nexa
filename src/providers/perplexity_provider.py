@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from src.providers.provider_contract import ProviderResult, make_failure, make_success, map_exception_to_reason_code
 import json
 import os
 import urllib.request
@@ -83,7 +85,7 @@ class PerplexityProvider:
         prompt: str,
         temperature: float = 0.0,
         max_output_tokens: int = 512,
-    ) -> Tuple[str, Dict[str, Any], Optional[Exception]]:
+    ) -> ProviderResult:
 
         if not self.api_key:
             return "", {}, RuntimeError("PERPLEXITY_API_KEY is missing")
@@ -100,7 +102,7 @@ class PerplexityProvider:
             raw = getattr(call_fn, "last_raw", {}) or {}
             return res.text, raw, None
         except Exception as e:
-            return "", {}, e
+            return make_failure(error=f"{type(e).__name__}: {e}", raw={}, reason_code=map_exception_to_reason_code(e), latency_ms=latency_ms)
 
     def verify(self, statement: str) -> Dict[str, Any]:
         def build_prompt(s: str) -> str:

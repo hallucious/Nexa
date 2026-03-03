@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from src.providers.provider_contract import ProviderResult, make_failure, make_success, map_exception_to_reason_code
 import os
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
@@ -46,7 +48,7 @@ class CodexProvider:
         temperature: float = 0.0,
         max_output_tokens: int = 2048,
         instructions: Optional[str] = None,
-    ) -> Tuple[str, Dict[str, Any], Optional[BaseException]]:
+    ) -> ProviderResult:
         safe_prompt = apply_safe_mode_prefix(prompt or "")
 
         payload: Dict[str, Any] = {
@@ -88,7 +90,9 @@ class CodexProvider:
             return text, raw
 
         try:
+            start = time.perf_counter()
             text, raw = run_safe_mode(_http_call)
-            return text, raw, None
+            latency_ms = int((time.perf_counter() - start) * 1000.0)
+            return make_success(text=text, raw=raw, latency_ms=latency_ms)
         except Exception as e:
-            return "", {}, e
+            return make_failure(error=f"{type(e).__name__}: {e}", raw={}, reason_code=map_exception_to_reason_code(e), latency_ms=latency_ms)
