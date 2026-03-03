@@ -1,4 +1,6 @@
 # Prompt Contract
+Version: 1.0.0
+
 
 -   Spec ID: PROMPT-CONTRACT
 -   Version: 1.0.0

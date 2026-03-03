@@ -1,5 +1,5 @@
 # FOUNDATION_MAP
-Version: 1.0.2
+Version: 1.0.3
 Status: Canonical Foundation Index (Architecture Memory)
 
 ## 1. 목적
@@ -24,8 +24,8 @@ Status: Canonical Foundation Index (Architecture Memory)
 # Layer 1. Doctrine (불변 철학 / 최상위 원칙)
 | 문서 | 경로 | 상태 | 설명 | 관련 영역 |
 |---|---|---:|---|---|
-| Strategic Direction & Evolution Policy | docs/Strategic Direction & Evolution Policy v1.0.md | Partial | 프로젝트의 진화 정책/방향성 | 전략/진화 정책 |
-| Architectural Doctrine | docs/specs/Architectural Doctrine v1.0.md | Partial | 아키텍처 핵심 원칙/금기 | 전체 |
+| Strategic Direction & Evolution Policy | docs/STRATEGY.md | Partial | 프로젝트의 진화 정책/방향성 | 전략/진화 정책 |
+| Architectural Doctrine | docs/specs/Architectural Doctrine.md | Partial | 아키텍처 핵심 원칙/금기 | 전체 |
 | determinism_policy | docs/specs/determinism_policy.md | Partial | 결정성/재현성 원칙 | 실행/Trace |
 | terminology | docs/specs/terminology.md | Partial | 용어 정의(사용자/내부 공통) | 문서/UX |
 | engine_constraints | docs/specs/engine_constraints.md | Partial | 엔진 제약 조건(그래프/실행 범위) | 엔진 |
@@ -39,6 +39,11 @@ Status: Canonical Foundation Index (Architecture Memory)
 | node_abstraction | docs/specs/node_abstraction.md | Partial | 노드 추상화/역할 | src/engine/* (계약 영향) |
 | node_execution_pipeline | docs/specs/node_execution_pipeline.md | Partial | 노드 실행 파이프라인(단계) | src/engine/engine.py (확장 예정) |
 | node_execution_contract | docs/specs/node_execution_contract.md | Active | Node 실행 계약(Pre/Core/Post, AI Core-only, Plugin all-stages, return-only mutation, orchestration default) | src/engine/*, src/circuit/* |
+| provider_contract | docs/specs/provider_contract.md | Active | AI Provider 계약(ProviderResult/normalization, 실패 reason_code 표준화) | src/providers/*, src/platform/worker.py |
+| plugin_contract | docs/specs/plugin_contract.md | Active | Plugin 계약(PluginResult envelope, stage-aware, reason_code 표준화) | src/platform/plugin.py, src/platform/* |
+| prompt_contract | docs/specs/prompt_contract.md | Active | Prompt 계약(PromptSpec hash/render, registry) | src/prompts/* |
+| docs_specs_circuit_trace_contract | docs/specs/docs_specs_circuit_trace_contract.md | Active | Circuit Trace 계약(노드/엣지/조건 선택 기록) | src/circuit/trace.py, src/circuit/runtime_adapter.py |
+| plugin_registry_contract | docs/specs/plugin_registry_contract.md | Active | Plugin Registry 계약(버전 레지스트리, resolve 정책, compatibility) | src/platform/plugin_version_registry.py, src/platform/capability_negotiation.py |
 | execution_model | docs/specs/execution_model.md | Active | 실행 의미(상태 전파 포함) | src/engine/engine.py |
 | trace_model | docs/specs/trace_model.md | Active | Trace 불변/커버리지 계약 | src/engine/trace.py |
 | Execution State Model | docs/specs/Execution State Model v0.1.md | Planned | 실행 상태 모델(확장) | 추후 |
@@ -64,7 +69,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 |---|---|---:|---|---|
 | Legacy Removal Plan (pipeline→engine cleanup) | docs/specs/legacy_removal_plan.md | Planned | legacy(pipeline/gates/orchestrator) 제거 설계 | 마이그레이션/정리 |
 | Pipeline Test Migration Plan | docs/specs/pipeline_test_migration_plan.md | Planned | legacy 테스트 전환 계획(Engine 중심) | 마이그레이션/테스트 |
-| SaaS Product Definition | docs/specs/SaaS Product Definition v1.0.md | Planned | SaaS 제품 정의(후순위) | 제품 |
+| SaaS Product Definition | docs/specs/SaaS Product Definition.md | Planned | SaaS 제품 정의(후순위) | 제품 |
 | Visual Editor Architecture | docs/specs/Visual Editor Architecture v0.1.md | Planned | 시각 편집기(후순위) | UX/UI |
 | User Profile (Preset) | docs/specs/User Profile (Preset) v0.1.md | Planned | 사용자 프리셋/프로필 | UX/제품 |
 | Definition Registry | docs/specs/Definition Registry v0.1.md | Planned | 정의/엔진 저장/불러오기(레지스트리) | 저장/공유 |
@@ -73,5 +78,11 @@ Status: Canonical Foundation Index (Architecture Memory)
 - docs/specs/circuit_contract.md (Circuit Definition Language v1.0.0)
 
 
-## 9. 추가된 foundation 문서
+## 4. 추가된 foundation 문서
 - `docs/specs/plugin_registry_contract.md` (PLUGIN-REGISTRY v1.0.0)
+- `docs/specs/provider_contract.md` (AI-PROVIDER v1.0.0)
+- `docs/specs/plugin_contract.md` (PLUGIN-CONTRACT v1.0.0)
+- `docs/specs/prompt_contract.md` (PROMPT-CONTRACT v1.0.0)
+- `docs/specs/docs_specs_circuit_trace_contract.md` (CT-TRACE v1.0.0)
+- `docs/specs/Observability & Metrics.md` (OBSERVABILITY opt-in)
+

@@ -1,4 +1,6 @@
 # AI Provider Contract
+Version: 1.0.0
+
 - Spec ID: AI-PROVIDER
 - Version: 1.0.0
 - Status: Draft

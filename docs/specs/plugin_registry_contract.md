@@ -1,81 +1,160 @@
-# Plugin Registry Contract
+# PLUGIN-REGISTRY Contract
 
-## 1. Status
+Version: 1.0.0  
+Status: active  
+Spec ID: PLUGIN-REGISTRY
 
-Spec ID: plugin_registry_contract
+## 1. Purpose
 
-Version: 1.0.0
+This spec defines the **Plugin Registry** contract used by the platform to:
 
-Scope: versioned plugin registration + deterministic resolution (in-memory v1)
+1. Register plugins with an explicit `(plugin_id, plugin_version)` identity.
+2. Resolve a plugin entry by explicit version or by `"latest"` (highest SemVer).
+3. Enforce **compatibility** between a plugin and the current runtime contracts.
+4. Provide a stable interface for capability negotiation to resolve plugin references safely.
 
-Related: `docs/specs/plugin_contract.md`, `docs/specs/execution_model.md`
+This contract exists to prevent “ambient plugin injection” and to make executions **reproducible**.
 
-## 2. Purpose
+## 2. Terminology
 
-This spec defines a versioned plugin registry that:
-1) registers plugins with a stable plugin_id and SemVer plugin_version,
-2) resolves deterministically by exact version or "latest",
-3) supports compatibility checks against minimum required platform spec versions,
-4) enables reproducibility (trace/savefile can record plugin_id + plugin_version).
+- **Plugin ID**: stable identifier (string), e.g. `"dummy_echo"`.
+- **Plugin Version**: SemVer string, e.g. `"1.0.0"`.
+- **Plugin Ref**: a reference to a plugin by `(plugin_id, plugin_version)`.
+- **Plugin Entry**: registry-resolved executable object (entrypoint/factory) plus manifest.
+- **Requires**: minimum contract versions required by a plugin.
 
-## 3. Terminology
+## 3. SemVer Rules
 
-- plugin_id: globally unique identifier for a plugin.
-- plugin_version: SemVer string (e.g., 1.2.3).
-- manifest: metadata describing stages allowed, default timeout, and compatibility minima.
-- registry: runtime component that stores entries and resolves requests.
+- `plugin_version` MUST be valid SemVer: `MAJOR.MINOR.PATCH` (integers).
+- `"latest"` is a special version selector that resolves to the highest SemVer registered for the `plugin_id`.
 
-## 4. Manifest fields
+## 4. Data Model
 
-Required (v1.0.0):
-- plugin_id: string
-- plugin_version: string (SemVer)
-- description: string
-- stages_allowed: array of ["pre","core","post"] (subset)
-- default_timeout_ms: integer
-- side_effects: array[string] (may be empty)
-- requires:
-  - node_exec_min: string (SemVer)
-  - plugin_contract_min: string (SemVer)
+### 4.1 PluginRequires
 
-Optional:
-- tags: array[string]
-- metadata: object (JSON-serializable; MUST NOT contain secrets)
+Fields:
 
-## 5. Registry API (v1.0.0)
+- `node_exec_min: str` (SemVer) — minimum compatible `NODE-EXEC` spec version.
+- `plugin_contract_min: str` (SemVer) — minimum compatible `PLUGIN-CONTRACT` spec version.
 
-Registration:
-- register(manifest, entrypoint)
-  - MUST reject duplicate (plugin_id, plugin_version).
+### 4.2 PluginManifest (v1)
+
+Fields (minimum):
+
+- `plugin_id: str`
+- `plugin_version: str` (SemVer)
+- `description: str`
+- `stages_allowed: list[str]` — non-empty; values in `{ "pre", "core", "post" }`
+- `default_timeout_ms: int`
+- `side_effects: list[str]` — may be empty
+- `requires: PluginRequires`
+- `tags: list[str] | None`
+- `metadata: dict | None`
+
+Validation requirements:
+
+- `plugin_id` MUST be a non-empty string.
+- `plugin_version` MUST be valid SemVer.
+- `stages_allowed` MUST be a non-empty list, each value MUST be one of `{pre, core, post}`.
+- `default_timeout_ms` MUST be positive integer.
+
+### 4.3 PluginEntry
+
+A registry-resolved entry MUST contain:
+
+- `manifest: PluginManifest`
+- `entrypoint: callable` (or class with `__call__`), the executable target
+- `factory: callable | None` (optional) — if provided, used to instantiate the plugin
+
+## 5. Registry Interface Contract
+
+A registry implementation MUST support:
+
+### 5.1 register
+
+Registers a plugin entry.
+
+- Input: `manifest: PluginManifest`, `entrypoint: callable`, optional `factory`
+- Behavior:
   - MUST validate manifest.
+  - MUST reject duplicate registration of the same `(plugin_id, plugin_version)` with a deterministic error.
+- Errors:
+  - Duplicate: `ValueError` (recommended) or a custom deterministic exception type.
 
-Resolution:
-- resolve(plugin_id, version)
-  - version may be exact SemVer (e.g. "1.2.3") or "latest".
-  - "latest" MUST resolve to the highest SemVer among registered versions.
-  - MUST be deterministic given the same registry state.
+### 5.2 resolve
 
-Listing:
-- list(plugin_id=None) -> manifests
+Resolves an entry for execution.
 
-## 6. Compatibility check (v1.0.0)
+- Input: `plugin_id: str`, `version: str`
+  - `version` is SemVer or `"latest"`.
+- Output: `PluginEntry`
+- Behavior:
+  - If `version == "latest"`, MUST resolve to the highest SemVer for the given `plugin_id`.
+  - If not found:
+    - For *required* resolution flows: raise `KeyError` (recommended) or deterministic “not found” error.
+    - For *optional* resolution flows (e.g., capability negotiation when `required=False`): caller MUST NOT crash; it should return `None`.
 
-Before execution, runtime SHOULD verify:
-- current NODE-EXEC version >= manifest.requires.node_exec_min
-- current PLUGIN-CONTRACT version >= manifest.requires.plugin_contract_min
+## 6. Compatibility
 
-If compatibility fails, runtime MUST treat as plugin execution failure with reason_code:
-- PLUGIN.incompatible
+### 6.1 Compatibility Check Function
 
-## 7. Observability and Trace
+Registry MUST provide a compatibility check:
 
-When a plugin call is recorded, meta SHOULD include:
-- plugin_id
-- plugin_version
+- `is_compatible(current_node_exec: str, current_plugin_contract: str, requires: PluginRequires) -> bool`
 
-## 8. Non-goals (v1.0.0)
+Rules:
 
-- remote registries / marketplace
-- signed plugin packages
-- dependency graphs between plugins
-- external plugin installation flows
+- Compatible iff:
+  - `current_node_exec >= requires.node_exec_min`
+  - `current_plugin_contract >= requires.plugin_contract_min`
+
+SemVer comparisons are numeric by `(MAJOR, MINOR, PATCH)`.
+
+### 6.2 Enforcement Point
+
+Before executing a resolved plugin, the runtime MUST enforce compatibility using the plugin's `requires`.
+
+If incompatible:
+- For required plugins: raise deterministic `RuntimeError` (recommended) with a clear message.
+- For optional plugins: behave as “unavailable” (return `None` from resolution layer).
+
+## 7. Stage Allowed Enforcement
+
+Before executing a plugin at stage `S ∈ {pre, core, post}`:
+
+- The runtime MUST ensure `S in manifest.stages_allowed`.
+- If violated:
+  - required: raise deterministic `RuntimeError`
+  - optional: treat as unavailable
+
+## 8. Timeout Defaults
+
+If caller does not specify a timeout, runtime MUST use:
+
+- `manifest.default_timeout_ms`
+
+## 9. Integration: Capability Negotiation
+
+When capability negotiation receives a plugin reference (PluginRef / tuple / dict form), it MUST:
+
+1. Attempt registry resolve.
+2. If resolve fails and capability is optional → return `None` (no KeyError propagation).
+3. If resolve fails and capability is required → raise a deterministic error.
+
+## 10. Observability / Trace Requirements
+
+When a plugin is executed via the registry:
+
+- OBSERVABILITY events MUST include:
+  - `plugin_id`
+  - `plugin_version`
+  - `stage`
+- CT-TRACE (if enabled) SHOULD include:
+  - `plugin_id`
+  - `plugin_version`
+  - execution outcome (success/failure) and reason_code (if available)
+
+## 11. Backward Compatibility Notes
+
+- This spec does NOT require legacy “direct callable injection” to be removed immediately,
+  but any *reference form* MUST prefer registry resolution to guarantee versioned execution.

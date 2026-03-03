@@ -1,4 +1,6 @@
 # circuit_trace_contract.md
+Version: 1.0.0
+
 - Spec ID: CT-TRACE
 - Version: 1.0.0
 - Status: Active

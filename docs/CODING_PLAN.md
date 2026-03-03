@@ -1,6 +1,29 @@
 # Hyper-AI CODING PLAN
 
-Version: 1.9.0
+Version: 2.0.0
+
+
+------------------------------------------
+Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)
+------------------------------------------
+
+요약:
+- Circuit Runtime Adapter: conditional edge(우선순위) + trace wiring + node execution pipeline 결합
+- CT-TRACE v1.0.0: node enter/exit, circuit finish, conditional edge 선택/조건 결과 기록
+- NODE-EXEC v1.0.0: Pre/Core/Post 파이프라인 + AI는 Core-only
+- AI-PROVIDER v1.0.0: ProviderResult + reason_code 정규화
+- PLUGIN-CONTRACT v1.0.0: PluginResult envelope + stage-aware + reason_code 정규화
+- PROMPT-CONTRACT v1.0.0: PromptSpec hash/render + PromptRegistry
+- OBSERVABILITY(opt-in): node/stage/prompt 이벤트 기록(기존 API 비파괴)
+- PLUGIN-REGISTRY v1.0.0: 버전 레지스트리 + negotiate에서 안전 resolve(옵션일 때 KeyError 방지)
+- Step84: 203 passed / 9 skipped / warnings 재현되지 않음 (stabilization checkpoint)
+
+완료 조건(증명):
+- `python -m pytest -q` → 203 passed, 9 skipped (Step84 기준)
+
+다음 목표(후속 Step 제안):
+- “노드/프롬프트/AI/플러그인 시스템”을 문서/계약 기준으로 더 명확히 고정
+- 이후 “회로(circuit) 시스템” 확장(모듈/서브그래프/분기/저장 등)로 진행
 
   ------------------------------------------
   Step45: DAG 상태 전파 규칙 (ALL_SUCCESS)

@@ -1,4 +1,6 @@
 # Node Execution Contract
+Version: 1.0.0
+
 - Spec ID: NODE-EXEC
 - Version: 1.0.0
 - Status: Active

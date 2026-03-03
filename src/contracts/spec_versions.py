@@ -1,10 +1,3 @@
-
-SPEC_VERSIONS = {
-
-    'NODE-EXEC': '1.0.0',
-    'CT-TRACE': '1.0.0',
-}
-
 # Spec ↔ Code Version Sync Constants
 # This module belongs to the contracts layer (not runtime logic).
 
@@ -14,3 +7,16 @@ VALIDATION_ENGINE_CONTRACT_VERSION = "1.2.0"
 VALIDATION_RULE_CATALOG_VERSION = "1.1.0"
 VALIDATION_RULE_LIFECYCLE_VERSION = "1.0.0"
 EXECUTION_ENVIRONMENT_CONTRACT_VERSION = "1.4.0"
+
+# Canonical mapping: doc-relative-path -> version constant
+# Used by the spec-version sync contract test to enforce completeness.
+SPEC_VERSIONS = {
+    "docs/specs/terminology.md": "1.0.0",
+    "docs/specs/execution_model.md": ENGINE_EXECUTION_MODEL_VERSION,
+    "docs/specs/trace_model.md": ENGINE_TRACE_MODEL_VERSION,
+    "docs/specs/validation_engine_contract.md": VALIDATION_ENGINE_CONTRACT_VERSION,
+    "docs/specs/validation_rule_catalog.md": VALIDATION_RULE_CATALOG_VERSION,
+    # Non-active specs may still be versioned here to enable strict checks when activated.
+    "docs/specs/validation_rule_lifecycle.md": VALIDATION_RULE_LIFECYCLE_VERSION,
+    "docs/specs/execution_environment_contract.md": EXECUTION_ENVIRONMENT_CONTRACT_VERSION,
+}

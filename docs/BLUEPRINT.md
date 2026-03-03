@@ -1,7 +1,6 @@
 # BLUEPRINT
 
-Version: 1.3.0
-
+Version: 1.4.0
 ## 1. Foundation Layer (Canonical Architecture Memory)
 
 본 프로젝트의 기초 설계 문서는 다음 문서에 의해 계층적으로 관리된다:
@@ -19,6 +18,26 @@ Version: 1.3.0
 -   docs/specs/trace_model.md
 -   docs/specs/validation_engine_contract.md
 -   docs/specs/validation_rule_catalog.md
+
+
+### 2.1 추가된 Active Specs (Step67~84 누적)
+
+아래 항목들은 기존 목록에 **누적 추가**된 활성 spec(코드/테스트와 동기화)이다:
+
+-   docs/specs/terminology.md
+-   docs/specs/node_execution_contract.md  (NODE-EXEC v1.0.0)
+-   docs/specs/docs_specs_circuit_trace_contract.md  (CT-TRACE v1.0.0, circuit trace contract)
+-   docs/specs/provider_contract.md  (AI-PROVIDER v1.0.0)
+-   docs/specs/plugin_contract.md  (PLUGIN-CONTRACT v1.0.0)
+-   docs/specs/prompt_contract.md  (PROMPT-CONTRACT v1.0.0)
+-   docs/specs/plugin_registry_contract.md  (PLUGIN-REGISTRY v1.0.0)
+-   docs/specs/Observability & Metrics.md  (OBSERVABILITY, opt-in 이벤트/메트릭)
+
+주의:
+- spec-version sync(contract) 관점에서 `src/contracts/spec_versions.py`에 아직 모두 등록되어 있지 않을 수 있다.
+  이 경우에도 “문서/테스트/코드”가 동일 계약을 만족하면 Active로 분류하되,
+  spec_versions 등록은 별도 작업(후속 step)으로 처리한다.
+
 
 구조/계약 변경 시 위 문서들과 코드, 테스트는 반드시 동기화되어야 한다.
 
