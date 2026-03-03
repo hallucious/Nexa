@@ -1,5 +1,5 @@
 # FOUNDATION_MAP
-Version: 1.0.1
+Version: 1.0.2
 Status: Canonical Foundation Index (Architecture Memory)
 
 ## 1. 목적
@@ -71,3 +71,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 | Definition Versioning & Migration Strategy | docs/specs/Definition Versioning & Migration Strategy v0.1.md | Planned | 정의 버전/마이그레이션 전략 | 저장/공유 |
 
 - docs/specs/circuit_contract.md (Circuit Definition Language v1.0.0)
+
+
+## 9. 추가된 foundation 문서
+- `docs/specs/plugin_registry_contract.md` (PLUGIN-REGISTRY v1.0.0)

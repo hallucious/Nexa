@@ -240,3 +240,4 @@ See docs/specs/circuit_contract.md
 
 ## Active Specs
 - NODE-EXEC v1.0.0 (Node Execution Contract) — docs/specs/node_execution_contract.md
+- PLUGIN-REGISTRY v1.0.0 (Plugin Registry Contract)
