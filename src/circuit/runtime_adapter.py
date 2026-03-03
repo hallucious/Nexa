@@ -1,6 +1,7 @@
-from typing import Callable, Dict, Any, Optional
+from typing import Callable, Dict, Any, Optional, Union
 from .model import CircuitModel
 from .condition_eval import evaluate
+from .node_execution import run_node_pipeline, is_pipeline_handler
 
 # --- CT-TRACE v1.0.0: minimal integration (signature unchanged) ---
 # Trace is stored in model.raw to avoid changing execute_circuit() signature.
@@ -17,7 +18,7 @@ def _trace_enabled(model: CircuitModel) -> bool:
         return False
 
 
-def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[str, Any]], Dict[str, Any]]) -> Dict[str, Any]:
+def execute_circuit(model: CircuitModel, engine_executor: Union[Callable[[str, Dict[str, Any]], Dict[str, Any]], Dict[str, Any]]) -> Dict[str, Any]:
     trace = None
     NodeTrace = SelectedEdge = ConditionResult = None  # type: ignore
     if _trace_enabled(model):
@@ -42,7 +43,17 @@ def execute_circuit(model: CircuitModel, engine_executor: Callable[[str, Dict[st
             trace.nodes.append(node_trace)
 
         node = model.nodes[current_id]
-        last_result = engine_executor(current_id, node.raw)
+        if is_pipeline_handler(engine_executor):
+            last_result = run_node_pipeline(
+                node_id=current_id,
+                node_raw=node.raw,
+                input_payload=last_result,
+                handler=engine_executor,
+            )
+        else:
+            # Backward compatible: callable treated as CORE handler
+            last_result = engine_executor(current_id, node.raw)  # type: ignore[misc]
+
 
         if node_trace is not None:
             node_trace.exited_at = now_iso()
