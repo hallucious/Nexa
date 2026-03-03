@@ -2,6 +2,7 @@ from typing import Callable, Dict, Any, Optional, Union
 from .model import CircuitModel
 from .condition_eval import evaluate
 from .node_execution import run_node_pipeline, is_pipeline_handler
+from src.utils.observability import is_observability_enabled, make_event, emit_event
 
 # --- CT-TRACE v1.0.0: minimal integration (signature unchanged) ---
 # Trace is stored in model.raw to avoid changing execute_circuit() signature.
@@ -28,6 +29,18 @@ def execute_circuit(model: CircuitModel, engine_executor: Union[Callable[[str, D
             trace = CircuitTrace(circuit_id=model.circuit_id)
             model.raw["trace"] = trace
 
+
+    raw = getattr(model, "raw", {})
+    obs_enabled = is_observability_enabled(raw)
+    run_id = None
+    try:
+        if trace is not None:
+            run_id = trace.run_id
+    except Exception:
+        run_id = None
+    if run_id is None:
+        run_id = str(raw.get("run_id") or "run-unknown")
+
     current_id = model.entry_node_id
     visited = set()
     last_result: Dict[str, Any] = {}
@@ -41,6 +54,9 @@ def execute_circuit(model: CircuitModel, engine_executor: Union[Callable[[str, D
         if trace is not None:
             node_trace = NodeTrace(node_id=current_id, entered_at=now_iso())
             trace.nodes.append(node_trace)
+
+        if obs_enabled:
+            emit_event(make_event(run_id=run_id, circuit_id=model.circuit_id, node_id=current_id, stage=None, event='node.enter'))
 
         node = model.nodes[current_id]
         if is_pipeline_handler(engine_executor):
@@ -58,6 +74,9 @@ def execute_circuit(model: CircuitModel, engine_executor: Union[Callable[[str, D
         if node_trace is not None:
             node_trace.exited_at = now_iso()
             node_trace.status = "success"
+
+        if obs_enabled:
+            emit_event(make_event(run_id=run_id, circuit_id=model.circuit_id, node_id=current_id, stage=None, event='node.exit', success=True))
 
         edges_from = [e for e in model.edges if e.from_id == current_id]
 
@@ -119,6 +138,8 @@ def execute_circuit(model: CircuitModel, engine_executor: Union[Callable[[str, D
                 if trace is not None:
                     trace.final_status = "success"
                     trace.finished_at = now_iso()
+                if obs_enabled:
+                    emit_event(make_event(run_id=run_id, circuit_id=model.circuit_id, node_id=None, stage=None, event='circuit.finish', success=True))
                 return last_result
 
             if node_trace is not None:

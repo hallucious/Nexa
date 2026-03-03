@@ -43,6 +43,9 @@ class NodeTrace:
     condition_result: Optional[ConditionResult] = None
     input_snapshot: Optional[SnapshotRef] = None
     output_snapshot: Optional[SnapshotRef] = None
+    prompt_meta: Optional[dict] = None
+    ai_call_summary: Optional[dict] = None
+    plugin_call_summaries: Optional[list] = None
 
 @dataclass
 class CircuitTrace:

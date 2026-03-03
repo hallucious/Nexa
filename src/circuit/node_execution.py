@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Protocol, Union
+from src.utils.observability import is_observability_enabled, make_event, emit_event
 
 
 class Stage(str, Enum):
@@ -11,14 +12,9 @@ class Stage(str, Enum):
     POST = "post"
 
 
-# Circuit-stage handler signatures:
-# - pre:  (node_id, node_raw, input_payload) -> patch (merged into input)
-# - core: (node_id, node_raw, input_payload) -> output_payload
-# - post: (node_id, node_raw, core_output)  -> patch (merged into core output)
 PreHandler = Callable[[str, Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
 CoreHandler = Callable[[str, Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
 PostHandler = Callable[[str, Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
-
 
 PipelineHandler = Dict[str, Any]  # keys: pre/core/post
 
@@ -35,19 +31,13 @@ def _merge(base: Dict[str, Any], patch: Optional[Dict[str, Any]]) -> Dict[str, A
     return merged
 
 
-@dataclass
-class StageRunReport:
-    ran_pre: bool
-    ran_core: bool
-    ran_post: bool
-
-
 class PromptSpecLike(Protocol):
     prompt_id: str
     version: str
 
     def validate(self, variables: Dict[str, Any]) -> None: ...
-    def render(self, variables: Dict[str, Any]) -> str: ...
+    def render(self, *, variables: Dict[str, Any]) -> str: ...
+    @property
     def prompt_hash(self) -> str: ...
 
 
@@ -55,16 +45,7 @@ class PromptRegistryLike(Protocol):
     def get(self, prompt_id: str) -> PromptSpecLike: ...
 
 
-def _resolve_prompt_variables(
-    *, node_raw: Dict[str, Any], input_payload: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Resolve variables for prompt rendering.
-
-    Rule (v1, minimal):
-    - Start from node_raw["prompt_variables"] if present (dict).
-    - Overlay input_payload["prompt_variables"] if present (dict).
-    - No implicit extraction from input_payload keys (keeps behavior explicit/stable).
-    """
+def _resolve_prompt_variables(*, node_raw: Dict[str, Any], input_payload: Dict[str, Any]) -> Dict[str, Any]:
     variables: Dict[str, Any] = {}
     nr_vars = node_raw.get("prompt_variables")
     if isinstance(nr_vars, dict):
@@ -83,12 +64,6 @@ def _inject_rendered_prompt(
     core_input: Dict[str, Any],
     prompt_registry: Optional[PromptRegistryLike],
 ) -> Dict[str, Any]:
-    """If node_raw declares prompt_id, render the prompt deterministically and inject.
-
-    Injected keys (v1):
-    - __rendered_prompt__: str
-    - __prompt_meta__: {prompt_id, version, prompt_hash}
-    """
     prompt_id = node_raw.get("prompt_id")
     if not prompt_id:
         return core_input
@@ -102,13 +77,12 @@ def _inject_rendered_prompt(
     spec = prompt_registry.get(prompt_id)
     variables = _resolve_prompt_variables(node_raw=node_raw, input_payload=core_input)
 
-    # Contract enforcement: validate → render (deterministic)
     spec.validate(variables)
-    rendered = spec.render(variables)
+    rendered = spec.render(variables=variables)
     meta = {
         "prompt_id": spec.prompt_id,
         "version": spec.version,
-        "prompt_hash": spec.prompt_hash(),
+        "prompt_hash": spec.prompt_hash,
     }
 
     injected = dict(core_input)
@@ -117,6 +91,16 @@ def _inject_rendered_prompt(
     return injected
 
 
+
+
+def _obs_ctx(input_payload: Dict[str, Any], node_raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    ctx = input_payload.get("__obs_ctx__")
+    if isinstance(ctx, dict):
+        return ctx
+    ctx = node_raw.get("__obs_ctx__")
+    if isinstance(ctx, dict):
+        return ctx
+    return None
 def run_node_pipeline(
     *,
     node_id: str,
@@ -125,15 +109,6 @@ def run_node_pipeline(
     handler: Union[CoreHandler, PipelineHandler],
     prompt_registry: Optional[PromptRegistryLike] = None,
 ) -> Dict[str, Any]:
-    """Run a node under mandatory Pre → Core → Post stages.
-
-    Enforcement:
-    - If handler is callable: treated as CORE only; PRE/POST are no-ops.
-    - If handler is pipeline dict: PRE/CORE/POST are executed in order (if present).
-    - Prompt rendering is Core-input injection only (PROMPT-CONTRACT v1.0.0):
-        * node_raw["prompt_id"] activates prompt rendering via prompt_registry.
-        * rendered prompt and prompt_meta are injected into core input.
-    """
     pre_fn: Optional[PreHandler] = None
     core_fn: Optional[CoreHandler] = None
     post_fn: Optional[PostHandler] = None
@@ -147,26 +122,40 @@ def run_node_pipeline(
     else:
         raise TypeError("Unsupported handler type for circuit execution")
 
-    # PRE
     core_input = dict(input_payload)
+    obs_enabled = is_observability_enabled(node_raw)
+    ctx = _obs_ctx(core_input, node_raw) if obs_enabled else None
+
+    # PRE
+    if obs_enabled and ctx is not None:
+        emit_event(make_event(run_id=str(ctx.get('run_id','run-unknown')), circuit_id=str(ctx.get('circuit_id','c-unknown')), node_id=node_id, stage='pre', event='node.stage.enter'))
     if pre_fn is not None:
         pre_patch = pre_fn(node_id, node_raw, dict(core_input))
         core_input = _merge(core_input, pre_patch)
 
-    # PROMPT (Core-input injection; explicit + deterministic)
-    core_input = _inject_rendered_prompt(
-        node_raw=node_raw, core_input=core_input, prompt_registry=prompt_registry
-    )
+    if obs_enabled and ctx is not None:
+        emit_event(make_event(run_id=str(ctx.get('run_id','run-unknown')), circuit_id=str(ctx.get('circuit_id','c-unknown')), node_id=node_id, stage='pre', event='node.stage.exit', success=True))
+        emit_event(make_event(run_id=str(ctx.get('run_id','run-unknown')), circuit_id=str(ctx.get('circuit_id','c-unknown')), node_id=node_id, stage='core', event='node.stage.enter'))
 
-    # CORE (required)
+    # PROMPT (Core-input injection)
+    core_input = _inject_rendered_prompt(node_raw=node_raw, core_input=core_input, prompt_registry=prompt_registry)
+
+    # CORE
     if core_fn is None:
         raise ValueError("Pipeline handler missing 'core'")
     core_output = core_fn(node_id, node_raw, dict(core_input))
+
+    if obs_enabled and ctx is not None:
+        emit_event(make_event(run_id=str(ctx.get('run_id','run-unknown')), circuit_id=str(ctx.get('circuit_id','c-unknown')), node_id=node_id, stage='core', event='node.stage.exit', success=True))
+        emit_event(make_event(run_id=str(ctx.get('run_id','run-unknown')), circuit_id=str(ctx.get('circuit_id','c-unknown')), node_id=node_id, stage='post', event='node.stage.enter'))
 
     # POST
     final_output = dict(core_output)
     if post_fn is not None:
         post_patch = post_fn(node_id, node_raw, dict(final_output))
         final_output = _merge(final_output, post_patch)
+
+    if obs_enabled and ctx is not None:
+        emit_event(make_event(run_id=str(ctx.get('run_id','run-unknown')), circuit_id=str(ctx.get('circuit_id','c-unknown')), node_id=node_id, stage='post', event='node.stage.exit', success=True))
 
     return final_output
