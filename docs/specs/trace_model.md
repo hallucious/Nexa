@@ -104,7 +104,7 @@ Enforced by rule_ids:
 # Archived Initial Version (Preserved)
 
 # Trace Model Specification
-Version: v1.0.0
+Archived-Version: v1.0.0
 Status: Official Contract
 
 Purpose:

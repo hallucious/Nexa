@@ -11,7 +11,7 @@ EXECUTION_ENVIRONMENT_CONTRACT_VERSION = "1.4.0"
 # Canonical mapping: doc-relative-path -> version constant
 # Used by the spec-version sync contract test to enforce completeness.
 SPEC_VERSIONS = {
-    "docs/specs/terminology.md": "1.0.0",
+    "docs/specs/terminology.md": "1.0.1",
     "docs/specs/execution_model.md": ENGINE_EXECUTION_MODEL_VERSION,
     "docs/specs/trace_model.md": ENGINE_TRACE_MODEL_VERSION,
     "docs/specs/validation_engine_contract.md": VALIDATION_ENGINE_CONTRACT_VERSION,

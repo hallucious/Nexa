@@ -36,7 +36,7 @@ ENG, ENT, CH, FLOW, NODE, PIPE, SIDE, DET, TRACE
 # Archived Initial Version (Preserved)
 
 # Validation Rule Catalog
-Version: v1.0.0
+Archived-Version: v1.0.0
 Status: Official Contract
 
 Purpose:

@@ -1,11 +1,16 @@
 # Terminology Specification
-Version: 1.0.0
+Version: 1.0.1
 Status: Official Contract
 
 Purpose:
 Hyper-AI의 핵심 용어(Engine/Node/Channel/Flow/Trace 등)를 정의한다.
 모든 spec은 이 용어를 기준으로 작성된다.
 
+
+## Version Notation Rule
+- 문서의 공식 버전 표기는 `Version: X.Y.Z` (SemVer, `v` 접두 **미사용**)로 고정한다.
+- `v1.0.0` 같은 표기는 **문서 본문 내 참고/인용/아카이브**에서만 허용하며, 그 경우 `Archived-Version:` 또는 `Example-Version:` 같은 다른 키를 사용한다.
+- 자동 계약 테스트는 활성 spec 문서에서 `^Version:` 라인을 파싱하므로, 본문에 두 번째 `Version:` 라인이 존재하면 동기화가 깨질 수 있다.
 ## Definitions
 - Engine: Node와 Channel, Flow로 구성된 실행 가능한 그래프 단위(Revision/Execution/Trace를 가진다).
 - Node: Engine 내부 최소 실행 단위(Pre/Core/Post 파이프라인을 따른다).
@@ -24,7 +29,7 @@ Related rule domains: ENG, NODE, CH
 # Archived Initial Version (Preserved)
 
 # Terminology Specification
-Version: v1.0.0
+Archived-Version: v1.0.0
 Status: Official Contract
 
 Purpose:

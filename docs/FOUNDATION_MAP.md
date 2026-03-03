@@ -1,5 +1,5 @@
 # FOUNDATION_MAP
-Version: 1.0.3
+Version: 1.0.5
 Status: Canonical Foundation Index (Architecture Memory)
 
 ## 1. 목적
@@ -7,6 +7,12 @@ Status: Canonical Foundation Index (Architecture Memory)
 각 문서가 현재 코드/계약/개발 단계에서 어떤 역할과 상태를 갖는지 명시한다.
 
 ## 2. 사용 규칙
+
+- **역할 경계(Active spec 포함):**
+  - Active spec의 **결정(Source-of-Truth)** 은 `docs/BLUEPRINT.md`가 가진다.
+  - `FOUNDATION_MAP.md`는 문서 카탈로그/레이어링을 제공하는 “인덱스”이며, **BLUEPRINT의 Active spec을 그대로 반영(동일 목록 유지)** 한다.
+  - 따라서 Active spec 목록은 “결정은 BLUEPRINT, 표시는 FOUNDATION_MAP이 동기화”가 원칙이며, 계약 테스트가 두 문서의 Active 목록 동일성을 강제한다.
+
 1) 문서는 **유효한 내용은 누적 유지**하고, 업데이트로 인해 **더 이상 적용되지 않는 내용은 삭제**한다.
    - Deprecations로 이동/이유/대체 규칙을 적는 절차는 필요하지 않다.
 
@@ -27,7 +33,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 | Strategic Direction & Evolution Policy | docs/STRATEGY.md | Partial | 프로젝트의 진화 정책/방향성 | 전략/진화 정책 |
 | Architectural Doctrine | docs/specs/Architectural Doctrine.md | Partial | 아키텍처 핵심 원칙/금기 | 전체 |
 | determinism_policy | docs/specs/determinism_policy.md | Partial | 결정성/재현성 원칙 | 실행/Trace |
-| terminology | docs/specs/terminology.md | Partial | 용어 정의(사용자/내부 공통) | 문서/UX |
+| terminology | docs/specs/terminology.md | Active | 용어 정의(사용자/내부 공통) | 문서/UX |
 | engine_constraints | docs/specs/engine_constraints.md | Partial | 엔진 제약 조건(그래프/실행 범위) | 엔진 |
 | entry_policy | docs/specs/entry_policy.md | Partial | entry 관련 정책 | 엔진/검증 |
 
@@ -60,7 +66,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 | Static Validation Rules | docs/specs/Static Validation Rules v0.2.md | Partial | 정적 규칙 설계(확장) | src/engine/validation/* |
 | Policy Engine | docs/specs/Policy Engine v0.1.md | Planned | 정책 엔진(확장) | 추후 |
 | side_effect_policy | docs/specs/side_effect_policy.md | Planned | 부작용/IO 정책 | 추후 |
-| Observability & Metrics | docs/specs/Observability & Metrics v0.1.md | Partial | 관측성/메트릭 확장 | OBSERVABILITY.jsonl 등 |
+| observability_metrics | docs/specs/observability_metrics.md | Active | OBSERVABILITY 이벤트/메트릭(옵트인) 계약(what/when/how to emit) | src/utils/observability.py, OBSERVABILITY.jsonl |
 
 ---
 
@@ -77,12 +83,10 @@ Status: Canonical Foundation Index (Architecture Memory)
 
 - docs/specs/circuit_contract.md (Circuit Definition Language v1.0.0)
 
-
 ## 4. 추가된 foundation 문서
 - `docs/specs/plugin_registry_contract.md` (PLUGIN-REGISTRY v1.0.0)
 - `docs/specs/provider_contract.md` (AI-PROVIDER v1.0.0)
 - `docs/specs/plugin_contract.md` (PLUGIN-CONTRACT v1.0.0)
 - `docs/specs/prompt_contract.md` (PROMPT-CONTRACT v1.0.0)
 - `docs/specs/docs_specs_circuit_trace_contract.md` (CT-TRACE v1.0.0)
-- `docs/specs/Observability & Metrics.md` (OBSERVABILITY opt-in)
-
+- `docs/specs/observability_metrics.md` (OBSERVABILITY v1.0.0)

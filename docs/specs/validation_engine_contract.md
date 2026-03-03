@@ -26,7 +26,7 @@ success=true 조건:
 # Archived Initial Version (Preserved)
 
 # Validation Engine Contract
-Version: v1.0.0
+Archived-Version: v1.0.0
 Status: Official Contract
 
 Purpose:
