@@ -40,6 +40,19 @@ class CodexProvider:
         timeout = (os.getenv("CODEX_TIMEOUT_SEC", "") or "").strip()
         timeout_i = int(timeout) if timeout.isdigit() else 120
         return cls(api_key, model=model, timeout_sec=timeout_i)
+    def fingerprint(self) -> str:
+        from src.providers.provider_contract import compute_provider_fingerprint
+        
+        info = {
+            "provider": type(self).__name__,
+            "api": "openai.responses",
+            "endpoint": self.API_URL,
+            "model": self.model,
+            "timeout_sec": self.timeout_sec,
+            "safe_mode": True,
+        }
+        return compute_provider_fingerprint(info)
+
 
     def generate_text(
         self,

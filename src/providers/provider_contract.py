@@ -130,3 +130,24 @@ def make_failure(*, error: str, raw: Optional[Dict[str, Any]], reason_code: str,
         reason_code=reason_code,
         metrics=ProviderMetrics(latency_ms=int(latency_ms), tokens_used=None),
     )
+
+# --- Provider identity / fingerprint (AI-PROVIDER v1.1.0) --------------------
+
+import hashlib
+import json
+
+
+def _canonical_json(data: dict) -> str:
+    """Deterministic JSON encoding for fingerprinting."""
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def compute_provider_fingerprint(info: dict) -> str:
+    """Return stable provider fingerprint as 'sha256:<hex>'.
+
+    The input MUST NOT contain secrets (API keys, tokens, raw prompts).
+    """
+    payload = _canonical_json(info).encode("utf-8")
+    digest = hashlib.sha256(payload).hexdigest()
+    return f"sha256:{digest}"
+

@@ -179,6 +179,20 @@ class GeminiProvider:
             text_out = ""
 
         return text_out, raw
+    def fingerprint(self) -> str:
+        from src.providers.provider_contract import compute_provider_fingerprint
+
+        info = {
+            "provider": type(self).__name__,
+            "api": "google.gemini.generateContent",
+            "endpoint_base": "https://generativelanguage.googleapis.com/v1beta/models/<model>:generateContent",
+            "model": self.model,
+            "fallback_model": self.fallback_model,
+            "thinking_budget": self.thinking_budget,
+            "safe_mode": True,
+        }
+        return compute_provider_fingerprint(info)
+
 
     def generate_text(
         self,

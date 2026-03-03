@@ -1,11 +1,10 @@
 # AI Provider Contract
-Version: 1.0.0
+Version: 1.1.0
 
 - Spec ID: AI-PROVIDER
-- Version: 1.0.0
-- Status: Draft
+- Status: Active
 - Scope: Provider-level text generation API used by Node Core execution.
-- Related Specs: NODE-EXEC@1.0.0, (optional) CT-TRACE@1.0.0
+- Related Specs: NODE-EXEC@1.1.0, (optional) CT-TRACE@1.0.0
 
 ---
 
@@ -30,6 +29,7 @@ It guarantees a stable result envelope, consistent error taxonomy, and minimal m
 4. Provider MAY return `tokens_used` when available; otherwise it MUST be `null`.
 5. `raw` MUST be a JSON-serializable object (dict) and MUST NOT contain secrets.
 6. The caller (Node runtime) is responsible for enforcing NODE-EXEC (AI calls occur only in Core).
+7. A Provider MUST expose a stable `fingerprint()` string that changes when provider configuration changes (model, endpoint, major runtime flags).
 
 ---
 
@@ -127,7 +127,22 @@ When a Node Core step uses a provider:
 
 ---
 
-## 11. Non-Goals (v1.0.0)
+## 11. Provider Fingerprint (v1.1.0)
+A Provider MUST implement `fingerprint() -> string` (sha256 recommended).
+
+Fingerprint input MUST exclude secrets and prompts. Recommended fields:
+- provider name
+- API family (e.g., openai.responses, anthropic.messages)
+- endpoint base URL
+- model name
+- timeout settings
+- SAFE_MODE enabled flag
+
+Fingerprint MUST be deterministic (canonical JSON + sha256).
+
+---
+
+## 12. Non-Goals (v1.1.0)
 - Tool-calling semantics
 - Multi-modal inputs/outputs
 - Streaming protocol contract
@@ -135,4 +150,4 @@ When a Node Core step uses a provider:
 
 ---
 
-End of AI-PROVIDER v1.0.0
+End of AI-PROVIDER v1.1.0

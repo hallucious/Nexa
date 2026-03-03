@@ -78,6 +78,20 @@ class PerplexityProvider:
             original = original[start:end + 1]
 
         return original.strip()
+    def fingerprint(self) -> str:
+        from src.providers.provider_contract import compute_provider_fingerprint
+
+        info = {
+            "provider": type(self).__name__,
+            "api": "perplexity.chat_completions",
+            "endpoint": self.API_URL,
+            "model": self.model,
+            "fallback_model": self.fallback_model,
+            "timeout_sec": self.timeout_sec,
+            "safe_mode": True,
+        }
+        return compute_provider_fingerprint(info)
+
 
     def generate_text(
         self,

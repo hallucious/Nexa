@@ -20,6 +20,7 @@ Version: 1.4.1
 -   docs/specs/validation_rule_catalog.md
 
 
+-   docs/specs/provider_contract.md
 ### 2.1 추가된 Active Specs (Step67~84 누적)
 
 아래 항목들은 기존 목록에 **누적 추가**된 활성 spec(코드/테스트와 동기화)이다:
@@ -27,7 +28,6 @@ Version: 1.4.1
 -   docs/specs/terminology.md
 -   docs/specs/node_execution_contract.md  (NODE-EXEC v1.0.0)
 -   docs/specs/docs_specs_circuit_trace_contract.md  (CT-TRACE v1.0.0, circuit trace contract)
--   docs/specs/provider_contract.md  (AI-PROVIDER v1.0.0)
 -   docs/specs/plugin_contract.md  (PLUGIN-CONTRACT v1.0.0)
 -   docs/specs/prompt_contract.md  (PROMPT-CONTRACT v1.0.0)
 -   docs/specs/plugin_registry_contract.md  (PLUGIN-REGISTRY v1.0.0)
