@@ -36,21 +36,24 @@ Status: Canonical Foundation Index (Architecture Memory)
 | terminology | docs/specs/terminology.md | Active | 용어 정의(사용자/내부 공통) | 문서/UX |
 | engine_constraints | docs/specs/engine_constraints.md | Partial | 엔진 제약 조건(그래프/실행 범위) | 엔진 |
 | entry_policy | docs/specs/entry_policy.md | Partial | entry 관련 정책 | 엔진/검증 |
+| circuit_contract | docs/specs/circuit_contract.md | Active | Circuit JSON schema contract (definition-only source of truth) | src/circuit/*, src/engine/* |
+| validation_rule_lifecycle | docs/specs/validation_rule_lifecycle.md | Active | rule lifecycle policy (active/deprecated rules, enforcement expectations) | src/engine/validation/* |
+| execution_environment_contract | docs/specs/execution_environment_contract.md | Active | execution environment contract (filesystem/network/tooling constraints) | src/platform/*, src/providers/* |
 
 ---
 
 # Layer 2. Engine Core Contracts (핵심 실행 모델/추적/노드)
 | 문서 | 경로 | 상태 | 설명 | 관련 코드/모듈(대표) |
 |---|---|---:|---|---|
-| node_abstraction | docs/specs/node_abstraction.md | Partial | 노드 추상화/역할 | src/engine/* (계약 영향) |
+| node_abstraction | docs/specs/node_abstraction.md | Active | 노드 추상화/역할 | src/engine/* (계약 영향) |
 | node_execution_pipeline | docs/specs/node_execution_pipeline.md | Partial | 노드 실행 파이프라인(단계) | src/engine/engine.py (확장 예정) |
 | node_execution_contract | docs/specs/node_execution_contract.md | Active | Node 실행 계약(Pre/Core/Post, AI Core-only, Plugin all-stages, return-only mutation, orchestration default) | src/engine/*, src/circuit/* |
 | provider_contract | docs/specs/provider_contract.md | Active | AI Provider 계약(ProviderResult/normalization, 실패 reason_code 표준화) | src/providers/*, src/platform/worker.py |
 | universal_provider_architecture | docs/specs/universal_provider_architecture.md | Active | UniversalProvider + Adapter 아키텍처(멀티 벤더 지원 단일 Provider) | src/providers/universal_provider.py (예정), src/providers/adapters/* (예정), src/platform/worker.py |
-| plugin_contract | docs/specs/plugin_contract.md | Active | Plugin 계약(PluginResult envelope, stage-aware, reason_code 표준화) | src/platform/plugin.py, src/platform/* |
-| prompt_contract | docs/specs/prompt_contract.md | Active | Prompt 계약(PromptSpec hash/render, registry) | src/prompts/* |
-| docs_specs_circuit_trace_contract | docs/specs/docs_specs_circuit_trace_contract.md | Active | Circuit Trace 계약(노드/엣지/조건 선택 기록) | src/circuit/trace.py, src/circuit/runtime_adapter.py |
-| plugin_registry_contract | docs/specs/plugin_registry_contract.md | Active | Plugin Registry 계약(버전 레지스트리, resolve 정책, compatibility) | src/platform/plugin_version_registry.py, src/platform/capability_negotiation.py |
+| plugin_contract | docs/specs/plugin_contract.md | Partial | Plugin 계약(PluginResult envelope, stage-aware, reason_code 표준화) | src/platform/plugin.py, src/platform/* |
+| prompt_contract | docs/specs/prompt_contract.md | Partial | Prompt 계약(PromptSpec hash/render, registry) | src/prompts/* |
+| docs_specs_circuit_trace_contract | docs/specs/docs_specs_circuit_trace_contract.md | Partial | Circuit Trace 계약(노드/엣지/조건 선택 기록) | src/circuit/trace.py, src/circuit/runtime_adapter.py |
+| plugin_registry_contract | docs/specs/plugin_registry_contract.md | Partial | Plugin Registry 계약(버전 레지스트리, resolve 정책, compatibility) | src/platform/plugin_version_registry.py, src/platform/capability_negotiation.py |
 | execution_model | docs/specs/execution_model.md | Active | 실행 의미(상태 전파 포함) | src/engine/engine.py |
 | trace_model | docs/specs/trace_model.md | Active | Trace 불변/커버리지 계약 | src/engine/trace.py |
 | Execution State Model | docs/specs/Execution State Model v0.1.md | Planned | 실행 상태 모델(확장) | 추후 |
@@ -67,7 +70,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 | Static Validation Rules | docs/specs/Static Validation Rules v0.2.md | Partial | 정적 규칙 설계(확장) | src/engine/validation/* |
 | Policy Engine | docs/specs/Policy Engine v0.1.md | Planned | 정책 엔진(확장) | 추후 |
 | side_effect_policy | docs/specs/side_effect_policy.md | Planned | 부작용/IO 정책 | 추후 |
-| observability_metrics | docs/specs/observability_metrics.md | Active | OBSERVABILITY 이벤트/메트릭(옵트인) 계약(what/when/how to emit) | src/utils/observability.py, OBSERVABILITY.jsonl |
+| observability_metrics | docs/specs/observability_metrics.md | Partial | OBSERVABILITY 이벤트/메트릭(옵트인) 계약(what/when/how to emit) | src/utils/observability.py, OBSERVABILITY.jsonl |
 
 ---
 

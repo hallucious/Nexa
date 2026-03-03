@@ -12,6 +12,11 @@ EXECUTION_ENVIRONMENT_CONTRACT_VERSION = "1.4.0"
 # Used by the spec-version sync contract test to enforce completeness.
 SPEC_VERSIONS = {
     "docs/specs/terminology.md": "1.0.1",
+    "docs/specs/docs_specs_circuit_trace_contract.md": "1.0.0",
+    "docs/specs/observability_metrics.md": "1.0.0",
+    "docs/specs/plugin_contract.md": "1.0.0",
+    "docs/specs/plugin_registry_contract.md": "1.0.0",
+    "docs/specs/prompt_contract.md": "1.0.0",
     "docs/specs/execution_model.md": ENGINE_EXECUTION_MODEL_VERSION,
     "docs/specs/trace_model.md": ENGINE_TRACE_MODEL_VERSION,
     "docs/specs/node_abstraction.md": "1.1.0",

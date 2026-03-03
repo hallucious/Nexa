@@ -1,0 +1,13 @@
+active_specs:
+  - docs/specs/terminology.md
+  - docs/specs/execution_model.md
+  - docs/specs/trace_model.md
+  - docs/specs/node_abstraction.md
+  - docs/specs/node_execution_contract.md
+  - docs/specs/provider_contract.md
+  - docs/specs/universal_provider_architecture.md
+  - docs/specs/circuit_contract.md
+  - docs/specs/validation_engine_contract.md
+  - docs/specs/validation_rule_catalog.md
+  - docs/specs/validation_rule_lifecycle.md
+  - docs/specs/execution_environment_contract.md
