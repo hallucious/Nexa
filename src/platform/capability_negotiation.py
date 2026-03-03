@@ -23,6 +23,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from src.platform.observability import append_observability_event
 from src.platform.plugin_contract import ReasonCode
+from src.platform.plugin_version_registry import PluginRef, PluginRegistryError, PluginVersionRegistry
 
 
 InjectTarget = str  # "providers" | "plugins" | "context.plugins"
@@ -50,13 +51,79 @@ def _get_context_plugins(ctx: GateContextLike) -> Dict[str, Any]:
         return {}
 
 
+def _get_plugin_registry(ctx: GateContextLike) -> Optional[PluginVersionRegistry]:
+    """Locate a PluginVersionRegistry from GateContextLike.
+
+    Backward-compatible: registry is optional.
+    Supported locations:
+    - ctx.context["plugin_registry"]
+    - ctx.context["__plugin_registry__"]
+    """
+    try:
+        c = getattr(ctx, "context", None) or {}
+        if isinstance(c, dict):
+            reg = c.get("plugin_registry")
+            if isinstance(reg, PluginVersionRegistry):
+                return reg
+            reg = c.get("__plugin_registry__")
+            if isinstance(reg, PluginVersionRegistry):
+                return reg
+    except Exception:
+        return None
+    return None
+
+
+
+def _maybe_resolve_plugin_ref(ctx: GateContextLike, obj: Any) -> Any:
+    """Resolve plugin references via PluginVersionRegistry if present.
+
+    Allowed ref shapes:
+    - PluginRef(plugin_id, plugin_version)
+    - tuple(plugin_id, plugin_version)
+    - dict {"plugin_id":..., "plugin_version":...}
+
+    If registry is absent or object is not a ref, returns obj unchanged.
+    If registry cannot resolve the ref, returns None.
+    """
+    reg = _get_plugin_registry(ctx)
+    if reg is None:
+        return obj
+
+    ref: Optional[PluginRef] = None
+    if isinstance(obj, PluginRef):
+        ref = obj
+    elif isinstance(obj, tuple) and len(obj) == 2:
+        pid, pv = obj
+        if isinstance(pid, str) and isinstance(pv, str):
+            ref = PluginRef(plugin_id=pid, plugin_version=pv)
+    elif isinstance(obj, dict):
+        pid = obj.get("plugin_id")
+        pv = obj.get("plugin_version")
+        if isinstance(pid, str) and isinstance(pv, str):
+            ref = PluginRef(plugin_id=pid, plugin_version=pv)
+
+    if ref is None:
+        return obj
+
+    try:
+        entry = reg.resolve(plugin_id=ref.plugin_id, version=ref.plugin_version)
+    except (KeyError, PluginRegistryError):
+        return None
+
+    if entry.factory is not None:
+        return entry.factory()
+    return entry.entrypoint()
+
+
 def _lookup(ctx: GateContextLike, target: InjectTarget, key: str) -> Any:
     if target == "providers":
         return (ctx.providers or {}).get(key)
     if target == "plugins":
-        return (ctx.plugins or {}).get(key)
+        obj = (ctx.plugins or {}).get(key)
+        return _maybe_resolve_plugin_ref(ctx, obj)
     if target == "context.plugins":
-        return _get_context_plugins(ctx).get(key)
+        obj = _get_context_plugins(ctx).get(key)
+        return _maybe_resolve_plugin_ref(ctx, obj)
     return None
 
 
