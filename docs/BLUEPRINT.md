@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.5.0
+Version: 1.6.0
 ## 1. Foundation Layer (Canonical Architecture Memory)
 
 본 프로젝트의 기초 설계 문서는 다음 문서에 의해 계층적으로 관리된다:
@@ -12,35 +12,16 @@ Version: 1.5.0
 
 ## 2. Active Specifications
 
-현재 코드와 1:1로 동기화되는 활성 spec 문서 목록:
+Active spec의 단일 Source of Truth는 다음 파일이다:
 
--   docs/specs/execution_model.md
--   docs/specs/trace_model.md
--   docs/specs/validation_engine_contract.md
--   docs/specs/validation_rule_catalog.md
+    docs/specs/_active_specs.yaml
 
+본 문서는 Active spec 목록을 중복 기재하지 않는다.
+실제 활성 spec 목록은 위 YAML 파일을 기준으로 하며,
+동기화는 계약 테스트에 의해 강제된다.
 
--   docs/specs/provider_contract.md
--   docs/specs/universal_provider_architecture.md
-### 2.1 추가된 Active Specs (Step67~84 누적)
+구조/계약 변경 시 관련 spec, 코드, 테스트는 반드시 동기화되어야 한다.
 
-아래 항목들은 기존 목록에 **누적 추가**된 활성 spec(코드/테스트와 동기화)이다:
-
--   docs/specs/terminology.md
--   docs/specs/node_execution_contract.md  (NODE-EXEC v1.0.0)
--   docs/specs/docs_specs_circuit_trace_contract.md  (CT-TRACE v1.0.0, circuit trace contract)
--   docs/specs/plugin_contract.md  (PLUGIN-CONTRACT v1.0.0)
--   docs/specs/prompt_contract.md  (PROMPT-CONTRACT v1.0.0)
--   docs/specs/plugin_registry_contract.md  (PLUGIN-REGISTRY v1.0.0)
--   docs/specs/observability_metrics.md  (OBSERVABILITY, opt-in 이벤트/메트릭)
-
-주의:
-- **Active spec 목록의 Source-of-Truth는 본 문서(BLUEPRINT)이다.**
-- `docs/FOUNDATION_MAP.md`는 문서 카탈로그/레이어링을 제공하지만, Active spec 결정 기준이 아니다.
-- spec-version sync 계약 테스트는 BLUEPRINT의 Active spec 목록을 파싱해, 각 spec 문서의 `Version:`과 `src/contracts/spec_versions.py`의 매핑이 일치하는지 강제한다.
-
-
-구조/계약 변경 시 위 문서들과 코드, 테스트는 반드시 동기화되어야 한다.
 
 ------------------------------------------------------------------------
 
