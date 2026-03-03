@@ -42,6 +42,19 @@ class ProviderTextWorker:
         self.name = str(name)
         self._provider = provider
 
+    def _fingerprint_or_error(self) -> Tuple[Optional[str], Optional[str]]:
+        """Return (fingerprint, error). Enforces Step92: fingerprint required for trace."""
+        try:
+            fp_fn = getattr(self._provider, "fingerprint", None)
+            if fp_fn is None or not callable(fp_fn):
+                return None, "provider_missing_fingerprint"
+            fp = fp_fn()
+            if not isinstance(fp, str) or not fp:
+                return None, "provider_invalid_fingerprint"
+            return fp, None
+        except Exception as e:  # noqa: BLE001
+            return None, f"provider_fingerprint_error:{type(e).__name__}:{e}"
+
     def generate_text(
         self,
         *,
@@ -70,6 +83,16 @@ class ProviderTextWorker:
                     text = "" if v.text is None else str(v.text)
                     raw = v.raw if isinstance(v.raw, dict) else {}
                     error = None if v.success else (v.error or v.reason_code or "provider_error")
+
+                    fp, fp_err = self._fingerprint_or_error()
+                    if fp is not None:
+                        raw = dict(raw)
+                        raw["provider_fingerprint"] = fp
+                        raw["provider_name"] = self.name
+                    if fp_err is not None:
+                        # Enforce fingerprint presence/validity for traceability (Step92).
+                        success = False
+                        error = fp_err
                 else:
                     # Legacy provider contract: (text, raw, err)
                     text, raw, err = v  # type: ignore[misc]
@@ -79,6 +102,15 @@ class ProviderTextWorker:
                         raw = {}
                     if not isinstance(text, str):
                         text = str(text)
+
+                    fp, fp_err = self._fingerprint_or_error()
+                    if fp is not None:
+                        raw = dict(raw)
+                        raw["provider_fingerprint"] = fp
+                        raw["provider_name"] = self.name
+                    if fp_err is not None:
+                        success = False
+                        error = fp_err
             except Exception as e:  # noqa: BLE001
                 text = ""
                 raw = {}

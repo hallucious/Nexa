@@ -10,6 +10,10 @@ class _FakeProvider:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = bool(fail)
 
+    def fingerprint(self) -> str:
+        return "fp-fake-v1"
+
+
     def generate_text(
         self,
         *,
@@ -27,6 +31,10 @@ class _FakeProvider:
 class _FakeProviderV2:
     def __init__(self, *, fail: bool = False) -> None:
         self.fail = bool(fail)
+
+    def fingerprint(self) -> str:
+        return "fp-fake-v2"
+
 
     def generate_text(
         self,
