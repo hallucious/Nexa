@@ -17,6 +17,7 @@ SPEC_VERSIONS = {
     "docs/specs/node_abstraction.md": "1.1.0",
     "docs/specs/node_execution_contract.md": "1.1.0",
     "docs/specs/provider_contract.md": "1.1.0",
+    "docs/specs/universal_provider_architecture.md": "1.0.0",
     "docs/specs/circuit_contract.md": "1.1.0",
     "docs/specs/validation_engine_contract.md": VALIDATION_ENGINE_CONTRACT_VERSION,
     "docs/specs/validation_rule_catalog.md": VALIDATION_RULE_CATALOG_VERSION,

@@ -1,5 +1,5 @@
 # FOUNDATION_MAP
-Version: 1.0.5
+Version: 1.0.6
 Status: Canonical Foundation Index (Architecture Memory)
 
 ## 1. 목적
@@ -46,6 +46,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 | node_execution_pipeline | docs/specs/node_execution_pipeline.md | Partial | 노드 실행 파이프라인(단계) | src/engine/engine.py (확장 예정) |
 | node_execution_contract | docs/specs/node_execution_contract.md | Active | Node 실행 계약(Pre/Core/Post, AI Core-only, Plugin all-stages, return-only mutation, orchestration default) | src/engine/*, src/circuit/* |
 | provider_contract | docs/specs/provider_contract.md | Active | AI Provider 계약(ProviderResult/normalization, 실패 reason_code 표준화) | src/providers/*, src/platform/worker.py |
+| universal_provider_architecture | docs/specs/universal_provider_architecture.md | Active | UniversalProvider + Adapter 아키텍처(멀티 벤더 지원 단일 Provider) | src/providers/universal_provider.py (예정), src/providers/adapters/* (예정), src/platform/worker.py |
 | plugin_contract | docs/specs/plugin_contract.md | Active | Plugin 계약(PluginResult envelope, stage-aware, reason_code 표준화) | src/platform/plugin.py, src/platform/* |
 | prompt_contract | docs/specs/prompt_contract.md | Active | Prompt 계약(PromptSpec hash/render, registry) | src/prompts/* |
 | docs_specs_circuit_trace_contract | docs/specs/docs_specs_circuit_trace_contract.md | Active | Circuit Trace 계약(노드/엣지/조건 선택 기록) | src/circuit/trace.py, src/circuit/runtime_adapter.py |

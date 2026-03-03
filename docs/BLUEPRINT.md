@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.4.1
+Version: 1.5.0
 ## 1. Foundation Layer (Canonical Architecture Memory)
 
 본 프로젝트의 기초 설계 문서는 다음 문서에 의해 계층적으로 관리된다:
@@ -21,6 +21,7 @@ Version: 1.4.1
 
 
 -   docs/specs/provider_contract.md
+-   docs/specs/universal_provider_architecture.md
 ### 2.1 추가된 Active Specs (Step67~84 누적)
 
 아래 항목들은 기존 목록에 **누적 추가**된 활성 spec(코드/테스트와 동기화)이다:
