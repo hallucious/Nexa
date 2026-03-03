@@ -1,5 +1,5 @@
 # Unified Node Abstraction
-Version: 1.0.0
+Version: 1.1.0
 Status: Official Contract
 
 Purpose:
@@ -13,6 +13,17 @@ Node의 구조/행동 계약을 정의한다.
 - 구조(Engine/Flow/Channel) 변경은 실행 중 금지.
 - 실패는 구조화된 reason_code를 포함해야 한다(침묵 실패 금지).
 
+## Responsibilities / Non-responsibilities (Step89 Clarification)
+
+### Responsibilities
+- Node는 **작업 단위(Work Unit)** 의 선언/구조 및 단계별(Pre/Core/Post) 로컬 로직을 제공한다.
+- Node는 입력/출력 스키마 및 정책(허용 도구, side-effect 등)을 **명시적으로** 제공한다.
+
+### Non-responsibilities
+- Node는 **플랫폼 오케스트레이션**(실행 스케줄링, dependency injection, provider 선택/교체 정책, registry 전역 정책, trace/observability 파이프라인 소유)을 담당하지 않는다.
+- Node는 Engine/Runtime이 제공하는 인터페이스(예: prompt registry, tool registry 등)를 **직접 소유(보유)하지 않는다**.
+- 도구 호출/AI 호출의 세부 실행은 Engine/Execution layer가 강제하는 계약 하에서만 발생한다.
+
 ## Validation Mapping
 Enforced by: NODE-001..006, PIPE-001..005
 
@@ -22,7 +33,6 @@ Enforced by: NODE-001..006, PIPE-001..005
 # Archived Initial Version (Preserved)
 
 # Unified Node Abstraction
-Version: v1.0.0
 Status: Official Contract
 
 Purpose:
@@ -34,8 +44,8 @@ All Engine execution depends on this abstraction.
 
 A Node is the smallest executable unit in an Engine.
 
-All functional behavior must be encapsulated inside Nodes.
-No logic may exist outside Nodes except Engine-level control rules.
+All **domain** behavior must be encapsulated inside Nodes.
+Platform orchestration (execution scheduling, dependency injection, registry governance, trace/observability pipeline) lives in the Engine/Execution layer.
 
 ----------------------------------------------------------------------
 

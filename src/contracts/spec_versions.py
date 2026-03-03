@@ -14,6 +14,9 @@ SPEC_VERSIONS = {
     "docs/specs/terminology.md": "1.0.1",
     "docs/specs/execution_model.md": ENGINE_EXECUTION_MODEL_VERSION,
     "docs/specs/trace_model.md": ENGINE_TRACE_MODEL_VERSION,
+    "docs/specs/node_abstraction.md": "1.1.0",
+    "docs/specs/node_execution_contract.md": "1.1.0",
+    "docs/specs/circuit_contract.md": "1.1.0",
     "docs/specs/validation_engine_contract.md": VALIDATION_ENGINE_CONTRACT_VERSION,
     "docs/specs/validation_rule_catalog.md": VALIDATION_RULE_CATALOG_VERSION,
     # Non-active specs may still be versioned here to enable strict checks when activated.

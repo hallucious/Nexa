@@ -1,5 +1,5 @@
 # Node Execution Contract
-Version: 1.0.0
+Version: 1.1.0
 
 - Spec ID: NODE-EXEC
 - Version: 1.0.0
@@ -27,7 +27,7 @@ Define the canonical execution contract for a Node. The contract standardizes:
 3. Plugin calls are allowed in Pre/Core/Post.
 4. Plugins **must not** mutate Node/Engine state directly; all changes are applied via explicit return values.
 5. Default mode is orchestration: the Node defines the plugin call sequence.
-6. Tool-calling (AI-directed plugin selection) is **out of scope** for v1.0.0; may be introduced in vNext with explicit guardrails.
+6. Tool-calling (AI-directed plugin selection) is **out of scope** for v1.0.0 as a normative contract. v1 implementations MAY use internal/adaptor-level tool-call shapes for testing or experimentation, but such shapes are not part of the stable public contract unless promoted via a versioned spec change with explicit guardrails.
 
 ## 4. Stage Responsibilities
 
