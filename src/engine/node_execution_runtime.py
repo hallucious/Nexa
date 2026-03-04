@@ -2,6 +2,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 import time
+import json
+from pathlib import Path
 
 
 @dataclass
@@ -21,10 +23,11 @@ class NodeResult:
 
 
 class NodeExecutionRuntime:
-    """Node execution runtime with basic observability (Step106)."""
+    """Node execution runtime with observability logging (Step107)."""
 
-    def __init__(self, provider_execution):
+    def __init__(self, provider_execution, observability_file: str = "OBSERVABILITY.jsonl"):
         self.provider_execution = provider_execution
+        self.observability_file = Path(observability_file)
 
     def _measure(self, name: str, fn, trace: NodeTrace):
         start = time.time()
@@ -32,6 +35,16 @@ class NodeExecutionRuntime:
         end = time.time()
         trace.timings_ms[name] = (end - start) * 1000.0
         return result
+
+    def _write_observability(self, node_id: str, trace: NodeTrace):
+        record = {
+            "node_id": node_id,
+            "events": trace.events,
+            "timings_ms": trace.timings_ms,
+            "provider": trace.provider_trace.get("provider") if isinstance(trace.provider_trace, dict) else None,
+        }
+        with self.observability_file.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record) + "\n")
 
     def execute(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
         node_id = node.get("id", "unknown")
@@ -65,9 +78,12 @@ class NodeExecutionRuntime:
 
         self._measure("post_plugins", post_stage, trace)
 
-        return NodeResult(
+        result = NodeResult(
             node_id=node_id,
             output=output,
             artifacts=[],
             trace=trace,
         )
+
+        self._write_observability(node_id, trace)
+        return result
