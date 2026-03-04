@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src.providers.provider_contract import (
     ProviderRequest,
@@ -15,6 +15,7 @@ from src.providers.provider_contract import (
 from src.providers.safe_mode import apply_safe_mode_prefix, run_safe_mode
 
 from src.providers.adapters.base_adapter import ProviderAdapter
+from src.providers.router import route_adapters
 
 
 @dataclass
@@ -22,6 +23,7 @@ class UniversalProvider:
     """A single provider implementation delegating vendor specifics to adapters."""
 
     adapter: ProviderAdapter
+    fallback_adapters: Optional[List[ProviderAdapter]] = None
     safe_mode_enabled: bool = True
 
     def fingerprint(self) -> str:
@@ -49,9 +51,10 @@ class UniversalProvider:
             max_output_tokens=int(max_output_tokens),
             model=model,
         )
-        payload = self.adapter.build_payload(req)
-        raw = self.adapter.send(payload)
-        text, tokens_used = self.adapter.parse(raw)
+        adapters: List[ProviderAdapter] = [self.adapter]
+        if self.fallback_adapters:
+            adapters.extend(list(self.fallback_adapters))
+        text, raw, tokens_used, _attempts = route_adapters(req=req, adapters=adapters)
         return text, raw, tokens_used
 
     def generate_text(
