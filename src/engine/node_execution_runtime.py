@@ -90,13 +90,28 @@ class NodeExecutionRuntime:
 
     def execute(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
         node_id = node.get("id", "unknown")
+
+        # Step113: plugin auto wiring from node spec
+        pre_plugins = self.pre_plugins
+        post_plugins = self.post_plugins
+
+        if "pre_plugins" in node or "post_plugins" in node:
+            try:
+                from src.engine.plugin_loader import load_plugins
+                pre_plugins = load_plugins(node.get("pre_plugins", []))
+                post_plugins = load_plugins(node.get("post_plugins", []))
+            except Exception:
+                # fallback to runtime configured plugins
+                pre_plugins = self.pre_plugins
+                post_plugins = self.post_plugins
+
         trace = NodeTrace()
         collected_artifacts: List[Artifact] = []
 
         # PRE PLUGINS
         def pre_stage():
             trace.events.append("pre_plugins")
-            self._run_plugins(self.pre_plugins, node_id, state, "pre", trace, collected_artifacts)
+            self._run_plugins(pre_plugins, node_id, state, "pre", trace, collected_artifacts)
 
         self._measure("pre_plugins", pre_stage, trace)
 
@@ -136,7 +151,7 @@ class NodeExecutionRuntime:
         # POST PLUGINS
         def post_stage():
             trace.events.append("post_plugins")
-            self._run_plugins(self.post_plugins, node_id, state, "post", trace, collected_artifacts)
+            self._run_plugins(post_plugins, node_id, state, "post", trace, collected_artifacts)
 
         self._measure("post_plugins", post_stage, trace)
 
