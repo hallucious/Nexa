@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -33,7 +34,7 @@ class NodeResult:
 
 
 class NodeExecutionRuntime:
-    """Node execution runtime with observability and artifact schema (Step108)."""
+    """Node execution runtime with artifact schema + append-only artifact lifecycle (Step109)."""
 
     def __init__(self, provider_execution, observability_file: str = "OBSERVABILITY.jsonl"):
         self.provider_execution = provider_execution
@@ -59,6 +60,7 @@ class NodeExecutionRuntime:
     def execute(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
         node_id = node.get("id", "unknown")
         trace = NodeTrace()
+        collected_artifacts: List[Artifact] = []
 
         def pre_stage():
             trace.events.append("pre_plugins")
@@ -82,13 +84,20 @@ class NodeExecutionRuntime:
 
         output = provider_result.get("output")
 
-        artifact = Artifact(
+        primary_artifact = Artifact(
             type="provider_output",
             name="primary_output",
             data=output,
             producer_node=node_id,
             timestamp_ms=time.time() * 1000.0,
         )
+        collected_artifacts.append(primary_artifact)
+
+        # Step109: append-only artifact merge from provider/plugins
+        extra_artifacts = provider_result.get("artifacts", [])
+        for a in extra_artifacts:
+            if isinstance(a, Artifact):
+                collected_artifacts.append(a)
 
         def post_stage():
             trace.events.append("post_plugins")
@@ -99,7 +108,7 @@ class NodeExecutionRuntime:
         result = NodeResult(
             node_id=node_id,
             output=output,
-            artifacts=[artifact],
+            artifacts=collected_artifacts,
             trace=trace,
         )
 
