@@ -7,6 +7,16 @@ from pathlib import Path
 
 
 @dataclass
+class Artifact:
+    type: str
+    name: str
+    data: Any
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    producer_node: Optional[str] = None
+    timestamp_ms: Optional[float] = None
+
+
+@dataclass
 class NodeTrace:
     events: List[str] = field(default_factory=list)
     timings_ms: Dict[str, float] = field(default_factory=dict)
@@ -18,12 +28,12 @@ class NodeTrace:
 class NodeResult:
     node_id: str
     output: Any
-    artifacts: List[Any] = field(default_factory=list)
+    artifacts: List[Artifact] = field(default_factory=list)
     trace: NodeTrace = field(default_factory=NodeTrace)
 
 
 class NodeExecutionRuntime:
-    """Node execution runtime with observability logging (Step107)."""
+    """Node execution runtime with observability and artifact schema (Step108)."""
 
     def __init__(self, provider_execution, observability_file: str = "OBSERVABILITY.jsonl"):
         self.provider_execution = provider_execution
@@ -72,6 +82,14 @@ class NodeExecutionRuntime:
 
         output = provider_result.get("output")
 
+        artifact = Artifact(
+            type="provider_output",
+            name="primary_output",
+            data=output,
+            producer_node=node_id,
+            timestamp_ms=time.time() * 1000.0,
+        )
+
         def post_stage():
             trace.events.append("post_plugins")
             trace.plugin_trace["post"].append("noop_post_plugin")
@@ -81,7 +99,7 @@ class NodeExecutionRuntime:
         result = NodeResult(
             node_id=node_id,
             output=output,
-            artifacts=[],
+            artifacts=[artifact],
             trace=trace,
         )
 
