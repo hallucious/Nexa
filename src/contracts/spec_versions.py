@@ -8,6 +8,10 @@ VALIDATION_RULE_CATALOG_VERSION = "1.1.0"
 VALIDATION_RULE_LIFECYCLE_VERSION = "1.0.0"
 EXECUTION_ENVIRONMENT_CONTRACT_VERSION = "1.4.0"
 
+# Step115 new specs
+GRAPH_EXECUTION_CONTRACT_VERSION = "1.0.0"
+CIRCUIT_RUNTIME_MODEL_VERSION = "1.0.0"
+
 # Canonical mapping: doc-relative-path -> version constant
 # Used by the spec-version sync contract test to enforce completeness.
 SPEC_VERSIONS = {
@@ -29,4 +33,8 @@ SPEC_VERSIONS = {
     # Non-active specs may still be versioned here to enable strict checks when activated.
     "docs/specs/validation_rule_lifecycle.md": VALIDATION_RULE_LIFECYCLE_VERSION,
     "docs/specs/execution_environment_contract.md": EXECUTION_ENVIRONMENT_CONTRACT_VERSION,
+
+    # Step115 new specs
+    "docs/specs/graph_execution_contract.md": GRAPH_EXECUTION_CONTRACT_VERSION,
+    "docs/specs/circuit_runtime_model.md": CIRCUIT_RUNTIME_MODEL_VERSION,
 }

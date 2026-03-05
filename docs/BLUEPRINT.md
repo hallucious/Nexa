@@ -236,6 +236,12 @@ execution_fingerprint determines semantic equality of runs.
 ## Circuit
 See docs/specs/circuit_contract.md
 
+## Graph Execution Runtime (Step115)
+See docs/specs/graph_execution_contract.md
+
+## Circuit Runtime Model (Long-term)
+See docs/specs/circuit_runtime_model.md
+
 ## Active Specs
 - CT-TRACE v1.0.0 (Circuit Trace Contract)
 
