@@ -19,6 +19,7 @@ from .revision import Revision
 from .trace import ExecutionTrace, NodeTrace
 from .types import FlowPolicy, NodeStatus, StageStatus
 from .node_execution_runtime import NodeExecutionRuntime
+from .graph_execution_runtime import GraphExecutionRuntime
 
 
 # Handler signatures for v1.5 execution (Step48):
@@ -47,6 +48,9 @@ class Engine:
 
     # Optional execution kernel (Step116+): if provided, the engine can delegate node execution.
     node_runtime: Optional[NodeExecutionRuntime] = field(default=None, repr=False)
+
+    # Optional graph runtime (Step117+): if provided, Engine can delegate graph traversal.
+    graph_runtime: Optional[GraphExecutionRuntime] = field(default=None, repr=False)
 
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
@@ -90,6 +94,7 @@ class Engine:
         - If handlers[node_id] is a dict with pre/core/post: pipeline handler.
         """
         handler_obj = self.handlers.get(node_id)
+
         # Step116+: if no explicit handler is registered and a node runtime is provided,
         # delegate execution to the runtime.
         if handler_obj is None and self.node_runtime is not None:
@@ -125,7 +130,6 @@ class Engine:
                     input_snapshot=dict(input_snapshot),
                     output_snapshot=None,
                 )
-
 
         pre_fn: Optional[PreHandler] = None
         core_fn: Optional[CoreHandler] = None
@@ -247,6 +251,98 @@ class Engine:
         execution_id = str(uuid.uuid4())
 
         validation = ValidationEngine().validate(self, revision_id=revision_id)
+
+        if self.graph_runtime is not None and validation.success:
+            circuit = {
+                "nodes": [{"id": nid} for nid in self.node_ids],
+                "edges": [
+                    {"from": ch.src_node_id, "to": ch.dst_node_id, "channel": ch.channel_id}
+                    for ch in self.channels
+                ],
+            }
+            graph_result = self.graph_runtime.execute(circuit=circuit, state={})
+
+            node_traces: Dict[str, NodeTrace] = {
+                nid: NodeTrace(
+                    node_id=nid,
+                    node_status=NodeStatus.NOT_REACHED,
+                    pre_status=StageStatus.SKIPPED,
+                    core_status=StageStatus.SKIPPED,
+                    post_status=StageStatus.SKIPPED,
+                    input_snapshot=None,
+                    output_snapshot=None,
+                    meta=None,
+                )
+                for nid in self.node_ids
+            }
+
+            graph_outputs = getattr(graph_result.trace, "node_outputs", {})
+            for nid in getattr(graph_result.trace, "node_sequence", []):
+                output = graph_outputs.get(nid)
+                if isinstance(output, dict):
+                    output_snapshot = dict(output)
+                elif output is None:
+                    output_snapshot = None
+                else:
+                    output_snapshot = {"output": output}
+
+                node_traces[nid] = NodeTrace(
+                    node_id=nid,
+                    node_status=NodeStatus.SUCCESS,
+                    pre_status=StageStatus.SKIPPED,
+                    core_status=StageStatus.SUCCESS,
+                    post_status=StageStatus.SKIPPED,
+                    input_snapshot=None,
+                    output_snapshot=output_snapshot,
+                    meta=None,
+                )
+
+            finished_at = now_utc()
+            duration_ms = int((finished_at - started_at).total_seconds() * 1000)
+
+            return ExecutionTrace(
+                execution_id=execution_id,
+                revision_id=revision_id,
+                structural_fingerprint=validation.structural_fingerprint,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_ms=duration_ms,
+                validation_success=validation.success,
+                validation_violations=[
+                    {
+                        "rule_id": v.rule_id,
+                        "rule_name": v.rule_name,
+                        "severity": v.severity.value,
+                        "location_type": v.location_type,
+                        "location_id": v.location_id,
+                        "message": v.message,
+                    }
+                    for v in validation.violations
+                ],
+                nodes=node_traces,
+                meta={
+                    "engine_meta": self.meta,
+                    "delegated_via": "graph_runtime",
+                    "graph_trace": {
+                        "run_id": getattr(graph_result.trace, "run_id", None),
+                        "node_sequence": list(getattr(graph_result.trace, "node_sequence", [])),
+                    },
+                    "spec_versions": {
+                        "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
+                        "trace_model": ENGINE_TRACE_MODEL_VERSION,
+                    },
+                    "validation": {
+                        "at": now_utc_iso(),
+                        "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
+                        "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
+                        "snapshot": {
+                            "snapshot_version": "1",
+                            "applied_rules": sorted(set(getattr(validation, "applied_rule_ids", []))),
+                        },
+                    },
+                },
+                expected_node_ids=self.node_ids,
+            )
 
         node_traces: Dict[str, NodeTrace] = {
             nid: NodeTrace(

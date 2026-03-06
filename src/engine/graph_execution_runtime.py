@@ -31,9 +31,11 @@ class GraphTrace:
     def __init__(self):
         self.run_id = uuid4().hex
         self.node_sequence = []
+        self.node_outputs = {}
 
-    def record(self, node_id: str):
+    def record(self, node_id: str, output=None):
         self.node_sequence.append(node_id)
+        self.node_outputs[node_id] = output
 
 
 class GraphResult:
@@ -87,7 +89,7 @@ class GraphExecutionRuntime:
                 channel = edge["channel"]
                 state[channel] = getattr(result, "output", None)
 
-            trace.record(node_id)
+            trace.record(node_id, getattr(result, "output", None))
 
         return GraphResult(
             state=state,

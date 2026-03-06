@@ -22,6 +22,29 @@ Active spec의 단일 Source of Truth는 다음 파일이다:
 
 구조/계약 변경 시 관련 spec, 코드, 테스트는 반드시 동기화되어야 한다.
 
+## 3. Engine Delegation Layers (Step116~117)
+
+현재 Engine 계층은 다음과 같이 분리된다.
+
+- Engine: semantics / validation / evidence trace
+- GraphExecutionRuntime: graph traversal / scheduling kernel
+- NodeExecutionRuntime: provider / plugin / artifact execution kernel
+
+Delegation path:
+
+Engine.execute
+    → GraphExecutionRuntime.execute (optional)
+        → NodeExecutionRuntime.execute
+
+Backward-compatibility path:
+
+Engine.execute
+    → _run_node
+        → handlers (legacy / compatibility)
+
+즉 Step117 이후의 정식 방향은 단일 실행 경로를 향해 수렴하되,
+기존 handler 기반 경로는 호환성 유지를 위해 일시적으로 유지된다.
+
 
 ------------------------------------------------------------------------
 
@@ -238,19 +261,6 @@ See docs/specs/circuit_contract.md
 
 ## Graph Execution Runtime (Step115)
 See docs/specs/graph_execution_contract.md
-
-
-## Engine → NodeExecutionRuntime Delegation (Step116)
-
-- 목적: Engine 실행 경로에서 **필요 시 NodeExecutionRuntime을 호출(위임)**할 수 있도록 최소 결합 고리를 추가한다.
-- 규칙: 해당 node_id에 handler가 등록되어 있으면 handler가 우선이며, handler가 없고 node_runtime이 제공된 경우에만 runtime으로 위임한다.
-- 효과: Engine의 semantics/trace/fixpoint loop는 유지하면서, 실행 커널(provider/plugins/artifacts)을 단계적으로 통합할 수 있다.
-
-Execution flow (delegation path):
-
-Engine.execute → _run_node → NodeExecutionRuntime.execute(node, state)
-
-Artifacts/Runtime trace는 NodeExecutionRuntime이 생성하고, Engine은 output을 NodeTrace.output_snapshot에 기록한다.
 
 ## Circuit Runtime Model (Long-term)
 See docs/specs/circuit_runtime_model.md
