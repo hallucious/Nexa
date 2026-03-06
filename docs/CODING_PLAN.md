@@ -195,3 +195,21 @@ Step55: Channel Validation Expansion (CH-001)
 - validation_rule_catalog.md Implemented Rules(Authoritative) 섹션 추가 및 버전 1.1.0 bump
 - spec_versions.py VALIDATION_RULE_CATALOG_VERSION 동기화
 - test_ch_001_contract.py 신규 추가
+
+
+Step119: Graph runtime trace contract hardening
+
+Status: Completed
+
+Changes:
+- GraphTrace now records started_at
+- GraphTrace now records finished_at
+- GraphTrace now records duration_ms
+- GraphTrace maintains deterministic execution_index
+- GraphTrace continues to record node_sequence and node_outputs
+
+Files:
+- src/engine/graph_execution_runtime.py
+
+Validation:
+- pytest passed after Step119 update

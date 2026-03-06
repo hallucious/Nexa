@@ -1,6 +1,5 @@
-
 """
-Step115: Sequential GraphExecutionRuntime (MVP)
+Step119: Sequential GraphExecutionRuntime with deterministic trace contract
 
 Features:
 - Topological sort execution
@@ -8,6 +7,8 @@ Features:
 - Channel-based state propagation
 - Artifact accumulation (append-only)
 - Cycle detection (fail-fast)
+- Deterministic execution_index trace
+- Runtime timing metadata on GraphTrace
 
 This runtime expects a NodeExecutionRuntime-like object with:
     execute(node: dict, state: dict) -> result
@@ -17,6 +18,7 @@ where result has attributes:
 """
 
 from collections import defaultdict, deque
+from datetime import datetime, timezone
 from uuid import uuid4
 
 
@@ -26,14 +28,20 @@ class GraphCycleError(Exception):
 
 
 class GraphTrace:
-    """Minimal graph execution trace."""
+    """Graph execution trace (Step119 contract)."""
 
     def __init__(self):
         self.run_id = uuid4().hex
+        self.started_at = datetime.now(timezone.utc)
+        self.finished_at = None
+        self.duration_ms = None
         self.node_sequence = []
         self.node_outputs = {}
+        self.execution_index = {}
 
     def record(self, node_id: str, output=None):
+        idx = len(self.node_sequence)
+        self.execution_index[node_id] = idx
         self.node_sequence.append(node_id)
         self.node_outputs[node_id] = output
 
@@ -49,7 +57,7 @@ class GraphResult:
 
 class GraphExecutionRuntime:
     """
-    Sequential GraphExecutionRuntime (Step115).
+    Sequential GraphExecutionRuntime.
     NodeExecutionRuntime must be injected (dependency injection).
     """
 
@@ -67,7 +75,6 @@ class GraphExecutionRuntime:
         artifacts = []
         trace = GraphTrace()
 
-        # build outgoing edge map
         outgoing = defaultdict(list)
         for e in edges:
             outgoing[e["from"]].append(e)
@@ -77,24 +84,25 @@ class GraphExecutionRuntime:
 
             result = self.node_runtime.execute(
                 node=node,
-                state=state
+                state=state,
             )
 
-            # append artifacts
             if hasattr(result, "artifacts") and result.artifacts:
                 artifacts.extend(result.artifacts)
 
-            # propagate channels
             for edge in outgoing[node_id]:
                 channel = edge["channel"]
                 state[channel] = getattr(result, "output", None)
 
             trace.record(node_id, getattr(result, "output", None))
 
+        trace.finished_at = datetime.now(timezone.utc)
+        trace.duration_ms = int((trace.finished_at - trace.started_at).total_seconds() * 1000)
+
         return GraphResult(
             state=state,
             artifacts=artifacts,
-            trace=trace
+            trace=trace,
         )
 
     def _topological_sort(self, nodes, edges):

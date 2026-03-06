@@ -271,3 +271,35 @@ See docs/specs/circuit_runtime_model.md
 ## Active Specs
 - NODE-EXEC v1.0.0 (Node Execution Contract) — docs/specs/node_execution_contract.md
 - PLUGIN-REGISTRY v1.0.0 (Plugin Registry Contract)
+
+
+## Graph Runtime Trace Contract (Step119)
+
+GraphExecutionRuntime trace contract is extended with deterministic timing and ordering metadata.
+
+GraphTrace fields:
+
+- run_id
+- started_at
+- finished_at
+- duration_ms
+- node_sequence
+- node_outputs
+- execution_index
+
+Execution guarantees:
+
+- topological sequential execution
+- deterministic execution_index assignment
+- per-node output capture in node_outputs
+- runtime-level duration measurement
+
+Layered execution structure:
+
+Engine
+    ↓
+GraphExecutionRuntime
+    ↓
+NodeExecutionRuntime
+    ↓
+providers / plugins
