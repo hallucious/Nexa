@@ -1,7 +1,26 @@
 # Hyper-AI CODING PLAN
 
-Version: 2.0.0
+Version: 2.1.0
 
+------------------------------------------
+Step110~116: Node Runtime + Plugins + NodeSpec + GraphExecutionRuntime + Engine Delegation (완료)
+------------------------------------------
+
+요약:
+- Step110~111: NodeExecutionRuntime에 PluginResult/Artifact append-only lifecycle 통합
+- Step112~113: plugin_loader 도입 및 node spec plugin auto-wiring
+- Step114: NodeSpec validation contract (fail-fast schema + plugin id verification)
+- Step115: Sequential GraphExecutionRuntime 추가 (순차 DAG 실행 + channel propagation)
+- Step116: Engine → NodeExecutionRuntime delegation path 추가 (handler 없을 때 runtime 위임)
+
+핵심 실행 구조(현재):
+- Engine: semantics/trace/fixpoint + (handler 기반 실행) + (runtime 위임 실행)
+- GraphExecutionRuntime: DAG 스케줄러(순차) + NodeExecutionRuntime 호출
+- NodeExecutionRuntime: provider/plugins/artifacts/runtime trace
+
+완료 조건:
+- python -m pytest -q 전체 통과
+- Step116 delegation contract 테스트 통과
 
 ------------------------------------------
 Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)

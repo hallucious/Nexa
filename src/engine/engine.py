@@ -18,6 +18,7 @@ from .model import Channel, EngineStructure, FlowRule
 from .revision import Revision
 from .trace import ExecutionTrace, NodeTrace
 from .types import FlowPolicy, NodeStatus, StageStatus
+from .node_execution_runtime import NodeExecutionRuntime
 
 
 # Handler signatures for v1.5 execution (Step48):
@@ -43,6 +44,9 @@ class Engine:
     # Node execution handlers (optional).
     # If a node is reached but no handler is registered, the engine uses a default no-op handler.
     handlers: Dict[str, Union[NodeHandler, Dict[str, Any]]] = field(default_factory=dict, repr=False)
+
+    # Optional execution kernel (Step116+): if provided, the engine can delegate node execution.
+    node_runtime: Optional[NodeExecutionRuntime] = field(default=None, repr=False)
 
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
@@ -86,6 +90,42 @@ class Engine:
         - If handlers[node_id] is a dict with pre/core/post: pipeline handler.
         """
         handler_obj = self.handlers.get(node_id)
+        # Step116+: if no explicit handler is registered and a node runtime is provided,
+        # delegate execution to the runtime.
+        if handler_obj is None and self.node_runtime is not None:
+            try:
+                runtime_result = self.node_runtime.execute(node={"id": node_id}, state=dict(input_snapshot))
+                out = runtime_result.output
+                output_snapshot: Optional[Dict[str, Any]]
+                if isinstance(out, dict):
+                    output_snapshot = dict(out)
+                else:
+                    output_snapshot = {"output": out}
+
+                return NodeTrace(
+                    node_id=node_id,
+                    node_status=NodeStatus.SUCCESS,
+                    pre_status=StageStatus.SKIPPED,
+                    core_status=StageStatus.SUCCESS,
+                    post_status=StageStatus.SKIPPED,
+                    reason_code=None,
+                    message=None,
+                    input_snapshot=dict(input_snapshot),
+                    output_snapshot=output_snapshot,
+                )
+            except Exception as e:
+                return NodeTrace(
+                    node_id=node_id,
+                    node_status=NodeStatus.FAILURE,
+                    pre_status=StageStatus.SKIPPED,
+                    core_status=StageStatus.FAILURE,
+                    post_status=StageStatus.SKIPPED,
+                    reason_code="ENG-RUNTIME-EXC",
+                    message=str(e),
+                    input_snapshot=dict(input_snapshot),
+                    output_snapshot=None,
+                )
+
 
         pre_fn: Optional[PreHandler] = None
         core_fn: Optional[CoreHandler] = None

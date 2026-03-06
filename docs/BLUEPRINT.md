@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.6.0
+Version: 1.7.0
 ## 1. Foundation Layer (Canonical Architecture Memory)
 
 본 프로젝트의 기초 설계 문서는 다음 문서에 의해 계층적으로 관리된다:
@@ -238,6 +238,19 @@ See docs/specs/circuit_contract.md
 
 ## Graph Execution Runtime (Step115)
 See docs/specs/graph_execution_contract.md
+
+
+## Engine → NodeExecutionRuntime Delegation (Step116)
+
+- 목적: Engine 실행 경로에서 **필요 시 NodeExecutionRuntime을 호출(위임)**할 수 있도록 최소 결합 고리를 추가한다.
+- 규칙: 해당 node_id에 handler가 등록되어 있으면 handler가 우선이며, handler가 없고 node_runtime이 제공된 경우에만 runtime으로 위임한다.
+- 효과: Engine의 semantics/trace/fixpoint loop는 유지하면서, 실행 커널(provider/plugins/artifacts)을 단계적으로 통합할 수 있다.
+
+Execution flow (delegation path):
+
+Engine.execute → _run_node → NodeExecutionRuntime.execute(node, state)
+
+Artifacts/Runtime trace는 NodeExecutionRuntime이 생성하고, Engine은 output을 NodeTrace.output_snapshot에 기록한다.
 
 ## Circuit Runtime Model (Long-term)
 See docs/specs/circuit_runtime_model.md
