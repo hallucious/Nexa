@@ -2,21 +2,6 @@
 
 Version: 2.1.0
 
-
-------------------------------------------
-Step117: Engine → GraphExecutionRuntime Integration (완료)
-------------------------------------------
-
-요약:
-- Engine can delegate graph traversal to GraphExecutionRuntime
-- GraphExecutionRuntime continues to delegate node execution to NodeExecutionRuntime
-- Engine converts GraphResult into ExecutionTrace
-- Existing handler path remains for backward compatibility
-
-완료 조건(증명):
-- test_step117_engine_graph_runtime_contract.py 통과
-- 전체 pytest 통과
-
 ------------------------------------------
 Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)
 ------------------------------------------
@@ -39,177 +24,116 @@ Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)
 - “노드/프롬프트/AI/플러그인 시스템”을 문서/계약 기준으로 더 명확히 고정
 - 이후 “회로(circuit) 시스템” 확장(모듈/서브그래프/분기/저장 등)로 진행
 
-  ------------------------------------------
-  Step45: DAG 상태 전파 규칙 (ALL_SUCCESS)
-  ------------------------------------------
-
-목표: - 다중 부모 노드 실행 조건을 ALL_SUCCESS 정책으로 확정 -
-execution_model.md 계약 갱신 - 이후 단계에서 실행 로직 구현 준비
-
-완료 조건: - execution_model.md v1.2.0 반영 - 테스트 전략 정의
-
-------------------------------------------------------------------------
-
-# Archived Initial Version (Preserved)
-
-# Hyper-AI CODING PLAN
-
-Version: v1.0.0
-
-Phase 1: - Core Engine Implementation - Constraint Enforcement System -
-Graph-based Trace Model
-
-Phase 2: - Statistical Analysis Layer - Proposal Engine
-
-Phase 3: - Guided UI Layer
-
-  ----------------------------------------------------
-  Step46: Legacy Isolation & Engine Canonicalization
-  ----------------------------------------------------
-
-목표: - src/pipeline 실구현을 src/legacy/pipeline 으로 이동 -
-src/pipeline 을 shim-only 구조로 전환 - Engine canonical entrypoint
-invariant 테스트 추가
-
-완료 조건: - test_engine_is_canonical_entrypoint.py 통과 - src.engine.\*
-내부에서 src.legacy 직접 import 없음 - 전체 pytest 통과 유지
-
-
----------------------------------------------------------------------
-Step47: Engine Determinism Contract 강화 (T1)
----------------------------------------------------------------------
+------------------------------------------
+Step121: ExecutionConfig Canonicalization / Hash Identity (완료)
+------------------------------------------
 
 목표:
-- Engine의 구조적 결정성(determinism)을 계약(테스트)으로 강화
-- 동일 그래프 구조에서 실행 반복 시, 노드별 구조 결과(signature)가 동일해야 함
+- ExecutionConfig를 실행 의미 기반 canonical hash로 식별
+- 같은 구성은 같은 ID, 실행 의미 변경은 다른 ID가 되도록 강제
+- canonicalization 계약을 문서/테스트/코드로 고정
 
-추가/변경 사항:
-- tests/test_engine_determinism_contract.py 추가
-  - node_status + (pre/core/post) stage status + reason_code 기반 signature 비교
-  - execution_id, revision_id, timestamp 등 비결정 필드는 비교 대상에서 제외
+구현:
+- src/engine/execution_config_hash.py
+- docs/specs/execution_config_canonicalization_contract.md
+- tests/test_step121_execution_config_hash_contract.py
 
 완료 조건:
-- python -m pytest -q 전체 통과
-- 50회 반복 실행에서 signature 동일
+- canonical hash 생성 테스트 통과
+- 전체 pytest 통과 유지
 
-
----------------------------------------------------------------------
-Step48: Trace Immutability Contract 강화
----------------------------------------------------------------------
+------------------------------------------
+Step122: ExecutionConfig Registry Loader (완료)
+------------------------------------------
 
 목표:
-- Engine 실행 완료 후 반환된 Trace 객체는 외부에서 변경 불가능해야 함
+- repo 내부 registry/execution_configs/에서 ExecutionConfig를 로드
+- ref → config resolution, version lookup, 캐싱 계약 고정
 
-추가/변경 사항:
-- tests/test_trace_immutability_contract.py 추가
-  - structural_fingerprint 변경 시 예외 발생
-  - node_status 변경 시 예외 발생
+구현:
+- src/platform/execution_config_registry.py
+- tests/test_step122_execution_config_registry_contract.py
 
 완료 조건:
-- python -m pytest -q 전체 통과
-- Trace 객체 외부 변조 시도 시 예외 발생
+- registry lookup / missing config / missing version / cache 테스트 통과
+- 전체 pytest 통과 유지
 
-
----------------------------------------------------------------------
-Step49: Engine Trace에 Spec-Version Stamp 추가 (Execution Artifact Sync)
----------------------------------------------------------------------
+------------------------------------------
+Step123: NodeExecutionRuntime Slot Pipeline (완료)
+------------------------------------------
 
 목표:
-- Engine 실행 결과(ExecutionTrace.meta)에 활성 spec 버전을 함께 기록하여,
-  spec-version sync를 실행 산출물 레벨까지 강화
+- NodeExecutionRuntime이 ExecutionConfig 스타일 입력을 받아 slot pipeline을 실행
+- legacy Artifact / NodeResult / NodeTrace 계약 유지
 
-추가/변경 사항:
-- src/engine/engine.py
-  - ExecutionTrace.meta에 spec_versions 필드 추가
-    - execution_model: ENGINE_EXECUTION_MODEL_VERSION
-    - trace_model: ENGINE_TRACE_MODEL_VERSION
-- tests/test_engine_spec_version_in_trace_contract.py 추가
-  - trace.meta.spec_versions 값이 contracts/spec_versions.py와 일치하는지 검증
+구현:
+- src/engine/node_execution_runtime.py
+- tests/test_step123_nodeslot_pipeline_contract.py
+
+실행 슬롯:
+1. pre_plugins
+2. prompt_render
+3. provider_execute
+4. post_plugins
+5. validation
+6. output_mapping
 
 완료 조건:
-- python -m pytest -q 전체 통과
-- trace.meta.spec_versions가 상수와 정확히 일치
+- legacy runtime 계약 유지
+- ExecutionConfig bridge 테스트 통과
+- 전체 pytest 통과 유지
 
+------------------------------------------
+Step124: NodeSpec → ExecutionConfig Resolution (완료)
+------------------------------------------
 
----------------------------------------------------------------------
-Step50: Trace Serialization Stability Contract
----------------------------------------------------------------------
 목표:
-- ExecutionTrace가 공식 직렬화 API를 제공해야 함 (to_dict / to_json)
-- 동일 Trace 인스턴스에 대해 stable 직렬화 결과는 반복 호출 시 100% 동일해야 함
-- meta / snapshot은 JSON-safe 강제를 통과해야 함 (비-JSON 타입은 계약 위반)
+- NodeSpec이 execution_config_ref를 통해 ExecutionConfigRegistry와 연결되도록 구현
+- Node는 실행 로직이 아닌 reference만 가지는 구조를 확정
 
-추가 사항:
-- src/engine/trace.py
-  - ExecutionTrace.to_dict(stable=True) / to_json(stable=True) 추가
-  - stable=True일 때 nodes는 node_id 정렬 기반으로 결정적 출력
-  - enum -> .value, datetime -> isoformat() 문자열
-  - meta/input_snapshot/output_snapshot JSON-safe 강제 (TypeError on violation)
-- tests/test_trace_serialization_stability_contract.py 추가
-  - trace.to_json(stable=True) 반복 호출 결과 동일성 검증
+구현:
+- src/engine/node_spec_resolver.py
+- tests/test_step124_node_spec_resolution_contract.py
 
 완료 조건:
-- python -m pytest -q 전체 통과
-- stable=True 직렬화 결과 반복 호출 시 완전 동일
+- resolution success / missing config / invalid ref / missing version 테스트 통과
+- 전체 pytest 통과 유지
 
+------------------------------------------
+Step125: ExecutionConfig Schema Validation (완료)
+------------------------------------------
 
-추가 사항:
-- tests/test_trace_serialization_stability_contract.py 추가
-  - trace.to_dict() 기반 JSON 비교
-  - sort_keys=True로 안정성 강제
-
-완료 조건:
-- python -m pytest -q 전체 통과
-- 반복 직렬화 결과 완전 동일
-
----------------------------------------------------------------------
-Step51: Validation → Trace Violation Structure Contract
----------------------------------------------------------------------
 목표:
-- Validation 실패/경고(violations)를 Trace에 표준 dict 구조로 기록한다.
-- Validation timestamp를 Trace.meta.validation.at에 기록한다.
-- spec-version sync: VALIDATION_ENGINE_CONTRACT_VERSION을 1.1.0으로 올리고, 코드/테스트로 강제한다.
+- ExecutionConfigRegistry 로드 전에 schema validation을 강제
+- 잘못된 config JSON을 조기 차단
+- ExecutionConfig를 검증됨 / canonical / hashable / registry-managed 실행 단위로 고정
 
-변경:
-- docs/specs/validation_engine_contract.md: 1.0.0 → 1.1.0 (MINOR)
-  - "Execution 금지" 의미를 "노드 실행 금지"로 명확화 (Trace 반환은 허용)
-  - Trace.validation_violations를 dict 스키마로 강제
-  - Trace.meta.validation.at timestamp 기록 강제
-- src/engine/engine.py
-  - trace.validation_violations: list[dict]로 기록
-  - trace.meta.validation: {at, contract_version, rule_catalog_version} 기록
-- src/contracts/spec_versions.py
-  - VALIDATION_ENGINE_CONTRACT_VERSION = "1.1.0"
-- tests/test_engine_validation_trace_violation_contract.py 추가
-  - 위 계약 강제
+구현:
+- src/platform/execution_config_schema.py
+- docs/specs/execution_config_schema_contract.md
+- tests/test_step125_execution_config_schema_contract.py
+
+최소 강제 필드:
+- config_id
+- version
+
+타입 강제:
+- pre_plugins: list
+- post_plugins: list
+- validation_rules: list
+- output_mapping: dict
 
 완료 조건:
-- python -m pytest -q 전체 통과
-- validation 실패 케이스에서 violations dict 구조 + timestamp 존재
+- schema validation contract 테스트 통과
+- 전체 pytest 통과 유지
 
+------------------------------------------
+다음 작업
+------------------------------------------
 
----------------------------------------------------------------------
-Step55: Channel Validation Expansion (CH-001)
----------------------------------------------------------------------
-- ValidationEngine에 CH-001 추가 (channel src/dst node_id 존재성 검증)
-- validation_rule_catalog.md Implemented Rules(Authoritative) 섹션 추가 및 버전 1.1.0 bump
-- spec_versions.py VALIDATION_RULE_CATALOG_VERSION 동기화
-- test_ch_001_contract.py 신규 추가
+Step126: ExecutionConfig Version Negotiation
 
-
-Step119: Graph runtime trace contract hardening
-
-Status: Completed
-
-Changes:
-- GraphTrace now records started_at
-- GraphTrace now records finished_at
-- GraphTrace now records duration_ms
-- GraphTrace maintains deterministic execution_index
-- GraphTrace continues to record node_sequence and node_outputs
-
-Files:
-- src/engine/graph_execution_runtime.py
-
-Validation:
-- pytest passed after Step119 update
+목표:
+- ExecutionConfig ref에서 version negotiation 규칙 정의
+- 1 / 1.x / 1.2 / 1.2.3 형태의 ref를 안정적으로 해석
+- registry lookup을 version compatibility-aware 로 확장

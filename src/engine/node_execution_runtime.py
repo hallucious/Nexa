@@ -1,10 +1,10 @@
-
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-import time
-import json
 from pathlib import Path
+from typing import Any, Dict, List, Optional
+import json
+import time
 
 from src.platform.plugin_result import normalize_plugin_result
 
@@ -36,7 +36,11 @@ class NodeResult:
 
 
 class NodeExecutionRuntime:
-    """Node execution runtime with artifact schema + append-only artifact lifecycle + plugin artifacts (Step111)."""
+    """
+    Node execution runtime with:
+    - legacy node execution contract (Step111+)
+    - Step123 slot-pipeline execution for ExecutionConfig-like dict input
+    """
 
     def __init__(
         self,
@@ -44,11 +48,13 @@ class NodeExecutionRuntime:
         pre_plugins=None,
         post_plugins=None,
         observability_file: str = "OBSERVABILITY.jsonl",
+        plugin_registry: Optional[Dict[str, Any]] = None,
     ):
         self.provider_execution = provider_execution
         self.pre_plugins = pre_plugins or []
         self.post_plugins = post_plugins or []
         self.observability_file = Path(observability_file)
+        self.plugin_registry = plugin_registry or {}
 
     def _measure(self, name: str, fn, trace: NodeTrace):
         start = time.time()
@@ -68,11 +74,6 @@ class NodeExecutionRuntime:
             f.write(json.dumps(record) + "\n")
 
     def _run_plugins(self, plugins, node_id, state, stage, trace, artifacts):
-        """Run plugins and append their emitted artifacts (append-only).
-
-        Backward-compat: when no plugins are configured, record explicit noop markers
-        so earlier contracts (Step106) remain valid.
-        """
         if not plugins:
             if stage == "pre":
                 trace.plugin_trace["pre"].append("noop_pre_plugin")
@@ -83,15 +84,120 @@ class NodeExecutionRuntime:
         for plugin in plugins:
             trace.plugin_trace[stage].append(plugin.__class__.__name__)
             result = normalize_plugin_result(plugin.run(node_id=node_id, state=state))
-
             for a in result.artifacts:
                 if isinstance(a, Artifact):
                     artifacts.append(a)
 
-    def execute(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
+    def _provider_call_legacy(self, rendered_prompt: str):
+        if hasattr(self.provider_execution, "execute"):
+            return self.provider_execution.execute(rendered_prompt)
+        return self.provider_execution(rendered_prompt)
+
+    def _provider_call_step123(self, prompt: Optional[str], context: Dict[str, Any]):
+        if hasattr(self.provider_execution, "execute"):
+            return self.provider_execution.execute(prompt)
+        return self.provider_execution(prompt=prompt, context=context)
+
+    def _render_prompt(self, prompt_ref: str, context: Dict[str, Any]) -> str:
+        # deterministic minimal renderer for Step123
+        return f"{prompt_ref}:{context}"
+
+    def _run_validation(self, rule: str, context: Dict[str, Any]):
+        if rule == "require_answer" and "answer" not in context:
+            raise ValueError("validation failed: answer missing")
+
+    def _resolve_plugin_callable(self, plugin_id: str):
+        if plugin_id not in self.plugin_registry:
+            raise ValueError(f"Unknown plugin: {plugin_id}")
+        return self.plugin_registry[plugin_id]
+
+    def _looks_like_execution_config(self, node: Dict[str, Any]) -> bool:
+        return (
+            "config_id" in node
+            or "execution_config_ref" in node
+            or "prompt_ref" in node
+            or "provider_ref" in node
+            or "validation_rules" in node
+            or "output_mapping" in node
+        ) and "id" not in node
+
+    def _execute_execution_config(self, config: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
+        node_id = config.get("node_id") or config.get("config_id") or "execution_config"
+        trace = NodeTrace()
+        artifacts: List[Artifact] = []
+        context = dict(state)
+
+        def pre_stage():
+            trace.events.append("pre_plugins")
+            for plugin_id in config.get("pre_plugins", []):
+                trace.plugin_trace["pre"].append(plugin_id)
+                result = self._resolve_plugin_callable(plugin_id)(context=context)
+                if isinstance(result, dict):
+                    context.update(result)
+
+        self._measure("pre_plugins", pre_stage, trace)
+
+        prompt = None
+
+        def render_stage():
+            trace.events.append("prompt_render")
+            nonlocal prompt
+            if config.get("prompt_ref"):
+                prompt = self._render_prompt(config["prompt_ref"], context)
+            return prompt or ""
+
+        self._measure("prompt_render", render_stage, trace)
+
+        def provider_stage():
+            trace.events.append("provider_execute")
+            if config.get("provider_ref") and self.provider_execution:
+                return self._provider_call_step123(prompt, context)
+            return {}
+
+        provider_result = self._measure("provider_execute", provider_stage, trace) or {}
+        if isinstance(provider_result, dict):
+            trace.provider_trace = provider_result.get("trace")
+            output = provider_result.get("output")
+            # Step123 convenience: provider may return plain key/values instead of nested output
+            if output is None:
+                context.update(provider_result)
+            else:
+                context.update(provider_result)
+        else:
+            output = provider_result
+
+        def post_stage():
+            trace.events.append("post_plugins")
+            for plugin_id in config.get("post_plugins", []):
+                trace.plugin_trace["post"].append(plugin_id)
+                result = self._resolve_plugin_callable(plugin_id)(context=context)
+                if isinstance(result, dict):
+                    context.update(result)
+
+        self._measure("post_plugins", post_stage, trace)
+
+        def validation_stage():
+            trace.events.append("validation")
+            for rule in config.get("validation_rules", []):
+                self._run_validation(rule, context)
+
+        self._measure("validation", validation_stage, trace)
+
+        mapped_output: Dict[str, Any] = {}
+        mapping = config.get("output_mapping", {})
+        for out_key, ctx_key in mapping.items():
+            mapped_output[out_key] = context.get(ctx_key)
+
+        return NodeResult(
+            node_id=node_id,
+            output=mapped_output,
+            artifacts=artifacts,
+            trace=trace,
+        )
+
+    def _execute_legacy_node(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
         node_id = node.get("id", "unknown")
 
-        # Step113: plugin auto wiring from node spec
         pre_plugins = self.pre_plugins
         post_plugins = self.post_plugins
 
@@ -101,21 +207,18 @@ class NodeExecutionRuntime:
                 pre_plugins = load_plugins(node.get("pre_plugins", []))
                 post_plugins = load_plugins(node.get("post_plugins", []))
             except Exception:
-                # fallback to runtime configured plugins
                 pre_plugins = self.pre_plugins
                 post_plugins = self.post_plugins
 
         trace = NodeTrace()
         collected_artifacts: List[Artifact] = []
 
-        # PRE PLUGINS
         def pre_stage():
             trace.events.append("pre_plugins")
             self._run_plugins(pre_plugins, node_id, state, "pre", trace, collected_artifacts)
 
         self._measure("pre_plugins", pre_stage, trace)
 
-        # PROMPT RENDER
         def render_stage():
             trace.events.append("prompt_render")
             prompt_template = node.get("prompt", "")
@@ -123,15 +226,14 @@ class NodeExecutionRuntime:
 
         rendered_prompt = self._measure("prompt_render", render_stage, trace)
 
-        # PROVIDER EXECUTION
         def provider_stage():
             trace.events.append("provider_execute")
-            return self.provider_execution.execute(rendered_prompt)
+            return self._provider_call_legacy(rendered_prompt)
 
         provider_result = self._measure("provider_execute", provider_stage, trace)
-        trace.provider_trace = provider_result.get("trace")
+        trace.provider_trace = provider_result.get("trace") if isinstance(provider_result, dict) else None
 
-        output = provider_result.get("output")
+        output = provider_result.get("output") if isinstance(provider_result, dict) else provider_result
 
         primary_artifact = Artifact(
             type="provider_output",
@@ -142,13 +244,11 @@ class NodeExecutionRuntime:
         )
         collected_artifacts.append(primary_artifact)
 
-        # provider artifacts
-        extra_artifacts = provider_result.get("artifacts", [])
+        extra_artifacts = provider_result.get("artifacts", []) if isinstance(provider_result, dict) else []
         for a in extra_artifacts:
             if isinstance(a, Artifact):
                 collected_artifacts.append(a)
 
-        # POST PLUGINS
         def post_stage():
             trace.events.append("post_plugins")
             self._run_plugins(post_plugins, node_id, state, "post", trace, collected_artifacts)
@@ -164,3 +264,8 @@ class NodeExecutionRuntime:
 
         self._write_observability(node_id, trace)
         return result
+
+    def execute(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
+        if self._looks_like_execution_config(node):
+            return self._execute_execution_config(node, state)
+        return self._execute_legacy_node(node, state)
