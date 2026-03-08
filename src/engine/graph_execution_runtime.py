@@ -1,20 +1,10 @@
 """
-Step119: Sequential GraphExecutionRuntime with deterministic trace contract
+Step128-C
 
-Features:
-- Topological sort execution
-- Sequential node execution
-- Channel-based state propagation
-- Artifact accumulation (append-only)
-- Cycle detection (fail-fast)
-- Deterministic execution_index trace
-- Runtime timing metadata on GraphTrace
+GraphExecutionRuntime now routes nodes with
+`execution_config_ref` through NodeSpecResolver.
 
-This runtime expects a NodeExecutionRuntime-like object with:
-    execute(node: dict, state: dict) -> result
-where result has attributes:
-    - output
-    - artifacts (list)
+Legacy nodes still use the old execution path.
 """
 
 from collections import defaultdict, deque
@@ -23,13 +13,10 @@ from uuid import uuid4
 
 
 class GraphCycleError(Exception):
-    """Raised when a cycle is detected in the circuit graph."""
     pass
 
 
 class GraphTrace:
-    """Graph execution trace (Step119 contract)."""
-
     def __init__(self):
         self.run_id = uuid4().hex
         self.started_at = datetime.now(timezone.utc)
@@ -47,8 +34,6 @@ class GraphTrace:
 
 
 class GraphResult:
-    """Final result of graph execution."""
-
     def __init__(self, state, artifacts, trace):
         self.state = state
         self.artifacts = artifacts
@@ -56,20 +41,15 @@ class GraphResult:
 
 
 class GraphExecutionRuntime:
-    """
-    Sequential GraphExecutionRuntime.
-    NodeExecutionRuntime must be injected (dependency injection).
-    """
-
-    def __init__(self, node_runtime):
+    def __init__(self, node_runtime, node_spec_resolver=None):
         self.node_runtime = node_runtime
+        self.node_spec_resolver = node_spec_resolver
 
     def execute(self, circuit: dict, state: dict):
         nodes = circuit.get("nodes", [])
         edges = circuit.get("edges", [])
 
         node_map = {n["id"]: n for n in nodes}
-
         order = self._topological_sort(nodes, edges)
 
         artifacts = []
@@ -82,8 +62,19 @@ class GraphExecutionRuntime:
         for node_id in order:
             node = node_map[node_id]
 
+            # Step128-C path routing
+            execution_node = node
+
+            if (
+                self.node_spec_resolver
+                and isinstance(node, dict)
+                and "execution_config_ref" in node
+            ):
+                resolved = self.node_spec_resolver.resolve(node)
+                execution_node = resolved
+
             result = self.node_runtime.execute(
-                node=node,
+                node=execution_node,
                 state=state,
             )
 
@@ -97,7 +88,9 @@ class GraphExecutionRuntime:
             trace.record(node_id, getattr(result, "output", None))
 
         trace.finished_at = datetime.now(timezone.utc)
-        trace.duration_ms = int((trace.finished_at - trace.started_at).total_seconds() * 1000)
+        trace.duration_ms = int(
+            (trace.finished_at - trace.started_at).total_seconds() * 1000
+        )
 
         return GraphResult(
             state=state,
@@ -106,7 +99,6 @@ class GraphExecutionRuntime:
         )
 
     def _topological_sort(self, nodes, edges):
-        """Kahn's algorithm for topological sorting."""
         node_ids = [n["id"] for n in nodes]
 
         indegree = {nid: 0 for nid in node_ids}
