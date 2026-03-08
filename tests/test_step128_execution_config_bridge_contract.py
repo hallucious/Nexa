@@ -1,16 +1,28 @@
-"""
-Step128-B contract test
-
-Goal:
-Ensure that when a node contains `execution_config_ref`,
-GraphExecutionRuntime still executes successfully and
-passes the node through the runtime path.
-
-This does NOT enforce resolver yet. It only ensures
-the bridge path works without breaking existing behavior.
-"""
-
 import pytest
+
+
+class _FakeResolver:
+    def __init__(self):
+        self.called = False
+
+    class _Config:
+        config_id = "ec_testhash"
+        version = "1.0.0"
+        config_schema_version = "1"
+        label = None
+        inputs = {}
+        pre_plugins = []
+        prompt_ref = None
+        provider_ref = None
+        post_plugins = []
+        validation_rules = []
+        output_mapping = {}
+        policy = {}
+        runtime_config = {}
+
+    def resolve(self, node):
+        self.called = True
+        return self._Config()
 
 
 class _FakeNodeResult:
@@ -27,14 +39,15 @@ class _FakeNodeRuntime:
 
     def execute(self, node, state):
         self.last_node = node
-        return _FakeNodeResult(node.get("id"))
+        return _FakeNodeResult(getattr(node, "config_id", None) or node.get("id"))
 
 
 def test_step128_execution_config_ref_bridge():
     from src.engine.graph_execution_runtime import GraphExecutionRuntime
 
     runtime = _FakeNodeRuntime()
-    engine = GraphExecutionRuntime(runtime)
+    resolver = _FakeResolver()
+    engine = GraphExecutionRuntime(runtime, node_spec_resolver=resolver)
 
     circuit = {
         "nodes": [
@@ -48,5 +61,6 @@ def test_step128_execution_config_ref_bridge():
 
     result = engine.execute(circuit, state={})
 
+    assert resolver.called is True
     assert result.trace.node_sequence == ["n1"]
-    assert runtime.last_node["execution_config_ref"] == "ec_testhash"
+    assert runtime.last_node.config_id == "ec_testhash"

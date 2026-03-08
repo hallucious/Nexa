@@ -1,12 +1,3 @@
-"""
-Step128-C
-
-GraphExecutionRuntime now routes nodes with
-`execution_config_ref` through NodeSpecResolver.
-
-Legacy nodes still use the old execution path.
-"""
-
 from collections import defaultdict, deque
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -41,6 +32,19 @@ class GraphResult:
 
 
 class GraphExecutionRuntime:
+    """
+    Step129-A
+
+    Preserve legacy constructor contract:
+        GraphExecutionRuntime(node_runtime)
+
+    Routing rules:
+    - legacy node without execution_config_ref:
+        pass through directly to node_runtime
+    - node with execution_config_ref:
+        requires node_spec_resolver and is resolved before execution
+    """
+
     def __init__(self, node_runtime, node_spec_resolver=None):
         self.node_runtime = node_runtime
         self.node_spec_resolver = node_spec_resolver
@@ -61,17 +65,14 @@ class GraphExecutionRuntime:
 
         for node_id in order:
             node = node_map[node_id]
-
-            # Step128-C path routing
             execution_node = node
 
-            if (
-                self.node_spec_resolver
-                and isinstance(node, dict)
-                and "execution_config_ref" in node
-            ):
-                resolved = self.node_spec_resolver.resolve(node)
-                execution_node = resolved
+            if isinstance(node, dict) and "execution_config_ref" in node:
+                if self.node_spec_resolver is None:
+                    raise RuntimeError(
+                        "NodeSpecResolver is required when graph node uses execution_config_ref"
+                    )
+                execution_node = self.node_spec_resolver.resolve(node)
 
             result = self.node_runtime.execute(
                 node=execution_node,
