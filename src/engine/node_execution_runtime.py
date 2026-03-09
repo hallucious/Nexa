@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 import json
@@ -110,6 +110,26 @@ class NodeExecutionRuntime:
         if plugin_id not in self.plugin_registry:
             raise ValueError(f"Unknown plugin: {plugin_id}")
         return self.plugin_registry[plugin_id]
+
+    def _normalize_node_payload(self, node: Any) -> Dict[str, Any]:
+        if isinstance(node, dict):
+            return dict(node)
+
+        if is_dataclass(node) and not isinstance(node, type):
+            payload = asdict(node)
+            if isinstance(payload, dict):
+                return payload
+
+        if hasattr(node, "__dict__"):
+            payload = {
+                key: value
+                for key, value in vars(node).items()
+                if not key.startswith("_")
+            }
+            if isinstance(payload, dict) and payload:
+                return payload
+
+        raise TypeError(f"node must be dict-like or dataclass-backed object, got {type(node).__name__}")
 
     def _looks_like_execution_config(self, node: Dict[str, Any]) -> bool:
         return (
@@ -266,6 +286,8 @@ class NodeExecutionRuntime:
         return result
 
     def execute(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
-        if self._looks_like_execution_config(node):
-            return self._execute_execution_config(node, state)
-        return self._execute_legacy_node(node, state)
+        normalized_node = self._normalize_node_payload(node)
+
+        if self._looks_like_execution_config(normalized_node):
+            return self._execute_execution_config(normalized_node, state)
+        return self._execute_legacy_node(normalized_node, state)
