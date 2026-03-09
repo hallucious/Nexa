@@ -52,6 +52,36 @@ class Engine:
     # Optional graph runtime (Step117+): if provided, Engine can delegate graph traversal.
     graph_runtime: Optional[GraphExecutionRuntime] = field(default=None, repr=False)
 
+    # Optional NodeSpec resolver (Step130-A): owned at Engine level and safely bridged
+    # into GraphExecutionRuntime when available. This is wiring only and must not
+    # replace legacy execution semantics.
+    node_spec_resolver: Optional[Any] = field(default=None, repr=False)
+
+    def _get_graph_runtime(self) -> Optional[GraphExecutionRuntime]:
+        """Return graph runtime with safe Step130-A wiring.
+
+        Non-breaking rules:
+        - If graph_runtime is absent, only auto-create it when node_runtime exists.
+        - If Engine owns node_spec_resolver, bridge it into graph_runtime when the runtime
+          does not already have one.
+        - Do not mutate or remove legacy execution paths.
+        """
+        runtime = self.graph_runtime
+
+        if runtime is None and self.node_runtime is not None:
+            runtime = GraphExecutionRuntime(
+                node_runtime=self.node_runtime,
+                node_spec_resolver=self.node_spec_resolver,
+            )
+            self.graph_runtime = runtime
+
+        if runtime is not None and self.node_spec_resolver is not None:
+            current_resolver = getattr(runtime, "node_spec_resolver", None)
+            if current_resolver is None:
+                runtime.node_spec_resolver = self.node_spec_resolver
+
+        return runtime
+
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
             entry_node_id=self.entry_node_id,
@@ -252,7 +282,9 @@ class Engine:
 
         validation = ValidationEngine().validate(self, revision_id=revision_id)
 
-        if self.graph_runtime is not None and validation.success:
+        graph_runtime = self._get_graph_runtime()
+
+        if graph_runtime is not None and validation.success:
             circuit = {
                 "nodes": [{"id": nid} for nid in self.node_ids],
                 "edges": [
@@ -260,7 +292,7 @@ class Engine:
                     for ch in self.channels
                 ],
             }
-            graph_result = self.graph_runtime.execute(circuit=circuit, state={})
+            graph_result = graph_runtime.execute(circuit=circuit, state={})
 
             node_traces: Dict[str, NodeTrace] = {
                 nid: NodeTrace(
