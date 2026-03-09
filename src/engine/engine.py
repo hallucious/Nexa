@@ -52,36 +52,6 @@ class Engine:
     # Optional graph runtime (Step117+): if provided, Engine can delegate graph traversal.
     graph_runtime: Optional[GraphExecutionRuntime] = field(default=None, repr=False)
 
-    # Optional NodeSpec resolver (Step130-A): owned at Engine level and safely bridged
-    # into GraphExecutionRuntime when available. This is wiring only and must not
-    # replace legacy execution semantics.
-    node_spec_resolver: Optional[Any] = field(default=None, repr=False)
-
-    def _get_graph_runtime(self) -> Optional[GraphExecutionRuntime]:
-        """Return graph runtime with safe Step130-A wiring.
-
-        Non-breaking rules:
-        - If graph_runtime is absent, only auto-create it when node_runtime exists.
-        - If Engine owns node_spec_resolver, bridge it into graph_runtime when the runtime
-          does not already have one.
-        - Do not mutate or remove legacy execution paths.
-        """
-        runtime = self.graph_runtime
-
-        if runtime is None and self.node_runtime is not None:
-            runtime = GraphExecutionRuntime(
-                node_runtime=self.node_runtime,
-                node_spec_resolver=self.node_spec_resolver,
-            )
-            self.graph_runtime = runtime
-
-        if runtime is not None and self.node_spec_resolver is not None:
-            current_resolver = getattr(runtime, "node_spec_resolver", None)
-            if current_resolver is None:
-                runtime.node_spec_resolver = self.node_spec_resolver
-
-        return runtime
-
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
             entry_node_id=self.entry_node_id,
@@ -282,17 +252,20 @@ class Engine:
 
         validation = ValidationEngine().validate(self, revision_id=revision_id)
 
-        graph_runtime = self._get_graph_runtime()
-
-        if graph_runtime is not None and validation.success:
+        if self.graph_runtime is not None and validation.success:
             circuit = {
                 "nodes": [{"id": nid} for nid in self.node_ids],
                 "edges": [
                     {"from": ch.src_node_id, "to": ch.dst_node_id, "channel": ch.channel_id}
                     for ch in self.channels
                 ],
+                "entry": self.entry_node_id,
+                "flow": [
+                    {"rule_id": fr.rule_id, "node_id": fr.node_id, "policy": fr.policy.value}
+                    for fr in self.flow
+                ],
             }
-            graph_result = graph_runtime.execute(circuit=circuit, state={})
+            graph_result = self.graph_runtime.execute(circuit=circuit, state={})
 
             node_traces: Dict[str, NodeTrace] = {
                 nid: NodeTrace(
@@ -309,7 +282,14 @@ class Engine:
             }
 
             graph_outputs = getattr(graph_result.trace, "node_outputs", {})
-            for nid in getattr(graph_result.trace, "node_sequence", []):
+            graph_statuses = getattr(graph_result.trace, "node_statuses", {})
+            graph_inputs = getattr(graph_result.trace, "node_inputs", {})
+            graph_messages = getattr(graph_result.trace, "node_messages", {})
+            for nid in self.node_ids:
+                status_value = graph_statuses.get(nid)
+                if status_value is None:
+                    continue
+
                 output = graph_outputs.get(nid)
                 if isinstance(output, dict):
                     output_snapshot = dict(output)
@@ -318,14 +298,34 @@ class Engine:
                 else:
                     output_snapshot = {"output": output}
 
+                input_snapshot = graph_inputs.get(nid)
+                if isinstance(input_snapshot, dict):
+                    input_snapshot = dict(input_snapshot)
+                else:
+                    input_snapshot = None
+
+                if status_value == "success":
+                    node_status = NodeStatus.SUCCESS
+                    core_status = StageStatus.SUCCESS
+                elif status_value == "failure":
+                    node_status = NodeStatus.FAILURE
+                    core_status = StageStatus.FAILURE
+                elif status_value == "skipped":
+                    node_status = NodeStatus.SKIPPED
+                    core_status = StageStatus.SKIPPED
+                else:
+                    node_status = NodeStatus.NOT_REACHED
+                    core_status = StageStatus.SKIPPED
+
                 node_traces[nid] = NodeTrace(
                     node_id=nid,
-                    node_status=NodeStatus.SUCCESS,
+                    node_status=node_status,
                     pre_status=StageStatus.SKIPPED,
-                    core_status=StageStatus.SUCCESS,
+                    core_status=core_status,
                     post_status=StageStatus.SKIPPED,
-                    input_snapshot=None,
+                    input_snapshot=input_snapshot,
                     output_snapshot=output_snapshot,
+                    message=graph_messages.get(nid),
                     meta=None,
                 )
 
