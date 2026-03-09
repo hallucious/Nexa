@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import json
 import time
 
@@ -37,9 +37,11 @@ class NodeResult:
 
 class NodeExecutionRuntime:
     """
-    Node execution runtime with:
-    - legacy node execution contract (Step111+)
-    - Step123 slot-pipeline execution for ExecutionConfig-like dict input
+    Node execution runtime with a unified execution-plan model.
+
+    Supported inputs:
+    - ExecutionConfig-like dicts / models
+    - legacy prompt nodes, which are normalized into an internal execution plan
     """
 
     def __init__(
@@ -98,7 +100,9 @@ class NodeExecutionRuntime:
             return self.provider_execution.execute(prompt)
         return self.provider_execution(prompt=prompt, context=context)
 
-    def _render_prompt(self, prompt_ref: str, context: Dict[str, Any]) -> str:
+    def _render_prompt(self, prompt_ref: str, context: Dict[str, Any], *, render_mode: str = "step123") -> str:
+        if render_mode == "legacy_format":
+            return prompt_ref.format(**context) if prompt_ref else ""
         # deterministic minimal renderer for Step123
         return f"{prompt_ref}:{context}"
 
@@ -141,15 +145,87 @@ class NodeExecutionRuntime:
             or "output_mapping" in node
         ) and "id" not in node
 
-    def _execute_execution_config(self, config: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
-        node_id = config.get("node_id") or config.get("config_id") or "execution_config"
+    def _coerce_node_to_execution_plan(self, normalized_node: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        if self._looks_like_execution_config(normalized_node):
+            return normalized_node, {}
+
+        node_id = normalized_node.get("id", "unknown")
+        legacy_pre_plugins = self.pre_plugins
+        legacy_post_plugins = self.post_plugins
+
+        if "pre_plugins" in normalized_node or "post_plugins" in normalized_node:
+            try:
+                from src.engine.plugin_loader import load_plugins
+                legacy_pre_plugins = load_plugins(normalized_node.get("pre_plugins", []))
+                legacy_post_plugins = load_plugins(normalized_node.get("post_plugins", []))
+            except Exception:
+                legacy_pre_plugins = self.pre_plugins
+                legacy_post_plugins = self.post_plugins
+
+        plan = {
+            "config_id": f"legacy.{node_id}",
+            "node_id": node_id,
+            "prompt_ref": normalized_node.get("prompt", ""),
+            "provider_ref": "__legacy_provider__",
+            "pre_plugins": [],
+            "post_plugins": [],
+            "validation_rules": [],
+            "output_mapping": {},
+            "runtime_config": {
+                "prompt_render_mode": "legacy_format",
+                "provider_call_mode": "legacy_prompt_only",
+                "return_raw_output": True,
+                "emit_primary_artifact": True,
+                "write_observability": True,
+                "legacy_node_id": node_id,
+                "legacy_plugin_mode": True,
+            },
+        }
+        extras = {
+            "legacy_pre_plugins": legacy_pre_plugins,
+            "legacy_post_plugins": legacy_post_plugins,
+        }
+        return plan, extras
+
+    def _execute_execution_config(
+        self,
+        config: Dict[str, Any],
+        state: Dict[str, Any],
+        *,
+        plan_extras: Optional[Dict[str, Any]] = None,
+    ) -> NodeResult:
+        runtime_config = dict(config.get("runtime_config") or {})
+        plan_extras = dict(plan_extras or {})
+
+        node_id = (
+            runtime_config.get("legacy_node_id")
+            or config.get("node_id")
+            or config.get("config_id")
+            or "execution_config"
+        )
         trace = NodeTrace()
         artifacts: List[Artifact] = []
         context = dict(state)
 
         def pre_stage():
             trace.events.append("pre_plugins")
-            for plugin_id in config.get("pre_plugins", []):
+            if runtime_config.get("legacy_plugin_mode"):
+                self._run_plugins(
+                    plan_extras.get("legacy_pre_plugins", []),
+                    node_id,
+                    context,
+                    "pre",
+                    trace,
+                    artifacts,
+                )
+                return
+
+            plugin_ids = config.get("pre_plugins", [])
+            if not plugin_ids:
+                trace.plugin_trace["pre"].append("noop_pre_plugin")
+                return
+
+            for plugin_id in plugin_ids:
                 trace.plugin_trace["pre"].append(plugin_id)
                 result = self._resolve_plugin_callable(plugin_id)(context=context)
                 if isinstance(result, dict):
@@ -162,14 +238,21 @@ class NodeExecutionRuntime:
         def render_stage():
             trace.events.append("prompt_render")
             nonlocal prompt
-            if config.get("prompt_ref"):
-                prompt = self._render_prompt(config["prompt_ref"], context)
+            if config.get("prompt_ref") is not None:
+                prompt = self._render_prompt(
+                    config.get("prompt_ref", ""),
+                    context,
+                    render_mode=runtime_config.get("prompt_render_mode", "step123"),
+                )
             return prompt or ""
 
         self._measure("prompt_render", render_stage, trace)
 
         def provider_stage():
             trace.events.append("provider_execute")
+            provider_mode = runtime_config.get("provider_call_mode", "step123")
+            if provider_mode == "legacy_prompt_only":
+                return self._provider_call_legacy(prompt or "")
             if config.get("provider_ref") and self.provider_execution:
                 return self._provider_call_step123(prompt, context)
             return {}
@@ -178,17 +261,44 @@ class NodeExecutionRuntime:
         if isinstance(provider_result, dict):
             trace.provider_trace = provider_result.get("trace")
             output = provider_result.get("output")
-            # Step123 convenience: provider may return plain key/values instead of nested output
-            if output is None:
-                context.update(provider_result)
-            else:
-                context.update(provider_result)
+            context.update(provider_result)
         else:
             output = provider_result
 
+        if runtime_config.get("emit_primary_artifact"):
+            artifacts.append(
+                Artifact(
+                    type="provider_output",
+                    name="primary_output",
+                    data=output,
+                    producer_node=node_id,
+                    timestamp_ms=time.time() * 1000.0,
+                )
+            )
+            extra_artifacts = provider_result.get("artifacts", []) if isinstance(provider_result, dict) else []
+            for artifact in extra_artifacts:
+                if isinstance(artifact, Artifact):
+                    artifacts.append(artifact)
+
         def post_stage():
             trace.events.append("post_plugins")
-            for plugin_id in config.get("post_plugins", []):
+            if runtime_config.get("legacy_plugin_mode"):
+                self._run_plugins(
+                    plan_extras.get("legacy_post_plugins", []),
+                    node_id,
+                    context,
+                    "post",
+                    trace,
+                    artifacts,
+                )
+                return
+
+            plugin_ids = config.get("post_plugins", [])
+            if not plugin_ids:
+                trace.plugin_trace["post"].append("noop_post_plugin")
+                return
+
+            for plugin_id in plugin_ids:
                 trace.plugin_trace["post"].append(plugin_id)
                 result = self._resolve_plugin_callable(plugin_id)(context=context)
                 if isinstance(result, dict):
@@ -203,91 +313,26 @@ class NodeExecutionRuntime:
 
         self._measure("validation", validation_stage, trace)
 
-        mapped_output: Dict[str, Any] = {}
         mapping = config.get("output_mapping", {})
-        for out_key, ctx_key in mapping.items():
-            mapped_output[out_key] = context.get(ctx_key)
+        if mapping:
+            final_output: Any = {out_key: context.get(ctx_key) for out_key, ctx_key in mapping.items()}
+        elif runtime_config.get("return_raw_output"):
+            final_output = output
+        else:
+            final_output = {}
 
-        return NodeResult(
+        result = NodeResult(
             node_id=node_id,
-            output=mapped_output,
+            output=final_output,
             artifacts=artifacts,
             trace=trace,
         )
 
-    def _execute_legacy_node(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
-        node_id = node.get("id", "unknown")
-
-        pre_plugins = self.pre_plugins
-        post_plugins = self.post_plugins
-
-        if "pre_plugins" in node or "post_plugins" in node:
-            try:
-                from src.engine.plugin_loader import load_plugins
-                pre_plugins = load_plugins(node.get("pre_plugins", []))
-                post_plugins = load_plugins(node.get("post_plugins", []))
-            except Exception:
-                pre_plugins = self.pre_plugins
-                post_plugins = self.post_plugins
-
-        trace = NodeTrace()
-        collected_artifacts: List[Artifact] = []
-
-        def pre_stage():
-            trace.events.append("pre_plugins")
-            self._run_plugins(pre_plugins, node_id, state, "pre", trace, collected_artifacts)
-
-        self._measure("pre_plugins", pre_stage, trace)
-
-        def render_stage():
-            trace.events.append("prompt_render")
-            prompt_template = node.get("prompt", "")
-            return prompt_template.format(**state) if prompt_template else ""
-
-        rendered_prompt = self._measure("prompt_render", render_stage, trace)
-
-        def provider_stage():
-            trace.events.append("provider_execute")
-            return self._provider_call_legacy(rendered_prompt)
-
-        provider_result = self._measure("provider_execute", provider_stage, trace)
-        trace.provider_trace = provider_result.get("trace") if isinstance(provider_result, dict) else None
-
-        output = provider_result.get("output") if isinstance(provider_result, dict) else provider_result
-
-        primary_artifact = Artifact(
-            type="provider_output",
-            name="primary_output",
-            data=output,
-            producer_node=node_id,
-            timestamp_ms=time.time() * 1000.0,
-        )
-        collected_artifacts.append(primary_artifact)
-
-        extra_artifacts = provider_result.get("artifacts", []) if isinstance(provider_result, dict) else []
-        for a in extra_artifacts:
-            if isinstance(a, Artifact):
-                collected_artifacts.append(a)
-
-        def post_stage():
-            trace.events.append("post_plugins")
-            self._run_plugins(post_plugins, node_id, state, "post", trace, collected_artifacts)
-
-        self._measure("post_plugins", post_stage, trace)
-
-        result = NodeResult(
-            node_id=node_id,
-            output=output,
-            artifacts=collected_artifacts,
-            trace=trace,
-        )
-
-        self._write_observability(node_id, trace)
+        if runtime_config.get("write_observability"):
+            self._write_observability(node_id, trace)
         return result
 
     def execute(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
         normalized_node = self._normalize_node_payload(node)
-
-        if self._looks_like_execution_config(normalized_node):
-            return self._execute_execution_config(normalized_node, state)
-        return self._execute_legacy_node(normalized_node, state)
+        execution_plan, plan_extras = self._coerce_node_to_execution_plan(normalized_node)
+        return self._execute_execution_config(execution_plan, state, plan_extras=plan_extras)
