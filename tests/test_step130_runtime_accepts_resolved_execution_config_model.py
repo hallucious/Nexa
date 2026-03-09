@@ -1,16 +1,20 @@
-from pathlib import Path
 import json
+from pathlib import Path
 
-from src.engine.execution_config_hash import generate_execution_config_id
 from src.engine.graph_execution_runtime import GraphExecutionRuntime
 from src.engine.node_execution_runtime import NodeExecutionRuntime
 from src.engine.node_spec_resolver import NodeSpecResolver
-from src.platform.execution_config_registry import ExecutionConfigRegistry
+from src.platform.execution_config_registry import (
+    ExecutionConfigRegistry,
+    generate_execution_config_id,
+)
+from src.platform.provider_executor import ProviderExecutor
+from src.platform.provider_registry import ProviderRegistry
 
 
 class ProviderStub:
-    def execute(self, prompt):
-        return {"answer": "ok", "trace": {"provider": "stub"}}
+    def execute(self, request):
+        return {"answer": "ok"}
 
 
 def test_step130_runtime_accepts_resolved_execution_config_model(tmp_path: Path):
@@ -26,7 +30,14 @@ def test_step130_runtime_accepts_resolved_execution_config_model(tmp_path: Path)
     config_dir.mkdir(parents=True)
     (config_dir / "1.0.0.json").write_text(json.dumps(payload), encoding="utf-8")
 
-    runtime = NodeExecutionRuntime(provider_execution=ProviderStub())
+    provider_registry = ProviderRegistry()
+    provider_registry.register("provider.stub", ProviderStub())
+    provider_executor = ProviderExecutor(provider_registry)
+
+    runtime = NodeExecutionRuntime(
+        provider_executor=provider_executor,
+        observability_file=str(tmp_path / "obs.jsonl"),
+    )
     resolver = NodeSpecResolver(ExecutionConfigRegistry(root=registry_root))
     graph = GraphExecutionRuntime(node_runtime=runtime, node_spec_resolver=resolver)
 

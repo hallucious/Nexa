@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any, Dict
-
 from src.contracts.provider_contract import (
     ProviderError,
     ProviderRequest,
@@ -47,10 +45,16 @@ class ProviderExecutor:
                     retryable=False,
                 )
 
+            standard = {"output", "raw_text", "structured", "artifacts", "trace", "error"}
+            extras = {k: v for k, v in raw_result.items() if k not in standard}
+            structured = raw_result.get("structured")
+            if structured is None and extras:
+                structured = extras
+
             return ProviderResult(
                 output=raw_result.get("output"),
                 raw_text=raw_result.get("raw_text"),
-                structured=raw_result.get("structured"),
+                structured=structured,
                 artifacts=list(raw_result.get("artifacts", [])),
                 trace=dict(raw_result.get("trace", {})),
                 error=error,

@@ -1,13 +1,18 @@
 from src.engine.node_execution_runtime import NodeExecutionRuntime
+from src.platform.provider_registry import ProviderRegistry
+from src.platform.provider_executor import ProviderExecutor
 
 
-def fake_provider(prompt, context):
-    return {"answer": "ok", "prompt": prompt}
+class FakeProvider:
+    def execute(self, request):
+        return {"answer": "ok", "prompt": request.prompt}
 
 
 def test_step123_pipeline_basic(tmp_path):
+    registry = ProviderRegistry()
+    registry.register("fake", FakeProvider())
     runtime = NodeExecutionRuntime(
-        provider_execution=fake_provider,
+        provider_executor=ProviderExecutor(registry),
         observability_file=str(tmp_path / "obs.jsonl"),
     )
 
@@ -32,8 +37,10 @@ def test_step123_pre_plugin(tmp_path):
     def add_field(context):
         return {"added": True}
 
+    registry = ProviderRegistry()
+    registry.register("fake", FakeProvider())
     runtime = NodeExecutionRuntime(
-        provider_execution=fake_provider,
+        provider_executor=ProviderExecutor(registry),
         observability_file=str(tmp_path / "obs.jsonl"),
         plugin_registry={"p1": add_field}
     )

@@ -1,16 +1,17 @@
 from src.engine.node_execution_runtime import NodeExecutionRuntime
+from src.platform.provider_registry import ProviderRegistry
+from src.platform.provider_executor import ProviderExecutor
 
 
-class DummyProviderExecution:
-    def execute(self, prompt):
-        return {
-            "output": f"echo:{prompt}",
-            "trace": {"provider": "dummy"}
-        }
+class DummyProvider:
+    def execute(self, request):
+        return {"output": f"echo:{request.prompt}", "trace": {"provider": "dummy"}}
 
 
 def test_step106_node_trace_observability_contract():
-    runtime = NodeExecutionRuntime(provider_execution=DummyProviderExecution())
+    registry = ProviderRegistry()
+    registry.register("__legacy_provider__", DummyProvider())
+    runtime = NodeExecutionRuntime(provider_executor=ProviderExecutor(registry))
 
     node = {"id": "n1", "prompt": "hello {name}"}
     state = {"name": "world"}
