@@ -8,6 +8,11 @@ import time
 
 from src.platform.plugin_result import normalize_plugin_result
 
+try:
+    from src.contracts.provider_contract import ProviderRequest
+except Exception:  # pragma: no cover - compatibility fallback
+    ProviderRequest = None
+
 
 @dataclass
 class Artifact:
@@ -46,17 +51,21 @@ class NodeExecutionRuntime:
 
     def __init__(
         self,
-        provider_execution,
+        provider_execution=None,
         pre_plugins=None,
         post_plugins=None,
         observability_file: str = "OBSERVABILITY.jsonl",
         plugin_registry: Optional[Dict[str, Any]] = None,
+        provider_registry=None,
+        provider_executor=None,
     ):
         self.provider_execution = provider_execution
         self.pre_plugins = pre_plugins or []
         self.post_plugins = post_plugins or []
         self.observability_file = Path(observability_file)
         self.plugin_registry = plugin_registry or {}
+        self.provider_registry = provider_registry
+        self.provider_executor = provider_executor
 
     def _measure(self, name: str, fn, trace: NodeTrace):
         start = time.time()
@@ -95,7 +104,32 @@ class NodeExecutionRuntime:
             return self.provider_execution.execute(rendered_prompt)
         return self.provider_execution(rendered_prompt)
 
-    def _provider_call_step123(self, prompt: Optional[str], context: Dict[str, Any]):
+    def _provider_call_step123(self, prompt: Optional[str], context: Dict[str, Any], *, provider_ref: Optional[str] = None):
+        if (
+            provider_ref
+            and self.provider_registry is not None
+            and self.provider_executor is not None
+            and ProviderRequest is not None
+        ):
+            provider = self.provider_registry.resolve(provider_ref)
+            request = ProviderRequest(
+                provider_id=provider_ref,
+                prompt=prompt or "",
+                context=context,
+                options={},
+                metadata={},
+            )
+            result = self.provider_executor.execute(provider, request)
+            if isinstance(result, dict):
+                return result
+            if hasattr(result, "output"):
+                return {
+                    "output": result.output,
+                    "trace": getattr(result, "trace", None),
+                    "artifacts": getattr(result, "artifacts", []),
+                }
+            return result
+
         if hasattr(self.provider_execution, "execute"):
             return self.provider_execution.execute(prompt)
         return self.provider_execution(prompt=prompt, context=context)
@@ -253,15 +287,19 @@ class NodeExecutionRuntime:
             provider_mode = runtime_config.get("provider_call_mode", "step123")
             if provider_mode == "legacy_prompt_only":
                 return self._provider_call_legacy(prompt or "")
-            if config.get("provider_ref") and self.provider_execution:
-                return self._provider_call_step123(prompt, context)
+            if config.get("provider_ref") and (self.provider_execution or (self.provider_registry and self.provider_executor)):
+                return self._provider_call_step123(prompt, context, provider_ref=config.get("provider_ref"))
             return {}
 
         provider_result = self._measure("provider_execute", provider_stage, trace) or {}
         if isinstance(provider_result, dict):
             trace.provider_trace = provider_result.get("trace")
             output = provider_result.get("output")
-            context.update(provider_result)
+            # preserve Step123 behavior: provider may return plain key/values instead of nested output
+            if output is None:
+                context.update(provider_result)
+            else:
+                context.update(provider_result)
         else:
             output = provider_result
 
