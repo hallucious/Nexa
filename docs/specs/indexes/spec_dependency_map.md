@@ -1,6 +1,16 @@
 
 # NEXA SPEC DEPENDENCY MAP (Draft)
 
+# Spec Dependency Map
+
+Version: 1.0.0
+Status: Active
+
+## Purpose
+
+Defines the dependency relationships between Nexa specification documents.
+
+
 terminology
  ↓
 architectural_doctrine

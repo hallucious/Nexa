@@ -1,96 +1,183 @@
 # FOUNDATION_MAP
-Version: 1.0.6
+Version: 1.1.0
 Status: Canonical Foundation Index (Architecture Memory)
 
 ## 1. 목적
-이 문서는 Hyper-AI의 기초 설계 문서를 계층 구조로 고정하고,
-각 문서가 현재 코드/계약/개발 단계에서 어떤 역할과 상태를 갖는지 명시한다.
+이 문서는 Nexa 프로젝트의 foundation 문서 집합을 현재 실제 파일 구조 기준으로 고정하고,
+각 문서가 코드/테스트/문서 거버넌스에서 어떤 역할을 가지는지 명시한다.
+
+이 문서의 목적은 다음과 같다.
+
+1. foundation 문서의 실제 경로를 단일 기준으로 고정
+2. Active / Partial / Planned / Deprecated 상태를 명확히 구분
+3. 문서 구조 변경 시 BLUEPRINT / spec catalog / 테스트와 동기화 기준 제공
+4. 코드와 문서의 불일치 탐지 기준 제공
+
+---
 
 ## 2. 사용 규칙
 
-- **역할 경계(Active spec 포함):**
-  - Active spec의 **결정(Source-of-Truth)** 은 `docs/BLUEPRINT.md`가 가진다.
-  - `FOUNDATION_MAP.md`는 문서 카탈로그/레이어링을 제공하는 “인덱스”이며, **BLUEPRINT의 Active spec을 그대로 반영(동일 목록 유지)** 한다.
-  - 따라서 Active spec 목록은 “결정은 BLUEPRINT, 표시는 FOUNDATION_MAP이 동기화”가 원칙이며, 계약 테스트가 두 문서의 Active 목록 동일성을 강제한다.
+1. Active 문서는 현재 코드/테스트/거버넌스와 동기화된 공식 문서다.
+2. Partial 문서는 방향성과 구조는 유효하지만 코드/테스트 반영이 일부만 완료된 문서다.
+3. Planned 문서는 아직 구현/계약 반영 전의 미래 설계 문서다.
+4. Deprecated 문서는 더 이상 기준 문서로 사용하지 않는다.
+5. 문서 경로 변경 시 반드시 FOUNDATION_MAP, BLUEPRINT, 관련 테스트를 함께 갱신한다.
+6. Active spec 목록의 최종 Source of Truth는 `docs/specs/indexes/_active_specs.yaml` 이다.
+7. FOUNDATION_MAP의 Active 문서 경로는 현재 실제 파일 위치와 일치해야 한다.
 
-1) 문서는 **유효한 내용은 누적 유지**하고, 업데이트로 인해 **더 이상 적용되지 않는 내용은 삭제**한다.
-   - Deprecations로 이동/이유/대체 규칙을 적는 절차는 필요하지 않다.
-
-2) 구조 변경 또는 계약 변경 작업 시작 전, FOUNDATION_MAP에서 관련 문서의 상태/연관 영역을 확인한다.
-3) 변경으로 인해 문서 내용이 달라져야 하면, 해당 문서의 SemVer를 올리고(문서 거버넌스 규칙 준수) BLUEPRINT의 활성 spec 목록을 갱신한다.
-4) Planned 문서는 코드와 불일치해도 허용되지만, Active/Partial 문서는 코드/테스트와 가능한 한 동기화한다.
+---
 
 ## 3. 문서 상태 정의
-- Active: 코드/테스트/계약과 동기화된 정식 근거 문서
-- Partial: 방향/스케치 수준. 일부만 코드/계약에 반영됨
-- Planned: 아직 구현/계약 반영 전. 미래 확장 영역
-- Deprecated: 더 이상 사용하지 않음(필요 시 문서에서 제거/대체 문서로 통합 가능)
+
+- Active: 현재 코드/테스트/문서 계약과 동기화된 공식 기준 문서
+- Partial: 유효한 설계 문서이지만 코드 또는 테스트 반영이 부분적임
+- Planned: 미래 확장 또는 후속 구현을 위한 계획 문서
+- Deprecated: 더 이상 기준으로 사용하지 않는 문서
+
 ---
 
-# Layer 1. Doctrine (불변 철학 / 최상위 원칙)
+## 4. Deprecations 정책
+
+- 유효한 내용은 항상 보존된다.
+- obsolete 내용은 삭제된다.
+- Nexa 문서 시스템에서는 deprecated 문서를 장기간 유지하지 않는다.  
+- obsolete 문서는 Deprecations 섹션으로 이동하지 않고 **삭제**하는 정책을 사용한다.
+
+---
+
+# Layer 1. Doctrine / Foundation
+
 | 문서 | 경로 | 상태 | 설명 | 관련 영역 |
 |---|---|---:|---|---|
-| Strategic Direction & Evolution Policy | docs/STRATEGY.md | Partial | 프로젝트의 진화 정책/방향성 | 전략/진화 정책 |
-| Architectural Doctrine | docs/specs/Architectural Doctrine.md | Partial | 아키텍처 핵심 원칙/금기 | 전체 |
-| determinism_policy | docs/specs/determinism_policy.md | Partial | 결정성/재현성 원칙 | 실행/Trace |
-| terminology | docs/specs/terminology.md | Active | 용어 정의(사용자/내부 공통) | 문서/UX |
-| engine_constraints | docs/specs/engine_constraints.md | Partial | 엔진 제약 조건(그래프/실행 범위) | 엔진 |
-| entry_policy | docs/specs/entry_policy.md | Partial | entry 관련 정책 | 엔진/검증 |
-| circuit_contract | docs/specs/circuit_contract.md | Active | Circuit JSON schema contract (definition-only source of truth) | src/circuit/*, src/engine/* |
-| validation_rule_lifecycle | docs/specs/validation_rule_lifecycle.md | Active | rule lifecycle policy (active/deprecated rules, enforcement expectations) | src/engine/validation/* |
-| execution_environment_contract | docs/specs/execution_environment_contract.md | Active | execution environment contract (filesystem/network/tooling constraints) | src/platform/*, src/providers/* |
+| Strategic Direction & Evolution Policy | docs/STRATEGY.md | Partial | 프로젝트 장기 방향과 진화 정책 | 전략 / 진화 |
+| architectural Doctrine | docs/specs/foundation/architectural Doctrine.md | Partial | 상위 아키텍처 원칙과 doctrine | 전체 구조 |
+| terminology | docs/specs/foundation/terminology.md | Active | 공식 용어집 | 문서 / 코드 / UX |
+| runtime Responsibility | docs/specs/foundation/runtime Responsibility.md | Partial | 런타임 책임 분리 원칙 | 엔진 / 런타임 |
+| definition Registry | docs/specs/foundation/definition Registry.md | Partial | 정의 레지스트리 개념 | registry / loading |
+| definition Versioning & Migration Strategy | docs/specs/foundation/definition Versioning & Migration Strategy.md | Partial | 정의 버전 및 마이그레이션 전략 | versioning / migration |
+| determinism_policy | docs/specs/policies/determinism_policy.md | Partial | 결정성 및 재현성 정책 | 실행 / trace |
+| engine_constraints | docs/specs/policies/engine_constraints.md | Partial | 엔진 제약 조건 | 엔진 코어 |
+| entry_policy | docs/specs/policies/entry_policy.md | Partial | 엔트리 정책 | bootstrap / entry |
+| execution_environment_contract | docs/specs/contracts/execution_environment_contract.md | Active | 실행 환경 계약 | src/platform/*, src/providers/* |
 
 ---
 
-# Layer 2. Engine Core Contracts (핵심 실행 모델/추적/노드)
-| 문서 | 경로 | 상태 | 설명 | 관련 코드/모듈(대표) |
+# Layer 2. Engine Core Contracts
+
+| 문서 | 경로 | 상태 | 설명 | 관련 코드 / 모듈 |
 |---|---|---:|---|---|
-| node_abstraction | docs/specs/node_abstraction.md | Active | 노드 추상화/역할 | src/engine/* (계약 영향) |
-| node_execution_pipeline | docs/specs/node_execution_pipeline.md | Partial | 노드 실행 파이프라인(단계) | src/engine/engine.py (확장 예정) |
-| node_execution_contract | docs/specs/node_execution_contract.md | Active | Node 실행 계약(Pre/Core/Post, AI Core-only, Plugin all-stages, return-only mutation, orchestration default) | src/engine/*, src/circuit/* |
-| provider_contract | docs/specs/provider_contract.md | Active | AI Provider 계약(ProviderResult/normalization, 실패 reason_code 표준화) | src/providers/*, src/platform/worker.py |
-| universal_provider_architecture | docs/specs/universal_provider_architecture.md | Active | UniversalProvider + Adapter 아키텍처(멀티 벤더 지원 단일 Provider) | src/providers/universal_provider.py (예정), src/providers/adapters/* (예정), src/platform/worker.py |
-| plugin_contract | docs/specs/plugin_contract.md | Partial | Plugin 계약(PluginResult envelope, stage-aware, reason_code 표준화) | src/platform/plugin.py, src/platform/* |
-| prompt_contract | docs/specs/prompt_contract.md | Partial | Prompt 계약(PromptSpec hash/render, registry) | src/prompts/* |
-| docs_specs_circuit_trace_contract | docs/specs/docs_specs_circuit_trace_contract.md | Partial | Circuit Trace 계약(노드/엣지/조건 선택 기록) | src/circuit/trace.py, src/circuit/runtime_adapter.py |
-| plugin_registry_contract | docs/specs/plugin_registry_contract.md | Partial | Plugin Registry 계약(버전 레지스트리, resolve 정책, compatibility) | src/platform/plugin_version_registry.py, src/platform/capability_negotiation.py |
-| execution_model | docs/specs/execution_model.md | Active | 실행 의미(상태 전파 포함) | src/engine/engine.py |
-| trace_model | docs/specs/trace_model.md | Active | Trace 불변/커버리지 계약 | src/engine/trace.py |
-| Execution State Model | docs/specs/Execution State Model v0.1.md | Planned | 실행 상태 모델(확장) | 추후 |
-| Runtime Responsibility | docs/specs/Runtime Responsibility v0.1.md | Planned | 런타임 책임 분리(엔진/노드/외부) | 추후 |
-| Subgraph & Reusable Module | docs/specs/Subgraph & Reusable Module v0.1.md | Planned | 서브그래프/모듈 재사용 | 추후 |
+| circuit_contract | docs/specs/architecture/circuit_contract.md | Active | Circuit 정의 계약 | src/circuit/*, src/engine/* |
+| circuit_runtime_model | docs/specs/architecture/circuit_runtime_model.md | Partial | circuit runtime model | src/circuit/* |
+| compiled_resource_graph_contract | docs/specs/architecture/compiled_resource_graph_contract.md | Partial | compiled resource graph 계약 | src/engine/* |
+| context_key_schema | docs/specs/architecture/context_key_schema.md | Partial | working context key schema | src/engine/* |
+| Execution State Model | docs/specs/architecture/Execution State Model.md | Planned | 실행 상태 모델 확장 | 추후 |
+| execution_model | docs/specs/architecture/execution_model.md | Active | 공식 실행 모델 | src/engine/engine.py |
+| graph_execution_contract | docs/specs/architecture/graph_execution_contract.md | Partial | graph execution 계약 | src/engine/graph_execution_runtime.py |
+| node_abstraction | docs/specs/architecture/node_abstraction.md | Active | node 추상화 | src/engine/* |
+| node_execution_contract | docs/specs/architecture/node_execution_contract.md | Active | node 실행 계약 | src/engine/*, src/circuit/* |
+| node_runtime_architecture | docs/specs/architecture/node_runtime_architecture.md | Partial | node runtime 구조 | src/engine/node_execution_runtime.py |
+| Subgraph & Reusable Module | docs/specs/architecture/Subgraph & Reusable Module.md | Planned | subgraph / reusable module | 추후 |
+| trace_model | docs/specs/architecture/trace_model.md | Active | trace model 계약 | src/engine/trace.py |
+| universal_provider_architecture | docs/specs/architecture/universal_provider_architecture.md | Active | universal provider 구조 | src/providers/* |
+| working_context_contract | docs/specs/architecture/working_context_contract.md | Partial | shared working context 계약 | src/engine/* |
 
 ---
 
-# Layer 3. Validation & Control (검증/정책/관측성)
-| 문서 | 경로 | 상태 | 설명 | 관련 코드/모듈(대표) |
+# Layer 3. Contracts / Runtime Integration
+
+| 문서 | 경로 | 상태 | 설명 | 관련 코드 / 모듈 |
 |---|---|---:|---|---|
-| validation_engine_contract | docs/specs/validation_engine_contract.md | Active | Validation Engine 출력/동작 계약 | src/engine/validation/* |
-| validation_rule_catalog | docs/specs/validation_rule_catalog.md | Active | rule_id 카탈로그 | src/engine/validation/* |
-| Static Validation Rules | docs/specs/Static Validation Rules v0.2.md | Partial | 정적 규칙 설계(확장) | src/engine/validation/* |
-| Policy Engine | docs/specs/Policy Engine v0.1.md | Planned | 정책 엔진(확장) | 추후 |
-| side_effect_policy | docs/specs/side_effect_policy.md | Planned | 부작용/IO 정책 | 추후 |
-| observability_metrics | docs/specs/observability_metrics.md | Partial | OBSERVABILITY 이벤트/메트릭(옵트인) 계약(what/when/how to emit) | src/utils/observability.py, OBSERVABILITY.jsonl |
+| drift_detector_contract | docs/specs/contracts/drift_detector_contract.md | Partial | drift detector 계약 | src/engine/drift_detector.py |
+| execution_config_canonicalization_contract | docs/specs/contracts/execution_config_canonicalization_contract.md | Active | execution config canonicalization 계약 | src/contracts/* |
+| execution_config_schema_contract | docs/specs/contracts/execution_config_schema_contract.md | Active | execution config schema 계약 | src/contracts/* |
+| plugin_contract | docs/specs/contracts/plugin_contract.md | Active | plugin execution 계약 | src/platform/* |
+| plugin_executor_contract | docs/specs/contracts/plugin_executor_contract.md | Partial | plugin executor 계약 | src/platform/* |
+| plugin_registry_contract | docs/specs/contracts/plugin_registry_contract.md | Active | plugin registry 계약 | src/platform/* |
+| prompt_contract | docs/specs/contracts/prompt_contract.md | Active | prompt contract | src/prompts/* |
+| provider_contract | docs/specs/contracts/provider_contract.md | Active | provider contract | src/providers/* |
+| validation_engine_contract | docs/specs/contracts/validation_engine_contract.md | Active | validation engine contract | src/engine/validation/* |
 
 ---
 
-# Layer 4. Product & Expansion (제품/UX/레지스트리/마이그레이션)
+# Layer 4. Validation / Policy / Observability
+
+| 문서 | 경로 | 상태 | 설명 | 관련 코드 / 모듈 |
+|---|---|---:|---|---|
+| docs_specs_circuit_trace_contract | docs/specs/history/docs_specs_circuit_trace_contract.md | Partial | circuit trace history / contract lineage | src/circuit/trace.py |
+| node_execution_pipeline | docs/specs/history/node_execution_pipeline.md | Partial | node execution pipeline history | src/engine/* |
+| pipeline_test_migration_plan | docs/specs/history/pipeline_test_migration_plan.md | Planned | legacy test migration 계획 | tests/* |
+| legacy_removal_plan | docs/specs/history/legacy_removal_plan.md | Planned | legacy 제거 계획 | migration / cleanup |
+| Observability & Metrics | docs/specs/policies/Observability & Metrics.md | Partial | observability 방향 문서 | observability |
+| observability_metrics | docs/specs/policies/observability_metrics.md | Partial | observability metrics 계약 | src/utils/observability.py |
+| Policy Engine | docs/specs/policies/Policy Engine.md | Planned | policy engine 설계 | 추후 |
+| safe_replay_contract | docs/specs/policies/safe_replay_contract.md | Partial | safe replay 계약 | src/engine/safe_replay.py |
+| side_effect_policy | docs/specs/policies/side_effect_policy.md | Partial | side effect 정책 | runtime / IO |
+| Static Validation Rules | docs/specs/policies/Static Validation Rules.md | Partial | static validation rules 설계 | src/engine/validation/* |
+| validation_rule_catalog | docs/specs/policies/validation_rule_catalog.md | Active | validation rule catalog | src/engine/validation/* |
+| validation_rule_lifecycle | docs/specs/policies/validation_rule_lifecycle.md | Active | validation rule lifecycle | src/engine/validation/* |
+
+---
+
+# Layer 5. Indexes / Catalogs
+
 | 문서 | 경로 | 상태 | 설명 | 관련 영역 |
 |---|---|---:|---|---|
-| Legacy Removal Plan (pipeline→engine cleanup) | docs/specs/legacy_removal_plan.md | Planned | legacy(pipeline/gates/orchestrator) 제거 설계 | 마이그레이션/정리 |
-| Pipeline Test Migration Plan | docs/specs/pipeline_test_migration_plan.md | Planned | legacy 테스트 전환 계획(Engine 중심) | 마이그레이션/테스트 |
-| SaaS Product Definition | docs/specs/SaaS Product Definition.md | Planned | SaaS 제품 정의(후순위) | 제품 |
-| Visual Editor Architecture | docs/specs/Visual Editor Architecture v0.1.md | Planned | 시각 편집기(후순위) | UX/UI |
-| User Profile (Preset) | docs/specs/User Profile (Preset) v0.1.md | Planned | 사용자 프리셋/프로필 | UX/제품 |
-| Definition Registry | docs/specs/Definition Registry v0.1.md | Planned | 정의/엔진 저장/불러오기(레지스트리) | 저장/공유 |
-| Definition Versioning & Migration Strategy | docs/specs/Definition Versioning & Migration Strategy v0.1.md | Planned | 정의 버전/마이그레이션 전략 | 저장/공유 |
+| spec_catalog | docs/specs/indexes/spec_catalog.md | Active | 전체 spec catalog | 문서 거버넌스 |
+| spec_dependency_map | docs/specs/indexes/spec_dependency_map.md | Active | spec dependency map | 문서 거버넌스 |
 
-- docs/specs/circuit_contract.md (Circuit Definition Language v1.0.0)
+---
 
-## 4. 추가된 foundation 문서
-- `docs/specs/plugin_registry_contract.md` (PLUGIN-REGISTRY v1.0.0)
-- `docs/specs/provider_contract.md` (AI-PROVIDER v1.0.0)
-- `docs/specs/plugin_contract.md` (PLUGIN-CONTRACT v1.0.0)
-- `docs/specs/prompt_contract.md` (PROMPT-CONTRACT v1.0.0)
-- `docs/specs/docs_specs_circuit_trace_contract.md` (CT-TRACE v1.0.0)
-- `docs/specs/observability_metrics.md` (OBSERVABILITY v1.0.0)
+# Layer 6. Additional Specs (Top-level under docs/specs)
+
+| 문서 | 경로 | 상태 | 설명 | 관련 영역 |
+|---|---|---:|---|---|
+| circuit_savefile_contract | docs/specs/circuit_savefile_contract.md | Partial | circuit savefile 계약 | serialization |
+| engine_savefile_contract | docs/specs/engine_savefile_contract.md | Partial | engine savefile 계약 | serialization |
+| execution_config_prompt_binding_contract | docs/specs/execution_config_prompt_binding_contract.md | Active | execution config ↔ prompt binding 계약 | src/contracts/* |
+| execution_config_registry_contract | docs/specs/execution_config_registry_contract.md | Active | execution config registry 계약 | src/contracts/* |
+| Provider Abstraction Contract | docs/specs/Provider Abstraction Contract.md | Partial | provider abstraction 초안 문서 | providers |
+
+---
+
+# Layer 7. Product / Expansion
+
+| 문서 | 경로 | 상태 | 설명 | 관련 영역 |
+|---|---|---:|---|---|
+| SaaS Product Definition | docs/product/SaaS Product Definition.md | Planned | SaaS 제품 정의 | 제품 |
+| User Profile (Preset) | docs/product/User Profile (Preset).md | Planned | 사용자 프로필 / preset | UX / 제품 |
+| Visual Editor Architecture | docs/product/Visual Editor Architecture.md | Planned | visual editor 구조 | UX / UI |
+
+---
+
+## 4. Active Foundation Docs
+아래 문서는 현재 기준으로 Active 상태이며, 실제 파일 경로와 반드시 일치해야 한다.
+
+- docs/specs/foundation/terminology.md
+- docs/specs/contracts/execution_environment_contract.md
+- docs/specs/architecture/circuit_contract.md
+- docs/specs/architecture/node_abstraction.md
+- docs/specs/architecture/node_execution_contract.md
+- docs/specs/architecture/execution_model.md
+- docs/specs/architecture/trace_model.md
+- docs/specs/architecture/universal_provider_architecture.md
+- docs/specs/contracts/plugin_contract.md
+- docs/specs/contracts/plugin_registry_contract.md
+- docs/specs/contracts/prompt_contract.md
+- docs/specs/contracts/provider_contract.md
+- docs/specs/contracts/validation_engine_contract.md
+- docs/specs/policies/validation_rule_catalog.md
+- docs/specs/policies/validation_rule_lifecycle.md
+- docs/specs/indexes/spec_catalog.md
+- docs/specs/indexes/spec_dependency_map.md
+
+---
+
+## 5. Sync Notes
+
+1. `docs/specs/indexes/_active_specs.yaml` 은 Active spec 목록의 최종 기준이다.
+2. FOUNDATION_MAP의 Active 항목은 `_active_specs.yaml` 과 논리적으로 일치해야 한다.
+3. 경로 이동이 발생하면 다음 세 곳을 함께 갱신한다.
+   - `docs/FOUNDATION_MAP.md`
+   - `docs/BLUEPRINT.md`
+   - 관련 문서 계약 테스트
+4. 인코딩은 반드시 UTF-8로 저장한다.

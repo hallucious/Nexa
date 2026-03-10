@@ -1,5 +1,13 @@
-
 # NEXA SPEC CATALOG (Draft)
+
+# Spec Catalog
+
+Version: 1.0.0
+Status: Active
+
+## Purpose
+
+Spec catalog provides the authoritative index of Nexa specification documents.
 
 | Spec | Category | Purpose |
 |-----|-----|-----|

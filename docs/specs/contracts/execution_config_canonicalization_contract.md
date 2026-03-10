@@ -1,5 +1,10 @@
 # ExecutionConfig Canonicalization Contract v1
 
+Version: 1.0.0
+Status: Active
+
+## Purpose
+
 ExecutionConfig ID is the hash of canonical execution meaning.
 
 Included fields:
