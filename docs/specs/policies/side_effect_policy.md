@@ -1,3 +1,9 @@
+Spec ID: side_effect_policy
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 # Side Effect Policy (Pure-first)
 Version: 1.0.0
 Status: Official Contract

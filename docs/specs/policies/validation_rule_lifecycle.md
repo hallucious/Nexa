@@ -1,3 +1,9 @@
+Spec ID: validation_rule_lifecycle
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 # Validation Rule Lifecycle
 Version: 1.0.0
 Status: Official Contract

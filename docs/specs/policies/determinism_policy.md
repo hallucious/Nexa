@@ -1,3 +1,9 @@
+Spec ID: determinism_policy
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 # Determinism & Reproducibility Policy
 Version: 1.0.0
 Status: Official Contract

@@ -1,6 +1,10 @@
-# graph_execution_contract.md
+Spec ID: graph_execution_contract
+Version: 1.1.0
+Status: Partial
+Category: architecture
+Depends On:
 
-Version: 1.0.0
+# graph_execution_contract.md
 
 Defines execution semantics of Circuit graphs.
 

@@ -1,5 +1,10 @@
-# Circuit Contract (Node Circuit Definition Language)
+Spec ID: circuit_contract
 Version: 1.1.0
+Status: Partial
+Category: architecture
+Depends On:
+
+# Circuit Contract (Node Circuit Definition Language)
 
 Purpose:
 Defines the canonical JSON schema for Node-based AI collaboration circuits.

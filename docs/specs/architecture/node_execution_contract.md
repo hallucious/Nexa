@@ -1,9 +1,12 @@
+Spec ID: node_execution_contract
+Version: 1.1.0
+Status: Active
+Category: architecture
+Depends On:
 # Node Execution Contract
 Version: 1.1.0
 
 - Spec ID: NODE-EXEC
-- Version: 1.0.0
-- Status: Active
 - Scope: Node runtime contract inside Engine; defines deterministic execution stages and responsibilities.
 
 ## 1. Purpose

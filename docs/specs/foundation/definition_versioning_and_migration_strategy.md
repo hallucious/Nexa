@@ -1,3 +1,9 @@
+Spec ID: definition_versioning_and_migration_strategy
+Version: 1.0.0
+Status: Partial
+Category: foundation
+Depends On:
+
 ======================================================================
 Hyper-AI Definition Versioning & Migration Strategy v0.1
 (정의 파일 버전 관리 및 마이그레이션 전략 – 복붙용 단일 블록)

@@ -1,7 +1,8 @@
-# Universal Provider Architecture
+Spec ID: universal_provider_architecture
 Version: 1.0.0
 Status: Official Contract
-Spec ID: UNIV-PROVIDER
+Category: architecture
+Depends On:
 
 ## 1. Purpose
 

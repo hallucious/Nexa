@@ -1,3 +1,9 @@
+Spec ID: safe_replay_contract
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 # Safe Replay Contract
 Version: 1.0.0
 

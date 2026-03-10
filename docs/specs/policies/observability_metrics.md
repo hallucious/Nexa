@@ -1,3 +1,9 @@
+Spec ID: observability_metrics
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 # observability_metrics
 Version: 1.0.0
 Status: Partial (opt-in observability implemented; contract surface still evolving)

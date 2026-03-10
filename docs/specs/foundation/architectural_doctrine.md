@@ -1,3 +1,9 @@
+Spec ID: architectural_doctrine
+Version: 1.0.0
+Status: Partial
+Category: foundation
+Depends On:
+
 ======================================================================
 Hyper-AI Architectural Doctrine v1.0
 (통합 개념 문서 – 복붙용 단일 블록)

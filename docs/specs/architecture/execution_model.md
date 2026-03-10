@@ -1,10 +1,10 @@
-# Execution Model Spec
-
-## 1. Status
-
 Spec ID: execution_model
-
 Version: 1.6.0
+Status: Active
+Category: architecture
+Depends On:
+
+# Execution Model Spec
 
 Scope: `src/engine/*` minimal deterministic execution semantics
 

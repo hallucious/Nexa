@@ -1,3 +1,9 @@
+Spec ID: provider_abstraction_contract
+Version: 1.0.0
+Status: Deprecated
+Category: history
+Depends On:
+
 DOCUMENT
 Provider Abstraction Contract v1
 
@@ -22,43 +28,43 @@ ProviderRequest
 
 필드
 
-provider_id
-string
+provider_id  
+string  
 provider registry에 등록된 provider 식별자
 
-prompt
-string
+prompt  
+string  
 모델에 전달되는 최종 렌더링된 prompt
 
-context
-dict
-추가 실행 context
-예:
-- conversation history
-- system metadata
+context  
+dict  
+추가 실행 context  
+예:  
+- conversation history  
+- system metadata  
 - runtime environment
 
-options
-dict
+options  
+dict  
 generation 옵션
 
 예
 
-temperature
-max_tokens
-top_p
-stop
+temperature  
+max_tokens  
+top_p  
+stop  
 response_format
 
-metadata
-dict
+metadata  
+dict  
 runtime이 전달하는 메타 정보
 
 예
 
-node_id
-execution_id
-timestamp
+node_id  
+execution_id  
+timestamp  
 trace flags
 
 REQUEST EXAMPLE
@@ -76,47 +82,46 @@ REQUEST EXAMPLE
   }
 }
 
-
 PROVIDER RESULT MODEL
 
 ProviderResult
 
 필드
 
-output
-any
+output  
+any  
 provider가 반환한 primary 결과
 
-raw_text
-string
+raw_text  
+string  
 모델이 생성한 raw text
 
-structured
-dict | None
+structured  
+dict | None  
 JSON / structured output
 
-artifacts
-list
+artifacts  
+list  
 runtime artifact
 
 예
 
-provider_output
-tool_calls
+provider_output  
+tool_calls  
 intermediate reasoning
 
-trace
-dict
+trace  
+dict  
 provider execution trace
 
 예
 
-provider name
-latency
+provider name  
+latency  
 token usage
 
-error
-ProviderError | None
+error  
+ProviderError | None  
 provider 오류
 
 RESULT EXAMPLE
@@ -138,29 +143,28 @@ RESULT EXAMPLE
   "error": null
 }
 
-
 PROVIDER ERROR MODEL
 
 ProviderError
 
 필드
 
-type
+type  
 string
 
 가능한 값
 
-provider_unavailable
-rate_limited
-timeout
-invalid_request
-policy_block
+provider_unavailable  
+rate_limited  
+timeout  
+invalid_request  
+policy_block  
 provider_internal_error
 
-message
+message  
 string
 
-retryable
+retryable  
 boolean
 
 예
@@ -171,14 +175,13 @@ boolean
   "retryable": true
 }
 
-
 PROVIDER REGISTRY
 
 ProviderRegistry는 provider_id → provider implementation 매핑을 담당한다.
 
 기능
 
-register(provider_id, provider)
+register(provider_id, provider)  
 resolve(provider_id)
 
 예
@@ -186,7 +189,6 @@ resolve(provider_id)
 provider_registry.register("openai:gpt-4.1", OpenAIProvider())
 
 provider = provider_registry.resolve("openai:gpt-4.1")
-
 
 PROVIDER EXECUTOR
 
@@ -200,66 +202,62 @@ execute(request: ProviderRequest) -> ProviderResult
 
 result = provider_executor.execute(request)
 
-
 RUNTIME INTEGRATION CONTRACT
 
 NodeExecutionRuntime은 ExecutionConfig의 provider_ref를 기반으로 provider를 호출한다.
 
 실행 흐름
 
-ExecutionConfig
-↓
-provider_ref
-↓
-ProviderRegistry.resolve()
-↓
-ProviderExecutor.execute()
-↓
-ProviderResult
-↓
+ExecutionConfig  
+↓  
+provider_ref  
+↓  
+ProviderRegistry.resolve()  
+↓  
+ProviderExecutor.execute()  
+↓  
+ProviderResult  
+↓  
 NodeExecutionRuntime output mapping
 
 FLOW DIAGRAM
 
-ExecutionConfig
-↓
-NodeExecutionRuntime
-↓
-ProviderRegistry
-↓
-ProviderExecutor
-↓
-Provider
-↓
-ProviderResult
-↓
+ExecutionConfig  
+↓  
+NodeExecutionRuntime  
+↓  
+ProviderRegistry  
+↓  
+ProviderExecutor  
+↓  
+Provider  
+↓  
+ProviderResult  
+↓  
 Runtime output
-
 
 MINIMUM CONTRACT TESTS
 
-1. provider registry resolve 테스트
-2. provider request → result 정상 반환 테스트
-3. provider error surface 테스트
-4. runtime integration 테스트
+1. provider registry resolve 테스트  
+2. provider request → result 정상 반환 테스트  
+3. provider error surface 테스트  
+4. runtime integration 테스트  
 5. structured output 처리 테스트
-
 
 NON-GOALS
 
 본 계약은 다음을 포함하지 않는다.
 
-1. Prompt rendering
-2. Plugin execution
-3. Tool execution
-4. Conversation state 관리
+1. Prompt rendering  
+2. Plugin execution  
+3. Tool execution  
+4. Conversation state 관리  
 5. Provider SDK 구현
-
 
 EXPECTED BENEFITS
 
-1. provider 변경 시 runtime 영향 최소화
-2. multi-provider 지원
-3. 테스트 가능한 provider contract 확보
-4. ExecutionConfig 기반 node 실행 안정화
+1. provider 변경 시 runtime 영향 최소화  
+2. multi-provider 지원  
+3. 테스트 가능한 provider contract 확보  
+4. ExecutionConfig 기반 node 실행 안정화  
 5. 향후 tool / agent 기능 확장 기반 제공

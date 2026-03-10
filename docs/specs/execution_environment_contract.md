@@ -1,3 +1,9 @@
+Spec ID: execution_environment_contract
+Version: 1.4.0
+Status: Active
+Category: misc
+Depends On:
+
 # Execution Environment Contract (No-IO v1)
 Version: 1.4.0
 Status: Official Contract

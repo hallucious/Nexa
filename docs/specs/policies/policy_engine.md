@@ -1,3 +1,9 @@
+Spec ID: policy_engine
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 ======================================================================
 Hyper-AI Policy Engine Specification v0.1
 (정책 엔진 분리 설계 – 복붙용 단일 블록)

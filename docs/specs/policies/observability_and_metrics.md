@@ -1,3 +1,9 @@
+Spec ID: observability_and_metrics
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 ======================================================================
 Hyper-AI Observability & Metrics Specification v0.1
 (관측성 및 메트릭 확장 – 복붙용 단일 블록)

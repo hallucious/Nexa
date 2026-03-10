@@ -1,3 +1,9 @@
+Spec ID: circuit_savefile_contract
+Version: 1.0.0
+Status: Partial
+Category: misc
+Depends On:
+
 
 # Circuit Savefile Contract
 

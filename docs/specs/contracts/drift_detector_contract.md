@@ -1,3 +1,9 @@
+Spec ID: drift_detector_contract
+Version: 1.0.0
+Status: Partial
+Category: contracts
+Depends On:
+
 # Drift Detector Contract
 Version: 1.0.0
 

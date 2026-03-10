@@ -1,3 +1,9 @@
+Spec ID: subgraph_and_reusable_module
+Version: 1.0.0
+Status: Partial
+Category: architecture
+Depends On:
+
 ======================================================================
 Hyper-AI Subgraph & Reusable Module Specification v0.1
 (재사용 가능한 서브그래프 설계 – 복붙용 단일 블록)

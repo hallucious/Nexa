@@ -1,3 +1,9 @@
+Spec ID: node_execution_pipeline
+Version: 1.0.0
+Status: Partial
+Category: history
+Depends On:
+
 # Node Execution Pipeline Specification (Pre/Core/Post)
 Version: 1.0.0
 Status: Official Contract

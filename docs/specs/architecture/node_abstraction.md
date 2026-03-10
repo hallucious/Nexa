@@ -1,6 +1,10 @@
-# Unified Node Abstraction
+Spec ID: node_abstraction
 Version: 1.1.0
-Status: Official Contract
+Status: Active
+Category: architecture
+Depends On:
+
+# Node Abstraction
 
 Purpose:
 Node의 구조/행동 계약을 정의한다.

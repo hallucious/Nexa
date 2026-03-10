@@ -1,3 +1,9 @@
+Spec ID: working_context_contract
+Version: 1.0.0
+Status: Partial
+Category: architecture
+Depends On:
+
 # Nexa Working Context Contract
 
 ## Purpose
@@ -20,13 +26,14 @@ Domains:
 - output
 
 Example:
-input.text
-prompt.main.rendered
-provider.openai.output
-plugin.search.results
+input.text  
+prompt.main.rendered  
+provider.openai.output  
+plugin.search.results  
 output.value
 
 ## Rules
+
 1. Resources must declare reads and writes.
 2. Context is the only communication channel between resources.
 3. Runtime is responsible for integrity and final output resolution.

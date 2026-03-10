@@ -1,3 +1,9 @@
+Spec ID: entry_policy
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 # Engine Entry Policy
 Version: 1.0.0
 Status: Official Contract

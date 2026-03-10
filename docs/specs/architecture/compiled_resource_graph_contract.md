@@ -1,3 +1,9 @@
+Spec ID: compiled_resource_graph_contract
+Version: 1.0.0
+Status: Partial
+Category: architecture
+Depends On:
+
 # Nexa Compiled Resource Graph Contract
 
 ## Purpose

@@ -1,3 +1,9 @@
+Spec ID: engine_constraints
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 # Engine Structural Constraints
 Version: 1.0.0
 Status: Official Contract

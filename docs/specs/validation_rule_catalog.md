@@ -1,3 +1,9 @@
+Spec ID: validation_rule_catalog
+Version: 1.0.0
+Status: Partial
+Category: misc
+Depends On:
+
 # Validation Rule Catalog
 Version: 1.1.0
 Status: Official Contract

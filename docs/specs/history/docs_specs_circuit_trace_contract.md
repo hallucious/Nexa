@@ -1,3 +1,9 @@
+Spec ID: docs_specs_circuit_trace_contract
+Version: 1.0.0
+Status: Partial
+Category: history
+Depends On:
+
 # circuit_trace_contract.md
 Version: 1.0.0
 

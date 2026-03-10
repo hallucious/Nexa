@@ -1,6 +1,10 @@
-# Trace Model Specification
+Spec ID: trace_model
 Version: 1.4.0
 Status: Official Contract
+Category: architecture
+Depends On:
+
+# Trace Model Specification
 
 Purpose:
 Execution의 증거(Trace) 형식을 정의한다.

@@ -1,3 +1,9 @@
+Spec ID: terminology
+Version: 1.0.1
+Status: Active
+Category: foundation
+Depends On:
+
 # Terminology Specification
 Version: 1.0.1
 Status: Official Contract

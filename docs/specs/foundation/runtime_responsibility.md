@@ -1,3 +1,9 @@
+Spec ID: runtime_responsibility
+Version: 1.0.0
+Status: Partial
+Category: foundation
+Depends On:
+
 ======================================================================
 Hyper-AI Runtime Responsibility Specification v0.1
 (런타임 책임 범위 정의 – 복붙용 단일 블록)

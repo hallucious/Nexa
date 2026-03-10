@@ -1,3 +1,9 @@
+Spec ID: static_validation_rules
+Version: 1.0.0
+Status: Partial
+Category: policies
+Depends On:
+
 ======================================================================
 Hyper-AI Static Validation Rules v0.2
 (설계 단계 정적 검사 규칙 – 복붙용 단일 블록)

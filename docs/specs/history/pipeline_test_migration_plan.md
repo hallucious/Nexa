@@ -1,3 +1,9 @@
+Spec ID: pipeline_test_migration_plan
+Version: 1.0.0
+Status: Partial
+Category: history
+Depends On:
+
 # pipeline_test_migration_plan
 Version: 0.1.0
 Status: Planned

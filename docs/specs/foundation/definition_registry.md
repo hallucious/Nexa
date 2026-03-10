@@ -1,3 +1,9 @@
+Spec ID: definition_registry
+Version: 1.0.0
+Status: Partial
+Category: foundation
+Depends On:
+
 ======================================================================
 Hyper-AI Definition Registry Specification v0.1
 (정의 저장·검색·버전관리·공유 체계 – 복붙용 단일 블록)

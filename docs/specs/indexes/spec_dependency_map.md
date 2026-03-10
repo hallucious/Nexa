@@ -1,3 +1,9 @@
+Spec ID: spec_dependency_map
+Version: 1.0.0
+Status: Partial
+Category: indexes
+Depends On:
+
 
 # NEXA SPEC DEPENDENCY MAP (Draft)
 

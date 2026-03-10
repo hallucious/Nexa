@@ -1,3 +1,9 @@
+Spec ID: execution_config_canonicalization_contract
+Version: 1.0.0
+Status: Partial
+Category: contracts
+Depends On:
+
 # ExecutionConfig Canonicalization Contract v1
 
 Version: 1.0.0

@@ -1,3 +1,9 @@
+Spec ID: validation_engine_contract
+Version: 1.2.0
+Status: Partial
+Category: contracts
+Depends On:
+
 # Validation Engine Contract
 Version: 1.2.0
 Status: Official Contract

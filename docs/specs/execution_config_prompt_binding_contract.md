@@ -1,3 +1,9 @@
+Spec ID: execution_config_prompt_binding_contract
+Version: 1.0.0
+Status: Partial
+Category: misc
+Depends On:
+
 
 # ExecutionConfig Prompt Binding Contract
 

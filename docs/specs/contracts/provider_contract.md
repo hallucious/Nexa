@@ -1,3 +1,9 @@
+Spec ID: provider_contract
+Version: 1.1.0
+Status: Partial
+Category: contracts
+Depends On:
+
 # AI Provider Contract
 Version: 1.1.0
 

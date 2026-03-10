@@ -1,3 +1,9 @@
+Spec ID: execution_config_schema_contract
+Version: 1.0.0
+Status: Partial
+Category: contracts
+Depends On:
+
 # ExecutionConfig Schema Contract
 
 Version: 1.0.0

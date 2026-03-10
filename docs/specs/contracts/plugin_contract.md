@@ -1,13 +1,14 @@
-# Nexa Plugin Contract
-Spec ID: PLUGIN-CONTRACT
+Spec ID: plugin_contract
 Version: 1.1.0
 Status: Draft
-Scope: Plugin capability execution within Nexa Node Runtime
-Related Specs:
+Category: contracts
+Depends On:
 - NODE-EXEC
 - AI-PROVIDER
 - NEXA-WORKING-CONTEXT
 - PLUGIN-EXECUTOR
+
+Scope: Plugin capability execution within Nexa Node Runtime
 
 --------------------------------------------------
 

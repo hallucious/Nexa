@@ -1,8 +1,8 @@
-# PLUGIN-REGISTRY Contract
-
-Version: 1.0.0  
-Status: active  
-Spec ID: PLUGIN-REGISTRY
+Spec ID: plugin_registry_contract
+Version: 1.0.0
+Status: Active
+Category: contracts
+Depends On:
 
 ## 1. Purpose
 

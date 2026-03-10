@@ -1,6 +1,10 @@
-# Prompt Contract
+Spec ID: prompt_contract
 Version: 1.0.0
+Status: Partial
+Category: contracts
+Depends On:
 
+# Prompt Contract
 
 -   Spec ID: PROMPT-CONTRACT
 -   Version: 1.0.0

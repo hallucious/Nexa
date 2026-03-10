@@ -1,3 +1,9 @@
+Spec ID: node_runtime_architecture
+Version: 1.0.0
+Status: Partial
+Category: architecture
+Depends On:
+
 # Nexa Node Runtime Architecture
 
 ## Overview

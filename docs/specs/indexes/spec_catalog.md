@@ -1,3 +1,9 @@
+Spec ID: spec_catalog
+Version: 1.0.0
+Status: Partial
+Category: indexes
+Depends On:
+
 # NEXA SPEC CATALOG (Draft)
 
 # Spec Catalog

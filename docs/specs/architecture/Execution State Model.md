@@ -1,3 +1,9 @@
+Spec ID: execution_state_model
+Version: 1.0.0
+Status: Partial
+Category: architecture
+Depends On:
+
 ======================================================================
 Hyper-AI Execution State Model v0.1
 (실행 상태 모델 정의 – 복붙용 단일 블록)

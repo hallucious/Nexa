@@ -1,3 +1,9 @@
+Spec ID: plugin_executor_contract
+Version: 1.0.0
+Status: Partial
+Category: contracts
+Depends On:
+
 # Nexa Plugin Executor Contract
 
 ## Purpose

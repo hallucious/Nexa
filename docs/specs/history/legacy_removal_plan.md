@@ -1,3 +1,9 @@
+Spec ID: legacy_removal_plan
+Version: 1.0.0
+Status: Partial
+Category: history
+Depends On:
+
 # legacy_removal_plan
 Version: 0.1.1
 Status: Planned
