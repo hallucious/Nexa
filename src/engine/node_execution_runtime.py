@@ -47,7 +47,7 @@ class NodeResult:
 
 class NodeExecutionRuntime:
     """
-    Step135: graph-only runtime coordinator.
+    Step135+ runtime coordinator.
 
     Runtime responsibilities:
     1. normalize input into execution config
@@ -55,7 +55,7 @@ class NodeExecutionRuntime:
     3. execute graph through GraphScheduler
     4. resolve deterministic final output
 
-    Important compatibility note:
+    Compatibility note:
     - legacy pre/post plugin execution path is removed
     - but pre/post trace markers are preserved for existing observability contracts
     """
@@ -521,13 +521,13 @@ class NodeExecutionRuntime:
         artifacts: List[Artifact] = []
         flat_context = self._build_flat_context(state)
 
-        # Step135: preserve trace contract, but do not execute legacy pre-stage logic.
+        # Preserve observability contract without executing legacy pre-stage logic.
         self._measure("pre_plugins", lambda: self._record_pre_stage_trace(trace), trace)
 
         graph = self._compile_execution_plan(config)
         provider_output = self._execute_compiled_graph(config, graph, flat_context, trace, artifacts) if graph is not None else None
 
-        # Step135: preserve trace contract, but do not execute legacy post-stage logic.
+        # Preserve observability contract without executing legacy post-stage logic.
         self._measure("post_plugins", lambda: self._record_post_stage_trace(trace, config), trace)
 
         def validation_stage():
@@ -564,3 +564,15 @@ class NodeExecutionRuntime:
         normalized_node = self._normalize_node_payload(node)
         execution_plan, plan_extras = self._coerce_node_to_execution_plan(normalized_node)
         return self._execute_execution_config(execution_plan, state, plan_extras=plan_extras)
+
+    def execute_by_config_id(self, registry, config_id: str, state: Dict[str, Any]) -> NodeResult:
+        """
+        Execute a registered execution config by config_id.
+
+        The registry must provide:
+            get(config_id) -> dict
+        """
+        config = registry.get(config_id)
+        if not isinstance(config, dict):
+            raise TypeError("execution config registry must return dict config")
+        return self.execute(config, state)
