@@ -12,13 +12,6 @@ from src.engine.node_execution_runtime import NodeExecutionRuntime
 
 
 def build_runtime(plugin_dir="plugins"):
-    """
-    Build default Nexa runtime for CLI execution.
-
-    Step146:
-    - auto-load plugins from plugins/ directory
-    - keep provider bootstrap minimal
-    """
     provider_registry = ProviderRegistry()
     provider_executor = ProviderExecutor(provider_registry)
     plugin_registry = load_plugin_registry(plugin_dir)
@@ -31,13 +24,41 @@ def build_runtime(plugin_dir="plugins"):
     return runtime
 
 
+def load_cli_state(state_file=None, variables=None):
+    state = {}
+
+    if state_file:
+        with open(state_file, "r", encoding="utf-8") as f:
+            loaded = json.load(f)
+
+        if not isinstance(loaded, dict):
+            raise ValueError("CLI state file must contain a JSON object")
+
+        state.update(loaded)
+
+    for item in variables or []:
+        if "=" not in item:
+            raise ValueError(f"invalid --var format: {item}")
+
+        key, value = item.split("=", 1)
+        key = key.strip()
+
+        if not key:
+            raise ValueError(f"invalid --var key: {item}")
+
+        state[key] = value
+
+    return state
+
+
 def run_command(args):
     execution_registry = load_execution_configs(args.configs)
     circuit = load_circuit(args.circuit)
     runtime = build_runtime(args.plugins)
+    input_state = load_cli_state(args.state, args.var)
 
     runner = CircuitRunner(runtime, execution_registry)
-    result = runner.execute(circuit, {})
+    result = runner.execute(circuit, input_state)
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
@@ -64,6 +85,16 @@ def build_parser():
         "--plugins",
         default="plugins",
         help="plugin directory",
+    )
+    run_parser.add_argument(
+        "--state",
+        help="JSON file containing initial execution state",
+    )
+    run_parser.add_argument(
+        "--var",
+        action="append",
+        default=[],
+        help='inline state variable, e.g. --var question="What is Nexa?"',
     )
 
     return parser
