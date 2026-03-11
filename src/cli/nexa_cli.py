@@ -1,5 +1,6 @@
 import argparse
 import json
+from pathlib import Path
 
 from src.config.execution_config_loader import load_execution_configs
 from src.circuit.circuit_io import load_circuit
@@ -51,6 +52,16 @@ def load_cli_state(state_file=None, variables=None):
     return state
 
 
+def save_output(result, out_file):
+    path = Path(out_file)
+
+    if not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(result, f, indent=2, ensure_ascii=False)
+
+
 def run_command(args):
     execution_registry = load_execution_configs(args.configs)
     circuit = load_circuit(args.circuit)
@@ -62,6 +73,9 @@ def run_command(args):
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
+    if args.out:
+        save_output(result, args.out)
+
 
 def build_parser():
     parser = argparse.ArgumentParser(
@@ -72,29 +86,39 @@ def build_parser():
     sub = parser.add_subparsers(dest="command")
 
     run_parser = sub.add_parser("run")
+
     run_parser.add_argument(
         "circuit",
         help=".nex circuit file",
     )
+
     run_parser.add_argument(
         "--configs",
         default="configs",
         help="execution config directory",
     )
+
     run_parser.add_argument(
         "--plugins",
         default="plugins",
         help="plugin directory",
     )
+
     run_parser.add_argument(
         "--state",
         help="JSON file containing initial execution state",
     )
+
     run_parser.add_argument(
         "--var",
         action="append",
         default=[],
         help='inline state variable, e.g. --var question="What is Nexa?"',
+    )
+
+    run_parser.add_argument(
+        "--out",
+        help="write execution result to JSON file",
     )
 
     return parser
