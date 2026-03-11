@@ -64,7 +64,15 @@ def save_output(result, out_file):
         json.dump(result, f, indent=2, ensure_ascii=False)
 
 
-def build_execution_summary(initial_state, final_state, started_at, ended_at):
+def build_execution_summary(
+    initial_state,
+    final_state,
+    started_at,
+    ended_at,
+    *,
+    circuit=None,
+    metrics=None,
+):
     initial_keys = set(initial_state.keys())
     final_keys = set(final_state.keys())
     produced_keys = sorted(final_keys - initial_keys)
@@ -76,6 +84,17 @@ def build_execution_summary(initial_state, final_state, started_at, ended_at):
         "produced_keys": produced_keys,
         "execution_time_ms": round((ended_at - started_at) * 1000.0, 3),
     }
+
+    # Step153: optional runtime metrics integration
+    if circuit is not None:
+        summary["node_count"] = len(circuit.get("nodes", []))
+
+    if metrics is not None:
+        summary["executed_nodes"] = metrics.get("executed_nodes", 0)
+        summary["wave_count"] = metrics.get("wave_count", 0)
+        summary["plugin_calls"] = metrics.get("plugin_calls", 0)
+        summary["provider_calls"] = metrics.get("provider_calls", 0)
+
     return summary
 
 
@@ -130,6 +149,8 @@ def run_command(args):
             final_state=result,
             started_at=started_at,
             ended_at=ended_at,
+            circuit=circuit,
+            metrics=runtime.get_metrics(),
         )
         print_summary(summary)
 
