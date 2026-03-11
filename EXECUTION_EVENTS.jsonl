@@ -102,3 +102,29 @@
 {"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_mapping_override", "timestamp_ms": 1773242348306, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
 {"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_graph_only", "timestamp_ms": 1773242348312, "payload": {}}
 {"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_graph_only", "timestamp_ms": 1773242348312, "payload": {"duration_ms": 0.0, "artifact_count": 0, "metrics": {"plugin_calls": 2, "provider_calls": 0, "executed_nodes": 0, "wave_count": 1}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003167, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003167, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003170, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003170, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003176, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003176, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003181, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003181, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003276, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773243003276, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_test", "timestamp_ms": 1773243003362, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_test", "timestamp_ms": 1773243003363, "payload": {"duration_ms": 1.002, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_test", "timestamp_ms": 1773243003367, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_test", "timestamp_ms": 1773243003367, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_73536563", "timestamp_ms": 1773243003496, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_73536563", "timestamp_ms": 1773243003496, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 1}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_reverse_dep", "timestamp_ms": 1773243003512, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_reverse_dep", "timestamp_ms": 1773243003512, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_existing", "timestamp_ms": 1773243003522, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_existing", "timestamp_ms": 1773243003523, "payload": {"duration_ms": 0.986, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_final_output", "timestamp_ms": 1773243003537, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_final_output", "timestamp_ms": 1773243003538, "payload": {"duration_ms": 1.003, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_mapping_override", "timestamp_ms": 1773243003546, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_mapping_override", "timestamp_ms": 1773243003547, "payload": {"duration_ms": 0.999, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_graph_only", "timestamp_ms": 1773243003554, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_graph_only", "timestamp_ms": 1773243003556, "payload": {"duration_ms": 2.006, "artifact_count": 0, "metrics": {"plugin_calls": 2, "provider_calls": 0, "executed_nodes": 0, "wave_count": 1}}}
