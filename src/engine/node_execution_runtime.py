@@ -12,6 +12,7 @@ from src.engine.compiled_resource_graph import (
     CompiledResourceGraph,
     compile_execution_config_to_graph,
 )
+from src.engine.graph_scheduler import GraphScheduler
 
 
 @dataclass
@@ -279,21 +280,6 @@ class NodeExecutionRuntime:
             return None
         return compile_execution_config_to_graph(normalized)
 
-    def _topological_order_from_graph(self, graph: CompiledResourceGraph) -> List[str]:
-        pending = {resource_id: set(graph.dependencies.get(resource_id, set())) for resource_id in graph.resources}
-        ready = sorted(resource_id for resource_id, deps in pending.items() if not deps)
-        order: List[str] = []
-
-        while ready:
-            current = ready.pop(0)
-            order.append(current)
-            for dependent in sorted(graph.dependents.get(current, set())):
-                pending[dependent].discard(current)
-                if not pending[dependent] and dependent not in order and dependent not in ready:
-                    ready.append(dependent)
-            ready.sort()
-        return order
-
     def _resolve_graph_plugin_inputs(self, plugin_config: Dict[str, Any], flat_context: Dict[str, Any]) -> Dict[str, Any]:
         inputs = plugin_config.get("inputs") or {}
         if not inputs:
@@ -349,6 +335,106 @@ class NodeExecutionRuntime:
 
         return ""
 
+    def _execute_resource_from_graph(
+        self,
+        resource_id: str,
+        config: Dict[str, Any],
+        graph: CompiledResourceGraph,
+        flat_context: Dict[str, Any],
+        trace: NodeTrace,
+        artifacts: List[Artifact],
+        prompt_configs: Dict[str, Dict[str, Any]],
+        provider_configs: Dict[str, Dict[str, Any]],
+        plugin_configs: Dict[str, Dict[str, Any]],
+        state_holder: Dict[str, Any],
+    ) -> Any:
+        resource = graph.resources[resource_id]
+
+        if resource.type == "prompt":
+            prompt_cfg = prompt_configs[resource_id]
+            prompt_ref = config.get("prompt_ref")
+            if prompt_ref is None:
+                prompt_ref = prompt_cfg.get("prompt_id", "")
+            compat_context = self._build_compat_context(flat_context)
+
+            def render_stage():
+                trace.events.append("prompt_render")
+                rendered = self._render_prompt(
+                    str(prompt_ref or ""),
+                    compat_context,
+                    render_mode=config.get("runtime_config", {}).get("prompt_render_mode", "step123"),
+                )
+                write_key = next(iter(resource.writes))
+                flat_context[write_key] = rendered
+                return rendered
+
+            return self._measure("prompt_render", render_stage, trace)
+
+        if resource.type == "provider":
+            provider_cfg = provider_configs[resource_id]
+            provider_id = provider_cfg["provider_id"]
+
+            def provider_stage():
+                trace.events.append("provider_execute")
+                compat_context = self._build_compat_context(flat_context)
+                prompt = self._resolve_provider_prompt(provider_cfg, config, flat_context)
+                return self._provider_call(provider_id, prompt, compat_context)
+
+            provider_result = self._measure("provider_execute", provider_stage, trace) or {}
+            if isinstance(provider_result, dict):
+                trace.provider_trace = provider_result.get("trace")
+                state_holder["last_provider_output"] = provider_result.get("output")
+                flat_context[f"provider.{provider_id}.output"] = provider_result.get("output")
+                for key, value in provider_result.items():
+                    if key in {"output", "trace", "artifacts"}:
+                        continue
+                    flat_context[f"provider.{provider_id}.{key}"] = value
+                    flat_context[key] = value
+            else:
+                state_holder["last_provider_output"] = provider_result
+                flat_context[f"provider.{provider_id}.output"] = provider_result
+
+            artifacts.append(
+                Artifact(
+                    type="provider_output",
+                    name="primary_output",
+                    data=state_holder["last_provider_output"],
+                    producer_node=config.get("node_id") or config.get("config_id"),
+                    timestamp_ms=time.time() * 1000.0,
+                )
+            )
+            if isinstance(provider_result, dict):
+                for artifact in provider_result.get("artifacts", []):
+                    if isinstance(artifact, Artifact):
+                        artifacts.append(artifact)
+            return provider_result
+
+        if resource.type == "plugin":
+            plugin_cfg = plugin_configs[resource_id]
+            plugin_id = plugin_cfg["plugin_id"]
+            plugin_callable = self._resolve_plugin_callable(plugin_id)
+            bound_inputs = self._resolve_graph_plugin_inputs(plugin_cfg, flat_context)
+            trace.plugin_trace["post"].append(plugin_id)
+
+            def plugin_stage():
+                trace.events.append(f"plugin_execute:{plugin_id}")
+                try:
+                    result = plugin_callable(**bound_inputs)
+                except TypeError:
+                    compat_context = self._build_compat_context(flat_context)
+                    result = plugin_callable(context=compat_context)
+                return normalize_plugin_result(result)
+
+            plugin_result = self._measure(f"plugin_execute:{plugin_id}", plugin_stage, trace)
+            for write_key, value in self._extract_plugin_output_mapping(plugin_result, sorted(resource.writes)).items():
+                flat_context[write_key] = value
+            for artifact in plugin_result.artifacts:
+                if isinstance(artifact, Artifact):
+                    artifacts.append(artifact)
+            return plugin_result
+
+        raise ValueError(f"Unsupported resource type: {resource.type}")
+
     def _execute_compiled_graph(
         self,
         config: Dict[str, Any],
@@ -376,93 +462,29 @@ class NodeExecutionRuntime:
             if isinstance(instance_id, str):
                 plugin_configs[f"plugin.{instance_id}"] = plugin_cfg
 
-        for resource_id in self._topological_order_from_graph(graph):
-            resource = graph.resources[resource_id]
-            if resource.type == "prompt":
-                prompt_cfg = prompt_configs[resource_id]
-                prompt_ref = config.get("prompt_ref")
-                if prompt_ref is None:
-                    prompt_ref = prompt_cfg.get("prompt_id", "")
-                compat_context = self._build_compat_context(flat_context)
+        scheduler = GraphScheduler(graph)
+        state_holder = {"last_provider_output": last_provider_output}
 
-                def render_stage():
-                    trace.events.append("prompt_render")
-                    rendered = self._render_prompt(
-                        str(prompt_ref or ""),
-                        compat_context,
-                        render_mode=config.get("runtime_config", {}).get("prompt_render_mode", "step123"),
-                    )
-                    write_key = next(iter(resource.writes))
-                    flat_context[write_key] = rendered
-                    return rendered
+        def resource_executor(resource_id: str):
+            return self._execute_resource_from_graph(
+                resource_id=resource_id,
+                config=config,
+                graph=graph,
+                flat_context=flat_context,
+                trace=trace,
+                artifacts=artifacts,
+                prompt_configs=prompt_configs,
+                provider_configs=provider_configs,
+                plugin_configs=plugin_configs,
+                state_holder=state_holder,
+            )
 
-                self._measure("prompt_render", render_stage, trace)
-                continue
+        execution_result = scheduler.execute(resource_executor)
 
-            if resource.type == "provider":
-                provider_cfg = provider_configs[resource_id]
-                provider_id = provider_cfg["provider_id"]
+        for wave in execution_result.waves:
+            trace.events.append(f"wave:{wave.index}:{','.join(wave.resource_ids)}")
 
-                def provider_stage():
-                    trace.events.append("provider_execute")
-                    compat_context = self._build_compat_context(flat_context)
-                    prompt = self._resolve_provider_prompt(provider_cfg, config, flat_context)
-                    return self._provider_call(provider_id, prompt, compat_context)
-
-                provider_result = self._measure("provider_execute", provider_stage, trace) or {}
-                if isinstance(provider_result, dict):
-                    trace.provider_trace = provider_result.get("trace")
-                    last_provider_output = provider_result.get("output")
-                    flat_context[f"provider.{provider_id}.output"] = provider_result.get("output")
-                    for key, value in provider_result.items():
-                        if key in {"output", "trace", "artifacts"}:
-                            continue
-                        flat_context[f"provider.{provider_id}.{key}"] = value
-                        flat_context[key] = value
-                else:
-                    last_provider_output = provider_result
-                    flat_context[f"provider.{provider_id}.output"] = provider_result
-
-                artifacts.append(
-                    Artifact(
-                        type="provider_output",
-                        name="primary_output",
-                        data=last_provider_output,
-                        producer_node=config.get("node_id") or config.get("config_id"),
-                        timestamp_ms=time.time() * 1000.0,
-                    )
-                )
-                if isinstance(provider_result, dict):
-                    for artifact in provider_result.get("artifacts", []):
-                        if isinstance(artifact, Artifact):
-                            artifacts.append(artifact)
-                continue
-
-            if resource.type == "plugin":
-                plugin_cfg = plugin_configs[resource_id]
-                plugin_id = plugin_cfg["plugin_id"]
-                plugin_callable = self._resolve_plugin_callable(plugin_id)
-                bound_inputs = self._resolve_graph_plugin_inputs(plugin_cfg, flat_context)
-                trace.plugin_trace["post"].append(plugin_id)
-
-                def plugin_stage():
-                    trace.events.append(f"plugin_execute:{plugin_id}")
-                    try:
-                        result = plugin_callable(**bound_inputs)
-                    except TypeError:
-                        compat_context = self._build_compat_context(flat_context)
-                        result = plugin_callable(context=compat_context)
-                    return normalize_plugin_result(result)
-
-                plugin_result = self._measure(f"plugin_execute:{plugin_id}", plugin_stage, trace)
-                for write_key, value in self._extract_plugin_output_mapping(plugin_result, sorted(resource.writes)).items():
-                    flat_context[write_key] = value
-                for artifact in plugin_result.artifacts:
-                    if isinstance(artifact, Artifact):
-                        artifacts.append(artifact)
-                continue
-
-        return last_provider_output
+        return state_holder["last_provider_output"]
 
     def _execute_execution_config(
         self,
