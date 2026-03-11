@@ -7,22 +7,25 @@ from src.circuit.circuit_runner import CircuitRunner
 
 from src.platform.provider_registry import ProviderRegistry
 from src.platform.provider_executor import ProviderExecutor
+from src.platform.plugin_auto_loader import load_plugin_registry
 from src.engine.node_execution_runtime import NodeExecutionRuntime
 
 
-def build_runtime():
+def build_runtime(plugin_dir="plugins"):
     """
     Build default Nexa runtime for CLI execution.
 
-    Step145에서는 CLI가 실제 엔진 객체를 생성할 수 있도록
-    최소 wiring만 연결한다.
+    Step146:
+    - auto-load plugins from plugins/ directory
+    - keep provider bootstrap minimal
     """
-
     provider_registry = ProviderRegistry()
     provider_executor = ProviderExecutor(provider_registry)
+    plugin_registry = load_plugin_registry(plugin_dir)
 
     runtime = NodeExecutionRuntime(
-        provider_executor=provider_executor
+        provider_executor=provider_executor,
+        plugin_registry=plugin_registry,
     )
 
     return runtime
@@ -31,7 +34,7 @@ def build_runtime():
 def run_command(args):
     execution_registry = load_execution_configs(args.configs)
     circuit = load_circuit(args.circuit)
-    runtime = build_runtime()
+    runtime = build_runtime(args.plugins)
 
     runner = CircuitRunner(runtime, execution_registry)
     result = runner.execute(circuit, {})
@@ -56,6 +59,11 @@ def build_parser():
         "--configs",
         default="configs",
         help="execution config directory",
+    )
+    run_parser.add_argument(
+        "--plugins",
+        default="plugins",
+        help="plugin directory",
     )
 
     return parser
