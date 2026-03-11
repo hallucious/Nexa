@@ -1,31 +1,39 @@
 import argparse
 import json
-from typing import Any
 
 from src.config.execution_config_loader import load_execution_configs
 from src.circuit.circuit_io import load_circuit
 from src.circuit.circuit_runner import CircuitRunner
 
+from src.platform.provider_registry import ProviderRegistry
+from src.platform.provider_executor import ProviderExecutor
+from src.engine.node_execution_runtime import NodeExecutionRuntime
 
-def build_runtime() -> Any:
-    """
-    Runtime construction entrypoint.
 
-    Step144에서는 CLI 설치/실행 구조를 먼저 고정한다.
-    실제 provider/plugin wiring은 이후 단계에서 확장한다.
+def build_runtime():
     """
-    raise NotImplementedError(
-        "CLI runtime bootstrap is not configured yet. "
-        "Connect ProviderRegistry/ProviderExecutor/NodeExecutionRuntime in the next step."
+    Build default Nexa runtime for CLI execution.
+
+    Step145에서는 CLI가 실제 엔진 객체를 생성할 수 있도록
+    최소 wiring만 연결한다.
+    """
+
+    provider_registry = ProviderRegistry()
+    provider_executor = ProviderExecutor(provider_registry)
+
+    runtime = NodeExecutionRuntime(
+        provider_executor=provider_executor
     )
+
+    return runtime
 
 
 def run_command(args):
-    registry = load_execution_configs(args.configs)
+    execution_registry = load_execution_configs(args.configs)
     circuit = load_circuit(args.circuit)
     runtime = build_runtime()
 
-    runner = CircuitRunner(runtime, registry)
+    runner = CircuitRunner(runtime, execution_registry)
     result = runner.execute(circuit, {})
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
