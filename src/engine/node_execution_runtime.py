@@ -12,6 +12,10 @@ from src.engine.compiled_resource_graph import (
     CompiledResourceGraph,
     compile_execution_config_to_graph,
 )
+from src.engine.final_output_resolver import (
+    FinalOutputResolverError,
+    resolve_final_output,
+)
 from src.engine.graph_scheduler import GraphScheduler
 
 
@@ -43,11 +47,17 @@ class NodeResult:
 
 class NodeExecutionRuntime:
     """
-    Node execution runtime with a unified execution-plan model.
+    Step135: graph-only runtime coordinator.
 
-    Supported inputs:
-    - ExecutionConfig-like dicts / models
-    - legacy prompt nodes, which are normalized into an internal execution plan
+    Runtime responsibilities:
+    1. normalize input into execution config
+    2. compile execution config into compiled resource graph
+    3. execute graph through GraphScheduler
+    4. resolve deterministic final output
+
+    Important compatibility note:
+    - legacy pre/post plugin execution path is removed
+    - but pre/post trace markers are preserved for existing observability contracts
     """
 
     def __init__(
@@ -81,20 +91,14 @@ class NodeExecutionRuntime:
         with self.observability_file.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
 
-    def _run_plugins(self, plugins, node_id, state, stage, trace, artifacts):
-        if not plugins:
-            if stage == "pre":
-                trace.plugin_trace["pre"].append("noop_pre_plugin")
-            elif stage == "post":
-                trace.plugin_trace["post"].append("noop_post_plugin")
-            return
+    def _record_pre_stage_trace(self, trace: NodeTrace):
+        trace.events.append("pre_plugins")
+        trace.plugin_trace["pre"].append("noop_pre_plugin")
 
-        for plugin in plugins:
-            trace.plugin_trace[stage].append(plugin.__class__.__name__)
-            result = normalize_plugin_result(plugin.run(node_id=node_id, state=state))
-            for a in result.artifacts:
-                if isinstance(a, Artifact):
-                    artifacts.append(a)
+    def _record_post_stage_trace(self, trace: NodeTrace, config: Dict[str, Any]):
+        trace.events.append("post_plugins")
+        if not config.get("plugins"):
+            trace.plugin_trace["post"].append("noop_post_plugin")
 
     def _provider_call(self, provider_ref: str, prompt: str, context: Dict[str, Any]) -> Dict[str, Any]:
         request = ProviderRequest(
@@ -170,45 +174,30 @@ class NodeExecutionRuntime:
 
     def _coerce_node_to_execution_plan(self, normalized_node: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         if self._looks_like_execution_config(normalized_node):
-            return normalized_node, {}
+            plan = dict(normalized_node)
+            runtime_config = dict(plan.get("runtime_config") or {})
+            runtime_config.pop("legacy_plugin_mode", None)
+            runtime_config.pop("emit_primary_artifact", None)
+            runtime_config.setdefault("write_observability", True)
+            plan["runtime_config"] = runtime_config
+            return plan, {}
 
         node_id = normalized_node.get("id", "unknown")
-        legacy_pre_plugins = self.pre_plugins
-        legacy_post_plugins = self.post_plugins
-
-        if "pre_plugins" in normalized_node or "post_plugins" in normalized_node:
-            try:
-                from src.engine.plugin_loader import load_plugins
-                legacy_pre_plugins = load_plugins(normalized_node.get("pre_plugins", []))
-                legacy_post_plugins = load_plugins(normalized_node.get("post_plugins", []))
-            except Exception:
-                legacy_pre_plugins = self.pre_plugins
-                legacy_post_plugins = self.post_plugins
-
         plan = {
             "config_id": f"legacy.{node_id}",
             "node_id": node_id,
             "prompt_ref": normalized_node.get("prompt", ""),
             "provider_ref": "__legacy_provider__",
-            "pre_plugins": [],
-            "post_plugins": [],
             "validation_rules": [],
             "output_mapping": {},
             "runtime_config": {
                 "prompt_render_mode": "legacy_format",
-                "provider_call_mode": "legacy_prompt_only",
                 "return_raw_output": True,
-                "emit_primary_artifact": True,
                 "write_observability": True,
                 "legacy_node_id": node_id,
-                "legacy_plugin_mode": True,
             },
         }
-        extras = {
-            "legacy_pre_plugins": legacy_pre_plugins,
-            "legacy_post_plugins": legacy_post_plugins,
-        }
-        return plan, extras
+        return plan, {}
 
     def _build_flat_context(self, state: Dict[str, Any]) -> Dict[str, Any]:
         flat: Dict[str, Any] = dict(state)
@@ -418,11 +407,7 @@ class NodeExecutionRuntime:
 
             def plugin_stage():
                 trace.events.append(f"plugin_execute:{plugin_id}")
-                try:
-                    result = plugin_callable(**bound_inputs)
-                except TypeError:
-                    compat_context = self._build_compat_context(flat_context)
-                    result = plugin_callable(context=compat_context)
+                result = plugin_callable(**bound_inputs)
                 return normalize_plugin_result(result)
 
             plugin_result = self._measure(f"plugin_execute:{plugin_id}", plugin_stage, trace)
@@ -443,7 +428,6 @@ class NodeExecutionRuntime:
         trace: NodeTrace,
         artifacts: List[Artifact],
     ) -> Any:
-        last_provider_output: Any = None
         compiled_config = self._normalize_config_for_compilation(config)
         prompt_configs = {
             f"prompt.{item['prompt_id']}": item
@@ -463,7 +447,7 @@ class NodeExecutionRuntime:
                 plugin_configs[f"plugin.{instance_id}"] = plugin_cfg
 
         scheduler = GraphScheduler(graph)
-        state_holder = {"last_provider_output": last_provider_output}
+        state_holder = {"last_provider_output": None}
 
         def resource_executor(resource_id: str):
             return self._execute_resource_from_graph(
@@ -480,11 +464,44 @@ class NodeExecutionRuntime:
             )
 
         execution_result = scheduler.execute(resource_executor)
-
         for wave in execution_result.waves:
             trace.events.append(f"wave:{wave.index}:{','.join(wave.resource_ids)}")
-
         return state_holder["last_provider_output"]
+
+    def _resolve_final_output(
+        self,
+        config: Dict[str, Any],
+        graph: Optional[CompiledResourceGraph],
+        flat_context: Dict[str, Any],
+        trace: NodeTrace,
+        provider_output: Any,
+    ) -> Any:
+        mapping = config.get("output_mapping", {})
+        runtime_config = dict(config.get("runtime_config") or {})
+
+        if mapping:
+            final_output: Any = {out_key: flat_context.get(ctx_key) for out_key, ctx_key in mapping.items()}
+            flat_context.update({f"output.{k}": v for k, v in final_output.items()})
+            trace.events.append("final_output:explicit_mapping")
+            return final_output
+
+        if runtime_config.get("return_raw_output"):
+            flat_context["output.value"] = provider_output
+            flat_context["output.source"] = "__raw_provider_output__"
+            flat_context["output.candidates"] = []
+            trace.events.append("final_output:raw_provider_output")
+            return provider_output
+
+        if graph is None:
+            trace.events.append("final_output:empty")
+            return {}
+
+        resolved = resolve_final_output(graph, flat_context)
+        flat_context["output.value"] = resolved.value
+        flat_context["output.source"] = resolved.source_key
+        flat_context["output.candidates"] = resolved.candidates
+        trace.events.append(f"final_output:{resolved.source_key}")
+        return resolved.value
 
     def _execute_execution_config(
         self,
@@ -494,8 +511,6 @@ class NodeExecutionRuntime:
         plan_extras: Optional[Dict[str, Any]] = None,
     ) -> NodeResult:
         runtime_config = dict(config.get("runtime_config") or {})
-        plan_extras = dict(plan_extras or {})
-
         node_id = (
             runtime_config.get("legacy_node_id")
             or config.get("node_id")
@@ -506,61 +521,14 @@ class NodeExecutionRuntime:
         artifacts: List[Artifact] = []
         flat_context = self._build_flat_context(state)
 
-        def pre_stage():
-            trace.events.append("pre_plugins")
-            if runtime_config.get("legacy_plugin_mode"):
-                self._run_plugins(
-                    plan_extras.get("legacy_pre_plugins", []),
-                    node_id,
-                    self._build_compat_context(flat_context),
-                    "pre",
-                    trace,
-                    artifacts,
-                )
-                return
-
-            plugin_ids = config.get("pre_plugins", [])
-            if not plugin_ids:
-                trace.plugin_trace["pre"].append("noop_pre_plugin")
-                return
-
-            for plugin_id in plugin_ids:
-                trace.plugin_trace["pre"].append(plugin_id)
-                result = self._resolve_plugin_callable(plugin_id)(context=self._build_compat_context(flat_context))
-                if isinstance(result, dict):
-                    flat_context.update(result)
-
-        self._measure("pre_plugins", pre_stage, trace)
+        # Step135: preserve trace contract, but do not execute legacy pre-stage logic.
+        self._measure("pre_plugins", lambda: self._record_pre_stage_trace(trace), trace)
 
         graph = self._compile_execution_plan(config)
-        output = self._execute_compiled_graph(config, graph, flat_context, trace, artifacts) if graph is not None else None
+        provider_output = self._execute_compiled_graph(config, graph, flat_context, trace, artifacts) if graph is not None else None
 
-        def post_stage():
-            trace.events.append("post_plugins")
-            if runtime_config.get("legacy_plugin_mode"):
-                self._run_plugins(
-                    plan_extras.get("legacy_post_plugins", []),
-                    node_id,
-                    self._build_compat_context(flat_context),
-                    "post",
-                    trace,
-                    artifacts,
-                )
-                return
-
-            plugin_ids = config.get("post_plugins", [])
-            if not plugin_ids:
-                if not config.get("plugins"):
-                    trace.plugin_trace["post"].append("noop_post_plugin")
-                return
-
-            for plugin_id in plugin_ids:
-                trace.plugin_trace["post"].append(plugin_id)
-                result = self._resolve_plugin_callable(plugin_id)(context=self._build_compat_context(flat_context))
-                if isinstance(result, dict):
-                    flat_context.update(result)
-
-        self._measure("post_plugins", post_stage, trace)
+        # Step135: preserve trace contract, but do not execute legacy post-stage logic.
+        self._measure("post_plugins", lambda: self._record_post_stage_trace(trace, config), trace)
 
         def validation_stage():
             trace.events.append("validation")
@@ -570,25 +538,16 @@ class NodeExecutionRuntime:
 
         self._measure("validation", validation_stage, trace)
 
-        mapping = config.get("output_mapping", {})
-        if mapping:
-            final_output: Any = {out_key: flat_context.get(ctx_key) for out_key, ctx_key in mapping.items()}
-            flat_context.update({f"output.{k}": v for k, v in final_output.items()})
-        elif runtime_config.get("return_raw_output"):
-            final_output = output
-            flat_context["output.value"] = output
-        elif graph is not None:
-            resolved_candidates = {
-                key: flat_context.get(key)
-                for key in sorted(graph.final_candidates)
-            }
-            if len(resolved_candidates) == 1:
-                final_output = next(iter(resolved_candidates.values()))
-            else:
-                final_output = resolved_candidates
-            flat_context["output.value"] = final_output
-        else:
-            final_output = {}
+        try:
+            final_output = self._resolve_final_output(
+                config=config,
+                graph=graph,
+                flat_context=flat_context,
+                trace=trace,
+                provider_output=provider_output,
+            )
+        except FinalOutputResolverError as exc:
+            raise ValueError(f"final output resolution failed: {exc}") from exc
 
         result = NodeResult(
             node_id=node_id,
