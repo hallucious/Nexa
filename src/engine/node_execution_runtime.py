@@ -45,6 +45,22 @@ class NodeResult:
     trace: NodeTrace = field(default_factory=NodeTrace)
 
 
+@dataclass
+class RuntimeMetrics:
+    plugin_calls: int = 0
+    provider_calls: int = 0
+    executed_nodes: int = 0
+    wave_count: int = 0
+
+    def to_dict(self) -> Dict[str, int]:
+        return {
+            "plugin_calls": self.plugin_calls,
+            "provider_calls": self.provider_calls,
+            "executed_nodes": self.executed_nodes,
+            "wave_count": self.wave_count,
+        }
+
+
 class NodeExecutionRuntime:
     """
     Step135+ runtime coordinator.
@@ -73,6 +89,40 @@ class NodeExecutionRuntime:
         self.post_plugins = post_plugins or []
         self.observability_file = Path(observability_file)
         self.plugin_registry = plugin_registry or {}
+        self.metrics = RuntimeMetrics()
+
+    # ------------------------------------------------------------------
+    # Step152 runtime metrics helpers
+    # ------------------------------------------------------------------
+
+    def reset_metrics(self) -> None:
+        self.metrics = RuntimeMetrics()
+
+    def record_wave(self) -> None:
+        self.metrics.wave_count += 1
+
+    def execute_plugin(self, plugin_id: str, **kwargs):
+        if plugin_id not in self.plugin_registry:
+            raise ValueError(f"Unknown plugin: {plugin_id}")
+
+        self.metrics.plugin_calls += 1
+        plugin_callable = self.plugin_registry[plugin_id]
+        return plugin_callable(**kwargs)
+
+    def execute_provider(self, provider_id: str, **kwargs):
+        self.metrics.provider_calls += 1
+        return self.provider_executor.execute(provider_id, **kwargs)
+
+    def execute_node(self, node_id: str, func, **kwargs):
+        self.metrics.executed_nodes += 1
+        return func(**kwargs)
+
+    def get_metrics(self) -> Dict[str, int]:
+        return self.metrics.to_dict()
+
+    # ------------------------------------------------------------------
+    # Existing runtime internals
+    # ------------------------------------------------------------------
 
     def _measure(self, name: str, fn, trace: NodeTrace):
         start = time.time()
@@ -101,6 +151,8 @@ class NodeExecutionRuntime:
             trace.plugin_trace["post"].append("noop_post_plugin")
 
     def _provider_call(self, provider_ref: str, prompt: str, context: Dict[str, Any]) -> Dict[str, Any]:
+        self.metrics.provider_calls += 1
+
         request = ProviderRequest(
             provider_id=provider_ref,
             prompt=prompt,
@@ -401,13 +453,13 @@ class NodeExecutionRuntime:
         if resource.type == "plugin":
             plugin_cfg = plugin_configs[resource_id]
             plugin_id = plugin_cfg["plugin_id"]
-            plugin_callable = self._resolve_plugin_callable(plugin_id)
             bound_inputs = self._resolve_graph_plugin_inputs(plugin_cfg, flat_context)
             trace.plugin_trace["post"].append(plugin_id)
 
             def plugin_stage():
                 trace.events.append(f"plugin_execute:{plugin_id}")
-                result = plugin_callable(**bound_inputs)
+                self.metrics.plugin_calls += 1
+                result = self.execute_plugin(plugin_id, **bound_inputs)
                 return normalize_plugin_result(result)
 
             plugin_result = self._measure(f"plugin_execute:{plugin_id}", plugin_stage, trace)
@@ -465,6 +517,7 @@ class NodeExecutionRuntime:
 
         execution_result = scheduler.execute(resource_executor)
         for wave in execution_result.waves:
+            self.record_wave()
             trace.events.append(f"wave:{wave.index}:{','.join(wave.resource_ids)}")
         return state_holder["last_provider_output"]
 
@@ -521,13 +574,11 @@ class NodeExecutionRuntime:
         artifacts: List[Artifact] = []
         flat_context = self._build_flat_context(state)
 
-        # Preserve observability contract without executing legacy pre-stage logic.
         self._measure("pre_plugins", lambda: self._record_pre_stage_trace(trace), trace)
 
         graph = self._compile_execution_plan(config)
         provider_output = self._execute_compiled_graph(config, graph, flat_context, trace, artifacts) if graph is not None else None
 
-        # Preserve observability contract without executing legacy post-stage logic.
         self._measure("post_plugins", lambda: self._record_post_stage_trace(trace, config), trace)
 
         def validation_stage():
