@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -83,6 +84,29 @@ def print_summary(summary):
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 
 
+def build_error_payload(exc, args):
+    payload = {
+        "status": "error",
+        "error_type": type(exc).__name__,
+        "message": str(exc),
+        "command": getattr(args, "command", None),
+    }
+
+    if hasattr(args, "circuit"):
+        payload["circuit"] = args.circuit
+    if hasattr(args, "configs"):
+        payload["configs"] = args.configs
+    if hasattr(args, "plugins"):
+        payload["plugins"] = args.plugins
+
+    return payload
+
+
+def print_error_payload(payload):
+    print("[nexa error]", file=sys.stderr)
+    print(json.dumps(payload, indent=2, ensure_ascii=False), file=sys.stderr)
+
+
 def run_command(args):
     execution_registry = load_execution_configs(args.configs)
     circuit = load_circuit(args.circuit)
@@ -108,6 +132,8 @@ def run_command(args):
             ended_at=ended_at,
         )
         print_summary(summary)
+
+    return 0
 
 
 def build_parser():
@@ -160,6 +186,11 @@ def build_parser():
         help="print execution summary and basic metrics",
     )
 
+    run_parser.add_argument(
+        "--error-out",
+        help="write structured error payload to JSON file on failure",
+    )
+
     return parser
 
 
@@ -167,11 +198,21 @@ def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.command == "run":
-        run_command(args)
-    else:
+    if args.command != "run":
         parser.print_help()
+        return 0
+
+    try:
+        return run_command(args)
+    except Exception as exc:
+        payload = build_error_payload(exc, args)
+        print_error_payload(payload)
+
+        if getattr(args, "error_out", None):
+            save_output(payload, args.error_out)
+
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
