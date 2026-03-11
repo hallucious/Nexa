@@ -10,7 +10,6 @@ from src.platform.plugin_result import PluginResult, normalize_plugin_result
 from src.contracts.provider_contract import ProviderRequest, ProviderResult
 from src.engine.compiled_resource_graph import (
     CompiledResourceGraph,
-    ResourceNode,
     compile_execution_config_to_graph,
 )
 
@@ -323,7 +322,6 @@ class NodeExecutionRuntime:
 
     def _resolve_provider_prompt(
         self,
-        resource_id: str,
         provider_config: Dict[str, Any],
         config: Dict[str, Any],
         flat_context: Dict[str, Any],
@@ -408,7 +406,7 @@ class NodeExecutionRuntime:
                 def provider_stage():
                     trace.events.append("provider_execute")
                     compat_context = self._build_compat_context(flat_context)
-                    prompt = self._resolve_provider_prompt(resource_id, provider_cfg, config, flat_context)
+                    prompt = self._resolve_provider_prompt(provider_cfg, config, flat_context)
                     return self._provider_call(provider_id, prompt, compat_context)
 
                 provider_result = self._measure("provider_execute", provider_stage, trace) or {}
