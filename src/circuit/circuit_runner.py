@@ -54,6 +54,26 @@ class CircuitRunner:
 
         return result.output
 
+    def run_single_node(
+        self,
+        *,
+        circuit: Dict[str, Any],
+        node_id: str,
+        state: Dict[str, Any],
+    ):
+        nodes: List[Dict[str, Any]] = circuit.get("nodes", [])
+
+        target_node = None
+        for node in nodes:
+            if node.get("id") == node_id:
+                target_node = node
+                break
+
+        if target_node is None:
+            raise ValueError(f"node not found in circuit: {node_id}")
+
+        return self._execute_node(target_node, state)
+
     def execute(self, circuit: Dict[str, Any], state: Dict[str, Any]) -> Dict[str, Any]:
         nodes: List[Dict[str, Any]] = circuit.get("nodes", [])
         current_state = dict(state)
