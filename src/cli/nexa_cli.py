@@ -1,5 +1,6 @@
 import argparse
 import json
+import time
 from pathlib import Path
 
 from src.config.execution_config_loader import load_execution_configs
@@ -62,6 +63,26 @@ def save_output(result, out_file):
         json.dump(result, f, indent=2, ensure_ascii=False)
 
 
+def build_execution_summary(initial_state, final_state, started_at, ended_at):
+    initial_keys = set(initial_state.keys())
+    final_keys = set(final_state.keys())
+    produced_keys = sorted(final_keys - initial_keys)
+
+    summary = {
+        "initial_state_keys": len(initial_state),
+        "final_state_keys": len(final_state),
+        "node_outputs": len(produced_keys),
+        "produced_keys": produced_keys,
+        "execution_time_ms": round((ended_at - started_at) * 1000.0, 3),
+    }
+    return summary
+
+
+def print_summary(summary):
+    print("\n[execution summary]")
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
+
+
 def run_command(args):
     execution_registry = load_execution_configs(args.configs)
     circuit = load_circuit(args.circuit)
@@ -69,12 +90,24 @@ def run_command(args):
     input_state = load_cli_state(args.state, args.var)
 
     runner = CircuitRunner(runtime, execution_registry)
+
+    started_at = time.perf_counter()
     result = runner.execute(circuit, input_state)
+    ended_at = time.perf_counter()
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
     if args.out:
         save_output(result, args.out)
+
+    if args.summary:
+        summary = build_execution_summary(
+            initial_state=input_state,
+            final_state=result,
+            started_at=started_at,
+            ended_at=ended_at,
+        )
+        print_summary(summary)
 
 
 def build_parser():
@@ -119,6 +152,12 @@ def build_parser():
     run_parser.add_argument(
         "--out",
         help="write execution result to JSON file",
+    )
+
+    run_parser.add_argument(
+        "--summary",
+        action="store_true",
+        help="print execution summary and basic metrics",
     )
 
     return parser
