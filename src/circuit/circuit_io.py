@@ -2,6 +2,8 @@ from pathlib import Path
 from typing import Dict, Any
 import yaml
 
+from src.circuit.circuit_schema_validator import CircuitSchemaValidator
+
 
 def save_circuit(circuit: Dict[str, Any], path: str):
 
@@ -25,4 +27,6 @@ def load_circuit(path: str) -> Dict[str, Any]:
         raise ValueError("circuit file must use .nex extension")
 
     with open(file_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        loaded = yaml.safe_load(f)
+
+    return CircuitSchemaValidator(loaded).validate()
