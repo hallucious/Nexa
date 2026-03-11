@@ -14,6 +14,9 @@ from src.platform.plugin_auto_loader import load_plugin_registry
 from src.engine.node_execution_runtime import NodeExecutionRuntime
 
 
+OBSERVABILITY_FILE = Path("OBSERVABILITY.jsonl")
+
+
 def build_runtime(plugin_dir="plugins"):
     provider_registry = ProviderRegistry()
     provider_executor = ProviderExecutor(provider_registry)
@@ -126,6 +129,56 @@ def print_error_payload(payload):
     print(json.dumps(payload, indent=2, ensure_ascii=False), file=sys.stderr)
 
 
+def append_observability_record(record):
+    with open(OBSERVABILITY_FILE, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def build_success_observability_record(
+    *,
+    args,
+    circuit,
+    metrics,
+    started_at,
+    ended_at,
+):
+    return {
+        "timestamp": round(ended_at, 6),
+        "command": getattr(args, "command", None),
+        "circuit_path": getattr(args, "circuit", None),
+        "circuit_id": circuit.get("id"),
+        "status": "success",
+        "success": True,
+        "execution_time_ms": round((ended_at - started_at) * 1000.0, 3),
+        "node_count": len(circuit.get("nodes", [])),
+        "executed_nodes": metrics.get("executed_nodes", 0),
+        "wave_count": metrics.get("wave_count", 0),
+        "plugin_calls": metrics.get("plugin_calls", 0),
+        "provider_calls": metrics.get("provider_calls", 0),
+        "error_type": None,
+        "error_message": None,
+    }
+
+
+def build_failure_observability_record(*, args, exc):
+    return {
+        "timestamp": round(time.perf_counter(), 6),
+        "command": getattr(args, "command", None),
+        "circuit_path": getattr(args, "circuit", None),
+        "circuit_id": None,
+        "status": "error",
+        "success": False,
+        "execution_time_ms": None,
+        "node_count": None,
+        "executed_nodes": None,
+        "wave_count": None,
+        "plugin_calls": None,
+        "provider_calls": None,
+        "error_type": type(exc).__name__,
+        "error_message": str(exc),
+    }
+
+
 def run_command(args):
     execution_registry = load_execution_configs(args.configs)
     circuit = load_circuit(args.circuit)
@@ -137,6 +190,17 @@ def run_command(args):
     started_at = time.perf_counter()
     result = runner.execute(circuit, input_state)
     ended_at = time.perf_counter()
+
+    metrics = runtime.get_metrics()
+
+    observability_record = build_success_observability_record(
+        args=args,
+        circuit=circuit,
+        metrics=metrics,
+        started_at=started_at,
+        ended_at=ended_at,
+    )
+    append_observability_record(observability_record)
 
     print(json.dumps(result, indent=2, ensure_ascii=False))
 
@@ -150,7 +214,7 @@ def run_command(args):
             started_at=started_at,
             ended_at=ended_at,
             circuit=circuit,
-            metrics=runtime.get_metrics(),
+            metrics=metrics,
         )
         print_summary(summary)
 
@@ -228,6 +292,9 @@ def main():
     except Exception as exc:
         payload = build_error_payload(exc, args)
         print_error_payload(payload)
+
+        failure_record = build_failure_observability_record(args=args, exc=exc)
+        append_observability_record(failure_record)
 
         if getattr(args, "error_out", None):
             save_output(payload, args.error_out)
