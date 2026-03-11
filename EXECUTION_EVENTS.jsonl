@@ -1,0 +1,52 @@
+{"type": "node_started", "node_id": "n1", "timestamp_ms": 1773239219595, "payload": {}}
+{"type": "node_completed", "node_id": "n1", "timestamp_ms": 1773239219597, "payload": {"duration_ms": 1.997, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "n1", "timestamp_ms": 1773239219599, "payload": {}}
+{"type": "node_completed", "node_id": "n1", "timestamp_ms": 1773239219599, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "n1", "timestamp_ms": 1773239219604, "payload": {}}
+{"type": "node_completed", "node_id": "n1", "timestamp_ms": 1773239219605, "payload": {"duration_ms": 1.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "n1", "timestamp_ms": 1773239219609, "payload": {}}
+{"type": "node_completed", "node_id": "n1", "timestamp_ms": 1773239219610, "payload": {"duration_ms": 0.996, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "n1", "timestamp_ms": 1773239219698, "payload": {}}
+{"type": "node_completed", "node_id": "n1", "timestamp_ms": 1773239219698, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "ec_test", "timestamp_ms": 1773239219788, "payload": {}}
+{"type": "node_completed", "node_id": "ec_test", "timestamp_ms": 1773239219789, "payload": {"duration_ms": 1.003, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "ec_test", "timestamp_ms": 1773239219794, "payload": {}}
+{"type": "node_completed", "node_id": "ec_test", "timestamp_ms": 1773239219795, "payload": {"duration_ms": 1.001, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "ec_73536563", "timestamp_ms": 1773239219906, "payload": {}}
+{"type": "node_completed", "node_id": "ec_73536563", "timestamp_ms": 1773239219906, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 1}}}
+{"type": "node_started", "node_id": "ec_reverse_dep", "timestamp_ms": 1773239219916, "payload": {}}
+{"type": "node_completed", "node_id": "ec_reverse_dep", "timestamp_ms": 1773239219916, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "ec_existing", "timestamp_ms": 1773239219921, "payload": {}}
+{"type": "node_completed", "node_id": "ec_existing", "timestamp_ms": 1773239219922, "payload": {"duration_ms": 1.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "ec_final_output", "timestamp_ms": 1773239219932, "payload": {}}
+{"type": "node_completed", "node_id": "ec_final_output", "timestamp_ms": 1773239219932, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "ec_mapping_override", "timestamp_ms": 1773239219938, "payload": {}}
+{"type": "node_completed", "node_id": "ec_mapping_override", "timestamp_ms": 1773239219938, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "node_id": "ec_graph_only", "timestamp_ms": 1773239219943, "payload": {}}
+{"type": "node_completed", "node_id": "ec_graph_only", "timestamp_ms": 1773239219943, "payload": {"duration_ms": 0.0, "artifact_count": 0, "metrics": {"plugin_calls": 2, "provider_calls": 0, "executed_nodes": 0, "wave_count": 1}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069449, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069450, "payload": {"duration_ms": 1.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069453, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069453, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069457, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069458, "payload": {"duration_ms": 0.998, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069463, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069464, "payload": {"duration_ms": 1.001, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069546, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "n1", "timestamp_ms": 1773240069546, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_test", "timestamp_ms": 1773240069634, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_test", "timestamp_ms": 1773240069635, "payload": {"duration_ms": 0.996, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_test", "timestamp_ms": 1773240069639, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_test", "timestamp_ms": 1773240069640, "payload": {"duration_ms": 1.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_73536563", "timestamp_ms": 1773240069756, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_73536563", "timestamp_ms": 1773240069757, "payload": {"duration_ms": 1.003, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 1}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_reverse_dep", "timestamp_ms": 1773240069768, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_reverse_dep", "timestamp_ms": 1773240069769, "payload": {"duration_ms": 0.998, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_existing", "timestamp_ms": 1773240069773, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_existing", "timestamp_ms": 1773240069774, "payload": {"duration_ms": 1.0, "artifact_count": 1, "metrics": {"plugin_calls": 0, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_final_output", "timestamp_ms": 1773240069788, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_final_output", "timestamp_ms": 1773240069789, "payload": {"duration_ms": 1.001, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_mapping_override", "timestamp_ms": 1773240069794, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_mapping_override", "timestamp_ms": 1773240069794, "payload": {"duration_ms": 0.0, "artifact_count": 1, "metrics": {"plugin_calls": 2, "provider_calls": 1, "executed_nodes": 0, "wave_count": 2}}}
+{"type": "node_started", "execution_id": "runtime-default", "node_id": "ec_graph_only", "timestamp_ms": 1773240069800, "payload": {}}
+{"type": "node_completed", "execution_id": "runtime-default", "node_id": "ec_graph_only", "timestamp_ms": 1773240069800, "payload": {"duration_ms": 0.0, "artifact_count": 0, "metrics": {"plugin_calls": 2, "provider_calls": 0, "executed_nodes": 0, "wave_count": 1}}}

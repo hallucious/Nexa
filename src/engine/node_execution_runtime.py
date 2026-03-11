@@ -12,6 +12,8 @@ from src.engine.compiled_resource_graph import (
     CompiledResourceGraph,
     compile_execution_config_to_graph,
 )
+from src.engine.execution_event import ExecutionEvent
+from src.engine.execution_event_emitter import ExecutionEventEmitter
 from src.engine.final_output_resolver import (
     FinalOutputResolverError,
     resolve_final_output,
@@ -83,6 +85,7 @@ class NodeExecutionRuntime:
         post_plugins=None,
         observability_file: str = "OBSERVABILITY.jsonl",
         plugin_registry: Optional[Dict[str, Any]] = None,
+        event_emitter: Optional[ExecutionEventEmitter] = None,
     ):
         self.provider_executor = provider_executor
         self.pre_plugins = pre_plugins or []
@@ -90,6 +93,8 @@ class NodeExecutionRuntime:
         self.observability_file = Path(observability_file)
         self.plugin_registry = plugin_registry or {}
         self.metrics = RuntimeMetrics()
+        self.event_emitter = event_emitter or ExecutionEventEmitter()
+        self.execution_id: str = "runtime-default"
 
     # ------------------------------------------------------------------
     # Step152 runtime metrics helpers
@@ -100,6 +105,9 @@ class NodeExecutionRuntime:
 
     def record_wave(self) -> None:
         self.metrics.wave_count += 1
+
+    def set_execution_id(self, execution_id: str) -> None:
+        self.execution_id = execution_id
 
     def execute_plugin(self, plugin_id: str, **kwargs):
         if plugin_id not in self.plugin_registry:
@@ -119,6 +127,63 @@ class NodeExecutionRuntime:
 
     def get_metrics(self) -> Dict[str, int]:
         return self.metrics.to_dict()
+
+    def get_execution_events(self) -> List[ExecutionEvent]:
+        return self.event_emitter.get_events()
+
+    # ------------------------------------------------------------------
+    # Step158 event helpers
+    # ------------------------------------------------------------------
+
+    def _emit_event(
+        self,
+        event_type: str,
+        payload: Optional[Dict[str, Any]] = None,
+        *,
+        node_id: Optional[str] = None,
+    ) -> None:
+        self.event_emitter.emit(
+            ExecutionEvent.now(
+                event_type,
+                payload or {},
+                execution_id=self.execution_id,
+                node_id=node_id,
+            )
+        )
+
+    def _emit_artifact_preview_events(self, node_id: str, artifacts: List[Artifact]) -> None:
+        for artifact in artifacts:
+            if artifact.type != "preview":
+                continue
+
+            self._emit_event(
+                "artifact_preview",
+                {
+                    "artifact_name": artifact.name,
+                    "artifact_type": artifact.type,
+                    "data": artifact.data,
+                    "metadata": artifact.metadata,
+                },
+                node_id=node_id,
+            )
+
+    def _emit_progress_event_from_plugin_result(
+        self,
+        node_id: str,
+        plugin_id: str,
+        plugin_result: PluginResult,
+    ) -> None:
+        if not isinstance(plugin_result.trace, dict):
+            return
+
+        progress = plugin_result.trace.get("progress")
+        if not isinstance(progress, dict):
+            return
+
+        payload = {"plugin_id": plugin_id}
+        payload.update(progress)
+
+        self._emit_event("progress", payload, node_id=node_id)
 
     # ------------------------------------------------------------------
     # Existing runtime internals
@@ -468,6 +533,13 @@ class NodeExecutionRuntime:
             for artifact in plugin_result.artifacts:
                 if isinstance(artifact, Artifact):
                     artifacts.append(artifact)
+
+            self._emit_progress_event_from_plugin_result(
+                node_id=config.get("node_id") or config.get("config_id") or "execution_config",
+                plugin_id=plugin_id,
+                plugin_result=plugin_result,
+            )
+
             return plugin_result
 
         raise ValueError(f"Unsupported resource type: {resource.type}")
@@ -574,6 +646,9 @@ class NodeExecutionRuntime:
         artifacts: List[Artifact] = []
         flat_context = self._build_flat_context(state)
 
+        node_started_at = time.time()
+        self._emit_event("node_started", {}, node_id=node_id)
+
         self._measure("pre_plugins", lambda: self._record_pre_stage_trace(trace), trace)
 
         graph = self._compile_execution_plan(config)
@@ -605,6 +680,19 @@ class NodeExecutionRuntime:
             output=final_output,
             artifacts=artifacts,
             trace=trace,
+        )
+
+        self._emit_artifact_preview_events(node_id, artifacts)
+
+        duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
+        self._emit_event(
+            "node_completed",
+            {
+                "duration_ms": duration_ms,
+                "artifact_count": len(artifacts),
+                "metrics": self.get_metrics(),
+            },
+            node_id=node_id,
         )
 
         if runtime_config.get("write_observability", True):
