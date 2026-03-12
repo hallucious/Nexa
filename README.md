@@ -1,6 +1,6 @@
-# AI 7-Gate Pipeline (MVP Skeleton)
+# AI Execution Engine (MVP Skeleton)
 
-7-Gate 상태머신 기반 AI 협업 파이프라인 스켈레톤.
+
 
 ## Quick Start (WSL)
 ```bash
