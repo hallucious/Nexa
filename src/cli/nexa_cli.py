@@ -4,165 +4,121 @@ import sys
 import time
 from pathlib import Path
 
-from src.config.execution_config_loader import load_execution_configs
-from src.circuit.circuit_io import load_circuit
 from src.circuit.circuit_runner import CircuitRunner
-
-from src.platform.provider_registry import ProviderRegistry
-from src.platform.provider_executor import ProviderExecutor
-from src.platform.plugin_auto_loader import load_plugin_registry
-from src.engine.node_execution_runtime import NodeExecutionRuntime
-
+from src.engine.run_comparator import RunComparator
 
 OBSERVABILITY_FILE = Path("OBSERVABILITY.jsonl")
 
 
-def build_runtime(plugin_dir="plugins"):
-    provider_registry = ProviderRegistry()
-    provider_executor = ProviderExecutor(provider_registry)
-    plugin_registry = load_plugin_registry(plugin_dir)
+def build_parser():
+    parser = argparse.ArgumentParser("nexa")
+    sub = parser.add_subparsers(dest="command")
 
-    runtime = NodeExecutionRuntime(
-        provider_executor=provider_executor,
-        plugin_registry=plugin_registry,
-    )
+    run_parser = sub.add_parser("run")
+    run_parser.add_argument("circuit")
+    run_parser.add_argument("--configs")
+    run_parser.add_argument("--plugins")
+    run_parser.add_argument("--state")
+    run_parser.add_argument("--var", action="append", default=[])
+    run_parser.add_argument("--summary", action="store_true")
+    run_parser.add_argument("--out", "--output", dest="out")
+    run_parser.add_argument("--error-out")
+    run_parser.add_argument("--observability-out")
 
-    return runtime
+    compare_parser = sub.add_parser("compare")
+    compare_parser.add_argument("run_a")
+    compare_parser.add_argument("run_b")
+
+    return parser
 
 
-def load_cli_state(state_file=None, variables=None):
+def _parse_inline_vars(var_items):
     state = {}
 
-    if state_file:
-        with open(state_file, "r", encoding="utf-8") as f:
-            loaded = json.load(f)
-
-        if not isinstance(loaded, dict):
-            raise ValueError("CLI state file must contain a JSON object")
-
-        state.update(loaded)
-
-    for item in variables or []:
+    for item in var_items or []:
         if "=" not in item:
-            raise ValueError(f"invalid --var format: {item}")
-
+            raise ValueError("invalid --var format")
         key, value = item.split("=", 1)
-        key = key.strip()
-
-        if not key:
-            raise ValueError(f"invalid --var key: {item}")
-
         state[key] = value
 
     return state
 
 
-def save_output(result, out_file):
-    path = Path(out_file)
+def load_cli_state(state_path=None, var_items=None):
+    state = {}
 
-    if not path.parent.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
+    if state_path is not None:
+        with open(state_path, "r", encoding="utf-8") as f:
+            state.update(json.load(f))
 
+    state.update(_parse_inline_vars(var_items))
+    return state
+
+
+def save_output(payload, path):
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2, ensure_ascii=False)
+        json.dump(payload, f, indent=2, ensure_ascii=False)
 
 
-def build_execution_summary(
-    initial_state,
-    final_state,
-    started_at,
-    ended_at,
-    *,
-    circuit=None,
-    metrics=None,
-):
+def build_execution_summary(initial_state, final_state, started_at, ended_at):
     initial_keys = set(initial_state.keys())
     final_keys = set(final_state.keys())
     produced_keys = sorted(final_keys - initial_keys)
 
-    summary = {
-        "initial_state_keys": len(initial_state),
-        "final_state_keys": len(final_state),
+    return {
+        "initial_state_keys": len(initial_keys),
+        "final_state_keys": len(final_keys),
         "node_outputs": len(produced_keys),
         "produced_keys": produced_keys,
-        "execution_time_ms": round((ended_at - started_at) * 1000.0, 3),
+        "execution_time_ms": round((ended_at - started_at) * 1000, 1),
     }
-
-    # Step153: optional runtime metrics integration
-    if circuit is not None:
-        summary["node_count"] = len(circuit.get("nodes", []))
-
-    if metrics is not None:
-        summary["executed_nodes"] = metrics.get("executed_nodes", 0)
-        summary["wave_count"] = metrics.get("wave_count", 0)
-        summary["plugin_calls"] = metrics.get("plugin_calls", 0)
-        summary["provider_calls"] = metrics.get("provider_calls", 0)
-
-    return summary
-
-
-def print_summary(summary):
-    print("\n[execution summary]")
-    print(json.dumps(summary, indent=2, ensure_ascii=False))
 
 
 def build_error_payload(exc, args):
-    payload = {
+    return {
         "status": "error",
         "error_type": type(exc).__name__,
         "message": str(exc),
         "command": getattr(args, "command", None),
+        "circuit": getattr(args, "circuit", None),
+        "configs": getattr(args, "configs", None),
+        "plugins": getattr(args, "plugins", None),
     }
-
-    if hasattr(args, "circuit"):
-        payload["circuit"] = args.circuit
-    if hasattr(args, "configs"):
-        payload["configs"] = args.configs
-    if hasattr(args, "plugins"):
-        payload["plugins"] = args.plugins
-
-    return payload
 
 
 def print_error_payload(payload):
-    print("[nexa error]", file=sys.stderr)
-    print(json.dumps(payload, indent=2, ensure_ascii=False), file=sys.stderr)
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 def append_observability_record(record):
+    OBSERVABILITY_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(OBSERVABILITY_FILE, "a", encoding="utf-8") as f:
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+        f.write(json.dumps(record, ensure_ascii=False))
+        f.write("\n")
 
 
-def build_success_observability_record(
-    *,
-    args,
-    circuit,
-    metrics,
-    started_at,
-    ended_at,
-):
+def build_success_observability_record(args, circuit, metrics, started_at, ended_at):
     return {
-        "timestamp": round(ended_at, 6),
+        "timestamp": started_at,
         "command": getattr(args, "command", None),
         "circuit_path": getattr(args, "circuit", None),
         "circuit_id": circuit.get("id"),
         "status": "success",
         "success": True,
-        "execution_time_ms": round((ended_at - started_at) * 1000.0, 3),
+        "execution_time_ms": round((ended_at - started_at) * 1000, 1),
         "node_count": len(circuit.get("nodes", [])),
-        "executed_nodes": metrics.get("executed_nodes", 0),
-        "wave_count": metrics.get("wave_count", 0),
-        "plugin_calls": metrics.get("plugin_calls", 0),
-        "provider_calls": metrics.get("provider_calls", 0),
+        "executed_nodes": metrics.get("executed_nodes"),
+        "wave_count": metrics.get("wave_count"),
+        "plugin_calls": metrics.get("plugin_calls"),
+        "provider_calls": metrics.get("provider_calls"),
         "error_type": None,
         "error_message": None,
     }
 
 
-def build_failure_observability_record(*, args, exc):
+def build_failure_observability_record(args, exc):
     return {
-        "timestamp": round(time.perf_counter(), 6),
+        "timestamp": time.time(),
         "command": getattr(args, "command", None),
         "circuit_path": getattr(args, "circuit", None),
         "circuit_id": None,
@@ -180,127 +136,97 @@ def build_failure_observability_record(*, args, exc):
 
 
 def run_command(args):
-    execution_registry = load_execution_configs(args.configs)
-    circuit = load_circuit(args.circuit)
-    runtime = build_runtime(args.plugins)
-    input_state = load_cli_state(args.state, args.var)
+    runner = CircuitRunner()
 
-    runner = CircuitRunner(runtime, execution_registry)
+    initial_state = load_cli_state(args.state, args.var)
+    started_at = time.time()
 
-    started_at = time.perf_counter()
-    result = runner.execute(circuit, input_state)
-    ended_at = time.perf_counter()
+    result = runner.run(Path(args.circuit), state=initial_state)
 
-    metrics = runtime.get_metrics()
+    ended_at = time.time()
 
-    observability_record = build_success_observability_record(
+    final_state = result.get("state", {})
+    summary = build_execution_summary(
+        initial_state=initial_state,
+        final_state=final_state,
+        started_at=started_at,
+        ended_at=ended_at,
+    )
+
+    payload = {
+        "result": result,
+        "summary": summary,
+    }
+
+    if args.out:
+        save_output(payload, args.out)
+    else:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+    metrics = result.get("metrics", {})
+    circuit = result.get("circuit", {"id": None, "nodes": []})
+
+    record = build_success_observability_record(
         args=args,
         circuit=circuit,
         metrics=metrics,
         started_at=started_at,
         ended_at=ended_at,
     )
-    append_observability_record(observability_record)
+    append_observability_record(record)
 
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-
-    if args.out:
-        save_output(result, args.out)
-
-    if args.summary:
-        summary = build_execution_summary(
-            initial_state=input_state,
-            final_state=result,
-            started_at=started_at,
-            ended_at=ended_at,
-            circuit=circuit,
-            metrics=metrics,
-        )
-        print_summary(summary)
+    if args.observability_out:
+        save_output(record, args.observability_out)
 
     return 0
 
 
-def build_parser():
-    parser = argparse.ArgumentParser(
-        prog="nexa",
-        description="Nexa workflow engine CLI",
-    )
+def compare_command(args):
+    with open(args.run_a, "r", encoding="utf-8") as f:
+        run_a = json.load(f)
 
-    sub = parser.add_subparsers(dest="command")
+    with open(args.run_b, "r", encoding="utf-8") as f:
+        run_b = json.load(f)
 
-    run_parser = sub.add_parser("run")
+    result = RunComparator.compare(run_a, run_b)
 
-    run_parser.add_argument(
-        "circuit",
-        help=".nex circuit file",
-    )
+    print(result["diff_text"])
 
-    run_parser.add_argument(
-        "--configs",
-        default="configs",
-        help="execution config directory",
-    )
+    reg = result["regression_report"]
+    print()
+    print("Regression Summary")
+    print("------------------")
+    print("Highest Severity:", reg.highest_severity)
+    print("Total Regressions:", reg.total_regressions)
 
-    run_parser.add_argument(
-        "--plugins",
-        default="plugins",
-        help="plugin directory",
-    )
-
-    run_parser.add_argument(
-        "--state",
-        help="JSON file containing initial execution state",
-    )
-
-    run_parser.add_argument(
-        "--var",
-        action="append",
-        default=[],
-        help='inline state variable, e.g. --var question="What is Nexa?"',
-    )
-
-    run_parser.add_argument(
-        "--out",
-        help="write execution result to JSON file",
-    )
-
-    run_parser.add_argument(
-        "--summary",
-        action="store_true",
-        help="print execution summary and basic metrics",
-    )
-
-    run_parser.add_argument(
-        "--error-out",
-        help="write structured error payload to JSON file on failure",
-    )
-
-    return parser
+    return 0
 
 
 def main():
     parser = build_parser()
     args = parser.parse_args()
 
-    if args.command != "run":
-        parser.print_help()
-        return 0
+    if args.command == "run":
+        try:
+            return run_command(args)
+        except Exception as exc:
+            payload = build_error_payload(exc, args)
+            print_error_payload(payload)
 
-    try:
-        return run_command(args)
-    except Exception as exc:
-        payload = build_error_payload(exc, args)
-        print_error_payload(payload)
+            failure_record = build_failure_observability_record(args=args, exc=exc)
+            append_observability_record(failure_record)
 
-        failure_record = build_failure_observability_record(args=args, exc=exc)
-        append_observability_record(failure_record)
+            if getattr(args, "error_out", None):
+                save_output(payload, args.error_out)
 
-        if getattr(args, "error_out", None):
-            save_output(payload, args.error_out)
+            return 1
 
-        return 1
+    if args.command == "compare":
+        return compare_command(args)
+
+    parser.print_help()
+    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    sys.exit(main())
