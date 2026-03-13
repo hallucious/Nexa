@@ -71,7 +71,7 @@ Properties:
 - Has defined input schema.
 - Has defined output schema.
 - Executes synchronously (v1 constraint).
-- Follows Pre/Core/Post execution pipeline.
+- Follows Pre/Core/Post execution stages.
 - Must obey side-effect policy.
 
 A Node does not contain other Engines (v1 constraint).

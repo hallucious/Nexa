@@ -6,7 +6,7 @@ External plugin loading utilities.
 
 This module intentionally supports two shapes of "external plugin":
 
-1) Step42 legacy injections
+1) Step42 external plugin injections
    - repo_root/plugins/*.py
    - module may define register(providers=..., plugins=..., context=...)
    - collisions are rejected
@@ -199,7 +199,7 @@ def load_external_plugins(
 
 
 # -----------------------------------------------------------------------------
-# Step42: legacy register() loader
+# Step42: external plugin register() loader
 # -----------------------------------------------------------------------------
 
 def load_external_injections(
@@ -207,7 +207,7 @@ def load_external_injections(
     *,
     plugins_dir: Optional[Path] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any], Dict[str, Any]]:
-    """Load legacy external injections from *.py files.
+    """Load external plugin injections from *.py files.
 
     Returns: (context, providers, plugins)
 

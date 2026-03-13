@@ -34,7 +34,7 @@ Each node has:
 - `node_status`: `NOT_REACHED | SUCCESS | FAILURE | SKIPPED`
 - stage statuses: `pre_status`, `core_status`, `post_status` (`NOT_RUN | SUCCESS | FAILURE | SKIPPED`)
 
-Pipeline contract (v1):
+Execution stages contract (v1):
 
 1. `pre` runs first (if present)
 2. `core` runs next (if present), unless `pre` failed

@@ -31,7 +31,7 @@ PostHandler = Callable[[Dict[str, Any]], Dict[str, Any]]
 
 NodeHandler = CoreHandler  # backward-compatible alias
 
-def _is_pipeline_handler(obj: Any) -> bool:
+def _is_staged_handler(obj: Any) -> bool:
     return isinstance(obj, dict) and any(k in obj for k in ("pre", "core", "post"))
 
 @dataclass
@@ -87,11 +87,11 @@ class Engine:
 
 
     def _run_node(self, *, node_id: str, input_snapshot: Dict[str, Any]) -> NodeTrace:
-        """Run node using mandatory Pre → Core → Post pipeline.
+        """Run node using pre / core / post stages.
 
         Backward compatible:
         - If handlers[node_id] is a callable: treated as Core handler.
-        - If handlers[node_id] is a dict with pre/core/post: pipeline handler.
+        - If handlers[node_id] is a dict with pre/core/post: staged handler (pre/core/post dict).
         """
         handler_obj = self.handlers.get(node_id)
 
@@ -99,7 +99,10 @@ class Engine:
         # delegate execution to the runtime.
         if handler_obj is None and self.node_runtime is not None:
             try:
-                runtime_result = self.node_runtime.execute(node={"id": node_id}, state=dict(input_snapshot))
+                runtime_result = self.node_runtime.execute(
+                    node={"config_id": node_id, "node_id": node_id},
+                    state=dict(input_snapshot),
+                )
                 out = runtime_result.output
                 output_snapshot: Optional[Dict[str, Any]]
                 if isinstance(out, dict):
@@ -139,7 +142,7 @@ class Engine:
             core_fn = self._noop_handler
         elif callable(handler_obj):
             core_fn = handler_obj  # type: ignore[assignment]
-        elif _is_pipeline_handler(handler_obj):
+        elif _is_staged_handler(handler_obj):
             pre_fn = handler_obj.get("pre")
             core_fn = handler_obj.get("core") or self._noop_handler
             post_fn = handler_obj.get("post")

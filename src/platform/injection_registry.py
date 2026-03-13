@@ -242,7 +242,7 @@ class InjectionRegistry:
 
     @classmethod
     def from_gate_context(cls, ctx: Any) -> "InjectionRegistry":
-        """Build a registry from legacy GateContext dicts (providers/plugins/context).
+        """Build a registry from injection dicts (providers/plugins/context).
 
         This is a compatibility bridge so existing tests and call sites keep working.
         """

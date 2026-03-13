@@ -7,7 +7,7 @@ Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)
 ------------------------------------------
 
 요약:
-- Circuit Runtime Adapter: conditional edge(우선순위) + trace wiring + node execution pipeline 결합
+- Circuit Runtime Adapter: conditional edge(우선순위) + trace wiring + node execution stages 결합
 - CT-TRACE v1.0.0: node enter/exit, circuit finish, conditional edge 선택/조건 결과 기록
 - NODE-EXEC v1.0.0: Pre/Core/Post 파이프라인 + AI는 Core-only
 - AI-PROVIDER v1.0.0: ProviderResult + reason_code 정규화
@@ -59,16 +59,16 @@ Step122: ExecutionConfig Registry Loader (완료)
 - 전체 pytest 통과 유지
 
 ------------------------------------------
-Step123: NodeExecutionRuntime Slot Pipeline (완료)
+Step123: NodeExecutionRuntime Slot Stages (완료)
 ------------------------------------------
 
 목표:
-- NodeExecutionRuntime이 ExecutionConfig 스타일 입력을 받아 slot pipeline을 실행
+- NodeExecutionRuntime이 ExecutionConfig 스타일 입력을 받아 slot stages를 실행
 - legacy Artifact / NodeResult / NodeTrace 계약 유지
 
 구현:
 - src/engine/node_execution_runtime.py
-- tests/test_step123_nodeslot_pipeline_contract.py
+- tests/test_step123_nodeslot_stages_contract.py
 
 실행 슬롯:
 1. pre_plugins

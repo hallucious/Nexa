@@ -2,6 +2,37 @@
 
 Version: 1.4.2
 
+────────────────
+Architecture Constitution
+────────────────
+
+Nexa는 Execution Engine 기반 아키텍처를 따른다.
+
+Nexa의 핵심 설계 원칙은
+docs/FOUNDATION_RULES.md
+문서에 정의된 Architecture Constitution을 따른다.
+
+이 문서는 Nexa의 최상위 설계 규칙을 정의한다.
+
+다음 규칙은 변경될 수 없는 시스템 invariant이다.
+
+1. Nexa는 workflow tool이 아니라 execution engine이다.
+2. Node는 유일한 실행 단위이다.
+3. Circuit은 실행을 수행하지 않고 연결만 담당한다.
+4. execution은 dependency 기반이어야 한다.
+5. artifact는 append-only immutable 구조이다.
+6. deterministic execution을 유지해야 한다.
+7. plugin write 영역은 plugin.<plugin_id>.* 로 제한된다.
+8. working context schema는 고정된 key 구조를 따른다.
+9. contract-driven architecture를 유지한다.
+10. spec-version synchronization을 유지한다.
+
+이 규칙을 위반하는 구현은 Nexa 아키텍처 위반으로 간주된다.
+
+모든 구현과 리팩토링은
+Architecture Constitution을 기준으로 검증되어야 한다.
+
+
 ## 1. Foundation Layer (Canonical Architecture Memory)
 
 본 프로젝트의 기초 설계 문서는 다음 문서에 의해 계층적으로 관리된다:
@@ -70,7 +101,7 @@ Engine
 → ExecutionConfigRegistry
 → ExecutionConfig Schema Validation
 → ExecutionConfig Hash
-→ NodeExecutionRuntime Slot Pipeline
+→ NodeExecutionRuntime Slot Stages
 
 ## 4. ExecutionConfig Hash Identity (Step121)
 

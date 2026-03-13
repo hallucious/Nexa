@@ -7,7 +7,7 @@ from typing import Any, Protocol
 class GateContextLike(Protocol):
     """Minimal context surface needed by platform plugins.
 
-    This protocol is used to decouple platform plugins from legacy pipeline GateContext.
+    This protocol decouples platform plugins from execution context dependencies.
     """
 
     run_dir: str

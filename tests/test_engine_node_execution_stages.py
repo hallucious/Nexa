@@ -5,7 +5,7 @@ from src.engine.model import Channel, FlowRule
 from src.engine.types import FlowPolicy, NodeStatus, StageStatus
 
 
-def test_pipeline_pre_failure_skips_core_but_runs_post_and_fails_node():
+def test_stages_pre_failure_skips_core_but_runs_post_and_fails_node():
     def pre(_inp):
         raise RuntimeError("bad input")
 
@@ -34,7 +34,7 @@ def test_pipeline_pre_failure_skips_core_but_runs_post_and_fails_node():
     assert core_ran["v"] is False
 
 
-def test_pipeline_post_can_override_output_snapshot():
+def test_stages_post_can_override_output_snapshot():
     def core(_inp):
         return {"core": 1}
 
@@ -53,7 +53,7 @@ def test_pipeline_post_can_override_output_snapshot():
     assert trace.nodes["n1"].output_snapshot == {"final": 2}
 
 
-def test_flowpolicy_any_success_still_gates_execution_with_pipeline_handlers():
+def test_flowpolicy_any_success_still_gates_execution_with_staged_handlers():
     def h1(_):
         return {"ok": True}
 

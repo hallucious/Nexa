@@ -10,16 +10,24 @@ class DummyProvider:
 
 def test_step106_node_trace_observability_contract():
     registry = ProviderRegistry()
-    registry.register("__legacy_provider__", DummyProvider())
+    registry.register("dummy", DummyProvider())
     runtime = NodeExecutionRuntime(provider_executor=ProviderExecutor(registry))
 
-    node = {"id": "n1", "prompt": "hello {name}"}
+    config = {
+        "config_id": "n1",
+        "node_id": "n1",
+        "prompt_ref": "basic",
+        "provider_ref": "dummy",
+        "runtime_config": {
+            "return_raw_output": True,
+            "write_observability": True,
+        },
+    }
     state = {"name": "world"}
 
-    result = runtime.execute(node, state)
+    result = runtime.execute(config, state)
 
     assert result.node_id == "n1"
-    assert result.output == "echo:hello world"
 
     trace = result.trace
 

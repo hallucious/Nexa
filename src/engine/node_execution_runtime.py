@@ -73,9 +73,7 @@ class NodeExecutionRuntime:
     3. execute graph through GraphScheduler
     4. resolve deterministic final output
 
-    Compatibility note:
-    - legacy pre/post plugin execution path is removed
-    - but pre/post trace markers are preserved for existing observability contracts
+    Note: pre/post trace markers are preserved for existing observability contracts.
     """
 
     def __init__(
@@ -186,7 +184,7 @@ class NodeExecutionRuntime:
         self._emit_event("progress", payload, node_id=node_id)
 
     # ------------------------------------------------------------------
-    # Existing runtime internals
+    # Execution internals
     # ------------------------------------------------------------------
 
     def _measure(self, name: str, fn, trace: NodeTrace):
@@ -242,9 +240,7 @@ class NodeExecutionRuntime:
             payload["structured"] = result.structured
         return payload
 
-    def _render_prompt(self, prompt_ref: str, context: Dict[str, Any], *, render_mode: str = "step123") -> str:
-        if render_mode == "legacy_format":
-            return prompt_ref.format(**context) if prompt_ref else ""
+    def _render_prompt(self, prompt_ref: str, context: Dict[str, Any]) -> str:
         return f"{prompt_ref}:{context}"
 
     def _run_validation(self, rule: str, context: Dict[str, Any]):
@@ -276,44 +272,13 @@ class NodeExecutionRuntime:
 
         raise TypeError(f"node must be dict-like or dataclass-backed object, got {type(node).__name__}")
 
-    def _looks_like_execution_config(self, node: Dict[str, Any]) -> bool:
-        return (
-            "config_id" in node
-            or "execution_config_ref" in node
-            or "prompt_ref" in node
-            or "provider_ref" in node
-            or "prompt" in node
-            or "provider" in node
-            or "plugins" in node
-            or "validation_rules" in node
-            or "output_mapping" in node
-        ) and "id" not in node
-
     def _coerce_node_to_execution_plan(self, normalized_node: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-        if self._looks_like_execution_config(normalized_node):
-            plan = dict(normalized_node)
-            runtime_config = dict(plan.get("runtime_config") or {})
-            runtime_config.pop("legacy_plugin_mode", None)
-            runtime_config.pop("emit_primary_artifact", None)
-            runtime_config.setdefault("write_observability", True)
-            plan["runtime_config"] = runtime_config
-            return plan, {}
-
-        node_id = normalized_node.get("id", "unknown")
-        plan = {
-            "config_id": f"legacy.{node_id}",
-            "node_id": node_id,
-            "prompt_ref": normalized_node.get("prompt", ""),
-            "provider_ref": "__legacy_provider__",
-            "validation_rules": [],
-            "output_mapping": {},
-            "runtime_config": {
-                "prompt_render_mode": "legacy_format",
-                "return_raw_output": True,
-                "write_observability": True,
-                "legacy_node_id": node_id,
-            },
-        }
+        """Normalize any execution config dict into a canonical execution plan."""
+        plan = dict(normalized_node)
+        runtime_config = dict(plan.get("runtime_config") or {})
+        runtime_config.pop("emit_primary_artifact", None)
+        runtime_config.setdefault("write_observability", True)
+        plan["runtime_config"] = runtime_config
         return plan, {}
 
     def _build_flat_context(self, state: Dict[str, Any]) -> Dict[str, Any]:
@@ -382,7 +347,12 @@ class NodeExecutionRuntime:
 
     def _compile_execution_plan(self, config: Dict[str, Any]) -> Optional[CompiledResourceGraph]:
         normalized = self._normalize_config_for_compilation(config)
-        if not normalized:
+        has_resource = (
+            "prompt" in normalized
+            or "provider" in normalized
+            or bool(normalized.get("plugins"))
+        )
+        if not has_resource:
             return None
         return compile_execution_config_to_graph(normalized)
 
@@ -465,11 +435,7 @@ class NodeExecutionRuntime:
 
             def render_stage():
                 trace.events.append("prompt_render")
-                rendered = self._render_prompt(
-                    str(prompt_ref or ""),
-                    compat_context,
-                    render_mode=config.get("runtime_config", {}).get("prompt_render_mode", "step123"),
-                )
+                rendered = self._render_prompt(str(prompt_ref or ""), compat_context)
                 write_key = next(iter(resource.writes))
                 flat_context[write_key] = rendered
                 return rendered
@@ -637,8 +603,7 @@ class NodeExecutionRuntime:
     ) -> NodeResult:
         runtime_config = dict(config.get("runtime_config") or {})
         node_id = (
-            runtime_config.get("legacy_node_id")
-            or config.get("node_id")
+            config.get("node_id")
             or config.get("config_id")
             or "execution_config"
         )

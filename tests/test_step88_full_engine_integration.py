@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 
 from src.circuit.model import CircuitModel, NodeModel, EdgeModel
 from src.circuit.runtime_adapter import execute_circuit
-from src.circuit.node_execution import run_node_pipeline
+from src.circuit.node_execution import run_node_stages
 
 from src.platform.plugin_version_registry import (
     PluginEntry,
@@ -157,7 +157,7 @@ def test_step88_symbolic_full_integration_proof():
             out["tool_result"] = result
             return out
 
-        return run_node_pipeline(
+        return run_node_stages(
             node_id=node_id,
             node_raw=node_raw,
             input_payload={},

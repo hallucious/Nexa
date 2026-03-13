@@ -8,7 +8,7 @@ class FakeProvider:
         return {"answer": "ok", "prompt": request.prompt}
 
 
-def test_step123_pipeline_basic(tmp_path):
+def test_step123_stages_basic(tmp_path):
     registry = ProviderRegistry()
     registry.register("fake", FakeProvider())
     runtime = NodeExecutionRuntime(

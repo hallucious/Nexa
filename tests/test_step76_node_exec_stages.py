@@ -11,7 +11,7 @@ def make_model_seq():
     return CircuitModel(circuit_id="c1", nodes=nodes, edges=edges, entry_node_id="n1", raw={})
 
 
-def test_pipeline_handler_runs_pre_core_post_in_order_and_merges_patches():
+def test_staged_handler_runs_pre_core_post_in_order_and_merges_patches():
     m = make_model_seq()
     order = []
 
@@ -34,7 +34,7 @@ def test_pipeline_handler_runs_pre_core_post_in_order_and_merges_patches():
     handler = {"pre": pre, "core": core, "post": post}
     res = execute_circuit(m, handler)
     assert res == {"c": 2, "q": 3}
-    # first node runs pipeline; second node has no edges from n2 so execution ends after n2.
+    # first node runs stages; second node has no edges from n2 so execution ends after n2.
     # Our handler runs for both nodes, but core for n2 will receive previous result.
     # For simplicity, check that we saw pre/core/post at least once for n1.
     assert order[0][0] == "pre"

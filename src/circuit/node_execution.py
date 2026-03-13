@@ -16,10 +16,10 @@ PreHandler = Callable[[str, Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
 CoreHandler = Callable[[str, Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
 PostHandler = Callable[[str, Dict[str, Any], Dict[str, Any]], Dict[str, Any]]
 
-PipelineHandler = Dict[str, Any]  # keys: pre/core/post
+StagedHandler = Dict[str, Any]  # keys: pre/core/post
 
 
-def is_pipeline_handler(obj: Any) -> bool:
+def is_staged_handler(obj: Any) -> bool:
     return isinstance(obj, dict) and any(k in obj for k in ("pre", "core", "post"))
 
 
@@ -101,12 +101,12 @@ def _obs_ctx(input_payload: Dict[str, Any], node_raw: Dict[str, Any]) -> Optiona
     if isinstance(ctx, dict):
         return ctx
     return None
-def run_node_pipeline(
+def run_node_stages(
     *,
     node_id: str,
     node_raw: Dict[str, Any],
     input_payload: Dict[str, Any],
-    handler: Union[CoreHandler, PipelineHandler],
+    handler: Union[CoreHandler, StagedHandler],
     prompt_registry: Optional[PromptRegistryLike] = None,
 ) -> Dict[str, Any]:
     pre_fn: Optional[PreHandler] = None
@@ -115,7 +115,7 @@ def run_node_pipeline(
 
     if callable(handler):
         core_fn = handler  # type: ignore[assignment]
-    elif is_pipeline_handler(handler):
+    elif is_staged_handler(handler):
         pre_fn = handler.get("pre")
         core_fn = handler.get("core")
         post_fn = handler.get("post")
@@ -142,7 +142,7 @@ def run_node_pipeline(
 
     # CORE
     if core_fn is None:
-        raise ValueError("Pipeline handler missing 'core'")
+        raise ValueError("Staged handler missing 'core'")
     core_output = core_fn(node_id, node_raw, dict(core_input))
 
     if obs_enabled and ctx is not None:

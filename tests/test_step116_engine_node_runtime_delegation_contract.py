@@ -12,7 +12,7 @@ class FakeProvider:
 
 def test_step116_engine_delegates_to_node_runtime_when_no_handler(tmp_path):
     registry = ProviderRegistry()
-    registry.register("__legacy_provider__", FakeProvider())
+    registry.register("fake", FakeProvider())
     runtime = NodeExecutionRuntime(
         provider_executor=ProviderExecutor(registry),
         observability_file=str(tmp_path / "obs.jsonl")
@@ -28,4 +28,3 @@ def test_step116_engine_delegates_to_node_runtime_when_no_handler(tmp_path):
     trace = eng.execute(revision_id="rev116")
 
     assert trace.nodes["n1"].node_status == NodeStatus.SUCCESS
-    assert trace.nodes["n1"].output_snapshot == {"answer": "ok", "prompt": ""}

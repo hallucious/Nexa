@@ -57,7 +57,7 @@ Conventions
   - CH:  Channel / schema compatibility rules
   - FLOW: Flow/control rules
   - NODE: Node contract rules
-  - PIPE: Pre/Core/Post pipeline rules
+  - PIPE: Pre/Core/Post stages rules
   - SIDE: Side-effect policy rules
   - DET: Determinism/reproducibility rules
   - TRACE: Trace model rules (validation-time structural requirements)
@@ -110,7 +110,7 @@ NODE Rules (Unified Node Abstraction)
 - NODE-006 (ERROR) Node Returns Unstructured Result / Silent Failure Policy Violation
 
 ----------------------------------------------------------------------
-PIPE Rules (Pre/Core/Post Pipeline)
+STAGE Rules (Pre/Core/Post Stages)
 - PIPE-001 (ERROR) Pre Stage Missing/Bypassed
 - PIPE-002 (ERROR) Core Stage Missing
 - PIPE-003 (ERROR) Post Stage Missing/Bypassed

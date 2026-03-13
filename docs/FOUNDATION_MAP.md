@@ -105,7 +105,6 @@ Status: Canonical Foundation Index (Architecture Memory)
 |---|---|---:|---|---|
 | docs_specs_circuit_trace_contract | docs/specs/history/docs_specs_circuit_trace_contract.md | Partial | circuit trace history / contract lineage | src/circuit/trace.py |
 | node_execution_pipeline | docs/specs/history/node_execution_pipeline.md | Partial | node execution pipeline history | src/engine/* |
-| pipeline_test_migration_plan | docs/specs/history/pipeline_test_migration_plan.md | Planned | legacy test migration 계획 | tests/* |
 | legacy_removal_plan | docs/specs/history/legacy_removal_plan.md | Planned | legacy 제거 계획 | migration / cleanup |
 | Observability & Metrics | docs/specs/policies/Observability & Metrics.md | Partial | observability 방향 문서 | observability |
 | observability_metrics | docs/specs/policies/observability_metrics.md | Partial | observability metrics 계약 | src/utils/observability.py |

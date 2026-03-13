@@ -1,7 +1,7 @@
 from typing import Callable, Dict, Any, Optional, Union
 from .model import CircuitModel
 from .condition_eval import evaluate
-from .node_execution import run_node_pipeline, is_pipeline_handler
+from .node_execution import run_node_stages, is_staged_handler
 from src.utils.observability import is_observability_enabled, make_event, emit_event
 
 # --- CT-TRACE v1.0.0: minimal integration (signature unchanged) ---
@@ -59,8 +59,8 @@ def execute_circuit(model: CircuitModel, engine_executor: Union[Callable[[str, D
             emit_event(make_event(run_id=run_id, circuit_id=model.circuit_id, node_id=current_id, stage=None, event='node.enter'))
 
         node = model.nodes[current_id]
-        if is_pipeline_handler(engine_executor):
-            last_result = run_node_pipeline(
+        if is_staged_handler(engine_executor):
+            last_result = run_node_stages(
                 node_id=current_id,
                 node_raw=node.raw,
                 input_payload=last_result,

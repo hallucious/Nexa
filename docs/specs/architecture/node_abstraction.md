@@ -49,7 +49,7 @@ All Engine execution depends on this abstraction.
 A Node is the smallest executable unit in an Engine.
 
 All **domain** behavior must be encapsulated inside Nodes.
-Platform orchestration (execution scheduling, dependency injection, registry governance, trace/observability pipeline) lives in the Engine/Execution layer.
+Platform orchestration (execution scheduling, dependency injection, registry governance, trace/observability stages) lives in the Engine/Execution layer.
 
 ----------------------------------------------------------------------
 
@@ -89,13 +89,13 @@ All Nodes must execute:
 
 - Synchronously
 - Deterministically by default
-- Within Pre/Core/Post pipeline
+- Within Pre/Core/Post stages
 
 Async execution is not allowed in v1.
 
 ----------------------------------------------------------------------
 
-5. Pre/Core/Post Pipeline
+5. Pre/Core/Post Stages
 
 Every Node execution must follow:
 

@@ -2,7 +2,7 @@
 Engine CLI - Hyper-AI
 
 Phase B:
-- Provide a stable Engine-native CLI surface without legacy imports.
+- Provide a stable Engine-native CLI surface.
 - Keep backward-stable contract: running with no args returns 0 and prints a placeholder.
 - Allow opt-in real Engine execution when required engine wiring args are provided.
 """

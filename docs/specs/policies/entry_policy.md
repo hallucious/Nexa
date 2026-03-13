@@ -53,7 +53,7 @@ The Entry Node must:
 
 - Define an explicit input schema.
 - Define an explicit output schema.
-- Follow full Pre/Core/Post execution pipeline.
+- Follow full Pre/Core/Post execution stages.
 - Obey side-effect policy.
 - Obey determinism policy.
 

@@ -12,16 +12,24 @@ def test_step108_artifact_schema(tmp_path):
     obs = tmp_path / "OBSERVABILITY.jsonl"
 
     registry = ProviderRegistry()
-    registry.register("__legacy_provider__", DummyProvider())
+    registry.register("dummy", DummyProvider())
     runtime = NodeExecutionRuntime(
         provider_executor=ProviderExecutor(registry),
         observability_file=str(obs),
     )
 
-    node = {"id": "n1", "prompt": "hello {name}"}
+    config = {
+        "config_id": "n1",
+        "node_id": "n1",
+        "provider_ref": "dummy",
+        "runtime_config": {
+            "return_raw_output": True,
+            "write_observability": True,
+        },
+    }
     state = {"name": "world"}
 
-    result = runtime.execute(node, state)
+    result = runtime.execute(config, state)
 
     assert result.node_id == "n1"
     assert len(result.artifacts) == 1

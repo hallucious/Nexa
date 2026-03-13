@@ -1,6 +1,6 @@
 Spec ID: legacy_removal_plan
 Version: 1.0.0
-Status: Partial
+Status: Complete
 Category: history
 Depends On:
 

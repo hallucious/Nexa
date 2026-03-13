@@ -9,7 +9,7 @@ from .types import NodeResult, NodeStatus, StageResult, StageStatus
 class Node(Protocol):
     """Unified Node abstraction (v1).
 
-    Contract reference: docs/specs/node_abstraction.md, node_execution_pipeline.md.
+    Contract reference: docs/specs/node_abstraction.md, docs/specs/history/node_execution_pipeline.md.
     This is an interface only. Runtime orchestration lives in Engine/Execution layer.
     """
 
