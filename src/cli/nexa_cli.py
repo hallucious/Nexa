@@ -29,6 +29,8 @@ def build_parser():
     compare_parser.add_argument("run_a")
     compare_parser.add_argument("run_b")
 
+    sub.add_parser("info")
+
     return parser
 
 
@@ -135,6 +137,48 @@ def build_failure_observability_record(args, exc):
     }
 
 
+def get_system_info() -> dict:
+    """Collect Nexa system information for the info command."""
+    # Python version (major.minor)
+    vi = sys.version_info
+    python_version = f"{vi.major}.{vi.minor}"
+
+    # Nexa root: src/cli/nexa_cli.py → ../../.. → project root
+    nexa_root = Path(__file__).resolve().parent.parent.parent
+
+    # Installed providers: count *_provider.py files under src/providers/
+    providers_dir = nexa_root / "src" / "providers"
+    if providers_dir.is_dir():
+        providers_installed = len(list(providers_dir.glob("*_provider.py")))
+    else:
+        providers_installed = 0
+
+    # Registered plugins: use plugin registry
+    from src.platform.plugin_registry import ids as plugin_ids
+    plugins_registered = len(plugin_ids())
+
+    return {
+        "python_version": python_version,
+        "nexa_root": str(nexa_root),
+        "providers_installed": providers_installed,
+        "plugins_registered": plugins_registered,
+    }
+
+
+def info_command() -> int:
+    """Print Nexa system information."""
+    info = get_system_info()
+
+    print("Nexa System Info")
+    print("----------------")
+    print(f"Python Version: {info['python_version']}")
+    print(f"Nexa Root Path: {info['nexa_root']}")
+    print(f"Providers Installed: {info['providers_installed']}")
+    print(f"Plugins Registered: {info['plugins_registered']}")
+
+    return 0
+
+
 def run_command(args):
     runner = CircuitRunner()
 
@@ -223,6 +267,9 @@ def main():
 
     if args.command == "compare":
         return compare_command(args)
+
+    if args.command == "info":
+        return info_command()
 
     parser.print_help()
     return 0

@@ -4,100 +4,152 @@ build_coding_kit.py
 
 Purpose
 -------
-Automatically generate the three files required for Claude coding tasks:
+Generate the three files required for Claude coding tasks:
 
-1. Nexa.zip
-2. Nexa_AI_CONTEXT.md
-3. task_prompt.txt
+1. build/Nexa.zip
+2. build/Nexa_AI_CONTEXT.md
+3. build/task_prompt.txt
 
-Output directory:
-build/
+Design Rule
+-----------
+Nexa_AI_CONTEXT.md is a merged document of the static context files
+inside tools/nexa_coding_kit.
+
+IMPORTANT:
+task_prompt.md is intentionally EXCLUDED from the merged context.
+It is copied separately as task_prompt.txt because it represents the
+dynamic task instruction for the current coding request.
 """
 
-from pathlib import Path
-import zipfile
+from __future__ import annotations
+
 import shutil
+import zipfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Directories included in Nexa.zip
 SRC_DIRS = [
     "src",
     "tests",
     "docs",
     "examples",
-    "scripts"
+    "scripts",
 ]
 
-# Individual files included
 FILES = [
-    "requirements.txt"
+    "requirements.txt",
 ]
 
-CODING_KIT_DIR = ROOT / "tools" / "coding_kit"
+CODING_KIT_DIR = ROOT / "tools" / "nexa_coding_kit"
 BUILD_DIR = ROOT / "build"
 
+CONTEXT_FILES = [
+    "architecture_constitution.md",
+    "execution_invariants.md",
+    "refactor_safety_scanner.md",
+    "implementation_done_checklist.md",
+    "output_contract.md",
+    "repo_map.md",
+    "runtime_flow.md",
+    "module_map.md",
+    "decision_log.md",
+    "test_map.md",
+    "file_manifest.md",
+]
 
-def build_zip():
+
+def build_zip() -> Path:
     zip_path = BUILD_DIR / "Nexa.zip"
 
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-
-        for d in SRC_DIRS:
-            path = ROOT / d
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for dirname in SRC_DIRS:
+            path = ROOT / dirname
             if not path.exists():
                 continue
 
             for file in path.rglob("*"):
                 if file.is_file():
-                    z.write(file, file.relative_to(ROOT))
+                    zf.write(file, file.relative_to(ROOT))
 
-        for f in FILES:
-            file = ROOT / f
+        for filename in FILES:
+            file = ROOT / filename
             if file.exists():
-                z.write(file, file.relative_to(ROOT))
+                zf.write(file, file.relative_to(ROOT))
+
+    return zip_path
 
 
-def build_context():
+def build_context() -> Path:
     output = BUILD_DIR / "Nexa_AI_CONTEXT.md"
 
-    parts = []
+    if not CODING_KIT_DIR.exists():
+        raise FileNotFoundError(f"Coding kit directory not found: {CODING_KIT_DIR}")
 
-    for file in sorted(CODING_KIT_DIR.glob("*")):
+    parts: list[str] = [
+        "# NEXA_AI_CONTEXT.md\n",
+        "Merged static context for Nexa coding agents.\n",
+        "Generated from tools/nexa_coding_kit/*.md (excluding task_prompt).\n",
+    ]
 
-        if file.name == "task_prompt_template.txt":
+    included = 0
+
+    for name in CONTEXT_FILES:
+        file = CODING_KIT_DIR / name
+        if not file.exists():
             continue
 
-        text = file.read_text(encoding="utf-8")
+        text = file.read_text(encoding="utf-8").strip()
+        if not text:
+            continue
 
-        header = f"\n\n# FILE: {file.name}\n\n"
-        parts.append(header + text)
+        parts.append(f"\n\n---\n\n# FILE: {name}\n\n{text}\n")
+        included += 1
 
-    output.write_text("\n".join(parts), encoding="utf-8")
-
-
-def build_prompt():
-    template = CODING_KIT_DIR / "task_prompt_template.txt"
-    output = BUILD_DIR / "task_prompt.txt"
-
-    if template.exists():
-        shutil.copy(template, output)
-    else:
-        output.write_text(
-            "Follow Nexa architecture rules and implement the requested task.",
-            encoding="utf-8"
+    if included == 0:
+        raise RuntimeError(
+            f"No context files were merged. Check contents of: {CODING_KIT_DIR}"
         )
 
+    output.write_text("".join(parts), encoding="utf-8")
 
-def main():
+    return output
+
+
+def build_prompt() -> Path:
+    candidates = [
+        CODING_KIT_DIR / "task_prompt.txt",
+        CODING_KIT_DIR / "task_prompt.md",
+        CODING_KIT_DIR / "task_prompt_template.txt",
+        CODING_KIT_DIR / "task_prompt_template.md",
+    ]
+
+    output = BUILD_DIR / "task_prompt.txt"
+
+    for candidate in candidates:
+        if candidate.exists():
+            shutil.copy(candidate, output)
+            return output
+
+    output.write_text(
+        "Follow Nexa architecture rules and implement the requested task.\n",
+        encoding="utf-8",
+    )
+
+    return output
+
+
+def main() -> None:
     BUILD_DIR.mkdir(exist_ok=True)
 
-    build_zip()
-    build_context()
-    build_prompt()
+    zip_path = build_zip()
+    context_path = build_context()
+    prompt_path = build_prompt()
 
     print("Nexa Coding Kit build complete.")
-    print("Output directory:", BUILD_DIR)
+    print(f"Nexa.zip: {zip_path}")
+    print(f"Nexa_AI_CONTEXT.md: {context_path}")
+    print(f"task_prompt.txt: {prompt_path}")
 
 
 if __name__ == "__main__":
