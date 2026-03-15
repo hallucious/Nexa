@@ -50,11 +50,11 @@ Status: Canonical Foundation Index (Architecture Memory)
 | 문서 | 경로 | 상태 | 설명 | 관련 영역 |
 |---|---|---:|---|---|
 | Strategic Direction & Evolution Policy | docs/STRATEGY.md | Partial | 프로젝트 장기 방향과 진화 정책 | 전략 / 진화 |
-| architectural Doctrine | docs/specs/foundation/architectural Doctrine.md | Partial | 상위 아키텍처 원칙과 doctrine | 전체 구조 |
+| architectural_doctrine | docs/specs/foundation/architectural_doctrine.md | Partial | 상위 아키텍처 원칙과 doctrine | 전체 구조 |
 | terminology | docs/specs/foundation/terminology.md | Active | 공식 용어집 | 문서 / 코드 / UX |
-| runtime Responsibility | docs/specs/foundation/runtime Responsibility.md | Partial | 런타임 책임 분리 원칙 | 엔진 / 런타임 |
-| definition Registry | docs/specs/foundation/definition Registry.md | Partial | 정의 레지스트리 개념 | registry / loading |
-| definition Versioning & Migration Strategy | docs/specs/foundation/definition Versioning & Migration Strategy.md | Partial | 정의 버전 및 마이그레이션 전략 | versioning / migration |
+| runtime_responsibility | docs/specs/foundation/runtime_responsibility.md | Partial | 런타임 책임 분리 원칙 | 엔진 / 런타임 |
+| definition_registry | docs/specs/foundation/definition_registry.md | Partial | 정의 레지스트리 개념 | registry / loading |
+| definition_versioning_and_migration_strategy | docs/specs/foundation/definition_versioning_and_migration_strategy.md | Partial | 정의 버전 및 마이그레이션 전략 | versioning / migration |
 | determinism_policy | docs/specs/policies/determinism_policy.md | Partial | 결정성 및 재현성 정책 | 실행 / trace |
 | engine_constraints | docs/specs/policies/engine_constraints.md | Partial | 엔진 제약 조건 | 엔진 코어 |
 | entry_policy | docs/specs/policies/entry_policy.md | Partial | 엔트리 정책 | bootstrap / entry |
@@ -105,13 +105,14 @@ Status: Canonical Foundation Index (Architecture Memory)
 |---|---|---:|---|---|
 | docs_specs_circuit_trace_contract | docs/specs/history/docs_specs_circuit_trace_contract.md | Partial | circuit trace history / contract lineage | src/circuit/trace.py |
 | node_execution_pipeline | docs/specs/history/node_execution_pipeline.md | Partial | node execution pipeline history | src/engine/* |
-| legacy_removal_plan | docs/specs/history/legacy_removal_plan.md | Planned | legacy 제거 계획 | migration / cleanup |
-| Observability & Metrics | docs/specs/policies/Observability & Metrics.md | Partial | observability 방향 문서 | observability |
+| pipeline_test_migration_plan | docs/specs/history/pipeline_test_migration_plan.md | Partial | legacy test migration 계획 | tests/* |
+| legacy_removal_plan | docs/specs/history/legacy_removal_plan.md | Partial | legacy 제거 계획 | migration / cleanup |
+| observability_and_metrics | docs/specs/policies/observability_and_metrics.md | Partial | observability 방향 문서 | observability |
 | observability_metrics | docs/specs/policies/observability_metrics.md | Partial | observability metrics 계약 | src/utils/observability.py |
-| Policy Engine | docs/specs/policies/Policy Engine.md | Planned | policy engine 설계 | 추후 |
+| policy_engine | docs/specs/policies/policy_engine.md | Planned | policy engine 설계 | 추후 |
 | safe_replay_contract | docs/specs/policies/safe_replay_contract.md | Partial | safe replay 계약 | src/engine/safe_replay.py |
 | side_effect_policy | docs/specs/policies/side_effect_policy.md | Partial | side effect 정책 | runtime / IO |
-| Static Validation Rules | docs/specs/policies/Static Validation Rules.md | Partial | static validation rules 설계 | src/engine/validation/* |
+| static_validation_rules | docs/specs/policies/static_validation_rules.md | Partial | static validation rules 설계 | src/engine/validation/* |
 | validation_rule_catalog | docs/specs/policies/validation_rule_catalog.md | Active | validation rule catalog | src/engine/validation/* |
 | validation_rule_lifecycle | docs/specs/policies/validation_rule_lifecycle.md | Active | validation rule lifecycle | src/engine/validation/* |
 
@@ -134,7 +135,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 | engine_savefile_contract | docs/specs/engine_savefile_contract.md | Partial | engine savefile 계약 | serialization |
 | execution_config_prompt_binding_contract | docs/specs/execution_config_prompt_binding_contract.md | Active | execution config ↔ prompt binding 계약 | src/contracts/* |
 | execution_config_registry_contract | docs/specs/execution_config_registry_contract.md | Active | execution config registry 계약 | src/contracts/* |
-| Provider Abstraction Contract | docs/specs/Provider Abstraction Contract.md | Partial | provider abstraction 초안 문서 | providers |
+| provider_abstraction_contract | docs/specs/history/redundant/provider_abstraction_contract.md | Partial | provider abstraction 초안 문서 | providers |
 
 ---
 

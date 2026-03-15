@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.4.2
+Version: 1.4.3
 
 ────────────────
 Architecture Constitution
@@ -44,39 +44,51 @@ Architecture Constitution을 기준으로 검증되어야 한다.
 
 ## 2. Active Specifications
 
-현재 코드와 1:1로 동기화되는 활성 spec 문서 목록:
+현재 코드와 1:1로 동기화되는 활성 spec 문서 목록.
 
-- docs/specs/execution_model.md
-- docs/specs/trace_model.md
-- docs/specs/validation_engine_contract.md
-- docs/specs/validation_rule_catalog.md
+Source-of-Truth: `docs/specs/indexes/_active_specs.yaml`
 
-### 2.1 추가된 Active Specs (Step67~84 누적)
+Active spec 경로는 _active_specs.yaml 이 최종 기준이며,
+아래 목록은 주요 spec 참조 목록이다.
 
-아래 항목들은 기존 목록에 누적 추가된 활성 spec(코드/테스트와 동기화)이다:
+### 2.1 Foundation / Terminology
 
-- docs/specs/terminology.md
-- docs/specs/node_execution_contract.md  (NODE-EXEC v1.0.0)
-- docs/specs/docs_specs_circuit_trace_contract.md  (CT-TRACE v1.0.0, circuit trace contract)
-- docs/specs/provider_contract.md  (AI-PROVIDER v1.0.0)
-- docs/specs/plugin_contract.md  (PLUGIN-CONTRACT v1.0.0)
-- docs/specs/prompt_contract.md  (PROMPT-CONTRACT v1.0.0)
-- docs/specs/plugin_registry_contract.md  (PLUGIN-REGISTRY v1.0.0)
-- docs/specs/observability_metrics.md  (OBSERVABILITY, opt-in 이벤트/메트릭)
+- docs/specs/foundation/terminology.md
 
-### 2.2 ExecutionConfig Layer Active Specs (Step121~125 누적)
+### 2.2 Architecture Core Contracts
 
-아래 항목들은 ExecutionConfig 계층 도입에 따라 누적 추가된 활성 spec이다:
+- docs/specs/architecture/execution_model.md
+- docs/specs/architecture/trace_model.md
+- docs/specs/architecture/node_abstraction.md
+- docs/specs/architecture/node_execution_contract.md
+- docs/specs/architecture/circuit_contract.md
+- docs/specs/architecture/universal_provider_architecture.md
 
-- docs/specs/execution_config_canonicalization_contract.md
-- docs/specs/execution_config_schema_contract.md
+### 2.3 Contracts Layer
 
-주의:
-- Active spec 목록의 Source-of-Truth는 본 문서(BLUEPRINT)이다.
-- docs/FOUNDATION_MAP.md는 문서 카탈로그/레이어링을 제공하지만, Active spec 결정 기준이 아니다.
-- spec-version sync 계약 테스트는 BLUEPRINT의 Active spec 목록을 파싱해, 각 spec 문서의 Version:과 src/contracts/spec_versions.py의 매핑이 일치하는지 강제한다.
+- docs/specs/contracts/execution_environment_contract.md
+- docs/specs/contracts/provider_contract.md
+- docs/specs/contracts/plugin_contract.md
+- docs/specs/contracts/prompt_contract.md
+- docs/specs/contracts/plugin_registry_contract.md
+- docs/specs/contracts/validation_engine_contract.md
+- docs/specs/contracts/execution_config_canonicalization_contract.md
+- docs/specs/contracts/execution_config_schema_contract.md
 
-구조/계약 변경 시 위 문서들과 코드, 테스트는 반드시 동기화되어야 한다.
+### 2.4 Policies
+
+- docs/specs/policies/validation_rule_catalog.md
+- docs/specs/policies/validation_rule_lifecycle.md
+
+### 2.5 Indexes
+
+- docs/specs/indexes/spec_catalog.md
+- docs/specs/indexes/spec_dependency_map.md
+
+### 2.6 ExecutionConfig Binding / Registry (Top-level)
+
+- docs/specs/execution_config_prompt_binding_contract.md
+- docs/specs/execution_config_registry_contract.md
 
 ## 3. ExecutionConfig Architecture (Step120~125)
 

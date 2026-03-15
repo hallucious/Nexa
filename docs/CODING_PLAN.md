@@ -1,6 +1,6 @@
 # Hyper-AI CODING PLAN
 
-Version: 2.1.0
+Version: 2.1.1
 
 ------------------------------------------
 Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)
@@ -9,7 +9,7 @@ Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)
 요약:
 - Circuit Runtime Adapter: conditional edge(우선순위) + trace wiring + node execution stages 결합
 - CT-TRACE v1.0.0: node enter/exit, circuit finish, conditional edge 선택/조건 결과 기록
-- NODE-EXEC v1.0.0: Pre/Core/Post 파이프라인 + AI는 Core-only
+- NODE-EXEC v1.0.0: Pre/Core/Post 실행 단계 + AI는 Core-only
 - AI-PROVIDER v1.0.0: ProviderResult + reason_code 정규화
 - PLUGIN-CONTRACT v1.0.0: PluginResult envelope + stage-aware + reason_code 정규화
 - PROMPT-CONTRACT v1.0.0: PromptSpec hash/render + PromptRegistry
@@ -21,8 +21,8 @@ Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)
 - `python -m pytest -q` → 203 passed, 9 skipped (Step84 기준)
 
 다음 목표(후속 Step 제안):
-- “노드/프롬프트/AI/플러그인 시스템”을 문서/계약 기준으로 더 명확히 고정
-- 이후 “회로(circuit) 시스템” 확장(모듈/서브그래프/분기/저장 등)로 진행
+- "노드/프롬프트/AI/플러그인 시스템"을 문서/계약 기준으로 더 명확히 고정
+- 이후 "회로(circuit) 시스템" 확장(모듈/서브그래프/분기/저장 등)로 진행
 
 ------------------------------------------
 Step121: ExecutionConfig Canonicalization / Hash Identity (완료)
@@ -35,7 +35,7 @@ Step121: ExecutionConfig Canonicalization / Hash Identity (완료)
 
 구현:
 - src/engine/execution_config_hash.py
-- docs/specs/execution_config_canonicalization_contract.md
+- docs/specs/contracts/execution_config_canonicalization_contract.md
 - tests/test_step121_execution_config_hash_contract.py
 
 완료 조건:
@@ -68,7 +68,7 @@ Step123: NodeExecutionRuntime Slot Stages (완료)
 
 구현:
 - src/engine/node_execution_runtime.py
-- tests/test_step123_nodeslot_stages_contract.py
+- tests/test_step123_nodeslot_pipeline_contract.py
 
 실행 슬롯:
 1. pre_plugins
@@ -110,7 +110,7 @@ Step125: ExecutionConfig Schema Validation (완료)
 
 구현:
 - src/platform/execution_config_schema.py
-- docs/specs/execution_config_schema_contract.md
+- docs/specs/contracts/execution_config_schema_contract.md
 - tests/test_step125_execution_config_schema_contract.py
 
 최소 강제 필드:
