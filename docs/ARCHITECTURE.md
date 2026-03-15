@@ -2,7 +2,7 @@
 
 ## Overview
 
-Nexa is an **AI execution engine platform** designed to orchestrate collaboration between multiple AI systems while preserving deterministic execution, traceability, and contract-driven reliability.
+Nexa is an **AI execution engine** designed to orchestrate multiple AI systems through structured computation graphs, while preserving deterministic execution, traceability, and contract-driven reliability.
 
 Nexa is **not a workflow automation tool**.
 It is an **execution runtime for AI computation graphs**.
@@ -16,10 +16,48 @@ The system is designed to make AI-based computation:
 
 ---
 
-# Core Execution Model
+# Why Nexa Exists
+
+Direct AI calls are difficult to scale and reproduce.
+
+Traditional AI usage looks like this:
+
+```
+User → Prompt → AI Model → Result
+```
+
+This approach breaks down when systems grow larger.
+
+Problems include:
+
+* inconsistent outputs
+* lack of traceability
+* difficult debugging
+* poor orchestration
+
+Nexa changes this into a structured system:
+
+```
+Input
+↓
+Circuit
+↓
+Nodes
+↓
+AI Providers / Plugins
+↓
+Artifacts
+↓
+Trace
+```
+
+---
+
+# 1. System Overview
 
 The fundamental execution structure of Nexa is:
 
+```
 Circuit
 ↓
 Node
@@ -31,22 +69,37 @@ Prompt / Provider / Plugin
 Artifact
 ↓
 Trace
+```
 
 This model defines how AI computation flows through the system.
 
-Node is the **only execution unit**.
+**Node is the only execution unit.**
 
 Circuit is responsible only for connecting nodes.
 
 ---
 
-# System Components
+# 2. Circuit Model
 
-## 1. Circuit
+A **Circuit** represents the execution graph.
 
-A Circuit represents the **execution graph**.
+You can think of it as a map of tasks — defining what nodes exist, how they depend on one another, and the order in which they become eligible to execute.
 
-Responsibilities:
+Example linear circuit:
+
+```
+Node A → Node B → Node C
+```
+
+Example parallel circuit:
+
+```
+        → Node B →
+Node A               → Node D
+        → Node C →
+```
+
+Circuit responsibilities:
 
 * define node topology
 * resolve dependencies
@@ -54,17 +107,19 @@ Responsibilities:
 
 Characteristics:
 
-* DAG-based structure
+* DAG-based structure (Directed Acyclic Graph)
 * supports parallel execution
 * manages node dependencies
 
-Circuit **does not execute logic**.
+**Circuit does not execute logic.**
+
+All execution occurs inside nodes.
 
 ---
 
-## 2. Node
+# 3. Node Execution Model
 
-Node is the **core execution unit** in Nexa.
+**Node** is the core execution unit in Nexa.
 
 All computation occurs inside nodes.
 
@@ -74,8 +129,17 @@ A node can combine the following resources:
 * provider
 * plugin
 
-Example execution flow inside a node:
+Example tasks a node might perform:
 
+* generating text
+* analyzing documents
+* evaluating outputs
+* transforming data
+* calling AI models
+
+Execution flow inside a node:
+
+```
 Prompt Rendering
 ↓
 Provider Call
@@ -83,115 +147,45 @@ Provider Call
 Plugin Processing
 ↓
 Artifact Creation
+```
 
 ---
 
-## 3. Execution Runtime
+# 4. Runtime Layer
 
-The runtime is responsible for executing nodes and maintaining execution state.
+The **Execution Runtime** is responsible for executing nodes and maintaining execution state.
 
-Responsibilities:
+Runtime responsibilities:
 
-* node execution
+* dependency-based node scheduling
 * working context management
 * artifact creation
 * execution trace recording
+* contract enforcement
+
+## Execution Model
+
+Execution in Nexa follows **dependency-based scheduling**.
+
+Nodes execute only when their dependencies are satisfied.
+
+Execution order is determined dynamically based on resource readiness.
+
+**Forbidden model:** fixed prompt → provider → plugin pipelines.
+
+## Deterministic Scheduling
+
+The runtime ensures consistent execution order.
+
+Given identical inputs and configuration, execution must produce identical artifacts.
+
+Mechanisms include:
+
 * deterministic scheduling
+* artifact hashing
+* trace comparison
 
-Runtime ensures that execution remains reproducible.
-
----
-
-## 4. Prompt
-
-Prompts define the input instructions for AI models.
-
-Responsibilities:
-
-* prompt rendering
-* variable interpolation
-* structured prompt construction
-
-Prompts operate inside nodes.
-
----
-
-## 5. Provider
-
-Providers are interfaces to AI model services.
-
-Examples:
-
-* OpenAI
-* Anthropic
-* Google Gemini
-* local models
-
-Responsibilities:
-
-* model invocation
-* input/output translation
-* error handling
-
----
-
-## 6. Plugin
-
-Plugins extend node functionality.
-
-Examples:
-
-* text processing
-* ranking
-* formatting
-* data transformation
-* evaluation
-
-Plugin write access is restricted.
-
-Allowed write namespace:
-
-```
-plugin.<plugin_id>.*
-```
-
-Plugins cannot modify unrelated system domains.
-
----
-
-## 7. Artifact
-
-Artifacts represent the persistent outputs produced during execution.
-
-Examples:
-
-* generated text
-* structured data
-* evaluation results
-* intermediate computation results
-
-Artifacts are **append-only**.
-
-Existing artifacts must never be modified.
-
----
-
-## 8. Execution Trace
-
-Execution traces record the runtime behavior of a circuit.
-
-Trace contains:
-
-* node execution events
-* resource execution order
-* artifact lineage
-* runtime metadata
-
-Trace enables debugging and reproducibility.
-
----
-
-# Working Context
+## Working Context
 
 Working Context is the shared data space used during execution.
 
@@ -217,23 +211,121 @@ This schema ensures consistent data flow across the system.
 
 ---
 
-# Execution Model
+# 5. Provider Layer
 
-Execution in Nexa follows **dependency-based scheduling**.
+**Providers** are interfaces to AI model services.
 
-Allowed execution model:
+Examples:
 
-dependency-based resource execution
+* OpenAI
+* Anthropic
+* Google Gemini
+* Local models
 
-Forbidden model:
+Provider responsibilities:
 
-prompt → provider → plugin fixed pipelines
+* model invocation
+* input/output translation
+* error handling
+* retry logic
 
-Execution order is determined dynamically based on resource readiness.
+Providers implement a common interface, allowing Nexa to switch between AI services without modifying circuits.
 
 ---
 
-# Contract Driven Architecture
+# 6. Plugin Layer
+
+**Plugins** extend node functionality with capabilities that are not AI model calls.
+
+Examples:
+
+* text processing
+* ranking outputs
+* formatting results
+* data transformation
+* evaluation
+* validation
+
+Plugin write access is strictly restricted.
+
+Allowed write namespace:
+
+```
+plugin.<plugin_id>.*
+```
+
+Plugins cannot modify unrelated system domains. This protects system integrity.
+
+---
+
+# 7. Artifact System
+
+**Artifacts** represent the persistent outputs produced during execution.
+
+Examples:
+
+* generated text
+* structured data
+* evaluation results
+* intermediate computation results
+
+Artifacts are **append-only**.
+
+Existing artifacts must never be modified. New results must be stored as new artifacts.
+
+This guarantees:
+
+* reproducibility
+* execution history preservation
+* reliable debugging
+
+---
+
+# 8. Trace System
+
+**Execution Traces** record the runtime behavior of a circuit.
+
+Trace contains:
+
+* node execution events
+* resource execution order
+* artifact lineage
+* runtime metadata
+* timestamps
+
+Trace enables:
+
+* debugging
+* auditing
+* execution replay
+
+---
+
+# Design Principles
+
+These principles explain why Nexa is designed the way it is.
+
+**Determinism Over Convenience** — Given identical inputs and configuration, the system must produce identical outputs. This ensures reproducibility and reliable automation.
+
+**Structure Over Ad-Hoc Automation** — AI tasks are represented as nodes connected through explicit dependencies. This keeps complex AI systems understandable and maintainable.
+
+**Observability First** — Every execution step must be traceable. Artifacts and traces allow developers to inspect the entire computation history.
+
+**Immutability of Results** — Artifacts are append-only. Instead of modifying existing results, Nexa produces new artifacts. This protects execution history and enables reliable debugging.
+
+**Contract-Driven Development** — System behavior is governed by explicit contracts (artifact schema, trace schema, validation rules, plugin behavior). Contracts prevent architectural drift as the system evolves.
+
+**Safe Extensibility** — Plugins, providers, and new node types integrate safely without compromising core guarantees.
+
+**Explicit Data Flow** — All components communicate through well-defined data paths in the Working Context.
+
+**Engine Stability First** — Development priorities follow: Engine → Runtime → Core architecture → Developer tools → User interfaces.
+
+**Minimal Core, Powerful Extensions** — The Nexa core remains minimal. Complex functionality is implemented through plugins, providers, and external tooling.
+
+---
+
+# Contract-Driven Architecture
 
 Nexa uses **contract-driven design**.
 
@@ -247,101 +339,13 @@ Important contracts include:
 
 Code must not violate existing contracts.
 
----
-
-# Observability
-
-The runtime records complete execution information.
-
-Observability includes:
-
-* execution traces
-* artifact lineage
-* node execution history
-* runtime metadata
-
-This allows:
-
-* debugging
-* replay
-* auditing
-
----
-
-# Deterministic Execution
-
-Nexa ensures deterministic behavior.
-
-Given identical inputs and configuration:
-
-execution must produce identical artifacts.
-
-Mechanisms include:
-
-* deterministic scheduling
-* artifact hashing
-* trace comparison
-
----
-
-# Repository Architecture
-
-Repository structure:
-
-```
-src/
-
-engine/
-runtime/
-plugins/
-contracts/
-cli/
-
-
-docs/
-
-BLUEPRINT.md
-CODING_PLAN.md
-FOUNDATION_RULES.md
-ARCHITECTURE.md
-specs/
-
-
-tests/
-```
-
-This structure separates:
-
-* runtime logic
-* contracts
-* documentation
-* tests
-
----
-
-# Development Principles
-
-Nexa development follows these principles.
-
-Engine-first development
-
-Engine
-↓
-CLI
-↓
-Developer tooling
-↓
-Product features
-↓
-UI / visual editor
-
-The execution engine must remain stable before product features are added.
+See `docs/specs/` for detailed contract specifications.
 
 ---
 
 # Forbidden Architectural Patterns
 
-The following patterns are not allowed.
+The following patterns are not allowed in Nexa:
 
 * pipeline-based execution engines
 * step-list workflow models
@@ -353,14 +357,41 @@ Violating these patterns breaks Nexa architecture.
 
 ---
 
+# Repository Structure
+
+```
+src/
+    artifacts/
+    circuit/
+    cli/
+    config/
+    contracts/
+    engine/
+    models/
+    platform/
+    policy/
+    prompts/
+    providers/
+    utils/
+
+tests/
+docs/
+examples/
+scripts/
+tools/
+```
+
+---
+
 # Summary
 
 Nexa is designed as a deterministic AI execution runtime.
 
 Key characteristics:
 
-* graph-based execution
-* node-centered computation
+* graph-based execution (Circuit → Node DAG)
+* node-centered computation (Node is the only execution unit)
+* dependency-based scheduling (not pipeline-based)
 * contract-driven architecture
 * append-only artifact storage
 * full execution observability

@@ -8,38 +8,18 @@ It helps developers, contributors, and AI coding tools navigate the documentatio
 
 ---
 
-# Documentation Overview
-
-Nexa documentation is organized into several categories.
-
-Each category serves a specific purpose in explaining the system.
-
----
-
-# Project Introduction
-
-These documents explain the motivation and long-term vision of Nexa.
-
-README.md
-Project overview and entry point for GitHub visitors.
-
-VISION.md
-Long-term goals and philosophical direction of the project.
-
----
-
 # Core Architecture
 
-These documents explain how Nexa is structured internally.
+These documents define the structure and invariants of the Nexa system.
 
-ARCHITECTURE.md
-Detailed description of the Nexa system architecture.
+**BLUEPRINT.md**
+High-level architecture blueprint and system design overview.
 
-ARCHITECTURE_CONSTITUTION.md
-The foundational rules that govern Nexa architecture.
+**ARCHITECTURE_CONSTITUTION.md**
+The foundational rules and non-negotiable invariants that govern Nexa architecture.
 
-CONCEPTS.md
-Explanation of core system concepts such as Circuit, Node, Artifact, and Trace.
+**ARCHITECTURE.md**
+Unified architecture explanation covering the Circuit model, Node execution, Runtime layer, Provider layer, Plugin layer, Artifact system, Trace system, and design principles.
 
 ---
 
@@ -47,98 +27,82 @@ Explanation of core system concepts such as Circuit, Node, Artifact, and Trace.
 
 These documents explain how to work with the Nexa codebase.
 
-DEVELOPMENT.md
-Development environment setup and contribution guidelines.
-
-CLAUDE_GUIDE.md
-Instructions for AI-assisted development using Claude.
-
----
-
-# System Components
-
-These documents describe major Nexa subsystems.
-
-PLUGIN_SYSTEM.md
-Plugin architecture and safety rules.
-
-PROVIDER_SYSTEM.md
-AI provider integration.
-
-RUNTIME_MODEL.md
-Runtime execution model.
-
----
-
-# Project Structure
-
-These documents describe internal project planning.
-
-BLUEPRINT.md
-High-level architecture blueprint.
-
-CODING_PLAN.md
+**CODING_PLAN.md**
 Implementation roadmap and development phases.
 
+**DEVELOPMENT.md**
+Development environment setup, testing, and contribution workflow.
+
+**CONTRIBUTING.md**
+Guidelines for open-source contributors.
+
 ---
 
-# Project Roadmap
+# Specifications
 
-ROADMAP.md
-Long-term development roadmap.
+The `docs/specs/` directory contains detailed technical specifications and contracts.
+
+These specifications are the authoritative source of truth for system behavior.
+They define strict contracts and are enforced by automated tests.
+
+Examples:
+
+* `docs/specs/architecture/` — execution model, node contracts, circuit contracts
+* `docs/specs/contracts/` — plugin, provider, prompt, and validation contracts
+* `docs/specs/policies/` — validation rules, observability, determinism policies
+* `docs/specs/indexes/` — spec catalog and dependency map
 
 ---
 
-# Reference Material
+# Product Vision
 
-GLOSSARY.md
+These documents describe the long-term direction and planned product evolution.
+
+**docs/product/SaaS Product Definition.md**
+Definition of the Nexa SaaS product offering.
+
+**docs/product/Visual Editor Architecture.md**
+Architecture for the planned visual circuit editor.
+
+**docs/product/User Profile (Preset).md**
+User profile and preset system design.
+
+---
+
+# Additional Reference
+
+**GLOSSARY.md**
 Definitions of key Nexa terminology.
 
----
+**VISION.md**
+Long-term goals and philosophical direction of the project.
 
-# Specification Documents
-
-The `specs/` directory contains detailed technical specifications.
-
-Examples may include:
-
-validation_engine_contract
-validation_rule_catalog
-artifact_schema
-trace_schema
-
-Specifications define strict system contracts.
+**ROADMAP.md**
+Long-term development roadmap.
 
 ---
 
 # Recommended Reading Order
 
-For new contributors, the recommended reading order is:
+For new contributors:
 
-1. README.md
-2. CONCEPTS.md
-3. ARCHITECTURE.md
-4. ARCHITECTURE_CONSTITUTION.md
-5. DEVELOPMENT.md
-
-This sequence provides a gradual introduction to the Nexa system.
+1. `README.md` — project introduction
+2. `docs/ARCHITECTURE_CONSTITUTION.md` — core invariants
+3. `docs/ARCHITECTURE.md` — full architecture explanation
+4. `docs/BLUEPRINT.md` — system design blueprint
+5. `docs/DEVELOPMENT.md` — how to contribute
 
 ---
 
 # Documentation Philosophy
 
-Nexa documentation follows several principles.
+**Clarity** — Documents should be understandable by new contributors.
 
-Clarity
-Documents should be understandable by new contributors.
+**Consistency** — Documentation must match the implementation.
 
-Consistency
-Documentation must match the implementation.
+**Stability** — Architectural principles should change rarely.
 
-Stability
-Architectural principles should change rarely.
-
-Maintaining good documentation is essential for long-term project health.
+**Single Source of Truth** — Specifications in `docs/specs/` are the authoritative contracts. Top-level architecture documents provide human-readable explanation.
 
 ---
 
