@@ -1,0 +1,13 @@
+# hello.nex
+# Minimal Nexa circuit example
+
+circuit hello_circuit:
+
+    node input_node:
+        type: prompt
+        value: "Hello from Nexa Circuit"
+
+    node output_node:
+        type: provider
+        provider: dummy
+        input: input_node
