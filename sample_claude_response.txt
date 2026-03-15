@@ -1,0 +1,2 @@
+FILE: src/test_dummy_file.py
+print("dummy file for dry run test")
