@@ -5,6 +5,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
 *.egg-info/
 dist/
 build/
@@ -24,14 +25,19 @@ htmlcov/
 venv/
 
 # ===============================
-# Runtime / artifacts
+# Runtime / generated artifacts
 # ===============================
 runs/
 baseline/history/
 obsidian/logs/
 
-# observability logs
+# Observability and execution logs
+*.jsonl
 OBSERVABILITY.jsonl
+EXECUTION_EVENTS.jsonl
+
+# Claude dev tooling output
+sample_claude_response.txt
 
 # ===============================
 # OS files

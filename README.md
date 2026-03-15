@@ -140,25 +140,24 @@ Nexa can integrate with multiple AI systems:
 
 ```
 src/
-    engine/
-    runtime/
-    plugins/
-    contracts/
+    artifacts/
+    circuit/
     cli/
-
-docs/
-    ARCHITECTURE.md
-    CONCEPTS.md
-    DEVELOPMENT.md
-    VISION.md
+    config/
+    contracts/
+    engine/
+    models/
+    platform/
+    policy/
+    prompts/
+    providers/
+    utils/
 
 tests/
-```
-
-Documentation index:
-
-```
-docs/INDEX.md
+docs/
+examples/
+scripts/
+tools/
 ```
 
 ---
@@ -175,6 +174,12 @@ Run tests:
 
 ```
 pytest
+```
+
+Run the hello circuit example:
+
+```
+python examples/hello_circuit/run.py
 ```
 
 ---
@@ -212,9 +217,9 @@ Nexa aims to become a **universal runtime for AI computation systems**.
 
 Future applications may include:
 
-AI production pipelines
-multi-agent AI systems
-automated research workflows
+AI production pipelines  
+multi-agent AI systems  
+automated research workflows  
 AI content generation platforms
 
 See:
@@ -232,14 +237,16 @@ Contributions are welcome.
 Before contributing, read:
 
 ```
-docs/DEVELOPMENT.md
+docs/CONTRIBUTING.md
 ```
 
 ---
 
 # License
 
-TBD
+Apache License 2.0
+
+See [LICENSE](LICENSE).
 
 ---
 

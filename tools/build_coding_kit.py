@@ -1,4 +1,3 @@
-
 """
 build_coding_kit.py
 
@@ -17,8 +16,9 @@ inside tools/nexa_coding_kit.
 
 IMPORTANT:
 task_prompt.md is intentionally EXCLUDED from the merged context.
-It is copied separately as task_prompt.txt because it represents the
-dynamic task instruction for the current coding request.
+It is read separately from tools/task_prompt.md and copied as
+build/task_prompt.txt because it represents the dynamic task
+instruction for the current coding request.
 """
 
 from __future__ import annotations
@@ -42,6 +42,10 @@ FILES = [
 ]
 
 CODING_KIT_DIR = ROOT / "tools" / "nexa_coding_kit"
+
+# task_prompt.md lives directly under tools/, not inside nexa_coding_kit/
+TASK_PROMPT_FILE = ROOT / "tools" / "task_prompt.md"
+
 BUILD_DIR = ROOT / "build"
 
 CONTEXT_FILES = [
@@ -117,20 +121,18 @@ def build_context() -> Path:
 
 
 def build_prompt() -> Path:
-    candidates = [
-        CODING_KIT_DIR / "task_prompt.txt",
-        CODING_KIT_DIR / "task_prompt.md",
-        CODING_KIT_DIR / "task_prompt_template.txt",
-        CODING_KIT_DIR / "task_prompt_template.md",
-    ]
+    """Copy tools/task_prompt.md → build/task_prompt.txt.
 
+    The task prompt is always read from tools/task_prompt.md.
+    This is the single authoritative location for the current task description.
+    """
     output = BUILD_DIR / "task_prompt.txt"
 
-    for candidate in candidates:
-        if candidate.exists():
-            shutil.copy(candidate, output)
-            return output
+    if TASK_PROMPT_FILE.exists():
+        shutil.copy(TASK_PROMPT_FILE, output)
+        return output
 
+    # Fallback: write a placeholder so the build never fails silently
     output.write_text(
         "Follow Nexa architecture rules and implement the requested task.\n",
         encoding="utf-8",
@@ -147,9 +149,9 @@ def main() -> None:
     prompt_path = build_prompt()
 
     print("Nexa Coding Kit build complete.")
-    print(f"Nexa.zip: {zip_path}")
-    print(f"Nexa_AI_CONTEXT.md: {context_path}")
-    print(f"task_prompt.txt: {prompt_path}")
+    print(f"  Nexa.zip:          {zip_path}")
+    print(f"  Nexa_AI_CONTEXT.md: {context_path}")
+    print(f"  task_prompt.txt:   {prompt_path}")
 
 
 if __name__ == "__main__":
