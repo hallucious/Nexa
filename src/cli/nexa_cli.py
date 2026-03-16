@@ -47,6 +47,7 @@ def build_parser():
     diff_parser.add_argument("left", help="Path to left run snapshot JSON file")
     diff_parser.add_argument("right", help="Path to right run snapshot JSON file")
     diff_parser.add_argument("--json", action="store_true", dest="output_json", help="Output diff as JSON")
+    diff_parser.add_argument("--regression", action="store_true", dest="regression_mode", help="Run regression detection mode")
 
     return parser
 
@@ -237,10 +238,26 @@ def diff_command(args) -> int:
 
     diff = compare_runs(left_run, right_run)
 
-    if getattr(args, "output_json", False):
-        print(_json.dumps(format_diff_json(diff), indent=2))
+    # Regression mode
+    if getattr(args, "regression_mode", False):
+        from src.engine.execution_regression_detector import detect_regressions
+        from src.engine.execution_regression_formatter import (
+            format_regression,
+            format_regression_json,
+        )
+        
+        regression_result = detect_regressions(diff)
+        
+        if getattr(args, "output_json", False):
+            print(_json.dumps(format_regression_json(regression_result), indent=2))
+        else:
+            print(format_regression(regression_result))
     else:
-        print(format_diff(diff))
+        # Normal diff mode
+        if getattr(args, "output_json", False):
+            print(_json.dumps(format_diff_json(diff), indent=2))
+        else:
+            print(format_diff(diff))
 
     return 0
 
