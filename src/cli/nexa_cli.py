@@ -31,6 +31,18 @@ def build_parser():
 
     sub.add_parser("info")
 
+    task_parser = sub.add_parser("task")
+    task_sub = task_parser.add_subparsers(dest="task_command")
+
+    tgen = task_sub.add_parser("generate")
+    tgen.add_argument("feature", help="Feature name (e.g. execution_diff)")
+    tgen.add_argument("--base", type=int, default=180, help="Base step number")
+
+    tprompt = task_sub.add_parser("prompt")
+    tprompt.add_argument("feature", help="Feature name")
+    tprompt.add_argument("step_id", help="Step ID or 1-based index (e.g. Step180 or 1)")
+    tprompt.add_argument("--base", type=int, default=180, help="Base step number")
+
     diff_parser = sub.add_parser("diff")
     diff_parser.add_argument("left", help="Path to left run snapshot JSON file")
     diff_parser.add_argument("right", help="Path to right run snapshot JSON file")
@@ -294,6 +306,24 @@ def compare_command(args):
     return 0
 
 
+def task_command(args) -> int:
+    """Route nexa task subcommands to the claude_task_generator."""
+    from src.devtools.claude_task_generator.cli import cmd_generate, cmd_prompt
+
+    task_cmd = getattr(args, "task_command", None)
+
+    if task_cmd == "generate":
+        return cmd_generate(args.feature, base_number=args.base)
+
+    if task_cmd == "prompt":
+        return cmd_prompt(args.feature, args.step_id, base_number=args.base)
+
+    # No task subcommand given — print help
+    print("Usage: nexa task <generate|prompt> ...")
+    return 1
+
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -321,6 +351,9 @@ def main():
 
     if args.command == "diff":
         return diff_command(args)
+
+    if args.command == "task":
+        return task_command(args)
 
     parser.print_help()
     return 0
