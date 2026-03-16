@@ -20,6 +20,9 @@ from src.engine.execution_regression_detector import (
     NODE_REMOVED_SUCCESS,
     NODE_SUCCESS_TO_FAILURE,
     NODE_SUCCESS_TO_SKIPPED,
+    REGRESSION_SEVERITY_HIGH,
+    REGRESSION_SEVERITY_MEDIUM,
+    REGRESSION_SEVERITY_LOW,
     REGRESSION_STATUS_CLEAN,
     REGRESSION_STATUS_REGRESSION,
     ArtifactRegression,
@@ -338,3 +341,185 @@ def test_format_regression_json_serializable():
     # Should be parseable
     parsed = json.loads(json_str)
     assert parsed["status"] == REGRESSION_STATUS_REGRESSION
+
+
+# ---------------------------------------------------------------------------
+# Severity formatting tests
+# ---------------------------------------------------------------------------
+
+def test_format_regression_summary_includes_severity_counts():
+    """Test that summary includes severity counts."""
+    from src.engine.execution_regression_detector import REGRESSION_SEVERITY_HIGH
+    
+    result = RegressionResult(
+        status=REGRESSION_STATUS_REGRESSION,
+        summary=RegressionSummary(
+            node_regressions=1,
+            high_regressions=1,
+            medium_regressions=0,
+            low_regressions=0,
+        ),
+        nodes=[
+            NodeRegression(
+                node_id="n1",
+                reason_code=NODE_SUCCESS_TO_FAILURE,
+                left_status="success",
+                right_status="failure",
+            ),
+        ],
+    )
+    
+    output = format_regression_summary(result)
+    
+    assert "severity: high=1 medium=0 low=0" in output
+
+
+def test_format_regression_text_shows_severity_labels():
+    """Test that detailed text formatter shows severity labels."""
+    from src.engine.execution_regression_detector import (
+        REGRESSION_SEVERITY_HIGH,
+        REGRESSION_SEVERITY_MEDIUM,
+        REGRESSION_SEVERITY_LOW,
+    )
+    
+    result = RegressionResult(
+        status=REGRESSION_STATUS_REGRESSION,
+        summary=RegressionSummary(
+            node_regressions=1,
+            artifact_regressions=1,
+            context_regressions=1,
+            high_regressions=2,
+            medium_regressions=0,
+            low_regressions=1,
+        ),
+        nodes=[
+            NodeRegression(
+                node_id="n1",
+                reason_code=NODE_SUCCESS_TO_FAILURE,
+                left_status="success",
+                right_status="failure",
+            ),
+        ],
+        artifacts=[
+            ArtifactRegression(
+                artifact_id="art_1",
+                reason_code=ARTIFACT_REMOVED,
+            ),
+        ],
+        context=[
+            ContextRegression(
+                context_key="ctx.key",
+                reason_code=CONTEXT_VALUE_CHANGED,
+            ),
+        ],
+    )
+    
+    output = format_regression(result)
+    
+    # Check that severity labels appear
+    assert "[HIGH]" in output
+    assert "[LOW]" in output
+    assert "n1: success -> failure [HIGH]" in output
+    assert "art_1: artifact removed [HIGH]" in output
+    assert "ctx.key: value changed [LOW]" in output
+
+
+def test_format_regression_json_includes_severity():
+    """Test that JSON formatter includes severity for each regression."""
+    from src.engine.execution_regression_detector import (
+        REGRESSION_SEVERITY_HIGH,
+        REGRESSION_SEVERITY_MEDIUM,
+        REGRESSION_SEVERITY_LOW,
+    )
+    
+    result = RegressionResult(
+        status=REGRESSION_STATUS_REGRESSION,
+        summary=RegressionSummary(
+            node_regressions=1,
+            artifact_regressions=1,
+            context_regressions=1,
+            high_regressions=2,
+            medium_regressions=0,
+            low_regressions=1,
+        ),
+        nodes=[
+            NodeRegression(
+                node_id="n1",
+                reason_code=NODE_SUCCESS_TO_FAILURE,
+                left_status="success",
+                right_status="failure",
+            ),
+        ],
+        artifacts=[
+            ArtifactRegression(
+                artifact_id="art_1",
+                reason_code=ARTIFACT_REMOVED,
+            ),
+        ],
+        context=[
+            ContextRegression(
+                context_key="ctx.key",
+                reason_code=CONTEXT_VALUE_CHANGED,
+            ),
+        ],
+    )
+    
+    output = format_regression_json(result)
+    
+    # Check summary severity counts
+    assert output["summary"]["high_regressions"] == 2
+    assert output["summary"]["medium_regressions"] == 0
+    assert output["summary"]["low_regressions"] == 1
+    
+    # Check individual regression severities
+    assert output["nodes"][0]["severity"] == REGRESSION_SEVERITY_HIGH
+    assert output["artifacts"][0]["severity"] == REGRESSION_SEVERITY_HIGH
+    assert output["context"][0]["severity"] == REGRESSION_SEVERITY_LOW
+
+
+def test_format_regression_json_clean_has_zero_severity_counts():
+    """Test that clean result JSON has zero severity counts."""
+    result = RegressionResult(
+        status=REGRESSION_STATUS_CLEAN,
+        summary=RegressionSummary(
+            high_regressions=0,
+            medium_regressions=0,
+            low_regressions=0,
+        ),
+    )
+    
+    output = format_regression_json(result)
+    
+    assert output["summary"]["high_regressions"] == 0
+    assert output["summary"]["medium_regressions"] == 0
+    assert output["summary"]["low_regressions"] == 0
+
+
+def test_format_regression_severity_deterministic():
+    """Test that severity formatting is deterministic."""
+    from src.engine.execution_regression_detector import REGRESSION_SEVERITY_HIGH
+    
+    result = RegressionResult(
+        status=REGRESSION_STATUS_REGRESSION,
+        summary=RegressionSummary(
+            node_regressions=1,
+            high_regressions=1,
+            medium_regressions=0,
+            low_regressions=0,
+        ),
+        nodes=[
+            NodeRegression(
+                node_id="n1",
+                reason_code=NODE_SUCCESS_TO_FAILURE,
+                left_status="success",
+                right_status="failure",
+            ),
+        ],
+    )
+    
+    # Format multiple times
+    output1 = format_regression(result)
+    output2 = format_regression(result)
+    
+    assert output1 == output2
+    assert "[HIGH]" in output1

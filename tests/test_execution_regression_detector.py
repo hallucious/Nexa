@@ -526,3 +526,447 @@ def test_detect_regressions_output_unchanged():
     assert len(result.nodes) == 1
     assert result.nodes[0].reason_code == NODE_SUCCESS_TO_FAILURE
     assert result.nodes[0].reason == "success -> failure"
+
+
+# ---------------------------------------------------------------------------
+# Severity modeling tests
+# ---------------------------------------------------------------------------
+
+def test_node_success_to_failure_severity_is_high():
+    """Test NODE_SUCCESS_TO_FAILURE maps to HIGH severity."""
+    from src.engine.execution_regression_detector import (
+        NodeRegression,
+        REGRESSION_SEVERITY_HIGH,
+    )
+    
+    reg = NodeRegression(
+        node_id="n1",
+        reason_code=NODE_SUCCESS_TO_FAILURE,
+        left_status="success",
+        right_status="failure",
+    )
+    
+    assert reg.severity == REGRESSION_SEVERITY_HIGH
+
+
+def test_node_removed_success_severity_is_high():
+    """Test NODE_REMOVED_SUCCESS maps to HIGH severity."""
+    from src.engine.execution_regression_detector import (
+        NodeRegression,
+        REGRESSION_SEVERITY_HIGH,
+    )
+    
+    reg = NodeRegression(
+        node_id="n1",
+        reason_code=NODE_REMOVED_SUCCESS,
+        left_status="success",
+        right_status=None,
+    )
+    
+    assert reg.severity == REGRESSION_SEVERITY_HIGH
+
+
+def test_node_success_to_skipped_severity_is_medium():
+    """Test NODE_SUCCESS_TO_SKIPPED maps to MEDIUM severity."""
+    from src.engine.execution_regression_detector import (
+        NodeRegression,
+        REGRESSION_SEVERITY_MEDIUM,
+    )
+    
+    reg = NodeRegression(
+        node_id="n1",
+        reason_code=NODE_SUCCESS_TO_SKIPPED,
+        left_status="success",
+        right_status="skipped",
+    )
+    
+    assert reg.severity == REGRESSION_SEVERITY_MEDIUM
+
+
+def test_artifact_removed_severity_is_high():
+    """Test ARTIFACT_REMOVED maps to HIGH severity."""
+    from src.engine.execution_regression_detector import (
+        ArtifactRegression,
+        REGRESSION_SEVERITY_HIGH,
+        ARTIFACT_REMOVED,
+    )
+    
+    reg = ArtifactRegression(
+        artifact_id="art_1",
+        reason_code=ARTIFACT_REMOVED,
+    )
+    
+    assert reg.severity == REGRESSION_SEVERITY_HIGH
+
+
+def test_artifact_hash_changed_severity_is_medium():
+    """Test ARTIFACT_HASH_CHANGED maps to MEDIUM severity."""
+    from src.engine.execution_regression_detector import (
+        ArtifactRegression,
+        REGRESSION_SEVERITY_MEDIUM,
+        ARTIFACT_HASH_CHANGED,
+    )
+    
+    reg = ArtifactRegression(
+        artifact_id="art_1",
+        reason_code=ARTIFACT_HASH_CHANGED,
+        left_hash="old",
+        right_hash="new",
+    )
+    
+    assert reg.severity == REGRESSION_SEVERITY_MEDIUM
+
+
+def test_context_key_removed_severity_is_medium():
+    """Test CONTEXT_KEY_REMOVED maps to MEDIUM severity."""
+    from src.engine.execution_regression_detector import (
+        ContextRegression,
+        REGRESSION_SEVERITY_MEDIUM,
+        CONTEXT_KEY_REMOVED,
+    )
+    
+    reg = ContextRegression(
+        context_key="ctx.key",
+        reason_code=CONTEXT_KEY_REMOVED,
+    )
+    
+    assert reg.severity == REGRESSION_SEVERITY_MEDIUM
+
+
+def test_context_value_changed_severity_is_low():
+    """Test CONTEXT_VALUE_CHANGED maps to LOW severity."""
+    from src.engine.execution_regression_detector import (
+        ContextRegression,
+        REGRESSION_SEVERITY_LOW,
+        CONTEXT_VALUE_CHANGED,
+    )
+    
+    reg = ContextRegression(
+        context_key="ctx.key",
+        reason_code=CONTEXT_VALUE_CHANGED,
+        left_value="old",
+        right_value="new",
+    )
+    
+    assert reg.severity == REGRESSION_SEVERITY_LOW
+
+
+def test_severity_counts_in_summary():
+    """Test that severity counts are correctly calculated in RegressionSummary."""
+    from src.engine.execution_regression_detector import (
+        REGRESSION_SEVERITY_HIGH,
+        REGRESSION_SEVERITY_MEDIUM,
+        REGRESSION_SEVERITY_LOW,
+    )
+    
+    # Create a diff with multiple regressions of different severities
+    node_diffs = [
+        NodeDiff(
+            node_id="n1",
+            change_type=CHANGE_TYPE_MODIFIED,
+            left_status="success",
+            right_status="failure",  # HIGH
+        ),
+        NodeDiff(
+            node_id="n2",
+            change_type=CHANGE_TYPE_MODIFIED,
+            left_status="success",
+            right_status="skipped",  # MEDIUM
+        ),
+    ]
+    
+    artifact_diffs = [
+        ArtifactDiff(
+            artifact_id="art_1",
+            change_type=CHANGE_TYPE_REMOVED,
+            left_hash="hash_abc",  # HIGH
+        ),
+        ArtifactDiff(
+            artifact_id="art_2",
+            change_type=CHANGE_TYPE_MODIFIED,
+            left_hash="old_hash",
+            right_hash="new_hash",  # MEDIUM
+        ),
+    ]
+    
+    context_diffs = [
+        ContextDiff(
+            context_key="ctx.key1",
+            change_type=CHANGE_TYPE_MODIFIED,
+            left_value="old",
+            right_value="new",  # LOW
+        ),
+    ]
+    
+    diff = RunDiff(
+        left_run_id="left",
+        right_run_id="right",
+        status=RUN_DIFF_STATUS_CHANGED,
+        node_diffs=node_diffs,
+        artifact_diffs=artifact_diffs,
+        context_diffs=context_diffs,
+    )
+    
+    result = detect_regressions(diff)
+    
+    # Verify severity counts
+    assert result.summary.high_regressions == 2  # n1, art_1
+    assert result.summary.medium_regressions == 2  # n2, art_2
+    assert result.summary.low_regressions == 1  # ctx.key1
+    
+    # Verify individual severities
+    assert result.nodes[0].severity == REGRESSION_SEVERITY_HIGH
+    assert result.nodes[1].severity == REGRESSION_SEVERITY_MEDIUM
+    assert result.artifacts[0].severity == REGRESSION_SEVERITY_HIGH
+    assert result.artifacts[1].severity == REGRESSION_SEVERITY_MEDIUM
+    assert result.context[0].severity == REGRESSION_SEVERITY_LOW
+
+
+def test_clean_result_has_zero_severity_counts():
+    """Test that clean results have zero severity counts."""
+    diff = RunDiff(
+        left_run_id="left",
+        right_run_id="right",
+        status=RUN_DIFF_STATUS_IDENTICAL,
+    )
+    
+    result = detect_regressions(diff)
+    
+    assert result.summary.high_regressions == 0
+    assert result.summary.medium_regressions == 0
+    assert result.summary.low_regressions == 0
+
+
+def test_severity_deterministic_output():
+    """Test that severity assignment is deterministic."""
+    from src.engine.execution_regression_detector import REGRESSION_SEVERITY_HIGH
+    
+    # Run detection twice
+    node_diffs = [
+        NodeDiff(
+            node_id="n1",
+            change_type=CHANGE_TYPE_MODIFIED,
+            left_status="success",
+            right_status="failure",
+        )
+    ]
+    
+    diff = RunDiff(
+        left_run_id="left",
+        right_run_id="right",
+        status=RUN_DIFF_STATUS_CHANGED,
+        node_diffs=node_diffs,
+    )
+    
+    result1 = detect_regressions(diff)
+    result2 = detect_regressions(diff)
+    
+    # Severity should be consistent
+    assert result1.nodes[0].severity == result2.nodes[0].severity
+    assert result1.nodes[0].severity == REGRESSION_SEVERITY_HIGH
+    assert result1.summary.high_regressions == result2.summary.high_regressions
+    assert result1.summary.high_regressions == 1
+
+
+# ---------------------------------------------------------------------------
+# Category-specific reason_code validation tests (Step186.2.1)
+# ---------------------------------------------------------------------------
+
+def test_node_regression_rejects_artifact_reason_code():
+    """Test NodeRegression rejects artifact reason codes."""
+    from src.engine.execution_regression_detector import (
+        NodeRegression,
+        ARTIFACT_REMOVED,
+    )
+    
+    with pytest.raises(ValueError) as exc_info:
+        NodeRegression(
+            node_id="n1",
+            reason_code=ARTIFACT_REMOVED,
+            left_status="success",
+            right_status="failure",
+        )
+    
+    assert "Invalid reason_code" in str(exc_info.value)
+    assert "NodeRegression" in str(exc_info.value)
+    assert ARTIFACT_REMOVED in str(exc_info.value)
+
+
+def test_node_regression_rejects_context_reason_code():
+    """Test NodeRegression rejects context reason codes."""
+    from src.engine.execution_regression_detector import (
+        NodeRegression,
+        CONTEXT_KEY_REMOVED,
+    )
+    
+    with pytest.raises(ValueError) as exc_info:
+        NodeRegression(
+            node_id="n1",
+            reason_code=CONTEXT_KEY_REMOVED,
+            left_status="success",
+            right_status="failure",
+        )
+    
+    assert "Invalid reason_code" in str(exc_info.value)
+    assert "NodeRegression" in str(exc_info.value)
+    assert CONTEXT_KEY_REMOVED in str(exc_info.value)
+
+
+def test_artifact_regression_rejects_node_reason_code():
+    """Test ArtifactRegression rejects node reason codes."""
+    from src.engine.execution_regression_detector import (
+        ArtifactRegression,
+        NODE_SUCCESS_TO_FAILURE,
+    )
+    
+    with pytest.raises(ValueError) as exc_info:
+        ArtifactRegression(
+            artifact_id="art_1",
+            reason_code=NODE_SUCCESS_TO_FAILURE,
+        )
+    
+    assert "Invalid reason_code" in str(exc_info.value)
+    assert "ArtifactRegression" in str(exc_info.value)
+    assert NODE_SUCCESS_TO_FAILURE in str(exc_info.value)
+
+
+def test_artifact_regression_rejects_context_reason_code():
+    """Test ArtifactRegression rejects context reason codes."""
+    from src.engine.execution_regression_detector import (
+        ArtifactRegression,
+        CONTEXT_VALUE_CHANGED,
+    )
+    
+    with pytest.raises(ValueError) as exc_info:
+        ArtifactRegression(
+            artifact_id="art_1",
+            reason_code=CONTEXT_VALUE_CHANGED,
+        )
+    
+    assert "Invalid reason_code" in str(exc_info.value)
+    assert "ArtifactRegression" in str(exc_info.value)
+    assert CONTEXT_VALUE_CHANGED in str(exc_info.value)
+
+
+def test_context_regression_rejects_node_reason_code():
+    """Test ContextRegression rejects node reason codes."""
+    from src.engine.execution_regression_detector import (
+        ContextRegression,
+        NODE_REMOVED_SUCCESS,
+    )
+    
+    with pytest.raises(ValueError) as exc_info:
+        ContextRegression(
+            context_key="ctx.key",
+            reason_code=NODE_REMOVED_SUCCESS,
+        )
+    
+    assert "Invalid reason_code" in str(exc_info.value)
+    assert "ContextRegression" in str(exc_info.value)
+    assert NODE_REMOVED_SUCCESS in str(exc_info.value)
+
+
+def test_context_regression_rejects_artifact_reason_code():
+    """Test ContextRegression rejects artifact reason codes."""
+    from src.engine.execution_regression_detector import (
+        ContextRegression,
+        ARTIFACT_HASH_CHANGED,
+    )
+    
+    with pytest.raises(ValueError) as exc_info:
+        ContextRegression(
+            context_key="ctx.key",
+            reason_code=ARTIFACT_HASH_CHANGED,
+        )
+    
+    assert "Invalid reason_code" in str(exc_info.value)
+    assert "ContextRegression" in str(exc_info.value)
+    assert ARTIFACT_HASH_CHANGED in str(exc_info.value)
+
+
+def test_valid_category_specific_codes_still_work():
+    """Test that valid category-specific codes continue to work."""
+    from src.engine.execution_regression_detector import (
+        NodeRegression,
+        ArtifactRegression,
+        ContextRegression,
+        NODE_SUCCESS_TO_FAILURE,
+        ARTIFACT_REMOVED,
+        CONTEXT_KEY_REMOVED,
+    )
+    
+    # Node regression with node code
+    node_reg = NodeRegression(
+        node_id="n1",
+        reason_code=NODE_SUCCESS_TO_FAILURE,
+        left_status="success",
+        right_status="failure",
+    )
+    assert node_reg.reason_code == NODE_SUCCESS_TO_FAILURE
+    
+    # Artifact regression with artifact code
+    artifact_reg = ArtifactRegression(
+        artifact_id="art_1",
+        reason_code=ARTIFACT_REMOVED,
+    )
+    assert artifact_reg.reason_code == ARTIFACT_REMOVED
+    
+    # Context regression with context code
+    context_reg = ContextRegression(
+        context_key="ctx.key",
+        reason_code=CONTEXT_KEY_REMOVED,
+    )
+    assert context_reg.reason_code == CONTEXT_KEY_REMOVED
+
+
+def test_detect_regressions_unchanged_with_category_validation():
+    """Test that detect_regressions behavior is unchanged after category validation."""
+    # This verifies that category-specific validation doesn't break normal detection
+    node_diffs = [
+        NodeDiff(
+            node_id="n1",
+            change_type=CHANGE_TYPE_MODIFIED,
+            left_status="success",
+            right_status="failure",
+        )
+    ]
+    
+    artifact_diffs = [
+        ArtifactDiff(
+            artifact_id="art_1",
+            change_type=CHANGE_TYPE_REMOVED,
+            left_hash="hash_abc",
+        )
+    ]
+    
+    context_diffs = [
+        ContextDiff(
+            context_key="ctx.key",
+            change_type=CHANGE_TYPE_MODIFIED,
+            left_value="old",
+            right_value="new",
+        )
+    ]
+    
+    diff = RunDiff(
+        left_run_id="left",
+        right_run_id="right",
+        status=RUN_DIFF_STATUS_CHANGED,
+        node_diffs=node_diffs,
+        artifact_diffs=artifact_diffs,
+        context_diffs=context_diffs,
+    )
+    
+    result = detect_regressions(diff)
+    
+    # Should work exactly as before
+    assert result.status == REGRESSION_STATUS_REGRESSION
+    assert result.summary.node_regressions == 1
+    assert result.summary.artifact_regressions == 1
+    assert result.summary.context_regressions == 1
+    assert len(result.nodes) == 1
+    assert len(result.artifacts) == 1
+    assert len(result.context) == 1
+    assert result.nodes[0].reason_code == NODE_SUCCESS_TO_FAILURE
+    assert result.artifacts[0].reason_code == ARTIFACT_REMOVED
+    assert result.context[0].reason_code == CONTEXT_VALUE_CHANGED

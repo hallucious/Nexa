@@ -33,6 +33,19 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, List
 
+from src.contracts.regression_reason_codes import (
+    NODE_SUCCESS_TO_FAILURE,
+    NODE_SUCCESS_TO_SKIPPED,
+    NODE_REMOVED_SUCCESS,
+    ARTIFACT_REMOVED,
+    ARTIFACT_HASH_CHANGED,
+    CONTEXT_KEY_REMOVED,
+    CONTEXT_VALUE_CHANGED,
+    VALID_NODE_REASON_CODES,
+    VALID_ARTIFACT_REASON_CODES,
+    VALID_CONTEXT_REASON_CODES,
+    VALID_REASON_CODES,
+)
 from src.engine.execution_diff_model import (
     CHANGE_TYPE_MODIFIED,
     CHANGE_TYPE_REMOVED,
@@ -54,32 +67,43 @@ VALID_REGRESSION_STATUSES = frozenset({
 
 
 # ---------------------------------------------------------------------------
-# Reason code constants
+# Severity constants
 # ---------------------------------------------------------------------------
 
-# Node regression reason codes
-NODE_SUCCESS_TO_FAILURE = "NODE_SUCCESS_TO_FAILURE"
-NODE_SUCCESS_TO_SKIPPED = "NODE_SUCCESS_TO_SKIPPED"
-NODE_REMOVED_SUCCESS = "NODE_REMOVED_SUCCESS"
+REGRESSION_SEVERITY_HIGH = "HIGH"
+REGRESSION_SEVERITY_MEDIUM = "MEDIUM"
+REGRESSION_SEVERITY_LOW = "LOW"
 
-# Artifact regression reason codes
-ARTIFACT_REMOVED = "ARTIFACT_REMOVED"
-ARTIFACT_HASH_CHANGED = "ARTIFACT_HASH_CHANGED"
-
-# Context regression reason codes
-CONTEXT_KEY_REMOVED = "CONTEXT_KEY_REMOVED"
-CONTEXT_VALUE_CHANGED = "CONTEXT_VALUE_CHANGED"
-
-# All valid reason codes
-VALID_REASON_CODES = frozenset({
-    NODE_SUCCESS_TO_FAILURE,
-    NODE_SUCCESS_TO_SKIPPED,
-    NODE_REMOVED_SUCCESS,
-    ARTIFACT_REMOVED,
-    ARTIFACT_HASH_CHANGED,
-    CONTEXT_KEY_REMOVED,
-    CONTEXT_VALUE_CHANGED,
+VALID_REGRESSION_SEVERITIES = frozenset({
+    REGRESSION_SEVERITY_HIGH,
+    REGRESSION_SEVERITY_MEDIUM,
+    REGRESSION_SEVERITY_LOW,
 })
+
+
+# ---------------------------------------------------------------------------
+# Reason code to severity mapping
+# ---------------------------------------------------------------------------
+
+_REASON_CODE_TO_SEVERITY = {
+    # Node regressions
+    NODE_SUCCESS_TO_FAILURE: REGRESSION_SEVERITY_HIGH,
+    NODE_REMOVED_SUCCESS: REGRESSION_SEVERITY_HIGH,
+    NODE_SUCCESS_TO_SKIPPED: REGRESSION_SEVERITY_MEDIUM,
+    
+    # Artifact regressions
+    ARTIFACT_REMOVED: REGRESSION_SEVERITY_HIGH,
+    ARTIFACT_HASH_CHANGED: REGRESSION_SEVERITY_MEDIUM,
+    
+    # Context regressions
+    CONTEXT_KEY_REMOVED: REGRESSION_SEVERITY_MEDIUM,
+    CONTEXT_VALUE_CHANGED: REGRESSION_SEVERITY_LOW,
+}
+
+
+def _get_severity(reason_code: str) -> str:
+    """Get severity level for a reason code."""
+    return _REASON_CODE_TO_SEVERITY[reason_code]
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +136,9 @@ class RegressionSummary:
     node_regressions: int = 0
     artifact_regressions: int = 0
     context_regressions: int = 0
+    high_regressions: int = 0
+    medium_regressions: int = 0
+    low_regressions: int = 0
 
 
 @dataclass
@@ -121,13 +148,24 @@ class NodeRegression:
     reason_code: str
     left_status: str | None
     right_status: str | None
+    severity: str = field(init=False)
     
     def __post_init__(self):
-        """Validate reason_code on construction."""
-        if self.reason_code not in VALID_REASON_CODES:
+        """Validate reason_code and assign severity on construction."""
+        if self.reason_code not in VALID_NODE_REASON_CODES:
             raise ValueError(
                 f"Invalid reason_code '{self.reason_code}' for NodeRegression. "
-                f"Must be one of: {', '.join(sorted(VALID_REASON_CODES))}"
+                f"Must be one of: {', '.join(sorted(VALID_NODE_REASON_CODES))}"
+            )
+        
+        # Assign severity from reason_code
+        self.severity = _get_severity(self.reason_code)
+        
+        # Validate severity
+        if self.severity not in VALID_REGRESSION_SEVERITIES:
+            raise ValueError(
+                f"Invalid severity '{self.severity}' for NodeRegression. "
+                f"Must be one of: {', '.join(sorted(VALID_REGRESSION_SEVERITIES))}"
             )
     
     @property
@@ -143,13 +181,24 @@ class ArtifactRegression:
     reason_code: str
     left_hash: str | None = None
     right_hash: str | None = None
+    severity: str = field(init=False)
     
     def __post_init__(self):
-        """Validate reason_code on construction."""
-        if self.reason_code not in VALID_REASON_CODES:
+        """Validate reason_code and assign severity on construction."""
+        if self.reason_code not in VALID_ARTIFACT_REASON_CODES:
             raise ValueError(
                 f"Invalid reason_code '{self.reason_code}' for ArtifactRegression. "
-                f"Must be one of: {', '.join(sorted(VALID_REASON_CODES))}"
+                f"Must be one of: {', '.join(sorted(VALID_ARTIFACT_REASON_CODES))}"
+            )
+        
+        # Assign severity from reason_code
+        self.severity = _get_severity(self.reason_code)
+        
+        # Validate severity
+        if self.severity not in VALID_REGRESSION_SEVERITIES:
+            raise ValueError(
+                f"Invalid severity '{self.severity}' for ArtifactRegression. "
+                f"Must be one of: {', '.join(sorted(VALID_REGRESSION_SEVERITIES))}"
             )
     
     @property
@@ -165,13 +214,24 @@ class ContextRegression:
     reason_code: str
     left_value: Any = None
     right_value: Any = None
+    severity: str = field(init=False)
     
     def __post_init__(self):
-        """Validate reason_code on construction."""
-        if self.reason_code not in VALID_REASON_CODES:
+        """Validate reason_code and assign severity on construction."""
+        if self.reason_code not in VALID_CONTEXT_REASON_CODES:
             raise ValueError(
                 f"Invalid reason_code '{self.reason_code}' for ContextRegression. "
-                f"Must be one of: {', '.join(sorted(VALID_REASON_CODES))}"
+                f"Must be one of: {', '.join(sorted(VALID_CONTEXT_REASON_CODES))}"
+            )
+        
+        # Assign severity from reason_code
+        self.severity = _get_severity(self.reason_code)
+        
+        # Validate severity
+        if self.severity not in VALID_REGRESSION_SEVERITIES:
+            raise ValueError(
+                f"Invalid severity '{self.severity}' for ContextRegression. "
+                f"Must be one of: {', '.join(sorted(VALID_REGRESSION_SEVERITIES))}"
             )
     
     @property
@@ -345,10 +405,19 @@ def detect_regressions(diff: RunDiff) -> RegressionResult:
     artifact_regressions = _detect_artifact_regressions(diff)
     context_regressions = _detect_context_regressions(diff)
     
+    # Calculate severity counts
+    all_regressions = node_regressions + artifact_regressions + context_regressions
+    high_count = sum(1 for r in all_regressions if r.severity == REGRESSION_SEVERITY_HIGH)
+    medium_count = sum(1 for r in all_regressions if r.severity == REGRESSION_SEVERITY_MEDIUM)
+    low_count = sum(1 for r in all_regressions if r.severity == REGRESSION_SEVERITY_LOW)
+    
     summary = RegressionSummary(
         node_regressions=len(node_regressions),
         artifact_regressions=len(artifact_regressions),
         context_regressions=len(context_regressions),
+        high_regressions=high_count,
+        medium_regressions=medium_count,
+        low_regressions=low_count,
     )
     
     has_regression = bool(

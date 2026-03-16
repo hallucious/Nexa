@@ -29,6 +29,7 @@ def format_regression_summary(result: RegressionResult) -> str:
         f"nodes: {result.summary.node_regressions}",
         f"artifacts: {result.summary.artifact_regressions}",
         f"context: {result.summary.context_regressions}",
+        f"severity: high={result.summary.high_regressions} medium={result.summary.medium_regressions} low={result.summary.low_regressions}",
     ]
     return "\n".join(lines)
 
@@ -52,10 +53,10 @@ def format_regression(result: RegressionResult) -> str:
         for node_reg in result.nodes:
             if node_reg.right_status is None:
                 # Removed node
-                lines.append(f"{node_reg.node_id}: removed (was {node_reg.left_status})")
+                lines.append(f"{node_reg.node_id}: removed (was {node_reg.left_status}) [{node_reg.severity}]")
             else:
                 # Status change
-                lines.append(f"{node_reg.node_id}: {node_reg.left_status} -> {node_reg.right_status}")
+                lines.append(f"{node_reg.node_id}: {node_reg.left_status} -> {node_reg.right_status} [{node_reg.severity}]")
     
     # Artifact regressions section
     if result.artifacts:
@@ -63,7 +64,7 @@ def format_regression(result: RegressionResult) -> str:
         lines.append("Artifact Regressions")
         lines.append("--------------------")
         for art_reg in result.artifacts:
-            lines.append(f"{art_reg.artifact_id}: {art_reg.reason}")
+            lines.append(f"{art_reg.artifact_id}: {art_reg.reason} [{art_reg.severity}]")
     
     # Context regressions section
     if result.context:
@@ -71,7 +72,7 @@ def format_regression(result: RegressionResult) -> str:
         lines.append("Context Regressions")
         lines.append("-------------------")
         for ctx_reg in result.context:
-            lines.append(f"{ctx_reg.context_key}: {ctx_reg.reason}")
+            lines.append(f"{ctx_reg.context_key}: {ctx_reg.reason} [{ctx_reg.severity}]")
     
     return "\n".join(lines)
 
@@ -88,12 +89,16 @@ def format_regression_json(result: RegressionResult) -> Dict[str, Any]:
             "node_regressions": result.summary.node_regressions,
             "artifact_regressions": result.summary.artifact_regressions,
             "context_regressions": result.summary.context_regressions,
+            "high_regressions": result.summary.high_regressions,
+            "medium_regressions": result.summary.medium_regressions,
+            "low_regressions": result.summary.low_regressions,
         },
         "nodes": [
             {
                 "node_id": nr.node_id,
                 "reason_code": nr.reason_code,
                 "reason": nr.reason,
+                "severity": nr.severity,
                 "left_status": nr.left_status,
                 "right_status": nr.right_status,
             }
@@ -104,6 +109,7 @@ def format_regression_json(result: RegressionResult) -> Dict[str, Any]:
                 "artifact_id": ar.artifact_id,
                 "reason_code": ar.reason_code,
                 "reason": ar.reason,
+                "severity": ar.severity,
                 "left_hash": ar.left_hash,
                 "right_hash": ar.right_hash,
             }
@@ -114,6 +120,7 @@ def format_regression_json(result: RegressionResult) -> Dict[str, Any]:
                 "context_key": cr.context_key,
                 "reason_code": cr.reason_code,
                 "reason": cr.reason,
+                "severity": cr.severity,
                 "left_value": cr.left_value,
                 "right_value": cr.right_value,
             }
