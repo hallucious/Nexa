@@ -31,6 +31,10 @@ def build_parser():
 
     sub.add_parser("info")
 
+    diff_parser = sub.add_parser("diff")
+    diff_parser.add_argument("left", help="Path to left run snapshot JSON file")
+    diff_parser.add_argument("right", help="Path to right run snapshot JSON file")
+
     return parser
 
 
@@ -139,21 +143,17 @@ def build_failure_observability_record(args, exc):
 
 def get_system_info() -> dict:
     """Collect Nexa system information for the info command."""
-    # Python version (major.minor)
     vi = sys.version_info
     python_version = f"{vi.major}.{vi.minor}"
 
-    # Nexa root: src/cli/nexa_cli.py → ../../.. → project root
     nexa_root = Path(__file__).resolve().parent.parent.parent
 
-    # Installed providers: count *_provider.py files under src/providers/
     providers_dir = nexa_root / "src" / "providers"
     if providers_dir.is_dir():
         providers_installed = len(list(providers_dir.glob("*_provider.py")))
     else:
         providers_installed = 0
 
-    # Registered plugins: use plugin registry
     from src.platform.plugin_registry import ids as plugin_ids
     plugins_registered = len(plugin_ids())
 
@@ -175,6 +175,59 @@ def info_command() -> int:
     print(f"Nexa Root Path: {info['nexa_root']}")
     print(f"Providers Installed: {info['providers_installed']}")
     print(f"Plugins Registered: {info['plugins_registered']}")
+
+    return 0
+
+
+def _load_run_snapshot(path: str) -> dict:
+    """Load a run snapshot JSON file and return it as a dict.
+
+    Raises SystemExit(1) with a message on any input error so that
+    diff_command can treat all error paths uniformly.
+    """
+    p = Path(path)
+    if not p.exists():
+        print(f"Error: file not found: {path}", file=sys.stderr)
+        raise SystemExit(1)
+
+    try:
+        text = p.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"Error: cannot read file {path}: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as exc:
+        print(f"Error: invalid JSON in {path}: {exc}", file=sys.stderr)
+        raise SystemExit(1)
+
+    if not isinstance(data, dict):
+        print(
+            f"Error: {path} must contain a JSON object (dict), "
+            f"got {type(data).__name__}",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+    return data
+
+
+def diff_command(args) -> int:
+    """Execute the diff command: compare two run snapshot JSON files."""
+    from src.engine.execution_diff_engine import compare_runs
+
+    left_run = _load_run_snapshot(args.left)
+    right_run = _load_run_snapshot(args.right)
+
+    diff = compare_runs(left_run, right_run)
+    s = diff.summary
+
+    print("Execution Diff")
+    print(f"status: {diff.status}")
+    print(f"nodes: added={s.nodes_added} removed={s.nodes_removed} changed={s.nodes_changed}")
+    print(f"artifacts: added={s.artifacts_added} removed={s.artifacts_removed} changed={s.artifacts_changed}")
+    print(f"context_keys_changed: {s.context_keys_changed}")
 
     return 0
 
@@ -270,6 +323,9 @@ def main():
 
     if args.command == "info":
         return info_command()
+
+    if args.command == "diff":
+        return diff_command(args)
 
     parser.print_help()
     return 0
