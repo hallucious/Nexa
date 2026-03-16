@@ -216,18 +216,13 @@ def _load_run_snapshot(path: str) -> dict:
 def diff_command(args) -> int:
     """Execute the diff command: compare two run snapshot JSON files."""
     from src.engine.execution_diff_engine import compare_runs
+    from src.engine.execution_diff_formatter import format_diff_summary
 
     left_run = _load_run_snapshot(args.left)
     right_run = _load_run_snapshot(args.right)
 
     diff = compare_runs(left_run, right_run)
-    s = diff.summary
-
-    print("Execution Diff")
-    print(f"status: {diff.status}")
-    print(f"nodes: added={s.nodes_added} removed={s.nodes_removed} changed={s.nodes_changed}")
-    print(f"artifacts: added={s.artifacts_added} removed={s.artifacts_removed} changed={s.artifacts_changed}")
-    print(f"context_keys_changed: {s.context_keys_changed}")
+    print(format_diff_summary(diff))
 
     return 0
 
