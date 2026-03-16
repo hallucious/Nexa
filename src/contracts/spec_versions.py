@@ -12,6 +12,9 @@ EXECUTION_ENVIRONMENT_CONTRACT_VERSION = "1.4.0"
 GRAPH_EXECUTION_CONTRACT_VERSION = "1.0.0"
 CIRCUIT_RUNTIME_MODEL_VERSION = "1.0.0"
 
+# Step179 new spec
+CONTEXT_KEY_SCHEMA_CONTRACT_VERSION = "1.0.0"
+
 # Canonical mapping: doc-relative-path -> version constant
 # Used by the spec-version sync contract test to enforce completeness.
 SPEC_VERSIONS = {
@@ -43,6 +46,7 @@ SPEC_VERSIONS = {
     "docs/specs/contracts/execution_environment_contract.md": "1.4.0",
     "docs/specs/contracts/execution_config_canonicalization_contract.md": "1.0.0",
     "docs/specs/contracts/execution_config_schema_contract.md": "1.0.0",
+    "docs/specs/contracts/context_key_schema_contract.md": CONTEXT_KEY_SCHEMA_CONTRACT_VERSION,
 
     "docs/specs/execution_config_prompt_binding_contract.md": "1.0.0",
     "docs/specs/execution_config_registry_contract.md": "1.0.0",

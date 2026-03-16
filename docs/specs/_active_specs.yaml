@@ -17,6 +17,7 @@ active_specs:
   - docs/specs/indexes/spec_catalog.md
   - docs/specs/indexes/spec_dependency_map.md
   - docs/specs/contracts/execution_config_canonicalization_contract.md
+  - docs/specs/contracts/context_key_schema_contract.md
   - docs/specs/contracts/execution_config_schema_contract.md
   - docs/specs/execution_config_prompt_binding_contract.md
   - docs/specs/execution_config_registry_contract.md

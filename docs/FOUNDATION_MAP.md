@@ -22,7 +22,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 3. Planned 문서는 아직 구현/계약 반영 전의 미래 설계 문서다.
 4. Deprecated 문서는 더 이상 기준 문서로 사용하지 않는다.
 5. 문서 경로 변경 시 반드시 FOUNDATION_MAP, BLUEPRINT, 관련 테스트를 함께 갱신한다.
-6. Active spec 목록의 최종 Source of Truth는 `docs/specs/indexes/_active_specs.yaml` 이다.
+6. Active spec 목록의 최종 Source of Truth는 `docs/specs/_active_specs.yaml` 이다.
 7. FOUNDATION_MAP의 Active 문서 경로는 현재 실제 파일 위치와 일치해야 한다.
 
 ---
@@ -96,6 +96,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 | prompt_contract | docs/specs/contracts/prompt_contract.md | Active | prompt contract | src/prompts/* |
 | provider_contract | docs/specs/contracts/provider_contract.md | Active | provider contract | src/providers/* |
 | validation_engine_contract | docs/specs/contracts/validation_engine_contract.md | Active | validation engine contract | src/engine/validation/* |
+| context_key_schema_contract | docs/specs/contracts/context_key_schema_contract.md | Active | working context key schema 계약 | src/contracts/context_key_schema.py |
 
 ---
 
@@ -105,7 +106,6 @@ Status: Canonical Foundation Index (Architecture Memory)
 |---|---|---:|---|---|
 | docs_specs_circuit_trace_contract | docs/specs/history/docs_specs_circuit_trace_contract.md | Partial | circuit trace history / contract lineage | src/circuit/trace.py |
 | node_execution_pipeline | docs/specs/history/node_execution_pipeline.md | Partial | node execution pipeline history | src/engine/* |
-| pipeline_test_migration_plan | docs/specs/history/pipeline_test_migration_plan.md | Partial | legacy test migration 계획 | tests/* |
 | legacy_removal_plan | docs/specs/history/legacy_removal_plan.md | Partial | legacy 제거 계획 | migration / cleanup |
 | observability_and_metrics | docs/specs/policies/observability_and_metrics.md | Partial | observability 방향 문서 | observability |
 | observability_metrics | docs/specs/policies/observability_metrics.md | Partial | observability metrics 계약 | src/utils/observability.py |
@@ -165,6 +165,7 @@ Status: Canonical Foundation Index (Architecture Memory)
 - docs/specs/contracts/prompt_contract.md
 - docs/specs/contracts/provider_contract.md
 - docs/specs/contracts/validation_engine_contract.md
+- docs/specs/contracts/context_key_schema_contract.md
 - docs/specs/policies/validation_rule_catalog.md
 - docs/specs/policies/validation_rule_lifecycle.md
 - docs/specs/indexes/spec_catalog.md
@@ -181,3 +182,16 @@ Status: Canonical Foundation Index (Architecture Memory)
    - `docs/BLUEPRINT.md`
    - 관련 문서 계약 테스트
 4. 인코딩은 반드시 UTF-8로 저장한다.
+
+---
+
+### Active Spec Registry
+
+The canonical registry of active specification documents is:
+
+docs/specs/_active_specs.yaml
+
+This file is the **source of truth** for all currently active specs in the Nexa documentation system.
+
+All spec activation, deprecation, and version synchronization must update this registry.
+Other documentation files (including FOUNDATION_MAP.md and BLUEPRINT.md) must treat this file as the authoritative index.
