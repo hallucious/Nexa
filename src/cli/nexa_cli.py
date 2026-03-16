@@ -46,6 +46,7 @@ def build_parser():
     diff_parser = sub.add_parser("diff")
     diff_parser.add_argument("left", help="Path to left run snapshot JSON file")
     diff_parser.add_argument("right", help="Path to right run snapshot JSON file")
+    diff_parser.add_argument("--json", action="store_true", dest="output_json", help="Output diff as JSON")
 
     return parser
 
@@ -227,14 +228,19 @@ def _load_run_snapshot(path: str) -> dict:
 
 def diff_command(args) -> int:
     """Execute the diff command: compare two run snapshot JSON files."""
+    import json as _json
     from src.engine.execution_diff_engine import compare_runs
-    from src.engine.execution_diff_formatter import format_diff
+    from src.engine.execution_diff_formatter import format_diff, format_diff_json
 
     left_run = _load_run_snapshot(args.left)
     right_run = _load_run_snapshot(args.right)
 
     diff = compare_runs(left_run, right_run)
-    print(format_diff(diff))
+
+    if getattr(args, "output_json", False):
+        print(_json.dumps(format_diff_json(diff), indent=2))
+    else:
+        print(format_diff(diff))
 
     return 0
 

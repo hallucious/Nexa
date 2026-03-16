@@ -76,3 +76,74 @@ def format_diff(diff: RunDiff) -> str:
     if details:
         return summary + "\n\n" + details
     return summary
+
+
+def format_diff_json(diff: RunDiff) -> dict:
+    """Return a machine-readable dict representation of a RunDiff.
+
+    Structure:
+        {
+            "status": str,
+            "summary": { nodes_added, nodes_removed, nodes_changed,
+                         artifacts_added, artifacts_removed, artifacts_changed,
+                         trace_keys_changed, context_keys_changed },
+            "nodes":    [ {node_id, change_type, left_status, right_status,
+                           left_output_ref, right_output_ref,
+                           artifact_ids_added, artifact_ids_removed, artifact_ids_changed} ],
+            "artifacts": [ {artifact_id, change_type, left_hash, right_hash,
+                            left_kind, right_kind} ],
+            "context":  [ {context_key, change_type, left_value, right_value} ]
+        }
+
+    Output is deterministic (field order is stable via dataclass asdict).
+    """
+    from dataclasses import asdict
+    s = diff.summary
+
+    return {
+        "status": diff.status,
+        "summary": {
+            "nodes_added":           s.nodes_added,
+            "nodes_removed":         s.nodes_removed,
+            "nodes_changed":         s.nodes_changed,
+            "artifacts_added":       s.artifacts_added,
+            "artifacts_removed":     s.artifacts_removed,
+            "artifacts_changed":     s.artifacts_changed,
+            "trace_keys_changed":    s.trace_keys_changed,
+            "context_keys_changed":  s.context_keys_changed,
+        },
+        "nodes": [
+            {
+                "node_id":               nd.node_id,
+                "change_type":           nd.change_type,
+                "left_status":           nd.left_status,
+                "right_status":          nd.right_status,
+                "left_output_ref":       nd.left_output_ref,
+                "right_output_ref":      nd.right_output_ref,
+                "artifact_ids_added":    nd.artifact_ids_added,
+                "artifact_ids_removed":  nd.artifact_ids_removed,
+                "artifact_ids_changed":  nd.artifact_ids_changed,
+            }
+            for nd in diff.node_diffs
+        ],
+        "artifacts": [
+            {
+                "artifact_id":  ad.artifact_id,
+                "change_type":  ad.change_type,
+                "left_hash":    ad.left_hash,
+                "right_hash":   ad.right_hash,
+                "left_kind":    ad.left_kind,
+                "right_kind":   ad.right_kind,
+            }
+            for ad in diff.artifact_diffs
+        ],
+        "context": [
+            {
+                "context_key": cd.context_key,
+                "change_type": cd.change_type,
+                "left_value":  cd.left_value,
+                "right_value": cd.right_value,
+            }
+            for cd in diff.context_diffs
+        ],
+    }
