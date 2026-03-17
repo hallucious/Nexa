@@ -4,6 +4,9 @@ Status: Partial
 Category: misc
 Depends On:
 
+
+> **NOTE**: THIS FILE IS A COMPATIBILITY COPY. CANONICAL VERSION IS IN `docs/specs/policies/validation_rule_lifecycle.md`
+
 # Validation Rule Lifecycle
 Version: 1.0.0
 Status: Official Contract

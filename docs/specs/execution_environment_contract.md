@@ -9,7 +9,7 @@ Version: 1.4.0
 Status: Official Contract
 
 Purpose:
-Defines execution environment constraints for Hyper-AI v1.
+Defines execution environment constraints for Nexa v1.
 
 ---------------------------------------------------------------------
 1. No-IO Principle (v1)

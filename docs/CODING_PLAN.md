@@ -1,139 +1,95 @@
-# Hyper-AI CODING PLAN
+# Nexa CODING PLAN
 
-Version: 2.1.1
+Version: 2.2.0
 
-------------------------------------------
-Step67~84: Engine/Circuit 안정화 + 핵심 계약 고정 (완료)
-------------------------------------------
+---
 
-요약:
-- Circuit Runtime Adapter: conditional edge(우선순위) + trace wiring + node execution stages 결합
-- CT-TRACE v1.0.0: node enter/exit, circuit finish, conditional edge 선택/조건 결과 기록
-- NODE-EXEC v1.0.0: Pre/Core/Post 실행 단계 + AI는 Core-only
-- AI-PROVIDER v1.0.0: ProviderResult + reason_code 정규화
-- PLUGIN-CONTRACT v1.0.0: PluginResult envelope + stage-aware + reason_code 정규화
-- PROMPT-CONTRACT v1.0.0: PromptSpec hash/render + PromptRegistry
-- OBSERVABILITY(opt-in): node/stage/prompt 이벤트 기록(기존 API 비파괴)
-- PLUGIN-REGISTRY v1.0.0: 버전 레지스트리 + negotiate에서 안전 resolve(옵션일 때 KeyError 방지)
-- Step84: 203 passed / 9 skipped / warnings 재현되지 않음 (stabilization checkpoint)
+## Completed Steps
 
-완료 조건(증명):
-- `python -m pytest -q` → 203 passed, 9 skipped (Step84 기준)
+### Step67–84: Engine/Circuit Stabilization + Core Contract Freeze
 
-다음 목표(후속 Step 제안):
-- "노드/프롬프트/AI/플러그인 시스템"을 문서/계약 기준으로 더 명확히 고정
-- 이후 "회로(circuit) 시스템" 확장(모듈/서브그래프/분기/저장 등)로 진행
+- Circuit Runtime Adapter: conditional edge + trace wiring + node resource execution
+- Node execution phases: pre / core / post (AI in core only; node-internal contract)
+- Provider contract: ProviderResult + reason_code normalization
+- Plugin contract: PluginResult envelope + stage-aware + reason_code normalization
+- Prompt contract: PromptSpec hash/render + PromptRegistry
+- Observability: opt-in node/stage/prompt event recording
+- Plugin registry: version registry + safe resolve
 
-------------------------------------------
-Step121: ExecutionConfig Canonicalization / Hash Identity (완료)
-------------------------------------------
+### Step100–108: Provider/Artifact/Node Observability Contracts
 
-목표:
-- ExecutionConfig를 실행 의미 기반 canonical hash로 식별
-- 같은 구성은 같은 ID, 실행 의미 변경은 다른 ID가 되도록 강제
-- canonicalization 계약을 문서/테스트/코드로 고정
+- Provider observability, trace, result, execution contracts
+- Node execution runtime contract
+- Artifact schema contract
 
-구현:
-- src/engine/execution_config_hash.py
-- docs/specs/contracts/execution_config_canonicalization_contract.md
-- tests/test_step121_execution_config_hash_contract.py
+### Step114–120: Node Spec + Graph Runtime + Engine Integration
 
-완료 조건:
-- canonical hash 생성 테스트 통과
-- 전체 pytest 통과 유지
+- NodeSpec contract, GraphExecutionRuntime contract, Engine delegation
 
-------------------------------------------
-Step122: ExecutionConfig Registry Loader (완료)
-------------------------------------------
+### Step121–125: ExecutionConfig Architecture
 
-목표:
-- repo 내부 registry/execution_configs/에서 ExecutionConfig를 로드
-- ref → config resolution, version lookup, 캐싱 계약 고정
+- **Step121**: ExecutionConfig canonical hash identity (`src/engine/execution_config_hash.py`)
+- **Step122**: ExecutionConfig registry (`src/platform/execution_config_registry.py`)
+- **Step123**: NodeExecutionRuntime resource execution stages (pre_plugins → prompt_render → provider_execute → post_plugins → validation → output_mapping)
+- **Step124**: NodeSpec → ExecutionConfig resolution (`src/engine/node_spec_resolver.py`)
+- **Step125**: ExecutionConfig schema validation (`src/platform/execution_config_schema.py`)
 
-구현:
-- src/platform/execution_config_registry.py
-- tests/test_step122_execution_config_registry_contract.py
+### Step126–142: Circuit System + CLI
 
-완료 조건:
-- registry lookup / missing config / missing version / cache 테스트 통과
-- 전체 pytest 통과 유지
+- ExecutionConfig version negotiation, bridge, compiled resource graph
+- Graph wave scheduler, final output resolver
+- Circuit validation, I/O, loader
+- CLI parser
 
-------------------------------------------
-Step123: NodeExecutionRuntime Slot Stages (완료)
-------------------------------------------
+### Step143–170: CLI + Observability + Determinism + Regression
 
-목표:
-- NodeExecutionRuntime이 ExecutionConfig 스타일 입력을 받아 slot stages를 실행
-- legacy Artifact / NodeResult / NodeTrace 계약 유지
+- CLI: state injection, output export, summary, error handling
+- Plugin auto-loader, runtime metrics, observability export
+- Execution event stream, timeline, replay
+- Execution determinism validator, artifact hashing
+- Execution snapshot and diff, diff visualizer
+- Regression detector (typed reason codes, severity)
+- Audit pack, provenance graph, run comparator, execution debugger
 
-구현:
-- src/engine/node_execution_runtime.py
-- tests/test_step123_nodeslot_pipeline_contract.py
+### Step179: Context Key Schema Contract
 
-실행 슬롯:
-1. pre_plugins
-2. prompt_render
-3. provider_execute
-4. post_plugins
-5. validation
-6. output_mapping
+- `src/contracts/context_key_schema.py`
+- `docs/specs/contracts/context_key_schema_contract.md`
 
-완료 조건:
-- legacy runtime 계약 유지
-- ExecutionConfig bridge 테스트 통과
-- 전체 pytest 통과 유지
+### Step186–186.3: Regression Reason Code System
 
-------------------------------------------
-Step124: NodeSpec → ExecutionConfig Resolution (완료)
-------------------------------------------
+- Typed reason codes with severity modeling
+- Reason code constants extracted to `src/contracts/regression_reason_codes.py` (single source of truth)
 
-목표:
-- NodeSpec이 execution_config_ref를 통해 ExecutionConfigRegistry와 연결되도록 구현
-- Node는 실행 로직이 아닌 reference만 가지는 구조를 확정
+### Step187–187.1: Regression Policy Engine
 
-구현:
-- src/engine/node_spec_resolver.py
-- tests/test_step124_node_spec_resolution_contract.py
+- `src/engine/execution_regression_policy.py`
+- PolicyDecision (PASS / WARN / FAIL)
+- HIGH → FAIL, MEDIUM → WARN, LOW → PASS
+- Detailed trigger lines: `Trigger: node n1 (NODE_SUCCESS_TO_FAILURE, HIGH)`
 
-완료 조건:
-- resolution success / missing config / invalid ref / missing version 테스트 통과
-- 전체 pytest 통과 유지
+**Current baseline: 688 passed, 3 skipped**
 
-------------------------------------------
-Step125: ExecutionConfig Schema Validation (완료)
-------------------------------------------
+---
 
-목표:
-- ExecutionConfigRegistry 로드 전에 schema validation을 강제
-- 잘못된 config JSON을 조기 차단
-- ExecutionConfig를 검증됨 / canonical / hashable / registry-managed 실행 단위로 고정
+## Next Steps
 
-구현:
-- src/platform/execution_config_schema.py
-- docs/specs/contracts/execution_config_schema_contract.md
-- tests/test_step125_execution_config_schema_contract.py
+### Step188: CLI Regression Gating
 
-최소 강제 필드:
-- config_id
-- version
+Goal: Integrate policy engine into CLI for CI/CD.
 
-타입 강제:
-- pre_plugins: list
-- post_plugins: list
-- validation_rules: list
-- output_mapping: dict
+- `--baseline` flag for comparison run
+- Exit code driven by PolicyDecision status (0=PASS, 1=WARN, 2=FAIL)
+- Structured output for FAIL/WARN cases
 
-완료 조건:
-- schema validation contract 테스트 통과
-- 전체 pytest 통과 유지
+### Step189: Configuration-Driven Policy
 
-------------------------------------------
-다음 작업
-------------------------------------------
+Goal: Allow policy rules to be configured per-circuit or per-run.
 
-Step126: ExecutionConfig Version Negotiation
+- Policy config schema
+- Per-reason-code severity override
+- Policy config registry
 
-목표:
-- ExecutionConfig ref에서 version negotiation 규칙 정의
-- 1 / 1.x / 1.2 / 1.2.3 형태의 ref를 안정적으로 해석
-- registry lookup을 version compatibility-aware 로 확장
+---
+
+End of Coding Plan

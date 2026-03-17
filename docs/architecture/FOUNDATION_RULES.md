@@ -1,4 +1,4 @@
-Nexa Architecture Constitution v1
+Nexa Architecture Constitution v2
 
 Purpose
 Nexa는 AI 간 협업을 통해 버그 발생 확률을 구조적으로 낮추는 execution engine을 구축하기 위한 시스템이다.
@@ -50,18 +50,21 @@ Circuit은 실행을 수행하지 않으며 Node 간 연결만 담당한다.
 3. Dependency Execution Rule
 ────────────────
 
-Nexa의 실행은 dependency 기반이어야 한다.
+Nexa의 시스템 수준 실행은 반드시 dependency 기반이어야 한다.
+
+노드는 자신의 upstream dependency가 충족될 때만 실행된다.
 
 허용되는 실행 방식
 
-dependency-based execution
+dependency-based execution (runtime이 동적으로 순서 결정)
 
 금지되는 실행 방식
 
-prompt → provider → plugin
-pipeline execution
+고정 순서 pipeline execution (시스템 수준)
+step-list workflow model
 
-Node 내부에서도 resource dependency 기반 실행을 유지한다.
+참고: Pre / Core / Post는 단일 노드 내부의 실행 단계 계약이며
+시스템 수준 pipeline이 아니다. (docs/specs/architecture/node_execution_contract.md)
 
 
 ────────────────
@@ -91,7 +94,7 @@ artifact.replace()
 
 이를 위해 다음을 유지한다.
 
-deterministic scheduling
+deterministic dependency-based scheduling
 artifact hash consistency
 execution trace reproducibility
 
@@ -147,6 +150,8 @@ artifact contract
 plugin result contract
 execution trace schema
 validation engine contract
+ExecutionConfig schema
+regression reason codes catalog
 spec-version registry
 
 구현은 항상 계약을 먼저 존중해야 한다.
@@ -175,7 +180,7 @@ contract tests
 최소 포함 정보
 
 execution trace
-node execution record
+node execution record (pre/core/post status)
 artifact lineage
 runtime metadata
 
@@ -188,7 +193,9 @@ Nexa 개발은 다음 순서를 따른다.
 
 Engine
 ↓
-CLI
+Runtime
+↓
+Core architecture
 ↓
 Developer tools
 ↓
@@ -205,7 +212,7 @@ UI / Visual editor
 
 다음 구조는 Nexa에서 금지된다.
 
-pipeline execution engine
+시스템 수준의 고정 pipeline execution engine
 step-list workflow model
 mutable artifact storage
 plugin unrestricted write access
@@ -220,6 +227,7 @@ undocumented runtime mutation
 
 이 기능이 execution engine 모델을 깨지 않는가?
 Node 중심 구조를 유지하는가?
+dependency-based execution을 유지하는가?
 artifact immutability를 유지하는가?
 plugin isolation을 깨지 않는가?
 contract system과 충돌하지 않는가?

@@ -9,7 +9,7 @@ Version: 1.0.1
 Status: Official Contract
 
 Purpose:
-Hyper-AI의 핵심 용어(Engine/Node/Channel/Flow/Trace 등)를 정의한다.
+Nexa의 핵심 용어(Engine/Node/Channel/Flow/Trace 등)를 정의한다.
 모든 spec은 이 용어를 기준으로 작성된다.
 
 
@@ -39,7 +39,7 @@ Archived-Version: v1.0.0
 Status: Official Contract
 
 Purpose:
-This document defines the canonical terminology of Hyper-AI.
+This document defines the canonical terminology of Nexa.
 All structural, execution, and validation rules depend on these definitions.
 No other interpretation is allowed.
 

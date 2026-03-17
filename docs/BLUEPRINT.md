@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.4.3
+Version: 1.5.0
 
 ────────────────
 Architecture Constitution
@@ -8,32 +8,26 @@ Architecture Constitution
 
 Nexa는 Execution Engine 기반 아키텍처를 따른다.
 
-Nexa의 핵심 설계 원칙은
-docs/FOUNDATION_RULES.md
-문서에 정의된 Architecture Constitution을 따른다.
+핵심 설계 원칙은 docs/architecture/FOUNDATION_RULES.md 문서에 정의된 Constitution을 따른다.
 
-이 문서는 Nexa의 최상위 설계 규칙을 정의한다.
-
-다음 규칙은 변경될 수 없는 시스템 invariant이다.
+변경될 수 없는 시스템 invariant:
 
 1. Nexa는 workflow tool이 아니라 execution engine이다.
 2. Node는 유일한 실행 단위이다.
 3. Circuit은 실행을 수행하지 않고 연결만 담당한다.
-4. execution은 dependency 기반이어야 한다.
-5. artifact는 append-only immutable 구조이다.
-6. deterministic execution을 유지해야 한다.
-7. plugin write 영역은 plugin.<plugin_id>.* 로 제한된다.
-8. working context schema는 고정된 key 구조를 따른다.
-9. contract-driven architecture를 유지한다.
-10. spec-version synchronization을 유지한다.
+4. 시스템 수준 실행은 dependency 기반이다. 고정 pipeline은 금지된다.
+5. Node 내부에는 pre/core/post 단계가 존재하지만, 이는 단일 노드의 내부 계약이다.
+6. artifact는 append-only immutable 구조이다.
+7. deterministic execution을 유지해야 한다.
+8. plugin write 영역은 plugin.<plugin_id>.* 로 제한된다.
+9. working context schema는 고정된 key 구조를 따른다.
+10. contract-driven architecture를 유지한다.
+11. spec-version synchronization을 유지한다.
 
 이 규칙을 위반하는 구현은 Nexa 아키텍처 위반으로 간주된다.
 
-모든 구현과 리팩토링은
-Architecture Constitution을 기준으로 검증되어야 한다.
 
-
-## 1. Foundation Layer (Canonical Architecture Memory)
+## 1. Foundation Layer
 
 본 프로젝트의 기초 설계 문서는 다음 문서에 의해 계층적으로 관리된다:
 
@@ -44,18 +38,15 @@ Architecture Constitution을 기준으로 검증되어야 한다.
 
 ## 2. Active Specifications
 
-현재 코드와 1:1로 동기화되는 활성 spec 문서 목록.
+현재 코드와 동기화되는 활성 spec 문서.
 
-Source-of-Truth: `docs/specs/indexes/_active_specs.yaml`
-
-Active spec 경로는 _active_specs.yaml 이 최종 기준이며,
-아래 목록은 주요 spec 참조 목록이다.
+Source-of-Truth: `docs/specs/_active_specs.yaml`
 
 ### 2.1 Foundation / Terminology
 
 - docs/specs/foundation/terminology.md
 
-### 2.2 Architecture Core Contracts
+### 2.2 Architecture Core
 
 - docs/specs/architecture/execution_model.md
 - docs/specs/architecture/trace_model.md
@@ -64,7 +55,7 @@ Active spec 경로는 _active_specs.yaml 이 최종 기준이며,
 - docs/specs/architecture/circuit_contract.md
 - docs/specs/architecture/universal_provider_architecture.md
 
-### 2.3 Contracts Layer
+### 2.3 Contracts
 
 - docs/specs/contracts/execution_environment_contract.md
 - docs/specs/contracts/provider_contract.md
@@ -74,6 +65,7 @@ Active spec 경로는 _active_specs.yaml 이 최종 기준이며,
 - docs/specs/contracts/validation_engine_contract.md
 - docs/specs/contracts/execution_config_canonicalization_contract.md
 - docs/specs/contracts/execution_config_schema_contract.md
+- docs/specs/contracts/context_key_schema_contract.md
 
 ### 2.4 Policies
 
@@ -85,19 +77,17 @@ Active spec 경로는 _active_specs.yaml 이 최종 기준이며,
 - docs/specs/indexes/spec_catalog.md
 - docs/specs/indexes/spec_dependency_map.md
 
-### 2.6 ExecutionConfig Binding / Registry (Top-level)
+### 2.6 ExecutionConfig
 
 - docs/specs/execution_config_prompt_binding_contract.md
 - docs/specs/execution_config_registry_contract.md
 
-## 3. ExecutionConfig Architecture (Step120~125)
+## 3. ExecutionConfig Architecture
 
 Node type은 존재하지 않는다.
 
 Node는 하나의 공통 실행 컨테이너이며,
 행동 다양성은 ExecutionConfig 조합으로만 표현한다.
-
-핵심 원칙:
 
 - Node = execution container
 - Behavior = ExecutionConfig composition
@@ -113,47 +103,19 @@ Engine
 → ExecutionConfigRegistry
 → ExecutionConfig Schema Validation
 → ExecutionConfig Hash
-→ NodeExecutionRuntime Slot Stages
+→ NodeExecutionRuntime
 
-## 4. ExecutionConfig Hash Identity (Step121)
+## 4. Regression Policy Architecture
 
-ExecutionConfig ID는 실행 의미의 정체성이다.
+contracts/regression_reason_codes.py  (single source of truth)
+  ↓
+engine/execution_regression_detector.py  (RegressionResult)
+  ↓
+engine/execution_regression_policy.py   (PolicyDecision: PASS/WARN/FAIL)
+  ↓
+formatter / CLI
 
-- 같은 구성 = 같은 ID
-- 실행 의미 변경 = 다른 ID
-- label / notes / metadata는 ID에 영향을 주지 않는다
-
-권장 형식:
-
-- ec_<short-hash>
-
-## 5. ExecutionConfig Registry (Step122)
-
-ExecutionConfig는 repo 내부 registry/에 저장된다.
-
-권장 구조:
-
-registry/
-  execution_configs/
-    ec_xxxxxxxx/
-      1.0.0.json
-
-Circuit/NodeSpec은 ExecutionConfig 전체를 포함하지 않고 reference만 가진다.
-
-## 6. ExecutionConfig Schema Validation (Step125)
-
-ExecutionConfigRegistry는 JSON 로드 후 schema validation을 통과한 config만 허용한다.
-
-최소 강제 필드:
-
-- config_id
-- version
-
-타입 강제:
-
-- pre_plugins: list
-- post_plugins: list
-- validation_rules: list
-- output_mapping: dict
-
-ExecutionConfig는 검증됨 / canonical / hashable / registry-managed 상태여야 한다.
+Policy rules (default):
+- HIGH severity regression → FAIL
+- MEDIUM severity regression → WARN
+- LOW severity / no regression → PASS

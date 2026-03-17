@@ -1,15 +1,18 @@
 Spec ID: validation_rule_catalog
-Version: 1.0.0
+Version: 1.1.0
 Status: Partial
 Category: misc
 Depends On:
+
+
+> **NOTE**: THIS FILE IS A COMPATIBILITY COPY. CANONICAL VERSION IS IN 
 
 # Validation Rule Catalog
 Version: 1.1.0
 Status: Official Contract
 
 Purpose:
-Hyper-AI v1 validation의 rule_id 표준 카탈로그.
+Nexa v1 validation의 rule_id 표준 카탈로그.
 
 ### Implemented Rules (Authoritative)
 The following rules are currently enforced by ValidationEngine (code).
@@ -46,7 +49,7 @@ Archived-Version: v1.0.0
 Status: Official Contract
 
 Purpose:
-Defines the canonical set of rule_id values for Hyper-AI v1 validation.
+Defines the canonical set of rule_id values for Nexa v1 validation.
 Rule IDs are stable identifiers. They must not change unless semantics change.
 
 ----------------------------------------------------------------------

@@ -1,71 +1,75 @@
 # Plugin System
 
-## Purpose
+Plugins extend nodes with non-AI computation capabilities.
 
-Plugins extend Nexa with additional functionality.
-
-They allow nodes to perform operations that do not require AI models.
+See contract: `docs/specs/contracts/plugin_contract.md`
 
 ---
 
 # Plugin Responsibilities
 
-Plugins may perform tasks such as:
-
 * data transformation
 * ranking outputs
 * formatting results
-* validation
-* evaluation
+* validation and evaluation
 * filtering
 
 ---
 
-# Plugin Execution
+# When Plugins Execute
 
-Plugins execute inside nodes.
+Plugins execute within node phases:
 
-Typical execution flow:
+* **pre**: data preparation before the AI call
+* **core**: tool calls alongside the AI call
+* **post**: output processing after the AI call
 
-Prompt
-↓
-Provider
-↓
-Plugin
+The order in which a plugin runs depends on the node's execution configuration, not a fixed system pipeline.
 
 ---
 
-# Plugin Write Restrictions
+# Plugin Write Restrictions (Strict)
 
-Plugins cannot modify arbitrary runtime data.
+```
+plugin.<plugin_id>.*    ← allowed
 
-Allowed namespace:
+prompt.*                ← forbidden
+provider.*              ← forbidden
+output.*                ← forbidden
+artifact.*              ← forbidden
+input.*                 ← forbidden
+```
 
-plugin.<plugin_id>.*
+---
 
-Example:
+# Plugin Result Contract
 
-plugin.rank.score
+```python
+PluginResult:
+    success: bool
+    output: dict | None
+    error: str | None
+    latency_ms: int
+    reason_code: str | None
+    stage: str | None  # PRE | CORE | POST
+```
 
 ---
 
 # Plugin Safety Model
 
 Plugins must:
-
 * avoid modifying core runtime structures
-* avoid side effects outside allowed namespaces
-* produce deterministic results
+* avoid side effects outside allowed namespace
+* produce deterministic results given the same inputs
 
 ---
 
-# Future Plugin Ecosystem
+# Plugin Registry
 
-In the future, Nexa may support:
+Managed by `src/platform/plugin_registry.py`.
 
-* plugin marketplaces
-* plugin versioning
-* distributed plugin execution
+See contract: `docs/specs/contracts/plugin_registry_contract.md`
 
 ---
 

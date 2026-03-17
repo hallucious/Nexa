@@ -6,7 +6,7 @@ Depends On:
 
 ## 1. Purpose
 
-Define the canonical architecture that enables Hyper-AI to support
+Define the canonical architecture that enables Nexa to support
 multiple external AI vendors through a single Provider implementation.
 
 This specification formalizes the separation between:

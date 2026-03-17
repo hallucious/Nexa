@@ -2,9 +2,7 @@
 
 ## Purpose
 
-This document defines the **foundational architectural principles** of the Nexa system.
-
-These rules represent the **highest-level invariants** of the project.
+The foundational architectural principles of the Nexa system. Non-negotiable invariants.
 
 All implementation decisions must respect this constitution.
 
@@ -12,74 +10,65 @@ All implementation decisions must respect this constitution.
 
 # Principle 1 — Node Is the Only Execution Unit
 
-All computation in Nexa must occur inside nodes.
+All computation in Nexa occurs inside nodes.
 
-Nodes are the smallest executable entities in the system.
+Nodes are the smallest executable entities.
 
-Other components such as circuits, prompts, providers, and plugins support node execution but do not replace it.
-
-This rule ensures architectural consistency.
+Circuits, prompts, providers, and plugins support node execution but do not replace it.
 
 ---
 
 # Principle 2 — Circuit Defines Structure, Not Execution
 
-A circuit represents the structure of computation.
+A circuit defines: nodes, dependencies, execution topology (DAG).
 
-It defines:
-
-* nodes
-* dependencies
-* execution topology
-
-Circuits do not execute logic.
-
-All execution must occur inside nodes.
+Circuits do not execute logic. All execution occurs inside nodes.
 
 ---
 
-# Principle 3 — Execution Is Dependency Driven
+# Principle 3 — Execution Is Dependency-Driven
 
-Execution must follow dependency resolution.
+At the system level, nodes execute only when their dependencies are satisfied.
 
-Nodes execute only when their dependencies are satisfied.
+Execution order is determined by the runtime scheduler dynamically.
 
-Execution order is determined by the runtime scheduler.
-
-Pipeline-based execution models are not allowed.
+Fixed global pipeline execution models are not allowed.
 
 ---
 
-# Principle 4 — Artifacts Are Immutable
+# Principle 4 — Node-Internal Phases Are a Contract, Not a Pipeline
+
+Within a single node, resources may execute in pre, core, and post phases.
+
+* pre: validation, prompt resolution, plugin data preparation
+* core: AI provider call (only here); plugin tool calls
+* post: output validation, persistence, trace emission
+
+These phases are an **internal contract of a single node**. They are NOT a system-level sequential pipeline.
+
+AI provider calls are restricted to the core phase.
+
+---
+
+# Principle 5 — Artifacts Are Immutable
 
 Artifacts represent execution outputs.
 
 Once created, artifacts must never be modified.
 
-If new results are generated, they must be stored as new artifacts.
-
-This guarantees reproducibility.
+New results must be stored as new artifacts.
 
 ---
 
-# Principle 5 — Execution Must Be Traceable
+# Principle 6 — Execution Must Be Traceable
 
 All runtime activity must be recorded.
 
-Trace logs must capture:
-
-* node execution
-* resource usage
-* artifact creation
-* runtime metadata
-
-Traceability is essential for debugging and auditing.
+Trace logs must capture: node execution status, per-node phase status, artifact creation, runtime metadata.
 
 ---
 
-# Principle 6 — Deterministic Execution
-
-Nexa must produce deterministic behavior.
+# Principle 7 — Deterministic Execution
 
 Given identical inputs and configuration, execution must produce identical artifacts.
 
@@ -87,106 +76,41 @@ Runtime scheduling must not introduce nondeterministic behavior.
 
 ---
 
-# Principle 7 — Plugins Are Restricted
+# Principle 8 — Plugins Are Restricted
 
-Plugins extend functionality but must operate within strict boundaries.
+Plugins may only write to: `plugin.<plugin_id>.*`
 
-Plugins may only write to:
-
-plugin.<plugin_id>.*
-
-Plugins must not modify unrelated runtime domains.
-
-This protects system integrity.
+Plugins must not modify any other runtime domain.
 
 ---
 
-# Principle 8 — Contract Driven Architecture
+# Principle 9 — Contract-Driven Architecture
 
-All major system behaviors must be defined by explicit contracts.
-
-Examples include:
-
-artifact schema
-execution trace schema
-plugin result schema
-validation rule catalog
+All major system behaviors must be defined by explicit versioned contracts.
 
 Code must comply with defined contracts.
 
 ---
 
-# Principle 9 — Observability First
+# Principle 10 — Observability First
 
-The system must prioritize observability.
-
-Developers must be able to inspect:
-
-* execution state
-* artifacts
-* traces
-* node execution order
-
-Observability reduces debugging complexity.
+Developers must be able to inspect execution state, artifacts, traces, and node execution order at any time.
 
 ---
 
-# Principle 10 — Safe Extensibility
+# Principle 11 — Safe Extensibility
 
-The architecture must allow safe extension.
-
-New features must not violate existing guarantees such as:
-
-deterministic execution
-artifact immutability
-contract compliance
+New features must not violate existing guarantees: deterministic execution, artifact immutability, contract compliance.
 
 ---
 
 # Forbidden Architectural Patterns
 
-The following architectural patterns are explicitly forbidden.
-
-Pipeline-based execution engines.
-
-Mutable artifact storage.
-
-Unrestricted plugin writes.
-
-Undocumented runtime mutations.
-
-Implicit execution order dependencies.
-
-These patterns break the Nexa architecture.
-
----
-
-# Governance
-
-Architectural changes affecting these principles require careful review.
-
-Major changes should update:
-
-ARCHITECTURE.md
-FOUNDATION_RULES.md
-relevant specification documents
-
-The constitution exists to maintain long-term architectural stability.
-
----
-
-# Summary
-
-Nexa is designed around a set of non-negotiable architectural principles.
-
-These principles ensure:
-
-deterministic execution
-reliable AI orchestration
-traceable computation
-stable system evolution
-
-All contributors must respect these rules.
+* System-level fixed-order pipeline execution
+* Mutable artifact storage
+* Unrestricted plugin writes
+* Undocumented runtime mutations
+* Implicit execution order dependencies
 
 ---
 

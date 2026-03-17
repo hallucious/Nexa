@@ -1,108 +1,87 @@
 # Nexa Documentation Index
 
-## Purpose
+---
 
-This document serves as the central index for all Nexa documentation.
+# Quick Start (New Contributors)
 
-It helps developers, contributors, and AI coding tools navigate the documentation system efficiently.
+1. `docs/README.md` — project overview
+2. `docs/architecture/ARCHITECTURE.md` — system architecture
+3. `docs/architecture/FOUNDATION_RULES.md` — non-negotiable invariants
+4. `docs/CODING_PLAN.md` — completed steps and next targets
+5. `docs/DEVELOPMENT.md` — environment setup and contribution process
 
 ---
 
-# Core Architecture
+# Root Documents
 
-These documents define the structure and invariants of the Nexa system.
-
-**BLUEPRINT.md**
-High-level architecture blueprint and system design overview.
-
-**ARCHITECTURE_CONSTITUTION.md**
-The foundational rules and non-negotiable invariants that govern Nexa architecture.
-
-**ARCHITECTURE.md**
-Unified architecture explanation covering the Circuit model, Node execution, Runtime layer, Provider layer, Plugin layer, Artifact system, Trace system, and design principles.
-
----
-
-# Development
-
-These documents explain how to work with the Nexa codebase.
-
-**CODING_PLAN.md**
-Implementation roadmap and development phases.
-
-**DEVELOPMENT.md**
-Development environment setup, testing, and contribution workflow.
-
-**CONTRIBUTING.md**
-Guidelines for open-source contributors.
+| File | Purpose |
+|---|---|
+| `docs/README.md` | Project overview |
+| `docs/BLUEPRINT.md` | Architecture overview, active spec list, invariants |
+| `docs/FOUNDATION_MAP.md` | Canonical doc index, Active/Partial/Planned status |
+| `docs/CODING_PLAN.md` | Implementation history and next steps |
+| `docs/ARCHITECTURE_CONSTITUTION.md` | Non-negotiable architectural principles |
+| `docs/CONTRIBUTING.md` | Spec change procedure, PR requirements |
+| `docs/DEVELOPMENT.md` | Environment setup, testing, contribution |
+| `docs/GLOSSARY.md` | Terminology definitions |
+| `docs/PLUGIN_SYSTEM.md` | Plugin architecture and contract |
+| `docs/PROVIDER_SYSTEM.md` | Provider abstraction and contract |
 
 ---
 
-# Specifications
+# Architecture Documents (`docs/architecture/`)
 
-The `docs/specs/` directory contains detailed technical specifications and contracts.
-
-These specifications are the authoritative source of truth for system behavior.
-They define strict contracts and are enforced by automated tests.
-
-Examples:
-
-* `docs/specs/architecture/` — execution model, node contracts, circuit contracts
-* `docs/specs/contracts/` — plugin, provider, prompt, and validation contracts
-* `docs/specs/policies/` — validation rules, observability, determinism policies
-* `docs/specs/indexes/` — spec catalog and dependency map
+| File | Purpose |
+|---|---|
+| `docs/architecture/ARCHITECTURE.md` | Full system architecture with execution model |
+| `docs/architecture/FOUNDATION_RULES.md` | Korean-language architecture constitution |
+| `docs/architecture/PROJECT_SCOPE.md` | Scope boundaries and MVP definition |
 
 ---
 
-# Product Vision
+# Strategy Documents (`docs/strategy/`)
 
-These documents describe the long-term direction and planned product evolution.
-
-**docs/product/SaaS Product Definition.md**
-Definition of the Nexa SaaS product offering.
-
-**docs/product/Visual Editor Architecture.md**
-Architecture for the planned visual circuit editor.
-
-**docs/product/User Profile (Preset).md**
-User profile and preset system design.
+| File | Purpose |
+|---|---|
+| `docs/strategy/STRATEGY.md` | Product strategy and target market |
+| `docs/strategy/VISION.md` | Long-term vision |
+| `docs/strategy/ROADMAP.md` | Development phases and next steps |
 
 ---
 
-# Additional Reference
+# AI Tool Documents (`docs/ai/`)
 
-**GLOSSARY.md**
-Definitions of key Nexa terminology.
-
-**VISION.md**
-Long-term goals and philosophical direction of the project.
-
-**ROADMAP.md**
-Long-term development roadmap.
+| File | Purpose |
+|---|---|
+| `docs/ai/NEXA_FOR_AI.md` | Architecture guide for AI coding assistants |
+| `docs/ai/CLAUDE_GUIDE.md` | Development rules for Claude |
+| `docs/ai/CLAUDE_MASTER_PROMPT.md` | Master prompt for Claude coding sessions |
 
 ---
 
-# Recommended Reading Order
+# Spec Documents (`docs/specs/`)
 
-For new contributors:
+Active spec list: `docs/specs/_active_specs.yaml`
 
-1. `README.md` — project introduction
-2. `docs/ARCHITECTURE_CONSTITUTION.md` — core invariants
-3. `docs/ARCHITECTURE.md` — full architecture explanation
-4. `docs/BLUEPRINT.md` — system design blueprint
-5. `docs/DEVELOPMENT.md` — how to contribute
+| Directory | Contents |
+|---|---|
+| `docs/specs/architecture/` | execution model, trace model, node contracts, circuit contract |
+| `docs/specs/contracts/` | plugin, provider, prompt, validation, ExecutionConfig contracts |
+| `docs/specs/policies/` | validation rule catalog and lifecycle |
+| `docs/specs/foundation/` | terminology, architectural doctrine |
+| `docs/specs/indexes/` | spec catalog and dependency map |
+| `docs/specs/` (root) | ExecutionConfig binding and registry contracts |
 
 ---
 
-# Documentation Philosophy
+# Contract Tests
 
-**Clarity** — Documents should be understandable by new contributors.
-
-**Consistency** — Documentation must match the implementation.
-
-**Stability** — Architectural principles should change rarely.
-
-**Single Source of Truth** — Specifications in `docs/specs/` are the authoritative contracts. Top-level architecture documents provide human-readable explanation.
+```bash
+pytest tests/test_spec_version_sync_contract.py        # spec versions match
+pytest tests/test_document_accumulation_contract.py    # FM references exist
+pytest tests/test_blueprint_foundation_sync_contract.py # FM == _active_specs.yaml
+pytest tests/test_foundation_autocheck_contract.py     # FM and BLUEPRINT exist
+```
 
 ---
 

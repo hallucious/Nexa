@@ -1,58 +1,64 @@
 # Provider System
 
-## Purpose
+Providers interface Nexa with AI model services.
 
-Providers allow Nexa to interact with external AI model services.
+See contract: `docs/specs/contracts/provider_contract.md`
+
+See architecture: `docs/specs/architecture/universal_provider_architecture.md`
 
 ---
 
-# Supported Provider Types
+# Supported Providers
 
-Examples:
+* OpenAI (GPT models)
+* Anthropic (Claude models)
+* Google Gemini
+* Perplexity
+* Codex
 
-OpenAI
-Anthropic
-Google Gemini
-Local models
+All implemented under `src/providers/`.
 
 ---
 
 # Provider Responsibilities
 
-Providers perform the following tasks:
-
-* send prompts to models
-* receive responses
-* normalize outputs
-* handle errors
+* Send prompts to AI models (in node core phase)
+* Receive and normalize model responses
+* Handle errors and retry logic
+* Record `ProviderTrace`
+* Return `ProviderResult` with standardized `reason_code`
 
 ---
 
 # Provider Abstraction
 
-Providers implement a common interface.
+All providers implement `ProviderAdapter`.
 
-This allows Nexa to switch between AI services without modifying circuits.
-
----
-
-# Provider Reliability
-
-Providers must:
-
-* implement retry logic
-* handle API errors
-* validate model responses
+`UniversalProvider` wraps any adapter and supports:
+* Fallback adapter chain
+* Safe mode (prefix to prompts)
+* Provider fingerprinting for determinism validation
 
 ---
 
-# Future Improvements
+# Provider Execution Scope
 
-Future provider features may include:
+Providers execute **only within the core phase of a node**.
 
-* automatic provider fallback
-* cost-aware model selection
-* multi-provider execution
+pre and post phases must not call AI providers.
+
+---
+
+# Provider Result Contract
+
+```python
+ProviderResult:
+    success: bool
+    output: str
+    reason_code: str
+    latency_ms: int
+    provider_trace: ProviderTrace
+```
 
 ---
 
