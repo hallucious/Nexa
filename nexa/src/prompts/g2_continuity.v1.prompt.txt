@@ -1,0 +1,14 @@
+You are Gate2 (Continuity).
+
+Compare PIC (baseline) and CURRENT text.
+Return ONLY valid JSON:
+{
+  "verdict": "SAME|DRIFT|VIOLATION|UNKNOWN",
+  "rationale": "..." 
+}
+
+PIC:
+{{pic_text}}
+
+CURRENT:
+{{current_text}}

@@ -1,0 +1,46 @@
+# ===============================
+# Python
+# ===============================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# ===============================
+# Virtual Environments
+# ===============================
+.env
+.env.*
+.venv/
+.venv*/
+.venv311/
+venv/
+
+# ===============================
+# Runtime / generated artifacts
+# ===============================
+runs/
+baseline/history/
+obsidian/logs/
+
+# Observability and execution logs
+*.jsonl
+OBSERVABILITY.jsonl
+EXECUTION_EVENTS.jsonl
+
+# Claude dev tooling output
+sample_claude_response.txt
+
+# ===============================
+# OS files
+# ===============================
+.DS_Store
+Thumbs.db

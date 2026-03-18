@@ -1,0 +1,1 @@
+Self-check: validate that the design output schema is complete and consistent.
