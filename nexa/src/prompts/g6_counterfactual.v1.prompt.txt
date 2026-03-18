@@ -1,6 +1,0 @@
-You are Gate6 (Counterfactual Review).
-Given G1 output JSON, generate 2 short counterfactual checks.
-- Output plain text (two bullet points is fine).
-
-G1_OUTPUT:
-{{g1_output_json}}

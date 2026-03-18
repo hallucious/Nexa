@@ -1,205 +1,186 @@
-Spec ID: validation_engine_contract
-Version: 1.2.0
-Status: Partial
-Category: contracts
-Depends On:
-
 # Validation Engine Contract
-Version: 1.2.0
-Status: Official Contract
 
-Purpose:
-Structural Validation Engine의 출력 및 강제 책임을 정의한다.
-Validation은 Execution 전에 필수이며, 실패 시 실행은 금지된다.
-
-## Output Contract
-Validation 결과는 아래를 포함해야 한다:
-- success (bool)
-- engine_revision (str)
-- structural_fingerprint (str)
-- violations[] (rule_id, severity, location, message)
-
-success=true 조건:
-- severity=error 위반이 0개일 때만 true
-
-## Execution Dependency
-- validation.success == false 이면 execute()는 거부해야 한다
-- validation 결과는 Trace에 참조로 기록되어야 한다
-
+Spec ID: validation_engine_contract  
+Version: 2.0.0  
+Status: Official Contract  
+Category: contracts  
 
 ---
 
-# Archived Initial Version (Preserved)
+# 1. Purpose
 
-# Validation Engine Contract
-Archived-Version: v1.0.0
-Status: Official Contract
+Validation Engine defines the **execution contract gate** of Nexa.
 
-Purpose:
-Defines the output contract and enforcement responsibilities of the Structural Validation Engine.
-Validation must occur before any Execution. Execution without successful validation is forbidden.
+Validation is NOT a safety check.
 
-======================================================================
-1. Validation Scope
-======================================================================
+It is a **deterministic execution enforcement system**.
 
-Validation Engine must verify:
-- Engine Structural Constraints
-- Entry Policy
-- Node Abstraction compliance
-- Channel type compatibility
+Execution MUST be rejected if validation fails.
+
+---
+
+# 2. Validation Scope
+
+Validation MUST verify:
+
+## 2.1 Structural Layer
+- EngineStructure integrity
+- Entry node existence
 - DAG constraint
-- Side-effect policy (static level)
+- Node uniqueness
+- Channel reference integrity
+
+## 2.2 Determinism Layer
 - Determinism configuration presence
-- Trace schema/requirements declared for v1
+- Node-level execution reproducibility requirements
 
-======================================================================
-2. Validation Result Object
-======================================================================
+---
 
-Validation must return a structured object:
+# 3. Validation Target Model
 
-{
+Validation operates on:
+
+```
+Engine
+→ EngineStructure
+→ meta.node_specs
+```
+
+## 3.1 node_specs Contract
+
+Each node MAY define:
+
+```
+node_specs[node_id] = {
+    "provider_ref": str,
+    "model": str,
+    "temperature": float,
+    "seed": int,
+    "prompt_ref": str
+}
+```
+
+---
+
+# 4. Rule Catalog (Authoritative)
+
+## 4.1 ENGINE
+
+- ENG-001: entry_node_id must exist
+- ENG-003: graph must be DAG
+
+## 4.2 NODE / CHANNEL
+
+- NODE-001: node_id must be unique
+- CH-001: channels must reference valid nodes
+
+## 4.3 DETERMINISM
+
+- DET-001: determinism config must exist
+- DET-002: provider_ref required
+- DET-003: model required
+- DET-004: temperature required
+- DET-007: temperature must be 0 ≤ t ≤ 2
+- DET-005: seed required
+- DET-006: prompt_ref required
+
+---
+
+# 5. Output Contract
+
+Validation MUST return:
+
+```
+ValidationResult = {
   "success": bool,
   "engine_revision": str,
   "structural_fingerprint": str,
-  "violations": [
-      {
-          "rule_id": str,
-          "rule_name": str,
-          "severity": "error" | "warning",
-          "location_type": "engine" | "node" | "channel" | "flow",
-          "location_id": str | null,
-          "message": str
-      }
-  ]
+  "applied_rule_ids": List[str],
+  "violations": List[Violation]
 }
+```
 
-Primitive boolean return values are forbidden.
+Violation:
 
-======================================================================
-3. Success Rule
-======================================================================
+```
+{
+  "rule_id": str,
+  "rule_name": str,
+  "severity": "ERROR",
+  "location_type": "engine" | "node",
+  "location_id": str | null,
+  "message": str
+}
+```
 
-success = true ONLY IF:
-- violations contains no item with severity = "error"
+---
 
-Warnings do not block execution.
-Errors must block execution.
+# 6. Success Condition
 
-======================================================================
-4. Rule Identification
-======================================================================
+```
+success = True
+ONLY IF no violation with severity == ERROR
+```
 
-Every violation must include:
-- rule_id (stable identifier)
-- rule_name (human readable name)
+---
 
-Rule IDs must be stable across versions unless rule semantics change.
+# 7. Execution Dependency
 
-======================================================================
-5. Severity Levels
-======================================================================
+If:
 
-error:
-- Execution must be blocked.
+```
+validation.success == False
+```
 
-warning:
-- Execution allowed.
-- Must be logged.
-- May generate Proposal.
+Then:
 
-Silent violations are forbidden.
+- Engine MUST NOT execute any node
+- Execution MUST be rejected
 
-======================================================================
-6. Location Semantics
-======================================================================
+---
 
-location_type must specify scope:
-- engine → entire Engine structure
-- node → specific Node
-- channel → specific Channel
-- flow → specific Flow rule
+# 8. Determinism Contract
 
-location_id must reference exact identifier or be null if global.
+Validation enforces:
 
-======================================================================
-7. Determinism Requirement
-======================================================================
+```
+Reproducibility = function(provider, model, temperature, seed, prompt)
+```
 
-Validation must ensure determinism metadata configuration exists and required recording fields are declared.
-Missing configuration = error.
+Missing ANY component → ERROR
 
-======================================================================
-8. Immutability Rule
-======================================================================
+---
 
-Validation result must be immutable after generation.
-Any post-generation mutation invalidates validation.
+# 9. Validation Philosophy
 
-======================================================================
-9. Execution Dependency Rule
-======================================================================
+Validation Engine is:
 
-Execution must:
-- Reject if validation.success == false
-- Store validation result reference in Trace
-- Record validation timestamp
+```
+NOT a defensive system
+BUT a deterministic execution contract enforcer
+```
 
-======================================================================
-10. Contract Supremacy
-======================================================================
+It guarantees:
 
-Validation Engine enforces BLUEPRINT contract.
-If validation detects a violation:
-- Engine must not execute.
-- Revision must not be published.
-- Proposal may be generated.
+- Reproducibility precondition
+- Structural correctness
+- Execution legitimacy
 
-End of Validation Engine Contract v1.0.0
+---
 
-================================================================================
-11) Execution Behavior Clarification (Added in v1.1.0)
-================================================================================
+# 10. Contract Supremacy
 
-배경:
-- v1 Engine.execute()는 Validation 결과를 항상 Trace에 기록해야 한다.
-- "Execution 금지"의 의미는 "노드 실행 금지"를 의미한다.
-  (Trace 생성/반환 자체를 금지하는 의미가 아님)
+Validation contract overrides:
 
-규칙:
-1) validation.success == false 인 경우:
-   - Engine은 어떤 노드도 실행하면 안 된다.
-   - Trace.nodes[*].node_status는 모두 NOT_REACHED 여야 한다.
-   - Trace.validation_success = false
-   - Trace.validation_violations는 violations[]를 *그대로* 기록해야 한다 (아래 스키마).
-2) Validation timestamp 기록:
-   - Trace.meta.validation.at 에 ISO-8601 문자열로 기록해야 한다.
+- Execution logic
+- Runtime behavior
+- Node scheduling
 
-Trace.validation_violations 스키마 (v1.1.0부터 강제):
-- violations: [
-    {
-      "rule_id": str,
-      "rule_name": str,
-      "severity": "error" | "warning",
-      "location_type": "engine" | "node" | "channel" | "flow",
-      "location_id": str | null,
-      "message": str
-    }
-  ]
+If validation fails:
 
-호환성:
-- tuple 형태 (rule_id, message) 기록은 더 이상 허용되지 않는다.
+- Execution is invalid
+- Revision must not be accepted
 
+---
 
-## Validation Snapshot Obligation
-
-If validation is executed,
-engine MUST populate:
-
-trace.meta.validation.snapshot
-
-Engine MUST:
-- Deduplicate rule ids
-- Sort rule ids lexicographically
-- Produce stable JSON structure
+# End of Validation Engine Contract v2.0.0

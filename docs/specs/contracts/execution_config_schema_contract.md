@@ -8,19 +8,19 @@ Depends On:
 
 Version: 1.0.0
 
-## 목적
+## Purpose
 
-ExecutionConfig JSON을 registry 로드 전에 구조적으로 검증한다.
+Structurally validates the ExecutionConfig JSON before registry loading.
 
-ExecutionConfig는 검증됨 / canonical / hashable / registry-managed 상태여야 하며,
-schema validation은 registry resolution의 선행 조건이다.
+ExecutionConfig MUST be in a validated / canonical / hashable / registry-managed state,
+and schema validation is a prerequisite for registry resolution.
 
-## 최소 필수 필드
+## Minimum Required Fields
 
 - config_id: string
 - version: string
 
-## 선택 필드
+## Optional Fields
 
 - prompt_ref: string
 - provider_ref: string
@@ -29,18 +29,18 @@ schema validation은 registry resolution의 선행 조건이다.
 - validation_rules: list[string]
 - output_mapping: dict[string, string]
 
-## 타입 규칙
+## Type Rules
 
-- pre_plugins는 list여야 한다.
-- post_plugins는 list여야 한다.
-- validation_rules는 list여야 한다.
-- output_mapping은 dict여야 한다.
+- pre_plugins MUST be a list.
+- post_plugins MUST be a list.
+- validation_rules MUST be a list.
+- output_mapping MUST be a dict.
 
-## 오류 정책
+## Error Policy
 
-schema 위반 시 ExecutionConfigSchemaError를 발생시킨다.
+If a schema violation occurs, ExecutionConfigSchemaError MUST be raised.
 
-## 실행 계층 내 위치
+## Position in Execution Layer
 
 ExecutionConfig JSON
 → Schema Validation

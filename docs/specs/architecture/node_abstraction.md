@@ -7,26 +7,26 @@ Depends On:
 # Node Abstraction
 
 Purpose:
-Node의 구조/행동 계약을 정의한다.
+Defines the structural/behavioral contract of a Node.
 
 ## Contract
-- node_id는 Engine 내에서 유일해야 한다.
-- 입력/출력 스키마는 명시되어야 한다.
-- v1: Sync-first, Pre/Core/Post 강제.
-- v1: Pure-first(사이드이펙트 금지).
-- 구조(Engine/Flow/Channel) 변경은 실행 중 금지.
-- 실패는 구조화된 reason_code를 포함해야 한다(침묵 실패 금지).
+- node_id MUST be unique within the Engine.
+- Input/output schemas MUST be explicitly defined.
+- v1: Sync-first, Pre/Core/Post enforced.
+- v1: Pure-first (side effects prohibited).
+- Structural changes (Engine/Flow/Channel) MUST NOT occur during execution.
+- Failures MUST include a structured reason_code (silent failure prohibited).
 
 ## Responsibilities / Non-responsibilities (Step89 Clarification)
 
 ### Responsibilities
-- Node는 **작업 단위(Work Unit)** 의 선언/구조 및 단계별(Pre/Core/Post) 로컬 로직을 제공한다.
-- Node는 입력/출력 스키마 및 정책(허용 도구, side-effect 등)을 **명시적으로** 제공한다.
+- A Node provides the declaration/structure of a **Work Unit** and local logic for each stage (Pre/Core/Post).
+- A Node MUST explicitly define input/output schemas and policies (allowed tools, side effects, etc.).
 
 ### Non-responsibilities
-- Node는 **플랫폼 오케스트레이션**(실행 스케줄링, dependency injection, provider 선택/교체 정책, registry 전역 정책, trace/observability 파이프라인 소유)을 담당하지 않는다.
-- Node는 Engine/Runtime이 제공하는 인터페이스(예: prompt registry, tool registry 등)를 **직접 소유(보유)하지 않는다**.
-- 도구 호출/AI 호출의 세부 실행은 Engine/Execution layer가 강제하는 계약 하에서만 발생한다.
+- A Node MUST NOT handle **platform orchestration** (execution scheduling, dependency injection, provider selection/replacement policy, registry global policy, trace/observability pipeline ownership).
+- A Node MUST NOT directly own (hold) Engine/Runtime-provided interfaces (e.g., prompt registry, tool registry).
+- Tool calls / AI calls MUST occur only under contracts enforced by the Engine/Execution layer.
 
 ## Validation Mapping
 Enforced by: NODE-001..006, PIPE-001..005

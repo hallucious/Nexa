@@ -5,26 +5,25 @@ Category: foundation
 Depends On:
 
 # Terminology Specification
-Version: 1.0.1
-Status: Official Contract
 
 Purpose:
-Nexa의 핵심 용어(Engine/Node/Channel/Flow/Trace 등)를 정의한다.
-모든 spec은 이 용어를 기준으로 작성된다.
+Defines the core terminology of Nexa (Engine / Node / Channel / Flow / Trace, etc.).
+All specifications MUST be written based on these terms.
 
 
 ## Version Notation Rule
-- 문서의 공식 버전 표기는 `Version: X.Y.Z` (SemVer, `v` 접두 **미사용**)로 고정한다.
-- `v1.0.0` 같은 표기는 **문서 본문 내 참고/인용/아카이브**에서만 허용하며, 그 경우 `Archived-Version:` 또는 `Example-Version:` 같은 다른 키를 사용한다.
-- 자동 계약 테스트는 활성 spec 문서에서 `^Version:` 라인을 파싱하므로, 본문에 두 번째 `Version:` 라인이 존재하면 동기화가 깨질 수 있다.
+- The official document version MUST follow `Version: X.Y.Z` (SemVer, without `v` prefix).
+- Notation such as `v1.0.0` is allowed ONLY for reference/quotation/archive within the document body. In such cases, different keys such as `Archived-Version:` or `Example-Version:` MUST be used.
+- Automated contract tests parse the `^Version:` line in active spec documents; therefore, if a second `Version:` line exists in the body, synchronization MAY break.
+
 ## Definitions
-- Engine: Node와 Channel, Flow로 구성된 실행 가능한 그래프 단위(Revision/Execution/Trace를 가진다).
-- Node: Engine 내부 최소 실행 단위(Pre/Core/Post 파이프라인을 따른다).
-- Channel: Node 출력 → 다른 Node 입력으로 전달되는 **데이터 경로**.
-- Flow: 실행 순서를 정의하는 **제어 규칙**(데이터 변형은 Channel/Node 영역).
-- Revision: 구조 변경 시 생성되는 Engine의 구조 버전(불변).
-- Execution: Engine 1회 실행(고유 execution_id).
-- Trace: 실행 결과의 **그래프 기반** 기록(미실행 노드 포함, 불변).
+- Engine: An executable graph unit composed of Node, Channel, and Flow (has Revision / Execution / Trace).
+- Node: The smallest execution unit inside an Engine (follows Pre/Core/Post pipeline).
+- Channel: A **data path** that transfers Node output → another Node input.
+- Flow: A **control rule** that defines execution order (data transformation belongs to Channel/Node).
+- Revision: A structural version of the Engine created upon structural changes (immutable).
+- Execution: A single execution of an Engine (unique execution_id).
+- Trace: A **graph-based** record of execution results (includes non-executed nodes, immutable).
 
 ## Validation Mapping
 Related rule domains: ENG, NODE, CH
@@ -208,14 +207,16 @@ v1 Policy:
 
 Contract Rule:
 
-All other specifications must use the terminology defined here.
+All other specifications MUST use the terminology defined here.
 Any contradiction invalidates the dependent spec.
 
 End of Terminology Spec v1.0.0
 
 ----------------------------------------------------------------------
+
 Validation Mapping
 ----------------------------------------------------------------------
+
 Related rule domains:
 - ENG (engine-level terminology consistency)
 - NODE (node identity consistency)

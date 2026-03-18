@@ -5,64 +5,64 @@ Status: Official Strategy Direction
 
 ---
 
-## 1. 제품 정체성
+## 1. Product Identity
 
-Nexa는 **구조적으로 검증 가능한 AI 실행 엔진**이다.
+Nexa is a **structurally verifiable AI execution engine**.
 
-단순 자동화 도구가 아니라, **구조/제약/재현성/Trace**를 기반으로 실행을 통제한다.
+It is not a simple automation tool, but a system that controls execution based on **structure / constraints / reproducibility / Trace**.
 
-핵심 차별화:
-- 결정론적 실행 (deterministic, dependency-based execution)
-- 전체 실행 추적 (full execution trace, per-node)
-- 계약 기반 아키텍처 (contract-driven architecture)
-- 회귀 감지 및 정책 게이팅 (regression detection + policy gating)
-
----
-
-## 2. 1차 타겟
-
-**기업 R&D 팀**을 1차 타겟으로 둔다.
-
-이유: 재현성, 감사 로그, 실패 분석, 비용 통제 요구가 강함.
+Core differentiators:
+- Deterministic execution (deterministic, dependency-based execution)
+- Full execution trace (per-node)
+- Contract-driven architecture
+- Regression detection and policy gating (regression detection + policy gating)
 
 ---
 
-## 3. MVP 범위 (완료)
+## 2. Primary Target
 
-- 구조 설계: Engine / Node / Circuit / Channel / Flow
-- 구조 검증: Validation Engine
-- 실제 실행: Runtime (dependency-based scheduling)
-- 전체 그래프 Trace 저장 (미실행 노드 포함)
-- execution_id 기반 재현 가능성
-- ExecutionConfig 기반 노드 행동 조합
-- 회귀 감지 (typed reason codes + severity)
-- 정책 평가 (PolicyDecision: PASS / WARN / FAIL)
-- CLI (실행, diff, regression 명령)
+The primary target is **enterprise R&D teams**.
+
+Reason: strong requirements for reproducibility, audit logs, failure analysis, and cost control.
 
 ---
 
-## 4. 철학 / 우선순위
+## 3. MVP Scope (Completed)
+
+- Structural design: Engine / Node / Circuit / Channel / Flow
+- Structural validation: Validation Engine
+- Actual execution: Runtime (dependency-based scheduling)
+- Full graph Trace storage (including non-executed nodes)
+- Reproducibility via execution_id
+- Node behavior composition via ExecutionConfig
+- Regression detection (typed reason codes + severity)
+- Policy evaluation (PolicyDecision: PASS / WARN / FAIL)
+- CLI (execution, diff, regression commands)
+
+---
+
+## 4. Philosophy / Priorities
 
 - Simple-first
-- 우선순위: 구조 단순성 > 안정성 > 재현성 > 비용 > 성능
-- 자동 적용 금지: 사용자 승인 후 새 Revision으로만 반영
+- Priority: structural simplicity > stability > reproducibility > cost > performance
+- No automatic application: applied only as a new Revision after user approval
 
 ---
 
-## 5. UI 방향 (후순위)
+## 5. UI Direction (Lower Priority)
 
-- Guided → Builder → Advanced 단계로 확장
-- 내부 모델은 유지하되, UX는 구조 안정화 이후 단계에서 진행
+- Expand in stages: Guided → Builder → Advanced
+- Maintain internal model, UX to be developed after structural stabilization
 
 ---
 
-## 6. 다음 전략 목표
+## 6. Next Strategic Goals
 
-**Phase 3**: CLI 회귀 게이팅 — CI/CD에서 PASS/WARN/FAIL 기반 자동 차단
+**Phase 3**: CLI regression gating — automatic blocking in CI/CD based on PASS/WARN/FAIL
 
-**Phase 4**: 설정 기반 정책 — 회귀 규칙을 circuit/run별로 커스터마이즈
+**Phase 4**: configuration-based policy — customizable regression rules per circuit/run
 
-**Phase 5**: Visual Circuit Builder — 개발자 생산성 향상
+**Phase 5**: Visual Circuit Builder — improve developer productivity
 
 ---
 

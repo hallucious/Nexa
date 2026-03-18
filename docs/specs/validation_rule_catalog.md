@@ -1,34 +1,40 @@
 Spec ID: validation_rule_catalog
-Version: 1.1.0
-Status: Partial
-Category: misc
+Version: 2.0.0
+Status: Active
+Category: policies
 Depends On:
 
 
-> **NOTE**: THIS FILE IS A COMPATIBILITY COPY. CANONICAL VERSION IS IN 
-
 # Validation Rule Catalog
-Version: 1.1.0
+Version: 2.0.0
 Status: Official Contract
 
 Purpose:
-Nexa v1 validation의 rule_id 표준 카탈로그.
+Defines the canonical catalog of rule_id values for Nexa validation.
+
+This document is the authoritative rule catalog used by ValidationEngine.
 
 ### Implemented Rules (Authoritative)
-The following rules are currently enforced by ValidationEngine (code).
+The following rules are currently enforced by ValidationEngine.
 
 | rule_id | name | severity | location_type | message |
 |---|---|---|---|---|
-| ENG-001 | Missing Entry Node | error | engine | Engine must define exactly one entry_node_id. |
-| NODE-001 | Duplicate node_id | error | engine | Duplicate node_id detected in EngineStructure. |
-| CH-001 | Channel References Missing Node | error | engine | Channel references undefined src or dst node_id. |
-| ENG-003 | Cycle Detected | error | engine | Engine graph must be a DAG (cycle detected). |
-
+| ENG-001 | Missing Entry Node | error | engine | Engine must define entry_node_id. |
+| ENG-003 | Cycle Detected | error | engine | Engine graph must be DAG. |
+| NODE-001 | Duplicate node_id | error | engine | Duplicate node_id detected. |
+| CH-001 | Invalid Channel | error | engine | Channel references invalid node. |
+| DET-001 | Determinism Missing | error | engine | Determinism config required. |
+| DET-002 | Provider Missing | error | node | provider_ref required. |
+| DET-003 | Model Missing | error | node | model required. |
+| DET-004 | Temperature Missing | error | node | temperature required. |
+| DET-005 | Seed Missing | error | node | seed required. |
+| DET-006 | Prompt Missing | error | node | prompt_ref required. |
+| DET-007 | Invalid Temperature Range | error | node | temperature must be between 0 and 2. |
 
 ## Domains
 ENG, ENT, CH, FLOW, NODE, PIPE, SIDE, DET, TRACE
 
-## Canonical rule_ids (v1)
+## Canonical rule_ids
 - ENG-001..008
 - ENT-001..005
 - CH-001..005
@@ -39,6 +45,34 @@ ENG, ENT, CH, FLOW, NODE, PIPE, SIDE, DET, TRACE
 - DET-001..007
 - TRACE-001..004
 
+---
+
+## Current Validation Scope (v2)
+
+ValidationEngine currently enforces:
+
+### Engine Structural Constraints
+- Entry node existence
+- DAG constraint
+- Duplicate node_id detection
+- Channel reference integrity
+
+### Determinism Preconditions
+- Engine-level determinism configuration presence
+- Node-level provider_ref presence
+- Node-level model presence
+- Node-level temperature presence
+- Node-level seed presence
+- Node-level prompt_ref presence
+- Temperature range validity (0 ≤ temperature ≤ 2)
+
+---
+
+## Stability Rule
+
+- rule_id values MUST remain stable across minor and patch changes.
+- If rule semantics change, the spec version MUST be incremented appropriately.
+- A new rule_id MUST be introduced if semantic continuity cannot be preserved.
 
 ---
 

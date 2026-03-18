@@ -7,7 +7,6 @@ from ..model import EngineStructure
 from .result import ValidationResult, Violation, Severity
 
 if TYPE_CHECKING:
-    # For type hints only (avoids import cycle at runtime)
     from ..engine import Engine
 
 
@@ -95,7 +94,6 @@ class ValidationEngine:
         )
 
     def _has_cycle(self, structure: EngineStructure) -> bool:
-        """Detect cycle using DFS."""
         graph: Dict[str, List[str]] = {nid: [] for nid in structure.node_ids}
 
         for ch in structure.channels:
