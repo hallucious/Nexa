@@ -1,29 +1,22 @@
 # Nexa
 
-### Deterministic AI Execution Engine
+## Deterministic AI Execution Engine
 
-Nexa is an **execution runtime for AI systems**.
+Nexa is a runtime for building **deterministic, reproducible, and debuggable AI systems**.
 
-It allows developers to build **structured AI computation graphs** that are:
-
-* deterministic
-* traceable
-* reproducible
-* scalable
-
-Instead of running isolated AI calls, Nexa orchestrates **multiple AI systems through a runtime engine**.
+Instead of isolated AI calls, Nexa executes **structured computation graphs (circuits)** with full traceability.
 
 ---
 
 ## Quick Start
 
-### 1. Run Hello Example
+Run the example:
 
 ```bash
 nexa run examples/hello_world.nex
 ```
 
-### 2. Expected Output
+Expected output:
 
 ```json
 {
@@ -34,269 +27,122 @@ nexa run examples/hello_world.nex
         "output": "Hello Nexa"
       }
     }
-  },
-  "summary": {
-    "node_outputs": 1
   }
 }
 ```
 
 ---
 
-## What This Demonstrates
+## Why Nexa
 
-- `.nex` is the execution entry point
-- CLI → Circuit → Runtime → Provider execution flow
-- Deterministic execution
-- Artifact/state propagation
-- Execution summary generation
+Modern AI systems break at scale:
 
----
+- You **cannot reproduce results**
+- You **cannot debug execution**
+- You **cannot trace decisions**
 
-# Why Nexa Exists
+This makes reliable AI systems nearly impossible.
 
-Most AI applications today rely on simple patterns:
-
-```
-prompt → model → response
-```
-
-This approach breaks down when systems grow larger.
-
-Problems include:
-
-* unpredictable results
-* difficult debugging
-* poor orchestration
-* lack of traceability
-
-Nexa introduces a different model.
-
-AI tasks become **structured computation graphs** executed inside a deterministic runtime.
+Nexa fixes this by turning AI execution into a **deterministic runtime system**.
 
 ---
 
-# Core Idea
+## Core Model
 
-Nexa transforms AI usage into a structured execution system.
+Nexa transforms AI workflows into a structured execution pipeline:
 
 ```
 Input
 ↓
-Circuit
+Circuit (.nex)
 ↓
 Nodes
 ↓
-AI Providers / Plugins
+Providers / Plugins
 ↓
 Artifacts
 ↓
 Trace
 ```
 
-Key concept:
+Key principles:
 
-**Node is the only execution unit.**
+- **Node is the only execution unit**
+- **Artifacts are immutable**
+- **Execution is deterministic**
+- **Every step is traceable**
 
 ---
 
-# Example
+## Example Workflow
 
-Imagine a user provides a short story.
+Input: a short story
 
-Nexa could run the following workflow:
+Nexa execution:
 
-1. expand the story into a script
-2. generate scene images
-3. evaluate narrative quality
-4. produce the final output
+1. Expand story into a script  
+2. Generate scene images  
+3. Evaluate narrative quality  
+4. Produce final output  
 
-In Nexa this becomes a **structured circuit**:
+This becomes a circuit:
 
 ```
-Input Story
-      ↓
-Node: expand script
-      ↓
-Node: generate images
-      ↓
-Node: evaluate story
-      ↓
-Node: produce result
+Input
+↓
+expand_script
+↓
+generate_images
+↓
+evaluate_story
+↓
+produce_result
 ```
 
-Each step produces artifacts and execution traces.
+Each step produces artifacts and trace logs.
 
 ---
 
-# Key Features
+## Key Features
 
-## Deterministic Execution
+### Deterministic Execution
+Same input → same output.
 
-Identical inputs produce identical results.
+### Full Traceability
+Every step is recorded and inspectable.
 
-This allows reproducible AI workflows.
+### Artifact System
+Outputs are immutable and versionable.
 
----
+### Multi-Provider Support
+OpenAI, Anthropic, Google, local models.
 
-## Artifact Tracking
-
-All outputs are stored as immutable artifacts.
-
-Execution history is preserved.
-
----
-
-## Execution Trace
-
-Every step of execution is recorded.
-
-This allows debugging and auditing of AI workflows.
+### Contract-Driven Architecture
+Execution rules are enforced by explicit contracts.
 
 ---
 
-## Contract Driven Architecture
-
-System behavior is defined through explicit contracts.
-
-This protects architectural consistency.
-
----
-
-## Provider Abstraction
-
-Nexa can integrate with multiple AI systems:
-
-* OpenAI
-* Anthropic
-* Google Gemini
-* local models
-
----
-
-# Repository Structure
+## Repository Structure
 
 ```
 src/
-    artifacts/
-    circuit/
-    cli/
-    config/
-    contracts/
-    engine/
-    models/
-    platform/
-    policy/
-    prompts/
-    providers/
-    utils/
-
 tests/
 docs/
 examples/
-scripts/
-tools/
 ```
 
 ---
 
-# Getting Started
+## Status
 
-Install dependencies:
-
-```
-pip install -r requirements.txt
-```
-
-Run tests:
-
-```
-pytest
-```
-
-Run the hello circuit example:
-
-```
-```
+Nexa is currently stabilizing the execution engine.
 
 ---
 
-# Documentation
+## Summary
 
-Core documentation:
-
-```
-docs/NEXA_SYSTEM_MAP.md
-docs/ARCHITECTURE.md
-docs/CONCEPTS.md
-docs/DEVELOPMENT.md
-```
-
-Start with:
-
-```
-docs/NEXA_SYSTEM_MAP.md
-```
-
----
-
-# Current Status
-
-Nexa is under active development.
-
-The current focus is **stabilizing the execution engine** before introducing higher-level tooling such as visual circuit builders.
-
----
-
-# Vision
-
-Nexa aims to become a **universal runtime for AI computation systems**.
-
-Future applications may include:
-
-AI production pipelines  
-multi-agent AI systems  
-automated research workflows  
-AI content generation platforms
-
-See:
-
-```
-docs/VISION.md
-```
-
----
-
-# Contributing
-
-Contributions are welcome.
-
-Before contributing, read:
-
-```
-docs/CONTRIBUTING.md
-```
-
----
-
-# License
-
-Apache License 2.0
-
-See [LICENSE](LICENSE).
-
----
-
-# Summary
-
-Nexa is not a chatbot framework.
-
-Nexa is not a workflow automation tool.
+Nexa is not a chatbot.
 
 Nexa is an **execution engine for AI systems**.
 
-It enables reliable orchestration of AI workflows through structured computation graphs.
-
----
-
-End of README
+It enables reliable, reproducible, and debuggable AI workflows.
