@@ -337,3 +337,226 @@ def test_determinism_50_runs_structural_signature_unchanged():
         sigs.append(_sig(eng.execute(revision_id=f"r{i}")))
 
     assert all(s == sigs[0] for s in sigs)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Decision Policy integration tests
+# (Step: Validation Outcome → Runtime Decision Integration)
+# ─────────────────────────────────────────────────────────────────────────────
+
+from src.engine.validation.decision_policy import ValidationDecisionPolicy
+from src.engine.validation.result import ValidationDecision
+
+
+# ── Direct policy unit tests ──────────────────────────────────────────────────
+
+def test_decision_policy_structural_failure_maps_to_block():
+    """Structural validation failure → BLOCK."""
+    from src.engine.validation.result import ValidationResult, Violation, Severity
+
+    failed = ValidationResult(
+        success=False,
+        engine_revision="r1",
+        structural_fingerprint="fp",
+        applied_rule_ids=["ENG-001"],
+        violations=[
+            Violation(
+                rule_id="ENG-001",
+                rule_name="Missing Entry",
+                severity=Severity.ERROR,
+                location_type="engine",
+                location_id=None,
+                message="entry missing",
+            )
+        ],
+    )
+    policy = ValidationDecisionPolicy()
+    result = policy.decide_pre(structural_result=failed, pre_determinism_result=None)
+    assert result.decision == ValidationDecision.BLOCK
+    assert result.blocks_execution is True
+
+
+def test_decision_policy_strict_determinism_failure_maps_to_block():
+    """Strict determinism pre-validation failure → BLOCK."""
+    from src.engine.validation.result import ValidationResult, Violation, Severity
+
+    ok_structural = ValidationResult(
+        success=True,
+        engine_revision="r1",
+        structural_fingerprint="fp",
+        applied_rule_ids=[],
+        violations=[],
+    )
+    failed_det = ValidationResult(
+        success=False,
+        engine_revision="r1",
+        structural_fingerprint="fp",
+        applied_rule_ids=["DET-001"],
+        violations=[
+            Violation(
+                rule_id="DET-001",
+                rule_name="Determinism Missing",
+                severity=Severity.ERROR,
+                location_type="engine",
+                location_id=None,
+                message="no determinism config",
+            )
+        ],
+    )
+    policy = ValidationDecisionPolicy()
+    result = policy.decide_pre(
+        structural_result=ok_structural,
+        pre_determinism_result=failed_det,
+    )
+    assert result.decision == ValidationDecision.BLOCK
+    assert result.blocks_execution is True
+
+
+def test_decision_policy_successful_pre_validation_maps_to_continue():
+    """All pre-checks pass → CONTINUE."""
+    from src.engine.validation.result import ValidationResult
+
+    ok = ValidationResult(
+        success=True,
+        engine_revision="r1",
+        structural_fingerprint="fp",
+        applied_rule_ids=[],
+        violations=[],
+    )
+    policy = ValidationDecisionPolicy()
+    result = policy.decide_pre(structural_result=ok, pre_determinism_result=None)
+    assert result.decision == ValidationDecision.CONTINUE
+    assert result.blocks_execution is False
+
+
+def test_decision_policy_post_with_violations_maps_to_warn():
+    """Post-validation with violations → WARN (advisory)."""
+    from src.engine.validation.result import ValidationResult, Violation, Severity
+
+    advisory = ValidationResult(
+        success=True,  # non-strict: success=True even with violations
+        engine_revision="r1",
+        structural_fingerprint="fp",
+        applied_rule_ids=["DET-001"],
+        violations=[
+            Violation(
+                rule_id="DET-001",
+                rule_name="Determinism Missing",
+                severity=Severity.WARNING,
+                location_type="engine",
+                location_id=None,
+                message="advisory",
+            )
+        ],
+    )
+    policy = ValidationDecisionPolicy()
+    result = policy.decide_post(advisory, strict_determinism=False)
+    assert result.decision == ValidationDecision.WARN
+
+
+def test_decision_policy_post_no_violations_maps_to_accept():
+    """Post-validation with no violations → ACCEPT."""
+    from src.engine.validation.result import ValidationResult
+
+    clean = ValidationResult(
+        success=True,
+        engine_revision="r1",
+        structural_fingerprint="fp",
+        applied_rule_ids=[],
+        violations=[],
+    )
+    policy = ValidationDecisionPolicy()
+    result = policy.decide_post(clean, strict_determinism=False)
+    assert result.decision == ValidationDecision.ACCEPT
+
+
+def test_decision_policy_post_none_maps_to_accept():
+    """Post-validation not performed (None) → ACCEPT (strict mode path)."""
+    policy = ValidationDecisionPolicy()
+    result = policy.decide_post(None, strict_determinism=True)
+    assert result.decision == ValidationDecision.ACCEPT
+
+
+# ── Engine integration: decisions visible in trace.meta ───────────────────────
+
+def test_decision_meta_present_in_trace():
+    """trace.meta['decision'] must be present after execution."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_dec")
+
+    assert "decision" in trace.meta
+    dec = trace.meta["decision"]
+    assert "pre" in dec
+    assert "post" in dec
+
+
+def test_decision_pre_continue_on_valid_engine():
+    """Valid engine → pre decision is CONTINUE."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_continue")
+
+    pre = trace.meta["decision"]["pre"]
+    assert pre["value"] == ValidationDecision.CONTINUE.value
+
+
+def test_decision_pre_block_on_structural_failure():
+    """Structural failure → pre decision is BLOCK."""
+    eng = _invalid_engine_missing_entry()
+    trace = eng.execute(revision_id="r_block_dec")
+
+    pre = trace.meta["decision"]["pre"]
+    assert pre["value"] == ValidationDecision.BLOCK.value
+    assert trace.validation_success is False
+
+
+def test_decision_pre_block_on_strict_determinism_failure():
+    """Strict determinism failure → pre decision is BLOCK."""
+    eng = _minimal_valid_engine()  # No determinism meta → DET-001 fires
+    trace = eng.execute(revision_id="r_strict_dec", strict_determinism=True)
+
+    pre = trace.meta["decision"]["pre"]
+    assert pre["value"] == ValidationDecision.BLOCK.value
+
+
+def test_decision_post_warn_on_advisory_violations():
+    """Non-strict mode with determinism violations → post decision is WARN."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_warn_dec")
+
+    post = trace.meta["decision"]["post"]
+    # No determinism config → DET-001..007 fire as advisory → WARN
+    assert post["value"] == ValidationDecision.WARN.value
+
+
+def test_decision_post_accept_in_strict_mode():
+    """In strict mode, post decision is ACCEPT (no post phase)."""
+    eng = _minimal_valid_engine()
+    # Even though strict mode blocks execution, post decision is ACCEPT
+    trace = eng.execute(revision_id="r_accept_strict", strict_determinism=True)
+
+    post = trace.meta["decision"]["post"]
+    assert post["value"] == ValidationDecision.ACCEPT.value
+
+
+def test_decision_meta_contains_reason():
+    """Decision entries must contain a human-readable reason."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_reason")
+
+    dec = trace.meta["decision"]
+    assert isinstance(dec["pre"]["reason"], str) and dec["pre"]["reason"]
+    assert isinstance(dec["post"]["reason"], str) and dec["post"]["reason"]
+
+
+def test_decision_enum_values_are_strings():
+    """Decision values in trace.meta must be plain strings (JSON-safe)."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_json_safe")
+
+    dec = trace.meta["decision"]
+    assert isinstance(dec["pre"]["value"], str)
+    assert isinstance(dec["post"]["value"], str)
+    # Must be one of the valid enum values
+    valid = {d.value for d in ValidationDecision}
+    assert dec["pre"]["value"] in valid
+    assert dec["post"]["value"] in valid

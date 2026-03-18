@@ -10,6 +10,28 @@ class Severity(str, Enum):
     WARNING = "warning"
 
 
+class ValidationDecision(str, Enum):
+    """Decision produced by the validation decision policy.
+
+    Maps validation outcomes to explicit runtime actions consumed by the engine.
+
+    Values:
+        BLOCK    — Execution must not proceed. Hard failure.
+        CONTINUE — Execution may proceed. All pre-validation checks passed.
+        WARN     — Post-execution advisory. Violations present but not blocking.
+        ACCEPT   — Post-execution clean. No violations found.
+    """
+
+    BLOCK = "BLOCK"
+    CONTINUE = "CONTINUE"
+    WARN = "WARN"
+    ACCEPT = "ACCEPT"
+
+    @property
+    def is_blocking(self) -> bool:
+        return self is ValidationDecision.BLOCK
+
+
 @dataclass(frozen=True)
 class Violation:
     rule_id: str

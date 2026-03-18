@@ -363,16 +363,14 @@ class Engine:
                 self, revision_id=revision_id, strict_determinism=True
             )
 
-        # Determine whether execution is blocked.
-        # Structural failure is always blocking.
-        # In strict mode, determinism failure is also blocking.
-        structural_ok = structural_validation.success
-        determinism_pre_ok = (
-            pre_determinism_validation.success
-            if pre_determinism_validation is not None
-            else True
+        # ── Decision Policy: map pre-validation results → pre-decision ──────────
+        from .validation.decision_policy import ValidationDecisionPolicy
+        decision_policy = ValidationDecisionPolicy()
+
+        pre_decision = decision_policy.decide_pre(
+            structural_validation, pre_determinism_validation
         )
-        execution_allowed = structural_ok and determinism_pre_ok
+        execution_allowed = not pre_decision.blocks_execution
 
         # The trace's top-level validation fields reflect the blocking validation
         # (structural, or strict determinism if that failed).
@@ -470,6 +468,11 @@ class Engine:
                     self, revision_id=revision_id, strict_determinism=False
                 )
 
+            # ── Decision Policy: map post-validation result → post-decision ────
+            post_decision = decision_policy.decide_post(
+                post_determinism_validation, strict_determinism=strict_determinism
+            )
+
             # ── Phase 4: Trace finalization (artifact commit boundary) ─────────
             trace_meta = {
                 "engine_meta": self.meta,
@@ -492,13 +495,24 @@ class Engine:
                         "applied_rules": sorted(set(getattr(structural_validation, "applied_rule_ids", []))),
                     },
                 },
-                # Explicit lifecycle phases (new)
+                # Explicit lifecycle phases
                 "pre_validation": self._build_pre_validation_meta(
                     structural_validation, pre_determinism_validation
                 ),
                 "post_validation": self._build_post_validation_meta(
                     post_determinism_validation, strict_determinism
                 ),
+                # Decision outcomes (policy layer)
+                "decision": {
+                    "pre": {
+                        "value": pre_decision.decision.value,
+                        "reason": pre_decision.reason,
+                    },
+                    "post": {
+                        "value": post_decision.decision.value,
+                        "reason": post_decision.reason,
+                    },
+                },
             }
 
             return ExecutionTrace(
@@ -644,6 +658,11 @@ class Engine:
                 self, revision_id=revision_id, strict_determinism=False
             )
 
+        # ── Decision Policy: map post-validation result → post-decision ────────
+        post_decision = decision_policy.decide_post(
+            post_determinism_validation, strict_determinism=strict_determinism
+        )
+
         # ── Phase 4: Trace finalization (artifact commit boundary) ─────────────
         # The trace is constructed only after post-validation completes.
         # Post-validation outcomes are embedded before the trace is returned.
@@ -663,13 +682,24 @@ class Engine:
                     "applied_rules": sorted(set(getattr(structural_validation, "applied_rule_ids", []))),
                 },
             },
-            # Explicit lifecycle phases (new)
+            # Explicit lifecycle phases
             "pre_validation": self._build_pre_validation_meta(
                 structural_validation, pre_determinism_validation
             ),
             "post_validation": self._build_post_validation_meta(
                 post_determinism_validation, strict_determinism
             ),
+            # Decision outcomes (policy layer)
+            "decision": {
+                "pre": {
+                    "value": pre_decision.decision.value,
+                    "reason": pre_decision.reason,
+                },
+                "post": {
+                    "value": post_decision.decision.value,
+                    "reason": post_decision.reason,
+                },
+            },
         }
 
         trace = ExecutionTrace(
