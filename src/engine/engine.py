@@ -35,6 +35,17 @@ def _is_staged_handler(obj: Any) -> bool:
     return isinstance(obj, dict) and any(k in obj for k in ("pre", "core", "post"))
 
 @dataclass
+class RetryConfig:
+    """Configuration for node-level retry (v1).
+
+    Attributes:
+        max_attempts: Total execution attempts allowed (must be >= 1).
+                      max_attempts=1 is equivalent to no retry.
+    """
+    max_attempts: int  # >= 1
+
+
+@dataclass
 class Engine:
     entry_node_id: str
     node_ids: List[str]
@@ -64,6 +75,14 @@ class Engine:
     #   - fallback executes at most once with the same input_snapshot
     #   - fallback does NOT affect DAG structure / edges
     node_fallback_map: Dict[str, str] = field(default_factory=dict, repr=False)
+
+    # Per-node retry policy (default: single execution, no retry).
+    # key: node_id  →  RetryConfig with max_attempts
+    # Constraints:
+    #   - same input_snapshot for all attempts
+    #   - stops immediately on first SUCCESS
+    #   - retry runs BEFORE fallback (primary → retry → fallback)
+    node_retry_policy: Dict[str, "RetryConfig"] = field(default_factory=dict, repr=False)
 
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
@@ -97,6 +116,86 @@ class Engine:
 
     def _noop_handler(self, _input: Dict[str, Any]) -> Dict[str, Any]:
         return {}
+
+    def _apply_retry(
+        self,
+        node_id: str,
+        input_snapshot: Dict[str, Any],
+    ) -> NodeTrace:
+        """Execute a node with optional retry, then return the final NodeTrace.
+
+        Execution order: attempt 1 → attempt 2 … → attempt max_attempts.
+        Stops immediately on first SUCCESS.
+        If all attempts fail, returns the last FAILURE trace.
+
+        Retry meta is attached only when max_attempts > 1:
+            node.meta["retry"] = {
+                "attempted": True,
+                "attempt_count": <total attempts made>,
+                "final_attempt": <0-based index of final attempt>,
+                "history": [{"attempt": i, "status": "SUCCESS"|"FAILURE"}, ...]
+            }
+
+        Edge cases:
+            - No policy configured   → single execution, no retry meta.
+            - max_attempts = 1       → single execution, no retry meta.
+            - max_attempts < 1       → immediate FAILURE (config error).
+            - Same input_snapshot used for every attempt (no mutation).
+        """
+        cfg = self.node_retry_policy.get(node_id)
+        max_attempts = cfg.max_attempts if cfg is not None else 1
+
+        # Config error: max_attempts < 1
+        if max_attempts < 1:
+            return NodeTrace(
+                node_id=node_id,
+                node_status=NodeStatus.FAILURE,
+                pre_status=StageStatus.SKIPPED,
+                core_status=StageStatus.SKIPPED,
+                post_status=StageStatus.SKIPPED,
+                reason_code="ENG-RETRY-INVALID-CONFIG",
+                message=f"node '{node_id}' RetryConfig.max_attempts must be >= 1, got {max_attempts}",
+                input_snapshot=dict(input_snapshot),
+                output_snapshot=None,
+            )
+
+        history: List[Dict[str, Any]] = []
+        last_trace: Optional[NodeTrace] = None
+
+        for attempt in range(max_attempts):
+            trace = self._run_node(node_id=node_id, input_snapshot=dict(input_snapshot))
+            status_str = "SUCCESS" if trace.node_status == NodeStatus.SUCCESS else "FAILURE"
+            history.append({"attempt": attempt, "status": status_str})
+            last_trace = trace
+
+            if trace.node_status == NodeStatus.SUCCESS:
+                break  # stop immediately on first success
+
+        assert last_trace is not None  # loop always executes at least once
+
+        # Attach retry meta only when max_attempts > 1
+        if max_attempts > 1:
+            existing_meta = dict(last_trace.meta) if last_trace.meta else {}
+            existing_meta["retry"] = {
+                "attempted": True,
+                "attempt_count": len(history),
+                "final_attempt": history[-1]["attempt"],
+                "history": history,
+            }
+            last_trace = NodeTrace(
+                node_id=last_trace.node_id,
+                node_status=last_trace.node_status,
+                pre_status=last_trace.pre_status,
+                core_status=last_trace.core_status,
+                post_status=last_trace.post_status,
+                reason_code=last_trace.reason_code,
+                message=last_trace.message,
+                input_snapshot=last_trace.input_snapshot,
+                output_snapshot=last_trace.output_snapshot,
+                meta=existing_meta,
+            )
+
+        return last_trace
 
     def _apply_fallback(
         self,
@@ -764,7 +863,7 @@ class Engine:
                     flow_policy[fr.node_id] = fr.policy
 
             # Execute entry
-            entry_trace = self._run_node(node_id=self.entry_node_id, input_snapshot={})
+            entry_trace = self._apply_retry(self.entry_node_id, {})
             if entry_trace.node_status == NodeStatus.FAILURE:
                 entry_trace = self._apply_fallback(self.entry_node_id, entry_trace, {})
             node_traces[self.entry_node_id] = entry_trace
@@ -893,7 +992,7 @@ class Engine:
                         if out is not None:
                             merged_input[p] = dict(out)
 
-                    node_trace = self._run_node(node_id=node_id, input_snapshot=merged_input)
+                    node_trace = self._apply_retry(node_id, merged_input)
                     if node_trace.node_status == NodeStatus.FAILURE:
                         node_trace = self._apply_fallback(node_id, node_trace, merged_input)
                     node_traces[node_id] = node_trace
