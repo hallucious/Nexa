@@ -1,5 +1,17 @@
 """
-examples/hello_circuit/run.py
+DEV REFERENCE ONLY
+
+This script demonstrates direct NodeExecutionRuntime usage.
+
+It is NOT part of the official Nexa execution path.
+
+Use CLI instead:
+
+    nexa run examples/hello_world.nex
+"""
+
+"""
+examples/dev_reference/run.py
 
 Minimal Nexa runtime execution example.
 
@@ -8,9 +20,6 @@ Demonstrates:
   - executing a single node with an inline execution config
   - reading artifact output
   - inspecting the execution trace
-
-Run:
-    python examples/hello_circuit/run.py
 """
 
 from __future__ import annotations
@@ -61,8 +70,6 @@ def run() -> None:
     runtime = NodeExecutionRuntime(provider_executor=executor)
 
     # 3. Define an inline execution config for a single node
-    #    The provider reads `input.message` from the working context
-    #    and returns it unchanged.
     execution_config = {
         "config_id": "hello_node",
         "node_id": "hello_node",
@@ -82,7 +89,7 @@ def run() -> None:
     result = runtime.execute(execution_config, initial_state)
 
     # 5. Print output
-    print("=== Nexa Hello Circuit ===")
+    print("=== Nexa Dev Reference Example ===")
     print()
     print(f"Node:   {result.node_id}")
     print(f"Output: {result.output}")
