@@ -560,3 +560,255 @@ def test_decision_enum_values_are_strings():
     valid = {d.value for d in ValidationDecision}
     assert dec["pre"]["value"] in valid
     assert dec["post"]["value"] in valid
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Node-level Validation & Decision Layer tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+from src.engine.validation.node_result import NodeDecision, NodeValidationResult
+from src.engine.validation.node_decision_policy import NodeDecisionPolicy, NodeDecisionOutcome
+from src.engine.validation.node_validator import NodeValidator
+
+
+def test_node_validation_always_performed():
+    """Node validation must run on every node execution (V1 stub always succeeds)."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_node_val")
+
+    # V1 stub: every reached node should have validation metadata
+    n1 = trace.nodes["n1"]
+    assert n1.meta is not None, "node.meta must not be None after execution"
+    assert "validation" in n1.meta, "node.meta['validation'] must be present"
+    assert n1.meta["validation"]["performed"] is True
+    assert n1.meta["validation"]["success"] is True
+    assert isinstance(n1.meta["validation"]["violations"], list)
+
+
+def test_node_decision_continue_executes_handler():
+    """When node decision is CONTINUE the handler is executed."""
+    executed = []
+
+    def handler(inp):
+        executed.append(True)
+        return {"result": "ok"}
+
+    eng = Engine(
+        entry_node_id="n1",
+        node_ids=["n1"],
+        handlers={"n1": handler},
+    )
+    trace = eng.execute(revision_id="r_continue_exec")
+
+    assert executed, "handler should have been called (decision=CONTINUE)"
+    assert trace.nodes["n1"].node_status == NodeStatus.SUCCESS
+    assert trace.nodes["n1"].output_snapshot == {"result": "ok"}
+    # Decision metadata
+    assert trace.nodes["n1"].meta["decision"]["value"] == NodeDecision.CONTINUE.value
+
+
+def test_node_decision_fail_blocks_handler_execution():
+    """When node decision is FAIL the handler must NOT be executed."""
+    from src.engine.validation.result import Violation, Severity
+
+    executed = []
+
+    def handler(inp):
+        executed.append(True)
+        return {"result": "should_not_reach"}
+
+    # Monkey-patch NodeValidator to return a failure for this test
+    import src.engine.validation.node_validator as nv_module
+
+    class _FailingValidator:
+        def validate(self, node_id, input_snapshot, context=None):
+            return NodeValidationResult(
+                node_id=node_id,
+                success=False,
+                applied_rule_ids=["TEST-001"],
+                violations=[
+                    Violation(
+                        rule_id="TEST-001",
+                        rule_name="Test Failure",
+                        severity=Severity.ERROR,
+                        location_type="node",
+                        location_id=node_id,
+                        message="injected failure for test",
+                    )
+                ],
+            )
+
+    original = nv_module.NodeValidator
+    nv_module.NodeValidator = _FailingValidator
+    try:
+        eng = Engine(
+            entry_node_id="n1",
+            node_ids=["n1"],
+            handlers={"n1": handler},
+        )
+        trace = eng.execute(revision_id="r_fail_block")
+    finally:
+        nv_module.NodeValidator = original
+
+    assert not executed, "handler must NOT have been called when decision=FAIL"
+    assert trace.nodes["n1"].node_status == NodeStatus.FAILURE
+    assert trace.nodes["n1"].output_snapshot is None
+    assert trace.nodes["n1"].meta["decision"]["value"] == NodeDecision.FAIL.value
+
+
+def test_node_validation_metadata_present_in_node_trace():
+    """node.meta['validation'] must be a dict with required keys."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_val_meta")
+
+    for nid, nt in trace.nodes.items():
+        if nt.node_status == NodeStatus.NOT_REACHED:
+            continue
+        assert nt.meta is not None, f"node {nid}: meta must not be None"
+        val = nt.meta.get("validation")
+        assert isinstance(val, dict), f"node {nid}: meta['validation'] must be dict"
+        assert "performed" in val
+        assert "success" in val
+        assert "violations" in val
+        assert isinstance(val["violations"], list)
+
+
+def test_node_decision_metadata_present_in_node_trace():
+    """node.meta['decision'] must be a dict with 'value' and 'reason'."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_dec_meta")
+
+    for nid, nt in trace.nodes.items():
+        if nt.node_status == NodeStatus.NOT_REACHED:
+            continue
+        assert nt.meta is not None
+        dec = nt.meta.get("decision")
+        assert isinstance(dec, dict), f"node {nid}: meta['decision'] must be dict"
+        assert "value" in dec
+        assert "reason" in dec
+        assert isinstance(dec["value"], str) and dec["value"]
+        assert isinstance(dec["reason"], str) and dec["reason"]
+        # Value must be one of the valid NodeDecision values
+        valid_values = {d.value for d in NodeDecision}
+        assert dec["value"] in valid_values, f"node {nid}: unexpected decision value {dec['value']!r}"
+
+
+def test_node_failure_does_not_block_engine_execution():
+    """A node-level FAIL does not stop the engine; engine continues processing other nodes."""
+    from src.engine.validation.result import Violation, Severity
+    import src.engine.validation.node_validator as nv_module
+
+    class _FailFirstNodeValidator:
+        """Fail only the entry node, pass everything else."""
+        def validate(self, node_id, input_snapshot, context=None):
+            if node_id == "n1":
+                return NodeValidationResult(
+                    node_id=node_id,
+                    success=False,
+                    applied_rule_ids=["TEST-001"],
+                    violations=[
+                        Violation(
+                            rule_id="TEST-001",
+                            rule_name="Test Failure",
+                            severity=Severity.ERROR,
+                            location_type="node",
+                            location_id=node_id,
+                            message="injected failure",
+                        )
+                    ],
+                )
+            return NodeValidationResult(
+                node_id=node_id, success=True, applied_rule_ids=[], violations=[]
+            )
+
+    original = nv_module.NodeValidator
+    nv_module.NodeValidator = _FailFirstNodeValidator
+    try:
+        # 3-node chain: n1 -> n2 -> n3
+        eng = Engine(
+            entry_node_id="n1",
+            node_ids=["n1", "n2", "n3"],
+            channels=[
+                Channel(channel_id="c1", src_node_id="n1", dst_node_id="n2"),
+                Channel(channel_id="c2", src_node_id="n2", dst_node_id="n3"),
+            ],
+        )
+        trace = eng.execute(revision_id="r_node_fail_continues")
+    finally:
+        nv_module.NodeValidator = original
+
+    # n1 fails node validation → FAILURE; n2/n3 are SKIPPED (ALL_SUCCESS policy),
+    # but the engine itself finishes — it does NOT raise an exception.
+    assert trace is not None, "engine must return a trace even when a node fails validation"
+    assert trace.nodes["n1"].node_status == NodeStatus.FAILURE
+    assert trace.nodes["n1"].meta["decision"]["value"] == NodeDecision.FAIL.value
+
+    # Engine-level validation_success is unaffected by node-level failures.
+    assert trace.validation_success is True
+
+
+# ── Direct unit tests for node validation components ─────────────────────────
+
+def test_node_validator_stub_always_succeeds():
+    """NodeValidator v1 stub must always return success=True with no violations."""
+    validator = NodeValidator()
+    result = validator.validate("n1", {"x": 1})
+    assert result.success is True
+    assert result.violations == []
+    assert result.node_id == "n1"
+
+
+def test_node_decision_policy_success_maps_to_continue():
+    """success=True → CONTINUE."""
+    result = NodeValidationResult(node_id="n1", success=True)
+    outcome = NodeDecisionPolicy().decide(result)
+    assert outcome.decision == NodeDecision.CONTINUE
+    assert outcome.blocks_execution is False
+    assert outcome.reason
+
+
+def test_node_decision_policy_failure_maps_to_fail():
+    """success=False → FAIL."""
+    from src.engine.validation.result import Violation, Severity
+
+    result = NodeValidationResult(
+        node_id="n1",
+        success=False,
+        violations=[
+            Violation(
+                rule_id="X-001",
+                rule_name="Test",
+                severity=Severity.ERROR,
+                location_type="node",
+                location_id="n1",
+                message="something wrong",
+            )
+        ],
+    )
+    outcome = NodeDecisionPolicy().decide(result)
+    assert outcome.decision == NodeDecision.FAIL
+    assert outcome.blocks_execution is True
+    assert "something wrong" in outcome.reason
+
+
+def test_node_decision_is_blocking_property():
+    """is_blocking must be True for FAIL, False for CONTINUE."""
+    assert NodeDecision.FAIL.is_blocking is True
+    assert NodeDecision.CONTINUE.is_blocking is False
+
+
+def test_engine_level_trace_keys_preserved_with_node_validation():
+    """Engine-level trace.meta keys must remain intact after node validation."""
+    eng = _minimal_valid_engine()
+    trace = eng.execute(revision_id="r_compat_check")
+
+    # Engine-level keys must still be present
+    assert "validation" in trace.meta
+    assert "pre_validation" in trace.meta
+    assert "post_validation" in trace.meta
+    assert "decision" in trace.meta  # engine-level decision
+
+    # Engine-level decision must not be confused with node-level decision
+    eng_dec = trace.meta["decision"]
+    assert "pre" in eng_dec
+    assert "post" in eng_dec

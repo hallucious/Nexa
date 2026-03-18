@@ -92,7 +92,66 @@ class Engine:
         Backward compatible:
         - If handlers[node_id] is a callable: treated as Core handler.
         - If handlers[node_id] is a dict with pre/core/post: staged handler (pre/core/post dict).
+
+        Node-level validation runs BEFORE handler dispatch:
+        - NodeValidator.validate(...) → NodeValidationResult
+        - NodeDecisionPolicy.decide(...) → NodeDecisionOutcome
+        - If decision is FAIL: handler is not executed; node is marked FAILURE.
+        - Validation outcome is recorded in node.meta.
         """
+        from .validation.node_validator import NodeValidator
+        from .validation.node_decision_policy import NodeDecisionPolicy
+
+        # ── Node-level validation (always before handler) ─────────────────────
+        _node_validator = NodeValidator()
+        _node_decision_policy = NodeDecisionPolicy()
+
+        node_val_result = _node_validator.validate(
+            node_id=node_id,
+            input_snapshot=dict(input_snapshot),
+            context=None,
+        )
+        node_decision_outcome = _node_decision_policy.decide(node_val_result)
+
+        # Build node-level validation metadata (attached to NodeTrace.meta)
+        _node_meta: Dict[str, Any] = {
+            "validation": {
+                "performed": True,
+                "success": node_val_result.success,
+                "violations": [
+                    {
+                        "rule_id": v.rule_id,
+                        "rule_name": v.rule_name,
+                        "severity": v.severity.value,
+                        "location_type": v.location_type,
+                        "location_id": v.location_id,
+                        "message": v.message,
+                    }
+                    for v in node_val_result.violations
+                ],
+            },
+            "decision": {
+                "value": node_decision_outcome.decision.value,
+                "reason": node_decision_outcome.reason,
+            },
+        }
+
+        # If node validation decided FAIL → block handler; mark node FAILURE.
+        if node_decision_outcome.blocks_execution:
+            return NodeTrace(
+                node_id=node_id,
+                node_status=NodeStatus.FAILURE,
+                pre_status=StageStatus.SKIPPED,
+                core_status=StageStatus.SKIPPED,
+                post_status=StageStatus.SKIPPED,
+                reason_code="NODE-VALIDATION-FAIL",
+                message=node_decision_outcome.reason,
+                input_snapshot=dict(input_snapshot),
+                output_snapshot=None,
+                meta=_node_meta,
+            )
+
+        # ── Handler dispatch ───────────────────────────────────────────────────
         handler_obj = self.handlers.get(node_id)
 
         # Step116+: if no explicit handler is registered and a node runtime is provided,
@@ -120,6 +179,7 @@ class Engine:
                     message=None,
                     input_snapshot=dict(input_snapshot),
                     output_snapshot=output_snapshot,
+                    meta=_node_meta,
                 )
             except Exception as e:
                 return NodeTrace(
@@ -132,6 +192,7 @@ class Engine:
                     message=str(e),
                     input_snapshot=dict(input_snapshot),
                     output_snapshot=None,
+                    meta=_node_meta,
                 )
 
         pre_fn: Optional[PreHandler] = None
@@ -157,6 +218,7 @@ class Engine:
                 message=f"invalid handler config for {node_id}",
                 input_snapshot=dict(input_snapshot),
                 output_snapshot=None,
+                meta=_node_meta,
             )
 
         pre_status = StageStatus.SUCCESS
@@ -238,6 +300,7 @@ class Engine:
             message=message,
             input_snapshot=dict(final_input),
             output_snapshot=dict(final_output) if isinstance(final_output, dict) else None,
+            meta=_node_meta,
         )
 
     # ------------------------------------------------------------------
