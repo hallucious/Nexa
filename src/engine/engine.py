@@ -57,6 +57,14 @@ class Engine:
     # Nodes not listed here are treated as STRICT (current default behavior).
     node_failure_policies: Dict[str, NodeFailurePolicy] = field(default_factory=dict, repr=False)
 
+    # Per-node fallback map: if a node fails, attempt its fallback once.
+    # key: primary node_id  →  value: fallback_node_id
+    # Constraints (v1):
+    #   - single fallback only (no chaining)
+    #   - fallback executes at most once with the same input_snapshot
+    #   - fallback does NOT affect DAG structure / edges
+    node_fallback_map: Dict[str, str] = field(default_factory=dict, repr=False)
+
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
             entry_node_id=self.entry_node_id,
@@ -89,6 +97,130 @@ class Engine:
 
     def _noop_handler(self, _input: Dict[str, Any]) -> Dict[str, Any]:
         return {}
+
+    def _apply_fallback(
+        self,
+        node_id: str,
+        original_trace: NodeTrace,
+        input_snapshot: Dict[str, Any],
+    ) -> NodeTrace:
+        """Attempt a single fallback execution if a fallback is configured for node_id.
+
+        Called only when the primary node resulted in FAILURE.
+
+        Rules (v1):
+        - Single fallback, executed at most once.
+        - Fallback receives the same input_snapshot as the original node.
+        - Fallback does NOT affect DAG edges or upstream visibility.
+        - If fallback == original node, treat as config error (prevent loop).
+        - If fallback_node_id not in node_ids, treat as config error → FAILURE.
+        - If fallback succeeds, replace the original trace with the fallback result
+          and embed recovery metadata.
+        - If fallback fails, keep FAILURE and embed recovery metadata.
+
+        Returns:
+            The final NodeTrace to use for this node (either recovered or still failed).
+        """
+        fallback_node_id = self.node_fallback_map.get(node_id)
+        if fallback_node_id is None:
+            # No fallback configured; return original failure unchanged.
+            return original_trace
+
+        # Edge case: fallback == original node (prevent infinite loop).
+        if fallback_node_id == node_id:
+            return NodeTrace(
+                node_id=node_id,
+                node_status=NodeStatus.FAILURE,
+                pre_status=original_trace.pre_status,
+                core_status=original_trace.core_status,
+                post_status=original_trace.post_status,
+                reason_code="ENG-FALLBACK-SELF-REF",
+                message=f"fallback node_id must differ from primary node_id '{node_id}'",
+                input_snapshot=original_trace.input_snapshot,
+                output_snapshot=None,
+                meta=dict(original_trace.meta) if original_trace.meta else None,
+            )
+
+        # Edge case: fallback_node_id not registered in node_ids.
+        if fallback_node_id not in set(self.node_ids):
+            return NodeTrace(
+                node_id=node_id,
+                node_status=NodeStatus.FAILURE,
+                pre_status=original_trace.pre_status,
+                core_status=original_trace.core_status,
+                post_status=original_trace.post_status,
+                reason_code="ENG-FALLBACK-UNKNOWN-NODE",
+                message=(
+                    f"fallback node '{fallback_node_id}' for '{node_id}' "
+                    "is not registered in engine node_ids"
+                ),
+                input_snapshot=original_trace.input_snapshot,
+                output_snapshot=None,
+                meta=dict(original_trace.meta) if original_trace.meta else None,
+            )
+
+        # Execute fallback (same input, single attempt).
+        fallback_trace = self._run_node(
+            node_id=fallback_node_id,
+            input_snapshot=dict(input_snapshot),
+        )
+
+        # Build recovery metadata block.
+        recovery_meta: Dict[str, Any] = {
+            "recovery": {
+                "used": True,
+                "fallback_node": fallback_node_id,
+                "original_failure": {
+                    "reason_code": original_trace.reason_code,
+                    "message": original_trace.message,
+                },
+            }
+        }
+
+        # Merge with existing node meta (if any).
+        if fallback_trace.node_status == NodeStatus.SUCCESS:
+            # Fallback succeeded — replace the original failure.
+            existing_meta = dict(fallback_trace.meta) if fallback_trace.meta else {}
+            existing_meta.update(recovery_meta)
+            return NodeTrace(
+                node_id=node_id,           # keep original node_id for DAG consistency
+                node_status=NodeStatus.SUCCESS,
+                pre_status=fallback_trace.pre_status,
+                core_status=fallback_trace.core_status,
+                post_status=fallback_trace.post_status,
+                reason_code=None,
+                message=None,
+                input_snapshot=fallback_trace.input_snapshot,
+                output_snapshot=fallback_trace.output_snapshot,
+                meta=existing_meta,
+            )
+        else:
+            # Fallback also failed — keep FAILURE, record recovery attempt.
+            existing_meta = dict(original_trace.meta) if original_trace.meta else {}
+            existing_meta["recovery"] = {
+                "used": True,
+                "fallback_node": fallback_node_id,
+                "original_failure": {
+                    "reason_code": original_trace.reason_code,
+                    "message": original_trace.message,
+                },
+                "fallback_failure": {
+                    "reason_code": fallback_trace.reason_code,
+                    "message": fallback_trace.message,
+                },
+            }
+            return NodeTrace(
+                node_id=node_id,
+                node_status=NodeStatus.FAILURE,
+                pre_status=original_trace.pre_status,
+                core_status=original_trace.core_status,
+                post_status=original_trace.post_status,
+                reason_code=original_trace.reason_code,
+                message=original_trace.message,
+                input_snapshot=original_trace.input_snapshot,
+                output_snapshot=None,
+                meta=existing_meta,
+            )
 
 
     def _run_node(self, *, node_id: str, input_snapshot: Dict[str, Any]) -> NodeTrace:
@@ -632,7 +764,10 @@ class Engine:
                     flow_policy[fr.node_id] = fr.policy
 
             # Execute entry
-            node_traces[self.entry_node_id] = self._run_node(node_id=self.entry_node_id, input_snapshot={})
+            entry_trace = self._run_node(node_id=self.entry_node_id, input_snapshot={})
+            if entry_trace.node_status == NodeStatus.FAILURE:
+                entry_trace = self._apply_fallback(self.entry_node_id, entry_trace, {})
+            node_traces[self.entry_node_id] = entry_trace
 
             # Deterministic, monotonic fixpoint loop:
             # NOT_REACHED -> (SUCCESS|FAILURE|SKIPPED) only, until no change.
@@ -758,7 +893,10 @@ class Engine:
                         if out is not None:
                             merged_input[p] = dict(out)
 
-                    node_traces[node_id] = self._run_node(node_id=node_id, input_snapshot=merged_input)
+                    node_trace = self._run_node(node_id=node_id, input_snapshot=merged_input)
+                    if node_trace.node_status == NodeStatus.FAILURE:
+                        node_trace = self._apply_fallback(node_id, node_trace, merged_input)
+                    node_traces[node_id] = node_trace
                     changed = True
 
         finished_at = now_utc()
