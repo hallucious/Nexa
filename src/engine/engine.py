@@ -240,46 +240,150 @@ class Engine:
             output_snapshot=dict(final_output) if isinstance(final_output, dict) else None,
         )
 
-    def execute(self, *, revision_id: str, strict_determinism: bool = False) -> ExecutionTrace:
-        """Step47: Execute reached nodes using handlers, then propagate reachability with FlowRule policies.
+    # ------------------------------------------------------------------
+    # Validation lifecycle helpers
+    # ------------------------------------------------------------------
 
-        - Validation must pass for any execution.
-        - Entry node is executed first.
-        - Downstream nodes are executed when their FlowPolicy condition is satisfied.
-        - Failure on any upstream parent causes downstream nodes to be SKIPPED (v1 semantics).
+    @staticmethod
+    def _build_pre_validation_meta(structural_result, pre_det_result) -> Dict[str, Any]:
+        """Build trace.meta['pre_validation'] block."""
+        block: Dict[str, Any] = {
+            "structural": {
+                "performed": True,
+                "success": structural_result.success,
+                "violations": [
+                    {
+                        "rule_id": v.rule_id,
+                        "rule_name": v.rule_name,
+                        "severity": v.severity.value,
+                        "location_type": v.location_type,
+                        "location_id": v.location_id,
+                        "message": v.message,
+                    }
+                    for v in structural_result.violations
+                ],
+            },
+        }
+        if pre_det_result is not None:
+            block["determinism"] = {
+                "performed": True,
+                "strict_mode": True,
+                "success": pre_det_result.success,
+                "violations": [
+                    {
+                        "rule_id": v.rule_id,
+                        "rule_name": v.rule_name,
+                        "severity": v.severity.value,
+                        "location_type": v.location_type,
+                        "location_id": v.location_id,
+                        "message": v.message,
+                    }
+                    for v in pre_det_result.violations
+                ],
+            }
+        else:
+            block["determinism"] = {"performed": False}
+        return block
+
+    @staticmethod
+    def _build_post_validation_meta(post_det_result, strict_determinism: bool) -> Dict[str, Any]:
+        """Build trace.meta['post_validation'] block."""
+        if post_det_result is not None:
+            return {
+                "performed": True,
+                "strict_mode": strict_determinism,
+                "success": post_det_result.success,
+                "violations": [
+                    {
+                        "rule_id": v.rule_id,
+                        "rule_name": v.rule_name,
+                        "severity": v.severity.value,
+                        "location_type": v.location_type,
+                        "location_id": v.location_id,
+                        "message": v.message,
+                    }
+                    for v in post_det_result.violations
+                ],
+            }
+        return {"performed": False}
+
+    # ------------------------------------------------------------------
+    # Main execution entry point
+    # ------------------------------------------------------------------
+
+    def execute(self, *, revision_id: str, strict_determinism: bool = False) -> ExecutionTrace:
+        """Execute the engine graph with a required validation lifecycle.
+
+        Validation lifecycle (enforced, cannot be bypassed):
+
+          Phase 1 — Pre-Validation: Structural (always blocking)
+            Structural validation runs before any node executes.
+            Hard failure prevents all execution; all nodes remain NOT_REACHED.
+
+          Phase 1b — Pre-Validation: Determinism (strict mode only, blocking)
+            In strict mode, determinism config validation is also blocking
+            pre-execution.  A failure here prevents execution identically to
+            a structural failure.
+
+          Phase 2 — Execution
+            Nodes execute only when Phase 1 (and 1b in strict mode) succeeded.
+
+          Phase 3 — Post-Validation: Determinism (non-strict mode, advisory)
+            In non-strict mode, determinism config validation runs AFTER
+            execution completes.  Findings are advisory: they do not alter
+            already-produced node outputs but are recorded in the trace so
+            callers can observe them.
+
+          Phase 4 — Trace Finalization (artifact commit boundary)
+            The ExecutionTrace (containing all node output_snapshots / artifacts)
+            is constructed and returned only AFTER Phase 3 completes.  This
+            guarantees that post-validation results are embedded in the trace
+            before it is surfaced to any caller.
 
         Args:
-            revision_id: Revision identifier for this execution
-            strict_determinism: If True, determinism validation becomes blocking pre-execution.
-                               If False (default), determinism validation is non-blocking.
+            revision_id: Revision identifier for this execution.
+            strict_determinism: If True, determinism validation is blocking
+                pre-execution (Phase 1b).  If False (default), determinism
+                validation is advisory post-execution (Phase 3).
         """
         from .validation.validator import ValidationEngine
 
         started_at = now_utc()
         execution_id = str(uuid.uuid4())
 
-        # Phase 1: Structural validation (always blocking, pre-run)
         validator = ValidationEngine()
-        validation = validator.validate_structural(self, revision_id=revision_id)
 
-        # Phase 2: Determinism validation (conditional)
-        determinism_validation = None
+        # ── Phase 1: Pre-validation — structural (always blocking) ────────────
+        structural_validation = validator.validate_structural(self, revision_id=revision_id)
+
+        # ── Phase 1b: Pre-validation — determinism (strict mode only, blocking)
+        pre_determinism_validation = None
         if strict_determinism:
-            # In strict mode, determinism validation is blocking pre-run
-            determinism_validation = validator.validate_determinism(
+            pre_determinism_validation = validator.validate_determinism(
                 self, revision_id=revision_id, strict_determinism=True
             )
-            # If determinism validation fails in strict mode, block execution
-            if not determinism_validation.success:
-                validation = determinism_validation  # Use determinism validation result
-        else:
-            # In non-strict mode, determinism validation is non-blocking
-            # We run it but don't block execution
-            determinism_validation = validator.validate_determinism(
-                self, revision_id=revision_id, strict_determinism=False
-            )
 
-        if self.graph_runtime is not None and validation.success:
+        # Determine whether execution is blocked.
+        # Structural failure is always blocking.
+        # In strict mode, determinism failure is also blocking.
+        structural_ok = structural_validation.success
+        determinism_pre_ok = (
+            pre_determinism_validation.success
+            if pre_determinism_validation is not None
+            else True
+        )
+        execution_allowed = structural_ok and determinism_pre_ok
+
+        # The trace's top-level validation fields reflect the blocking validation
+        # (structural, or strict determinism if that failed).
+        if pre_determinism_validation is not None and not pre_determinism_validation.success:
+            # Strict determinism failure: surface it as the primary validation result.
+            primary_validation = pre_determinism_validation
+        else:
+            primary_validation = structural_validation
+
+        # ── Phase 2: Execution ────────────────────────────────────────────────
+        if self.graph_runtime is not None and execution_allowed:
             circuit = {
                 "nodes": [{"id": nid} for nid in self.node_ids],
                 "edges": [
@@ -359,7 +463,14 @@ class Engine:
             finished_at = now_utc()
             duration_ms = int((finished_at - started_at).total_seconds() * 1000)
 
-            # Build meta with validation info
+            # ── Phase 3: Post-validation — determinism (non-strict, advisory) ──
+            post_determinism_validation = None
+            if not strict_determinism:
+                post_determinism_validation = validator.validate_determinism(
+                    self, revision_id=revision_id, strict_determinism=False
+                )
+
+            # ── Phase 4: Trace finalization (artifact commit boundary) ─────────
             trace_meta = {
                 "engine_meta": self.meta,
                 "delegated_via": "graph_runtime",
@@ -371,48 +482,33 @@ class Engine:
                     "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
                     "trace_model": ENGINE_TRACE_MODEL_VERSION,
                 },
+                # Legacy key: structural validation info (backward compat)
                 "validation": {
                     "at": now_utc_iso(),
                     "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
                     "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
                     "snapshot": {
                         "snapshot_version": "1",
-                        "applied_rules": sorted(set(getattr(validation, "applied_rule_ids", []))),
+                        "applied_rules": sorted(set(getattr(structural_validation, "applied_rule_ids", []))),
                     },
                 },
+                # Explicit lifecycle phases (new)
+                "pre_validation": self._build_pre_validation_meta(
+                    structural_validation, pre_determinism_validation
+                ),
+                "post_validation": self._build_post_validation_meta(
+                    post_determinism_validation, strict_determinism
+                ),
             }
-
-            # Add determinism validation info if performed
-            if determinism_validation is not None:
-                trace_meta["determinism_validation"] = {
-                    "performed": True,
-                    "strict_mode": strict_determinism,
-                    "success": determinism_validation.success,
-                    "violations": [
-                        {
-                            "rule_id": v.rule_id,
-                            "rule_name": v.rule_name,
-                            "severity": v.severity.value,
-                            "location_type": v.location_type,
-                            "location_id": v.location_id,
-                            "message": v.message,
-                        }
-                        for v in determinism_validation.violations
-                    ],
-                }
-            else:
-                trace_meta["determinism_validation"] = {
-                    "performed": False,
-                }
 
             return ExecutionTrace(
                 execution_id=execution_id,
                 revision_id=revision_id,
-                structural_fingerprint=validation.structural_fingerprint,
+                structural_fingerprint=primary_validation.structural_fingerprint,
                 started_at=started_at,
                 finished_at=finished_at,
                 duration_ms=duration_ms,
-                validation_success=validation.success,
+                validation_success=primary_validation.success,
                 validation_violations=[
                     {
                         "rule_id": v.rule_id,
@@ -422,13 +518,14 @@ class Engine:
                         "location_id": v.location_id,
                         "message": v.message,
                     }
-                    for v in validation.violations
+                    for v in primary_validation.violations
                 ],
                 nodes=node_traces,
                 meta=trace_meta,
                 expected_node_ids=self.node_ids,
             )
 
+        # ── Phase 2 (direct handler path) ─────────────────────────────────────
         node_traces: Dict[str, NodeTrace] = {
             nid: NodeTrace(
                 node_id=nid,
@@ -443,7 +540,7 @@ class Engine:
             for nid in self.node_ids
         }
 
-        if validation.success and self.entry_node_id in node_traces:
+        if execution_allowed and self.entry_node_id in node_traces:
             reverse = self._build_reverse_graph()
 
             # Node-level flow policy map (default ALL_SUCCESS)
@@ -540,55 +637,49 @@ class Engine:
         finished_at = now_utc()
         duration_ms = int((finished_at - started_at).total_seconds() * 1000)
 
-        # Build meta with validation info
+        # ── Phase 3: Post-validation — determinism (non-strict, advisory) ──────
+        post_determinism_validation = None
+        if not strict_determinism:
+            post_determinism_validation = validator.validate_determinism(
+                self, revision_id=revision_id, strict_determinism=False
+            )
+
+        # ── Phase 4: Trace finalization (artifact commit boundary) ─────────────
+        # The trace is constructed only after post-validation completes.
+        # Post-validation outcomes are embedded before the trace is returned.
         trace_meta = {
             "engine_meta": self.meta,
             "spec_versions": {
                 "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
                 "trace_model": ENGINE_TRACE_MODEL_VERSION,
             },
+            # Legacy key: structural validation info (backward compat)
             "validation": {
                 "at": now_utc_iso(),
                 "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
                 "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
                 "snapshot": {
                     "snapshot_version": "1",
-                    "applied_rules": sorted(set(getattr(validation, "applied_rule_ids", []))),
+                    "applied_rules": sorted(set(getattr(structural_validation, "applied_rule_ids", []))),
                 },
             },
+            # Explicit lifecycle phases (new)
+            "pre_validation": self._build_pre_validation_meta(
+                structural_validation, pre_determinism_validation
+            ),
+            "post_validation": self._build_post_validation_meta(
+                post_determinism_validation, strict_determinism
+            ),
         }
-
-        # Add determinism validation info if performed
-        if determinism_validation is not None:
-            trace_meta["determinism_validation"] = {
-                "performed": True,
-                "strict_mode": strict_determinism,
-                "success": determinism_validation.success,
-                "violations": [
-                    {
-                        "rule_id": v.rule_id,
-                        "rule_name": v.rule_name,
-                        "severity": v.severity.value,
-                        "location_type": v.location_type,
-                        "location_id": v.location_id,
-                        "message": v.message,
-                    }
-                    for v in determinism_validation.violations
-                ],
-            }
-        else:
-            trace_meta["determinism_validation"] = {
-                "performed": False,
-            }
 
         trace = ExecutionTrace(
             execution_id=execution_id,
             revision_id=revision_id,
-            structural_fingerprint=validation.structural_fingerprint,
+            structural_fingerprint=primary_validation.structural_fingerprint,
             started_at=started_at,
             finished_at=finished_at,
             duration_ms=duration_ms,
-            validation_success=validation.success,
+            validation_success=primary_validation.success,
             validation_violations=[
                 {
                     "rule_id": v.rule_id,
@@ -598,7 +689,7 @@ class Engine:
                     "location_id": v.location_id,
                     "message": v.message,
                 }
-                for v in validation.violations
+                for v in primary_validation.violations
             ],
             nodes=node_traces,
             meta=trace_meta,
