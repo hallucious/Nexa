@@ -5,13 +5,13 @@ from pathlib import Path
 
 import pytest
 
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BLUEPRINT = REPO_ROOT / "docs" / "BLUEPRINT.md"
-README = REPO_ROOT / "docs" / "README.md"
-DEVELOPMENT = REPO_ROOT / "docs" / "DEVELOPMENT.md"
+FOUNDATION_MAP = REPO_ROOT / "docs" / "FOUNDATION_MAP.md"
 
 
 def _extract_doc_paths(text: str) -> list[Path]:
+    """Extract docs/*.md paths from text (markdown links, inline code, plain paths)."""
     candidates: set[str] = set()
 
     for m in re.finditer(r"\((docs/[^\s)]+\.md)\)", text):
@@ -34,26 +34,22 @@ def _extract_doc_paths(text: str) -> list[Path]:
 
 
 @pytest.mark.contract
-def test_blueprint_principles_are_explicit():
-    assert BLUEPRINT.exists(), "docs/BLUEPRINT.md must exist"
-    t = BLUEPRINT.read_text(encoding="utf-8")
+def test_foundation_map_principles_are_explicit():
+    assert FOUNDATION_MAP.exists(), "docs/FOUNDATION_MAP.md must exist"
+    t = FOUNDATION_MAP.read_text(encoding="utf-8")
 
-    assert "Execution Engine-based architecture" in t, "BLUEPRINT must explicitly state the execution-engine architecture"
-    assert "docs/specs/_active_specs.yaml" in t, "BLUEPRINT must explicitly declare the active spec source of truth"
+    # Must explicitly state: keep valid content, delete obsolete content.
+    assert "유효한 내용" in t, "FOUNDATION_MAP must state that valid content is preserved"
+    assert "삭제" in t, "FOUNDATION_MAP must state that obsolete content is deleted"
+    assert "Deprecations" in t or "deprecation" in t.lower(), "FOUNDATION_MAP must explicitly state deprecations workflow decision (even if not required)"
 
 
 @pytest.mark.contract
-def test_core_docs_reference_existing_docs():
-    texts = [
-        BLUEPRINT.read_text(encoding="utf-8"),
-        README.read_text(encoding="utf-8"),
-        DEVELOPMENT.read_text(encoding="utf-8"),
-    ]
-    paths = []
-    for t in texts:
-        paths.extend(_extract_doc_paths(t))
+def test_foundation_map_references_existing_docs():
+    t = FOUNDATION_MAP.read_text(encoding="utf-8")
+    paths = _extract_doc_paths(t)
 
-    assert paths, "Core docs must reference at least one docs/*.md file"
+    assert paths, "FOUNDATION_MAP must reference at least one docs/*.md file"
 
     missing: list[str] = []
     for p in paths:
@@ -61,21 +57,15 @@ def test_core_docs_reference_existing_docs():
         if not p.exists():
             missing.append(str(rel))
 
-    assert not missing, "Missing referenced docs:\n" + "\n".join(sorted(set(missing)))
+    assert not missing, "Missing referenced docs:\n" + "\n".join(missing)
 
 
 @pytest.mark.contract
-def test_core_docs_include_specs_entries():
-    texts = [
-        BLUEPRINT.read_text(encoding="utf-8"),
-        README.read_text(encoding="utf-8"),
-        DEVELOPMENT.read_text(encoding="utf-8"),
-    ]
-    paths = []
-    for t in texts:
-        paths.extend(_extract_doc_paths(t))
+def test_foundation_map_includes_specs_entries():
+    t = FOUNDATION_MAP.read_text(encoding="utf-8")
+    paths = _extract_doc_paths(t)
 
     specs_root = (REPO_ROOT / "docs" / "specs").resolve()
     spec_docs = [p for p in paths if specs_root in p.parents and p.name.endswith(".md")]
 
-    assert spec_docs, "Core docs must include at least one docs/specs/*.md entry"
+    assert spec_docs, "FOUNDATION_MAP must include at least one docs/specs/*.md entry"

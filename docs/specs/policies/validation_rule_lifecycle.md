@@ -5,6 +5,8 @@ Category: policies
 Depends On:
 
 # Validation Rule Lifecycle
+Version: 1.0.0
+Status: Official Contract
 
 Purpose:
 Defines lifecycle governance for rule_id in validation_rule_catalog.md.

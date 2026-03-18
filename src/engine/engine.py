@@ -240,20 +240,44 @@ class Engine:
             output_snapshot=dict(final_output) if isinstance(final_output, dict) else None,
         )
 
-    def execute(self, *, revision_id: str) -> ExecutionTrace:
+    def execute(self, *, revision_id: str, strict_determinism: bool = False) -> ExecutionTrace:
         """Step47: Execute reached nodes using handlers, then propagate reachability with FlowRule policies.
 
         - Validation must pass for any execution.
         - Entry node is executed first.
         - Downstream nodes are executed when their FlowPolicy condition is satisfied.
         - Failure on any upstream parent causes downstream nodes to be SKIPPED (v1 semantics).
+
+        Args:
+            revision_id: Revision identifier for this execution
+            strict_determinism: If True, determinism validation becomes blocking pre-execution.
+                               If False (default), determinism validation is non-blocking.
         """
         from .validation.validator import ValidationEngine
 
         started_at = now_utc()
         execution_id = str(uuid.uuid4())
 
-        validation = ValidationEngine().validate(self, revision_id=revision_id)
+        # Phase 1: Structural validation (always blocking, pre-run)
+        validator = ValidationEngine()
+        validation = validator.validate_structural(self, revision_id=revision_id)
+
+        # Phase 2: Determinism validation (conditional)
+        determinism_validation = None
+        if strict_determinism:
+            # In strict mode, determinism validation is blocking pre-run
+            determinism_validation = validator.validate_determinism(
+                self, revision_id=revision_id, strict_determinism=True
+            )
+            # If determinism validation fails in strict mode, block execution
+            if not determinism_validation.success:
+                validation = determinism_validation  # Use determinism validation result
+        else:
+            # In non-strict mode, determinism validation is non-blocking
+            # We run it but don't block execution
+            determinism_validation = validator.validate_determinism(
+                self, revision_id=revision_id, strict_determinism=False
+            )
 
         if self.graph_runtime is not None and validation.success:
             circuit = {
@@ -335,6 +359,52 @@ class Engine:
             finished_at = now_utc()
             duration_ms = int((finished_at - started_at).total_seconds() * 1000)
 
+            # Build meta with validation info
+            trace_meta = {
+                "engine_meta": self.meta,
+                "delegated_via": "graph_runtime",
+                "graph_trace": {
+                    "run_id": getattr(graph_result.trace, "run_id", None),
+                    "node_sequence": list(getattr(graph_result.trace, "node_sequence", [])),
+                },
+                "spec_versions": {
+                    "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
+                    "trace_model": ENGINE_TRACE_MODEL_VERSION,
+                },
+                "validation": {
+                    "at": now_utc_iso(),
+                    "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
+                    "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
+                    "snapshot": {
+                        "snapshot_version": "1",
+                        "applied_rules": sorted(set(getattr(validation, "applied_rule_ids", []))),
+                    },
+                },
+            }
+
+            # Add determinism validation info if performed
+            if determinism_validation is not None:
+                trace_meta["determinism_validation"] = {
+                    "performed": True,
+                    "strict_mode": strict_determinism,
+                    "success": determinism_validation.success,
+                    "violations": [
+                        {
+                            "rule_id": v.rule_id,
+                            "rule_name": v.rule_name,
+                            "severity": v.severity.value,
+                            "location_type": v.location_type,
+                            "location_id": v.location_id,
+                            "message": v.message,
+                        }
+                        for v in determinism_validation.violations
+                    ],
+                }
+            else:
+                trace_meta["determinism_validation"] = {
+                    "performed": False,
+                }
+
             return ExecutionTrace(
                 execution_id=execution_id,
                 revision_id=revision_id,
@@ -355,27 +425,7 @@ class Engine:
                     for v in validation.violations
                 ],
                 nodes=node_traces,
-                meta={
-                    "engine_meta": self.meta,
-                    "delegated_via": "graph_runtime",
-                    "graph_trace": {
-                        "run_id": getattr(graph_result.trace, "run_id", None),
-                        "node_sequence": list(getattr(graph_result.trace, "node_sequence", [])),
-                    },
-                    "spec_versions": {
-                        "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
-                        "trace_model": ENGINE_TRACE_MODEL_VERSION,
-                    },
-                    "validation": {
-                        "at": now_utc_iso(),
-                        "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
-                        "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
-                        "snapshot": {
-                            "snapshot_version": "1",
-                            "applied_rules": sorted(set(getattr(validation, "applied_rule_ids", []))),
-                        },
-                    },
-                },
+                meta=trace_meta,
                 expected_node_ids=self.node_ids,
             )
 
@@ -490,6 +540,47 @@ class Engine:
         finished_at = now_utc()
         duration_ms = int((finished_at - started_at).total_seconds() * 1000)
 
+        # Build meta with validation info
+        trace_meta = {
+            "engine_meta": self.meta,
+            "spec_versions": {
+                "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
+                "trace_model": ENGINE_TRACE_MODEL_VERSION,
+            },
+            "validation": {
+                "at": now_utc_iso(),
+                "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
+                "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
+                "snapshot": {
+                    "snapshot_version": "1",
+                    "applied_rules": sorted(set(getattr(validation, "applied_rule_ids", []))),
+                },
+            },
+        }
+
+        # Add determinism validation info if performed
+        if determinism_validation is not None:
+            trace_meta["determinism_validation"] = {
+                "performed": True,
+                "strict_mode": strict_determinism,
+                "success": determinism_validation.success,
+                "violations": [
+                    {
+                        "rule_id": v.rule_id,
+                        "rule_name": v.rule_name,
+                        "severity": v.severity.value,
+                        "location_type": v.location_type,
+                        "location_id": v.location_id,
+                        "message": v.message,
+                    }
+                    for v in determinism_validation.violations
+                ],
+            }
+        else:
+            trace_meta["determinism_validation"] = {
+                "performed": False,
+            }
+
         trace = ExecutionTrace(
             execution_id=execution_id,
             revision_id=revision_id,
@@ -510,22 +601,7 @@ class Engine:
                 for v in validation.violations
             ],
             nodes=node_traces,
-            meta={
-                "engine_meta": self.meta,
-                "spec_versions": {
-                    "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
-                    "trace_model": ENGINE_TRACE_MODEL_VERSION,
-                },
-                "validation": {
-                    "at": now_utc_iso(),
-                    "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
-                    "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
-                    "snapshot": {
-                        "snapshot_version": "1",
-                        "applied_rules": sorted(set(getattr(validation, "applied_rule_ids", []))),
-                    },
-                },
-            },
+            meta=trace_meta,
             expected_node_ids=self.node_ids,
         )
 

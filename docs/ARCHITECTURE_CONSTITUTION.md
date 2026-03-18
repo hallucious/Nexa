@@ -84,25 +84,7 @@ Plugins must not modify any other runtime domain.
 
 ---
 
-# Principle 9 — Working Context Schema Is Fixed
-
-Working context keys must follow the fixed structure:
-
-`<context-domain>.<resource-id>.<field>`
-
-Examples:
-
-* `input.text`
-* `prompt.main.rendered`
-* `provider.openai.output`
-* `plugin.format.result`
-* `output.value`
-
-This schema is a system-wide invariant.
-
----
-
-# Principle 10 — Contract-Driven Architecture
+# Principle 9 — Contract-Driven Architecture
 
 All major system behaviors must be defined by explicit versioned contracts.
 
@@ -110,43 +92,15 @@ Code must comply with defined contracts.
 
 ---
 
-# Principle 11 — Spec-Version Synchronization
-
-Document and code version mismatches are not allowed for active specifications.
-
-When an active specification changes, the corresponding registry and contract tests must be updated together.
-
----
-
-# Principle 12 — Observability First
+# Principle 10 — Observability First
 
 Developers must be able to inspect execution state, artifacts, traces, and node execution order at any time.
 
 ---
 
-# Principle 13 — Safe Extensibility
+# Principle 11 — Safe Extensibility
 
-New features must not violate existing guarantees: deterministic execution, artifact immutability, contract compliance, and plugin isolation.
-
----
-
-# Principle 14 — Engine-First Development
-
-Nexa development proceeds in this order:
-
-Engine
-↓
-Runtime
-↓
-Core architecture
-↓
-Developer tools
-↓
-Product features
-↓
-UI / Visual editor
-
-Product features must not be prioritized before the engine is structurally stable.
+New features must not violate existing guarantees: deterministic execution, artifact immutability, contract compliance.
 
 ---
 

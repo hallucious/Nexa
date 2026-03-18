@@ -40,11 +40,6 @@ def _load_dotenv(path: Path) -> None:
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    # Prevent duplicate option registration when another plugin already defines it.
-    existing = getattr(parser, "_option_string_actions", {})
-    if "--real-api" in existing:
-        return
-
     parser.addoption(
         "--real-api",
         action="store_true",

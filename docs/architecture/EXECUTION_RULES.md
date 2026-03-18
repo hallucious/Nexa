@@ -1,8 +1,10 @@
 # Nexa Execution Rules
 
+Version: 1.0.0
+
 ## Purpose
 
-This document defines derived execution and implementation rules for Nexa.
+This document defines the derived execution rules of Nexa.
 
 It is subordinate to:
 
@@ -16,7 +18,7 @@ It is subordinate to:
 4. Artifacts are append-only and immutable.
 5. Plugins are restricted to `plugin.<plugin_id>.*`.
 6. Execution behavior must remain traceable.
-7. New features must not violate the constitution.
+7. New features must not violate the architecture constitution.
 
 ## Related Specs
 

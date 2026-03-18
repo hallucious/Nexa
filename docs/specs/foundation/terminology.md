@@ -5,25 +5,26 @@ Category: foundation
 Depends On:
 
 # Terminology Specification
+Version: 1.0.1
+Status: Official Contract
 
 Purpose:
-Defines the core terminology of Nexa (Engine / Node / Channel / Flow / Trace, etc.).
-All specifications MUST be written based on these terms.
+Defines Nexa’s core terminology (Engine/Node/Channel/Flow/Trace, etc.).
+All specs are written based on this terminology.
 
 
 ## Version Notation Rule
-- The official document version MUST follow `Version: X.Y.Z` (SemVer, without `v` prefix).
-- Notation such as `v1.0.0` is allowed ONLY for reference/quotation/archive within the document body. In such cases, different keys such as `Archived-Version:` or `Example-Version:` MUST be used.
-- Automated contract tests parse the `^Version:` line in active spec documents; therefore, if a second `Version:` line exists in the body, synchronization MAY break.
-
+- The official document version format is fixed as `Version: X.Y.Z` (SemVer, **without** the `v` prefix).
+- Notation such as `v1.0.0` is allowed only for **references/quotes/archives inside the document body**; in that case, use a different key such as `Archived-Version:` or `Example-Version:`.
+- Automated contract tests parse the `^Version:` line in active spec documents, so a second `Version:` line in the body can break synchronization.
 ## Definitions
-- Engine: An executable graph unit composed of Node, Channel, and Flow (has Revision / Execution / Trace).
-- Node: The smallest execution unit inside an Engine (follows Pre/Core/Post pipeline).
-- Channel: A **data path** that transfers Node output → another Node input.
-- Flow: A **control rule** that defines execution order (data transformation belongs to Channel/Node).
-- Revision: A structural version of the Engine created upon structural changes (immutable).
-- Execution: A single execution of an Engine (unique execution_id).
-- Trace: A **graph-based** record of execution results (includes non-executed nodes, immutable).
+- Engine: An executable graph unit composed of Nodes, Channels, and Flows (with Revision/Execution/Trace).
+- Node: The minimum execution unit inside an Engine (follows the Pre/Core/Post pipeline).
+- Channel: A **data path** that delivers output from one Node to another Node’s input.
+- Flow: A **control rule** that defines execution order (data transformation belongs to the Channel/Node domain).
+- Revision: An immutable structural version of the Engine created when the structure changes.
+- Execution: A single run of the Engine (with a unique execution_id).
+- Trace: A **graph-based** record of execution results (including unexecuted nodes, immutable).
 
 ## Validation Mapping
 Related rule domains: ENG, NODE, CH
@@ -207,16 +208,14 @@ v1 Policy:
 
 Contract Rule:
 
-All other specifications MUST use the terminology defined here.
+All other specifications must use the terminology defined here.
 Any contradiction invalidates the dependent spec.
 
 End of Terminology Spec v1.0.0
 
 ----------------------------------------------------------------------
-
 Validation Mapping
 ----------------------------------------------------------------------
-
 Related rule domains:
 - ENG (engine-level terminology consistency)
 - NODE (node identity consistency)

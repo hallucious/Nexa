@@ -1,55 +1,90 @@
 # BLUEPRINT
 
-Version: 1.6.0
+Version: 1.5.0
 
 ────────────────
-Architecture Reference
+Architecture Constitution
 ────────────────
 
 Nexa follows an Execution Engine-based architecture.
 
-All architectural rules are defined in:
+The core design principles follow the Constitution defined in `docs/architecture/FOUNDATION_RULES.md`.
 
-- `docs/ARCHITECTURE_CONSTITUTION.md`
-- `docs/architecture/EXECUTION_RULES.md`
+System invariants that MUST NOT be changed:
 
-This document does not redefine architectural rules.
-It provides the current architectural reference points and active specification links.
+1. Nexa is not a workflow tool but an execution engine.
+2. Node is the only execution unit.
+3. Circuit does not perform execution and is responsible only for connections.
+4. System-level execution is dependency-based. Fixed pipelines are prohibited.
+5. Pre/core/post phases exist inside a Node, but they are the internal contract of a single node.
+6. Artifacts are append-only immutable structures.
+7. Deterministic execution must be maintained.
+8. The plugin write scope is restricted to `plugin.<plugin_id>.*`.
+9. The working context schema follows a fixed key structure.
+10. Contract-driven architecture must be maintained.
+11. Spec-version synchronization must be maintained.
 
-Any implementation that violates the Constitution or the Execution Rules
-is considered a violation of the Nexa architecture.
+Any implementation that violates these rules is considered a violation of the Nexa architecture.
 
 ## 1. Foundation Layer
 
-The foundational design of this project is governed by:
+The foundational design documents of this project are managed hierarchically by the following document:
 
-- `docs/ARCHITECTURE_CONSTITUTION.md`
-- `docs/architecture/EXECUTION_RULES.md`
-- `docs/CODING_PLAN.md`
+- `docs/FOUNDATION_MAP.md`
 
-When performing structure changes or contract changes, the Constitution layer and the active specification layer MUST both be checked.
+When performing structure changes or contract changes, FOUNDATION_MAP must be referenced, and the status and SemVer of the affected documents must be checked.
 
 ## 2. Active Specifications
 
-Active specifications synchronized with code.
+Currently active spec documents that are synchronized with the code.
 
-Source of Truth:
-`docs/specs/_active_specs.yaml`
+Source-of-Truth: `docs/specs/_active_specs.yaml`
 
-Representative active specifications include:
+### 2.1 Foundation / Terminology
 
 - `docs/specs/foundation/terminology.md`
-- `docs/specs/contracts/validation_engine_contract.md`
-- `docs/specs/architecture/trace_model.md`
 
-This document does not duplicate the active spec list.
-The YAML file above is authoritative.
+### 2.2 Architecture Core
+
+- `docs/specs/architecture/execution_model.md`
+- `docs/specs/architecture/trace_model.md`
+- `docs/specs/architecture/node_abstraction.md`
+- `docs/specs/architecture/node_execution_contract.md`
+- `docs/specs/architecture/circuit_contract.md`
+- `docs/specs/architecture/universal_provider_architecture.md`
+
+### 2.3 Contracts
+
+- `docs/specs/contracts/execution_environment_contract.md`
+- `docs/specs/contracts/provider_contract.md`
+- `docs/specs/contracts/plugin_contract.md`
+- `docs/specs/contracts/prompt_contract.md`
+- `docs/specs/contracts/plugin_registry_contract.md`
+- `docs/specs/contracts/validation_engine_contract.md`
+- `docs/specs/contracts/execution_config_canonicalization_contract.md`
+- `docs/specs/contracts/execution_config_schema_contract.md`
+- `docs/specs/contracts/context_key_schema_contract.md`
+
+### 2.4 Policies
+
+- `docs/specs/policies/validation_rule_catalog.md`
+- `docs/specs/policies/validation_rule_lifecycle.md`
+
+### 2.5 Indexes
+
+- `docs/specs/indexes/spec_catalog.md`
+- `docs/specs/indexes/spec_dependency_map.md`
+
+### 2.6 ExecutionConfig
+
+- `docs/specs/execution_config_prompt_binding_contract.md`
+- `docs/specs/execution_config_registry_contract.md`
 
 ## 3. ExecutionConfig Architecture
 
-There is no Node type specialization.
+There is no Node type.
 
-A Node is a common execution container,
+A Node is a single common execution container,
 and behavioral diversity is expressed only through ExecutionConfig composition.
 
 - Node = execution container
@@ -65,15 +100,16 @@ Engine
 → NodeSpecResolver
 → ExecutionConfigRegistry
 → ExecutionConfig Schema Validation
+→ ExecutionConfig Hash
 → NodeExecutionRuntime
 
 ## 4. Regression Policy Architecture
 
-`src/contracts/regression_reason_codes.py`  (single source of truth)
+`contracts/regression_reason_codes.py`  (single source of truth)
   ↓
-`src/engine/execution_regression_detector.py`  (RegressionResult)
+`engine/execution_regression_detector.py`  (RegressionResult)
   ↓
-`src/engine/execution_regression_policy.py`   (PolicyDecision: PASS/WARN/FAIL)
+`engine/execution_regression_policy.py`   (PolicyDecision: PASS/WARN/FAIL)
   ↓
 formatter / CLI
 

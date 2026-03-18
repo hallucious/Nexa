@@ -10,9 +10,9 @@ Version: 1.0.0
 
 ## Purpose
 
-Structurally validates the ExecutionConfig JSON before registry loading.
+Structurally validates ExecutionConfig JSON before registry loading.
 
-ExecutionConfig MUST be in a validated / canonical / hashable / registry-managed state,
+ExecutionConfig must be validated / canonical / hashable / registry-managed,
 and schema validation is a prerequisite for registry resolution.
 
 ## Minimum Required Fields
@@ -31,16 +31,16 @@ and schema validation is a prerequisite for registry resolution.
 
 ## Type Rules
 
-- pre_plugins MUST be a list.
-- post_plugins MUST be a list.
-- validation_rules MUST be a list.
-- output_mapping MUST be a dict.
+- pre_plugins must be a list.
+- post_plugins must be a list.
+- validation_rules must be a list.
+- output_mapping must be a dict.
 
 ## Error Policy
 
-If a schema violation occurs, ExecutionConfigSchemaError MUST be raised.
+Raises ExecutionConfigSchemaError on schema violation.
 
-## Position in Execution Layer
+## Position Within the Execution Layer
 
 ExecutionConfig JSON
 → Schema Validation
