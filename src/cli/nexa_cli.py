@@ -245,9 +245,9 @@ def diff_command(args) -> int:
             format_regression,
             format_regression_json,
         )
-        
+
         regression_result = detect_regressions(diff)
-        
+
         if getattr(args, "output_json", False):
             print(_json.dumps(format_regression_json(regression_result), indent=2))
         else:
@@ -262,14 +262,18 @@ def diff_command(args) -> int:
     return 0
 
 
+def _default_execution_config_dir(circuit_path: str) -> Path:
+    return Path(circuit_path).resolve().parent / "execution_configs"
+
+
 def run_command(args):
+    from src.config.execution_config_loader import load_execution_configs
     from src.contracts.provider_contract import ProviderRequest, ProviderResult
     from src.circuit.circuit_io import load_circuit
     from src.engine.node_execution_runtime import NodeExecutionRuntime
     from src.platform.provider_executor import ProviderExecutor
     from src.platform.provider_registry import ProviderRegistry
 
-    # 1. Echo provider — returns the prompt text unchanged (no external API)
     class EchoProvider:
         def execute(self, request: ProviderRequest) -> ProviderResult:
             return ProviderResult(
@@ -281,53 +285,23 @@ def run_command(args):
                 error=None,
             )
 
-    # 2. Build provider registry and executor
-    registry = ProviderRegistry()
-    registry.register("echo", EchoProvider())
-    executor = ProviderExecutor(registry)
-
-    # 3. Build runtime
+    provider_registry = ProviderRegistry()
+    provider_registry.register("echo", EchoProvider())
+    executor = ProviderExecutor(provider_registry)
     runtime = NodeExecutionRuntime(provider_executor=executor)
 
-    # 4. Execution config registry: maps config_id → execution config dict
-    #    Uses "input.message" to read from the initial state key "message".
-    execution_config_registry = {
-        "hello_node": {
-            "config_id": "hello_node",
-            "node_id": "hello_node",
-            "provider": {
-                "provider_id": "echo",
-                "inputs": {"prompt": "input.message"},
-            },
-            "output_mapping": {
-                "output": "provider.echo.output",
-            },
-            "runtime_config": {
-                "return_raw_output": True,
-                "write_observability": False,
-            },
-        }
-    }
+    config_dir = args.configs or str(_default_execution_config_dir(args.circuit))
+    config_registry = load_execution_configs(config_dir)
 
-    # Registry adapter: expose .get(config_id) as expected by execute_by_config_id
-    class _ConfigRegistry:
-        def get(self, config_id):
-            return execution_config_registry.get(config_id)
+    runner = CircuitRunner(runtime, config_registry)
 
-    # 5. Build runner
-    runner = CircuitRunner(runtime, _ConfigRegistry())
-
-    # 6. Load circuit and prepare state
-    circuit = load_circuit(args.circuit)
     initial_state = load_cli_state(args.state, args.var)
     if not initial_state:
         initial_state = {"message": "Hello Nexa"}
 
     started_at = time.time()
-
-    # 7. Execute — returns the final state dict (flat mapping of node_id → output)
+    circuit = load_circuit(args.circuit)
     final_state = runner.execute(circuit, initial_state)
-
     ended_at = time.time()
 
     summary = build_execution_summary(
@@ -347,7 +321,7 @@ def run_command(args):
     else:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
-    metrics = {}
+    metrics = runtime.get_metrics()
     circuit_meta = {"id": circuit.get("id"), "nodes": circuit.get("nodes", [])}
 
     record = build_success_observability_record(

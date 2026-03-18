@@ -15,6 +15,44 @@ Instead of running isolated AI calls, Nexa orchestrates **multiple AI systems th
 
 ---
 
+## Quick Start
+
+### 1. Run Hello Example
+
+```bash
+python -m src.cli.nexa_cli run examples/hello_world.nex
+```
+
+### 2. Expected Output
+
+```json
+{
+  "result": {
+    "state": {
+      "message": "Hello Nexa",
+      "hello_node": {
+        "output": "Hello Nexa"
+      }
+    }
+  },
+  "summary": {
+    "node_outputs": 1
+  }
+}
+```
+
+---
+
+## What This Demonstrates
+
+- `.nex` is the execution entry point
+- CLI → Circuit → Runtime → Provider execution flow
+- Deterministic execution
+- Artifact/state propagation
+- Execution summary generation
+
+---
+
 # Why Nexa Exists
 
 Most AI applications today rely on simple patterns:
@@ -174,12 +212,6 @@ Run tests:
 
 ```
 pytest
-```
-
-Run the hello circuit example:
-
-```
-python examples/hello_circuit/run.py
 ```
 
 ---
