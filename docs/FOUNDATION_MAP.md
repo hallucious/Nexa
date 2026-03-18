@@ -28,7 +28,10 @@ It serves two roles:
 | architecture_constitution | docs/ARCHITECTURE_CONSTITUTION.md | Active | highest architectural invariants |
 | execution_rules | docs/architecture/EXECUTION_RULES.md | Active | derived execution rules |
 | coding_plan | docs/CODING_PLAN.md | Active | implementation status and next steps |
+<<<<<<< HEAD
 | readme | docs/README.md | Active | repository entry document |
+=======
+>>>>>>> 8f5f438 (CLI: add execution config autodiscovery + stabilize installed hello example path)
 | development | docs/DEVELOPMENT.md | Active | development workflow |
 
 ---
