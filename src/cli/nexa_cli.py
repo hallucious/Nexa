@@ -262,8 +262,27 @@ def diff_command(args) -> int:
     return 0
 
 
-def _default_execution_config_dir(circuit_path: str) -> Path:
-    return Path(circuit_path).resolve().parent / "execution_configs"
+def _execution_config_search_candidates(circuit_path: str):
+    circuit = Path(circuit_path).resolve()
+    yield circuit.parent / "execution_configs"
+    yield Path.cwd() / "execution_configs"
+
+
+def resolve_execution_config_dir(circuit_path: str, cli_configs: str | None = None) -> Path:
+    if cli_configs:
+        path = Path(cli_configs).resolve()
+        if not path.exists():
+            raise FileNotFoundError(cli_configs)
+        return path
+
+    for candidate in _execution_config_search_candidates(circuit_path):
+        if candidate.exists():
+            return candidate
+
+    searched = [str(path) for path in _execution_config_search_candidates(circuit_path)]
+    raise FileNotFoundError(
+        "execution config directory not found. searched: " + ", ".join(searched)
+    )
 
 
 def run_command(args):
@@ -290,8 +309,8 @@ def run_command(args):
     executor = ProviderExecutor(provider_registry)
     runtime = NodeExecutionRuntime(provider_executor=executor)
 
-    config_dir = args.configs or str(_default_execution_config_dir(args.circuit))
-    config_registry = load_execution_configs(config_dir)
+    config_dir = resolve_execution_config_dir(args.circuit, args.configs)
+    config_registry = load_execution_configs(str(config_dir))
 
     runner = CircuitRunner(runtime, config_registry)
 

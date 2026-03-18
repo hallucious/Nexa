@@ -63,3 +63,51 @@ def test_installed_entrypoint_runs_hello_example():
     )
     assert result.returncode == 0, result.stderr
     assert "Hello Nexa" in result.stdout
+
+
+def test_auto_discovery_from_nex_path():
+    command = [
+        sys.executable,
+        "-m",
+        "src.cli.nexa_cli",
+        "run",
+        str(NEX_FILE),
+    ]
+    result = subprocess.run(command, capture_output=True, text=True, cwd=str(ROOT))
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["result"]["state"]["hello_node"]["output"] == "Hello Nexa"
+
+
+def test_cli_override_configs_still_works():
+    result = _run_module_cli()
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["result"]["state"]["hello_node"]["output"] == "Hello Nexa"
+
+
+def test_config_not_found_error(tmp_path):
+    missing_circuit = tmp_path / "missing.nex"
+    missing_circuit.write_text(
+        "id: missing\nversion: '1.0'\nnodes:\n  - id: hello_node\n    execution_config_ref: hello_node\n",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "src.cli.nexa_cli",
+            "run",
+            str(missing_circuit),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(ROOT),
+    )
+
+    assert result.returncode == 1
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "error"
+    assert payload["error_type"] == "FileNotFoundError"
+    assert "execution config directory not found" in payload["message"]

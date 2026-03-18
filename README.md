@@ -20,7 +20,7 @@ Instead of running isolated AI calls, Nexa orchestrates **multiple AI systems th
 ### 1. Run Hello Example
 
 ```bash
-python -m src.cli.nexa_cli run examples/hello_world.nex
+nexa run examples/hello_world.nex
 ```
 
 ### 2. Expected Output
@@ -212,6 +212,11 @@ Run tests:
 
 ```
 pytest
+```
+
+Run the hello circuit example:
+
+```
 ```
 
 ---
