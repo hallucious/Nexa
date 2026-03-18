@@ -17,7 +17,7 @@ from .fingerprint import StructuralFingerprint, compute_fingerprint
 from .model import Channel, EngineStructure, FlowRule
 from .revision import Revision
 from .trace import ExecutionTrace, NodeTrace
-from .types import FlowPolicy, NodeStatus, StageStatus
+from .types import FlowPolicy, NodeFailurePolicy, NodeStatus, StageStatus
 from .node_execution_runtime import NodeExecutionRuntime
 from .graph_execution_runtime import GraphExecutionRuntime
 
@@ -51,6 +51,11 @@ class Engine:
 
     # Optional graph runtime (Step117+): if provided, Engine can delegate graph traversal.
     graph_runtime: Optional[GraphExecutionRuntime] = field(default=None, repr=False)
+
+    # Per-node failure propagation policy (default: STRICT for all nodes).
+    # Controls how upstream FAILURE affects a downstream node.
+    # Nodes not listed here are treated as STRICT (current default behavior).
+    node_failure_policies: Dict[str, NodeFailurePolicy] = field(default_factory=dict, repr=False)
 
     def to_structure(self) -> EngineStructure:
         return EngineStructure(
@@ -649,6 +654,51 @@ class Engine:
                     parent_statuses = [node_traces[p].node_status for p in parents]
 
                     policy = flow_policy.get(node_id, FlowPolicy.ALL_SUCCESS)
+
+                    # ── Failure Propagation Policy ─────────────────────────────
+                    # Applied BEFORE flow policy logic.
+                    # Default is STRICT (backward compatible).
+                    failure_policy = self.node_failure_policies.get(node_id, NodeFailurePolicy.STRICT)
+
+                    # CASCADE_FAIL: any upstream FAILURE → this node becomes FAILURE immediately.
+                    if failure_policy == NodeFailurePolicy.CASCADE_FAIL:
+                        if any(s == NodeStatus.FAILURE for s in parent_statuses):
+                            node_traces[node_id] = NodeTrace(
+                                node_id=node_id,
+                                node_status=NodeStatus.FAILURE,
+                                pre_status=StageStatus.SKIPPED,
+                                core_status=StageStatus.SKIPPED,
+                                post_status=StageStatus.SKIPPED,
+                                reason_code="ENG-CASCADE-FAIL",
+                                message="upstream FAILURE propagated via CASCADE_FAIL policy",
+                            )
+                            changed = True
+                            continue
+
+                    # ISOLATE: treat upstream FAILURE as NOT_REACHED for propagation purposes.
+                    # Recompute parent_statuses with FAILURE replaced by NOT_REACHED.
+                    if failure_policy == NodeFailurePolicy.ISOLATE:
+                        parent_statuses = [
+                            NodeStatus.NOT_REACHED if s == NodeStatus.FAILURE else s
+                            for s in parent_statuses
+                        ]
+                        # If all effective statuses are NOT_REACHED, defer — nothing to act on yet.
+                        if all(s == NodeStatus.NOT_REACHED for s in parent_statuses):
+                            # All parents are either FAILURE (ignored) or actually NOT_REACHED.
+                            # If all original parents are terminal (FAILURE or SKIPPED), skip.
+                            orig = [node_traces[p].node_status for p in parents]
+                            if all(s in (NodeStatus.FAILURE, NodeStatus.SKIPPED) for s in orig):
+                                node_traces[node_id] = NodeTrace(
+                                    node_id=node_id,
+                                    node_status=NodeStatus.SKIPPED,
+                                    pre_status=StageStatus.SKIPPED,
+                                    core_status=StageStatus.SKIPPED,
+                                    post_status=StageStatus.SKIPPED,
+                                    reason_code="ENG-UPSTREAM-NO-SUCCESS",
+                                    message="no upstream success available (ISOLATE policy)",
+                                )
+                                changed = True
+                            continue
 
                     # v1 deterministic reachability rules:
                     # - A node runs when its flow policy is satisfied.
