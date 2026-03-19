@@ -1,0 +1,7 @@
+id: bug_autopsy_run_b
+version: "1.0"
+
+nodes:
+  - id: summarizer_node
+    execution_config_ref: summarize_case_b
+    depends_on: []

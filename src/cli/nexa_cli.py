@@ -2,14 +2,160 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    def load_dotenv(*args, **kwargs):
+        return False
 
 from src.circuit.circuit_runner import CircuitRunner
 from src.engine.run_comparator import RunComparator
 
 OBSERVABILITY_FILE = Path("OBSERVABILITY.jsonl")
+
+
+class _GenerateTextProviderAdapter:
+    """Compatibility adapter: wrap providers exposing generate_text(...) so they
+    can be used through the runtime ProviderExecutor execute(request) contract.
+    """
+
+    def __init__(self, provider, provider_name: str | None = None) -> None:
+        self.provider = provider
+        self.provider_name = provider_name or type(provider).__name__
+
+    def execute(self, request):
+        from src.contracts.provider_contract import ProviderResult
+
+        options = dict(getattr(request, 'options', {}) or {})
+        kwargs = {
+            'prompt': request.prompt,
+            'temperature': options.get('temperature', 0.0),
+            'max_output_tokens': options.get('max_output_tokens', options.get('max_tokens', 1024)),
+        }
+        if 'instructions' in options and options.get('instructions') is not None:
+            kwargs['instructions'] = options.get('instructions')
+        if 'timeout_sec' in options and options.get('timeout_sec') is not None:
+            kwargs['timeout_sec'] = options.get('timeout_sec')
+
+        result = self.provider.generate_text(**kwargs)
+
+        if isinstance(result, ProviderResult):
+            return result
+
+        # Some legacy providers may return tuples like (text, raw, err).
+        if isinstance(result, tuple) and len(result) == 3:
+            text, raw, err = result
+            trace = {'provider': self.provider_name}
+            if isinstance(raw, dict):
+                trace.update({'raw': raw})
+            if err is not None:
+                from src.contracts.provider_contract import ProviderError
+                return ProviderResult(
+                    output=text,
+                    raw_text=str(text) if text is not None else None,
+                    structured=None,
+                    artifacts=[],
+                    trace=trace,
+                    error=ProviderError(type='provider_internal_error', message=str(err), retryable=False),
+                )
+            return ProviderResult(
+                output=text,
+                raw_text=str(text) if text is not None else None,
+                structured=None,
+                artifacts=[],
+                trace=trace,
+                error=None,
+            )
+
+        return result
+
+
+def _safe_register(registry, provider_id: str, provider) -> bool:
+    try:
+        registry.register(provider_id, provider)
+        return True
+    except ValueError:
+        return False
+
+
+def _maybe_register_real_providers(provider_registry):
+    """Best-effort registration of real AI providers.
+
+    Returns a list of provider ids that were newly registered. This function is
+    intentionally tolerant: missing env vars, optional dependencies, or import
+    failures should never break the CLI.
+    """
+    load_dotenv()
+
+    registered: list[str] = []
+    first_real_alias: str | None = None
+
+    def add_aliases(alias_map):
+        nonlocal first_real_alias
+        for alias, provider in alias_map:
+            if _safe_register(provider_registry, alias, provider):
+                registered.append(alias)
+                if alias != 'ai' and first_real_alias is None:
+                    first_real_alias = alias
+
+    # OpenAI / GPT
+    openai_key = (os.environ.get('OPENAI_API_KEY') or '').strip()
+    if openai_key:
+        try:
+            from src.providers.gpt_provider import GPTProvider
+            provider = _GenerateTextProviderAdapter(GPTProvider.from_env(), provider_name='openai')
+            add_aliases([('gpt', provider), ('openai', provider)])
+        except Exception:
+            pass
+
+    # Anthropic / Claude
+    anthropic_key = (os.environ.get('ANTHROPIC_API_KEY') or '').strip()
+    if anthropic_key:
+        try:
+            from src.providers.claude_provider import ClaudeProvider
+            provider = _GenerateTextProviderAdapter(ClaudeProvider.from_env(), provider_name='anthropic')
+            add_aliases([('claude', provider), ('anthropic', provider)])
+        except Exception:
+            pass
+
+    # Gemini
+    gemini_key = (os.environ.get('GEMINI_API_KEY') or '').strip()
+    if gemini_key:
+        try:
+            from src.providers.gemini_provider import GeminiProvider
+            provider = _GenerateTextProviderAdapter(GeminiProvider.from_env(), provider_name='gemini')
+            add_aliases([('gemini', provider)])
+        except Exception:
+            pass
+
+    # Perplexity
+    pplx_key = ((os.environ.get('PPLX_API_KEY') or '') or (os.environ.get('PERPLEXITY_API_KEY') or '')).strip()
+    if pplx_key:
+        try:
+            # Normalize PERPLEXITY_API_KEY to PPLX_API_KEY for existing provider surface.
+            if not os.environ.get('PPLX_API_KEY') and os.environ.get('PERPLEXITY_API_KEY'):
+                os.environ['PPLX_API_KEY'] = os.environ['PERPLEXITY_API_KEY']
+            from src.providers.perplexity_provider import PerplexityProvider
+            provider = _GenerateTextProviderAdapter(PerplexityProvider.from_env(), provider_name='perplexity')
+            add_aliases([('perplexity', provider), ('pplx', provider)])
+        except Exception:
+            pass
+
+    # Convenience alias for the first available real provider.
+    if first_real_alias is not None:
+        try:
+            provider = provider_registry.resolve(first_real_alias)
+            if _safe_register(provider_registry, 'ai', provider):
+                registered.append('ai')
+        except Exception:
+            pass
+
+    return registered
 
 
 def build_parser():
@@ -316,6 +462,7 @@ def run_command(args):
 
     provider_registry = ProviderRegistry()
     provider_registry.register("echo", EchoProvider())
+    _maybe_register_real_providers(provider_registry)
     executor = ProviderExecutor(provider_registry)
     runtime = NodeExecutionRuntime(provider_executor=executor)
 
