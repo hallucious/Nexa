@@ -15,6 +15,7 @@ from src.contracts.regression_reason_codes import (
     NODE_SUCCESS_TO_FAILURE,
     NODE_SUCCESS_TO_SKIPPED,
 )
+from src.contracts.policy_config_contract import validate_policy_config
 from src.engine.engine import Engine
 from src.engine.execution_regression_detector import NodeRegression, RegressionResult
 from src.engine.execution_regression_policy import (
