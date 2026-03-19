@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 from src.contracts.nex_engine_adapter import build_engine_from_nex
 from src.contracts.nex_loader import load_nex_file
+from src.contracts.nex_plugin_integration import validate_plugins_from_nex
 from src.engine.engine import Engine
 from src.engine.types import NodeStatus
 
@@ -27,6 +28,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         required=False,
         help="Write execution summary JSON to file",
+    )
+    run_parser.add_argument(
+        "--bundle",
+        type=str,
+        required=False,
+        help="Path to bundle root that contains plugins/",
     )
 
     # legacy args
@@ -76,7 +83,15 @@ def build_trace_summary(circuit_id: str, trace) -> Dict[str, Any]:
     }
 
 
-def run_nex(circuit_path: str, out_path: Optional[str] = None) -> int:
+def run_nex(
+    circuit_path: str,
+    out_path: Optional[str] = None,
+    bundle_path: Optional[str] = None,
+) -> int:
+    if bundle_path:
+        raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
+        validate_plugins_from_nex(raw_data, bundle_path)
+
     circuit = load_nex_file(circuit_path)
     engine = build_engine_from_nex(circuit)
     trace = engine.execute(revision_id="cli")
@@ -126,7 +141,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if args.command == "run":
-        return run_nex(args.circuit, getattr(args, "out", None))
+        return run_nex(
+            args.circuit,
+            getattr(args, "out", None),
+            getattr(args, "bundle", None),
+        )
 
     node_ids = _parse_node_ids(args.node_ids)
     return run_engine(args.input, args.dry_run, args.entry_node_id, node_ids)
