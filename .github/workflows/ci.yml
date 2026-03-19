@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: [ "3.8" ]
+        python-version: [ "3.11.9" ]
 
     steps:
       - name: Checkout
@@ -29,8 +29,7 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt; fi
-          # If the repo is installable, install it in editable mode; ignore if not.
-          if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ]; then python -m pip install -e . || true; fi
+          if [ -f pyproject.toml ] || [ -f setup.py ] || [ -f setup.cfg ]; then python -m pip install -e .; fi
           python -m pip install pytest
 
       - name: Run tests
