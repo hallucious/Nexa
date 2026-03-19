@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import time
+from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 try:
@@ -231,9 +232,56 @@ def load_cli_state(state_path=None, var_items=None):
     return state
 
 
+def resolve_output_path(out_path: str, circuit_path: str) -> Path:
+    """Resolve CLI output path.
+
+    Rules:
+    1. If --out is filename-only, store under <nex file dir>/runs/<filename>
+    2. If --out contains a directory path, use it as-is
+    """
+    p = Path(out_path)
+
+    if p.parent == Path("."):
+        nex_dir = Path(circuit_path).resolve().parent
+        runs_dir = nex_dir / "runs"
+        runs_dir.mkdir(parents=True, exist_ok=True)
+        return runs_dir / p.name
+
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+
+def _to_json_safe(value):
+    """Recursively convert Python/runtime objects into JSON-serializable values."""
+    if is_dataclass(value):
+        return _to_json_safe(asdict(value))
+
+    if isinstance(value, dict):
+        return {str(k): _to_json_safe(v) for k, v in value.items()}
+
+    if isinstance(value, (list, tuple, set)):
+        return [_to_json_safe(v) for v in value]
+
+    if isinstance(value, Path):
+        return str(value)
+
+    if hasattr(value, "model_dump") and callable(value.model_dump):
+        return _to_json_safe(value.model_dump())
+
+    if hasattr(value, "to_dict") and callable(value.to_dict):
+        return _to_json_safe(value.to_dict())
+
+    try:
+        json.dumps(value)
+        return value
+    except TypeError:
+        return repr(value)
+
+
 def save_output(payload, path):
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, ensure_ascii=False)
+        json.dump(_to_json_safe(payload), f, indent=2, ensure_ascii=False)
 
 
 def build_execution_summary(initial_state, final_state, started_at, ended_at):
@@ -558,7 +606,8 @@ def run_command(args):
     }
 
     if args.out:
-        save_output(payload, args.out)
+        out_path = resolve_output_path(args.out, args.circuit)
+        save_output(payload, out_path)
     else:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
@@ -575,7 +624,10 @@ def run_command(args):
     append_observability_record(record)
 
     if args.observability_out:
-        save_output(record, args.observability_out)
+        observability_out = Path(args.observability_out)
+        if observability_out.parent != Path("."):
+            observability_out.parent.mkdir(parents=True, exist_ok=True)
+        save_output(record, observability_out)
 
     return 0
 
@@ -682,7 +734,10 @@ def main():
             append_observability_record(failure_record)
 
             if getattr(args, "error_out", None):
-                save_output(payload, args.error_out)
+                error_out = Path(args.error_out)
+                if error_out.parent != Path("."):
+                    error_out.parent.mkdir(parents=True, exist_ok=True)
+                save_output(payload, error_out)
 
             return 1
 
