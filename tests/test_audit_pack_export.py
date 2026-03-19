@@ -52,6 +52,7 @@ def test_audit_pack_export_creates_zip(tmp_path):
     assert "execution_trace.json" in names
     assert "metadata.json" in names
     assert "summary.json" in names
+    assert "replay_payload.json" in names
     assert "artifacts/artifact_1.json" in names
 
 

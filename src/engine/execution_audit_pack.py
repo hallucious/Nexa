@@ -88,6 +88,9 @@ class ExecutionAuditPackBuilder:
             summary_payload = {
                 'summary': ExecutionAuditPackBuilder._normalize(summary),
             }
+            replay_payload = ExecutionAuditPackBuilder._normalize(
+                payload.get('replay_payload', {}) if isinstance(payload, dict) else {}
+            )
 
             (root / 'execution_trace.json').write_text(
                 json.dumps(execution_trace_payload, indent=2, ensure_ascii=False, sort_keys=True),
@@ -99,6 +102,10 @@ class ExecutionAuditPackBuilder:
             )
             (root / 'summary.json').write_text(
                 json.dumps(summary_payload, indent=2, ensure_ascii=False, sort_keys=True),
+                encoding='utf-8',
+            )
+            (root / 'replay_payload.json').write_text(
+                json.dumps(replay_payload, indent=2, ensure_ascii=False, sort_keys=True),
                 encoding='utf-8',
             )
 

@@ -56,8 +56,8 @@ def build_parser():
     export_parser.add_argument("--out", required=True, help="Path to audit pack zip output")
 
     replay_parser = sub.add_parser("replay")
-    replay_parser.add_argument("audit_zip", help="Path to audit pack zip file")
-    replay_parser.add_argument("--strict", action="store_true", help="Return non-zero on replay failure")
+    replay_parser.add_argument("input", help="Path to audit pack zip file")
+    replay_parser.add_argument("--strict", action="store_true", help="Return non-zero on any non-determinism")
 
     return parser
 
@@ -340,9 +340,23 @@ def run_command(args):
         ended_at=ended_at,
     )
 
+    replay_payload = {
+        "execution_id": circuit.get("id", "unknown-execution"),
+        "node_order": [node.get("id") for node in circuit.get("nodes", []) if node.get("id")],
+        "circuit": circuit,
+        "execution_configs": dict(getattr(config_registry, "_configs", {})),
+        "input_state": initial_state,
+        "expected_outputs": {
+            node.get("id"): final_state.get(node.get("id"))
+            for node in circuit.get("nodes", [])
+            if node.get("id") in final_state
+        },
+    }
+
     payload = {
         "result": {"state": final_state},
         "summary": summary,
+        "replay_payload": replay_payload,
     }
 
     if args.out:
@@ -413,23 +427,28 @@ def export_command(args) -> int:
     return 0
 
 
+
 def replay_command(args) -> int:
-    from src.engine.audit_replay import AuditReplayError, replay_audit_pack
+    from src.engine.audit_replay import replay_audit_pack
 
     try:
-        result = replay_audit_pack(args.audit_zip)
-    except AuditReplayError as exc:
+        result = replay_audit_pack(args.input)
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-
-    if result.get("status") == "PASS":
+    if result["status"] == "PASS":
+        print("PASS: deterministic execution confirmed")
         return 0
 
-    if getattr(args, "strict", False):
-        return 1
-    return 0
+    print("FAIL: non-determinism detected")
+    for diff in result.get("differences", []):
+        print(f"- {diff}")
+
+    return 1 if getattr(args, "strict", False) else 0
 
 
 def task_command(args) -> int:
