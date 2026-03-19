@@ -53,6 +53,12 @@ def build_parser() -> argparse.ArgumentParser:
         required=False,
         help="Path to baseline execution summary JSON for regression gating",
     )
+    run_parser.add_argument(
+        "--policy-config",
+        type=str,
+        required=False,
+        help="Path to policy config JSON",
+    )
 
     # legacy args
     parser.add_argument("--input", type=str, required=False)
@@ -150,16 +156,36 @@ def _build_regression_result_from_summaries(
     return RegressionResult(status="clean")
 
 
+def _load_policy_overrides(policy_config_path: Optional[str]) -> Optional[Dict[str, str]]:
+    if not policy_config_path:
+        return None
+    payload = json.loads(Path(policy_config_path).read_text(encoding="utf-8"))
+    overrides = payload.get("overrides")
+    if overrides is None:
+        return None
+    if not isinstance(overrides, dict):
+        raise ValueError("policy config 'overrides' must be an object")
+
+    normalized: Dict[str, str] = {}
+    for reason_code, severity in overrides.items():
+        if not isinstance(reason_code, str) or not isinstance(severity, str):
+            raise ValueError("policy config overrides must map strings to strings")
+        normalized[reason_code] = severity
+    return normalized
+
+
 def _apply_baseline_policy(
     payload: Dict[str, Any],
     baseline_path: Optional[str],
+    policy_config_path: Optional[str] = None,
 ) -> tuple[Dict[str, Any], int]:
     if not baseline_path:
         return payload, 0
 
     baseline_payload = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
     regression_result = _build_regression_result_from_summaries(baseline_payload, payload)
-    decision = evaluate_regression_policy(regression_result)
+    overrides = _load_policy_overrides(policy_config_path)
+    decision = evaluate_regression_policy(regression_result, overrides)
 
     enriched = dict(payload)
     enriched["policy"] = {
@@ -191,6 +217,7 @@ def run_nex(
     out_path: Optional[str] = None,
     bundle_path: Optional[str] = None,
     baseline_path: Optional[str] = None,
+    policy_config_path: Optional[str] = None,
 ) -> int:
     if bundle_path:
         raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
@@ -200,7 +227,7 @@ def run_nex(
     engine = build_engine_from_nex(circuit)
     trace = engine.execute(revision_id="cli")
     payload = build_trace_summary(circuit.circuit.circuit_id, trace)
-    payload, exit_code = _apply_baseline_policy(payload, baseline_path)
+    payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
     _write_or_print_payload(payload, out_path)
     return exit_code
 
@@ -209,6 +236,7 @@ def run_nex_bundle(
     bundle_path: str,
     out_path: Optional[str] = None,
     baseline_path: Optional[str] = None,
+    policy_config_path: Optional[str] = None,
 ) -> int:
     bundle = load_nex_bundle(bundle_path)
     try:
@@ -219,7 +247,7 @@ def run_nex_bundle(
         engine = build_engine_from_nex(circuit)
         trace = engine.execute(revision_id="cli")
         payload = build_trace_summary(circuit.circuit.circuit_id, trace)
-        payload, exit_code = _apply_baseline_policy(payload, baseline_path)
+        payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
         _write_or_print_payload(payload, out_path)
         return exit_code
     finally:
@@ -262,12 +290,14 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 args.circuit,
                 getattr(args, "out", None),
                 getattr(args, "baseline", None),
+                getattr(args, "policy_config", None),
             )
         return run_nex(
             args.circuit,
             getattr(args, "out", None),
             getattr(args, "bundle", None),
             getattr(args, "baseline", None),
+            getattr(args, "policy_config", None),
         )
 
     node_ids = _parse_node_ids(args.node_ids)
