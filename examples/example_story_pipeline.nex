@@ -1,0 +1,82 @@
+{
+  "format": {
+    "kind": "nexa.circuit",
+    "version": "1.0.0"
+  },
+  "circuit": {
+    "circuit_id": "demo.story_pipeline",
+    "name": "Story Pipeline Demo",
+    "entry_node_id": "n1",
+    "description": "Minimal example Nex circuit for round-trip testing"
+  },
+  "nodes": [
+    {
+      "node_id": "n1",
+      "kind": "execution",
+      "prompt_ref": "prompt.main",
+      "provider_ref": "provider.openai.gpt5",
+      "plugin_refs": [
+        "text.cleaner"
+      ]
+    },
+    {
+      "node_id": "n2",
+      "kind": "execution",
+      "prompt_ref": "prompt.summary",
+      "provider_ref": "provider.openai.gpt5",
+      "plugin_refs": []
+    }
+  ],
+  "edges": [
+    {
+      "edge_id": "e1",
+      "src_node_id": "n1",
+      "dst_node_id": "n2"
+    }
+  ],
+  "flow": [
+    {
+      "rule_id": "f1",
+      "node_id": "n2",
+      "policy": "ALL_SUCCESS"
+    }
+  ],
+  "execution": {
+    "strict_determinism": false,
+    "node_failure_policies": {
+      "n2": "STRICT"
+    },
+    "node_fallback_map": {
+      "n1": "n1_backup"
+    },
+    "node_retry_policy": {
+      "n1": {
+        "max_attempts": 2
+      }
+    }
+  },
+  "resources": {
+    "prompts": {
+      "prompt.main": {
+        "template": "Summarize: {{input.text}}"
+      },
+      "prompt.summary": {
+        "template": "Create summary from {{n1.output}}"
+      }
+    },
+    "providers": {
+      "provider.openai.gpt5": {
+        "provider_type": "openai",
+        "model": "gpt-5",
+        "config": {}
+      }
+    }
+  },
+  "plugins": [
+    {
+      "plugin_id": "text.cleaner",
+      "version": "1.0.0",
+      "required": true
+    }
+  ]
+}
