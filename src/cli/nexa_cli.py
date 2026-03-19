@@ -51,6 +51,10 @@ def build_parser():
     diff_parser.add_argument("--json", action="store_true", dest="output_json", help="Output diff as JSON")
     diff_parser.add_argument("--regression", action="store_true", dest="regression_mode", help="Run regression detection mode")
 
+    export_parser = sub.add_parser("export")
+    export_parser.add_argument("input", help="Path to run result JSON file")
+    export_parser.add_argument("--out", required=True, help="Path to audit pack zip output")
+
     return parser
 
 
@@ -381,6 +385,30 @@ def compare_command(args):
     return 0
 
 
+
+def export_command(args) -> int:
+    from src.engine.execution_audit_pack import ExecutionAuditPackBuilder
+
+    input_path = Path(args.input)
+    if not input_path.exists():
+        print(f"Error: file not found: {args.input}", file=sys.stderr)
+        return 1
+
+    try:
+        payload = json.loads(input_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        print(f"Error: invalid JSON in {args.input}: {exc}", file=sys.stderr)
+        return 1
+
+    if not isinstance(payload, dict):
+        print(f"Error: {args.input} must contain a JSON object", file=sys.stderr)
+        return 1
+
+    ExecutionAuditPackBuilder.export(payload, args.out)
+    print(json.dumps({"status": "ok", "output": args.out}, indent=2, ensure_ascii=False))
+    return 0
+
+
 def task_command(args) -> int:
     """Route nexa task subcommands to the claude_task_generator."""
     from src.devtools.claude_task_generator.cli import cmd_generate, cmd_prompt
@@ -429,6 +457,9 @@ def main():
 
     if args.command == "task":
         return task_command(args)
+
+    if args.command == "export":
+        return export_command(args)
 
     parser.print_help()
     return 0
