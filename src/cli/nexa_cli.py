@@ -55,6 +55,10 @@ def build_parser():
     export_parser.add_argument("input", help="Path to run result JSON file")
     export_parser.add_argument("--out", required=True, help="Path to audit pack zip output")
 
+    replay_parser = sub.add_parser("replay")
+    replay_parser.add_argument("audit_zip", help="Path to audit pack zip file")
+    replay_parser.add_argument("--strict", action="store_true", help="Return non-zero on replay failure")
+
     return parser
 
 
@@ -409,6 +413,25 @@ def export_command(args) -> int:
     return 0
 
 
+def replay_command(args) -> int:
+    from src.engine.audit_replay import AuditReplayError, replay_audit_pack
+
+    try:
+        result = replay_audit_pack(args.audit_zip)
+    except AuditReplayError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+    if result.get("status") == "PASS":
+        return 0
+
+    if getattr(args, "strict", False):
+        return 1
+    return 0
+
+
 def task_command(args) -> int:
     """Route nexa task subcommands to the claude_task_generator."""
     from src.devtools.claude_task_generator.cli import cmd_generate, cmd_prompt
@@ -460,6 +483,9 @@ def main():
 
     if args.command == "export":
         return export_command(args)
+
+    if args.command == "replay":
+        return replay_command(args)
 
     parser.print_help()
     return 0
