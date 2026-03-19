@@ -10,7 +10,18 @@ from src.contracts.nex_bundle_loader import load_nex_bundle
 from src.contracts.nex_engine_adapter import build_engine_from_nex
 from src.contracts.nex_loader import load_nex_file
 from src.contracts.nex_plugin_integration import validate_plugins_from_nex
+from src.contracts.regression_reason_codes import (
+    NODE_REMOVED_SUCCESS,
+    NODE_SUCCESS_TO_FAILURE,
+    NODE_SUCCESS_TO_SKIPPED,
+)
 from src.engine.engine import Engine
+from src.engine.execution_regression_detector import NodeRegression, RegressionResult
+from src.engine.execution_regression_policy import (
+    POLICY_STATUS_FAIL,
+    POLICY_STATUS_WARN,
+    evaluate_regression_policy,
+)
 from src.engine.types import NodeStatus
 
 
@@ -35,6 +46,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         required=False,
         help="Path to bundle root that contains plugins/",
+    )
+    run_parser.add_argument(
+        "--baseline",
+        type=str,
+        required=False,
+        help="Path to baseline execution summary JSON for regression gating",
     )
 
     # legacy args
@@ -84,20 +101,80 @@ def build_trace_summary(circuit_id: str, trace) -> Dict[str, Any]:
     }
 
 
-def run_nex(
-    circuit_path: str,
-    out_path: Optional[str] = None,
-    bundle_path: Optional[str] = None,
-) -> int:
-    if bundle_path:
-        raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
-        validate_plugins_from_nex(raw_data, bundle_path)
+def _build_regression_result_from_summaries(
+    baseline_payload: Dict[str, Any],
+    current_payload: Dict[str, Any],
+) -> RegressionResult:
+    baseline_nodes = baseline_payload.get("nodes") or {}
+    current_nodes = current_payload.get("nodes") or {}
 
-    circuit = load_nex_file(circuit_path)
-    engine = build_engine_from_nex(circuit)
-    trace = engine.execute(revision_id="cli")
-    payload = build_trace_summary(circuit.circuit.circuit_id, trace)
+    regressions: List[NodeRegression] = []
 
+    for node_id in sorted(set(baseline_nodes) | set(current_nodes)):
+        left = baseline_nodes.get(node_id)
+        right = current_nodes.get(node_id)
+
+        left_status = (left or {}).get("status")
+        right_status = (right or {}).get("status")
+
+        if left_status == "SUCCESS" and right_status == "FAILURE":
+            regressions.append(
+                NodeRegression(
+                    node_id=node_id,
+                    reason_code=NODE_SUCCESS_TO_FAILURE,
+                    left_status="success",
+                    right_status="failure",
+                )
+            )
+        elif left_status == "SUCCESS" and right_status == "SKIPPED":
+            regressions.append(
+                NodeRegression(
+                    node_id=node_id,
+                    reason_code=NODE_SUCCESS_TO_SKIPPED,
+                    left_status="success",
+                    right_status="skipped",
+                )
+            )
+        elif left_status == "SUCCESS" and right is None:
+            regressions.append(
+                NodeRegression(
+                    node_id=node_id,
+                    reason_code=NODE_REMOVED_SUCCESS,
+                    left_status="success",
+                    right_status=None,
+                )
+            )
+
+    if regressions:
+        return RegressionResult(status="regression", nodes=regressions)
+    return RegressionResult(status="clean")
+
+
+def _apply_baseline_policy(
+    payload: Dict[str, Any],
+    baseline_path: Optional[str],
+) -> tuple[Dict[str, Any], int]:
+    if not baseline_path:
+        return payload, 0
+
+    baseline_payload = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
+    regression_result = _build_regression_result_from_summaries(baseline_payload, payload)
+    decision = evaluate_regression_policy(regression_result)
+
+    enriched = dict(payload)
+    enriched["policy"] = {
+        "status": decision.status,
+        "reasons": list(decision.reasons),
+    }
+
+    if decision.status == POLICY_STATUS_FAIL:
+        return enriched, 2
+    if decision.status == POLICY_STATUS_WARN:
+        return enriched, 1
+    return enriched, 0
+
+
+def _write_or_print_payload(payload: Dict[str, Any], out_path: Optional[str]) -> None:
     if out_path:
         out_file = Path(out_path)
         out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -108,10 +185,31 @@ def run_nex(
     else:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
-    return 0
+
+def run_nex(
+    circuit_path: str,
+    out_path: Optional[str] = None,
+    bundle_path: Optional[str] = None,
+    baseline_path: Optional[str] = None,
+) -> int:
+    if bundle_path:
+        raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
+        validate_plugins_from_nex(raw_data, bundle_path)
+
+    circuit = load_nex_file(circuit_path)
+    engine = build_engine_from_nex(circuit)
+    trace = engine.execute(revision_id="cli")
+    payload = build_trace_summary(circuit.circuit.circuit_id, trace)
+    payload, exit_code = _apply_baseline_policy(payload, baseline_path)
+    _write_or_print_payload(payload, out_path)
+    return exit_code
 
 
-def run_nex_bundle(bundle_path: str, out_path: Optional[str] = None) -> int:
+def run_nex_bundle(
+    bundle_path: str,
+    out_path: Optional[str] = None,
+    baseline_path: Optional[str] = None,
+) -> int:
     bundle = load_nex_bundle(bundle_path)
     try:
         raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
@@ -121,18 +219,9 @@ def run_nex_bundle(bundle_path: str, out_path: Optional[str] = None) -> int:
         engine = build_engine_from_nex(circuit)
         trace = engine.execute(revision_id="cli")
         payload = build_trace_summary(circuit.circuit.circuit_id, trace)
-
-        if out_path:
-            out_file = Path(out_path)
-            out_file.parent.mkdir(parents=True, exist_ok=True)
-            out_file.write_text(
-                json.dumps(payload, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-        else:
-            print(json.dumps(payload, indent=2, ensure_ascii=False))
-
-        return 0
+        payload, exit_code = _apply_baseline_policy(payload, baseline_path)
+        _write_or_print_payload(payload, out_path)
+        return exit_code
     finally:
         bundle.cleanup()
 
@@ -169,8 +258,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.command == "run":
         if str(args.circuit).endswith(".nexb"):
-            return run_nex_bundle(args.circuit, getattr(args, "out", None))
-        return run_nex(args.circuit, getattr(args, "out", None), getattr(args, "bundle", None))
+            return run_nex_bundle(
+                args.circuit,
+                getattr(args, "out", None),
+                getattr(args, "baseline", None),
+            )
+        return run_nex(
+            args.circuit,
+            getattr(args, "out", None),
+            getattr(args, "bundle", None),
+            getattr(args, "baseline", None),
+        )
 
     node_ids = _parse_node_ids(args.node_ids)
     return run_engine(args.input, args.dry_run, args.entry_node_id, node_ids)
