@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
-from typing import List, Optional, Sequence
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence
 
-from src.engine.engine import Engine
-from src.contracts.nex_loader import load_nex_file
 from src.contracts.nex_engine_adapter import build_engine_from_nex
+from src.contracts.nex_loader import load_nex_file
+from src.engine.engine import Engine
+from src.engine.types import NodeStatus
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -17,9 +20,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command")
 
-    # run .nex
-    run_parser = subparsers.add_parser("run")
-    run_parser.add_argument("file", type=str)
+    run_parser = subparsers.add_parser("run", help="Execute a .nex circuit file")
+    run_parser.add_argument("circuit", type=str, help="Path to .nex circuit file")
+    run_parser.add_argument(
+        "--out",
+        type=str,
+        required=False,
+        help="Write execution summary JSON to file",
+    )
 
     # legacy args
     parser.add_argument("--input", type=str, required=False)
@@ -33,17 +41,56 @@ def build_parser() -> argparse.ArgumentParser:
 def _parse_node_ids(node_ids_csv: Optional[str]) -> Optional[List[str]]:
     if not node_ids_csv:
         return None
-    return [s.strip() for s in node_ids_csv.split(",") if s.strip()]
+    items = [s.strip() for s in node_ids_csv.split(",")]
+    items = [s for s in items if s]
+    return items or None
 
 
-def run_nex(file_path: str) -> int:
-    circuit = load_nex_file(file_path)
+def _node_attempts(node_meta: Optional[Dict[str, Any]], status: NodeStatus) -> int:
+    if node_meta and isinstance(node_meta.get("retry"), dict):
+        retry_meta = node_meta["retry"]
+        if isinstance(retry_meta.get("attempt_count"), int):
+            return retry_meta["attempt_count"]
+    if status in (NodeStatus.SUCCESS, NodeStatus.FAILURE):
+        return 1
+    return 0
+
+
+def build_trace_summary(circuit_id: str, trace) -> Dict[str, Any]:
+    nodes: Dict[str, Dict[str, Any]] = {}
+    any_failure = False
+
+    for node_id, node_trace in trace.nodes.items():
+        status = node_trace.node_status
+        nodes[node_id] = {
+            "status": status.value.upper(),
+            "attempts": _node_attempts(getattr(node_trace, "meta", None), status),
+        }
+        if status == NodeStatus.FAILURE:
+            any_failure = True
+
+    return {
+        "circuit_id": circuit_id,
+        "status": "FAILURE" if any_failure else "SUCCESS",
+        "nodes": nodes,
+    }
+
+
+def run_nex(circuit_path: str, out_path: Optional[str] = None) -> int:
+    circuit = load_nex_file(circuit_path)
     engine = build_engine_from_nex(circuit)
-
     trace = engine.execute(revision_id="cli")
+    payload = build_trace_summary(circuit.circuit.circuit_id, trace)
 
-    for node_id, node in trace.nodes.items():
-        print(f"{node_id}: {node.node_status}")
+    if out_path:
+        out_file = Path(out_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        out_file.write_text(
+            json.dumps(payload, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    else:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
 
     return 0
 
@@ -63,10 +110,10 @@ def run_engine(
         return 0
 
     engine = Engine(entry_node_id=entry_node_id, node_ids=node_ids)
+    trace = engine.execute(revision_id="cli")
+    has_failure = any(node.node_status == NodeStatus.FAILURE for node in trace.nodes.values())
 
-    result = engine.run(payload={"input": input_path})
-
-    if getattr(result, "success", True):
+    if not has_failure:
         print("[Engine CLI] Execution completed.")
         return 0
 
@@ -79,7 +126,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if args.command == "run":
-        return run_nex(args.file)
+        return run_nex(args.circuit, getattr(args, "out", None))
 
     node_ids = _parse_node_ids(args.node_ids)
     return run_engine(args.input, args.dry_run, args.entry_node_id, node_ids)
