@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from src.contracts.nex_bundle_loader import load_nex_bundle
 from src.contracts.nex_engine_adapter import build_engine_from_nex
 from src.contracts.nex_loader import load_nex_file
 from src.contracts.nex_plugin_integration import validate_plugins_from_nex
@@ -110,6 +111,32 @@ def run_nex(
     return 0
 
 
+def run_nex_bundle(bundle_path: str, out_path: Optional[str] = None) -> int:
+    bundle = load_nex_bundle(bundle_path)
+    try:
+        raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
+        validate_plugins_from_nex(raw_data, str(bundle.temp_dir))
+
+        circuit = load_nex_file(str(bundle.circuit_path))
+        engine = build_engine_from_nex(circuit)
+        trace = engine.execute(revision_id="cli")
+        payload = build_trace_summary(circuit.circuit.circuit_id, trace)
+
+        if out_path:
+            out_file = Path(out_path)
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            out_file.write_text(
+                json.dumps(payload, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        else:
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+        return 0
+    finally:
+        bundle.cleanup()
+
+
 def run_engine(
     input_path: Optional[str],
     dry_run: bool,
@@ -141,11 +168,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if args.command == "run":
-        return run_nex(
-            args.circuit,
-            getattr(args, "out", None),
-            getattr(args, "bundle", None),
-        )
+        if str(args.circuit).endswith(".nexb"):
+            return run_nex_bundle(args.circuit, getattr(args, "out", None))
+        return run_nex(args.circuit, getattr(args, "out", None), getattr(args, "bundle", None))
 
     node_ids = _parse_node_ids(args.node_ids)
     return run_engine(args.input, args.dry_run, args.entry_node_id, node_ids)

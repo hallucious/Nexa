@@ -1,4 +1,4 @@
-# SAFE INTEGRATION LAYER (DO NOT REPLACE EXISTING ADAPTER)
+# STRICT INTEGRATION (version mismatch = FAIL)
 
 from pathlib import Path
 from src.contracts.nex_plugin_resolver import resolve_plugins
@@ -12,5 +12,8 @@ def validate_plugins_from_nex(nex_data: dict, bundle_path: str):
 
     if result.missing_required:
         raise RuntimeError(f"Missing required plugins: {result.missing_required}")
+
+    if result.version_mismatch:
+        raise RuntimeError(f"Plugin version mismatch: {result.version_mismatch}")
 
     return result
