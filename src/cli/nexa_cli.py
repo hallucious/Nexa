@@ -383,14 +383,65 @@ def _load_run_snapshot(path: str) -> dict:
     return data
 
 
+def _normalize_run_output_to_snapshot(raw: dict) -> dict:
+    """Normalize CLI run output JSON into the execution diff snapshot contract.
+
+    Pass-through when the payload already matches the diff engine contract
+    (top-level nodes/artifacts/context). Otherwise, adapt the standard
+    `nexa run` output structure into a comparable snapshot.
+    """
+    if not isinstance(raw, dict):
+        return raw
+
+    if any(key in raw for key in ("nodes", "artifacts", "context")):
+        return raw
+
+    result = raw.get("result") or {}
+    state = result.get("state") or {}
+    replay_payload = raw.get("replay_payload") or {}
+    expected_outputs = replay_payload.get("expected_outputs") or {}
+
+    nodes: dict[str, dict] = {}
+    context: dict[str, object] = {}
+
+    for node_id, node_data in state.items():
+        if not isinstance(node_data, dict):
+            continue
+
+        node_output = node_data.get("output")
+        nodes[node_id] = {
+            "status": "success" if "error" not in node_data else "failure",
+            "output": node_output,
+        }
+        context[f"{node_id}.output"] = node_output
+
+    for output_key, output_value in expected_outputs.items():
+        context[f"output.{output_key}"] = output_value
+
+    return {
+        "run_id": (
+            raw.get("run_id")
+            or result.get("execution_id")
+            or replay_payload.get("execution_id")
+            or "unknown-run"
+        ),
+        "nodes": nodes,
+        "artifacts": {},
+        "context": context,
+    }
+
+
 def diff_command(args) -> int:
     """Execute the diff command: compare two run snapshot JSON files."""
     import json as _json
     from src.engine.execution_diff_engine import compare_runs
     from src.engine.execution_diff_formatter import format_diff, format_diff_json
 
-    left_run = _load_run_snapshot(args.left)
-    right_run = _load_run_snapshot(args.right)
+    left_run_raw = _load_run_snapshot(args.left)
+    right_run_raw = _load_run_snapshot(args.right)
+
+    left_run = _normalize_run_output_to_snapshot(left_run_raw)
+    right_run = _normalize_run_output_to_snapshot(right_run_raw)
 
     diff = compare_runs(left_run, right_run)
 
