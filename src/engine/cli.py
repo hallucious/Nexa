@@ -1,12 +1,3 @@
-"""
-Engine CLI - Hyper-AI
-
-Phase B:
-- Provide a stable Engine-native CLI surface.
-- Keep backward-stable contract: running with no args returns 0 and prints a placeholder.
-- Allow opt-in real Engine execution when required engine wiring args are provided.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -14,6 +5,8 @@ import sys
 from typing import List, Optional, Sequence
 
 from src.engine.engine import Engine
+from src.contracts.nex_loader import load_nex_file
+from src.contracts.nex_engine_adapter import build_engine_from_nex
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -21,40 +14,38 @@ def build_parser() -> argparse.ArgumentParser:
         prog="hai-engine",
         description="Hyper-AI Engine CLI (Engine-native execution)",
     )
-    parser.add_argument(
-        "--input",
-        type=str,
-        required=False,
-        help="Input file or payload path",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Run without side effects",
-    )
 
-    # Opt-in real engine run wiring (Phase B step2)
-    parser.add_argument(
-        "--entry-node-id",
-        type=str,
-        required=False,
-        help="Engine entry_node_id (required for real run)",
-    )
-    parser.add_argument(
-        "--node-ids",
-        type=str,
-        required=False,
-        help="Comma-separated list of engine node_ids (required for real run)",
-    )
+    subparsers = parser.add_subparsers(dest="command")
+
+    # run .nex
+    run_parser = subparsers.add_parser("run")
+    run_parser.add_argument("file", type=str)
+
+    # legacy args
+    parser.add_argument("--input", type=str, required=False)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--entry-node-id", type=str, required=False)
+    parser.add_argument("--node-ids", type=str, required=False)
+
     return parser
 
 
 def _parse_node_ids(node_ids_csv: Optional[str]) -> Optional[List[str]]:
     if not node_ids_csv:
         return None
-    items = [s.strip() for s in node_ids_csv.split(",")]
-    items = [s for s in items if s]
-    return items or None
+    return [s.strip() for s in node_ids_csv.split(",") if s.strip()]
+
+
+def run_nex(file_path: str) -> int:
+    circuit = load_nex_file(file_path)
+    engine = build_engine_from_nex(circuit)
+
+    trace = engine.execute(revision_id="cli")
+
+    for node_id, node in trace.nodes.items():
+        print(f"{node_id}: {node.node_status}")
+
+    return 0
 
 
 def run_engine(
@@ -67,7 +58,6 @@ def run_engine(
         print("[Engine CLI] Dry run successful.")
         return 0
 
-    # Keep contract stability: if not enough info to construct Engine, do nothing.
     if not entry_node_id or not node_ids:
         print("[Engine CLI] Execution placeholder.")
         return 0
@@ -87,6 +77,10 @@ def run_engine(
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
+
+    if args.command == "run":
+        return run_nex(args.file)
+
     node_ids = _parse_node_ids(args.node_ids)
     return run_engine(args.input, args.dry_run, args.entry_node_id, node_ids)
 
