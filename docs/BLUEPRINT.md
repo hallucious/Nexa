@@ -215,3 +215,77 @@ Policy rules (default):
 * LOW severity / no regression → PASS
 
 ---
+
+## 6. Universal Artifact Diff Architecture (NEW)
+
+Nexa defines artifact comparison as a first-class architectural component.
+
+All artifact comparison MUST follow a media-agnostic pipeline:
+
+Artifact
+→ Representation
+→ ComparableUnit[]
+→ Alignment
+→ DiffResult
+→ Formatter
+
+### 6.1 Core Principle
+
+- Raw artifact comparison is prohibited
+- All comparison must operate on structured representations
+- Comparison must be deterministic and reproducible
+
+### 6.2 ComparableUnit Abstraction
+
+ComparableUnit is the universal comparison unit across all media types.
+
+Properties:
+
+- unit_kind is extensible (section, scene, function, region, etc.)
+- canonical_label enables cross-artifact alignment
+- payload contains comparison-relevant data
+
+This abstraction allows Nexa to support:
+- text
+- image
+- video
+- audio
+- code
+- structured data
+- unknown future media
+
+without modifying the core engine.
+
+### 6.3 Layer Separation
+
+The comparison system is strictly layered:
+
+1. Extractor (Artifact → Representation)
+2. Alignment (unit matching)
+3. Comparison (unit-level diff)
+4. Formatter (output only)
+
+Formatter MUST NOT generate semantic meaning.
+
+### 6.4 Architectural Constraint
+
+The diff engine MUST remain media-agnostic.
+
+Adding new media types MUST require ONLY:
+- new extractor implementation
+
+No modification to:
+- alignment engine
+- comparison engine
+- formatter core
+
+### 6.5 Relationship to Execution Engine
+
+Artifact Diff operates as a downstream system of execution:
+
+Execution Engine → Artifacts → Diff Engine
+
+The diff engine does NOT influence execution semantics.
+
+---
+

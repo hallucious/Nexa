@@ -134,9 +134,102 @@ CLI
 
 ---
 
+### Step191: ComparableUnit Model Introduction (CRITICAL)
+
+Goal:
+
+* Introduce ComparableUnit as universal comparison abstraction
+* Define unit structure:
+  - unit_id
+  - unit_kind
+  - canonical_label
+  - payload
+  - metadata
+
+Outcome:
+
+* foundation for media-agnostic diff engine
+
+---
+
+### Step192: Representation Layer (Text Extractor)
+
+Goal:
+
+* Replace section-based parsing with representation extraction
+* Implement:
+
+  extract_text_representation(text) -> Representation
+
+* Convert text into ComparableUnit list
+
+Outcome:
+
+* text is no longer treated as raw string
+* section summary logic removed from formatter
+
+---
+
+### Step193: Alignment Engine
+
+Goal:
+
+* Implement unit alignment logic:
+
+  align_units(units_a, units_b)
+
+* Matching priority:
+  - canonical_label
+  - structure
+  - metadata
+
+Outcome:
+
+* stable unit matching across artifacts
+
+---
+
+### Step194: Unit-Based Diff Engine
+
+Goal:
+
+* Replace line-based diff with unit-based comparison
+* Implement:
+
+  compare_units(alignment) -> DiffResult
+
+Outcome:
+
+* diff becomes structure-aware
+* enables cross-media comparison
+
+---
+
+### Step195: Formatter Simplification
+
+Goal:
+
+* Remove semantic logic from formatter
+* Formatter becomes output-only
+
+Outcome:
+
+* strict layer separation
+* improved extensibility
+
+---
+
+### Step196: CLI Integration for New Diff Model
+
+Goal:
+
+* integrate new DiffResult into CLI output
+
+---
+
 ## Next Steps
 
-### Step191: CLI Regression Gating
+### Step197: CLI Regression Gating
 
 Goal:
 
@@ -144,7 +237,7 @@ Goal:
 
 ---
 
-### Step192: Configuration-Driven Policy
+### Step198: Configuration-Driven Policy
 
 Goal:
 
@@ -154,7 +247,7 @@ Goal:
 
 ---
 
-### Step193: Bundle Integrity & Security (Recommended)
+### Step199: Bundle Integrity & Security (Recommended)
 
 Goal:
 
@@ -163,7 +256,7 @@ Goal:
 
 ---
 
-### Step194: Demo Preparation (GitHub MVP)
+### Step200: Demo Preparation (GitHub MVP)
 
 Goal:
 
