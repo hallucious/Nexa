@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 from pprint import pformat
 from typing import Any
+import difflib
 
 from src.engine.execution_diff_model import RunDiff
 
@@ -93,11 +94,49 @@ def _extract_text(value: Any) -> str | None:
     return None
 
 
+def _render_text_diff(a_text: str, b_text: str, max_lines: int = 200, max_chars: int = 5000) -> str | None:
+    if len(a_text) > max_chars or len(b_text) > max_chars:
+        return None
+
+    a_lines = a_text.splitlines()
+    b_lines = b_text.splitlines()
+
+    if len(a_lines) > max_lines or len(b_lines) > max_lines:
+        return None
+
+    matcher = difflib.SequenceMatcher(a=a_lines, b=b_lines)
+    rendered: list[str] = ["    text diff:", ""]
+
+    label_width = len("[A only]")
+
+    def add_line(label: str, line: str) -> None:
+        rendered.append(f"      {label:<{label_width}}  {line}")
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            for line in a_lines[i1:i2]:
+                add_line("[same]", line)
+        elif tag == "delete":
+            for line in a_lines[i1:i2]:
+                add_line("[A only]", line)
+        elif tag == "insert":
+            for line in b_lines[j1:j2]:
+                add_line("[B only]", line)
+        elif tag == "replace":
+            for line in a_lines[i1:i2]:
+                add_line("[A only]", line)
+            for line in b_lines[j1:j2]:
+                add_line("[B only]", line)
+
+    return "\n".join(rendered)
+
+
 def format_context_value_pair(label: str, a_value: Any, b_value: Any) -> str:
     lines = [f"  [modified] {label}"]
 
     a_text = _extract_text(a_value)
     b_text = _extract_text(b_value)
+
     if a_text is not None or b_text is not None:
         lines.append("")
         lines.append("    text (A):")
@@ -105,6 +144,12 @@ def format_context_value_pair(label: str, a_value: Any, b_value: Any) -> str:
         lines.append("")
         lines.append("    text (B):")
         lines.append(_indent_block(b_text or "<none>"))
+
+        if a_text is not None and b_text is not None:
+            text_diff_rendered = _render_text_diff(a_text, b_text)
+            if text_diff_rendered:
+                lines.append("")
+                lines.append(text_diff_rendered)
 
     a_metrics = _extract_metrics(a_value)
     b_metrics = _extract_metrics(b_value)
@@ -145,7 +190,6 @@ def format_diff_details(diff: RunDiff) -> str:
     """Return per-item detail sections for nodes, artifacts, and context."""
     sections: list[str] = []
 
-    # --- Node Changes ---
     if diff.node_diffs:
         lines = ["Node Changes", "-" * 12]
         for nd in diff.node_diffs:
@@ -162,7 +206,6 @@ def format_diff_details(diff: RunDiff) -> str:
                 lines.append(f"    artifacts changed: {', '.join(nd.artifact_ids_changed)}")
         sections.append("\n".join(lines))
 
-    # --- Artifact Changes ---
     if diff.artifact_diffs:
         lines = ["Artifact Changes", "-" * 16]
         for ad in diff.artifact_diffs:
@@ -173,7 +216,6 @@ def format_diff_details(diff: RunDiff) -> str:
                 lines.append(f"    kind: {ad.left_kind} -> {ad.right_kind}")
         sections.append("\n".join(lines))
 
-    # --- Context Changes ---
     if diff.context_diffs:
         lines = ["Context Changes", "-" * 15]
         for cd in diff.context_diffs:
@@ -193,24 +235,7 @@ def format_diff(diff: RunDiff) -> str:
 
 
 def format_diff_json(diff: RunDiff) -> dict:
-    """Return a machine-readable dict representation of a RunDiff.
-
-    Structure:
-        {
-            "status": str,
-            "summary": { nodes_added, nodes_removed, nodes_changed,
-                         artifacts_added, artifacts_removed, artifacts_changed,
-                         trace_keys_changed, context_keys_changed },
-            "nodes":    [ {node_id, change_type, left_status, right_status,
-                           left_output_ref, right_output_ref,
-                           artifact_ids_added, artifact_ids_removed, artifact_ids_changed} ],
-            "artifacts": [ {artifact_id, change_type, left_hash, right_hash,
-                            left_kind, right_kind} ],
-            "context":  [ {context_key, change_type, left_value, right_value} ]
-        }
-
-    Output is deterministic (field order is stable via dataclass asdict).
-    """
+    """Return a machine-readable dict representation of a RunDiff."""
     s = diff.summary
 
     return {
