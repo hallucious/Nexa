@@ -46,7 +46,33 @@ def compute_text_diff(a: str, b: str) -> List[DiffOp]:
     return ops
 
 
-def normalize_diff_ops(ops: List[DiffOp]) -> List[DiffOp]:
+def compute_word_diff(a: str, b: str) -> List[DiffOp]:
+    a_words = a.split()
+    b_words = b.split()
+
+    matcher = difflib.SequenceMatcher(None, a_words, b_words)
+    ops: List[DiffOp] = []
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            text = " ".join(a_words[i1:i2])
+            ops.append(DiffOp("equal", text))
+        elif tag == "replace":
+            delete_text = " ".join(a_words[i1:i2])
+            insert_text = " ".join(b_words[j1:j2])
+            ops.append(DiffOp("delete", delete_text))
+            ops.append(DiffOp("insert", insert_text))
+        elif tag == "delete":
+            text = " ".join(a_words[i1:i2])
+            ops.append(DiffOp("delete", text))
+        elif tag == "insert":
+            text = " ".join(b_words[j1:j2])
+            ops.append(DiffOp("insert", text))
+
+    return ops
+
+
+def normalize_diff_ops(ops: List[DiffOp], *, strip_outer_equal: bool = True) -> List[DiffOp]:
     if not ops:
         return []
 
@@ -58,20 +84,26 @@ def normalize_diff_ops(ops: List[DiffOp]) -> List[DiffOp]:
 
         if normalized and normalized[-1].op_type == op.op_type:
             prev = normalized[-1]
-            normalized[-1] = DiffOp(prev.op_type, prev.text + op.text)
+            joiner = ""
+            if prev.text and op.text and " " not in prev.text[-1:] and " " not in op.text[:1]:
+                joiner = ""
+            normalized[-1] = DiffOp(prev.op_type, prev.text + joiner + op.text)
         else:
             normalized.append(op)
 
-    # remove leading/trailing equal
-    if normalized and normalized[0].op_type == "equal":
-        normalized = normalized[1:]
-    if normalized and normalized[-1].op_type == "equal":
-        normalized = normalized[:-1]
+    if strip_outer_equal:
+        if normalized and normalized[0].op_type == "equal":
+            normalized = normalized[1:]
+        if normalized and normalized[-1].op_type == "equal":
+            normalized = normalized[:-1]
 
     return normalized
 
 
-def compare_aligned_units(alignment: AlignmentResult) -> UnitDiffResult:
+def compare_aligned_units(alignment: AlignmentResult, mode: str = "char") -> UnitDiffResult:
+    if mode not in {"char", "word"}:
+        raise ValueError("mode must be 'char' or 'word'")
+
     changes: List[UnitChange] = []
 
     summary = {
@@ -86,8 +118,12 @@ def compare_aligned_units(alignment: AlignmentResult) -> UnitDiffResult:
             changes.append(UnitChange("unchanged", unit_a, unit_b, None))
             summary["unchanged"] += 1
         else:
-            diff = compute_text_diff(unit_a.payload, unit_b.payload)
-            diff = normalize_diff_ops(diff)
+            if mode == "word":
+                diff = compute_word_diff(unit_a.payload, unit_b.payload)
+                diff = normalize_diff_ops(diff, strip_outer_equal=False)
+            else:
+                diff = compute_text_diff(unit_a.payload, unit_b.payload)
+                diff = normalize_diff_ops(diff)
             changes.append(UnitChange("modified", unit_a, unit_b, diff))
             summary["modified"] += 1
 

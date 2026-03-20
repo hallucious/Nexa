@@ -1,6 +1,7 @@
 from src.engine.unit_diff_engine import (
     DiffOp,
     compute_text_diff,
+    compute_word_diff,
     normalize_diff_ops,
     compare_aligned_units,
 )
@@ -183,3 +184,56 @@ def test_compare_units_added_removed_and_modified_mixed_summary_is_exact():
     assert result.changes[2].unit_b is None
     assert result.changes[3].unit_a is None
     assert result.changes[3].unit_b == b3
+
+
+def test_word_diff_basic():
+    ops = compute_word_diff("I eat ramen", "I eat sushi")
+
+    assert ops == [
+        DiffOp("equal", "I eat"),
+        DiffOp("delete", "ramen"),
+        DiffOp("insert", "sushi"),
+    ]
+
+
+def test_word_diff_sentence():
+    ops = compute_word_diff("I eat ramen today", "I ate sushi today")
+
+    assert ops == [
+        DiffOp("equal", "I"),
+        DiffOp("delete", "eat ramen"),
+        DiffOp("insert", "ate sushi"),
+        DiffOp("equal", "today"),
+    ]
+
+
+def test_char_and_word_diff_are_different():
+    char_ops = normalize_diff_ops(compute_text_diff("I eat ramen", "I eat sushi"))
+    word_ops = compute_word_diff("I eat ramen", "I eat sushi")
+    word_ops = normalize_diff_ops(word_ops, strip_outer_equal=False)
+
+    assert char_ops != word_ops
+    assert word_ops == [
+        DiffOp("equal", "I eat"),
+        DiffOp("delete", "ramen"),
+        DiffOp("insert", "sushi"),
+    ]
+
+
+def test_compare_units_word_mode():
+    a = make_unit("a", "x", "I eat ramen")
+    b = make_unit("b", "x", "I eat sushi")
+
+    alignment = AlignmentResult(
+        matched_pairs=[(a, b)],
+        added_units=[],
+        removed_units=[],
+    )
+
+    result = compare_aligned_units(alignment, mode="word")
+
+    assert result.changes[0].diff == [
+        DiffOp("equal", "I eat"),
+        DiffOp("delete", "ramen"),
+        DiffOp("insert", "sushi"),
+    ]
