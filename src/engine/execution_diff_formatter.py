@@ -10,6 +10,7 @@ Public API:
 """
 from __future__ import annotations
 
+from collections import OrderedDict
 from pathlib import Path
 from pprint import pformat
 from typing import Any
@@ -130,10 +131,79 @@ def _render_text_diff(a_text: str, b_text: str, max_lines: int = 200, max_chars:
             for line in b_lines[j1:j2]:
                 add_line("[B only]", line)
 
-    if len(rendered) == 2:
+    return "\n".join(rendered)
+
+
+def _normalize_section_name(heading: str) -> str:
+    return " ".join(heading.lstrip("#").strip().split())
+
+
+def _extract_sections(text: str) -> "OrderedDict[str, list[str]]":
+    sections: "OrderedDict[str, list[str]]" = OrderedDict()
+    current_name: str | None = None
+
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            current_name = _normalize_section_name(stripped)
+            sections.setdefault(current_name, [])
+            continue
+        if stripped.startswith("### "):
+            current_name = _normalize_section_name(stripped)
+            sections.setdefault(current_name, [])
+            continue
+        if current_name is not None:
+            sections[current_name].append(line)
+
+    return sections
+
+
+def _summarize_section_changes(a_text: str, b_text: str, max_sections: int = 12) -> str | None:
+    a_sections = _extract_sections(a_text)
+    b_sections = _extract_sections(b_text)
+
+    if not a_sections and not b_sections:
         return None
 
-    return "\n".join(rendered)
+    ordered_names: list[str] = []
+    seen: set[str] = set()
+
+    for name in list(a_sections.keys()) + list(b_sections.keys()):
+        if name not in seen:
+            ordered_names.append(name)
+            seen.add(name)
+
+    lines = ["    section summary:", ""]
+    added = 0
+
+    for name in ordered_names:
+        if added >= max_sections:
+            lines.append("      - additional section changes omitted")
+            break
+
+        in_a = name in a_sections
+        in_b = name in b_sections
+
+        if in_a and not in_b:
+            lines.append(f"      - {name}: removed from A-side structure")
+            added += 1
+            continue
+        if in_b and not in_a:
+            lines.append(f"      - {name}: added in B-side structure")
+            added += 1
+            continue
+
+        a_body = "\n".join(a_sections[name]).strip()
+        b_body = "\n".join(b_sections[name]).strip()
+        if a_body != b_body:
+            lines.append(f"      - {name}: changed")
+            added += 1
+
+    if added == 0:
+        return None
+
+    return "\n".join(lines)
 
 
 def format_context_value_pair(label: str, a_value: Any, b_value: Any) -> str:
@@ -151,6 +221,11 @@ def format_context_value_pair(label: str, a_value: Any, b_value: Any) -> str:
         lines.append(_indent_block(b_text or "<none>"))
 
         if a_text is not None and b_text is not None:
+            section_summary = _summarize_section_changes(a_text, b_text)
+            if section_summary:
+                lines.append("")
+                lines.append(section_summary)
+
             text_diff_rendered = _render_text_diff(a_text, b_text)
             if text_diff_rendered:
                 lines.append("")
