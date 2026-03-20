@@ -47,6 +47,11 @@ def _compact_raw_summary(value: Any) -> str:
 
     raw = value.get("raw")
     if not isinstance(raw, dict):
+        text_block = value.get("text")
+        if isinstance(text_block, dict):
+            raw = text_block.get("raw")
+
+    if not isinstance(raw, dict):
         return repr(value)
 
     raw_id = raw.get("id", "?")
@@ -58,9 +63,16 @@ def _compact_raw_summary(value: Any) -> str:
 def _extract_metrics(value: Any) -> str | None:
     if not isinstance(value, dict):
         return None
+
     metrics = value.get("metrics")
     if not isinstance(metrics, dict):
+        text_block = value.get("text")
+        if isinstance(text_block, dict):
+            metrics = text_block.get("metrics")
+
+    if not isinstance(metrics, dict):
         return None
+
     latency_ms = metrics.get("latency_ms")
     tokens_used = metrics.get("tokens_used")
     if latency_ms is None and tokens_used is None:
