@@ -1,6 +1,6 @@
 # Nexa CODING PLAN
 
-Version: 2.3.0
+Version: 2.4.0
 
 ---
 
@@ -134,17 +134,32 @@ CLI
 
 ---
 
-### Step191: ComparableUnit Model Introduction (CRITICAL)
+### Step191: Core Diff Data Model Introduction (CRITICAL)
 
 Goal:
 
-* Introduce ComparableUnit as universal comparison abstraction
-* Define unit structure:
-  - unit_id
-  - unit_kind
-  - canonical_label
-  - payload
-  - metadata
+* Introduce core diff data structures:
+  - ComparableUnit
+  - Representation
+
+Representation:
+
+Representation {
+    representation_id: str
+    artifact_type: str
+    units: List[ComparableUnit]
+    metadata: dict
+}
+
+ComparableUnit:
+
+ComparableUnit {
+    unit_id: str
+    unit_kind: str
+    canonical_label
+    payload
+    metadata
+}
 
 Outcome:
 

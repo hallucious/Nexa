@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.6.0
+Version: 1.7.0
 
 ────────────────
 Architecture Constitution
@@ -286,6 +286,28 @@ Artifact Diff operates as a downstream system of execution:
 Execution Engine → Artifacts → Diff Engine
 
 The diff engine does NOT influence execution semantics.
+
+### 6.6 Representation Definition
+
+Representation is a structured, deterministic transformation of an Artifact.
+
+It is the ONLY valid input to the diff engine.
+
+Properties:
+
+- MUST be deterministic
+- MUST be reproducible
+- MUST be independent from formatter
+- MUST consist of ComparableUnit[]
+
+Structure:
+
+Representation {
+    representation_id: str
+    artifact_type: str
+    units: List[ComparableUnit]
+    metadata: dict
+}
 
 ---
 
