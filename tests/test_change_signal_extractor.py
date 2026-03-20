@@ -1,5 +1,5 @@
 from src.engine.change_signal_extractor import ChangeSignal, extract_change_signals
-from src.engine.unit_diff_engine import DiffOp
+from src.engine.diff_types import DiffOp
 
 
 def test_extract_change_signals_replace_from_adjacent_delete_insert():
@@ -13,7 +13,6 @@ def test_extract_change_signals_replace_from_adjacent_delete_insert():
     ]
 
 
-
 def test_extract_change_signals_add_from_insert_only():
     diff_ops = [DiffOp("insert", "dessert")]
 
@@ -22,14 +21,12 @@ def test_extract_change_signals_add_from_insert_only():
     ]
 
 
-
 def test_extract_change_signals_remove_from_delete_only():
     diff_ops = [DiffOp("delete", "spicy")]
 
     assert extract_change_signals(diff_ops) == [
         ChangeSignal("REMOVE", before="spicy", after=None),
     ]
-
 
 
 def test_extract_change_signals_ignores_equal_ops():
@@ -43,7 +40,6 @@ def test_extract_change_signals_ignores_equal_ops():
     assert extract_change_signals(diff_ops) == [
         ChangeSignal("REPLACE", before="ramen", after="sushi"),
     ]
-
 
 
 def test_extract_change_signals_mixed_sequence_preserves_order():
@@ -63,10 +59,8 @@ def test_extract_change_signals_mixed_sequence_preserves_order():
     ]
 
 
-
 def test_extract_change_signals_empty_input_returns_empty_list():
     assert extract_change_signals([]) == []
-
 
 
 def test_extract_change_signals_non_adjacent_delete_insert_are_not_grouped():
