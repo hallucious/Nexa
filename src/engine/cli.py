@@ -175,6 +175,27 @@ def _load_policy_overrides(policy_config_path: Optional[str]) -> Optional[Dict[s
     return normalized
 
 
+
+
+def _render_policy_output(policy_result: Any) -> str:
+    """Render policy result into a compact CLI-friendly string.
+
+    The JSON payload remains the primary output contract. This helper provides a
+    stable human-readable representation for future CLI presentation paths while
+    preserving backward compatibility.
+    """
+    status = getattr(policy_result, "status", None)
+    reasons = list(getattr(policy_result, "reasons", []) or [])
+
+    lines: List[str] = []
+    if status is not None:
+        lines.append(f"Status: {status}")
+
+    if reasons:
+        lines.extend(reasons)
+
+    return "\n".join(lines) if lines else str(policy_result)
+
 def _apply_baseline_policy(
     payload: Dict[str, Any],
     baseline_path: Optional[str],
@@ -192,6 +213,7 @@ def _apply_baseline_policy(
     enriched["policy"] = {
         "status": decision.status,
         "reasons": list(decision.reasons),
+        "display": _render_policy_output(decision),
     }
 
     if decision.status == POLICY_STATUS_FAIL:
