@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from src.engine.alignment_engine import AlignmentResult, align_units
 from src.engine.representation_model import ComparableUnit
+
 
 
 def make_unit(
@@ -17,14 +20,17 @@ def make_unit(
     )
 
 
-def test_alignment_result_shape():
-    result = AlignmentResult(matched_pairs=[], added_units=[], removed_units=[])
+
+def test_alignment_result_defaults_are_empty():
+    result = AlignmentResult()
+
     assert result.matched_pairs == []
     assert result.added_units == []
     assert result.removed_units == []
 
 
-def test_perfect_label_match():
+
+def test_align_units_matches_exact_labels_in_order():
     units_a = [
         make_unit("a1", "morning", 0),
         make_unit("a2", "lunch", 1),
@@ -36,15 +42,16 @@ def test_perfect_label_match():
 
     result = align_units(units_a, units_b)
 
-    assert [(a.canonical_label, b.canonical_label) for a, b in result.matched_pairs] == [
-        ("morning", "morning"),
-        ("lunch", "lunch"),
+    assert [(a.unit_id, b.unit_id) for a, b in result.matched_pairs] == [
+        ("a1", "b1"),
+        ("a2", "b2"),
     ]
     assert result.added_units == []
     assert result.removed_units == []
 
 
-def test_partial_match_with_added_and_removed():
+
+def test_align_units_uses_positional_fallback_for_unmatched_units():
     units_a = [
         make_unit("a1", "morning", 0),
         make_unit("a2", "lunch", 1),
@@ -58,16 +65,17 @@ def test_partial_match_with_added_and_removed():
 
     result = align_units(units_a, units_b)
 
-    assert [(a.canonical_label, b.canonical_label) for a, b in result.matched_pairs] == [
-        ("morning", "morning"),
-        ("afternoon", "afternoon"),
-        ("lunch", "dinner"),
+    assert [(a.unit_id, b.unit_id) for a, b in result.matched_pairs] == [
+        ("a1", "b1"),
+        ("a3", "b2"),
+        ("a2", "b3"),
     ]
     assert result.added_units == []
     assert result.removed_units == []
 
 
-def test_no_label_match_falls_back_to_position():
+
+def test_align_units_handles_no_label_match_by_position():
     units_a = [
         make_unit("a1", "alpha", 0),
         make_unit("a2", "beta", 1),
@@ -87,7 +95,8 @@ def test_no_label_match_falls_back_to_position():
     assert result.removed_units == []
 
 
-def test_different_lengths_creates_removed_units():
+
+def test_align_units_marks_leftover_a_units_as_removed():
     units_a = [
         make_unit("a1", "morning", 0),
         make_unit("a2", "lunch", 1),
@@ -99,17 +108,14 @@ def test_different_lengths_creates_removed_units():
 
     result = align_units(units_a, units_b)
 
-    assert [(a.unit_id, b.unit_id) for a, b in result.matched_pairs] == [
-        ("a1", "b1"),
-    ]
-    assert [u.unit_id for u in result.removed_units] == ["a2", "a3"]
+    assert [(a.unit_id, b.unit_id) for a, b in result.matched_pairs] == [("a1", "b1")]
+    assert [unit.unit_id for unit in result.removed_units] == ["a2", "a3"]
     assert result.added_units == []
 
 
-def test_different_lengths_creates_added_units():
-    units_a = [
-        make_unit("a1", "morning", 0),
-    ]
+
+def test_align_units_marks_leftover_b_units_as_added():
+    units_a = [make_unit("a1", "morning", 0)]
     units_b = [
         make_unit("b1", "morning", 0),
         make_unit("b2", "lunch", 1),
@@ -118,14 +124,13 @@ def test_different_lengths_creates_added_units():
 
     result = align_units(units_a, units_b)
 
-    assert [(a.unit_id, b.unit_id) for a, b in result.matched_pairs] == [
-        ("a1", "b1"),
-    ]
+    assert [(a.unit_id, b.unit_id) for a, b in result.matched_pairs] == [("a1", "b1")]
     assert result.removed_units == []
-    assert [u.unit_id for u in result.added_units] == ["b2", "b3"]
+    assert [unit.unit_id for unit in result.added_units] == ["b2", "b3"]
 
 
-def test_empty_input():
+
+def test_align_units_handles_empty_inputs():
     result = align_units([], [])
 
     assert result.matched_pairs == []
@@ -133,7 +138,8 @@ def test_empty_input():
     assert result.removed_units == []
 
 
-def test_duplicate_labels_match_in_order():
+
+def test_align_units_matches_duplicate_labels_in_order_of_appearance():
     units_a = [
         make_unit("a1", "section", 0, "A1"),
         make_unit("a2", "section", 1, "A2"),
@@ -151,7 +157,8 @@ def test_duplicate_labels_match_in_order():
     ]
 
 
-def test_none_labels_use_positional_fallback():
+
+def test_align_units_uses_positional_fallback_for_none_labels():
     units_a = [
         make_unit("a1", None, 0),
         make_unit("a2", None, 1),
