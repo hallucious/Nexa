@@ -2,16 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import List, Optional
-import difflib
 
 from src.engine.alignment_engine import AlignmentResult
+from src.engine.diff_formatter import render_diff_ops
+from src.engine.diff_types import DiffOp
 from src.engine.representation_model import ComparableUnit
-
-
-@dataclass(frozen=True)
-class DiffOp:
-    op_type: str
-    text: str
+from src.engine.text_extractor import extract_char_representation, extract_word_representation
+from src.engine.unit_alignment import align_unit_sequences
+from src.engine.unit_comparator import compare_aligned_unit_sequences
 
 
 @dataclass(frozen=True)
@@ -28,51 +26,24 @@ class UnitDiffResult:
     summary: dict
 
 
-def compute_text_diff(a: str, b: str) -> List[DiffOp]:
-    matcher = difflib.SequenceMatcher(None, a, b)
-    ops: List[DiffOp] = []
+def _ops_from_representations(a: str, b: str, *, mode: str) -> List[DiffOp]:
+    if mode == "char":
+        rep_a = extract_char_representation(a)
+        rep_b = extract_char_representation(b)
+    elif mode == "word":
+        rep_a = extract_word_representation(a)
+        rep_b = extract_word_representation(b)
+    else:
+        raise ValueError("mode must be 'char' or 'word'")
 
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        if tag == "equal":
-            ops.append(DiffOp("equal", a[i1:i2]))
-        elif tag == "replace":
-            ops.append(DiffOp("delete", a[i1:i2]))
-            ops.append(DiffOp("insert", b[j1:j2]))
-        elif tag == "delete":
-            ops.append(DiffOp("delete", a[i1:i2]))
-        elif tag == "insert":
-            ops.append(DiffOp("insert", b[j1:j2]))
-
-    return ops
+    alignment = align_unit_sequences(rep_a.units, rep_b.units)
+    diff_result = compare_aligned_unit_sequences(alignment)
+    return render_diff_ops(diff_result)
 
 
-def compute_word_diff(a: str, b: str) -> List[DiffOp]:
-    a_words = a.split()
-    b_words = b.split()
-
-    matcher = difflib.SequenceMatcher(None, a_words, b_words)
-    ops: List[DiffOp] = []
-
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        if tag == "equal":
-            text = " ".join(a_words[i1:i2])
-            ops.append(DiffOp("equal", text))
-        elif tag == "replace":
-            delete_text = " ".join(a_words[i1:i2])
-            insert_text = " ".join(b_words[j1:j2])
-            ops.append(DiffOp("delete", delete_text))
-            ops.append(DiffOp("insert", insert_text))
-        elif tag == "delete":
-            text = " ".join(a_words[i1:i2])
-            ops.append(DiffOp("delete", text))
-        elif tag == "insert":
-            text = " ".join(b_words[j1:j2])
-            ops.append(DiffOp("insert", text))
-
-    return ops
-
-
-def normalize_diff_ops(ops: List[DiffOp], *, strip_outer_equal: bool = True) -> List[DiffOp]:
+def _normalize_diff_ops(
+    ops: List[DiffOp], *, separator: str, strip_outer_equal: bool = True
+) -> List[DiffOp]:
     if not ops:
         return []
 
@@ -84,10 +55,7 @@ def normalize_diff_ops(ops: List[DiffOp], *, strip_outer_equal: bool = True) -> 
 
         if normalized and normalized[-1].op_type == op.op_type:
             prev = normalized[-1]
-            joiner = ""
-            if prev.text and op.text and " " not in prev.text[-1:] and " " not in op.text[:1]:
-                joiner = ""
-            normalized[-1] = DiffOp(prev.op_type, prev.text + joiner + op.text)
+            normalized[-1] = DiffOp(prev.op_type, prev.text + separator + op.text)
         else:
             normalized.append(op)
 
@@ -98,6 +66,23 @@ def normalize_diff_ops(ops: List[DiffOp], *, strip_outer_equal: bool = True) -> 
             normalized = normalized[:-1]
 
     return normalized
+
+
+def normalize_diff_ops(ops: List[DiffOp], *, strip_outer_equal: bool = True) -> List[DiffOp]:
+    separator = ""
+    if any(" " in op.text for op in ops):
+        separator = " "
+    return _normalize_diff_ops(ops, separator=separator, strip_outer_equal=strip_outer_equal)
+
+
+def compute_text_diff(a: str, b: str) -> List[DiffOp]:
+    raw_ops = _ops_from_representations(a, b, mode="char")
+    return _normalize_diff_ops(raw_ops, separator="", strip_outer_equal=False)
+
+
+def compute_word_diff(a: str, b: str) -> List[DiffOp]:
+    raw_ops = _ops_from_representations(a, b, mode="word")
+    return _normalize_diff_ops(raw_ops, separator=" ", strip_outer_equal=False)
 
 
 def compare_aligned_units(alignment: AlignmentResult, mode: str = "char") -> UnitDiffResult:
@@ -119,10 +104,10 @@ def compare_aligned_units(alignment: AlignmentResult, mode: str = "char") -> Uni
             summary["unchanged"] += 1
         else:
             if mode == "word":
-                diff = compute_word_diff(unit_a.payload, unit_b.payload)
+                diff = compute_word_diff(str(unit_a.payload), str(unit_b.payload))
                 diff = normalize_diff_ops(diff, strip_outer_equal=False)
             else:
-                diff = compute_text_diff(unit_a.payload, unit_b.payload)
+                diff = compute_text_diff(str(unit_a.payload), str(unit_b.payload))
                 diff = normalize_diff_ops(diff)
             changes.append(UnitChange("modified", unit_a, unit_b, diff))
             summary["modified"] += 1

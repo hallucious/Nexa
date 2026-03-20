@@ -8,6 +8,7 @@ Current scope:
 - heading-aware text extraction for markdown-like text
 - headings beginning with "## " or "### " create section units
 - no-heading input falls back to a single section unit
+- sequence extractors for text payload diffing (word / char)
 """
 from __future__ import annotations
 
@@ -25,6 +26,11 @@ _CANONICAL_LABEL_PATTERN = re.compile(r"^[^A-Za-z0-9]*([A-Za-z0-9]+)")
 def _build_representation_id(text: str) -> str:
     digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
     return f"text:{digest}"
+
+
+def _build_sequence_representation_id(kind: str, text: str) -> str:
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return f"text-{kind}:{digest}"
 
 
 def _normalize_heading(heading: str) -> str:
@@ -61,6 +67,21 @@ def _make_unit(
     )
 
 
+def _make_sequence_units(items: list[str], unit_kind: str) -> list[ComparableUnit]:
+    units: list[ComparableUnit] = []
+    for index, item in enumerate(items):
+        units.append(
+            ComparableUnit(
+                unit_id=str(index),
+                unit_kind=unit_kind,
+                canonical_label=item,
+                payload=item,
+                metadata={"position": index},
+            )
+        )
+    return units
+
+
 def extract_text_representation(text: str) -> Representation:
     """Convert raw text into a deterministic Representation.
 
@@ -93,10 +114,7 @@ def extract_text_representation(text: str) -> Representation:
             current_lines = [line]
             continue
 
-        if current_heading is not None:
-            current_lines.append(line)
-        else:
-            current_lines.append(line)
+        current_lines.append(line)
 
     if saw_heading and current_heading is not None:
         units.append(
@@ -123,4 +141,27 @@ def extract_text_representation(text: str) -> Representation:
             "unit_count": len(units),
             "heading_mode": saw_heading,
         },
+    )
+
+
+def extract_word_representation(text: str) -> Representation:
+    words = text.split()
+    units = _make_sequence_units(words, "word")
+    return Representation(
+        representation_id=_build_sequence_representation_id("word", text),
+        artifact_type="text",
+        units=units,
+        metadata={"unit_count": len(units), "granularity": "word"},
+    )
+
+
+
+def extract_char_representation(text: str) -> Representation:
+    chars = list(text)
+    units = _make_sequence_units(chars, "char")
+    return Representation(
+        representation_id=_build_sequence_representation_id("char", text),
+        artifact_type="text",
+        units=units,
+        metadata={"unit_count": len(units), "granularity": "char"},
     )
