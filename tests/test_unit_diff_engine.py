@@ -1,6 +1,7 @@
 from src.engine.unit_diff_engine import (
     DiffOp,
     compute_text_diff,
+    normalize_diff_ops,
     compare_aligned_units,
 )
 from src.engine.alignment_engine import AlignmentResult
@@ -16,6 +17,10 @@ def make_unit(unit_id: str, label: str | None, payload: str) -> ComparableUnit:
         metadata={},
     )
 
+
+# -------------------------
+# ORIGINAL TESTS (RESTORED)
+# -------------------------
 
 def test_simple_replace_emits_delete_then_insert_with_exact_text():
     ops = compute_text_diff("ramen", "sushi")
@@ -50,15 +55,41 @@ def test_no_change_emits_single_equal_op_with_exact_text():
     ]
 
 
-def test_mixed_equal_delete_insert_sequence_is_exact():
+# -------------------------
+# NORMALIZATION TESTS
+# -------------------------
+
+def test_merge_consecutive_ops():
+    ops = [
+        DiffOp("delete", "a"),
+        DiffOp("delete", "b"),
+    ]
+    result = normalize_diff_ops(ops)
+    assert result == [DiffOp("delete", "ab")]
+
+
+def test_remove_empty_ops():
+    ops = [
+        DiffOp("equal", ""),
+        DiffOp("delete", "a"),
+    ]
+    result = normalize_diff_ops(ops)
+    assert result == [DiffOp("delete", "a")]
+
+
+def test_real_diff_normalized():
     ops = compute_text_diff("I eat ramen", "I eat sushi")
+    ops = normalize_diff_ops(ops)
 
     assert ops == [
-        DiffOp("equal", "I eat "),
         DiffOp("delete", "ramen"),
         DiffOp("insert", "sushi"),
     ]
 
+
+# -------------------------
+# COMPARE TESTS (FULL)
+# -------------------------
 
 def test_compare_units_modified_attaches_diff_and_exact_summary():
     a = make_unit("a", "x", "ramen")

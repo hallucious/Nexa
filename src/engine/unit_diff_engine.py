@@ -46,6 +46,31 @@ def compute_text_diff(a: str, b: str) -> List[DiffOp]:
     return ops
 
 
+def normalize_diff_ops(ops: List[DiffOp]) -> List[DiffOp]:
+    if not ops:
+        return []
+
+    normalized: List[DiffOp] = []
+
+    for op in ops:
+        if not op.text:
+            continue
+
+        if normalized and normalized[-1].op_type == op.op_type:
+            prev = normalized[-1]
+            normalized[-1] = DiffOp(prev.op_type, prev.text + op.text)
+        else:
+            normalized.append(op)
+
+    # remove leading/trailing equal
+    if normalized and normalized[0].op_type == "equal":
+        normalized = normalized[1:]
+    if normalized and normalized[-1].op_type == "equal":
+        normalized = normalized[:-1]
+
+    return normalized
+
+
 def compare_aligned_units(alignment: AlignmentResult) -> UnitDiffResult:
     changes: List[UnitChange] = []
 
@@ -62,6 +87,7 @@ def compare_aligned_units(alignment: AlignmentResult) -> UnitDiffResult:
             summary["unchanged"] += 1
         else:
             diff = compute_text_diff(unit_a.payload, unit_b.payload)
+            diff = normalize_diff_ops(diff)
             changes.append(UnitChange("modified", unit_a, unit_b, diff))
             summary["modified"] += 1
 
