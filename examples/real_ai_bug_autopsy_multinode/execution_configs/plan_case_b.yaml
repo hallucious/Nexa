@@ -1,0 +1,10 @@
+config_id: plan_case_b
+version: "1.0"
+provider_ref: ai
+provider_inputs:
+  prompt: input.prompt_b
+output_mapping:
+  text: provider.ai.output
+runtime_config:
+  return_raw_output: true
+  write_observability: true

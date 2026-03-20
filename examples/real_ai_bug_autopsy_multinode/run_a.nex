@@ -1,0 +1,22 @@
+id: bug_autopsy_multinode_run_a
+version: "1.0"
+
+nodes:
+  - id: planner_node
+    execution_config_ref: plan_case_a
+    depends_on: []
+
+  - id: structure_node
+    execution_config_ref: structure_plan
+    depends_on:
+      - planner_node
+
+  - id: summary_node
+    execution_config_ref: summarize_plan
+    depends_on:
+      - structure_node
+
+  - id: recommendation_node
+    execution_config_ref: recommend_plan
+    depends_on:
+      - summary_node

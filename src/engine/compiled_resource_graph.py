@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any, Callable, Dict, Iterable, Optional, Set
 
 
@@ -29,7 +30,14 @@ class CompiledResourceGraph:
     final_candidates: Set[str]
 
 
-INPUT_DOMAIN_PREFIXES = ("input.", "system.")
+INPUT_DOMAIN_PREFIXES = ("input.", "system.", "node.")
+NODE_OUTPUT_REFERENCE_PATTERN = re.compile(r"^[a-zA-Z0-9_]+\.output(?:\.[a-zA-Z0-9_]+)*$")
+
+
+def _is_external_reference(read_key: str) -> bool:
+    if read_key.startswith(INPUT_DOMAIN_PREFIXES):
+        return True
+    return bool(NODE_OUTPUT_REFERENCE_PATTERN.match(read_key))
 
 
 def _as_string_mapping(value: Any, field_name: str) -> Dict[str, str]:
@@ -189,7 +197,7 @@ def compile_execution_config_to_graph(config: Dict[str, Any]) -> CompiledResourc
                 dependencies[resource.id].add(producer_id)
                 dependents[producer_id].add(resource.id)
                 continue
-            if not read_key.startswith(INPUT_DOMAIN_PREFIXES):
+            if not _is_external_reference(read_key):
                 raise CompiledResourceGraphError(
                     f"unresolved input reference: {resource.id} reads {read_key}"
                 )

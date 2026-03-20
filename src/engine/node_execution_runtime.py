@@ -281,10 +281,39 @@ class NodeExecutionRuntime:
         plan["runtime_config"] = runtime_config
         return plan, {}
 
+    def _flatten_node_output_aliases(self, flat: Dict[str, Any], node_id: str, output: Any) -> None:
+        dotted_prefixes = [f"node.{node_id}.output", f"{node_id}.output"]
+        for prefix in dotted_prefixes:
+            flat[prefix] = output
+
+        def _walk(prefix: str, value: Any) -> None:
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if not isinstance(key, str) or not key:
+                        continue
+                    child_prefix = f"{prefix}.{key}"
+                    flat[child_prefix] = item
+                    _walk(child_prefix, item)
+
+        for prefix in dotted_prefixes:
+            _walk(prefix, output)
+
     def _build_flat_context(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        flat: Dict[str, Any] = dict(state)
+        flat: Dict[str, Any] = {}
+        node_outputs = state.get("__node_outputs__")
+
         for key, value in state.items():
+            if key == "__node_outputs__":
+                continue
+            flat[key] = value
             flat[f"input.{key}"] = value
+
+        if isinstance(node_outputs, dict):
+            for node_id, node_output in node_outputs.items():
+                if not isinstance(node_id, str) or not node_id:
+                    continue
+                self._flatten_node_output_aliases(flat, node_id, node_output)
+
         return flat
 
     def _build_compat_context(self, flat_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -361,6 +390,19 @@ class NodeExecutionRuntime:
         if not inputs:
             return {}
         return {name: flat_context.get(context_key) for name, context_key in inputs.items()}
+
+    def _validate_external_graph_inputs(self, graph: CompiledResourceGraph, flat_context: Dict[str, Any]) -> None:
+        missing: List[str] = []
+        for resource in graph.resources.values():
+            for read_key in sorted(resource.reads):
+                if read_key in flat_context:
+                    continue
+                if read_key.startswith(("input.", "system.")):
+                    continue
+                if read_key.startswith("node.") or ".output" in read_key:
+                    missing.append(f"{resource.id} reads {read_key}")
+        if missing:
+            raise ValueError("missing cross-node input reference: " + "; ".join(missing))
 
     def _extract_plugin_output_mapping(self, plugin_result: PluginResult, write_keys: List[str]) -> Dict[str, Any]:
         if len(write_keys) == 1 and write_keys[0].endswith(".result"):
@@ -535,6 +577,8 @@ class NodeExecutionRuntime:
             instance_id = plugin_cfg.get("id") or plugin_id
             if isinstance(instance_id, str):
                 plugin_configs[f"plugin.{instance_id}"] = plugin_cfg
+
+        self._validate_external_graph_inputs(graph, flat_context)
 
         scheduler = GraphScheduler(graph)
         state_holder = {"last_provider_output": None}
