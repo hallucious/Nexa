@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 
-from src.engine.unit_diff_engine import DiffOp
+from src.engine.diff_types import DiffOp
 
 
 @dataclass(frozen=True)

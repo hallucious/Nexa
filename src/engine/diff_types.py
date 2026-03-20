@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
-
-from src.engine.representation_model import ComparableUnit
+from typing import Any, Optional
 
 
 @dataclass(frozen=True)
@@ -15,14 +13,14 @@ class DiffOp:
 @dataclass(frozen=True)
 class UnitDiff:
     unit_kind: str
-    label: str | None
-    status: str  # added | removed | unchanged
-    unit: ComparableUnit
+    label: Optional[str]
+    status: str  # added | removed | changed | unchanged
+    delta: Any = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class DiffResult:
-    unit_diffs: list[UnitDiff]
+    unit_diffs: list[UnitDiff] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
     metrics: dict[str, Any] = field(default_factory=dict)

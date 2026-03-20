@@ -7,7 +7,10 @@ from src.engine.alignment_engine import AlignmentResult
 from src.engine.diff_formatter import render_diff_ops
 from src.engine.diff_types import DiffOp
 from src.engine.representation_model import ComparableUnit
-from src.engine.text_extractor import extract_char_representation, extract_word_representation
+from src.engine.text_extractor import (
+    extract_char_representation,
+    extract_word_representation,
+)
 from src.engine.unit_alignment import align_unit_sequences
 from src.engine.unit_comparator import compare_aligned_unit_sequences
 
@@ -26,6 +29,7 @@ class UnitDiffResult:
     summary: dict
 
 
+
 def _ops_from_representations(a: str, b: str, *, mode: str) -> List[DiffOp]:
     if mode == "char":
         rep_a = extract_char_representation(a)
@@ -39,6 +43,7 @@ def _ops_from_representations(a: str, b: str, *, mode: str) -> List[DiffOp]:
     alignment = align_unit_sequences(rep_a.units, rep_b.units)
     diff_result = compare_aligned_unit_sequences(alignment)
     return render_diff_ops(diff_result)
+
 
 
 def _normalize_diff_ops(
@@ -68,6 +73,7 @@ def _normalize_diff_ops(
     return normalized
 
 
+
 def normalize_diff_ops(ops: List[DiffOp], *, strip_outer_equal: bool = True) -> List[DiffOp]:
     separator = ""
     if any(" " in op.text for op in ops):
@@ -75,14 +81,17 @@ def normalize_diff_ops(ops: List[DiffOp], *, strip_outer_equal: bool = True) -> 
     return _normalize_diff_ops(ops, separator=separator, strip_outer_equal=strip_outer_equal)
 
 
+
 def compute_text_diff(a: str, b: str) -> List[DiffOp]:
     raw_ops = _ops_from_representations(a, b, mode="char")
     return _normalize_diff_ops(raw_ops, separator="", strip_outer_equal=False)
 
 
+
 def compute_word_diff(a: str, b: str) -> List[DiffOp]:
     raw_ops = _ops_from_representations(a, b, mode="word")
     return _normalize_diff_ops(raw_ops, separator=" ", strip_outer_equal=False)
+
 
 
 def compare_aligned_units(alignment: AlignmentResult, mode: str = "char") -> UnitDiffResult:
@@ -104,10 +113,10 @@ def compare_aligned_units(alignment: AlignmentResult, mode: str = "char") -> Uni
             summary["unchanged"] += 1
         else:
             if mode == "word":
-                diff = compute_word_diff(str(unit_a.payload), str(unit_b.payload))
+                diff = compute_word_diff(unit_a.payload, unit_b.payload)
                 diff = normalize_diff_ops(diff, strip_outer_equal=False)
             else:
-                diff = compute_text_diff(str(unit_a.payload), str(unit_b.payload))
+                diff = compute_text_diff(unit_a.payload, unit_b.payload)
                 diff = normalize_diff_ops(diff)
             changes.append(UnitChange("modified", unit_a, unit_b, diff))
             summary["modified"] += 1

@@ -1,38 +1,21 @@
 from __future__ import annotations
 
-from src.engine.diff_types import DiffOp, DiffResult, UnitDiff
-
-
-_STATUS_TO_OP = {
-    "unchanged": "equal",
-    "removed": "delete",
-    "added": "insert",
-}
-
-
-def _separator_for(unit_diff: UnitDiff) -> str:
-    if unit_diff.unit_kind == "char":
-        return ""
-    return " "
+from src.engine.diff_types import DiffOp, DiffResult
 
 
 def render_diff_ops(diff_result: DiffResult) -> list[DiffOp]:
-    rendered: list[DiffOp] = []
-
+    ops: list[DiffOp] = []
     for unit_diff in diff_result.unit_diffs:
-        op_type = _STATUS_TO_OP.get(unit_diff.status)
-        if op_type is None:
-            raise ValueError(f"Unsupported unit diff status: {unit_diff.status}")
-
-        text = str(unit_diff.unit.payload)
-        if not text:
-            continue
-
-        if rendered and rendered[-1].op_type == op_type:
-            separator = _separator_for(unit_diff)
-            previous = rendered[-1]
-            rendered[-1] = DiffOp(previous.op_type, previous.text + separator + text)
+        text = "" if unit_diff.delta is None else str(unit_diff.delta)
+        if unit_diff.status == "unchanged":
+            ops.append(DiffOp("equal", text if text else str(unit_diff.label or "")))
+        elif unit_diff.status == "removed":
+            ops.append(DiffOp("delete", text))
+        elif unit_diff.status == "added":
+            ops.append(DiffOp("insert", text))
+        elif unit_diff.status == "changed":
+            # kept for future extensibility; current comparator decomposes into remove/add
+            ops.append(DiffOp("delete", text))
         else:
-            rendered.append(DiffOp(op_type, text))
-
-    return rendered
+            raise ValueError(f"Unsupported unit diff status: {unit_diff.status}")
+    return ops
