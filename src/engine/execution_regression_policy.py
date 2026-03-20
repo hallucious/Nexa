@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
 
+from src.engine.change_signal_extractor import ChangeSignal
 from src.engine.execution_regression_detector import (
     REGRESSION_SEVERITY_HIGH,
     REGRESSION_SEVERITY_MEDIUM,
@@ -51,11 +52,11 @@ def _apply_override_immutable(regressions, overrides: Dict[str, str]):
         return regressions
 
     updated = []
-    for r in regressions:
-        if r.reason_code in overrides:
-            updated.append(replace(r, severity=overrides[r.reason_code]))
+    for regression in regressions:
+        if regression.reason_code in overrides:
+            updated.append(replace(regression, severity=overrides[regression.reason_code]))
         else:
-            updated.append(r)
+            updated.append(regression)
     return updated
 
 
@@ -63,7 +64,6 @@ def evaluate_regression_policy(
     regressions: RegressionResult,
     overrides: Optional[Dict[str, str]] = None,
 ) -> PolicyDecision:
-
     ordered = (
         list(regressions.nodes)
         + list(regressions.artifacts)
@@ -72,20 +72,65 @@ def evaluate_regression_policy(
 
     ordered = _apply_override_immutable(ordered, overrides or {})
 
-    high = [r for r in ordered if r.severity == REGRESSION_SEVERITY_HIGH]
-    medium = [r for r in ordered if r.severity == REGRESSION_SEVERITY_MEDIUM]
+    high = [regression for regression in ordered if regression.severity == REGRESSION_SEVERITY_HIGH]
+    medium = [regression for regression in ordered if regression.severity == REGRESSION_SEVERITY_MEDIUM]
 
     if high:
         reasons = [f"FAIL: {len(high)} high severity regression(s) detected"]
-        reasons += [_trigger_line(r) for r in high]
+        reasons += [_trigger_line(regression) for regression in high]
         return PolicyDecision(status=POLICY_STATUS_FAIL, reasons=reasons)
 
     if medium:
         reasons = [f"WARN: {len(medium)} medium severity regression(s) detected"]
-        reasons += [_trigger_line(r) for r in medium]
+        reasons += [_trigger_line(regression) for regression in medium]
         return PolicyDecision(status=POLICY_STATUS_WARN, reasons=reasons)
 
     return PolicyDecision(
         status=POLICY_STATUS_PASS,
         reasons=["PASS: no blocking regressions detected"],
+    )
+
+
+def evaluate_change_signals(signals: List[ChangeSignal]) -> PolicyDecision:
+    if not signals:
+        return PolicyDecision(
+            status=POLICY_STATUS_PASS,
+            reasons=["PASS: no change signals detected"],
+        )
+
+    reasons: List[str] = []
+    has_high = False
+    has_low = False
+
+    for signal in signals:
+        if signal.signal_type == "REPLACE":
+            has_high = True
+            reasons.append(
+                f'FAIL: signal REPLACE (before="{signal.before}", after="{signal.after}")'
+            )
+        elif signal.signal_type == "REMOVE":
+            has_high = True
+            reasons.append(
+                f'FAIL: signal REMOVE (before="{signal.before}")'
+            )
+        elif signal.signal_type == "ADD":
+            has_low = True
+            reasons.append(
+                f'WARN: signal ADD (after="{signal.after}")'
+            )
+        else:
+            has_high = True
+            reasons.append(
+                f'FAIL: signal UNKNOWN (type="{signal.signal_type}")'
+            )
+
+    if has_high:
+        return PolicyDecision(status=POLICY_STATUS_FAIL, reasons=reasons)
+
+    if has_low:
+        return PolicyDecision(status=POLICY_STATUS_WARN, reasons=reasons)
+
+    return PolicyDecision(
+        status=POLICY_STATUS_PASS,
+        reasons=["PASS: no change signals detected"],
     )
