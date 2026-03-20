@@ -110,6 +110,8 @@ def _render_text_diff(a_text: str, b_text: str, max_lines: int = 200, max_chars:
     label_width = len("[A only]")
 
     def add_line(label: str, line: str) -> None:
+        if line.strip() == "":
+            return
         rendered.append(f"      {label:<{label_width}}  {line}")
 
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
@@ -127,6 +129,9 @@ def _render_text_diff(a_text: str, b_text: str, max_lines: int = 200, max_chars:
                 add_line("[A only]", line)
             for line in b_lines[j1:j2]:
                 add_line("[B only]", line)
+
+    if len(rendered) == 2:
+        return None
 
     return "\n".join(rendered)
 
