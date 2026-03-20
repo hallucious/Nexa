@@ -19,14 +19,14 @@ def test_pass_output():
 
 
 def test_warn_output():
-    d = make("WARN", "WARN: 1 semantic issues", ["WARN: content replaced"])
+    d = make("WARN", "WARN: 1 semantic issues", ["WARN: unit replaced"])
     out = format_semantic_policy_output(d)
     assert "WARN" in out
-    assert "content replaced" in out
+    assert "unit replaced" in out
 
 
 def test_fail_output():
-    d = make("FAIL", "FAIL: 1 semantic issues", ["FAIL: critical content removed"])
+    d = make("FAIL", "FAIL: 1 semantic issues", ["FAIL: critical unit removed"])
     out = format_semantic_policy_output(d)
     assert "FAIL" in out
-    assert "critical content removed" in out
+    assert "critical unit removed" in out

@@ -13,28 +13,28 @@ def make(label):
 
 
 def test_pass_when_only_added():
-    res = evaluate_semantic_policy([make("CONTENT_ADDED")])
+    res = evaluate_semantic_policy([make("UNIT_ADDED")])
     assert res.status == POLICY_STATUS_PASS
 
 
 def test_warn_when_replaced():
-    res = evaluate_semantic_policy([make("CONTENT_REPLACED")])
+    res = evaluate_semantic_policy([make("UNIT_REPLACED")])
     assert res.status == POLICY_STATUS_WARN
 
 
 def test_fail_when_removed():
-    res = evaluate_semantic_policy([make("CONTENT_REMOVED")])
+    res = evaluate_semantic_policy([make("UNIT_REMOVED")])
     assert res.status == POLICY_STATUS_FAIL
 
 
 def test_warn_when_modified():
-    res = evaluate_semantic_policy([make("CONTENT_MODIFIED")])
+    res = evaluate_semantic_policy([make("UNIT_MODIFIED")])
     assert res.status == POLICY_STATUS_WARN
 
 
 def test_fail_overrides_warn():
     res = evaluate_semantic_policy([
-        make("CONTENT_REPLACED"),
-        make("CONTENT_REMOVED"),
+        make("UNIT_REPLACED"),
+        make("UNIT_REMOVED"),
     ])
     assert res.status == POLICY_STATUS_FAIL

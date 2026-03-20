@@ -48,28 +48,28 @@ def evaluate_semantic_policy(labels: List[SemanticLabel]) -> SemanticPolicyDecis
         label = item.label
         cat = _classify(label)
 
-        if label == "CONTENT_REMOVED":
+        if label == "UNIT_REMOVED":
             status = POLICY_STATUS_FAIL
-            msg = "FAIL: critical content removed"
+            msg = "FAIL: critical unit removed"
             reasons.append(msg)
             categories[cat].append(msg)
 
-        elif label == "CONTENT_REPLACED":
+        elif label == "UNIT_REPLACED":
             if status != POLICY_STATUS_FAIL:
                 status = POLICY_STATUS_WARN
-            msg = "WARN: content replaced"
+            msg = "WARN: unit replaced"
             reasons.append(msg)
             categories[cat].append(msg)
 
-        elif label == "CONTENT_MODIFIED":
+        elif label == "UNIT_MODIFIED":
             if status == POLICY_STATUS_PASS:
                 status = POLICY_STATUS_WARN
-            msg = "WARN: content modified"
+            msg = "WARN: unit modified"
             reasons.append(msg)
             categories[cat].append(msg)
 
-        elif label == "CONTENT_ADDED":
-            msg = "INFO: content added"
+        elif label == "UNIT_ADDED":
+            msg = "INFO: unit added"
             reasons.append(msg)
             categories[cat].append(msg)
 
