@@ -1,106 +1,76 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from typing import List, Optional
+import difflib
 
 from src.engine.alignment_engine import AlignmentResult
 from src.engine.representation_model import ComparableUnit
 
 
 @dataclass(frozen=True)
-class UnitChange:
-    """Single unit-level change classification result."""
+class DiffOp:
+    op_type: str
+    text: str
 
+
+@dataclass(frozen=True)
+class UnitChange:
     change_type: str
-    unit_a: ComparableUnit | None
-    unit_b: ComparableUnit | None
+    unit_a: Optional[ComparableUnit]
+    unit_b: Optional[ComparableUnit]
+    diff: Optional[List[DiffOp]] = None
 
 
 @dataclass(frozen=True)
 class UnitDiffResult:
-    """Aggregate result for unit-level comparison over an alignment."""
-
-    changes: list[UnitChange] = field(default_factory=list)
-    summary: dict[str, int] = field(
-        default_factory=lambda: {
-            "added": 0,
-            "removed": 0,
-            "modified": 0,
-            "unchanged": 0,
-        }
-    )
+    changes: List[UnitChange]
+    summary: dict
 
 
-_ALLOWED_CHANGE_TYPES = {"added", "removed", "modified", "unchanged"}
+def compute_text_diff(a: str, b: str) -> List[DiffOp]:
+    matcher = difflib.SequenceMatcher(None, a, b)
+    ops: List[DiffOp] = []
+
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            ops.append(DiffOp("equal", a[i1:i2]))
+        elif tag == "replace":
+            ops.append(DiffOp("delete", a[i1:i2]))
+            ops.append(DiffOp("insert", b[j1:j2]))
+        elif tag == "delete":
+            ops.append(DiffOp("delete", a[i1:i2]))
+        elif tag == "insert":
+            ops.append(DiffOp("insert", b[j1:j2]))
+
+    return ops
 
 
-def _empty_summary() -> dict[str, int]:
-    return {
+def compare_aligned_units(alignment: AlignmentResult) -> UnitDiffResult:
+    changes: List[UnitChange] = []
+
+    summary = {
         "added": 0,
         "removed": 0,
         "modified": 0,
         "unchanged": 0,
     }
 
-
-def _make_change(
-    *,
-    change_type: str,
-    unit_a: ComparableUnit | None,
-    unit_b: ComparableUnit | None,
-) -> UnitChange:
-    if change_type not in _ALLOWED_CHANGE_TYPES:
-        raise ValueError(f"unsupported change_type: {change_type}")
-    return UnitChange(change_type=change_type, unit_a=unit_a, unit_b=unit_b)
-
-
-def compare_aligned_units(alignment: AlignmentResult) -> UnitDiffResult:
-    """Classify aligned ComparableUnits into deterministic unit-level changes.
-
-    Rules:
-    - matched pair with equal payload -> unchanged
-    - matched pair with different payload -> modified
-    - removed_units -> removed
-    - added_units -> added
-    """
-
-    changes: list[UnitChange] = []
-    summary = _empty_summary()
-
     for unit_a, unit_b in alignment.matched_pairs:
         if unit_a.payload == unit_b.payload:
-            change = _make_change(
-                change_type="unchanged",
-                unit_a=unit_a,
-                unit_b=unit_b,
-            )
+            changes.append(UnitChange("unchanged", unit_a, unit_b, None))
             summary["unchanged"] += 1
         else:
-            change = _make_change(
-                change_type="modified",
-                unit_a=unit_a,
-                unit_b=unit_b,
-            )
+            diff = compute_text_diff(unit_a.payload, unit_b.payload)
+            changes.append(UnitChange("modified", unit_a, unit_b, diff))
             summary["modified"] += 1
-        changes.append(change)
 
     for unit in alignment.removed_units:
-        changes.append(
-            _make_change(
-                change_type="removed",
-                unit_a=unit,
-                unit_b=None,
-            )
-        )
+        changes.append(UnitChange("removed", unit, None, None))
         summary["removed"] += 1
 
     for unit in alignment.added_units:
-        changes.append(
-            _make_change(
-                change_type="added",
-                unit_a=None,
-                unit_b=unit,
-            )
-        )
+        changes.append(UnitChange("added", None, unit, None))
         summary["added"] += 1
 
     return UnitDiffResult(changes=changes, summary=summary)

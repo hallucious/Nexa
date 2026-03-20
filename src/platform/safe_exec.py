@@ -16,7 +16,7 @@ Implementation:
 """
 
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Tuple
+from typing import Any, Callable, Optional
 
 import concurrent.futures
 import time
@@ -60,17 +60,18 @@ def safe_call(fn: Callable[[], Any], *, timeout_ms: Optional[int]) -> SafeCallRe
 
     latency_ms = int((time.perf_counter() - start) * 1000)
 
-    # Hard timeout: if we exceeded the budget, treat it as timeout even if the
-    # Future returned (Windows may oversleep on very small timeouts).
-    if timeout_ms is not None and latency_ms > int(timeout_ms):
+    # FIX: do not override crash into timeout
+    # Only mark as timeout if the call was originally successful
+    if timeout_ms is not None and latency_ms > int(timeout_ms) and ok:
         timed_out = True
         ok = False
         err = "TIMEOUT"
         val = None
 
-    return SafeCallResult(ok=ok, value=val, error=err, timed_out=timed_out, latency_ms=latency_ms)
-
-
-def safe_call2(fn: Callable[[], Any], *, timeout_ms: Optional[int]) -> Tuple[bool, Any, Optional[str], bool, int]:
-    res = safe_call(fn, timeout_ms=timeout_ms)
-    return res.ok, res.value, res.error, res.timed_out, res.latency_ms
+    return SafeCallResult(
+        ok=ok,
+        value=val,
+        error=err,
+        timed_out=timed_out,
+        latency_ms=latency_ms,
+    )
