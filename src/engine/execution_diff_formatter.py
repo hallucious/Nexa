@@ -10,6 +10,10 @@ Public API:
 """
 from __future__ import annotations
 
+from pathlib import Path
+from pprint import pformat
+from typing import Any
+
 from src.engine.execution_diff_model import RunDiff
 
 
@@ -24,6 +28,105 @@ def format_diff_summary(diff: RunDiff) -> str:
         f"context_keys_changed: {s.context_keys_changed}",
     ]
     return "\n".join(lines)
+
+
+def _basename(path: str | None) -> str:
+    if not path:
+        return "<unknown>"
+    return Path(path).name
+
+
+def _indent_block(text: str, prefix: str = "      ") -> str:
+    lines = text.splitlines() or [text]
+    return "\n".join(f"{prefix}{line}" for line in lines)
+
+
+def _compact_raw_summary(value: Any) -> str:
+    if not isinstance(value, dict):
+        return repr(value)
+
+    raw = value.get("raw")
+    if not isinstance(raw, dict):
+        return repr(value)
+
+    raw_id = raw.get("id", "?")
+    model = raw.get("model", "?")
+    status = raw.get("status", "?")
+    return f"id={raw_id}, model={model}, status={status}"
+
+
+def _extract_metrics(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    metrics = value.get("metrics")
+    if not isinstance(metrics, dict):
+        return None
+    latency_ms = metrics.get("latency_ms")
+    tokens_used = metrics.get("tokens_used")
+    if latency_ms is None and tokens_used is None:
+        return None
+    return f"latency_ms={latency_ms}, tokens_used={tokens_used}"
+
+
+def _extract_text(value: Any) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    text_block = value.get("text")
+    if isinstance(text_block, dict):
+        text_value = text_block.get("text")
+        if isinstance(text_value, str):
+            return text_value
+    if isinstance(value.get("text"), str):
+        return value["text"]
+    return None
+
+
+def format_context_value_pair(label: str, a_value: Any, b_value: Any) -> str:
+    lines = [f"  [modified] {label}"]
+
+    a_text = _extract_text(a_value)
+    b_text = _extract_text(b_value)
+    if a_text is not None or b_text is not None:
+        lines.append("")
+        lines.append("    text (A):")
+        lines.append(_indent_block(a_text or "<none>"))
+        lines.append("")
+        lines.append("    text (B):")
+        lines.append(_indent_block(b_text or "<none>"))
+
+    a_metrics = _extract_metrics(a_value)
+    b_metrics = _extract_metrics(b_value)
+    if a_metrics or b_metrics:
+        lines.append("")
+        lines.append("    metrics:")
+        lines.append(f"      A: {a_metrics or '<none>'}")
+        lines.append(f"      B: {b_metrics or '<none>'}")
+
+    lines.append("")
+    lines.append("    raw summary:")
+    lines.append(f"      A: {_compact_raw_summary(a_value)}")
+    lines.append(f"      B: {_compact_raw_summary(b_value)}")
+
+    if a_text is None and b_text is None and not (a_metrics or b_metrics):
+        lines.append("")
+        lines.append("    value (A):")
+        lines.append(_indent_block(pformat(a_value)))
+        lines.append("")
+        lines.append("    value (B):")
+        lines.append(_indent_block(pformat(b_value)))
+
+    return "\n".join(lines)
+
+
+def format_execution_diff_header(a_path: str | None, b_path: str | None) -> str:
+    return "\n".join(
+        [
+            "Execution Diff",
+            "--------------",
+            f"A: {_basename(a_path)}",
+            f"B: {_basename(b_path)}",
+        ]
+    )
 
 
 def format_diff_details(diff: RunDiff) -> str:
@@ -62,8 +165,7 @@ def format_diff_details(diff: RunDiff) -> str:
     if diff.context_diffs:
         lines = ["Context Changes", "-" * 15]
         for cd in diff.context_diffs:
-            lines.append(f"  [{cd.change_type}] {cd.context_key}")
-            lines.append(f"    {cd.left_value!r} -> {cd.right_value!r}")
+            lines.append(format_context_value_pair(cd.context_key, cd.left_value, cd.right_value))
         sections.append("\n".join(lines))
 
     return "\n\n".join(sections)
@@ -97,7 +199,6 @@ def format_diff_json(diff: RunDiff) -> dict:
 
     Output is deterministic (field order is stable via dataclass asdict).
     """
-    from dataclasses import asdict
     s = diff.summary
 
     return {

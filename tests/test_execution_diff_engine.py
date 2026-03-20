@@ -506,3 +506,53 @@ def test_output_ref_change_counted_in_summary():
     assert diff.summary.nodes_changed == 1
     assert diff.summary.nodes_added == 0
     assert diff.summary.nodes_removed == 0
+
+
+def test_output_context_change_promotes_node_change():
+    left = _run(
+        "r1",
+        context={"output.planner_node": {"text": "old"}},
+    )
+    right = _run(
+        "r2",
+        context={"output.planner_node": {"text": "new"}},
+    )
+
+    diff = compare_runs(left, right)
+
+    assert diff.status == RUN_DIFF_STATUS_CHANGED
+    assert diff.summary.nodes_changed == 1
+    assert any(nd.node_id == "planner_node" and nd.change_type == CHANGE_TYPE_MODIFIED for nd in diff.node_diffs)
+
+
+def test_output_context_change_deduplicates_multiple_keys_for_same_node():
+    left = _run(
+        "r1",
+        context={
+            "output.planner_node": {"text": "old"},
+            "output.planner_node.text": "old",
+        },
+    )
+    right = _run(
+        "r2",
+        context={
+            "output.planner_node": {"text": "new"},
+            "output.planner_node.text": "new",
+        },
+    )
+
+    diff = compare_runs(left, right)
+
+    planner_diffs = [nd for nd in diff.node_diffs if nd.node_id == "planner_node"]
+    assert len(planner_diffs) == 1
+    assert diff.summary.nodes_changed == 1
+
+
+def test_output_context_change_ignores_non_node_output_namespace_key():
+    left = _run("r1", context={"output.output": "Alpha"})
+    right = _run("r2", context={"output.output": "Beta"})
+
+    diff = compare_runs(left, right)
+
+    assert diff.summary.nodes_changed == 0
+    assert diff.node_diffs == []

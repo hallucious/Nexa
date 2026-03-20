@@ -44,7 +44,7 @@ Input contract (run snapshot dict):
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 from src.engine.execution_diff_model import (
     CHANGE_TYPE_ADDED,
@@ -176,6 +176,43 @@ def _diff_node(
     )
 
 
+def _extract_changed_node_ids_from_context_diffs(
+    context_diffs: List[ContextDiff],
+) -> Set[str]:
+    """Promote output.<node_id>[.*] context changes into node-level changes.
+
+    The diff adapter for real run outputs can surface node output changes as
+    Working Context changes under keys such as:
+
+        output.planner_node
+        output.planner_node.text
+
+    These should count as changed nodes for human-readable diff output.
+    """
+    changed_node_ids: Set[str] = set()
+
+    for diff in context_diffs:
+        key = diff.context_key or ""
+
+        node_id: str | None = None
+
+        if key.startswith("output."):
+            remainder = key[len("output."): ]
+            if remainder:
+                candidate = remainder.split(".", 1)[0]
+                if candidate and candidate != "output":
+                    node_id = candidate
+        elif key.endswith(".output") or ".output." in key:
+            candidate = key.split(".", 1)[0]
+            if candidate and candidate != "output":
+                node_id = candidate
+
+        if node_id:
+            changed_node_ids.add(node_id)
+
+    return changed_node_ids
+
+
 def _diff_context(
     left_ctx: Dict[str, Any],
     right_ctx: Dict[str, Any],
@@ -269,12 +306,12 @@ def compare_runs(
             left_output_ref=ln.get("output_ref"),
         ))
 
-    nodes_changed = 0
+    structural_changed_node_ids: Set[str] = set()
     for nid in common_ids:
         nd = _diff_node(nid, left_nodes[nid], right_nodes[nid])
         if nd is not None:
             node_diffs.append(nd)
-            nodes_changed += 1
+            structural_changed_node_ids.add(nid)
 
     # Top-level artifact diffs
     left_arts = _get_artifacts(left_run)
@@ -285,6 +322,17 @@ def compare_runs(
     left_ctx = _get_context(left_run)
     right_ctx = _get_context(right_run)
     context_diffs = _diff_context(left_ctx, right_ctx)
+
+    output_changed_node_ids = _extract_changed_node_ids_from_context_diffs(context_diffs)
+    output_only_node_ids = sorted(output_changed_node_ids - structural_changed_node_ids - set_left.symmetric_difference(set_right))
+
+    for nid in output_only_node_ids:
+        node_diffs.append(NodeDiff(
+            node_id=nid,
+            change_type=CHANGE_TYPE_MODIFIED,
+        ))
+
+    nodes_changed = len(structural_changed_node_ids | output_changed_node_ids)
 
     # Summary
     summary = DiffSummary(
