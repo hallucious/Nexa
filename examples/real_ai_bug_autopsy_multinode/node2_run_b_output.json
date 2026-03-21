@@ -1,0 +1,12 @@
+{
+  "risk_flags": [
+    {
+      "type": "governance",
+      "signal": "forced exit",
+      "severity": "high",
+      "direction": "negative",
+      "confidence": "high"
+    }
+  ],
+  "overall_bias": "negative"
+}
