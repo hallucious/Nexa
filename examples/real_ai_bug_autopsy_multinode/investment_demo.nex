@@ -1,0 +1,89 @@
+{
+  "meta": {
+    "name": "Investment Demo",
+    "version": "1.0"
+  },
+  "circuit": {
+    "entry": "node1",
+    "nodes": [
+      {
+        "id": "node1",
+        "type": "plugin",
+        "resource_ref": {
+          "plugin": "normalize"
+        },
+        "inputs": {
+          "text": "state.input.text"
+        },
+        "outputs": {
+          "normalized": "state.working.normalized"
+        }
+      },
+      {
+        "id": "node2",
+        "type": "plugin",
+        "resource_ref": {
+          "plugin": "score"
+        },
+        "inputs": {
+          "analysis": "state.working.normalized"
+        },
+        "outputs": {
+          "score": "state.working.score"
+        }
+      },
+      {
+        "id": "node3",
+        "type": "plugin",
+        "resource_ref": {
+          "plugin": "decision"
+        },
+        "inputs": {
+          "score": "state.working.score"
+        },
+        "outputs": {
+          "final_decision": "state.working.final_decision"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "from_node": "node1",
+        "to_node": "node2"
+      },
+      {
+        "from_node": "node2",
+        "to_node": "node3"
+      }
+    ]
+  },
+  "resources": {
+    "prompts": {},
+    "providers": {
+      "test_provider": {
+        "type": "test",
+        "model": "dummy",
+        "config": {}
+      }
+    },
+    "plugins": {
+      "normalize": {
+        "entry": "examples.real_ai_bug_autopsy_multinode.plugins.demo_plugins.normalize"
+      },
+      "score": {
+        "entry": "examples.real_ai_bug_autopsy_multinode.plugins.demo_plugins.score"
+      },
+      "decision": {
+        "entry": "examples.real_ai_bug_autopsy_multinode.plugins.demo_plugins.decision"
+      }
+    }
+  },
+  "state": {
+    "input": {
+      "text": "Sample company data"
+    },
+    "working": {},
+    "memory": {}
+  },
+  "ui": {}
+}

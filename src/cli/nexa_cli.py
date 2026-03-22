@@ -48,7 +48,6 @@ class _GenerateTextProviderAdapter:
         if isinstance(result, ProviderResult):
             return result
 
-        # Some legacy providers may return tuples like (text, raw, err).
         if isinstance(result, tuple) and len(result) == 3:
             text, raw, err = result
             trace = {'provider': self.provider_name}
@@ -104,7 +103,6 @@ def _maybe_register_real_providers(provider_registry):
                 if alias != 'ai' and first_real_alias is None:
                     first_real_alias = alias
 
-    # OpenAI / GPT
     openai_key = (os.environ.get('OPENAI_API_KEY') or '').strip()
     if openai_key:
         try:
@@ -114,7 +112,6 @@ def _maybe_register_real_providers(provider_registry):
         except Exception:
             pass
 
-    # Anthropic / Claude
     anthropic_key = (os.environ.get('ANTHROPIC_API_KEY') or '').strip()
     if anthropic_key:
         try:
@@ -124,7 +121,6 @@ def _maybe_register_real_providers(provider_registry):
         except Exception:
             pass
 
-    # Gemini
     gemini_key = (os.environ.get('GEMINI_API_KEY') or '').strip()
     if gemini_key:
         try:
@@ -134,11 +130,9 @@ def _maybe_register_real_providers(provider_registry):
         except Exception:
             pass
 
-    # Perplexity
     pplx_key = ((os.environ.get('PPLX_API_KEY') or '') or (os.environ.get('PERPLEXITY_API_KEY') or '')).strip()
     if pplx_key:
         try:
-            # Normalize PERPLEXITY_API_KEY to PPLX_API_KEY for existing provider surface.
             if not os.environ.get('PPLX_API_KEY') and os.environ.get('PERPLEXITY_API_KEY'):
                 os.environ['PPLX_API_KEY'] = os.environ['PERPLEXITY_API_KEY']
             from src.providers.perplexity_provider import PerplexityProvider
@@ -147,7 +141,6 @@ def _maybe_register_real_providers(provider_registry):
         except Exception:
             pass
 
-    # Convenience alias for the first available real provider.
     if first_real_alias is not None:
         try:
             provider = provider_registry.resolve(first_real_alias)
@@ -211,13 +204,11 @@ def build_parser():
 
 def _parse_inline_vars(var_items):
     state = {}
-
     for item in var_items or []:
         if "=" not in item:
             raise ValueError("invalid --var format")
         key, value = item.split("=", 1)
         state[key] = value
-
     return state
 
 
@@ -233,12 +224,6 @@ def load_cli_state(state_path=None, var_items=None):
 
 
 def resolve_output_path(out_path: str, circuit_path: str) -> Path:
-    """Resolve CLI output path.
-
-    Rules:
-    1. If --out is filename-only, store under <nex file dir>/runs/<filename>
-    2. If --out contains a directory path, use it as-is
-    """
     p = Path(out_path)
 
     if p.parent == Path("."):
@@ -251,9 +236,7 @@ def resolve_output_path(out_path: str, circuit_path: str) -> Path:
     return p
 
 
-
 def _to_json_safe(value):
-    """Recursively convert Python/runtime objects into JSON-serializable values."""
     if is_dataclass(value):
         return _to_json_safe(asdict(value))
 
@@ -360,7 +343,6 @@ def build_failure_observability_record(args, exc):
 
 
 def get_system_info() -> dict:
-    """Collect Nexa system information for the info command."""
     vi = sys.version_info
     python_version = f"{vi.major}.{vi.minor}"
 
@@ -384,7 +366,6 @@ def get_system_info() -> dict:
 
 
 def info_command() -> int:
-    """Print Nexa system information."""
     info = get_system_info()
 
     print("Nexa System Info")
@@ -398,11 +379,6 @@ def info_command() -> int:
 
 
 def _load_run_snapshot(path: str) -> dict:
-    """Load a run snapshot JSON file and return it as a dict.
-
-    Raises SystemExit(1) with a message on any input error so that
-    diff_command can treat all error paths uniformly.
-    """
     p = Path(path)
     if not p.exists():
         print(f"Error: file not found: {path}", file=sys.stderr)
@@ -432,12 +408,6 @@ def _load_run_snapshot(path: str) -> dict:
 
 
 def _normalize_run_output_to_snapshot(raw: dict) -> dict:
-    """Normalize CLI run output JSON into the execution diff snapshot contract.
-
-    Pass-through when the payload already matches the diff engine contract
-    (top-level nodes/artifacts/context). Otherwise, adapt the standard
-    `nexa run` output structure into a comparable snapshot.
-    """
     if not isinstance(raw, dict):
         return raw
 
@@ -480,7 +450,6 @@ def _normalize_run_output_to_snapshot(raw: dict) -> dict:
 
 
 def diff_command(args) -> int:
-    """Execute the diff command: compare two run snapshot JSON files."""
     import json as _json
     from src.engine.execution_diff_engine import compare_runs
     from src.engine.execution_diff_formatter import format_diff, format_diff_json
@@ -493,7 +462,6 @@ def diff_command(args) -> int:
 
     diff = compare_runs(left_run, right_run)
 
-    # Regression mode
     if getattr(args, "regression_mode", False):
         from src.engine.execution_regression_detector import detect_regressions
         from src.engine.execution_regression_formatter import (
@@ -508,7 +476,6 @@ def diff_command(args) -> int:
         else:
             print(format_regression(regression_result))
     else:
-        # Normal diff mode
         if getattr(args, "output_json", False):
             print(_json.dumps(format_diff_json(diff), indent=2))
         else:
@@ -540,7 +507,133 @@ def resolve_execution_config_dir(circuit_path: str, cli_configs: str | None = No
     )
 
 
+def _is_savefile_contract(circuit_path: str) -> bool:
+    """Return True if the .nex file matches the savefile-native contract."""
+    try:
+        with open(circuit_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return False
+
+    if not isinstance(data, dict):
+        return False
+
+    required = {"meta", "circuit", "resources", "state", "ui"}
+    return required.issubset(set(data.keys()))
+
+
+def _extract_savefile_metrics(trace) -> dict:
+    executed_nodes = len(getattr(trace, "node_results", {}) or {})
+    provider_calls = 0
+    plugin_calls = 0
+    for result in (getattr(trace, "node_results", {}) or {}).values():
+        trace_data = getattr(result, "trace", {}) or {}
+        if trace_data.get("provider_type") or trace_data.get("provider"):
+            provider_calls += 1
+        else:
+            plugin_calls += 1
+
+    return {
+        "executed_nodes": executed_nodes,
+        "wave_count": None,
+        "plugin_calls": plugin_calls,
+        "provider_calls": provider_calls,
+    }
+
+
+def _savefile_payload(savefile, trace, started_at, ended_at):
+    summary = build_execution_summary(
+        initial_state=getattr(savefile.state, "input", {}) or {},
+        final_state=getattr(trace, "final_state", {}) or {},
+        started_at=started_at,
+        ended_at=ended_at,
+    )
+
+    expected_outputs = {}
+    for node_id, result in (getattr(trace, "node_results", {}) or {}).items():
+        expected_outputs[node_id] = {
+            "status": getattr(result, "status", None),
+            "output": getattr(result, "output", None),
+            "error": getattr(result, "error", None),
+            "artifacts": getattr(result, "artifacts", []),
+            "trace": getattr(result, "trace", {}),
+        }
+
+    replay_payload = {
+        "execution_id": getattr(trace, "run_id", "unknown-execution"),
+        "node_order": [node.id for node in savefile.circuit.nodes],
+        "circuit": _to_json_safe({
+            "id": savefile.meta.name,
+            "nodes": [{"id": node.id} for node in savefile.circuit.nodes],
+        }),
+        "execution_configs": {},
+        "input_state": getattr(savefile.state, "input", {}) or {},
+        "expected_outputs": expected_outputs,
+    }
+
+    return {
+        "result": {
+            "state": getattr(trace, "final_state", {}) or {},
+            "status": getattr(trace, "status", None),
+            "node_results": expected_outputs,
+            "artifacts": getattr(trace, "all_artifacts", []),
+        },
+        "summary": summary,
+        "replay_payload": replay_payload,
+    }
+
+
+def _run_savefile_command(args):
+    from src.contracts.savefile_loader import load_savefile_from_path
+    from src.contracts.savefile_validator import validate_savefile
+    from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
+    from src.contracts.savefile_executor_aligned import SavefileExecutor
+
+    started_at = time.time()
+    savefile = load_savefile_from_path(args.circuit)
+
+    cli_state = load_cli_state(args.state, args.var)
+    if cli_state:
+        savefile.state.input.update(cli_state)
+
+    validate_savefile(savefile)
+    provider_registry = build_provider_registry_from_savefile(savefile)
+    executor = SavefileExecutor(provider_registry)
+    trace = executor.execute(savefile, run_id=f"savefile-{int(started_at)}")
+    ended_at = time.time()
+
+    payload = _savefile_payload(savefile, trace, started_at, ended_at)
+
+    if args.out:
+        out_path = resolve_output_path(args.out, args.circuit)
+        save_output(payload, out_path)
+    else:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+    metrics = _extract_savefile_metrics(trace)
+    circuit_meta = {"id": savefile.meta.name, "nodes": [{"id": node.id} for node in savefile.circuit.nodes]}
+    record = build_success_observability_record(
+        args=args,
+        circuit=circuit_meta,
+        metrics=metrics,
+        started_at=started_at,
+        ended_at=ended_at,
+    )
+    append_observability_record(record)
+
+    if args.observability_out:
+        observability_out = Path(args.observability_out)
+        if observability_out.parent != Path("."):
+            observability_out.parent.mkdir(parents=True, exist_ok=True)
+        save_output(record, observability_out)
+
+    return 0
+
+
 def run_command(args):
+    if _is_savefile_contract(args.circuit):
+        return _run_savefile_command(args)
+
     from src.config.execution_config_loader import load_execution_configs
     from src.contracts.provider_contract import ProviderRequest, ProviderResult
     from src.circuit.circuit_io import load_circuit
@@ -653,7 +746,6 @@ def compare_command(args):
     return 0
 
 
-
 def export_command(args) -> int:
     from src.engine.execution_audit_pack import ExecutionAuditPackBuilder
 
@@ -675,7 +767,6 @@ def export_command(args) -> int:
     ExecutionAuditPackBuilder.export(payload, args.out)
     print(json.dumps({"status": "ok", "output": args.out}, indent=2, ensure_ascii=False))
     return 0
-
 
 
 def replay_command(args) -> int:
@@ -702,7 +793,6 @@ def replay_command(args) -> int:
 
 
 def task_command(args) -> int:
-    """Route nexa task subcommands to the claude_task_generator."""
     from src.devtools.claude_task_generator.cli import cmd_generate, cmd_prompt
 
     task_cmd = getattr(args, "task_command", None)
@@ -713,10 +803,8 @@ def task_command(args) -> int:
     if task_cmd == "prompt":
         return cmd_prompt(args.feature, args.step_id, base_number=args.base)
 
-    # No task subcommand given — print help
     print("Usage: nexa task <generate|prompt> ...")
     return 1
-
 
 
 def main():
