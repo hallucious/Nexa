@@ -33,7 +33,15 @@ class PerplexityProvider:
     def from_env(cls) -> "PerplexityProvider":
         api_key = (os.environ.get("PPLX_API_KEY") or "").strip()
         if not api_key:
-            raise RuntimeError("PPLX_API_KEY is missing")
+            raise RuntimeError(
+            "[ERROR] PPLX_API_KEY not found\n\n"
+            "Fix:\n"
+            "1. Create a .env file in project root\n"
+            "2. Add:\n"
+            "   PPLX_API_KEY=your_key_here\n\n"
+            "OR\n\n"
+            "export PPLX_API_KEY=your_key_here\n"
+        )
         model = (os.environ.get("PPLX_MODEL") or cls.DEFAULT_MODEL).strip()
         timeout = (os.environ.get("PPLX_TIMEOUT_SEC") or "").strip()
         timeout_i = int(timeout) if timeout.isdigit() else 60

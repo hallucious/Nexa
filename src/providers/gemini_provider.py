@@ -53,7 +53,17 @@ class GeminiProvider:
 
     @staticmethod
     def from_env() -> "GeminiProvider":
-        api_key = os.environ.get("GEMINI_API_KEY", "")
+        api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+        if not api_key:
+            raise RuntimeError(
+                "[ERROR] GEMINI_API_KEY not found\n\n"
+                "Fix:\n"
+                "1. Create a .env file in project root\n"
+                "2. Add:\n"
+                "   GEMINI_API_KEY=your_key_here\n\n"
+                "OR\n\n"
+                "export GEMINI_API_KEY=your_key_here\n"
+            )
         model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
         return GeminiProvider(api_key, model=model)
 
@@ -102,7 +112,15 @@ class GeminiProvider:
         model: Optional[str] = None,
     ) -> Tuple[str, Dict[str, Any]]:
         if not self.api_key:
-            raise RuntimeError("INVALID_REQUEST: GEMINI_API_KEY is missing")
+            raise RuntimeError(
+            "[ERROR] GEMINI_API_KEY not found\n\n"
+            "Fix:\n"
+            "1. Create a .env file in project root\n"
+            "2. Add:\n"
+            "   GEMINI_API_KEY=your_key_here\n\n"
+            "OR\n\n"
+            "export GEMINI_API_KEY=your_key_here\n"
+        )
 
         use_model = (model or self.model).strip()
 
@@ -208,7 +226,15 @@ class GeminiProvider:
         - Otherwise uses SAFE_MODE v2 to retry/preprocess.
         """
         if not self.api_key:
-            return "", {}, RuntimeError("GEMINI_API_KEY is missing")
+            return "", {}, RuntimeError(
+            "[ERROR] GEMINI_API_KEY not found\n\n"
+            "Fix:\n"
+            "1. Create a .env file in project root\n"
+            "2. Add:\n"
+            "   GEMINI_API_KEY=your_key_here\n\n"
+            "OR\n\n"
+            "export GEMINI_API_KEY=your_key_here\n"
+        )
 
         def call_fn(p: str) -> str:
             # We only return text to SAFE_MODE; raw is captured separately via closure.

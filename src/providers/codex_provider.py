@@ -40,7 +40,15 @@ class CodexProvider:
     def from_env(cls) -> "CodexProvider":
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not api_key:
-            raise RuntimeError("OPENAI_API_KEY is missing")
+            raise RuntimeError(
+            "[ERROR] OPENAI_API_KEY not found\n\n"
+            "Fix:\n"
+            "1. Create a .env file in project root\n"
+            "2. Add:\n"
+            "   OPENAI_API_KEY=your_key_here\n\n"
+            "OR\n\n"
+            "export OPENAI_API_KEY=your_key_here\n"
+        )
         model = (os.getenv("CODEX_MODEL", "") or cls.DEFAULT_MODEL).strip()
         timeout = (os.getenv("CODEX_TIMEOUT_SEC", "") or "").strip()
         timeout_i = int(timeout) if timeout.isdigit() else 60
