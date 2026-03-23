@@ -1,148 +1,146 @@
-# Nexa
+# Nexa — Make AI Execution Deterministic, Traceable, and Debuggable
 
-## Deterministic AI Execution Engine
+## 🔥 What This Demo Shows
 
-Nexa is a runtime for building **deterministic, reproducible, and debuggable AI systems**.
-
-Instead of isolated AI calls, Nexa executes **structured computation graphs (circuits)** with full traceability.
-
----
-
-## Quick Start
-
-Run the example:
+Same input.
+One word changed.
+Completely different decision.
 
 ```bash
-nexa run examples/hello_world.nex
+nexa run examples/real_ai_bug_autopsy_multinode/investment_demo_A.nex --out run_a.json
+nexa run examples/real_ai_bug_autopsy_multinode/investment_demo_B.nex --out run_b.json
+nexa diff run_a.json run_b.json
 ```
 
-Expected output:
+## 💥 Result
 
-```json
-{
-  "result": {
-    "state": {
-      "message": "Hello Nexa",
-      "hello_node": {
-        "output": "Hello Nexa"
-      }
-    }
-  }
-}
+* A (lens: continuity) → INVEST
+* B (lens: fragility) → DO_NOT_INVEST
+
+**Only one word changed.**
+
+---
+
+## 🧠 Why This Matters
+
+AI systems are **not deterministic**.
+
+Same input → different output
+But:
+
+* You don’t know why
+* You can’t reproduce it
+* You can’t debug it
+
+---
+
+## 🧩 Nexa Fixes This
+
+Nexa turns AI execution into:
+
+* **Deterministic pipeline**
+* **Traceable reasoning flow**
+* **Diffable outputs**
+
+---
+
+## 🔍 What Actually Happened
+
+```text
+Node2 (AI interpretation changed)
+→ Node3 (score changed)
+→ Node4 (decision flipped)
+```
+
+You can see exactly:
+
+* where it changed
+* how much it changed
+* why the final result changed
+
+---
+
+## ⚙️ How It Works
+
+Each AI workflow is a **circuit**:
+
+* Node1: deterministic normalization
+* Node2: AI interpretation
+* Node3: deterministic scoring
+* Node4: deterministic decision
+
+---
+
+## 📊 Example Diff (Real Output)
+
+```text
+Node2: interpretation changed
+Node3: score 20 → 75
+Node4: INVEST → DO_NOT_INVEST
 ```
 
 ---
 
-## Why Nexa
+## 🚀 Quick Start
 
-Modern AI systems break at scale:
+### 1. Install
 
-- You **cannot reproduce results**
-- You **cannot debug execution**
-- You **cannot trace decisions**
-
-This makes reliable AI systems nearly impossible.
-
-Nexa fixes this by turning AI execution into a **deterministic runtime system**.
-
----
-
-## Core Model
-
-Nexa transforms AI workflows into a structured execution pipeline:
-
-```
-Input
-↓
-Circuit (.nex)
-↓
-Nodes
-↓
-Providers / Plugins
-↓
-Artifacts
-↓
-Trace
+```bash
+pip install -e .
 ```
 
-Key principles:
+### 2. Set API Key
 
-- **Node is the only execution unit**
-- **Artifacts are immutable**
-- **Execution is deterministic**
-- **Every step is traceable**
-
----
-
-## Example Workflow
-
-Input: a short story
-
-Nexa execution:
-
-1. Expand story into a script  
-2. Generate scene images  
-3. Evaluate narrative quality  
-4. Produce final output  
-
-This becomes a circuit:
-
-```
-Input
-↓
-expand_script
-↓
-generate_images
-↓
-evaluate_story
-↓
-produce_result
+```bash
+export OPENAI_API_KEY="your_api_key"
 ```
 
-Each step produces artifacts and trace logs.
+### 3. Run Demo
 
----
-
-## Key Features
-
-### Deterministic Execution
-Same input → same output.
-
-### Full Traceability
-Every step is recorded and inspectable.
-
-### Artifact System
-Outputs are immutable and versionable.
-
-### Multi-Provider Support
-OpenAI, Anthropic, Google, local models.
-
-### Contract-Driven Architecture
-Execution rules are enforced by explicit contracts.
-
----
-
-## Repository Structure
-
-```
-src/
-tests/
-docs/
-examples/
+```bash
+nexa run examples/real_ai_bug_autopsy_multinode/investment_demo_A.nex --out run_a.json
+nexa run examples/real_ai_bug_autopsy_multinode/investment_demo_B.nex --out run_b.json
+nexa diff run_a.json run_b.json
 ```
 
 ---
 
-## Status
+## 🧪 What Makes Nexa Different
 
-Nexa is currently stabilizing the execution engine.
+| Problem         | Traditional AI | Nexa |
+| --------------- | -------------- | ---- |
+| Reproducibility | ❌              | ✔️   |
+| Debugging       | ❌              | ✔️   |
+| Causal tracing  | ❌              | ✔️   |
+| Output diff     | ❌              | ✔️   |
 
 ---
 
-## Summary
+## 🎯 Core Idea
 
-Nexa is not a chatbot.
+> AI should not be a black box.
+> It should be a **traceable system.**
 
-Nexa is an **execution engine for AI systems**.
+---
 
-It enables reliable, reproducible, and debuggable AI workflows.
+## 📌 Status
+
+* ✅ Real AI divergence demo complete
+* ✅ Deterministic execution engine
+* ✅ Trace + diff system working
+
+---
+
+## 🧠 Future
+
+* Multi-agent circuits
+* Debate / consensus workflows
+* Self-debugging AI pipelines
+
+---
+
+## 🏁 Conclusion
+
+Nexa doesn’t make AI smarter.
+
+It makes AI **understandable**.

@@ -223,13 +223,34 @@ def load_cli_state(state_path=None, var_items=None):
     return state
 
 
-def resolve_output_path(out_path: str, circuit_path: str) -> Path:
-    del circuit_path  # kept for backward-compatible call signature
+def _deduplicate_output_path(path: Path) -> Path:
+    if not path.exists():
+        return path
 
+    stem = path.stem
+    suffix = path.suffix
+    parent = path.parent
+    counter = 1
+    while True:
+        candidate = parent / f"{stem}__{counter}{suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
+def resolve_output_path(out_path: str, circuit_path: str) -> Path:
     p = Path(out_path).expanduser()
-    resolved = p.resolve()
-    resolved.parent.mkdir(parents=True, exist_ok=True)
-    return resolved
+
+    if p.parent == Path('.'):
+        circuit_dir = Path(circuit_path).expanduser().resolve().parent
+        target_dir = circuit_dir / "runs"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        resolved = (target_dir / p.name).resolve()
+    else:
+        resolved = p.resolve()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+
+    return _deduplicate_output_path(resolved)
 
 
 def _to_json_safe(value):
@@ -601,8 +622,14 @@ def _run_savefile_command(args):
     payload = _savefile_payload(savefile, trace, started_at, ended_at)
 
     if args.out:
+        requested_out_path = Path(args.out).expanduser().resolve()
         out_path = resolve_output_path(args.out, args.circuit)
         save_output(payload, out_path)
+        if out_path != requested_out_path:
+            print(
+                f"Info: output already existed; wrote new file to {out_path}",
+                file=sys.stderr,
+            )
     else:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
@@ -695,8 +722,14 @@ def run_command(args):
     }
 
     if args.out:
+        requested_out_path = Path(args.out).expanduser().resolve()
         out_path = resolve_output_path(args.out, args.circuit)
         save_output(payload, out_path)
+        if out_path != requested_out_path:
+            print(
+                f"Info: output already existed; wrote new file to {out_path}",
+                file=sys.stderr,
+            )
     else:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 

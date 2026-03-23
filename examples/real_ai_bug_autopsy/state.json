@@ -1,4 +1,0 @@
-{
-  "prompt_a": "Summarize the following medical case clearly and concisely. Preserve all key clinical information including diagnosis clues.\n\nPatient presents with persistent cough, mild fever, and weight loss over 2 months. Chest X-ray shows upper lobe infiltrates. Findings are highly suggestive of tuberculosis.",
-  "prompt_b": "Summarize briefly.\n\nPatient presents with persistent cough, mild fever, and weight loss over 2 months. Chest X-ray shows upper lobe infiltrates. Findings are highly suggestive of tuberculosis."
-}
