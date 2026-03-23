@@ -224,16 +224,12 @@ def load_cli_state(state_path=None, var_items=None):
 
 
 def resolve_output_path(out_path: str, circuit_path: str) -> Path:
-    p = Path(out_path)
+    del circuit_path  # kept for backward-compatible call signature
 
-    if p.parent == Path("."):
-        nex_dir = Path(circuit_path).resolve().parent
-        runs_dir = nex_dir / "runs"
-        runs_dir.mkdir(parents=True, exist_ok=True)
-        return runs_dir / p.name
-
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    p = Path(out_path).expanduser()
+    resolved = p.resolve()
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    return resolved
 
 
 def _to_json_safe(value):

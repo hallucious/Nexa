@@ -1,0 +1,141 @@
+{
+  "result": {
+    "state": {
+      "input": {
+        "company_text": "AcmeCorp Q3 2024: Revenue $48M (+12% YoY). Recurring SaaS contracts cover 78% of revenue. Churn rate 3.2%. Management team unchanged for 4 years. New product line launched. Some customer concentration risk with top 3 clients at 35% of revenue."
+      },
+      "working": {
+        "normalized_company_text": "acmecorp q3 2024 revenue 48m 12 yoy. recurring saas contracts cover 78 of revenue. churn rate 3.2. management team unchanged for 4 years. new product line launched. some customer concentration risk with top 3 clients at 35 of revenue.",
+        "analysis": {
+          "text": "AcmeCorp's strong reliance on recurring SaaS contracts, which account for 78% of its revenue, signals a stable and predictable revenue stream, essential for continuity. A low churn rate of 3.2% indicates strong customer retention, further reinforcing the reliability of its business model. The management team's stability over four years suggests consistent strategic direction, while the recent launch of a new product line may enhance growth without disrupting existing operations. Although there is some customer concentration risk, the overall structure supports a continuous and sustainable business model."
+        },
+        "score": 20,
+        "final_decision": "INVEST"
+      },
+      "memory": {}
+    },
+    "status": "success",
+    "node_results": {
+      "node1": {
+        "status": "success",
+        "output": {
+          "normalized_company_text": "acmecorp q3 2024 revenue 48m 12 yoy. recurring saas contracts cover 78 of revenue. churn rate 3.2. management team unchanged for 4 years. new product line launched. some customer concentration risk with top 3 clients at 35 of revenue."
+        },
+        "error": null,
+        "artifacts": [],
+        "trace": {}
+      },
+      "node2": {
+        "status": "success",
+        "output": {
+          "text": "AcmeCorp's strong reliance on recurring SaaS contracts, which account for 78% of its revenue, signals a stable and predictable revenue stream, essential for continuity. A low churn rate of 3.2% indicates strong customer retention, further reinforcing the reliability of its business model. The management team's stability over four years suggests consistent strategic direction, while the recent launch of a new product line may enhance growth without disrupting existing operations. Although there is some customer concentration risk, the overall structure supports a continuous and sustainable business model."
+        },
+        "error": null,
+        "artifacts": [],
+        "trace": {
+          "provider": "gpt"
+        }
+      },
+      "node3": {
+        "status": "success",
+        "output": {
+          "score": 20
+        },
+        "error": null,
+        "artifacts": [],
+        "trace": {}
+      },
+      "node4": {
+        "status": "success",
+        "output": {
+          "final_decision": "INVEST"
+        },
+        "error": null,
+        "artifacts": [],
+        "trace": {}
+      }
+    },
+    "artifacts": []
+  },
+  "summary": {
+    "initial_state_keys": 1,
+    "final_state_keys": 3,
+    "node_outputs": 3,
+    "produced_keys": [
+      "input",
+      "memory",
+      "working"
+    ],
+    "execution_time_ms": 3354.2
+  },
+  "replay_payload": {
+    "execution_id": "savefile-1774232078",
+    "node_order": [
+      "node1",
+      "node2",
+      "node3",
+      "node4"
+    ],
+    "circuit": {
+      "id": "Investment Demo A - Continuity Lens",
+      "nodes": [
+        {
+          "id": "node1"
+        },
+        {
+          "id": "node2"
+        },
+        {
+          "id": "node3"
+        },
+        {
+          "id": "node4"
+        }
+      ]
+    },
+    "execution_configs": {},
+    "input_state": {
+      "company_text": "AcmeCorp Q3 2024: Revenue $48M (+12% YoY). Recurring SaaS contracts cover 78% of revenue. Churn rate 3.2%. Management team unchanged for 4 years. New product line launched. Some customer concentration risk with top 3 clients at 35% of revenue."
+    },
+    "expected_outputs": {
+      "node1": {
+        "status": "success",
+        "output": {
+          "normalized_company_text": "acmecorp q3 2024 revenue 48m 12 yoy. recurring saas contracts cover 78 of revenue. churn rate 3.2. management team unchanged for 4 years. new product line launched. some customer concentration risk with top 3 clients at 35 of revenue."
+        },
+        "error": null,
+        "artifacts": [],
+        "trace": {}
+      },
+      "node2": {
+        "status": "success",
+        "output": {
+          "text": "AcmeCorp's strong reliance on recurring SaaS contracts, which account for 78% of its revenue, signals a stable and predictable revenue stream, essential for continuity. A low churn rate of 3.2% indicates strong customer retention, further reinforcing the reliability of its business model. The management team's stability over four years suggests consistent strategic direction, while the recent launch of a new product line may enhance growth without disrupting existing operations. Although there is some customer concentration risk, the overall structure supports a continuous and sustainable business model."
+        },
+        "error": null,
+        "artifacts": [],
+        "trace": {
+          "provider": "gpt"
+        }
+      },
+      "node3": {
+        "status": "success",
+        "output": {
+          "score": 20
+        },
+        "error": null,
+        "artifacts": [],
+        "trace": {}
+      },
+      "node4": {
+        "status": "success",
+        "output": {
+          "final_decision": "INVEST"
+        },
+        "error": null,
+        "artifacts": [],
+        "trace": {}
+      }
+    }
+  }
+}

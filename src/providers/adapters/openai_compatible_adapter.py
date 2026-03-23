@@ -62,7 +62,11 @@ class OpenAICompatibleAdapter(ProviderAdapter):
             "Authorization": f"Bearer {self.config.api_key}",
         }
         if self.config.extra_headers:
-            headers.update({k: str(v) for k, v in self.config.extra_headers.items()})
+            headers.update({
+                k.encode("ascii", errors="ignore").decode("ascii"):
+                str(v).encode("ascii", errors="ignore").decode("ascii")
+                for k, v in self.config.extra_headers.items()
+            })
 
         req = urllib.request.Request(
             self.config.endpoint,
