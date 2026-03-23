@@ -223,6 +223,20 @@ def load_cli_state(state_path=None, var_items=None):
     return state
 
 
+def _canonical_output_path(out_path: str, circuit_path: str) -> Path:
+    """Return the intended output path before deduplication suffix is applied.
+
+    This mirrors resolve_output_path's directory routing logic but skips
+    _deduplicate_output_path, so callers can check whether the file already
+    exists *before* resolve_output_path is called.
+    """
+    p = Path(out_path).expanduser()
+    if p.parent == Path('.'):
+        circuit_dir = Path(circuit_path).expanduser().resolve().parent
+        return (circuit_dir / "runs" / p.name).resolve()
+    return p.resolve()
+
+
 def _deduplicate_output_path(path: Path) -> Path:
     if not path.exists():
         return path
@@ -622,10 +636,10 @@ def _run_savefile_command(args):
     payload = _savefile_payload(savefile, trace, started_at, ended_at)
 
     if args.out:
-        requested_out_path = Path(args.out).expanduser().resolve()
+        file_already_existed = _canonical_output_path(args.out, args.circuit).exists()
         out_path = resolve_output_path(args.out, args.circuit)
         save_output(payload, out_path)
-        if out_path != requested_out_path:
+        if file_already_existed:
             print(
                 f"Info: output already existed; wrote new file to {out_path}",
                 file=sys.stderr,
@@ -722,10 +736,10 @@ def run_command(args):
     }
 
     if args.out:
-        requested_out_path = Path(args.out).expanduser().resolve()
+        file_already_existed = _canonical_output_path(args.out, args.circuit).exists()
         out_path = resolve_output_path(args.out, args.circuit)
         save_output(payload, out_path)
-        if out_path != requested_out_path:
+        if file_already_existed:
             print(
                 f"Info: output already existed; wrote new file to {out_path}",
                 file=sys.stderr,
