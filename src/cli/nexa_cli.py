@@ -83,6 +83,79 @@ def _safe_register(registry, provider_id: str, provider) -> bool:
         return False
 
 
+def _find_repo_root_from_path(start: "Path | None") -> "Path | None":
+    """Walk upward from *start* to find the repo root.
+
+    A directory is considered the repo root when it contains both src/
+    and examples/.  Returns None if not found or if *start* is None.
+    """
+    if start is None:
+        return None
+    try:
+        current = Path(start).resolve()
+    except Exception:
+        return None
+    for candidate in [current, *current.parents]:
+        if (candidate / "src").exists() and (candidate / "examples").exists():
+            return candidate
+    return None
+
+
+def _find_repo_root_from_cwd() -> "Path | None":
+    """Walk up from cwd looking for the repo root (has both 'src' and 'examples')."""
+    return _find_repo_root_from_path(Path.cwd())
+
+
+def _load_env_for_args(args) -> "str | None":
+    """Load the first .env found in the standard search order.
+
+    Search order:
+      1. cwd/.env
+      2. repo root/.env  (detected by walking up from cwd)
+      3. repo root/.env  (detected by walking up from args.circuit)
+      4. circuit/savefile parent dir/.env (if args.circuit is set)
+      5. plain load_dotenv() fallback (searches standard locations)
+
+    Duplicate resolved paths are skipped.
+    Returns the path of the .env that was loaded, or None if only the
+    fallback was used (or dotenv is not installed).
+    """
+    candidates = [Path.cwd() / ".env"]
+
+    cwd_root = _find_repo_root_from_cwd()
+    if cwd_root is not None:
+        candidates.append(cwd_root / ".env")
+
+    circuit = getattr(args, "circuit", None)
+    if circuit:
+        try:
+            circuit_path = Path(circuit).expanduser().resolve()
+        except Exception:
+            circuit_path = None
+
+        if circuit_path is not None:
+            circuit_root = _find_repo_root_from_path(circuit_path.parent)
+            if circuit_root is not None:
+                candidates.append(circuit_root / ".env")
+            candidates.append(circuit_path.parent / ".env")
+
+    seen: set = set()
+    for path in candidates:
+        try:
+            rp = path.resolve()
+        except Exception:
+            continue
+        if rp in seen:
+            continue
+        seen.add(rp)
+        if rp.exists():
+            load_dotenv(dotenv_path=rp)
+            return str(rp)
+
+    load_dotenv()
+    return None
+
+
 def _maybe_register_real_providers(provider_registry):
     """Best-effort registration of real AI providers.
 
@@ -90,7 +163,6 @@ def _maybe_register_real_providers(provider_registry):
     intentionally tolerant: missing env vars, optional dependencies, or import
     failures should never break the CLI.
     """
-    load_dotenv()
 
     registered: list[str] = []
     first_real_alias: str | None = None
@@ -853,6 +925,8 @@ def task_command(args) -> int:
 def main():
     parser = build_parser()
     args = parser.parse_args()
+
+    _load_env_for_args(args)
 
     if args.command == "run":
         try:
