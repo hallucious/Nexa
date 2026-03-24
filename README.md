@@ -43,6 +43,12 @@ What this demo shows:
 | A | `INVEST` |
 | B | `DO_NOT_INVEST` |
 
+### Visual example
+
+This demo shows the same input producing a different provider-backed interpretation at the non-deterministic node, which then propagates into a different score and final decision.
+
+![Investment demo](examples/real_ai_bug_autopsy_multinode/investment_demo.png)
+
 ---
 
 ## 🔍 Why Nexa exists

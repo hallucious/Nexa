@@ -39,6 +39,15 @@ A company description with:
 
 That is the **only intentional difference**.
 
+
+---
+
+## 🖼️ Visual Overview
+
+The diagram below shows the same-input / different-interpretation split and the downstream effect on score and final decision.
+
+![Investment demo](investment_demo.png)
+
 ---
 
 ## ▶️ How to Run
