@@ -95,3 +95,15 @@ def test_example_nex_file_shape():
     assert warnings == []
     assert circuit.circuit.circuit_id == "demo.story_pipeline"
     assert circuit.resources.prompts["prompt.main"].template.startswith("Summarize")
+
+
+def test_save_nex_file_requires_nex_extension(tmp_path):
+    raw = _example_nex_dict()
+    circuit = deserialize_nex(raw)
+
+    bad_path = tmp_path / "example.json"
+
+    import pytest
+
+    with pytest.raises(ValueError, match=r"legacy NexCircuit files must use \.nex extension"):
+        save_nex_file(circuit, str(bad_path))
