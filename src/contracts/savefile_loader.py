@@ -1,10 +1,11 @@
-"""Savefile Loader - Loads minimal executable contract.
+"""Savefile Loader - Loads canonical executable savefile contract.
 
-Loads .nex files in savefile v2.0 format with clean root structure:
+Loads .nex files in savefile v2.0 format with required root sections:
 - meta
 - circuit
 - resources
 - state
+- ui
 """
 
 from __future__ import annotations
@@ -119,14 +120,21 @@ def load_savefile(data: Dict[str, Any]) -> Savefile:
         Savefile instance
         
     Raises:
-        KeyError: If required sections missing
+        KeyError: If any required root section is missing
     """
+    required_sections = ("meta", "circuit", "resources", "state", "ui")
+    missing = [section for section in required_sections if section not in data]
+    if missing:
+        raise KeyError(
+            "Missing required savefile section(s): " + ", ".join(missing)
+        )
+
     return Savefile(
         meta=_load_meta(data["meta"]),
         circuit=_load_circuit(data["circuit"]),
         resources=_load_resources(data["resources"]),
         state=_load_state(data["state"]),
-        ui=_load_ui(data.get("ui", {})),  # Default to empty if missing for backward compat
+        ui=_load_ui(data["ui"]),
     )
 
 

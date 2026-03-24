@@ -1,7 +1,8 @@
-"""Savefile Validator - Strict validation of minimal contract.
+"""Savefile Validator - Strict validation of canonical savefile contract.
 
 Validates:
-- Required top-level sections (meta, circuit, resources, state)
+- Required top-level sections are present in the loaded savefile object
+- UI section exists but remains execution-independent
 - Node IDs unique
 - Entry node exists
 - Edges reference valid nodes
@@ -66,7 +67,9 @@ def _validate_ui_section(savefile: Savefile, warnings: List[str]) -> None:
     
     UI section must exist but must not be referenced in inputs or execution logic.
     """
-    # UI section existence is enforced by dataclass structure
+    if savefile.ui is None:
+        raise SavefileValidationError("ui section must exist")
+
     # Check that UI is not referenced in any input paths
     for node in savefile.circuit.nodes:
         for input_key, input_path in node.inputs.items():
