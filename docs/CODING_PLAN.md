@@ -6,7 +6,7 @@ Version: 2.5.1
 
 ## Completed Steps
 
-## Release Snapshot (d7cbcf0 baseline)
+## Release Snapshot (1637049 baseline)
 
 The current repository state includes the following implemented surface:
 
@@ -49,10 +49,16 @@ The current repository state includes the following implemented surface:
 ### 5. Current Public Baseline
 
 ```text
-947 passed, 3 skipped
+961 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness in the current baseline
+* savefile strictness now requires explicit `ui` across create / serialize / load / validate
+* canonical savefile lifecycle entry points now exist:
+  * `savefile_factory`
+  * `savefile_serializer`
+* canonical savefile test setup was partially centralized through shared helpers
+* legacy `.nex` writer semantics were clarified and separated from the canonical savefile writer
 
 ---
 
@@ -182,7 +188,7 @@ CLI
 ### Current Status
 
 ```text
-947 passed, 3 skipped
+961 passed, 3 skipped
 ```
 
 ---
@@ -295,9 +301,20 @@ Goal:
 
 ---
 
+### Step197–202: Savefile Lifecycle Hardening
+
+* strict `ui` enforcement across loader / validator
+* canonical savefile serializer introduced
+* canonical savefile factory introduced
+* legacy `.nex` writer role clarified
+* canonical savefile tests aligned with factory-based creation
+* shared savefile test helpers introduced for valid baseline setup
+
+---
+
 ## Next Steps
 
-### Step197: Release Documentation Hardening
+### Step203: Release Documentation Hardening
 
 Goal:
 
@@ -307,7 +324,7 @@ Goal:
 
 ---
 
-### Step198: CLI Regression Gating
+### Step204: CLI Regression Gating
 
 Goal:
 
@@ -315,7 +332,7 @@ Goal:
 
 ---
 
-### Step199: Configuration-Driven Policy
+### Step205: Configuration-Driven Policy
 
 Goal:
 
@@ -325,7 +342,7 @@ Goal:
 
 ---
 
-### Step200: Release Polish for the Official Demo
+### Step206: Release Polish for the Official Demo
 
 Goal:
 

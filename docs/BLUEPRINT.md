@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.8.0
+Version: 1.8.1
 
 ────────────────
 Architecture Constitution
@@ -162,6 +162,23 @@ Properties:
 * serializable
 * reproducible
 * portable as the primary execution artifact
+
+Canonical savefile lifecycle entry points currently implemented in code:
+
+* create → `src/contracts/savefile_factory.py`
+  * `create_savefile(...)`
+  * `make_minimal_savefile(...)`
+* serialize / save → `src/contracts/savefile_serializer.py`
+  * `serialize_savefile(...)`
+  * `save_savefile_file(...)`
+* load → `src/contracts/savefile_loader.py`
+* validate → `src/contracts/savefile_validator.py`
+
+Contract status:
+
+* `ui` is required at create / serialize / load / validate time
+* `runtime` is not part of the canonical savefile root
+* canonical savefiles and legacy `.nex` writer behavior are kept distinct
 
 ---
 

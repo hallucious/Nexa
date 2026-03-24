@@ -231,7 +231,67 @@ It MUST NOT affect execution behavior.
 
 ---
 
-## 7. Non-Savefile Runtime Artifacts
+## 7. Canonical Savefile Lifecycle
+
+The canonical savefile lifecycle is implemented through explicit entry points.
+
+### 7.1 Create
+
+New valid savefiles SHOULD be created through `src/contracts/savefile_factory.py`.
+
+Official creation entry points:
+
+* `create_savefile(...)`
+* `make_minimal_savefile(...)`
+
+These creation paths always materialize the full canonical root explicitly:
+
+* `meta`
+* `circuit`
+* `resources`
+* `state`
+* `ui`
+
+### 7.2 Serialize / Save
+
+Canonical savefiles SHOULD be written through `src/contracts/savefile_serializer.py`.
+
+Official write entry points:
+
+* `serialize_savefile(savefile)`
+* `save_savefile_file(savefile, file_path)`
+
+These write paths always emit the explicit canonical root.
+Serialization MUST fail if `ui` is absent.
+
+### 7.3 Load
+
+Canonical savefiles are loaded through `src/contracts/savefile_loader.py`.
+
+Official load entry points:
+
+* `load_savefile(data)`
+* `load_savefile_from_path(path)`
+
+Loading MUST fail if any required root section is missing.
+
+### 7.4 Validate
+
+Canonical savefiles are validated through `src/contracts/savefile_validator.py`.
+
+Official validation entry point:
+
+* `validate_savefile(savefile)`
+
+Validation MUST enforce:
+
+* `ui` exists
+* `ui` is execution-independent
+* `ui.*` must not be referenced as node input
+
+---
+
+## 8. Non-Savefile Runtime Artifacts
 
 The following are intentionally outside the canonical savefile root contract:
 
@@ -244,7 +304,7 @@ These artifacts may be derived from a savefile or execution trace, but they are 
 
 ---
 
-## 8. External Dependency Rules
+## 9. External Dependency Rules
 
 Allowed external dependency:
 
