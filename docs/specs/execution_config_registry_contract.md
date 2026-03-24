@@ -70,8 +70,7 @@ Rules:
   "prompt_ref": "g1_design",
   "prompt_version": "v1",
   "provider_ref": "provider.openai",
-  "pre_plugins": [],
-  "post_plugins": [],
+  "plugins": [],
   "validation_rules": [],
   "output_mapping": {
     "answer": "answer"

@@ -12,8 +12,6 @@ def test_step121_hash_ignores_human_metadata_and_version():
         "config_schema_version": "1",
         "prompt_ref": "prompt.basic.v1",
         "provider_ref": "openai.gpt4",
-        "pre_plugins": [],
-        "post_plugins": [],
         "validation_rules": [],
         "output_mapping": {},
         "policy": {},

@@ -22,8 +22,7 @@ class ExecutionConfigSchemaValidator:
         "prompt_inputs",
         "provider_ref",
         "provider_inputs",
-        "pre_plugins",
-        "post_plugins",
+                        "plugins",
         "validation_rules",
         "output_mapping",
         "runtime_config",
@@ -46,8 +45,7 @@ class ExecutionConfigSchemaValidator:
         self._validate_optional_string_dict_field(payload, "prompt_inputs")
         self._validate_optional_string_field(payload, "provider_ref")
         self._validate_optional_string_dict_field(payload, "provider_inputs")
-        self._validate_optional_string_list_field(payload, "pre_plugins")
-        self._validate_optional_string_list_field(payload, "post_plugins")
+        self._validate_optional_string_list_field(payload, "plugins")
         self._validate_optional_string_list_field(payload, "validation_rules")
         self._validate_output_mapping(payload)
         self._validate_runtime_config(payload)

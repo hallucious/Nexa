@@ -15,11 +15,14 @@ def validate_execution_config_schema(payload: Dict[str, Any]) -> None:
     if "version" not in payload:
         raise ExecutionConfigSchemaError("ExecutionConfig missing 'version'")
 
-    if "pre_plugins" in payload and not isinstance(payload["pre_plugins"], list):
-        raise ExecutionConfigSchemaError("'pre_plugins' must be a list")
+    for _legacy in ("pre_plugins", "post_plugins"):
+        if _legacy in payload:
+            raise ExecutionConfigSchemaError(
+                f"'{_legacy}' is not a valid field. Use 'plugins' instead."
+            )
 
-    if "post_plugins" in payload and not isinstance(payload["post_plugins"], list):
-        raise ExecutionConfigSchemaError("'post_plugins' must be a list")
+    if "plugins" in payload and not isinstance(payload["plugins"], list):
+        raise ExecutionConfigSchemaError("'plugins' must be a list")
 
     if "validation_rules" in payload and not isinstance(payload["validation_rules"], list):
         raise ExecutionConfigSchemaError("'validation_rules' must be a list")

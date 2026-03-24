@@ -19,7 +19,7 @@ All specs are written based on this terminology.
 - Automated contract tests parse the `^Version:` line in active spec documents, so a second `Version:` line in the body can break synchronization.
 ## Definitions
 - Engine: An executable graph unit composed of Nodes, Channels, and Flows (with Revision/Execution/Trace).
-- Node: The minimum execution unit inside an Engine (follows the Pre/Core/Post pipeline).
+- Node: The minimum execution unit inside an Engine. Executes via dependency-based resource graph (prompt / provider / plugin).
 - Channel: A **data path** that delivers output from one Node to another Node’s input.
 - Flow: A **control rule** that defines execution order (data transformation belongs to the Channel/Node domain).
 - Revision: An immutable structural version of the Engine created when the structure changes.
@@ -71,7 +71,7 @@ Properties:
 - Has defined input schema.
 - Has defined output schema.
 - Executes synchronously (v1 constraint).
-- Follows Pre/Core/Post execution stages.
+- Executes resources via dependency-based graph.
 - Must obey side-effect policy.
 
 A Node does not contain other Engines (v1 constraint).
@@ -133,7 +133,7 @@ Properties:
 - Includes executed Nodes.
 - Includes skipped Nodes.
 - Includes failed Nodes.
-- Includes Pre/Core/Post status.
+- Includes execution trace and node status.
 - Immutable after completion.
 
 Trace is the canonical execution record.

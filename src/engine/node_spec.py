@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from src.engine.plugin_loader import load_plugins
-
 
 class NodeSpecError(Exception):
     pass
@@ -14,10 +12,9 @@ class NodeSpecError(Exception):
 class NodeSpecModel:
     node_id: str
     inputs: Dict[str, str] = field(default_factory=dict)
-    pre_plugins: List[str] = field(default_factory=list)
+    plugins: List[str] = field(default_factory=list)
     prompt_ref: Optional[str] = None
     provider_ref: Optional[str] = None
-    post_plugins: List[str] = field(default_factory=list)
     validation_rules: List[str] = field(default_factory=list)
     output_mapping: Dict[str, str] = field(default_factory=dict)
     policy: Dict[str, Any] = field(default_factory=dict)
@@ -58,6 +55,12 @@ def validate_node_spec(node: Dict[str, Any]) -> None:
     if not isinstance(node_id, str) or not node_id:
         raise NodeSpecError("node.id/node_id must be non-empty string")
 
+    for legacy_field in ("pre_plugins", "post_plugins"):
+        if node.get(legacy_field) is not None:
+            raise NodeSpecError(
+                f"'{legacy_field}' is not a valid node field. Use 'plugins' instead."
+            )
+
     prompt_value = node.get("prompt")
     prompt_ref = node.get("prompt_ref", prompt_value)
     if prompt_ref is not None and not isinstance(prompt_ref, str):
@@ -75,12 +78,10 @@ def validate_node_spec(node: Dict[str, Any]) -> None:
     if output_mapping is not None:
         _ensure_str_dict(output_mapping, "output_mapping")
 
-    for field_name in ("pre_plugins", "post_plugins", "validation_rules"):
+    for field_name in ("plugins", "validation_rules"):
         values = node.get(field_name)
         if values is not None:
-            parsed = _ensure_str_list(values, field_name)
-            if field_name in ("pre_plugins", "post_plugins"):
-                load_plugins(parsed)
+            _ensure_str_list(values, field_name)
 
     for field_name in ("policy", "runtime_config"):
         value = node.get(field_name)
@@ -88,15 +89,14 @@ def validate_node_spec(node: Dict[str, Any]) -> None:
             raise NodeSpecError(f"{field_name} must be dict")
 
     active_slots = [
-        bool(node.get("pre_plugins")),
+        bool(node.get("plugins")),
         bool(prompt_ref),
         bool(provider_ref),
-        bool(node.get("post_plugins")),
         bool(node.get("validation_rules")),
     ]
     if not any(active_slots):
         raise NodeSpecError(
-            "node must activate at least one slot: pre_plugins, prompt_ref, provider_ref, post_plugins, validation_rules"
+            "node must activate at least one slot: plugins, prompt_ref, provider_ref, validation_rules"
         )
 
 
@@ -109,10 +109,9 @@ def parse_node_spec(node: Dict[str, Any]) -> NodeSpecModel:
     return NodeSpecModel(
         node_id=node.get("node_id") or node.get("id"),
         inputs=_ensure_str_dict(node.get("inputs"), "inputs"),
-        pre_plugins=_ensure_str_list(node.get("pre_plugins"), "pre_plugins"),
+        plugins=_ensure_str_list(node.get("plugins"), "plugins"),
         prompt_ref=prompt_ref,
         provider_ref=node.get("provider_ref"),
-        post_plugins=_ensure_str_list(node.get("post_plugins"), "post_plugins"),
         validation_rules=_ensure_str_list(node.get("validation_rules"), "validation_rules"),
         output_mapping=_ensure_str_dict(node.get("output_mapping"), "output_mapping"),
         policy=dict(node.get("policy") or {}),

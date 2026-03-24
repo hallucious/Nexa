@@ -36,10 +36,9 @@ class ExecutionConfigModel:
     config_schema_version: str = "1"
     label: Optional[str] = None
     inputs: Dict[str, str] = field(default_factory=dict)
-    pre_plugins: list[str] = field(default_factory=list)
+    plugins: list[str] = field(default_factory=list)
     prompt_ref: Optional[str] = None
     provider_ref: Optional[str] = None
-    post_plugins: list[str] = field(default_factory=list)
     validation_rules: list[str] = field(default_factory=list)
     output_mapping: Dict[str, str] = field(default_factory=dict)
     policy: Dict[str, Any] = field(default_factory=dict)
@@ -101,16 +100,21 @@ class ExecutionConfigModel:
         if not isinstance(runtime_config, dict):
             raise ExecutionConfigFormatError("runtime_config must be dict")
 
+        for _legacy in ("pre_plugins", "post_plugins"):
+            if payload.get(_legacy) is not None:
+                raise ExecutionConfigFormatError(
+                    f"'{_legacy}' is not a valid execution config field. Use 'plugins' instead."
+                )
+
         active_slots = [
-            bool(payload.get("pre_plugins")),
             bool(prompt_ref),
             bool(provider_ref),
-            bool(payload.get("post_plugins")),
+            bool(payload.get("plugins")),
             bool(payload.get("validation_rules")),
         ]
         if not any(active_slots):
             raise ExecutionConfigFormatError(
-                "execution config must activate at least one slot: pre_plugins, prompt_ref, provider_ref, post_plugins, validation_rules"
+                "execution config must activate at least one slot: plugins, prompt_ref, provider_ref, validation_rules"
             )
 
         return cls(
@@ -119,10 +123,9 @@ class ExecutionConfigModel:
             config_schema_version=str(payload.get("config_schema_version") or "1"),
             label=label,
             inputs=_dict_str_str(payload.get("inputs"), "inputs"),
-            pre_plugins=_list_str(payload.get("pre_plugins"), "pre_plugins"),
+            plugins=_list_str(payload.get("plugins"), "plugins"),
             prompt_ref=prompt_ref,
             provider_ref=provider_ref,
-            post_plugins=_list_str(payload.get("post_plugins"), "post_plugins"),
             validation_rules=_list_str(payload.get("validation_rules"), "validation_rules"),
             output_mapping=_dict_str_str(payload.get("output_mapping"), "output_mapping"),
             policy=dict(policy),

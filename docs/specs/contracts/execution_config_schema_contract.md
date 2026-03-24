@@ -24,15 +24,12 @@ and schema validation is a prerequisite for registry resolution.
 
 - prompt_ref: string
 - provider_ref: string
-- pre_plugins: list[string]
-- post_plugins: list[string]
 - validation_rules: list[string]
 - output_mapping: dict[string, string]
 
 ## Type Rules
 
-- pre_plugins must be a list.
-- post_plugins must be a list.
+- plugins must be a list.
 - validation_rules must be a list.
 - output_mapping must be a dict.
 

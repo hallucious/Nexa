@@ -79,15 +79,11 @@ class NodeExecutionRuntime:
     def __init__(
         self,
         provider_executor,
-        pre_plugins=None,
-        post_plugins=None,
         observability_file: str = "OBSERVABILITY.jsonl",
         plugin_registry: Optional[Dict[str, Any]] = None,
         event_emitter: Optional[ExecutionEventEmitter] = None,
     ):
         self.provider_executor = provider_executor
-        self.pre_plugins = pre_plugins or []
-        self.post_plugins = post_plugins or []
         self.observability_file = Path(observability_file)
         self.plugin_registry = plugin_registry or {}
         self.metrics = RuntimeMetrics()
@@ -204,14 +200,7 @@ class NodeExecutionRuntime:
         with self.observability_file.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
 
-    def _record_pre_stage_trace(self, trace: NodeTrace):
-        trace.events.append("pre_plugins")
-        trace.plugin_trace["pre"].append("noop_pre_plugin")
 
-    def _record_post_stage_trace(self, trace: NodeTrace, config: Dict[str, Any]):
-        trace.events.append("post_plugins")
-        if not config.get("plugins"):
-            trace.plugin_trace["post"].append("noop_post_plugin")
 
     def _provider_call(self, provider_ref: str, prompt: str, context: Dict[str, Any]) -> Dict[str, Any]:
         self.metrics.provider_calls += 1
@@ -658,12 +647,9 @@ class NodeExecutionRuntime:
         node_started_at = time.time()
         self._emit_event("node_started", {}, node_id=node_id)
 
-        self._measure("pre_plugins", lambda: self._record_pre_stage_trace(trace), trace)
-
         graph = self._compile_execution_plan(config)
         provider_output = self._execute_compiled_graph(config, graph, flat_context, trace, artifacts) if graph is not None else None
 
-        self._measure("post_plugins", lambda: self._record_post_stage_trace(trace, config), trace)
 
         def validation_stage():
             trace.events.append("validation")

@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "NodeSpec",
+  "type": "object",
+  "required": ["node_id"],
+  "properties": {
+    "node_id": {
+      "type": "string",
+      "description": "Unique node identifier"
+    },
+    "inputs": {
+      "type": "object",
+      "description": "Input mapping from state channels",
+      "additionalProperties": {"type": "string"}
+    },
+    "plugins": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Plugins referenced by this node"
+    },
+    "prompt_ref": {
+      "type": ["string", "null"],
+      "description": "Reference to prompt template"
+    },
+    "provider_ref": {
+      "type": ["string", "null"],
+      "description": "AI provider identifier"
+    },
+    "validation_rules": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Validation rule identifiers"
+    },
+    "output_mapping": {
+      "type": "object",
+      "additionalProperties": {"type": "string"},
+      "description": "Mapping from node output to state channels"
+    },
+    "policy": {
+      "type": "object",
+      "description": "Execution policy configuration",
+      "additionalProperties": true
+    },
+    "runtime_config": {
+      "type": "object",
+      "description": "Low-level runtime configuration",
+      "additionalProperties": true
+    }
+  },
+  "anyOf": [
+    {"required": ["plugins"]},
+    {"required": ["prompt_ref"]},
+    {"required": ["provider_ref"]},
+    {"required": ["validation_rules"]}
+  ]
+}

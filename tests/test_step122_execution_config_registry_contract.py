@@ -34,8 +34,6 @@ def test_step122_resolve_execution_config_success(tmp_path: Path):
         "config_schema_version": "1",
         "prompt_ref": "prompt.basic.v1",
         "provider_ref": "openai.gpt4",
-        "pre_plugins": [],
-        "post_plugins": [],
         "validation_rules": [],
         "output_mapping": {},
         "policy": {},

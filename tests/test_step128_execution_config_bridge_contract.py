@@ -11,10 +11,9 @@ class _FakeResolver:
         config_schema_version = "1"
         label = None
         inputs = {}
-        pre_plugins = []
+        plugins = []
         prompt_ref = None
         provider_ref = None
-        post_plugins = []
         validation_rules = []
         output_mapping = {}
         policy = {}

@@ -16,10 +16,9 @@ ExecutionConfig ID is the hash of canonical execution meaning.
 Included fields:
 - config_schema_version
 - inputs
-- pre_plugins
+- plugins
 - prompt_ref
 - provider_ref
-- post_plugins
 - validation_rules
 - output_mapping
 - policy
