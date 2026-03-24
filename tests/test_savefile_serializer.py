@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from src.contracts.savefile_format import Savefile, SavefileMeta
+from src.contracts.savefile_factory import make_minimal_savefile
 from src.contracts.savefile_loader import load_savefile, load_savefile_from_path
 from src.contracts.savefile_serializer import (
     ROOT_SECTIONS,
@@ -20,56 +21,38 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 DEMO_DIR = BASE_DIR / "examples" / "real_ai_bug_autopsy_multinode"
 
 
+def _minimal_savefile():
+    return make_minimal_savefile(
+        name="demo",
+        version="2.0.0",
+        description="minimal savefile",
+        entry="node1",
+        node_type="ai",
+        resource_ref={
+            "prompt": "prompt.main",
+            "provider": "provider.main",
+        },
+        inputs={"text": "state.input.text"},
+        outputs={"answer": "state.working.answer"},
+        prompts={"prompt.main": {"template": "Answer {{text}}"}},
+        providers={
+            "provider.main": {
+                "type": "openai",
+                "model": "gpt-5",
+                "config": {},
+            }
+        },
+        state_input={"text": "hello"},
+    )
+
+
 def _minimal_savefile_dict():
-    return {
-        "meta": {
-            "name": "demo",
-            "version": "2.0.0",
-            "description": "minimal savefile",
-        },
-        "circuit": {
-            "entry": "node1",
-            "nodes": [
-                {
-                    "id": "node1",
-                    "type": "ai",
-                    "resource_ref": {
-                        "prompt": "prompt.main",
-                        "provider": "provider.main",
-                    },
-                    "inputs": {"text": "state.input.text"},
-                    "outputs": {"answer": "state.working.answer"},
-                }
-            ],
-            "edges": [],
-        },
-        "resources": {
-            "prompts": {
-                "prompt.main": {"template": "Answer {{text}}"},
-            },
-            "providers": {
-                "provider.main": {
-                    "type": "openai",
-                    "model": "gpt-5",
-                    "config": {},
-                }
-            },
-            "plugins": {},
-        },
-        "state": {
-            "input": {"text": "hello"},
-            "working": {},
-            "memory": {},
-        },
-        "ui": {
-            "layout": {},
-            "metadata": {},
-        },
-    }
+    return serialize_savefile(_minimal_savefile())
+
 
 
 def test_serialize_savefile_emits_explicit_ui_root_section():
-    savefile = load_savefile(_minimal_savefile_dict())
+    savefile = _minimal_savefile()
 
     payload = serialize_savefile(savefile)
 
@@ -78,7 +61,7 @@ def test_serialize_savefile_emits_explicit_ui_root_section():
 
 
 def test_save_savefile_file_roundtrips_with_explicit_ui(tmp_path):
-    savefile = load_savefile(_minimal_savefile_dict())
+    savefile = _minimal_savefile()
     path = tmp_path / "roundtrip.nex"
 
     save_savefile_file(savefile, str(path))
@@ -97,11 +80,12 @@ def test_save_savefile_file_roundtrips_with_explicit_ui(tmp_path):
 
 
 def test_serialize_savefile_rejects_missing_ui_object():
+    baseline = _minimal_savefile()
     savefile = Savefile(
         meta=SavefileMeta(name="demo", version="2.0.0"),
-        circuit=load_savefile(_minimal_savefile_dict()).circuit,
-        resources=load_savefile(_minimal_savefile_dict()).resources,
-        state=load_savefile(_minimal_savefile_dict()).state,
+        circuit=baseline.circuit,
+        resources=baseline.resources,
+        state=baseline.state,
         ui=None,
     )
 

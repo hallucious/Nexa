@@ -13,34 +13,29 @@ from src.contracts.savefile_format import (
     StateSpec,
     UISpec,
 )
+from src.contracts.savefile_factory import make_minimal_savefile
+from src.contracts.savefile_serializer import serialize_savefile
 from src.contracts.savefile_loader import load_savefile
 from src.contracts.savefile_validator import SavefileValidationError, validate_savefile
 
 
+def _minimal_savefile():
+    return make_minimal_savefile(
+        name="demo",
+        version="2.0.0",
+        entry="n1",
+        node_type="plugin",
+        resource_ref={"plugin": "plugin.clean"},
+        inputs={"text": "state.input.text"},
+        outputs={"text": "state.working.cleaned"},
+        plugins={"plugin.clean": {"entry": "pkg.clean"}},
+        state_input={"text": "hello"},
+    )
+
+
 def _minimal_savefile_dict():
-    return {
-        "meta": {"name": "demo", "version": "2.0.0"},
-        "circuit": {
-            "entry": "n1",
-            "nodes": [
-                {
-                    "id": "n1",
-                    "type": "plugin",
-                    "resource_ref": {"plugin": "plugin.clean"},
-                    "inputs": {"text": "state.input.text"},
-                    "outputs": {"text": "state.working.cleaned"},
-                }
-            ],
-            "edges": [],
-        },
-        "resources": {
-            "prompts": {},
-            "providers": {},
-            "plugins": {"plugin.clean": {"entry": "pkg.clean"}},
-        },
-        "state": {"input": {"text": "hello"}, "working": {}, "memory": {}},
-        "ui": {"layout": {}, "metadata": {}},
-    }
+    return serialize_savefile(_minimal_savefile())
+
 
 
 def test_load_savefile_requires_ui_section():
