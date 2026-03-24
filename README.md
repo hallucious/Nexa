@@ -84,7 +84,7 @@ A node can reference:
 
 - a **prompt**
 - a **provider**
-- **plugins**
+- a **plugins**
 
 around a shared working context.
 Depending on the node’s role, any of these components may be absent.
