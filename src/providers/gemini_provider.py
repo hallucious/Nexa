@@ -5,6 +5,8 @@ from src.providers.provider_contract import ProviderResult, make_failure, make_s
 import json
 import os
 import urllib.request
+
+from src.providers.env_diagnostics import resolve_api_key_or_raise
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
@@ -53,17 +55,7 @@ class GeminiProvider:
 
     @staticmethod
     def from_env() -> "GeminiProvider":
-        api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
-        if not api_key:
-            raise RuntimeError(
-                "[ERROR] GEMINI_API_KEY not found\n\n"
-                "Fix:\n"
-                "1. Create a .env file in project root\n"
-                "2. Add:\n"
-                "   GEMINI_API_KEY=your_key_here\n\n"
-                "OR\n\n"
-                "export GEMINI_API_KEY=your_key_here\n"
-            )
+        api_key = resolve_api_key_or_raise("GEMINI_API_KEY")
         model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
         return GeminiProvider(api_key, model=model)
 

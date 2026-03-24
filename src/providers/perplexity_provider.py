@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+
+from src.providers.env_diagnostics import resolve_api_key_or_raise
 from typing import Any, Dict, Optional
 
 from src.providers.provider_contract import ProviderResult, compute_provider_fingerprint
@@ -31,17 +33,7 @@ class PerplexityProvider:
 
     @classmethod
     def from_env(cls) -> "PerplexityProvider":
-        api_key = (os.environ.get("PPLX_API_KEY") or "").strip()
-        if not api_key:
-            raise RuntimeError(
-            "[ERROR] PPLX_API_KEY not found\n\n"
-            "Fix:\n"
-            "1. Create a .env file in project root\n"
-            "2. Add:\n"
-            "   PPLX_API_KEY=your_key_here\n\n"
-            "OR\n\n"
-            "export PPLX_API_KEY=your_key_here\n"
-        )
+        api_key = resolve_api_key_or_raise("PERPLEXITY_API_KEY", aliases=("PPLX_API_KEY",))
         model = (os.environ.get("PPLX_MODEL") or cls.DEFAULT_MODEL).strip()
         timeout = (os.environ.get("PPLX_TIMEOUT_SEC") or "").strip()
         timeout_i = int(timeout) if timeout.isdigit() else 60

@@ -77,9 +77,16 @@ def _try_load_env_file(dotenv_path: Path | None) -> None:
     load_dotenv(dotenv_path=dotenv_path, override=False)
 
 
-def _missing_dotenv_file_message(var_name: str) -> str:
+def _format_missing_key_header(var_name: str, aliases: tuple[str, ...]) -> str:
+    accepted = (var_name, *aliases)
+    if len(accepted) == 1:
+        return f"[ERROR] {var_name} not found"
+    return f"[ERROR] {var_name} not found (also accepts: {', '.join(aliases)})"
+
+
+def _missing_dotenv_file_message(var_name: str, aliases: tuple[str, ...] = ()) -> str:
     return (
-        f"[ERROR] {var_name} not found\n\n"
+        f"{_format_missing_key_header(var_name, aliases)}\n\n"
         "Cause:\n"
         "- No API key is set in the current process environment\n"
         "- No .env file was found\n\n"
@@ -92,9 +99,9 @@ def _missing_dotenv_file_message(var_name: str) -> str:
     )
 
 
-def _missing_python_dotenv_message(var_name: str, dotenv_path: Path) -> str:
+def _missing_python_dotenv_message(var_name: str, dotenv_path: Path, aliases: tuple[str, ...] = ()) -> str:
     return (
-        f"[ERROR] {var_name} not found\n\n"
+        f"{_format_missing_key_header(var_name, aliases)}\n\n"
         "Cause:\n"
         f"- .env file exists: {dotenv_path}\n"
         "- python-dotenv is not installed, so Nexa cannot auto-load .env\n\n"
@@ -105,9 +112,9 @@ def _missing_python_dotenv_message(var_name: str, dotenv_path: Path) -> str:
     )
 
 
-def _missing_key_message(var_name: str, dotenv_path: Path) -> str:
+def _missing_key_message(var_name: str, dotenv_path: Path, aliases: tuple[str, ...] = ()) -> str:
     return (
-        f"[ERROR] {var_name} not found\n\n"
+        f"{_format_missing_key_header(var_name, aliases)}\n\n"
         "Cause:\n"
         f"- .env file was found: {dotenv_path}\n"
         f"- {var_name} is missing or empty\n\n"
@@ -118,21 +125,30 @@ def _missing_key_message(var_name: str, dotenv_path: Path) -> str:
     )
 
 
-def resolve_api_key_or_raise(var_name: str) -> str:
-    key = (os.environ.get(var_name) or "").strip()
+def _get_first_nonempty_env(var_names: tuple[str, ...]) -> str:
+    for var_name in var_names:
+        value = (os.environ.get(var_name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def resolve_api_key_or_raise(var_name: str, *, aliases: tuple[str, ...] = ()) -> str:
+    all_names = (var_name, *aliases)
+    key = _get_first_nonempty_env(all_names)
     if key:
         return key
 
     dotenv_path = _find_existing_env_file()
     if dotenv_path is None:
-        raise RuntimeError(_missing_dotenv_file_message(var_name))
+        raise RuntimeError(_missing_dotenv_file_message(var_name, aliases))
 
     if not _dotenv_installed():
-        raise RuntimeError(_missing_python_dotenv_message(var_name, dotenv_path))
+        raise RuntimeError(_missing_python_dotenv_message(var_name, dotenv_path, aliases))
 
     _try_load_env_file(dotenv_path)
-    key = (os.environ.get(var_name) or "").strip()
+    key = _get_first_nonempty_env(all_names)
     if key:
         return key
 
-    raise RuntimeError(_missing_key_message(var_name, dotenv_path))
+    raise RuntimeError(_missing_key_message(var_name, dotenv_path, aliases))
