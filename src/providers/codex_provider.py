@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+
+from src.providers.env_diagnostics import resolve_api_key_or_raise
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -38,17 +40,7 @@ class CodexProvider:
 
     @classmethod
     def from_env(cls) -> "CodexProvider":
-        api_key = os.getenv("OPENAI_API_KEY", "").strip()
-        if not api_key:
-            raise RuntimeError(
-            "[ERROR] OPENAI_API_KEY not found\n\n"
-            "Fix:\n"
-            "1. Create a .env file in project root\n"
-            "2. Add:\n"
-            "   OPENAI_API_KEY=your_key_here\n\n"
-            "OR\n\n"
-            "export OPENAI_API_KEY=your_key_here\n"
-        )
+        api_key = resolve_api_key_or_raise("OPENAI_API_KEY")
         model = (os.getenv("CODEX_MODEL", "") or cls.DEFAULT_MODEL).strip()
         timeout = (os.getenv("CODEX_TIMEOUT_SEC", "") or "").strip()
         timeout_i = int(timeout) if timeout.isdigit() else 60

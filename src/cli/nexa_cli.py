@@ -10,12 +10,16 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
+    DOTENV_INSTALLED = True
 except ModuleNotFoundError:
+    DOTENV_INSTALLED = False
+
     def load_dotenv(*args, **kwargs):
         return False
 
 from src.circuit.circuit_runner import CircuitRunner
 from src.engine.run_comparator import RunComparator
+from src.providers.env_diagnostics import publish_dotenv_status
 
 OBSERVABILITY_FILE = Path("OBSERVABILITY.jsonl")
 
