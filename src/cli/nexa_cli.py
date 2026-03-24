@@ -249,6 +249,38 @@ def build_parser():
 
     sub.add_parser("info")
 
+    savefile_parser = sub.add_parser("savefile")
+    savefile_sub = savefile_parser.add_subparsers(dest="savefile_command")
+
+    savefile_new = savefile_sub.add_parser("new")
+    savefile_new.add_argument("output", help="Path to output .nex savefile")
+    savefile_new.add_argument("--name", help="Savefile name (defaults to output stem)")
+    savefile_new.add_argument("--version", default="1.0.0", help="Savefile version")
+    savefile_new.add_argument("--description", help="Optional savefile description")
+    savefile_new.add_argument("--entry", default="node1", help="Entry node id")
+    savefile_new.add_argument(
+        "--node-type",
+        choices=["plugin", "ai"],
+        default="plugin",
+        help="Template node type for the minimal savefile",
+    )
+    savefile_new.add_argument("--plugin-id", default="plugin.main", help="Plugin resource id for plugin template")
+    savefile_new.add_argument(
+        "--plugin-entry",
+        default="plugins.example.run",
+        help="Plugin entry path for plugin template",
+    )
+    savefile_new.add_argument("--prompt-id", default="prompt.main", help="Prompt resource id for ai template")
+    savefile_new.add_argument(
+        "--prompt-template",
+        default="You are a helpful assistant.",
+        help="Prompt template for ai template",
+    )
+    savefile_new.add_argument("--provider-id", default="provider.main", help="Provider resource id for ai template")
+    savefile_new.add_argument("--provider-type", default="openai", help="Provider type for ai template")
+    savefile_new.add_argument("--provider-model", default="gpt-4o-mini", help="Provider model for ai template")
+    savefile_new.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
+
     task_parser = sub.add_parser("task")
     task_sub = task_parser.add_subparsers(dest="task_command")
 
@@ -482,6 +514,76 @@ def info_command() -> int:
     print(f"Providers Installed: {info['providers_installed']}")
     print(f"Plugins Registered: {info['plugins_registered']}")
 
+    return 0
+
+
+def _build_new_savefile(args):
+    from src.contracts.savefile_factory import make_minimal_savefile
+
+    output_path = Path(args.output)
+    if output_path.suffix != ".nex":
+        raise ValueError("savefile output must use .nex extension")
+
+    name = args.name or output_path.stem
+
+    ui_metadata = {
+        "created_by": "nexa savefile new",
+        "template": args.node_type,
+    }
+
+    if args.node_type == "plugin":
+        return make_minimal_savefile(
+            name=name,
+            version=args.version,
+            description=args.description,
+            entry=args.entry,
+            node_type="plugin",
+            resource_ref={"plugin": args.plugin_id},
+            plugins={args.plugin_id: {"entry": args.plugin_entry}},
+            ui_metadata=ui_metadata,
+        )
+
+    return make_minimal_savefile(
+        name=name,
+        version=args.version,
+        description=args.description,
+        entry=args.entry,
+        node_type="ai",
+        resource_ref={"prompt": args.prompt_id, "provider": args.provider_id},
+        prompts={args.prompt_id: {"template": args.prompt_template}},
+        providers={
+            args.provider_id: {
+                "type": args.provider_type,
+                "model": args.provider_model,
+                "config": {},
+            }
+        },
+        ui_metadata=ui_metadata,
+    )
+
+
+def savefile_new_command(args) -> int:
+    from src.contracts.savefile_serializer import save_savefile_file
+    from src.contracts.savefile_validator import validate_savefile
+
+    output_path = Path(args.output)
+    if output_path.exists() and not args.force:
+        raise FileExistsError(f"output already exists: {output_path}")
+
+    savefile = _build_new_savefile(args)
+    validate_savefile(savefile)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    save_savefile_file(savefile, str(output_path))
+
+    payload = {
+        "status": "ok",
+        "output": str(output_path),
+        "name": savefile.meta.name,
+        "entry": savefile.circuit.entry,
+        "node_type": savefile.circuit.nodes[0].type,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
 
 
@@ -955,6 +1057,24 @@ def main():
 
     if args.command == "info":
         return info_command()
+
+    if args.command == "savefile":
+        try:
+            if getattr(args, "savefile_command", None) == "new":
+                return savefile_new_command(args)
+            parser.print_help()
+            return 1
+        except Exception as exc:
+            payload = {
+                "status": "error",
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+                "command": "savefile",
+                "subcommand": getattr(args, "savefile_command", None),
+                "output": getattr(args, "output", None),
+            }
+            print_error_payload(payload)
+            return 1
 
     if args.command == "diff":
         return diff_command(args)
