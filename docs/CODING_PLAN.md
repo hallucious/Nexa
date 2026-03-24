@@ -1,12 +1,12 @@
 # Nexa CODING PLAN
 
-Version: 2.5.0
+Version: 2.5.1
 
 ---
 
 ## Completed Steps
 
-## Release Snapshot (a874972 baseline)
+## Release Snapshot (d7cbcf0 baseline)
 
 The current repository state includes the following implemented surface:
 
@@ -49,8 +49,10 @@ The current repository state includes the following implemented surface:
 ### 5. Current Public Baseline
 
 ```text
-934 passed, 3 skipped
+947 passed, 3 skipped
 ```
+
+* root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness in the current baseline
 
 ---
 
@@ -180,7 +182,7 @@ CLI
 ### Current Status
 
 ```text
-934 passed, 3 skipped
+947 passed, 3 skipped
 ```
 
 ---

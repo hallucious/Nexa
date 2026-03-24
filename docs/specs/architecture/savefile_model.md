@@ -32,7 +32,7 @@ All executable artifacts MUST be represented as savefiles.
 This specification defines:
 
 * Savefile structure
-* Required and optional sections
+* Required sections
 * Execution invariants
 * External dependency rules
 * UI/editor compatibility constraints
@@ -42,6 +42,7 @@ This specification does NOT define:
 * Plugin implementation details
 * Provider internal behavior
 * Execution engine internals
+* Run output or audit-pack artifact schemas
 
 ---
 
@@ -105,6 +106,12 @@ These must be embedded inside the savefile.
 
 ---
 
+### 4.7 UI Metadata Is Execution-Independent
+
+A savefile MUST include a `ui` section for editor/layout compatibility, but `ui` data MUST NOT affect execution semantics.
+
+---
+
 ## 5. Top-Level Structure
 
 A valid savefile MUST follow this structure:
@@ -115,10 +122,12 @@ A valid savefile MUST follow this structure:
   "circuit": {},
   "resources": {},
   "state": {},
-  "runtime": {},
   "ui": {}
 }
 ```
+
+The canonical savefile root contract contains exactly these five sections.
+Execution results, replay payloads, and audit artifacts are not part of the savefile root contract.
 
 ---
 
@@ -206,38 +215,32 @@ Persistent or long-term state
 
 ---
 
-## 7. Optional Sections
+### 6.5 ui
 
-### 7.1 runtime
-
-Stores execution results and artifacts.
-
-```json
-"runtime": {
-  "last_run": {},
-  "artifacts": []
-}
-```
-
-Used for:
-
-* debugging
-* replay
-* diff
-
----
-
-### 7.2 ui
-
-Used exclusively by visual editors.
+Used exclusively by visual editors and layout-aware tooling.
 
 ```json
 "ui": {
-  "layout": {}
+  "layout": {},
+  "metadata": {}
 }
 ```
 
-This section MUST NOT affect execution.
+This section is **required** for savefile portability and editor compatibility.
+It MUST NOT affect execution behavior.
+
+---
+
+## 7. Non-Savefile Runtime Artifacts
+
+The following are intentionally outside the canonical savefile root contract:
+
+* run outputs
+* replay payloads
+* diff inputs/outputs
+* audit-pack exports
+
+These artifacts may be derived from a savefile or execution trace, but they are not required top-level savefile sections.
 
 ---
 
@@ -306,6 +309,10 @@ Future changes MUST:
     "input": {},
     "working": {},
     "memory": {}
+  },
+  "ui": {
+    "layout": {},
+    "metadata": {}
   }
 }
 ```
@@ -322,6 +329,6 @@ The savefile is:
 
 It unifies:
 
-> **Circuit + State + Execution Context**
+> **Circuit + State + Embedded Resources**
 
 into one coherent system.

@@ -11,7 +11,7 @@ This demo proves a simple but critical fact:
 ## ⚡ Key Idea
 
 * Same input data
-* Only ONE word changed in AI prompt
+* Only ONE word changed in the AI lens
 * Completely different outcome
 
 ---
@@ -20,13 +20,13 @@ This demo proves a simple but critical fact:
 
 ### Input (identical)
 
-A company description:
+A company description with:
 
-* Revenue growth
+* revenue growth
 * SaaS recurring model
-* Low churn
-* Stable management
-* Some customer concentration risk
+* low churn
+* stable management
+* some customer concentration risk
 
 ---
 
@@ -37,7 +37,7 @@ A company description:
 | A   | continuity |
 | B   | fragility  |
 
-That’s the **only difference**.
+That is the **only intentional difference**.
 
 ---
 
@@ -46,8 +46,10 @@ That’s the **only difference**.
 ```bash
 nexa run examples/real_ai_bug_autopsy_multinode/investment_demo_A.nex --out run_a.json
 nexa run examples/real_ai_bug_autopsy_multinode/investment_demo_B.nex --out run_b.json
-nexa diff run_a.json run_b.json
+nexa diff examples/real_ai_bug_autopsy_multinode/runs/run_a.json examples/real_ai_bug_autopsy_multinode/runs/run_b.json
 ```
+
+> When `--out` is given as a bare filename, Nexa writes the snapshot into the demo's `runs/` directory.
 
 ---
 
@@ -55,19 +57,19 @@ nexa diff run_a.json run_b.json
 
 ### Run A (continuity)
 
-* score: low (e.g., ~20)
+* score: low (for example, around 20)
 * decision: **INVEST**
 
 ---
 
 ### Run B (fragility)
 
-* score: high (e.g., ~70)
+* score: high (for example, around 70)
 * decision: **DO_NOT_INVEST**
 
 ---
 
-## 🔍 What You’ll See in Diff
+## 🔍 What You’ll See in the Diff
 
 ```text
 Node2 → AI interpretation changed
@@ -79,12 +81,12 @@ Node4 → decision flipped
 
 ## 🧠 Why This Matters
 
-Typical AI systems:
+Typical AI usage often looks like this:
 
-* Same input → different output
-* ❌ No explanation
-* ❌ No reproducibility
-* ❌ No debugging
+* same input → different output
+* no precise explanation of where the change began
+* no reliable run-to-run comparison path
+* no clean debugging surface
 
 ---
 
@@ -92,29 +94,39 @@ Typical AI systems:
 
 Nexa turns AI workflows into:
 
-* ✔️ Traceable execution
-* ✔️ Deterministic downstream logic
-* ✔️ Diffable outputs
+* traceable execution
+* deterministic downstream logic where possible
+* diffable run outputs
+* reproducible investigation artifacts
 
 ---
 
-## 🏗️ Pipeline Structure
+## 🏗️ Execution Structure
 
 ```text
 Node1: Normalize input (deterministic)
-Node2: AI interpretation (non-deterministic)
-Node3: Score (deterministic)
-Node4: Decision (deterministic)
+Node2: AI interpretation (provider-backed)
+Node3: Score from interpreted signal (deterministic)
+Node4: Final decision from score (deterministic)
 ```
+
+Nexa does not force this demo through a global fixed pipeline.
+Each node executes according to dependency satisfaction, and the diff compares the resulting run artifacts.
+
+---
+
+## ⚠️ Environment Note
+
+If the demo behaves unexpectedly on Windows or PowerShell, check whether an old shell-level `OPENAI_API_KEY` is already set.
+A shell environment variable can take precedence over values loaded from `.env`, which may cause the run to use a different key than expected.
 
 ---
 
 ## 🎯 Core Insight
 
-> AI is not deterministic — but your system can be.
+> AI is not deterministic — but your system can still be inspectable.
 
-Nexa isolates where randomness happens
-and makes everything else predictable and debuggable.
+Nexa isolates where model variability happens and makes downstream reasoning easier to trace, compare, and debug.
 
 ---
 
@@ -125,8 +137,8 @@ This is not a toy example.
 It demonstrates:
 
 * AI reasoning variability
-* Controlled propagation into decisions
-* Full traceability of cause → effect
+* controlled propagation into decisions
+* full traceability from upstream interpretation change to downstream decision flip
 
 ---
 
@@ -138,12 +150,12 @@ Try modifying:
 * the scoring logic
 * the decision threshold
 
-and observe how the system behaves.
+Then compare the new run output against the baseline snapshots.
 
 ---
 
 ## 🏁 Conclusion
 
-Nexa doesn't try to make AI deterministic.
+Nexa does not try to make AI deterministic.
 
-It makes AI **understandable**.
+It makes AI **understandable, comparable, and debuggable**.
