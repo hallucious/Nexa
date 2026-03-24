@@ -22,10 +22,18 @@
 * Regression detector (typed reason codes, severity)
 * Regression formatter and policy engine (PASS/WARN/FAIL)
 * Audit pack, provenance graph, run comparator
-* CLI: diff, regression, summary commands
+* CLI: run, compare, diff, export, replay, info, and task commands
 * Regression policy reason detail (trigger lines)
 
-Current baseline: 688 passed, 3 skipped
+Current baseline: 934 passed, 3 skipped
+
+---
+
+# Public GitHub Baseline (current)
+
+* Official retained demo consolidated to `examples/real_ai_bug_autopsy_multinode/`
+* Provider environment guidance unified across OpenAI, Codex, Claude, Gemini, and Perplexity
+* Current repository baseline: 934 passed, 3 skipped
 
 ---
 

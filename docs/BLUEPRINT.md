@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.7.0
+Version: 1.8.0
 
 ────────────────
 Architecture Constitution
@@ -135,20 +135,33 @@ Engine
 
 ### 4.1 Savefile (.nex)
 
-`.nex` is the canonical circuit definition format.
+`.nex` is the primary executable savefile format.
 
-It includes:
+It is not a circuit-only artifact.
+A valid `.nex` savefile includes both execution structure and execution state.
+
+Current savefile root sections:
+
+* `meta`
+* `circuit`
+* `resources`
+* `state`
+* `ui`
+
+This means a savefile includes:
 
 * circuit structure
 * node definitions
-* plugin references
-* execution configuration bindings
+* prompt / provider / plugin resources
+* execution state (`input`, `working`, `memory`)
+* UI metadata
 
 Properties:
 
 * deterministic
 * serializable
 * reproducible
+* portable as the primary execution artifact
 
 ---
 
@@ -195,6 +208,16 @@ All plugins MUST:
 * comply with plugin contract spec
 
 Validation is performed BEFORE execution.
+
+---
+
+## 4.5 Public Demo Baseline
+
+The repository currently keeps one official demo path for public GitHub usage:
+
+* `examples/real_ai_bug_autopsy_multinode/`
+
+Other demo/example assets were intentionally removed to prevent deleted demo files from remaining as hidden test dependencies.
 
 ---
 

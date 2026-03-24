@@ -2,13 +2,13 @@
 
 ---
 
-# Quick Start (New Contributors)
+# Quick Start
 
-1. `docs/README.md` — project overview
-2. `docs/architecture/ARCHITECTURE.md` — system architecture
-3. `docs/architecture/FOUNDATION_RULES.md` — non-negotiable invariants
-4. `docs/CODING_PLAN.md` — completed steps and next targets
-5. `docs/DEVELOPMENT.md` — environment setup and contribution process
+1. `README.md` — public project overview and official demo entry
+2. `docs/BLUEPRINT.md` — architecture overview, invariants, active spec list
+3. `docs/architecture/ARCHITECTURE.md` — execution model and runtime structure
+4. `docs/CODING_PLAN.md` — implemented surface, completed milestones, next targets
+5. `docs/DEVELOPMENT.md` — local setup, testing, and contributor workflow
 
 ---
 
@@ -16,16 +16,16 @@
 
 | File | Purpose |
 |---|---|
-| `docs/README.md` | Project overview |
-| `docs/BLUEPRINT.md` | Architecture overview, active spec list, invariants |
-| `docs/FOUNDATION_MAP.md` | Canonical doc index, Active/Partial/Planned status |
-| `docs/CODING_PLAN.md` | Implementation history and next steps |
-| `docs/ARCHITECTURE_CONSTITUTION.md` | Non-negotiable architectural principles |
-| `docs/CONTRIBUTING.md` | Spec change procedure, PR requirements |
-| `docs/DEVELOPMENT.md` | Environment setup, testing, contribution |
-| `docs/GLOSSARY.md` | Terminology definitions |
-| `docs/PLUGIN_SYSTEM.md` | Plugin architecture and contract |
-| `docs/PROVIDER_SYSTEM.md` | Provider abstraction and contract |
+| `README.md` | public overview, quick start, official retained demo |
+| `docs/BLUEPRINT.md` | architecture overview, active spec list, invariants |
+| `docs/FOUNDATION_MAP.md` | canonical doc index, Active/Partial/Planned status |
+| `docs/CODING_PLAN.md` | implementation status, release snapshot, next steps |
+| `docs/ARCHITECTURE_CONSTITUTION.md` | non-negotiable architectural principles |
+| `docs/CONTRIBUTING.md` | spec change procedure, PR requirements |
+| `docs/DEVELOPMENT.md` | environment setup, testing, contributor workflow |
+| `docs/GLOSSARY.md` | terminology definitions |
+| `docs/PLUGIN_SYSTEM.md` | plugin architecture and contract |
+| `docs/PROVIDER_SYSTEM.md` | provider implementation model and environment initialization |
 
 ---
 
@@ -33,9 +33,10 @@
 
 | File | Purpose |
 |---|---|
-| `docs/architecture/ARCHITECTURE.md` | Full system architecture with execution model |
-| `docs/architecture/FOUNDATION_RULES.md` | Korean-language architecture constitution |
-| `docs/architecture/PROJECT_SCOPE.md` | Scope boundaries and MVP definition |
+| `docs/architecture/ARCHITECTURE.md` | system architecture and execution flow |
+| `docs/architecture/FOUNDATION_RULES.md` | architecture constitution / invariants |
+| `docs/architecture/PROJECT_SCOPE.md` | scope boundaries and MVP / release scope |
+| `docs/architecture/EXECUTION_RULES.md` | execution-level derived rules |
 
 ---
 
@@ -43,9 +44,9 @@
 
 | File | Purpose |
 |---|---|
-| `docs/strategy/STRATEGY.md` | Product strategy and target market |
-| `docs/strategy/VISION.md` | Long-term vision |
-| `docs/strategy/ROADMAP.md` | Development phases and next steps |
+| `docs/strategy/STRATEGY.md` | product strategy and target market |
+| `docs/strategy/VISION.md` | long-term vision |
+| `docs/strategy/ROADMAP.md` | completed phases, public baseline, next phases |
 
 ---
 
@@ -53,9 +54,9 @@
 
 | File | Purpose |
 |---|---|
-| `docs/ai/NEXA_FOR_AI.md` | Architecture guide for AI coding assistants |
-| `docs/ai/CLAUDE_GUIDE.md` | Development rules for Claude |
-| `docs/ai/CLAUDE_MASTER_PROMPT.md` | Master prompt for Claude coding sessions |
+| `docs/ai/NEXA_FOR_AI.md` | architecture guide for AI coding assistants |
+| `docs/ai/CLAUDE_GUIDE.md` | development rules for Claude |
+| `docs/ai/CLAUDE_MASTER_PROMPT.md` | master prompt for Claude coding sessions |
 
 ---
 
@@ -68,19 +69,27 @@ Active spec list: `docs/specs/_active_specs.yaml`
 | `docs/specs/architecture/` | execution model, trace model, node contracts, circuit contract |
 | `docs/specs/contracts/` | plugin, provider, prompt, validation, ExecutionConfig contracts |
 | `docs/specs/policies/` | validation rule catalog and lifecycle |
-| `docs/specs/foundation/` | terminology, architectural doctrine |
+| `docs/specs/foundation/` | terminology and architectural doctrine |
 | `docs/specs/indexes/` | spec catalog and dependency map |
 | `docs/specs/` (root) | ExecutionConfig binding and registry contracts |
+
+---
+
+# Current Public Release Notes
+
+- The repository keeps one official demo: `examples/real_ai_bug_autopsy_multinode/`
+- Provider environment guidance is implemented across OpenAI, Codex, Claude, Gemini, and Perplexity
+- Current verified baseline: `934 passed, 3 skipped`
 
 ---
 
 # Contract Tests
 
 ```bash
-pytest tests/test_spec_version_sync_contract.py        # spec versions match
-pytest tests/test_document_accumulation_contract.py    # FM references exist
-pytest tests/test_blueprint_foundation_sync_contract.py # FM == _active_specs.yaml
-pytest tests/test_foundation_autocheck_contract.py     # FM and BLUEPRINT exist
+pytest tests/test_spec_version_sync_contract.py
+pytest tests/test_document_accumulation_contract.py
+pytest tests/test_blueprint_foundation_sync_contract.py
+pytest tests/test_foundation_autocheck_contract.py
 ```
 
 ---

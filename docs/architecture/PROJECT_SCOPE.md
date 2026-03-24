@@ -49,15 +49,15 @@ Nexa focuses on:
 * Circuit execution (DAG-based dependency scheduling)
 * Node execution with resource execution contract
 * Prompt integration (PromptRegistry, PromptSpec)
-* Provider abstraction (OpenAI, Anthropic, Gemini)
+* Provider abstraction (OpenAI / GPT, Codex, Anthropic Claude, Gemini, Perplexity)
 * Plugin system (restricted namespaces)
 * Artifact creation and hashing
 * Execution trace logging (immutable)
 * Contract validation engine
 * ExecutionConfig canonicalization and registry
 * Regression detection, formatting, and policy evaluation (PASS/WARN/FAIL)
-* CLI for circuit execution, diff, and regression reporting
-* Test infrastructure (688 passed, 3 skipped)
+* CLI for run / compare / diff / export / replay / info / task flows
+* Test infrastructure (934 passed, 3 skipped)
 
 ---
 
@@ -83,6 +83,16 @@ Architectural consistency over rapid experimentation.
 Traceability over opaque automation.
 
 Contract compliance over implementation speed.
+
+---
+
+# Public Demo Scope
+
+The repository currently retains one official public demo path:
+
+* `examples/real_ai_bug_autopsy_multinode/`
+
+Deleted demo/example assets are out of scope for the current public baseline and must not remain as hidden test dependencies.
 
 ---
 

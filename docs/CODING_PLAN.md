@@ -1,10 +1,58 @@
 # Nexa CODING PLAN
 
-Version: 2.4.0
+Version: 2.5.0
 
 ---
 
 ## Completed Steps
+
+## Release Snapshot (a874972 baseline)
+
+The current repository state includes the following implemented surface:
+
+### 1. Core Execution Engine
+
+* dependency-based circuit runtime
+* node execution phases (pre / core / post)
+* ExecutionConfig registry, hashing, validation, and loading
+* savefile-based `.nex` execution
+* observability and runtime metrics
+
+### 2. Provider Layer
+
+* OpenAI / GPT provider support
+* Codex provider support
+* Claude provider support
+* Gemini provider support
+* Perplexity provider support
+* provider routing / cooldown / fingerprint contracts
+* explicit environment guidance for:
+  * missing `.env`
+  * missing `python-dotenv`
+  * missing provider API key
+
+### 3. Diff / Replay / Audit Tooling
+
+* run comparison
+* execution diff formatting
+* regression detection + policy decision
+* audit pack export
+* audit replay
+* determinism / provenance tooling
+* alignment-based diff contracts present in tests
+
+### 4. Public Demo Baseline
+
+* only `examples/real_ai_bug_autopsy_multinode/` remains as the official demo
+* obsolete demo-coupled tests were removed to keep the suite aligned with the retained demo set
+
+### 5. Current Public Baseline
+
+```text
+934 passed, 3 skipped
+```
+
+---
 
 ### Step67–84: Engine/Circuit Stabilization + Core Contract Freeze
 
@@ -80,13 +128,16 @@ Version: 2.4.0
 
 #### Step188: Savefile (.nex)
 
-* Circuit serialization format
+* Primary executable savefile format
 * Includes:
 
-  * node structure
-  * execution config bindings
-  * plugin references
+  * `meta`
+  * `circuit`
+  * `resources`
+  * `state`
+  * `ui`
 * Deterministic and reproducible
+* Savefile is not circuit-only; it includes both structure and state
 
 ---
 
@@ -129,7 +180,7 @@ CLI
 ### Current Status
 
 ```text
-827 passed, 3 skipped
+934 passed, 3 skipped
 ```
 
 ---
@@ -244,40 +295,40 @@ Goal:
 
 ## Next Steps
 
-### Step197: CLI Regression Gating
+### Step197: Release Documentation Hardening
 
 Goal:
 
-* Integrate regression policy into CLI exit codes
+* keep README / BLUEPRINT / DEVELOPMENT / provider docs synchronized with current code
+* remove stale references to deleted demos
+* keep public-facing setup instructions aligned with actual provider behavior
 
 ---
 
-### Step198: Configuration-Driven Policy
+### Step198: CLI Regression Gating
 
 Goal:
 
-* External policy config
-* Severity override
-* Policy registry
+* integrate regression policy into CLI exit codes more directly for CI/CD use
 
 ---
 
-### Step199: Bundle Integrity & Security (Recommended)
+### Step199: Configuration-Driven Policy
 
 Goal:
 
-* Bundle signature / hash verification
-* tamper detection
+* external policy config
+* severity override
+* policy registry
 
 ---
 
-### Step200: Demo Preparation (GitHub MVP)
+### Step200: Release Polish for the Official Demo
 
 Goal:
 
-* developer demo (.nexb)
-* user demo (.nexb)
-* README + usage
+* finalize `real_ai_bug_autopsy_multinode` as the public GitHub demo
+* keep demo instructions, run outputs, and docs aligned
 
 ---
 
