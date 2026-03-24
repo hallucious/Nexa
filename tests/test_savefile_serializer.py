@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from src.contracts.savefile_format import Savefile, SavefileMeta
-from src.contracts.savefile_factory import make_minimal_savefile
 from src.contracts.savefile_loader import load_savefile, load_savefile_from_path
 from src.contracts.savefile_serializer import (
     ROOT_SECTIONS,
@@ -15,6 +14,7 @@ from src.contracts.savefile_serializer import (
     serialize_savefile,
 )
 from src.contracts.savefile_validator import validate_savefile
+from tests.savefile_test_helpers import make_demo_savefile, make_demo_savefile_payload
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -22,32 +22,12 @@ DEMO_DIR = BASE_DIR / "examples" / "real_ai_bug_autopsy_multinode"
 
 
 def _minimal_savefile():
-    return make_minimal_savefile(
-        name="demo",
-        version="2.0.0",
-        description="minimal savefile",
-        entry="node1",
-        node_type="ai",
-        resource_ref={
-            "prompt": "prompt.main",
-            "provider": "provider.main",
-        },
-        inputs={"text": "state.input.text"},
-        outputs={"answer": "state.working.answer"},
-        prompts={"prompt.main": {"template": "Answer {{text}}"}},
-        providers={
-            "provider.main": {
-                "type": "openai",
-                "model": "gpt-5",
-                "config": {},
-            }
-        },
-        state_input={"text": "hello"},
-    )
+    return make_demo_savefile()
+
 
 
 def _minimal_savefile_dict():
-    return serialize_savefile(_minimal_savefile())
+    return make_demo_savefile_payload()
 
 
 
