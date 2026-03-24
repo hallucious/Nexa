@@ -1,6 +1,0 @@
-id: hello_circuit
-version: "1.0"
-nodes:
-  - id: hello_node
-    execution_config_ref: hello_node
-    depends_on: []
