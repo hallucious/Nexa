@@ -1,12 +1,12 @@
 # Nexa CODING PLAN
 
-Version: 2.5.1
+Version: 2.5.2
 
 ---
 
 ## Completed Steps
 
-## Release Snapshot (1637049 baseline)
+## Release Snapshot (bc980b3 baseline)
 
 The current repository state includes the following implemented surface:
 
@@ -49,7 +49,7 @@ The current repository state includes the following implemented surface:
 ### 5. Current Public Baseline
 
 ```text
-961 passed, 3 skipped
+966 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness in the current baseline
@@ -59,6 +59,7 @@ The current repository state includes the following implemented surface:
   * `savefile_serializer`
 * canonical savefile test setup was partially centralized through shared helpers
 * legacy `.nex` writer semantics were clarified and separated from the canonical savefile writer
+* `nexa savefile new <output.nex>` now exposes canonical savefile creation through the CLI
 
 ---
 
@@ -188,7 +189,7 @@ CLI
 ### Current Status
 
 ```text
-961 passed, 3 skipped
+966 passed, 3 skipped
 ```
 
 ---
@@ -312,19 +313,35 @@ Goal:
 
 ---
 
-## Next Steps
+### Step203: Savefile Lifecycle Documentation Sync
 
-### Step203: Release Documentation Hardening
-
-Goal:
-
-* keep README / BLUEPRINT / DEVELOPMENT / provider docs synchronized with current code
-* remove stale references to deleted demos
-* keep public-facing setup instructions aligned with actual provider behavior
+* `savefile_model`, `BLUEPRINT`, and `CODING_PLAN` synchronized with current lifecycle implementation
+* canonical savefile lifecycle entry points documented: create / serialize / load / validate
+* canonical savefile vs legacy `.nex` writer boundary clarified in docs
 
 ---
 
-### Step204: CLI Regression Gating
+### Step204: CLI Surface for Canonical Savefile Creation
+
+* `nexa savefile new <output.nex>` introduced
+* minimal canonical `.nex` generation now exposed through the CLI
+* command uses factory + serializer + validation path
+
+---
+
+## Next Steps
+
+### Step205: README / CLI Usage Expansion
+
+Goal:
+
+* surface `nexa savefile new` more clearly in public-facing docs and examples
+* keep CLI usage text synchronized with current command surface
+* document minimal constraints such as `.nex` extension and overwrite behavior
+
+---
+
+### Step206: CLI Regression Gating
 
 Goal:
 
@@ -332,7 +349,7 @@ Goal:
 
 ---
 
-### Step205: Configuration-Driven Policy
+### Step207: Configuration-Driven Policy
 
 Goal:
 

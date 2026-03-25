@@ -194,7 +194,26 @@ Perplexity also accepts this alias:
 PPLX_API_KEY=your_perplexity_key
 ```
 
-### 3. Run the official demo and diff the results
+### 3. Create a minimal canonical savefile
+
+```bash
+nexa savefile new demo.nex
+```
+
+This command creates a minimal valid canonical `.nex` savefile with explicit root sections:
+
+- `meta`
+- `circuit`
+- `resources`
+- `state`
+- `ui`
+
+Notes:
+
+- output must use the `.nex` extension
+- existing files are not overwritten unless `--force` is provided
+
+### 4. Run the official demo and diff the results
 
 ```bash
 nexa run examples/real_ai_bug_autopsy_multinode/investment_demo_A.nex --out run_a.json
@@ -207,6 +226,7 @@ nexa diff examples/real_ai_bug_autopsy_multinode/runs/run_a.json examples/real_a
 ## 🧭 CLI surface
 
 ```text
+nexa savefile new <output.nex> [--force]
 nexa run <file.nex>
 nexa compare <run_a.json> <run_b.json>
 nexa diff <left.json> <right.json> [--json] [--regression]
