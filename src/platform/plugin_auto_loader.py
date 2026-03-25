@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import importlib
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from types import ModuleType
-from typing import Any, Dict
+from typing import Any, Callable, Dict
 
 from src.platform.plugin_definition import PluginDefinition
 
@@ -91,6 +92,43 @@ def _validate_plugin(plugin_id: str, plugin_payload: Any, file_path: Path) -> Pl
         callable=fn,
     )
 
+
+
+_ENTRY_CACHE: Dict[str, Callable[..., Any]] = {}
+
+
+def load_plugin_entry(entry: str) -> Callable[..., Any]:
+    """Load a plugin callable from a module.function entry path.
+
+    This is the runtime bridge loader for savefile/plugin-entry style plugin references.
+    It is intentionally separate from versioned registry resolution.
+    """
+    if entry in _ENTRY_CACHE:
+        return _ENTRY_CACHE[entry]
+
+    parts = entry.rsplit(".", 1)
+    if len(parts) != 2:
+        raise PluginAutoLoaderError(f"invalid plugin entry path: {entry}")
+
+    module_name, function_name = parts
+    try:
+        module = importlib.import_module(module_name)
+    except ImportError as e:
+        raise PluginAutoLoaderError(f"cannot import plugin module '{module_name}': {e}") from e
+
+    if not hasattr(module, function_name):
+        raise PluginAutoLoaderError(
+            f"plugin module '{module_name}' has no callable '{function_name}'"
+        )
+
+    plugin_callable = getattr(module, function_name)
+    if not callable(plugin_callable):
+        raise PluginAutoLoaderError(
+            f"plugin entry is not callable: {entry}"
+        )
+
+    _ENTRY_CACHE[entry] = plugin_callable
+    return plugin_callable
 
 def load_plugin_registry(plugin_dir: str) -> Dict[str, PluginDefinition]:
     """

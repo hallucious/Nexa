@@ -10,13 +10,14 @@ This module integrates savefile execution with existing Nexa subsystems:
 from __future__ import annotations
 
 import copy
-import importlib
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from src.contracts.savefile_format import Savefile, NodeSpec
 from src.contracts.provider_contract import ProviderRequest, ProviderResult
-from src.platform.plugin_result import PluginResult, normalize_plugin_result
+from src.platform.plugin import Plugin, PluginResult, safe_execute_plugin
+from src.platform.plugin_auto_loader import load_plugin_entry
+from src.platform.plugin_result import normalize_plugin_result
 from src.platform.provider_registry import ProviderRegistry
 
 
@@ -125,44 +126,11 @@ def topological_sort(savefile: Savefile) -> List[str]:
     return result
 
 
-class PluginLoader:
-    """Dynamic plugin loader."""
-
-    def __init__(self):
-        self._cache: Dict[str, Callable] = {}
-
-    def load_plugin(self, entry: str) -> Callable:
-        """Load plugin function from entry path."""
-        if entry in self._cache:
-            return self._cache[entry]
-
-        parts = entry.rsplit(".", 1)
-        if len(parts) != 2:
-            raise ValueError(f"Invalid entry path: {entry}")
-
-        module_name, function_name = parts
-
-        try:
-            module = importlib.import_module(module_name)
-        except ImportError as e:
-            raise ImportError(f"Cannot import module '{module_name}': {e}")
-
-        if not hasattr(module, function_name):
-            raise AttributeError(
-                f"Module '{module_name}' has no function '{function_name}'"
-            )
-
-        plugin_func = getattr(module, function_name)
-        self._cache[entry] = plugin_func
-        return plugin_func
-
-
 def execute_plugin_node(
     node: NodeSpec,
     savefile: Savefile,
     state: Dict[str, Any],
     node_outputs: Dict[str, Any],
-    plugin_loader: PluginLoader,
 ) -> NodeExecutionResult:
     """Execute plugin node."""
     plugin_name = node.resource_ref.get("plugin")
@@ -183,7 +151,7 @@ def execute_plugin_node(
     plugin_resource = savefile.resources.plugins[plugin_name]
 
     try:
-        plugin_func = plugin_loader.load_plugin(plugin_resource.entry)
+        plugin_func = load_plugin_entry(plugin_resource.entry)
     except Exception as e:
         return NodeExecutionResult(
             node_id=node.id,
@@ -203,16 +171,34 @@ def execute_plugin_node(
         )
 
     try:
-        raw_result = plugin_func(**inputs)
-        plugin_result = normalize_plugin_result(raw_result)
+        class _CallablePluginAdapter(Plugin):
+            name = plugin_name
 
-        if isinstance(raw_result, dict) and plugin_result.output is None:
-            plugin_result = PluginResult(
-                output=raw_result,
-                artifacts=plugin_result.artifacts,
-                trace=plugin_result.trace,
-            )
+            def execute(self, **kwargs: Any) -> PluginResult:
+                call_kwargs = dict(kwargs)
+                call_kwargs.pop("stage", None)
+                raw_result = plugin_func(**call_kwargs)
+                if isinstance(raw_result, PluginResult):
+                    return raw_result
+                compat = normalize_plugin_result(raw_result)
+                output = compat.output
+                if isinstance(raw_result, dict) and output is None:
+                    output = raw_result
+                return PluginResult(
+                    success=True,
+                    output=output,
+                    error=None,
+                    latency_ms=0,
+                    stage=kwargs.get("stage"),
+                    resource_usage=None,
+                )
 
+        plugin_result = safe_execute_plugin(
+            plugin=_CallablePluginAdapter(),
+            timeout_ms=None,
+            stage="CORE",
+            **inputs,
+        )
     except Exception as e:
         return NodeExecutionResult(
             node_id=node.id,
@@ -220,12 +206,29 @@ def execute_plugin_node(
             error=f"Plugin execution error: {e}",
         )
 
+    if not plugin_result.success:
+        return NodeExecutionResult(
+            node_id=node.id,
+            status="failure",
+            error=plugin_result.error or "Plugin execution failed",
+            trace={
+                "reason_code": plugin_result.reason_code,
+                "latency_ms": plugin_result.latency_ms,
+                "stage": plugin_result.stage,
+                "resource_usage": plugin_result.resource_usage or {},
+            },
+        )
+
     return NodeExecutionResult(
         node_id=node.id,
         status="success",
         output=plugin_result.output,
-        artifacts=plugin_result.artifacts or [],
-        trace=plugin_result.trace or {},
+        artifacts=[],
+        trace={
+            "latency_ms": plugin_result.latency_ms,
+            "stage": plugin_result.stage,
+            "resource_usage": plugin_result.resource_usage or {},
+        },
     )
 
 
@@ -329,7 +332,6 @@ class SavefileExecutor:
 
     def __init__(self, provider_registry: ProviderRegistry):
         self.provider_registry = provider_registry
-        self.plugin_loader = PluginLoader()
 
     def execute(
         self,
