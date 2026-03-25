@@ -24,59 +24,13 @@ from src.providers.env_diagnostics import publish_dotenv_status
 OBSERVABILITY_FILE = Path("OBSERVABILITY.jsonl")
 
 
-class _GenerateTextProviderAdapter:
-    """Compatibility adapter: wrap providers exposing generate_text(...) so they
-    can be used through the runtime ProviderExecutor execute(request) contract.
-    """
+from src.platform.provider_executor import GenerateTextProviderBridge
 
-    def __init__(self, provider, provider_name: str | None = None) -> None:
-        self.provider = provider
-        self.provider_name = provider_name or type(provider).__name__
 
-    def execute(self, request):
-        from src.contracts.provider_contract import ProviderResult
+class _GenerateTextProviderAdapter(GenerateTextProviderBridge):
+    """Backward-compatible alias for the shared generate_text bridge."""
 
-        options = dict(getattr(request, 'options', {}) or {})
-        kwargs = {
-            'prompt': request.prompt,
-            'temperature': options.get('temperature', 0.0),
-            'max_output_tokens': options.get('max_output_tokens', options.get('max_tokens', 1024)),
-        }
-        if 'instructions' in options and options.get('instructions') is not None:
-            kwargs['instructions'] = options.get('instructions')
-        if 'timeout_sec' in options and options.get('timeout_sec') is not None:
-            kwargs['timeout_sec'] = options.get('timeout_sec')
-
-        result = self.provider.generate_text(**kwargs)
-
-        if isinstance(result, ProviderResult):
-            return result
-
-        if isinstance(result, tuple) and len(result) == 3:
-            text, raw, err = result
-            trace = {'provider': self.provider_name}
-            if isinstance(raw, dict):
-                trace.update({'raw': raw})
-            if err is not None:
-                from src.contracts.provider_contract import ProviderError
-                return ProviderResult(
-                    output=text,
-                    raw_text=str(text) if text is not None else None,
-                    structured=None,
-                    artifacts=[],
-                    trace=trace,
-                    error=ProviderError(type='provider_internal_error', message=str(err), retryable=False),
-                )
-            return ProviderResult(
-                output=text,
-                raw_text=str(text) if text is not None else None,
-                structured=None,
-                artifacts=[],
-                trace=trace,
-                error=None,
-            )
-
-        return result
+    pass
 
 
 def _safe_register(registry, provider_id: str, provider) -> bool:

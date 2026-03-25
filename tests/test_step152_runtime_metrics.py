@@ -1,9 +1,17 @@
 from src.engine.node_execution_runtime import NodeExecutionRuntime
+from src.providers.provider_contract import ProviderResult, ProviderMetrics
 
 
 class DummyProviderExecutor:
-    def execute(self, provider_id, **kwargs):
-        return {"result": "ok"}
+    def execute(self, request):
+        return ProviderResult(
+            success=True,
+            text="ok",
+            raw={"output": "ok", "provider_id": request.provider_id},
+            error=None,
+            reason_code=None,
+            metrics=ProviderMetrics(latency_ms=0),
+        )
 
 
 def test_step152_runtime_metrics_collection():

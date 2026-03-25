@@ -119,7 +119,26 @@ class NodeExecutionRuntime:
 
     def execute_provider(self, provider_id: str, **kwargs):
         self.metrics.provider_calls += 1
-        return self.provider_executor.execute(provider_id, **kwargs)
+
+        request = kwargs.pop("request", None)
+        if request is None:
+            prompt = kwargs.pop("prompt", "")
+            context = kwargs.pop("context", {})
+            options = kwargs.pop("options", {})
+            metadata = kwargs.pop("metadata", {})
+            if kwargs:
+                options = {**dict(options or {}), **kwargs}
+            request = ProviderRequest(
+                provider_id=provider_id,
+                prompt=str(prompt),
+                context=dict(context or {}),
+                options=dict(options or {}),
+                metadata=dict(metadata or {}),
+            )
+        elif not isinstance(request, ProviderRequest):
+            raise TypeError("request must be ProviderRequest")
+
+        return self.provider_executor.execute(request)
 
     def execute_node(self, node_id: str, func, **kwargs):
         self.metrics.executed_nodes += 1
