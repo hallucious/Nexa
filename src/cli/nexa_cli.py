@@ -287,6 +287,10 @@ def build_parser():
     savefile_info = savefile_sub.add_parser("info")
     savefile_info.add_argument("input", help="Path to input .nex savefile")
 
+    savefile_template = savefile_sub.add_parser("template")
+    savefile_template_sub = savefile_template.add_subparsers(dest="savefile_template_command")
+    savefile_template_sub.add_parser("list")
+
     task_parser = sub.add_parser("task")
     task_sub = task_parser.add_subparsers(dest="task_command")
 
@@ -520,6 +524,53 @@ def info_command() -> int:
     print(f"Providers Installed: {info['providers_installed']}")
     print(f"Plugins Registered: {info['plugins_registered']}")
 
+    return 0
+
+
+def _savefile_template_registry() -> list[dict]:
+    return [
+        {
+            "name": "plugin",
+            "description": "Minimal canonical savefile with one plugin node.",
+            "node_type": "plugin",
+            "defaults": {
+                "entry": "node1",
+                "plugin_id": "plugin.main",
+                "plugin_entry": "plugins.example.run",
+            },
+            "options": ["--plugin-id", "--plugin-entry"],
+        },
+        {
+            "name": "ai",
+            "description": "Minimal canonical savefile with one AI node.",
+            "node_type": "ai",
+            "defaults": {
+                "entry": "node1",
+                "prompt_id": "prompt.main",
+                "prompt_template": "You are a helpful assistant.",
+                "provider_id": "provider.main",
+                "provider_type": "openai",
+                "provider_model": "gpt-4o-mini",
+            },
+            "options": [
+                "--prompt-id",
+                "--prompt-template",
+                "--provider-id",
+                "--provider-type",
+                "--provider-model",
+            ],
+        },
+    ]
+
+
+def savefile_template_list_command(args) -> int:
+    templates = _savefile_template_registry()
+    payload = {
+        "status": "ok",
+        "template_count": len(templates),
+        "templates": templates,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
 
 
@@ -1127,6 +1178,11 @@ def main():
                 return savefile_validate_command(args)
             if getattr(args, "savefile_command", None) == "info":
                 return savefile_info_command(args)
+            if getattr(args, "savefile_command", None) == "template":
+                if getattr(args, "savefile_template_command", None) == "list":
+                    return savefile_template_list_command(args)
+                parser.print_help()
+                return 1
             parser.print_help()
             return 1
         except Exception as exc:
@@ -1136,6 +1192,7 @@ def main():
                 "message": str(exc),
                 "command": "savefile",
                 "subcommand": getattr(args, "savefile_command", None),
+                "template_subcommand": getattr(args, "savefile_template_command", None),
                 "output": getattr(args, "output", None),
                 "input": getattr(args, "input", None),
             }
