@@ -4,8 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.platform.plugin_discovery import load_platform_plugin_manifests
-from src.platform.plugin_registry import as_mapping
+from src.platform.plugin_discovery import discover_platform_plugins, load_platform_plugin_manifests
 
 
 def _repo_root() -> Path:
@@ -20,9 +19,9 @@ def test_step40_all_manifests_load_and_validate() -> None:
     repo = _repo_root()
     manifests = load_platform_plugin_manifests(repo)
 
-    registry = as_mapping()
-    discovered_ids = {m.plugin_id for m in manifests}
-    assert discovered_ids == set(registry.keys())
+    manifest_ids = {m.plugin_id for m in manifests}
+    discovered_ids = {p.plugin_id for p in discover_platform_plugins(repo)}
+    assert manifest_ids == discovered_ids
 
 
 def test_step40_duplicate_injection_rejected() -> None:

@@ -520,8 +520,14 @@ def get_system_info() -> dict:
     else:
         providers_installed = 0
 
-    from src.platform.plugin_registry import ids as plugin_ids
-    plugins_registered = len(plugin_ids())
+    from src.platform.plugin_discovery import load_platform_plugin_manifests
+
+    try:
+        plugins_registered = len(load_platform_plugin_manifests(nexa_root))
+    except Exception:
+        # Keep `nexa info` resilient even if plugin manifests are temporarily
+        # invalid or incomplete; detailed validation belongs elsewhere.
+        plugins_registered = 0
 
     return {
         "python_version": python_version,

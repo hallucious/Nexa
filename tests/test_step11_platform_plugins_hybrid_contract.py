@@ -4,7 +4,7 @@ import importlib
 from pathlib import Path
 
 from src.platform.plugin_discovery import discovered_ids
-from src.platform.plugin_registry import as_mapping
+from src.platform.plugin_discovery import load_platform_plugin_manifests
 
 
 def _repo_root() -> Path:
@@ -29,10 +29,10 @@ def test_hybrid_registry_matches_discovery_exactly() -> None:
 
     root = _repo_root()
     discovered = discovered_ids(root)
-    registry_ids = set(as_mapping().keys())
+    manifest_ids = {m.plugin_id for m in load_platform_plugin_manifests(root)}
 
-    orphan = sorted(discovered - registry_ids)
-    missing = sorted(registry_ids - discovered)
+    orphan = sorted(discovered - manifest_ids)
+    missing = sorted(manifest_ids - discovered)
 
     assert orphan == [], f"Orphan plugin files found (scan but not registry): {orphan}"
     assert missing == [], f"Registry entries missing corresponding files: {missing}"
@@ -41,8 +41,10 @@ def test_hybrid_registry_matches_discovery_exactly() -> None:
 def test_registered_plugins_expose_required_symbols() -> None:
     """Contract: each registry entry must be importable and expose its symbols."""
 
-    reg = as_mapping()
-    for pid, c in reg.items():
-        mod = importlib.import_module(c.module)
-        for sym in c.required_symbols:
-            assert hasattr(mod, sym), f"{pid}: missing required symbol '{sym}' in {c.module}"
+    manifests = load_platform_plugin_manifests(_repo_root())
+    for manifest in manifests:
+        module_name, symbol = manifest.entrypoint.split(":", 1)
+        mod = importlib.import_module(module_name)
+        assert hasattr(mod, symbol), (
+            f"{manifest.plugin_id}: missing entrypoint symbol '{symbol}' in {module_name}"
+        )
