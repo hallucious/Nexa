@@ -43,6 +43,17 @@ def test_cli_parser_accepts_savefile_set_entry():
     assert args.entry == "node2"
 
 
+def test_cli_parser_accepts_savefile_set_description():
+    parser = build_parser()
+
+    args = parser.parse_args(["savefile", "set-description", "demo.nex", "--description", "updated description"])
+
+    assert args.command == "savefile"
+    assert args.savefile_command == "set-description"
+    assert args.input == "demo.nex"
+    assert args.description == "updated description"
+
+
 
 def test_savefile_set_name_command_updates_file_in_place(tmp_path, monkeypatch, capsys):
     in_path = tmp_path / "demo.nex"
@@ -145,3 +156,46 @@ def test_savefile_set_entry_command_rejects_unknown_entry_without_overwriting(tm
     assert payload["error_type"] == "SavefileValidationError"
     assert "Entry node 'missing_node' not found in nodes" in payload["message"]
     assert in_path.read_text(encoding="utf-8") == before
+
+def test_savefile_set_description_command_updates_file_in_place(tmp_path, monkeypatch, capsys):
+    in_path = tmp_path / "demo.nex"
+    _write_valid_savefile(in_path)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["nexa", "savefile", "set-description", str(in_path), "--description", "updated description"],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["description"] == "updated description"
+
+    reloaded = load_savefile_from_path(str(in_path))
+    assert reloaded.meta.description == "updated description"
+    assert reloaded.meta.name == "demo_edit"
+    assert reloaded.circuit.entry == "node1"
+
+
+
+def test_savefile_set_description_command_rejects_non_nex_input(tmp_path, monkeypatch, capsys):
+    in_path = tmp_path / "demo.json"
+    in_path.write_text("{}", encoding="utf-8")
+    before = in_path.read_text(encoding="utf-8")
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["nexa", "savefile", "set-description", str(in_path), "--description", "updated description"],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert payload["error_type"] == "ValueError"
+    assert "savefile input must use .nex extension" in payload["message"]
+    assert in_path.read_text(encoding="utf-8") == before
+

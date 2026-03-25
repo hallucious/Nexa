@@ -300,6 +300,10 @@ def build_parser():
     savefile_set_entry.add_argument("input", help="Path to input .nex savefile")
     savefile_set_entry.add_argument("--entry", required=True, help="New entry node id")
 
+    savefile_set_description = savefile_sub.add_parser("set-description")
+    savefile_set_description.add_argument("input", help="Path to input .nex savefile")
+    savefile_set_description.add_argument("--description", required=True, help="New savefile description")
+
     savefile_template = savefile_sub.add_parser("template")
     savefile_template_sub = savefile_template.add_subparsers(dest="savefile_template_command")
     savefile_template_sub.add_parser("list")
@@ -759,6 +763,23 @@ def savefile_set_entry_command(args) -> int:
         "input": str(input_path),
         "name": savefile.meta.name,
         "entry": savefile.circuit.entry,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+
+def savefile_set_description_command(args) -> int:
+    input_path, savefile = _load_editable_savefile(args.input)
+    savefile.meta.description = args.description
+    _persist_edited_savefile(savefile, input_path)
+
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "name": savefile.meta.name,
+        "entry": savefile.circuit.entry,
+        "description": savefile.meta.description,
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
@@ -1248,6 +1269,8 @@ def main():
                 return savefile_set_name_command(args)
             if getattr(args, "savefile_command", None) == "set-entry":
                 return savefile_set_entry_command(args)
+            if getattr(args, "savefile_command", None) == "set-description":
+                return savefile_set_description_command(args)
             if getattr(args, "savefile_command", None) == "template":
                 if getattr(args, "savefile_template_command", None) == "list":
                     return savefile_template_list_command(args)
