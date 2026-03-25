@@ -281,6 +281,9 @@ def build_parser():
     savefile_new.add_argument("--provider-model", default="gpt-4o-mini", help="Provider model for ai template")
     savefile_new.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
 
+    savefile_validate = savefile_sub.add_parser("validate")
+    savefile_validate.add_argument("input", help="Path to input .nex savefile")
+
     task_parser = sub.add_parser("task")
     task_sub = task_parser.add_subparsers(dest="task_command")
 
@@ -582,6 +585,30 @@ def savefile_new_command(args) -> int:
         "name": savefile.meta.name,
         "entry": savefile.circuit.entry,
         "node_type": savefile.circuit.nodes[0].type,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+def savefile_validate_command(args) -> int:
+    from src.contracts.savefile_loader import load_savefile_from_path
+    from src.contracts.savefile_validator import validate_savefile
+
+    input_path = Path(args.input)
+    if input_path.suffix != ".nex":
+        raise ValueError("savefile input must use .nex extension")
+
+    savefile = load_savefile_from_path(str(input_path))
+    warnings = validate_savefile(savefile) or []
+
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "name": savefile.meta.name,
+        "entry": savefile.circuit.entry,
+        "node_count": len(savefile.circuit.nodes),
+        "warnings": warnings,
+        "warning_count": len(warnings),
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
@@ -1062,6 +1089,8 @@ def main():
         try:
             if getattr(args, "savefile_command", None) == "new":
                 return savefile_new_command(args)
+            if getattr(args, "savefile_command", None) == "validate":
+                return savefile_validate_command(args)
             parser.print_help()
             return 1
         except Exception as exc:
@@ -1072,6 +1101,7 @@ def main():
                 "command": "savefile",
                 "subcommand": getattr(args, "savefile_command", None),
                 "output": getattr(args, "output", None),
+                "input": getattr(args, "input", None),
             }
             print_error_payload(payload)
             return 1
