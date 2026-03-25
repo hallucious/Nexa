@@ -1,12 +1,12 @@
 # Nexa CODING PLAN
 
-Version: 2.6.0
+Version: 2.7.0
 
 ---
 
 ## Completed Steps
 
-## Release Snapshot (0954505 baseline)
+## Release Snapshot (runtime convergence baseline)
 
 The current repository state includes the following implemented surface:
 
@@ -17,21 +17,29 @@ The current repository state includes the following implemented surface:
 * ExecutionConfig registry, hashing, validation, and loading
 * savefile-based `.nex` execution
 * observability and runtime metrics
+* graph-only runtime execution in `NodeExecutionRuntime`
 
-### 2. Provider Layer
+### 2. Prompt / Provider Runtime
 
-* OpenAI / GPT provider support
-* Codex provider support
-* Claude provider support
-* Gemini provider support
-* Perplexity provider support
-* provider routing / cooldown / fingerprint contracts
+* PromptRegistry / PromptSpec integration in the node runtime
+* provider execution through ProviderExecutor / ProviderRegistry
+* provider result canonicalization in the runtime path
 * explicit environment guidance for:
   * missing `.env`
   * missing `python-dotenv`
   * missing provider API key
 
-### 3. Diff / Replay / Audit Tooling
+### 3. Plugin Runtime
+
+* plugin auto-loader for savefile entry-path execution
+* versioned plugin registry for registry-based capability resolution
+* plugin result normalization and runtime event emission
+* legacy plugin loader removal
+* legacy plugin registry shell removal
+* savefile-aligned plugin execution convergence onto the auto-loader bridge
+* savefile executor plugin-node path validated by regression coverage
+
+### 4. Diff / Replay / Audit Tooling
 
 * run comparison
 * execution diff formatting
@@ -41,26 +49,23 @@ The current repository state includes the following implemented surface:
 * determinism / provenance tooling
 * alignment-based diff contracts present in tests
 
-### 4. Public Demo Baseline
+### 5. Public Demo Baseline
 
 * only `examples/real_ai_bug_autopsy_multinode/` remains as the official demo
 * obsolete demo-coupled tests were removed to keep the suite aligned with the retained demo set
 
-### 5. Current Public Baseline
+### 6. Current Verified Baseline
 
 ```text
-988 passed, 3 skipped
+1012 passed, 3 skipped
 ```
 
-* root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness in the current baseline
-* savefile strictness now requires explicit `ui` across create / serialize / load / validate
-* canonical savefile lifecycle entry points now exist:
-  * `savefile_factory`
-  * `savefile_serializer`
-* canonical savefile test setup was partially centralized through shared helpers
-* legacy `.nex` writer semantics were clarified and separated from the canonical savefile writer
-* `nexa savefile new <output.nex>` now exposes canonical savefile creation through the CLI
-* `nexa savefile validate <file.nex>` now exposes canonical savefile validation through the CLI
+* root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
+* canonical savefile lifecycle entry points exist across create / serialize / load / validate
+* savefile strictness requires explicit `ui` across create / serialize / load / validate
+* legacy `.nex` writer semantics remain separated from canonical savefile handling
+* `nexa savefile new <output.nex>` exposes canonical savefile creation through the CLI
+* `nexa savefile validate <file.nex>` exposes canonical savefile validation through the CLI
 
 ---
 
@@ -134,29 +139,28 @@ The current repository state includes the following implemented surface:
 
 ---
 
-### Step188–190: Savefile & Bundle System (NEW)
+### Step188–190: Savefile & Bundle System
 
 #### Step188: Savefile (.nex)
 
 * Primary executable savefile format
 * Includes:
-
   * `meta`
   * `circuit`
   * `resources`
   * `state`
   * `ui`
-* Deterministic and reproducible
-* Savefile is not circuit-only; it includes both structure and state
+* deterministic and reproducible
+* savefile is not circuit-only; it includes both structure and state
 
 ---
 
 #### Step189: Plugin Integration (Strict)
 
-* plugin.json metadata enforcement
+* plugin metadata validation for bundle/plugin resolution flows
 * strict version validation
 * plugin resolver + integration layer
-* validation BEFORE execution
+* validation before execution
 
 ---
 
@@ -165,8 +169,7 @@ The current repository state includes the following implemented surface:
 * `.nexb` bundle format
 * zip-based packaging
 * contains:
-
-  * circuit (.nex)
+  * circuit (`.nex`)
   * plugins
 
 Execution flow:
@@ -187,234 +190,60 @@ CLI
 
 ---
 
+### Step191–194: Runtime Convergence Line
+
+* governance migration refinement accepted
+* node runtime prompt registry integration accepted
+* provider runtime canonicalization accepted
+* plugin reporting converged away from the legacy registry shell
+* `src/engine/plugin_loader.py` removed
+* `src/platform/plugin_registry.py` removed
+* savefile-aligned plugin loading converged onto `src/platform/plugin_auto_loader.py`
+* savefile executor plugin node path now uses the converged auto-loader path directly
+
+---
+
+### Current Runtime Interpretation
+
+#### Prompt side
+
+* `NodeExecutionRuntime` is the practical prompt execution caller
+* prompt resolution is handled through `PromptRegistry` / `PromptSpec`
+
+#### Provider side
+
+* provider execution is routed through `ProviderExecutor`
+* provider lookup is handled through `ProviderRegistry`
+* provider result normalization is concentrated in the runtime path
+
+#### Plugin side
+
+* practical runtime execution side:
+  * `src/engine/node_execution_runtime.py`
+  * `src/platform/plugin_result.py`
+* runtime bridge loader for savefile/plugin-entry execution:
+  * `src/platform/plugin_auto_loader.py`
+* canonical versioned registry side:
+  * `src/platform/plugin_version_registry.py`
+* execution contract / safe execution side:
+  * `src/platform/plugin.py`
+* bundle/savefile compatibility side:
+  * `src/contracts/nex_plugin_resolver.py`
+  * `src/contracts/nex_plugin_integration.py`
+  * `src/contracts/savefile_executor_aligned.py`
+
+---
+
 ### Current Status
 
 ```text
-988 passed, 3 skipped
+1012 passed, 3 skipped
 ```
 
 ---
 
-### Step191: Core Diff Data Model Introduction (CRITICAL)
-
-Goal:
-
-* Introduce core diff data structures:
-  - ComparableUnit
-  - Representation
-
-Representation:
-
-Representation {
-    representation_id: str
-    artifact_type: str
-    units: List[ComparableUnit]
-    metadata: dict
-}
-
-ComparableUnit:
-
-ComparableUnit {
-    unit_id: str
-    unit_kind: str
-    canonical_label
-    payload
-    metadata
-}
-
-Outcome:
-
-* foundation for media-agnostic diff engine
-
----
-
-### Step192: Representation Layer (Text Extractor)
-
-Goal:
-
-* Replace section-based parsing with representation extraction
-* Implement:
-
-  extract_text_representation(text) -> Representation
-
-* Convert text into ComparableUnit list
-
-Outcome:
-
-* text is no longer treated as raw string
-* section summary logic removed from formatter
-
----
-
-### Step193: Alignment Engine
-
-Goal:
-
-* Implement unit alignment logic:
-
-  align_units(units_a, units_b)
-
-* Matching priority:
-  - canonical_label
-  - structure
-  - metadata
-
-Outcome:
-
-* stable unit matching across artifacts
-
----
-
-### Step194: Unit-Based Diff Engine
-
-Goal:
-
-* Replace line-based diff with unit-based comparison
-* Implement:
-
-  compare_units(alignment) -> DiffResult
-
-Outcome:
-
-* diff becomes structure-aware
-* enables cross-media comparison
-
----
-
-### Step195: Formatter Simplification
-
-Goal:
-
-* Remove semantic logic from formatter
-* Formatter becomes output-only
-
-Outcome:
-
-* strict layer separation
-* improved extensibility
-
----
-
-### Step196: CLI Integration for New Diff Model
-
-Goal:
-
-* integrate new DiffResult into CLI output
-
----
-
-### Step197–202: Savefile Lifecycle Hardening
-
-* strict `ui` enforcement across loader / validator
-* canonical savefile serializer introduced
-* canonical savefile factory introduced
-* legacy `.nex` writer role clarified
-* canonical savefile tests aligned with factory-based creation
-* shared savefile test helpers introduced for valid baseline setup
-
----
-
-### Step203: Savefile Lifecycle Documentation Sync
-
-* `savefile_model`, `BLUEPRINT`, and `CODING_PLAN` synchronized with current lifecycle implementation
-* canonical savefile lifecycle entry points documented: create / serialize / load / validate
-* canonical savefile vs legacy `.nex` writer boundary clarified in docs
-
----
-
-### Step204: CLI Surface for Canonical Savefile Creation
-
-* `nexa savefile new <output.nex>` introduced
-* minimal canonical `.nex` generation now exposed through the CLI
-* command uses factory + serializer + validation path
-
----
-
-### Step205: CLI Surface for Canonical Savefile Validation
-
-* `nexa savefile validate <file.nex>` introduced
-* canonical `.nex` validation now exposed through the CLI
-* command uses loader + validator path and returns structured success / failure output
-
----
-
-### Step206: CLI Surface for Savefile Inspection
-
-* `nexa savefile info <file.nex>` introduced
-* canonical `.nex` inspection now exposed through the CLI
-* command uses loader path and returns structured savefile metadata / shape summary
-
----
-
-### Step207: CLI Surface for Savefile Template Discovery
-
-* `nexa savefile template list` introduced
-* official named template discovery is now exposed through the CLI
-* current canonical template names are documented and inspectable without source reading
-
----
-
-### Step208: Unified Savefile CLI Surface Restore
-
-* unified `nexa savefile ...` command surface restored after partial CLI surface loss
-* official savefile CLI surface is now consistently exposed under one namespace
-* current baseline command family: `new`, `validate`, `info`, `template list`
-
----
-
-### Step209: Minimal Savefile Metadata Edit Surface
-
-* `nexa savefile set-name <file.nex> --name ...` introduced
-* `nexa savefile set-entry <file.nex> --entry ...` introduced
-* official edit flow follows: load → mutate → validate → save
-
----
-
-### Step210: Savefile Description Edit Surface
-
-* `nexa savefile set-description <file.nex> --description ...` introduced
-* current official edit scope remains metadata-focused and intentionally small
-* broader structural/resource/state/ui mutation is still outside the official CLI edit surface
-
----
-
-## Next Steps
-
-### Step211: Savefile Edit Surface Boundary Freeze
-
-Goal:
-
-* keep the current official savefile edit surface minimal and explicit
-* decide whether any additional metadata-only edit commands are warranted
-* avoid accidental expansion into structural editor responsibilities
-
----
-
-### Step212: CLI Regression Gating
-
-Goal:
-
-* integrate regression policy into CLI exit codes more directly for CI/CD use
-
----
-
-### Step213: Configuration-Driven Policy
-
-Goal:
-
-* external policy config
-* severity override
-* policy registry
-
----
-
-### Step214: Release Polish for the Official Demo
-
-Goal:
-
-* finalize `real_ai_bug_autopsy_multinode` as the public GitHub demo
-* keep demo instructions, run outputs, and docs aligned
-
----
-
-End of Coding Plan
+### Next Priority
+
+* runtime-completion work should continue from the converged plugin baseline, not from deleted legacy paths
+* documentation is synchronized to the accepted runtime direction through this tracker update
+* future plugin work should target boundary clarification or deeper unification only when it can be done without reopening removed legacy paths

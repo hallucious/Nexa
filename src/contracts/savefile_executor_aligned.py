@@ -358,7 +358,10 @@ class SavefileExecutor:
 
             if node.type == "plugin":
                 result = execute_plugin_node(
-                    node, savefile, state, node_outputs, self.plugin_loader
+                    node=node,
+                    savefile=savefile,
+                    state=state,
+                    node_outputs=node_outputs,
                 )
             elif node.type == "ai":
                 result = execute_ai_node(

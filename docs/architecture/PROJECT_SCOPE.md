@@ -57,7 +57,7 @@ Nexa focuses on:
 * ExecutionConfig canonicalization and registry
 * Regression detection, formatting, and policy evaluation (PASS/WARN/FAIL)
 * CLI for run / compare / diff / export / replay / info / task flows
-* Test infrastructure (934 passed, 3 skipped)
+* Test infrastructure (1012 passed, 3 skipped)
 
 ---
 

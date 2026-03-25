@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.9.0
+Version: 1.10.0
 
 ────────────────
 Architecture Constitution
@@ -128,6 +128,47 @@ Engine
 → ExecutionConfig Schema Validation
 → ExecutionConfig Hash
 → NodeExecutionRuntime
+
+---
+## 3.1 Current Runtime Convergence Snapshot
+
+The current runtime line is intentionally concentrated into a smaller set of practical execution files.
+
+### Prompt side
+
+* `src.engine.node_execution_runtime.NodeExecutionRuntime` is the practical prompt execution caller
+* prompt resolution is handled through `src.platform.prompt_registry.PromptRegistry` and PromptSpec loading
+
+### Provider side
+
+* provider execution is routed through `src.platform.provider_executor.ProviderExecutor`
+* provider lookup is handled through `src.platform.provider_registry.ProviderRegistry`
+* provider result canonicalization is concentrated in the runtime path
+
+### Plugin side
+
+The plugin surface is currently split by role rather than duplicated legacy ownership:
+
+* practical runtime execution side:
+  * `src/engine/node_execution_runtime.py`
+  * `src/platform/plugin_result.py`
+* runtime bridge loader for savefile entry references:
+  * `src/platform/plugin_auto_loader.py`
+* canonical versioned registry side:
+  * `src/platform/plugin_version_registry.py`
+* execution contract / safe execution side:
+  * `src/platform/plugin.py`
+* bundle/savefile compatibility side:
+  * `src/contracts/nex_plugin_resolver.py`
+  * `src/contracts/nex_plugin_integration.py`
+  * `src/contracts/savefile_executor_aligned.py`
+
+Removed legacy ownership paths:
+
+* `src/engine/plugin_loader.py`
+* `src/platform/plugin_registry.py`
+
+This means new runtime work MUST build from the converged files above rather than recreating the deleted legacy paths.
 
 ---
 
