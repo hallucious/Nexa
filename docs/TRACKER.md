@@ -1,12 +1,12 @@
 # Nexa CODING PLAN
 
-Version: 2.5.3
+Version: 2.6.0
 
 ---
 
 ## Completed Steps
 
-## Release Snapshot (522bfa2 baseline)
+## Release Snapshot (0954505 baseline)
 
 The current repository state includes the following implemented surface:
 
@@ -49,7 +49,7 @@ The current repository state includes the following implemented surface:
 ### 5. Current Public Baseline
 
 ```text
-970 passed, 3 skipped
+988 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness in the current baseline
@@ -190,7 +190,7 @@ CLI
 ### Current Status
 
 ```text
-970 passed, 3 skipped
+988 passed, 3 skipped
 ```
 
 ---
@@ -338,19 +338,59 @@ Goal:
 
 ---
 
-## Next Steps
+### Step206: CLI Surface for Savefile Inspection
 
-### Step206: README / CLI Usage Expansion
-
-Goal:
-
-* surface `nexa savefile new` more clearly in public-facing docs and examples
-* keep CLI usage text synchronized with current command surface
-* document minimal constraints such as `.nex` extension and overwrite behavior
+* `nexa savefile info <file.nex>` introduced
+* canonical `.nex` inspection now exposed through the CLI
+* command uses loader path and returns structured savefile metadata / shape summary
 
 ---
 
-### Step207: CLI Regression Gating
+### Step207: CLI Surface for Savefile Template Discovery
+
+* `nexa savefile template list` introduced
+* official named template discovery is now exposed through the CLI
+* current canonical template names are documented and inspectable without source reading
+
+---
+
+### Step208: Unified Savefile CLI Surface Restore
+
+* unified `nexa savefile ...` command surface restored after partial CLI surface loss
+* official savefile CLI surface is now consistently exposed under one namespace
+* current baseline command family: `new`, `validate`, `info`, `template list`
+
+---
+
+### Step209: Minimal Savefile Metadata Edit Surface
+
+* `nexa savefile set-name <file.nex> --name ...` introduced
+* `nexa savefile set-entry <file.nex> --entry ...` introduced
+* official edit flow follows: load → mutate → validate → save
+
+---
+
+### Step210: Savefile Description Edit Surface
+
+* `nexa savefile set-description <file.nex> --description ...` introduced
+* current official edit scope remains metadata-focused and intentionally small
+* broader structural/resource/state/ui mutation is still outside the official CLI edit surface
+
+---
+
+## Next Steps
+
+### Step211: Savefile Edit Surface Boundary Freeze
+
+Goal:
+
+* keep the current official savefile edit surface minimal and explicit
+* decide whether any additional metadata-only edit commands are warranted
+* avoid accidental expansion into structural editor responsibilities
+
+---
+
+### Step212: CLI Regression Gating
 
 Goal:
 
@@ -358,7 +398,7 @@ Goal:
 
 ---
 
-### Step208: Configuration-Driven Policy
+### Step213: Configuration-Driven Policy
 
 Goal:
 
@@ -368,7 +408,7 @@ Goal:
 
 ---
 
-### Step209: Release Polish for the Official Demo
+### Step214: Release Polish for the Official Demo
 
 Goal:
 

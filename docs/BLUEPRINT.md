@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.8.1
+Version: 1.9.0
 
 ────────────────
 Architecture Constitution
@@ -179,6 +179,21 @@ Contract status:
 * `ui` is required at create / serialize / load / validate time
 * `runtime` is not part of the canonical savefile root
 * canonical savefiles and legacy `.nex` writer behavior are kept distinct
+
+Current official savefile CLI surface:
+
+* `nexa savefile new <output.nex>`
+* `nexa savefile validate <file.nex>`
+* `nexa savefile info <file.nex>`
+* `nexa savefile template list`
+* `nexa savefile set-name <file.nex> --name ...`
+* `nexa savefile set-entry <file.nex> --entry ...`
+* `nexa savefile set-description <file.nex> --description ...`
+
+Boundary status:
+
+* the current official edit surface is intentionally limited to minimal metadata / entry editing
+* broader structural editing, `resources` mutation, `state` mutation, and `ui` mutation are not yet part of the official CLI surface
 
 ---
 

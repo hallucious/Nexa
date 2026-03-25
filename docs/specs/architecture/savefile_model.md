@@ -289,6 +289,46 @@ Validation MUST enforce:
 * `ui` is execution-independent
 * `ui.*` must not be referenced as node input
 
+### 7.5 Inspect / Discover
+
+The canonical savefile lifecycle also includes official CLI inspection / discovery entry points:
+
+* `nexa savefile info <file.nex>`
+* `nexa savefile template list`
+
+These commands do not mutate the savefile. They expose the current savefile shape and supported template surface without requiring direct source inspection.
+
+### 7.6 Minimal Edit Surface
+
+The current official savefile CLI exposes a deliberately small edit surface:
+
+* `nexa savefile set-name <file.nex> --name ...`
+* `nexa savefile set-entry <file.nex> --entry ...`
+* `nexa savefile set-description <file.nex> --description ...`
+
+All official savefile edit commands MUST follow this flow:
+
+* load
+* mutate
+* validate
+* save
+
+This means invalid mutations MUST fail before the original savefile is overwritten.
+
+### 7.7 Current Boundary
+
+The current official savefile CLI is not a full structural editor.
+
+The following mutation classes are intentionally outside the current official edit surface:
+
+* node add / remove
+* edge add / remove
+* `resources` mutation
+* `state` mutation
+* `ui` mutation
+
+Those areas require separate contract decisions and are not implied by the minimal metadata edit surface.
+
 ---
 
 ## 8. Non-Savefile Runtime Artifacts
