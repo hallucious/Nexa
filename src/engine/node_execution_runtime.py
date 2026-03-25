@@ -597,7 +597,6 @@ class NodeExecutionRuntime:
 
             def plugin_stage():
                 trace.events.append(f"plugin_execute:{plugin_id}")
-                self.metrics.plugin_calls += 1
                 result = self.execute_plugin(plugin_id, **bound_inputs)
                 return normalize_plugin_result(result)
 

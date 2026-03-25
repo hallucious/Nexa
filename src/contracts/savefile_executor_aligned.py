@@ -15,9 +15,7 @@ from typing import Any, Dict, List, Optional
 
 from src.contracts.savefile_format import Savefile, NodeSpec
 from src.contracts.provider_contract import ProviderRequest, ProviderResult
-from src.platform.plugin import Plugin, PluginResult, safe_execute_plugin
-from src.platform.plugin_auto_loader import load_plugin_entry
-from src.platform.plugin_result import normalize_plugin_result
+from src.platform.plugin_executor import execute_plugin_entry
 from src.platform.provider_registry import ProviderRegistry
 
 
@@ -132,7 +130,7 @@ def execute_plugin_node(
     state: Dict[str, Any],
     node_outputs: Dict[str, Any],
 ) -> NodeExecutionResult:
-    """Execute plugin node."""
+    """Execute plugin node through the canonical plugin executor."""
     plugin_name = node.resource_ref.get("plugin")
     if not plugin_name:
         return NodeExecutionResult(
@@ -151,15 +149,6 @@ def execute_plugin_node(
     plugin_resource = savefile.resources.plugins[plugin_name]
 
     try:
-        plugin_func = load_plugin_entry(plugin_resource.entry)
-    except Exception as e:
-        return NodeExecutionResult(
-            node_id=node.id,
-            status="failure",
-            error=f"Plugin load failed: {e}",
-        )
-
-    try:
         inputs = {}
         for input_key, input_path in node.inputs.items():
             inputs[input_key] = resolve_input_value(input_path, state, node_outputs)
@@ -171,32 +160,11 @@ def execute_plugin_node(
         )
 
     try:
-        class _CallablePluginAdapter(Plugin):
-            name = plugin_name
-
-            def execute(self, **kwargs: Any) -> PluginResult:
-                call_kwargs = dict(kwargs)
-                call_kwargs.pop("stage", None)
-                raw_result = plugin_func(**call_kwargs)
-                if isinstance(raw_result, PluginResult):
-                    return raw_result
-                compat = normalize_plugin_result(raw_result)
-                output = compat.output
-                if isinstance(raw_result, dict) and output is None:
-                    output = raw_result
-                return PluginResult(
-                    success=True,
-                    output=output,
-                    error=None,
-                    latency_ms=0,
-                    stage=kwargs.get("stage"),
-                    resource_usage=None,
-                )
-
-        plugin_result = safe_execute_plugin(
-            plugin=_CallablePluginAdapter(),
-            timeout_ms=None,
+        plugin_result = execute_plugin_entry(
+            plugin_name=plugin_name,
+            entry=plugin_resource.entry,
             stage="CORE",
+            timeout_ms=None,
             **inputs,
         )
     except Exception as e:
@@ -216,6 +184,7 @@ def execute_plugin_node(
                 "latency_ms": plugin_result.latency_ms,
                 "stage": plugin_result.stage,
                 "resource_usage": plugin_result.resource_usage or {},
+                "plugin_trace": plugin_result.trace or {},
             },
         )
 
@@ -223,11 +192,12 @@ def execute_plugin_node(
         node_id=node.id,
         status="success",
         output=plugin_result.output,
-        artifacts=[],
+        artifacts=list(plugin_result.artifacts),
         trace={
             "latency_ms": plugin_result.latency_ms,
             "stage": plugin_result.stage,
             "resource_usage": plugin_result.resource_usage or {},
+            "plugin_trace": plugin_result.trace or {},
         },
     )
 

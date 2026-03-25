@@ -151,7 +151,8 @@ The plugin surface is currently split by role rather than duplicated legacy owne
 
 * practical runtime execution side:
   * `src/engine/node_execution_runtime.py`
-  * `src/platform/plugin_result.py`
+  * `src/platform/plugin_executor.py`
+* `src/platform/plugin_result.py`
 * runtime bridge loader for savefile entry references:
   * `src/platform/plugin_auto_loader.py`
 * canonical versioned registry side:
@@ -162,6 +163,10 @@ The plugin surface is currently split by role rather than duplicated legacy owne
   * `src/contracts/nex_plugin_resolver.py`
   * `src/contracts/nex_plugin_integration.py`
   * `src/contracts/savefile_executor_aligned.py`
+
+Current savefile plugin execution delegates entry-path execution to
+`src/platform/plugin_executor.py`, so the savefile layer does not re-implement
+callable wrapping or safe-execution adaptation.
 
 Removed legacy ownership paths:
 

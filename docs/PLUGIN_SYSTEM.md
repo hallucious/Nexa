@@ -65,6 +65,7 @@ This split is currently intentional in the accepted runtime line.
 ## Practical runtime execution side
 
 * `src/engine/node_execution_runtime.py`
+* `src/platform/plugin_executor.py`
 * `src/platform/plugin_result.py`
 
 ## Runtime bridge loader for savefile entry references
@@ -88,6 +89,10 @@ This registry remains the source for explicit `(plugin_id, plugin_version)` reso
 * `src/contracts/nex_plugin_resolver.py`
 * `src/contracts/nex_plugin_integration.py`
 * `src/contracts/savefile_executor_aligned.py`
+
+Savefile execution delegates entry-path plugin execution into
+`src/platform/plugin_executor.py` instead of re-implementing the wrapping logic
+inside the savefile layer.
 
 ---
 

@@ -199,7 +199,8 @@ CLI
 * `src/engine/plugin_loader.py` removed
 * `src/platform/plugin_registry.py` removed
 * savefile-aligned plugin loading converged onto `src/platform/plugin_auto_loader.py`
-* savefile executor plugin node path now uses the converged auto-loader path directly
+* savefile executor plugin node path now delegates into `src/platform/plugin_executor.py`, preserving plugin artifacts/trace through the converged auto-loader path
+* runtime graph plugin metrics count one execution per plugin call rather than double-counting the compiled-graph path
 
 ---
 
@@ -220,7 +221,8 @@ CLI
 
 * practical runtime execution side:
   * `src/engine/node_execution_runtime.py`
-  * `src/platform/plugin_result.py`
+  * `src/platform/plugin_executor.py`
+* `src/platform/plugin_result.py`
 * runtime bridge loader for savefile/plugin-entry execution:
   * `src/platform/plugin_auto_loader.py`
 * canonical versioned registry side:
