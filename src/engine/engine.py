@@ -616,28 +616,16 @@ class Engine:
         Validation lifecycle (enforced, cannot be bypassed):
 
           Phase 1 — Pre-Validation: Structural (always blocking)
-            Structural validation runs before any node executes.
-            Hard failure prevents all execution; all nodes remain NOT_REACHED.
-
           Phase 1b — Pre-Validation: Determinism (strict mode only, blocking)
-            In strict mode, determinism config validation is also blocking
-            pre-execution.  A failure here prevents execution identically to
-            a structural failure.
-
           Phase 2 — Execution
-            Nodes execute only when Phase 1 (and 1b in strict mode) succeeded.
-
           Phase 3 — Post-Validation: Determinism (non-strict mode, advisory)
-            In non-strict mode, determinism config validation runs AFTER
-            execution completes.  Findings are advisory: they do not alter
-            already-produced node outputs but are recorded in the trace so
-            callers can observe them.
-
           Phase 4 — Trace Finalization (artifact commit boundary)
-            The ExecutionTrace (containing all node output_snapshots / artifacts)
-            is constructed and returned only AFTER Phase 3 completes.  This
-            guarantees that post-validation results are embedded in the trace
-            before it is surfaced to any caller.
+
+        Governance delegation:
+          Phases 1, 1b, 3, and 4-decision are delegated to
+          EngineGovernanceOrchestrator. Engine.execute() owns Phase 2 (node
+          execution) and assembles the final ExecutionTrace from orchestrator
+          results.
 
         Args:
             revision_id: Revision identifier for this execution.
@@ -645,39 +633,20 @@ class Engine:
                 pre-execution (Phase 1b).  If False (default), determinism
                 validation is advisory post-execution (Phase 3).
         """
-        from .validation.validator import ValidationEngine
+        from .validation.governance_orchestrator import EngineGovernanceOrchestrator
 
         started_at = now_utc()
         execution_id = str(uuid.uuid4())
 
-        validator = ValidationEngine()
+        # ── Phases 1 + 1b + Pre-decision: delegated to orchestrator ──────────
+        _gov = EngineGovernanceOrchestrator()
+        pre_gov = _gov.run_pre(self, revision_id=revision_id, strict_determinism=strict_determinism)
 
-        # ── Phase 1: Pre-validation — structural (always blocking) ────────────
-        structural_validation = validator.validate_structural(self, revision_id=revision_id)
-
-        # ── Phase 1b: Pre-validation — determinism (strict mode only, blocking)
-        pre_determinism_validation = None
-        if strict_determinism:
-            pre_determinism_validation = validator.validate_determinism(
-                self, revision_id=revision_id, strict_determinism=True
-            )
-
-        # ── Decision Policy: map pre-validation results → pre-decision ──────────
-        from .validation.decision_policy import ValidationDecisionPolicy
-        decision_policy = ValidationDecisionPolicy()
-
-        pre_decision = decision_policy.decide_pre(
-            structural_validation, pre_determinism_validation
-        )
-        execution_allowed = not pre_decision.blocks_execution
-
-        # The trace's top-level validation fields reflect the blocking validation
-        # (structural, or strict determinism if that failed).
-        if pre_determinism_validation is not None and not pre_determinism_validation.success:
-            # Strict determinism failure: surface it as the primary validation result.
-            primary_validation = pre_determinism_validation
-        else:
-            primary_validation = structural_validation
+        execution_allowed = pre_gov.execution_allowed
+        primary_validation = pre_gov.primary_validation
+        structural_validation = pre_gov.structural_validation
+        pre_determinism_validation = pre_gov.pre_determinism_validation
+        pre_decision = pre_gov.pre_decision
 
         # ── Phase 2: Execution ────────────────────────────────────────────────
         if self.graph_runtime is not None and execution_allowed:
@@ -760,17 +729,13 @@ class Engine:
             finished_at = now_utc()
             duration_ms = int((finished_at - started_at).total_seconds() * 1000)
 
-            # ── Phase 3: Post-validation — determinism (non-strict, advisory) ──
-            post_determinism_validation = None
-            if not strict_determinism:
-                post_determinism_validation = validator.validate_determinism(
-                    self, revision_id=revision_id, strict_determinism=False
-                )
-
-            # ── Decision Policy: map post-validation result → post-decision ────
-            post_decision = decision_policy.decide_post(
-                post_determinism_validation, strict_determinism=strict_determinism
+            # ── Phase 3 + 4-decision: delegated to orchestrator ───────────────
+            post_gov = _gov.run_post(
+                self, revision_id=revision_id,
+                strict_determinism=strict_determinism, pre=pre_gov
             )
+            post_determinism_validation = post_gov.post_determinism_validation
+            post_decision = post_gov.post_decision
 
             # ── Phase 4: Trace finalization (artifact commit boundary) ─────────
             trace_meta = {
@@ -784,34 +749,10 @@ class Engine:
                     "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
                     "trace_model": ENGINE_TRACE_MODEL_VERSION,
                 },
-                # Legacy key: structural validation info (backward compat)
-                "validation": {
-                    "at": now_utc_iso(),
-                    "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
-                    "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
-                    "snapshot": {
-                        "snapshot_version": "1",
-                        "applied_rules": sorted(set(getattr(structural_validation, "applied_rule_ids", []))),
-                    },
-                },
-                # Explicit lifecycle phases
-                "pre_validation": self._build_pre_validation_meta(
-                    structural_validation, pre_determinism_validation
-                ),
-                "post_validation": self._build_post_validation_meta(
-                    post_determinism_validation, strict_determinism
-                ),
-                # Decision outcomes (policy layer)
-                "decision": {
-                    "pre": {
-                        "value": pre_decision.decision.value,
-                        "reason": pre_decision.reason,
-                    },
-                    "post": {
-                        "value": post_decision.decision.value,
-                        "reason": post_decision.reason,
-                    },
-                },
+                "validation": _gov.build_legacy_validation_meta(pre_gov, revision_id),
+                "pre_validation": _gov.build_pre_validation_meta(pre_gov),
+                "post_validation": _gov.build_post_validation_meta(post_gov, strict_determinism),
+                "decision": _gov.build_decision_meta(pre_gov, post_gov),
             }
 
             return ExecutionTrace(
@@ -1001,55 +942,25 @@ class Engine:
         finished_at = now_utc()
         duration_ms = int((finished_at - started_at).total_seconds() * 1000)
 
-        # ── Phase 3: Post-validation — determinism (non-strict, advisory) ──────
-        post_determinism_validation = None
-        if not strict_determinism:
-            post_determinism_validation = validator.validate_determinism(
-                self, revision_id=revision_id, strict_determinism=False
-            )
-
-        # ── Decision Policy: map post-validation result → post-decision ────────
-        post_decision = decision_policy.decide_post(
-            post_determinism_validation, strict_determinism=strict_determinism
+        # ── Phase 3 + 4-decision: delegated to orchestrator ─────────────────
+        post_gov = _gov.run_post(
+            self, revision_id=revision_id,
+            strict_determinism=strict_determinism, pre=pre_gov
         )
+        post_determinism_validation = post_gov.post_determinism_validation
+        post_decision = post_gov.post_decision
 
         # ── Phase 4: Trace finalization (artifact commit boundary) ─────────────
-        # The trace is constructed only after post-validation completes.
-        # Post-validation outcomes are embedded before the trace is returned.
         trace_meta = {
             "engine_meta": self.meta,
             "spec_versions": {
                 "execution_model": ENGINE_EXECUTION_MODEL_VERSION,
                 "trace_model": ENGINE_TRACE_MODEL_VERSION,
             },
-            # Legacy key: structural validation info (backward compat)
-            "validation": {
-                "at": now_utc_iso(),
-                "contract_version": VALIDATION_ENGINE_CONTRACT_VERSION,
-                "rule_catalog_version": VALIDATION_RULE_CATALOG_VERSION,
-                "snapshot": {
-                    "snapshot_version": "1",
-                    "applied_rules": sorted(set(getattr(structural_validation, "applied_rule_ids", []))),
-                },
-            },
-            # Explicit lifecycle phases
-            "pre_validation": self._build_pre_validation_meta(
-                structural_validation, pre_determinism_validation
-            ),
-            "post_validation": self._build_post_validation_meta(
-                post_determinism_validation, strict_determinism
-            ),
-            # Decision outcomes (policy layer)
-            "decision": {
-                "pre": {
-                    "value": pre_decision.decision.value,
-                    "reason": pre_decision.reason,
-                },
-                "post": {
-                    "value": post_decision.decision.value,
-                    "reason": post_decision.reason,
-                },
-            },
+            "validation": _gov.build_legacy_validation_meta(pre_gov, revision_id),
+            "pre_validation": _gov.build_pre_validation_meta(pre_gov),
+            "post_validation": _gov.build_post_validation_meta(post_gov, strict_determinism),
+            "decision": _gov.build_decision_meta(pre_gov, post_gov),
         }
 
         trace = ExecutionTrace(
