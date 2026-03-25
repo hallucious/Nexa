@@ -42,6 +42,12 @@ from src.engine.validation.decision_policy import (
     PreDecisionResult,
     ValidationDecisionPolicy,
 )
+from src.engine.validation.governance_shapes import (
+    build_decision_block,
+    build_post_validation_block,
+    build_pre_validation_block,
+    violations_as_dicts,
+)
 from src.engine.validation.result import (
     Severity,
     ValidationDecision,
@@ -123,38 +129,102 @@ class CircuitGovernanceTrace:
     finished_at_ms: Optional[float] = None
     duration_ms: Optional[int] = None
 
+    def to_engine_meta(self) -> Dict[str, Any]:
+        structural = ValidationResult(
+            success=self.structural_success,
+            engine_revision="circuit",
+            structural_fingerprint=_CIRCUIT_PATH_FINGERPRINT,
+            violations=[],
+        )
+        structural = ValidationResult(
+            success=self.structural_success,
+            engine_revision=structural.engine_revision,
+            structural_fingerprint=structural.structural_fingerprint,
+            applied_rule_ids=structural.applied_rule_ids,
+            violations=[
+                Violation(
+                    rule_id=v["rule_id"],
+                    rule_name=v["rule_name"],
+                    severity=Severity(v["severity"]),
+                    location_type=v["location_type"],
+                    location_id=v["location_id"],
+                    message=v["message"],
+                )
+                for v in self.structural_violations
+            ],
+        )
+
+        pre_det = None
+        if self.determinism_pre_performed:
+            pre_det = ValidationResult(
+                success=self.determinism_pre_success,
+                engine_revision="circuit",
+                structural_fingerprint=_CIRCUIT_PATH_FINGERPRINT,
+                violations=[
+                    Violation(
+                        rule_id=v["rule_id"],
+                        rule_name=v["rule_name"],
+                        severity=Severity(v["severity"]),
+                        location_type=v["location_type"],
+                        location_id=v["location_id"],
+                        message=v["message"],
+                    )
+                    for v in self.determinism_pre_violations
+                ],
+            )
+
+        post_det = None
+        if self.determinism_post_performed:
+            post_det = ValidationResult(
+                success=self.determinism_post_success,
+                engine_revision="circuit",
+                structural_fingerprint=_CIRCUIT_PATH_FINGERPRINT,
+                violations=[
+                    Violation(
+                        rule_id=v["rule_id"],
+                        rule_name=v["rule_name"],
+                        severity=Severity(v["severity"]),
+                        location_type=v["location_type"],
+                        location_id=v["location_id"],
+                        message=v["message"],
+                    )
+                    for v in self.determinism_post_violations
+                ],
+            )
+
+        return {
+            "pre_validation": build_pre_validation_block(structural, pre_det),
+            "post_validation": build_post_validation_block(
+                post_det,
+                strict_determinism=not self.determinism_post_performed,
+            ),
+            "decision": build_decision_block(
+                pre_value=self.pre_decision,
+                pre_reason=self.pre_decision_reason,
+                post_value=self.post_decision,
+                post_reason=self.post_decision_reason,
+            ),
+        }
+
     def to_dict(self) -> Dict[str, Any]:
+        engine_meta = self.to_engine_meta()
         return {
             "execution_id": self.execution_id,
             "circuit_id": self.circuit_id,
-            "pre_validation": {
-                "structural": {
-                    "performed": True,
-                    "success": self.structural_success,
-                    "violations": self.structural_violations,
-                },
-                "determinism": {
-                    "performed": self.determinism_pre_performed,
-                    "success": self.determinism_pre_success,
-                    "violations": self.determinism_pre_violations,
-                },
-            },
+            "pre_validation": engine_meta["pre_validation"],
             "pre_decision": {
                 "value": self.pre_decision,
                 "reason": self.pre_decision_reason,
                 "execution_allowed": self.execution_allowed,
             },
             "post_validation": {
-                "determinism": {
-                    "performed": self.determinism_post_performed,
-                    "success": self.determinism_post_success,
-                    "violations": self.determinism_post_violations,
-                },
+                "determinism": engine_meta["post_validation"],
             },
             "post_decision": {
                 "value": self.post_decision,
                 "reason": self.post_decision_reason,
             },
+            "decision": engine_meta["decision"],
             "execution_completed": self.execution_completed,
             "final_status": self.final_status,
             "timing": {
@@ -202,20 +272,6 @@ def _to_validation_result(violations: List[Violation], *, success: bool) -> Vali
     )
 
 
-def _violations_as_dicts(violations: List[Violation]) -> List[Dict[str, Any]]:
-    return [
-        {
-            "rule_id": v.rule_id,
-            "rule_name": v.rule_name,
-            "severity": v.severity.value,
-            "location_type": v.location_type,
-            "location_id": v.location_id,
-            "message": v.message,
-        }
-        for v in violations
-    ]
-
-
 # ── CircuitRunner ─────────────────────────────────────────────────────────────
 
 class CircuitRunner:
@@ -232,6 +288,49 @@ class CircuitRunner:
         self.runtime = runtime
         self.registry = registry
         self._policy = ValidationDecisionPolicy()
+
+    def _build_governance_trace(
+        self,
+        *,
+        execution_id: str,
+        circuit_id: Optional[str],
+        structural_result: ValidationResult,
+        pre_det_result: Optional[ValidationResult],
+        pre_decision: PreDecisionResult,
+        execution_allowed: bool,
+        post_det_result: Optional[ValidationResult],
+        post_decision: PostDecisionResult,
+        execution_completed: bool,
+        final_status: str,
+        started_at_ms: float,
+        finished_at_ms: float,
+    ) -> CircuitGovernanceTrace:
+        return CircuitGovernanceTrace(
+            execution_id=execution_id,
+            circuit_id=circuit_id,
+            structural_success=structural_result.success,
+            structural_violations=violations_as_dicts(structural_result.violations),
+            determinism_pre_performed=pre_det_result is not None,
+            determinism_pre_success=(pre_det_result.success if pre_det_result else True),
+            determinism_pre_violations=violations_as_dicts(
+                pre_det_result.violations if pre_det_result else []
+            ),
+            pre_decision=pre_decision.decision.value,
+            pre_decision_reason=pre_decision.reason,
+            execution_allowed=execution_allowed,
+            determinism_post_performed=post_det_result is not None,
+            determinism_post_success=(post_det_result.success if post_det_result else True),
+            determinism_post_violations=violations_as_dicts(
+                post_det_result.violations if post_det_result else []
+            ),
+            post_decision=post_decision.decision.value,
+            post_decision_reason=post_decision.reason,
+            execution_completed=execution_completed,
+            final_status=final_status,
+            started_at_ms=started_at_ms,
+            finished_at_ms=finished_at_ms,
+            duration_ms=int((finished_at_ms - started_at_ms) * 1000),
+        )
 
     def _emit_runtime_event(
         self,
@@ -413,29 +512,22 @@ class CircuitRunner:
         if pre_decision.blocks_execution:
             # Build blocked governance trace — no execution takes place
             finished_ms = time.monotonic()
-            governance = CircuitGovernanceTrace(
+            governance = self._build_governance_trace(
                 execution_id=execution_id,
                 circuit_id=circuit_id,
-                structural_success=structural_result.success,
-                structural_violations=_violations_as_dicts(structural_result.violations),
-                determinism_pre_performed=pre_det_result is not None,
-                determinism_pre_success=(pre_det_result.success if pre_det_result else True),
-                determinism_pre_violations=_violations_as_dicts(
-                    pre_det_result.violations if pre_det_result else []
-                ),
-                pre_decision=pre_decision.decision.value,
-                pre_decision_reason=pre_decision.reason,
+                structural_result=structural_result,
+                pre_det_result=pre_det_result,
+                pre_decision=pre_decision,
                 execution_allowed=False,
-                determinism_post_performed=False,
-                determinism_post_success=True,
-                determinism_post_violations=[],
-                post_decision=ValidationDecision.ACCEPT.value,
-                post_decision_reason="execution blocked; no post-validation performed",
+                post_det_result=None,
+                post_decision=PostDecisionResult(
+                    decision=ValidationDecision.ACCEPT,
+                    reason="execution blocked; no post-validation performed",
+                ),
                 execution_completed=False,
                 final_status="blocked",
                 started_at_ms=started_at_ms,
                 finished_at_ms=finished_ms,
-                duration_ms=int((finished_ms - started_at_ms) * 1000),
             )
             return CircuitRunResult(current_state, governance)
 
@@ -505,31 +597,19 @@ class CircuitRunner:
 
             final_status = "failed" if execution_failed else "success"
 
-            governance = CircuitGovernanceTrace(
+            governance = self._build_governance_trace(
                 execution_id=execution_id,
                 circuit_id=circuit_id,
-                structural_success=structural_result.success,
-                structural_violations=_violations_as_dicts(structural_result.violations),
-                determinism_pre_performed=pre_det_result is not None,
-                determinism_pre_success=(pre_det_result.success if pre_det_result else True),
-                determinism_pre_violations=_violations_as_dicts(
-                    pre_det_result.violations if pre_det_result else []
-                ),
-                pre_decision=pre_decision.decision.value,
-                pre_decision_reason=pre_decision.reason,
+                structural_result=structural_result,
+                pre_det_result=pre_det_result,
+                pre_decision=pre_decision,
                 execution_allowed=True,
-                determinism_post_performed=post_det_result is not None,
-                determinism_post_success=(post_det_result.success if post_det_result else True),
-                determinism_post_violations=_violations_as_dicts(
-                    post_det_result.violations if post_det_result else []
-                ),
-                post_decision=post_decision.decision.value,
-                post_decision_reason=post_decision.reason,
+                post_det_result=post_det_result,
+                post_decision=post_decision,
                 execution_completed=not execution_failed,
                 final_status=final_status,
                 started_at_ms=started_at_ms,
                 finished_at_ms=finished_ms,
-                duration_ms=int((finished_ms - started_at_ms) * 1000),
             )
 
         return CircuitRunResult(current_state, governance)

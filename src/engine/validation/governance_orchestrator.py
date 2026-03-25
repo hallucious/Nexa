@@ -35,6 +35,11 @@ from src.contracts.spec_versions import (
 from src.utils.time import now_utc_iso
 
 from .decision_policy import PostDecisionResult, PreDecisionResult, ValidationDecisionPolicy
+from .governance_shapes import (
+    build_decision_block,
+    build_post_validation_block,
+    build_pre_validation_block,
+)
 from .result import ValidationResult
 
 if TYPE_CHECKING:
@@ -180,48 +185,10 @@ class EngineGovernanceOrchestrator:
     @staticmethod
     def build_pre_validation_meta(pre: PreGovernanceResult) -> Dict[str, Any]:
         """Build trace.meta['pre_validation'] block."""
-        structural = pre.structural_validation
-        pre_det = pre.pre_determinism_validation
-
-        block: Dict[str, Any] = {
-            "structural": {
-                "performed": True,
-                "success": structural.success,
-                "violations": [
-                    {
-                        "rule_id": v.rule_id,
-                        "rule_name": v.rule_name,
-                        "severity": v.severity.value,
-                        "location_type": v.location_type,
-                        "location_id": v.location_id,
-                        "message": v.message,
-                    }
-                    for v in structural.violations
-                ],
-            },
-        }
-
-        if pre_det is not None:
-            block["determinism"] = {
-                "performed": True,
-                "strict_mode": True,
-                "success": pre_det.success,
-                "violations": [
-                    {
-                        "rule_id": v.rule_id,
-                        "rule_name": v.rule_name,
-                        "severity": v.severity.value,
-                        "location_type": v.location_type,
-                        "location_id": v.location_id,
-                        "message": v.message,
-                    }
-                    for v in pre_det.violations
-                ],
-            }
-        else:
-            block["determinism"] = {"performed": False}
-
-        return block
+        return build_pre_validation_block(
+            pre.structural_validation,
+            pre.pre_determinism_validation,
+        )
 
     @staticmethod
     def build_post_validation_meta(
@@ -229,25 +196,10 @@ class EngineGovernanceOrchestrator:
         strict_determinism: bool,
     ) -> Dict[str, Any]:
         """Build trace.meta['post_validation'] block."""
-        post_det = post.post_determinism_validation
-        if post_det is not None:
-            return {
-                "performed": True,
-                "strict_mode": strict_determinism,
-                "success": post_det.success,
-                "violations": [
-                    {
-                        "rule_id": v.rule_id,
-                        "rule_name": v.rule_name,
-                        "severity": v.severity.value,
-                        "location_type": v.location_type,
-                        "location_id": v.location_id,
-                        "message": v.message,
-                    }
-                    for v in post_det.violations
-                ],
-            }
-        return {"performed": False}
+        return build_post_validation_block(
+            post.post_determinism_validation,
+            strict_determinism=strict_determinism,
+        )
 
     @staticmethod
     def build_decision_meta(
@@ -255,16 +207,12 @@ class EngineGovernanceOrchestrator:
         post: PostGovernanceResult,
     ) -> Dict[str, Any]:
         """Build trace.meta['decision'] block."""
-        return {
-            "pre": {
-                "value": pre.pre_decision.decision.value,
-                "reason": pre.pre_decision.reason,
-            },
-            "post": {
-                "value": post.post_decision.decision.value,
-                "reason": post.post_decision.reason,
-            },
-        }
+        return build_decision_block(
+            pre_value=pre.pre_decision.decision.value,
+            pre_reason=pre.pre_decision.reason,
+            post_value=post.post_decision.decision.value,
+            post_reason=post.post_decision.reason,
+        )
 
     def build_legacy_validation_meta(
         self,
