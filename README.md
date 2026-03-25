@@ -110,16 +110,8 @@ This makes the system better suited to real workflows where small upstream chang
 
 ### Savefile
 
-A **`.nex` file** is Nexa’s primary runnable artifact.
-
-It is not just a graph definition. A `.nex` savefile can include:
-
-- the **circuit**
-- the current **state**
-- required **resources**
-- UI-related data needed to reproduce execution
-
-That makes a savefile closer to a reproducible execution package than a simple workflow description.
+A **`.nex` file** is Nexa’s runnable savefile artifact.
+It packages the **circuit**, **state**, **resources**, and **UI-related data** needed for reproducible execution.
 
 ---
 

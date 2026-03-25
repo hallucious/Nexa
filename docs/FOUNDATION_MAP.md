@@ -27,7 +27,7 @@ It serves two roles:
 | blueprint | docs/BLUEPRINT.md | Active | top-level project reference |
 | architecture_constitution | docs/ARCHITECTURE_CONSTITUTION.md | Active | highest architectural invariants |
 | execution_rules | docs/architecture/EXECUTION_RULES.md | Active | derived execution rules |
-| coding_plan | docs/CODING_PLAN.md | Active | implementation status and next steps |
+| tracker | docs/TRACKER.md | Active | implementation tracker, release snapshot, and next steps |
 | development | docs/DEVELOPMENT.md | Active | development workflow |
 
 ---

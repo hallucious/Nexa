@@ -1,12 +1,12 @@
 # Nexa CODING PLAN
 
-Version: 2.5.2
+Version: 2.5.3
 
 ---
 
 ## Completed Steps
 
-## Release Snapshot (bc980b3 baseline)
+## Release Snapshot (522bfa2 baseline)
 
 The current repository state includes the following implemented surface:
 
@@ -49,7 +49,7 @@ The current repository state includes the following implemented surface:
 ### 5. Current Public Baseline
 
 ```text
-966 passed, 3 skipped
+970 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness in the current baseline
@@ -60,6 +60,7 @@ The current repository state includes the following implemented surface:
 * canonical savefile test setup was partially centralized through shared helpers
 * legacy `.nex` writer semantics were clarified and separated from the canonical savefile writer
 * `nexa savefile new <output.nex>` now exposes canonical savefile creation through the CLI
+* `nexa savefile validate <file.nex>` now exposes canonical savefile validation through the CLI
 
 ---
 
@@ -189,7 +190,7 @@ CLI
 ### Current Status
 
 ```text
-966 passed, 3 skipped
+970 passed, 3 skipped
 ```
 
 ---
@@ -329,9 +330,17 @@ Goal:
 
 ---
 
+### Step205: CLI Surface for Canonical Savefile Validation
+
+* `nexa savefile validate <file.nex>` introduced
+* canonical `.nex` validation now exposed through the CLI
+* command uses loader + validator path and returns structured success / failure output
+
+---
+
 ## Next Steps
 
-### Step205: README / CLI Usage Expansion
+### Step206: README / CLI Usage Expansion
 
 Goal:
 
@@ -341,7 +350,7 @@ Goal:
 
 ---
 
-### Step206: CLI Regression Gating
+### Step207: CLI Regression Gating
 
 Goal:
 
@@ -349,7 +358,7 @@ Goal:
 
 ---
 
-### Step207: Configuration-Driven Policy
+### Step208: Configuration-Driven Policy
 
 Goal:
 
@@ -359,7 +368,7 @@ Goal:
 
 ---
 
-### Step206: Release Polish for the Official Demo
+### Step209: Release Polish for the Official Demo
 
 Goal:
 

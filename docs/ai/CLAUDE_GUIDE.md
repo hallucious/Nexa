@@ -86,7 +86,7 @@ utils/
 docs/
 
 BLUEPRINT.md
-CODING_PLAN.md
+TRACKER.md
 FOUNDATION_MAP.md
 architecture/
 strategy/
@@ -189,7 +189,7 @@ Never describe the system as a "prompt → provider → plugin pipeline".
 
 Relevant documents:
 docs/BLUEPRINT.md
-docs/CODING_PLAN.md
+docs/TRACKER.md
 docs/specs/*
 
 If a change affects system architecture, update documentation.

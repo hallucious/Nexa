@@ -160,8 +160,8 @@ docs/
 BLUEPRINT.md
 system architecture overview
 
-CODING_PLAN.md
-step-by-step implementation roadmap
+TRACKER.md
+implementation tracker and next-step plan
 
 specs/
 contract documentation

@@ -143,10 +143,10 @@ Role
 High-level architecture description.
 
 
-docs/CODING_PLAN.md
+docs/TRACKER.md
 
 Role
-Implementation roadmap with step numbers.
+Implementation tracker with baseline, completed steps, and next targets.
 
 
 docs/specs/

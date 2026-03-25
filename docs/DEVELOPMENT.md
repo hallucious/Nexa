@@ -5,7 +5,7 @@ Before modifying code, read:
 - `docs/BLUEPRINT.md`
 - `docs/architecture/ARCHITECTURE.md`
 - `docs/architecture/FOUNDATION_RULES.md`
-- `docs/CODING_PLAN.md`
+- `docs/TRACKER.md`
 
 ---
 
@@ -147,7 +147,7 @@ src/
 
 docs/
     BLUEPRINT.md            FOUNDATION_MAP.md
-    CODING_PLAN.md          CONTRIBUTING.md
+    TRACKER.md              CONTRIBUTING.md
     DEVELOPMENT.md          GLOSSARY.md  INDEX.md
     architecture/           strategy/           ai/
     specs/                  (all active specs)
