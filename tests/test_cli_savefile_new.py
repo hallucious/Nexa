@@ -17,6 +17,19 @@ def test_cli_parser_accepts_savefile_new_defaults():
     assert args.node_type == "plugin"
 
 
+
+
+def test_cli_parser_accepts_savefile_new_template_argument():
+    parser = build_parser()
+
+    args = parser.parse_args(["savefile", "new", "demo.nex", "--template", "ai"])
+
+    assert args.command == "savefile"
+    assert args.savefile_command == "new"
+    assert args.output == "demo.nex"
+    assert args.template == "ai"
+
+
 def test_savefile_new_command_writes_valid_plugin_savefile(tmp_path, monkeypatch, capsys):
     out_path = tmp_path / "demo.nex"
 
@@ -40,7 +53,7 @@ def test_savefile_new_command_writes_valid_plugin_savefile(tmp_path, monkeypatch
     assert savefile.ui.metadata["created_by"] == "nexa savefile new"
 
 
-def test_savefile_new_command_writes_valid_ai_savefile(tmp_path, monkeypatch):
+def test_savefile_new_command_writes_valid_ai_savefile_from_template(tmp_path, monkeypatch):
     out_path = tmp_path / "demo_ai.nex"
 
     monkeypatch.setattr(
@@ -50,7 +63,7 @@ def test_savefile_new_command_writes_valid_ai_savefile(tmp_path, monkeypatch):
             "savefile",
             "new",
             str(out_path),
-            "--node-type",
+            "--template",
             "ai",
             "--prompt-template",
             "Answer briefly.",
@@ -72,6 +85,35 @@ def test_savefile_new_command_writes_valid_ai_savefile(tmp_path, monkeypatch):
     assert node.resource_ref == {"prompt": "prompt.main", "provider": "provider.main"}
     assert savefile.resources.prompts["prompt.main"].template == "Answer briefly."
     assert savefile.resources.providers["provider.main"].model == "gpt-4o-mini"
+
+
+
+
+def test_savefile_new_template_takes_precedence_over_node_type(tmp_path, monkeypatch):
+    out_path = tmp_path / "demo_template_precedence.nex"
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "nexa",
+            "savefile",
+            "new",
+            str(out_path),
+            "--template",
+            "ai",
+            "--node-type",
+            "plugin",
+            "--prompt-template",
+            "Answer briefly.",
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    savefile = load_savefile_from_path(str(out_path))
+    assert savefile.circuit.nodes[0].type == "ai"
+    assert savefile.ui.metadata["template"] == "ai"
 
 
 def test_savefile_new_command_rejects_non_nex_output(tmp_path, monkeypatch, capsys):

@@ -259,10 +259,15 @@ def build_parser():
     savefile_new.add_argument("--description", help="Optional savefile description")
     savefile_new.add_argument("--entry", default="node1", help="Entry node id")
     savefile_new.add_argument(
+        "--template",
+        choices=["plugin", "ai"],
+        help="Named savefile template to create (preferred over manual node-type selection)",
+    )
+    savefile_new.add_argument(
         "--node-type",
         choices=["plugin", "ai"],
         default="plugin",
-        help="Template node type for the minimal savefile",
+        help="Template node type for the minimal savefile (legacy fallback; prefer --template)",
     )
     savefile_new.add_argument("--plugin-id", default="plugin.main", help="Plugin resource id for plugin template")
     savefile_new.add_argument(
@@ -573,7 +578,6 @@ def savefile_template_list_command(args) -> int:
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
 
-
 def _build_new_savefile(args):
     from src.contracts.savefile_factory import make_minimal_savefile
 
@@ -583,12 +587,14 @@ def _build_new_savefile(args):
 
     name = args.name or output_path.stem
 
+    template_name = args.template or args.node_type
+
     ui_metadata = {
         "created_by": "nexa savefile new",
-        "template": args.node_type,
+        "template": template_name,
     }
 
-    if args.node_type == "plugin":
+    if template_name == "plugin":
         return make_minimal_savefile(
             name=name,
             version=args.version,
@@ -1181,8 +1187,6 @@ def main():
             if getattr(args, "savefile_command", None) == "template":
                 if getattr(args, "savefile_template_command", None) == "list":
                     return savefile_template_list_command(args)
-                parser.print_help()
-                return 1
             parser.print_help()
             return 1
         except Exception as exc:
@@ -1192,7 +1196,6 @@ def main():
                 "message": str(exc),
                 "command": "savefile",
                 "subcommand": getattr(args, "savefile_command", None),
-                "template_subcommand": getattr(args, "savefile_template_command", None),
                 "output": getattr(args, "output", None),
                 "input": getattr(args, "input", None),
             }
