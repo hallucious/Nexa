@@ -292,6 +292,14 @@ def build_parser():
     savefile_info = savefile_sub.add_parser("info")
     savefile_info.add_argument("input", help="Path to input .nex savefile")
 
+    savefile_set_name = savefile_sub.add_parser("set-name")
+    savefile_set_name.add_argument("input", help="Path to input .nex savefile")
+    savefile_set_name.add_argument("--name", required=True, help="New savefile name")
+
+    savefile_set_entry = savefile_sub.add_parser("set-entry")
+    savefile_set_entry.add_argument("input", help="Path to input .nex savefile")
+    savefile_set_entry.add_argument("--entry", required=True, help="New entry node id")
+
     savefile_template = savefile_sub.add_parser("template")
     savefile_template_sub = savefile_template.add_subparsers(dest="savefile_template_command")
     savefile_template_sub.add_parser("list")
@@ -703,6 +711,58 @@ def savefile_info_command(args) -> int:
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
+
+
+def _load_editable_savefile(input_value: str):
+    from src.contracts.savefile_loader import load_savefile_from_path
+
+    input_path = Path(input_value)
+    if input_path.suffix != ".nex":
+        raise ValueError("savefile input must use .nex extension")
+
+    savefile = load_savefile_from_path(str(input_path))
+    return input_path, savefile
+
+
+def _persist_edited_savefile(savefile, input_path: Path) -> None:
+    from src.contracts.savefile_serializer import save_savefile_file
+    from src.contracts.savefile_validator import validate_savefile
+
+    validate_savefile(savefile)
+    save_savefile_file(savefile, str(input_path))
+
+
+
+def savefile_set_name_command(args) -> int:
+    input_path, savefile = _load_editable_savefile(args.input)
+    savefile.meta.name = args.name
+    _persist_edited_savefile(savefile, input_path)
+
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "name": savefile.meta.name,
+        "entry": savefile.circuit.entry,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+
+def savefile_set_entry_command(args) -> int:
+    input_path, savefile = _load_editable_savefile(args.input)
+    savefile.circuit.entry = args.entry
+    _persist_edited_savefile(savefile, input_path)
+
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "name": savefile.meta.name,
+        "entry": savefile.circuit.entry,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
 
 
 def _load_run_snapshot(path: str) -> dict:
@@ -1184,6 +1244,10 @@ def main():
                 return savefile_validate_command(args)
             if getattr(args, "savefile_command", None) == "info":
                 return savefile_info_command(args)
+            if getattr(args, "savefile_command", None) == "set-name":
+                return savefile_set_name_command(args)
+            if getattr(args, "savefile_command", None) == "set-entry":
+                return savefile_set_entry_command(args)
             if getattr(args, "savefile_command", None) == "template":
                 if getattr(args, "savefile_template_command", None) == "list":
                     return savefile_template_list_command(args)
