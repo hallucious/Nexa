@@ -10,7 +10,8 @@ from src.platform.prompt_loader import PromptLoaderError
 from src.platform.prompt_registry import PromptRegistry
 from src.platform.prompt_spec import PromptSpecError
 from src.platform.plugin_result import PluginResult, normalize_plugin_result
-from src.contracts.provider_contract import ProviderRequest, ProviderResult
+from src.contracts.provider_contract import ProviderRequest
+from src.providers.provider_contract import ProviderResult
 from src.engine.compiled_resource_graph import (
     CompiledResourceGraph,
     compile_execution_config_to_graph,
@@ -220,18 +221,35 @@ class NodeExecutionRuntime:
         result = self.provider_executor.execute(request)
         if not isinstance(result, ProviderResult):
             raise TypeError("ProviderExecutor must return ProviderResult")
-        if result.error is not None:
-            raise RuntimeError(result.error.message)
+        if not result.success:
+            raise RuntimeError(result.error or result.reason_code or "provider_error")
+
+        raw = dict(result.raw) if isinstance(result.raw, dict) else {}
+        output = raw.get("output")
+        if output is None:
+            output = result.text
 
         payload: Dict[str, Any] = {
-            "output": result.output,
-            "trace": result.trace,
-            "artifacts": list(result.artifacts),
+            "output": output,
+            "trace": dict(raw.get("trace", {})),
+            "artifacts": list(raw.get("artifacts", [])),
+            "text": result.text,
+            "success": result.success,
+            "metrics": {
+                "latency_ms": int(result.metrics.latency_ms),
+                "tokens_used": result.metrics.tokens_used,
+            },
         }
-        if result.output is None and isinstance(result.structured, dict):
-            payload.update(result.structured)
-        elif isinstance(result.structured, dict):
-            payload["structured"] = result.structured
+        if result.reason_code is not None:
+            payload["reason_code"] = result.reason_code
+        if result.error is not None:
+            payload["error"] = result.error
+
+        structured = raw.get("structured")
+        if output is None and isinstance(structured, dict):
+            payload.update(structured)
+        elif isinstance(structured, dict):
+            payload["structured"] = structured
         return payload
 
     def _resolve_prompt_spec(self, prompt_ref: str, prompt_version: Optional[str] = None):
