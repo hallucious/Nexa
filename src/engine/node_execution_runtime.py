@@ -6,6 +6,9 @@ from typing import Any, Dict, List, Optional, Tuple
 import json
 import time
 
+from src.platform.prompt_loader import PromptLoaderError
+from src.platform.prompt_registry import PromptRegistry
+from src.platform.prompt_spec import PromptSpecError
 from src.platform.plugin_result import PluginResult, normalize_plugin_result
 from src.contracts.provider_contract import ProviderRequest, ProviderResult
 from src.engine.compiled_resource_graph import (
@@ -82,10 +85,12 @@ class NodeExecutionRuntime:
         observability_file: str = "OBSERVABILITY.jsonl",
         plugin_registry: Optional[Dict[str, Any]] = None,
         event_emitter: Optional[ExecutionEventEmitter] = None,
+        prompt_registry: Optional[Any] = None,
     ):
         self.provider_executor = provider_executor
         self.observability_file = Path(observability_file)
         self.plugin_registry = plugin_registry or {}
+        self.prompt_registry = prompt_registry or PromptRegistry()
         self.metrics = RuntimeMetrics()
         self.event_emitter = event_emitter or ExecutionEventEmitter()
         self.execution_id: str = "runtime-default"
@@ -229,8 +234,37 @@ class NodeExecutionRuntime:
             payload["structured"] = result.structured
         return payload
 
-    def _render_prompt(self, prompt_ref: str, context: Dict[str, Any]) -> str:
-        return f"{prompt_ref}:{context}"
+    def _resolve_prompt_spec(self, prompt_ref: str, prompt_version: Optional[str] = None):
+        if prompt_version:
+            return self.prompt_registry.get(prompt_ref, prompt_version)
+        return self.prompt_registry.get(prompt_ref)
+
+    def _render_prompt(
+        self,
+        prompt_ref: str,
+        context: Dict[str, Any],
+        *,
+        prompt_version: Optional[str] = None,
+        prompt_inputs: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        try:
+            spec = self._resolve_prompt_spec(prompt_ref, prompt_version)
+        except (FileNotFoundError, RuntimeError) as exc:
+            # Backward compatibility for legacy prompt_ref-only execution configs.
+            # Modern prompt binding should fail hard when an explicit version is requested.
+            if prompt_version is not None:
+                raise ValueError(
+                    f"prompt resolution failed for '{prompt_ref}:{prompt_version}': {exc}"
+                ) from exc
+            return f"{prompt_ref}:{context}"
+        except PromptLoaderError as exc:
+            raise ValueError(f"prompt resolution failed for '{prompt_ref}': {exc}") from exc
+
+        render_inputs = prompt_inputs if prompt_inputs is not None else context
+        try:
+            return spec.render(render_inputs)
+        except PromptSpecError as exc:
+            raise ValueError(f"prompt render failed for '{prompt_ref}': {exc}") from exc
 
     def _run_validation(self, rule: str, context: Dict[str, Any]):
         if rule == "require_answer" and "answer" not in context:
@@ -380,6 +414,20 @@ class NodeExecutionRuntime:
             return {}
         return {name: flat_context.get(context_key) for name, context_key in inputs.items()}
 
+    def _resolve_prompt_inputs(
+        self,
+        prompt_config: Dict[str, Any],
+        flat_context: Dict[str, Any],
+        compat_context: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        input_mapping = prompt_config.get("inputs") or {}
+        if input_mapping:
+            return {
+                name: flat_context.get(context_key)
+                for name, context_key in input_mapping.items()
+            }
+        return compat_context
+
     def _validate_external_graph_inputs(self, graph: CompiledResourceGraph, flat_context: Dict[str, Any]) -> None:
         missing: List[str] = []
         for resource in graph.resources.values():
@@ -462,11 +510,22 @@ class NodeExecutionRuntime:
             prompt_ref = config.get("prompt_ref")
             if prompt_ref is None:
                 prompt_ref = prompt_cfg.get("prompt_id", "")
+            prompt_version = (
+                prompt_cfg.get("prompt_version")
+                or prompt_cfg.get("version")
+                or config.get("prompt_version")
+            )
             compat_context = self._build_compat_context(flat_context)
+            prompt_inputs = self._resolve_prompt_inputs(prompt_cfg, flat_context, compat_context)
 
             def render_stage():
                 trace.events.append("prompt_render")
-                rendered = self._render_prompt(str(prompt_ref or ""), compat_context)
+                rendered = self._render_prompt(
+                    str(prompt_ref or ""),
+                    compat_context,
+                    prompt_version=str(prompt_version) if prompt_version is not None else None,
+                    prompt_inputs=prompt_inputs,
+                )
                 write_key = next(iter(resource.writes))
                 flat_context[write_key] = rendered
                 return rendered
