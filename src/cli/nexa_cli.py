@@ -284,6 +284,9 @@ def build_parser():
     savefile_validate = savefile_sub.add_parser("validate")
     savefile_validate.add_argument("input", help="Path to input .nex savefile")
 
+    savefile_info = savefile_sub.add_parser("info")
+    savefile_info.add_argument("input", help="Path to input .nex savefile")
+
     task_parser = sub.add_parser("task")
     task_sub = task_parser.add_subparsers(dest="task_command")
 
@@ -609,6 +612,37 @@ def savefile_validate_command(args) -> int:
         "node_count": len(savefile.circuit.nodes),
         "warnings": warnings,
         "warning_count": len(warnings),
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+def savefile_info_command(args) -> int:
+    from src.contracts.savefile_loader import load_savefile_from_path
+
+    input_path = Path(args.input)
+    if input_path.suffix != ".nex":
+        raise ValueError("savefile input must use .nex extension")
+
+    savefile = load_savefile_from_path(str(input_path))
+
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "name": savefile.meta.name,
+        "version": savefile.meta.version,
+        "description": savefile.meta.description,
+        "entry": savefile.circuit.entry,
+        "node_count": len(savefile.circuit.nodes),
+        "edge_count": len(savefile.circuit.edges),
+        "prompt_count": len(savefile.resources.prompts),
+        "provider_count": len(savefile.resources.providers),
+        "plugin_count": len(savefile.resources.plugins),
+        "state_input_key_count": len(savefile.state.input),
+        "state_working_key_count": len(savefile.state.working),
+        "state_memory_key_count": len(savefile.state.memory),
+        "ui_layout_key_count": len(savefile.ui.layout),
+        "ui_metadata_key_count": len(savefile.ui.metadata),
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
@@ -1091,6 +1125,8 @@ def main():
                 return savefile_new_command(args)
             if getattr(args, "savefile_command", None) == "validate":
                 return savefile_validate_command(args)
+            if getattr(args, "savefile_command", None) == "info":
+                return savefile_info_command(args)
             parser.print_help()
             return 1
         except Exception as exc:
