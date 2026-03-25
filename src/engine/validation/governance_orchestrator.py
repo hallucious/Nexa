@@ -23,7 +23,7 @@ Design rules:
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from src.contracts.spec_versions import (
@@ -150,7 +150,6 @@ class EngineGovernanceOrchestrator:
         *,
         revision_id: str,
         strict_determinism: bool,
-        pre: PreGovernanceResult,
     ) -> PostGovernanceResult:
         """
         Run Phase 3 governance (post-execution, advisory in non-strict mode).

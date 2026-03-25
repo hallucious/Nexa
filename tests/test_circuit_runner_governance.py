@@ -309,18 +309,23 @@ def test_circuit_run_result_is_backward_compat_dict():
 
 # ── Engine.execute() delegation proof ─────────────────────────────────────────
 
-def test_engine_execute_uses_governance_orchestrator_not_inline():
+def test_engine_execute_delegates_to_orchestrator_not_inline():
     """
-    Engine.execute() must NOT instantiate ValidationEngine directly inline.
-    It now delegates to EngineGovernanceOrchestrator which handles that.
+    Engine.execute() must delegate governance to EngineGovernanceOrchestrator.
+
+    Proven by patching EngineGovernanceOrchestrator.run_pre: if Engine.execute()
+    delegates, it MUST call run_pre exactly once. If Engine owned governance inline
+    it would bypass run_pre entirely.
     """
-    from src.engine.validation.validator import ValidationEngine
-    original_init = ValidationEngine.__init__
-    calls = []
-    def tracking_init(self):
-        calls.append(1)
-        original_init(self)
-    ValidationEngine.__init__ = tracking_init
+    run_pre_calls = []
+    original_run_pre = EngineGovernanceOrchestrator.run_pre
+
+    def tracking_run_pre(self, engine_obj, *, revision_id, strict_determinism):
+        run_pre_calls.append({"revision_id": revision_id, "strict": strict_determinism})
+        return original_run_pre(self, engine_obj, revision_id=revision_id,
+                                strict_determinism=strict_determinism)
+
+    EngineGovernanceOrchestrator.run_pre = tracking_run_pre
     try:
         from src.engine.engine import Engine
         engine = Engine(
@@ -328,11 +333,12 @@ def test_engine_execute_uses_governance_orchestrator_not_inline():
             node_ids=["n1"],
             handlers={"n1": lambda s: {"ok": True}},
         )
-        engine.execute(revision_id="r1")
+        engine.execute(revision_id="r_delegate_proof")
     finally:
-        ValidationEngine.__init__ = original_init
-    # ValidationEngine is still instantiated (via orchestrator.run_pre/run_post)
-    # but via the orchestrator, not inline in Engine.execute()
-    # The count should be > 0 (orchestrator instantiates it per call)
-    # The key point: Engine.execute() doesn't own ValidationEngine instantiation anymore
-    assert len(calls) > 0, "ValidationEngine should be instantiated (by orchestrator)"
+        EngineGovernanceOrchestrator.run_pre = original_run_pre
+
+    assert len(run_pre_calls) == 1, (
+        f"run_pre called {len(run_pre_calls)} times — expected 1. "
+        "Engine must delegate governance rather than owning it inline."
+    )
+    assert run_pre_calls[0]["revision_id"] == "r_delegate_proof"

@@ -543,69 +543,6 @@ class Engine:
     # Validation lifecycle helpers
     # ------------------------------------------------------------------
 
-    @staticmethod
-    def _build_pre_validation_meta(structural_result, pre_det_result) -> Dict[str, Any]:
-        """Build trace.meta['pre_validation'] block."""
-        block: Dict[str, Any] = {
-            "structural": {
-                "performed": True,
-                "success": structural_result.success,
-                "violations": [
-                    {
-                        "rule_id": v.rule_id,
-                        "rule_name": v.rule_name,
-                        "severity": v.severity.value,
-                        "location_type": v.location_type,
-                        "location_id": v.location_id,
-                        "message": v.message,
-                    }
-                    for v in structural_result.violations
-                ],
-            },
-        }
-        if pre_det_result is not None:
-            block["determinism"] = {
-                "performed": True,
-                "strict_mode": True,
-                "success": pre_det_result.success,
-                "violations": [
-                    {
-                        "rule_id": v.rule_id,
-                        "rule_name": v.rule_name,
-                        "severity": v.severity.value,
-                        "location_type": v.location_type,
-                        "location_id": v.location_id,
-                        "message": v.message,
-                    }
-                    for v in pre_det_result.violations
-                ],
-            }
-        else:
-            block["determinism"] = {"performed": False}
-        return block
-
-    @staticmethod
-    def _build_post_validation_meta(post_det_result, strict_determinism: bool) -> Dict[str, Any]:
-        """Build trace.meta['post_validation'] block."""
-        if post_det_result is not None:
-            return {
-                "performed": True,
-                "strict_mode": strict_determinism,
-                "success": post_det_result.success,
-                "violations": [
-                    {
-                        "rule_id": v.rule_id,
-                        "rule_name": v.rule_name,
-                        "severity": v.severity.value,
-                        "location_type": v.location_type,
-                        "location_id": v.location_id,
-                        "message": v.message,
-                    }
-                    for v in post_det_result.violations
-                ],
-            }
-        return {"performed": False}
-
     # ------------------------------------------------------------------
     # Main execution entry point
     # ------------------------------------------------------------------
@@ -644,9 +581,6 @@ class Engine:
 
         execution_allowed = pre_gov.execution_allowed
         primary_validation = pre_gov.primary_validation
-        structural_validation = pre_gov.structural_validation
-        pre_determinism_validation = pre_gov.pre_determinism_validation
-        pre_decision = pre_gov.pre_decision
 
         # ── Phase 2: Execution ────────────────────────────────────────────────
         if self.graph_runtime is not None and execution_allowed:
@@ -732,10 +666,8 @@ class Engine:
             # ── Phase 3 + 4-decision: delegated to orchestrator ───────────────
             post_gov = _gov.run_post(
                 self, revision_id=revision_id,
-                strict_determinism=strict_determinism, pre=pre_gov
+                strict_determinism=strict_determinism,
             )
-            post_determinism_validation = post_gov.post_determinism_validation
-            post_decision = post_gov.post_decision
 
             # ── Phase 4: Trace finalization (artifact commit boundary) ─────────
             trace_meta = {
@@ -945,10 +877,8 @@ class Engine:
         # ── Phase 3 + 4-decision: delegated to orchestrator ─────────────────
         post_gov = _gov.run_post(
             self, revision_id=revision_id,
-            strict_determinism=strict_determinism, pre=pre_gov
+            strict_determinism=strict_determinism,
         )
-        post_determinism_validation = post_gov.post_determinism_validation
-        post_decision = post_gov.post_decision
 
         # ── Phase 4: Trace finalization (artifact commit boundary) ─────────────
         trace_meta = {
