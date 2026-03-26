@@ -210,6 +210,7 @@ CLI
 
 * `NodeExecutionRuntime` is the practical prompt execution caller
 * prompt resolution is handled through `PromptRegistry` / `PromptSpec`
+* `src/prompts/` is not part of the live runtime prompt path; only bounded legacy/test assets remain there
 
 #### Provider side
 
@@ -236,39 +237,16 @@ CLI
 
 ---
 
-### Step199: Prompt Path Convergence
-
-* determined that full prompt subsystem unification is not yet safe (src/prompts/* has active domain contracts)
-* performed **partial bounded convergence**:
-  * `test_step106` converted from accidental legacy fallback to explicit PromptRegistry fixture
-  * `test_step123_stages_basic` converted from accidental legacy fallback to explicit PromptRegistry fixture
-  * `test_step132` retained as intentional legacy compatibility contract
-  * `test_step199_prompt_path_convergence.py` created: 7 tests locking the boundary between modern path and bounded legacy fallback
-* legacy fallback in `NodeExecutionRuntime._render_prompt` re-commented with explicit boundary documentation
-* `docs/specs/execution_config_prompt_binding_contract.md` updated to v1.1.0 (Status: Active)
-
-#### Prompt subsystem boundary (post-Step199)
-
-* **Modern path (Path A)**: `NodeExecutionRuntime` + `src/platform/prompt_registry.py`
-  * hard fail on any resolution or render error
-* **Bounded legacy path (Path B)**: fallback to `"{prompt_ref}:{context}"` placeholder
-  * only triggered when prompt_version is absent AND registry cannot resolve prompt_ref
-  * deterministic, explicit, NOT silent
-* **Domain layer (src/prompts/*)**: owned by test_step79, test_prompt_registry_contract, test_step80
-  * mustache-style format with JSON Schema validation
-  * NOT used by NodeExecutionRuntime
-
----
-
 ### Current Status
 
 ```text
-1027 passed, 3 skipped
+1012 passed, 3 skipped
 ```
 
 ---
 
 ### Next Priority
 
-* full legacy Path B removal is a future task requiring migration of all symbolic prompt_ref usages to registry-backed specs
-* deletion candidates when safe: src/prompts/store.py, src/prompts/renderer.py
+* runtime-completion work should continue from the converged plugin baseline, not from deleted legacy paths
+* documentation is synchronized to the accepted runtime direction through this tracker update
+* future plugin work should target boundary clarification or deeper unification only when it can be done without reopening removed legacy paths

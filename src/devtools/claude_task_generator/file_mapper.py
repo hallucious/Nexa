@@ -22,7 +22,7 @@ _LAYER_PATHS = {
     "validation": "src/engine/validation",
     "contracts":  "src/contracts",
     "platform":   "src/platform",
-    "prompts":    "src/prompts",
+    "prompts":    "src/platform",
     "providers":  "src/providers",
     "circuit":    "src/circuit",
     "utils":      "src/utils",
