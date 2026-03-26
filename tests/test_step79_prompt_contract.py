@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.legacy_prompts.prompt_spec import PromptSpec
+from legacy_prompts.prompt_spec import PromptSpec
 
 
 def test_prompt_spec_hash_is_deterministic_and_prefixed():
