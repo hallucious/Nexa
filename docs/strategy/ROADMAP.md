@@ -25,7 +25,7 @@
 * CLI: run, compare, diff, export, replay, info, and task commands
 * Regression policy reason detail (trigger lines)
 
-Current baseline: 1020 passed, 3 skipped
+Current baseline: 1029 passed, 3 skipped
 
 ---
 
@@ -33,7 +33,9 @@ Current baseline: 1020 passed, 3 skipped
 
 * Official retained demo consolidated to `examples/real_ai_bug_autopsy_multinode/`
 * Provider environment guidance unified across OpenAI, Codex, Claude, Gemini, and Perplexity
-* Current repository baseline: 1020 passed, 3 skipped
+* Canonical public CLI clarified as `src.cli.nexa_cli:main`
+* Legacy Nex runtime / plugin compatibility isolated behind bounded wrapper modules
+* Current repository baseline: 1029 passed, 3 skipped
 
 ---
 

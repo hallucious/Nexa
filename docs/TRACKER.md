@@ -57,7 +57,7 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1020 passed, 3 skipped
+1029 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
@@ -231,7 +231,7 @@ CLI
 * execution contract / safe execution side:
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
-  * `src/engine/cli_legacy_nex_plugins.py`
+  * `src/engine/cli_legacy_nex_runtime.py`
   * `src/engine/cli_legacy_nex_plugins.py`
   * `src/contracts/savefile_executor_aligned.py`
 
@@ -240,13 +240,13 @@ CLI
 ### Current Status
 
 ```text
-1020 passed, 3 skipped
+1029 passed, 3 skipped
 ```
 
 ---
 
 ### Next Priority
 
-* runtime-completion work should continue from the converged plugin baseline, not from deleted legacy paths
-* documentation is synchronized to the accepted runtime direction through this tracker update
-* future plugin work should target boundary clarification or deeper unification only when it can be done without reopening removed legacy paths
+* bounded legacy Nex compatibility should be reduced from the isolated wrapper boundary, not reopened in canonical runtime files
+* the next audit target is the remaining `src/contracts/nex_*` compatibility cluster (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
+* future cleanup should remove or contract legacy surfaces only when compatibility coverage remains intact
