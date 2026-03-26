@@ -162,7 +162,7 @@ Used by: NodeExecutionRuntime
 PromptSpec format: format-string {var} with Python type schema
 PromptRegistry: loads from registry/prompts/{id}/vX.md with PROMPT_SPEC header
 
-### src/prompts/* — Domain-level legacy layer
+### legacy_prompts/* — Domain-level legacy/test layer
 
 Used by: test_step79, test_prompt_registry_contract, test_step80
 PromptSpec format: {{var}} mustache-style with JSON Schema validation
@@ -170,7 +170,7 @@ Contracts: prompt_hash, render(variables=...) API
 
 These two layers are NOT unified. The split is intentional and documented.
 New runtime-level features MUST use src/platform/prompt_*.py.
-The src/prompts/* layer is retained for its contracted domain-level behavior.
+The legacy_prompts/* layer is retained only for its bounded legacy/test contract behavior and is no longer part of `src/`.
 
 ---
 

@@ -25,7 +25,7 @@
 * CLI: run, compare, diff, export, replay, info, and task commands
 * Regression policy reason detail (trigger lines)
 
-Current baseline: 1012 passed, 3 skipped
+Current baseline: 1027 passed, 3 skipped
 
 ---
 
@@ -33,7 +33,7 @@ Current baseline: 1012 passed, 3 skipped
 
 * Official retained demo consolidated to `examples/real_ai_bug_autopsy_multinode/`
 * Provider environment guidance unified across OpenAI, Codex, Claude, Gemini, and Perplexity
-* Current repository baseline: 1012 passed, 3 skipped
+* Current repository baseline: 1027 passed, 3 skipped
 
 ---
 

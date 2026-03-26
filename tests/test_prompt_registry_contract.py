@@ -1,13 +1,13 @@
 import re
 from pathlib import Path
 
-from src.prompts.registry import PROMPT_REGISTRY
+from src.legacy_prompts.registry import PROMPT_REGISTRY
 
 _PLACEHOLDER = re.compile(r"{{\s*(\w+)\s*}}")
 
 
 def test_prompt_registry_contract_files_and_required_placeholders_exist():
-    base_dir = Path(__file__).resolve().parents[1] / "src" / "prompts"
+    base_dir = Path(__file__).resolve().parents[1] / "src" / "legacy_prompts"
 
     for prompt_id, spec in PROMPT_REGISTRY.items():
         file_name = spec["file"]

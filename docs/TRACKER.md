@@ -57,7 +57,7 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1012 passed, 3 skipped
+1027 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
@@ -210,7 +210,7 @@ CLI
 
 * `NodeExecutionRuntime` is the practical prompt execution caller
 * prompt resolution is handled through `PromptRegistry` / `PromptSpec`
-* `src/prompts/` is not part of the live runtime prompt path; only bounded legacy/test assets remain there
+* `legacy_prompts/` is not part of the live runtime prompt path; it now holds the bounded legacy/test prompt assets that were moved out of `src/`
 
 #### Provider side
 
@@ -240,7 +240,7 @@ CLI
 ### Current Status
 
 ```text
-1012 passed, 3 skipped
+1027 passed, 3 skipped
 ```
 
 ---

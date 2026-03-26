@@ -79,7 +79,7 @@ Active spec list: `docs/specs/_active_specs.yaml`
 
 - The repository keeps one official demo: `examples/real_ai_bug_autopsy_multinode/`
 - Provider environment guidance is implemented across OpenAI, Codex, Claude, Gemini, and Perplexity
-- Current verified baseline: `1012 passed, 3 skipped`
+- Current verified baseline: `1027 passed, 3 skipped`
 
 ---
 

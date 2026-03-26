@@ -1,5 +1,5 @@
-from src.prompts.prompt_spec import PromptSpec
-from src.prompts.prompt_registry import PromptRegistry
+from src.legacy_prompts.prompt_spec import PromptSpec
+from src.legacy_prompts.prompt_registry import PromptRegistry
 
 
 def _schema_str(var: str) -> dict:
