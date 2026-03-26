@@ -231,8 +231,8 @@ CLI
 * execution contract / safe execution side:
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
-  * `src/contracts/nex_plugin_resolver.py`
-  * `src/contracts/nex_plugin_integration.py`
+  * `src/engine/cli_legacy_nex_plugins.py`
+  * `src/engine/cli_legacy_nex_plugins.py`
   * `src/contracts/savefile_executor_aligned.py`
 
 ---

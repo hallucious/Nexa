@@ -1,6 +1,6 @@
 from pathlib import Path
 import json
-from src.contracts.nex_plugin_resolver import resolve_plugins
+from src.engine.cli_legacy_nex_plugins import resolve_plugins
 
 
 def test_plugin_resolution_with_metadata(tmp_path):

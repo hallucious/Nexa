@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -101,3 +100,18 @@ def resolve_plugins(plugin_refs, plugins_dir: Path) -> PluginResolutionResult:
         missing_optional=missing_optional,
         version_mismatch=version_mismatch,
     )
+
+
+def validate_plugins_from_nex(nex_data: dict, bundle_path: str):
+    plugin_refs = nex_data.get("plugin_refs", [])
+    plugins_dir = Path(bundle_path) / "plugins"
+
+    result = resolve_plugins(plugin_refs, plugins_dir)
+
+    if result.missing_required:
+        raise RuntimeError(f"Missing required plugins: {result.missing_required}")
+
+    if result.version_mismatch:
+        raise RuntimeError(f"Plugin version mismatch: {result.version_mismatch}")
+
+    return result
