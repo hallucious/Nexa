@@ -161,7 +161,7 @@ The plugin surface is currently split by role rather than duplicated legacy owne
 * execution contract / safe execution side:
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
-  * `src/engine/cli.py` (inline legacy `.nex` execution-only compatibility path)
+  * `src/engine/cli.py` (inline legacy `.nex` execution-only runtime path)
   * `src/contracts/savefile_executor_aligned.py`
 
 Current savefile plugin execution delegates entry-path execution to
@@ -425,3 +425,6 @@ Representation {
 
 ---
 
+
+
+* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only the execution path

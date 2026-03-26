@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from src.cli.savefile_runtime import execute_savefile_summary, is_savefile_contract
+from src.platform.external_loader import validate_legacy_nex_plugins
 from src.contracts.regression_reason_codes import (
     NODE_REMOVED_SUCCESS,
     NODE_SUCCESS_TO_FAILURE,
@@ -40,14 +41,6 @@ _NEX_META_KEY = "_nex_adapter"
 ApplyBaselinePolicy = Callable[[Dict[str, Any], Optional[str], Optional[str]], tuple[Dict[str, Any], int]]
 WritePayload = Callable[[Dict[str, Any], Optional[str]], None]
 RunSavefile = Callable[[str, Optional[str], Optional[str], Optional[str]], int]
-
-
-@dataclass
-class _LegacyPluginResolutionResult:
-    found: List[str]
-    missing_required: List[str]
-    missing_optional: List[str]
-    version_mismatch: List[str]
 
 
 @dataclass
@@ -200,95 +193,6 @@ def _parse_node_ids(node_ids_csv: Optional[str]) -> Optional[List[str]]:
     items = [s.strip() for s in node_ids_csv.split(",")]
     items = [s for s in items if s]
     return items or None
-
-
-def _load_legacy_plugin_metadata(plugin_dir: Path) -> Optional[Dict[str, Any]]:
-    meta_file = plugin_dir / "plugin.json"
-    if not meta_file.exists():
-        return None
-
-    data = json.loads(meta_file.read_text(encoding="utf-8"))
-    required_fields = ["plugin_id", "version", "entrypoint", "type"]
-    for field_name in required_fields:
-        if field_name not in data:
-            raise RuntimeError(f"Missing field '{field_name}' in {meta_file}")
-
-    if data["plugin_id"] != plugin_dir.name:
-        raise RuntimeError(f"plugin_id mismatch: {data['plugin_id']} != {plugin_dir.name}")
-
-    return data
-
-
-def _scan_legacy_plugins_dir(plugins_dir: Path) -> Dict[str, Dict[str, Any]]:
-    if not plugins_dir.exists():
-        return {}
-
-    result: Dict[str, Dict[str, Any]] = {}
-    for plugin_dir in plugins_dir.iterdir():
-        if not plugin_dir.is_dir():
-            continue
-
-        metadata = _load_legacy_plugin_metadata(plugin_dir)
-        if metadata is None:
-            metadata = {
-                "plugin_id": plugin_dir.name,
-                "version": None,
-                "entrypoint": None,
-                "type": "legacy",
-            }
-
-        result[plugin_dir.name] = metadata
-
-    return result
-
-
-def _resolve_legacy_plugins(
-    plugin_refs: List[Dict[str, Any]],
-    plugins_dir: Path,
-) -> _LegacyPluginResolutionResult:
-    available = _scan_legacy_plugins_dir(plugins_dir)
-
-    found: List[str] = []
-    missing_required: List[str] = []
-    missing_optional: List[str] = []
-    version_mismatch: List[str] = []
-
-    for ref in plugin_refs:
-        plugin_id = ref.get("plugin_id")
-        required = ref.get("required", True)
-        expected_version = ref.get("version")
-
-        if plugin_id not in available:
-            if required:
-                missing_required.append(plugin_id)
-            else:
-                missing_optional.append(plugin_id)
-            continue
-
-        actual_version = available[plugin_id].get("version")
-        if expected_version and actual_version is not None and expected_version != actual_version:
-            version_mismatch.append(f"{plugin_id}:{expected_version}!={actual_version}")
-            continue
-
-        found.append(plugin_id)
-
-    return _LegacyPluginResolutionResult(
-        found=found,
-        missing_required=missing_required,
-        missing_optional=missing_optional,
-        version_mismatch=version_mismatch,
-    )
-
-
-def _validate_plugins_from_nex(nex_data: Dict[str, Any], bundle_path: str) -> None:
-    plugin_refs = nex_data.get("plugins")
-    if not isinstance(plugin_refs, list):
-        plugin_refs = nex_data.get("plugin_refs", [])
-    result = _resolve_legacy_plugins(plugin_refs, Path(bundle_path) / "plugins")
-    if result.missing_required:
-        raise RuntimeError(f"Missing required plugins: {result.missing_required}")
-    if result.version_mismatch:
-        raise RuntimeError(f"Plugin version mismatch: {result.version_mismatch}")
 
 
 def _validate_legacy_nex(circuit: _LegacyNexCircuit) -> None:
@@ -487,7 +391,7 @@ def _run_legacy_nex(
 ) -> int:
     if bundle_path:
         raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
-        _validate_plugins_from_nex(raw_data, bundle_path)
+        validate_legacy_nex_plugins(raw_data, bundle_path)
 
     circuit = _load_legacy_nex_file(circuit_path)
     engine = _build_engine_from_legacy_nex(circuit)
@@ -522,7 +426,7 @@ def _run_legacy_nex_bundle(
             raise RuntimeError("plugins/ missing in bundle")
 
         raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
-        _validate_plugins_from_nex(raw_data, str(bundle.temp_dir))
+        validate_legacy_nex_plugins(raw_data, str(bundle.temp_dir))
 
         circuit = _load_legacy_nex_file(str(bundle.circuit_path))
         engine = _build_engine_from_legacy_nex(circuit)

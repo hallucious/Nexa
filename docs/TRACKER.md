@@ -235,7 +235,7 @@ CLI
 * execution contract / safe execution side:
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
-  * `src/engine/cli.py` (inline legacy `.nex` execution-only compatibility path)
+  * `src/engine/cli.py` (inline legacy `.nex` execution-only runtime path)
   * `src/contracts/savefile_executor_aligned.py`
 
 ---
@@ -253,3 +253,6 @@ CLI
 * runtime-completion work should continue from the converged plugin baseline, not from deleted legacy paths
 * documentation is synchronized to the accepted runtime direction through this tracker update
 * future plugin work should target boundary clarification or deeper unification only when it can be done without reopening removed legacy paths
+
+
+* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only the execution path
