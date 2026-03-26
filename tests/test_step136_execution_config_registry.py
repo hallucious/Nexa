@@ -1,8 +1,8 @@
-from src.config.execution_config_registry import ExecutionConfigRegistry
+from src.platform.execution_config_registry import AdhocExecutionConfigRegistry
 
 
 def test_step136_execution_config_registry_basic():
-    registry = ExecutionConfigRegistry()
+    registry = AdhocExecutionConfigRegistry()
 
     config = {
         "config_id": "qa.answer",
@@ -18,7 +18,7 @@ def test_step136_execution_config_registry_basic():
 
 
 def test_step136_registry_duplicate_error():
-    registry = ExecutionConfigRegistry()
+    registry = AdhocExecutionConfigRegistry()
 
     config = {"config_id": "qa.answer"}
 

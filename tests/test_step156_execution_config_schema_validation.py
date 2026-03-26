@@ -2,8 +2,8 @@
 import pytest
 import yaml
 
-from src.config.execution_config_loader import load_execution_configs
-from src.config.execution_config_schema_validator import (
+from src.platform.execution_config_registry import load_execution_configs
+from src.platform.execution_config_registry import (
     ExecutionConfigSchemaValidationError,
     ExecutionConfigSchemaValidator,
 )

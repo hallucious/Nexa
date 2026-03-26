@@ -1,5 +1,5 @@
 from src.circuit.circuit_runner import CircuitRunner
-from src.config.execution_config_registry import ExecutionConfigRegistry
+from src.platform.execution_config_registry import AdhocExecutionConfigRegistry
 
 
 class DummyRuntime:
@@ -12,7 +12,7 @@ class DummyRuntime:
 
 def test_step137_circuit_runtime_bridge():
 
-    registry = ExecutionConfigRegistry()
+    registry = AdhocExecutionConfigRegistry()
 
     registry.register({
         "config_id": "qa.answer"

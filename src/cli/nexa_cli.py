@@ -1008,7 +1008,7 @@ def run_command(args):
     if _is_savefile_contract(args.circuit):
         return _run_savefile_command(args)
 
-    from src.config.execution_config_loader import load_execution_configs
+    from src.platform.execution_config_registry import load_execution_configs
     from src.contracts.provider_contract import ProviderRequest, ProviderResult
     from src.circuit.circuit_io import load_circuit
     from src.engine.node_execution_runtime import NodeExecutionRuntime

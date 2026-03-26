@@ -1,4 +1,4 @@
-from src.config.execution_config_loader import load_execution_configs
+from src.platform.execution_config_registry import load_execution_configs
 
 
 def test_execution_config_loader(tmp_path):
