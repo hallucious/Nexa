@@ -86,7 +86,6 @@ This registry remains the source for explicit `(plugin_id, plugin_version)` reso
 
 ## Bundle / savefile compatibility side
 
-* `src/engine/cli_legacy_nex_plugins.py`
 * `src/contracts/savefile_executor_aligned.py`
 
 Savefile execution delegates entry-path plugin execution into

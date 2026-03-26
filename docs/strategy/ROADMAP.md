@@ -34,7 +34,7 @@ Current baseline: 1029 passed, 3 skipped
 * Official retained demo consolidated to `examples/real_ai_bug_autopsy_multinode/`
 * Provider environment guidance unified across OpenAI, Codex, Claude, Gemini, and Perplexity
 * Canonical public CLI clarified as `src.cli.nexa_cli:main`
-* Legacy Nex runtime / plugin compatibility isolated behind bounded wrapper modules
+* Legacy Nex compatibility isolated inside a single bounded runtime wrapper module
 * Current repository baseline: 1029 passed, 3 skipped
 
 ---

@@ -9,11 +9,112 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from src.cli.savefile_runtime import is_savefile_contract
-from src.engine.cli_legacy_nex_plugins import validate_plugins_from_nex
 from src.engine.engine import Engine, RetryConfig as EngineRetryConfig
 from src.engine.model import Channel, FlowRule as EngineFlowRule
 from src.engine.types import FlowPolicy, NodeFailurePolicy, NodeStatus
 
+
+
+@dataclass
+class PluginResolutionResult:
+    found: List[str]
+    missing_required: List[str]
+    missing_optional: List[str]
+    version_mismatch: List[str]
+
+
+def _load_plugin_metadata(plugin_dir: Path) -> Optional[Dict[str, Any]]:
+    """Best-effort metadata loader for legacy .nex plugin bundles."""
+    meta_file = plugin_dir / "plugin.json"
+    if not meta_file.exists():
+        return None
+
+    data = json.loads(meta_file.read_text(encoding="utf-8"))
+
+    required_fields = ["plugin_id", "version", "entrypoint", "type"]
+    for field_name in required_fields:
+        if field_name not in data:
+            raise RuntimeError(f"Missing field '{field_name}' in {meta_file}")
+
+    if data["plugin_id"] != plugin_dir.name:
+        raise RuntimeError(
+            f"plugin_id mismatch: {data['plugin_id']} != {plugin_dir.name}"
+        )
+
+    return data
+
+
+def scan_plugins_dir(plugins_dir: Path) -> Dict[str, Dict[str, Any]]:
+    if not plugins_dir.exists():
+        return {}
+
+    result: Dict[str, Dict[str, Any]] = {}
+    for plugin_dir in plugins_dir.iterdir():
+        if not plugin_dir.is_dir():
+            continue
+
+        metadata = _load_plugin_metadata(plugin_dir)
+        if metadata is None:
+            metadata = {
+                "plugin_id": plugin_dir.name,
+                "version": None,
+                "entrypoint": None,
+                "type": "legacy",
+            }
+
+        result[plugin_dir.name] = metadata
+
+    return result
+
+
+def resolve_plugins(plugin_refs, plugins_dir: Path) -> PluginResolutionResult:
+    available = scan_plugins_dir(plugins_dir)
+
+    found: List[str] = []
+    missing_required: List[str] = []
+    missing_optional: List[str] = []
+    version_mismatch: List[str] = []
+
+    for ref in plugin_refs:
+        plugin_id = ref.get("plugin_id")
+        required = ref.get("required", True)
+        expected_version = ref.get("version")
+
+        if plugin_id not in available:
+            if required:
+                missing_required.append(plugin_id)
+            else:
+                missing_optional.append(plugin_id)
+            continue
+
+        actual_version = available[plugin_id].get("version")
+        if expected_version and actual_version is not None and expected_version != actual_version:
+            version_mismatch.append(f"{plugin_id}:{expected_version}!={actual_version}")
+            continue
+
+        found.append(plugin_id)
+
+    return PluginResolutionResult(
+        found=found,
+        missing_required=missing_required,
+        missing_optional=missing_optional,
+        version_mismatch=version_mismatch,
+    )
+
+
+def validate_plugins_from_nex(nex_data: dict, bundle_path: str) -> PluginResolutionResult:
+    plugin_refs = nex_data.get("plugin_refs", [])
+    plugins_dir = Path(bundle_path) / "plugins"
+
+    result = resolve_plugins(plugin_refs, plugins_dir)
+
+    if result.missing_required:
+        raise RuntimeError(f"Missing required plugins: {result.missing_required}")
+
+    if result.version_mismatch:
+        raise RuntimeError(f"Plugin version mismatch: {result.version_mismatch}")
+
+    return result
 
 
 @dataclass

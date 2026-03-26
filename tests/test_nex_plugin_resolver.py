@@ -1,5 +1,5 @@
 from pathlib import Path
-from src.engine.cli_legacy_nex_plugins import resolve_plugins
+from src.engine.cli_legacy_nex_runtime import resolve_plugins
 
 
 def test_plugin_resolution(tmp_path):

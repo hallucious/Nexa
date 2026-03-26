@@ -235,7 +235,6 @@ CLI
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
   * `src/engine/cli_legacy_nex_runtime.py`
-  * `src/engine/cli_legacy_nex_plugins.py`
   * `src/contracts/savefile_executor_aligned.py`
 
 ---
