@@ -112,7 +112,7 @@ pytest -q
 Current verified baseline:
 
 ```text
-1027 passed, 3 skipped
+1020 passed, 3 skipped
 ```
 
 All tests must pass. Never ignore failures.
@@ -141,21 +141,18 @@ Contract tests are critical because they enforce doc/code/architecture alignment
 src/
     artifacts/      engine/         platform/
     circuit/        models/         policy/
-    cli/            prompts/        providers/
-    config/         utils/
-    contracts/
+    cli/            providers/
+    config/         utils/          contracts/
 
 docs/
     BLUEPRINT.md            FOUNDATION_MAP.md
     TRACKER.md              CONTRIBUTING.md
     DEVELOPMENT.md          GLOSSARY.md  INDEX.md
     architecture/           strategy/           ai/
-    specs/                  (all active specs)
-
-tests/
-examples/
-scripts/    tools/
 ```
+
+The legacy prompt contract package has been fully removed. Prompt execution is now documented and implemented on the canonical `src/platform/prompt_*` path.
+
 
 ---
 

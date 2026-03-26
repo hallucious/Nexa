@@ -57,7 +57,7 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1027 passed, 3 skipped
+1020 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
@@ -240,7 +240,7 @@ CLI
 ### Current Status
 
 ```text
-1027 passed, 3 skipped
+1020 passed, 3 skipped
 ```
 
 ---
