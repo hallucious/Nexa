@@ -38,6 +38,8 @@ The current repository state includes the following implemented surface:
 * legacy plugin registry shell removal
 * savefile-aligned plugin execution convergence onto the auto-loader bridge
 * savefile executor plugin-node path validated by regression coverage
+* legacy `.nex` runtime concentration into `src/engine/cli_legacy_nex_runtime.py`
+* deletion of legacy nex contract leaves (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
 
 ### 4. Diff / Replay / Audit Tooling
 
@@ -247,6 +249,6 @@ CLI
 
 ### Next Priority
 
-* bounded legacy Nex compatibility should be reduced from the isolated wrapper boundary, not reopened in canonical runtime files
-* the next audit target is the remaining `src/contracts/nex_*` compatibility cluster (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
-* future cleanup should remove or contract legacy surfaces only when compatibility coverage remains intact
+* runtime-completion work should continue from the converged plugin baseline, not from deleted legacy paths
+* documentation is synchronized to the accepted runtime direction through this tracker update
+* future plugin work should target boundary clarification or deeper unification only when it can be done without reopening removed legacy paths

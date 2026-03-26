@@ -161,7 +161,7 @@ The plugin surface is currently split by role rather than duplicated legacy owne
 * execution contract / safe execution side:
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
-  * `src/engine/cli_legacy_nex_plugins.py`
+  * `src/engine/cli_legacy_nex_runtime.py`
   * `src/engine/cli_legacy_nex_plugins.py`
   * `src/contracts/savefile_executor_aligned.py`
 
@@ -175,6 +175,15 @@ Removed legacy ownership paths:
 * `src/platform/plugin_registry.py`
 
 This means new runtime work MUST build from the converged files above rather than recreating the deleted legacy paths.
+
+Legacy `.nex` compatibility runtime concentration:
+
+* `.nex` load / adapt / bundle handling is now concentrated in `src/engine/cli_legacy_nex_runtime.py`
+* deleted legacy contract leaves:
+  * `src/contracts/nex_loader.py`
+  * `src/contracts/nex_engine_adapter.py`
+  * `src/contracts/nex_bundle_loader.py`
+
 
 ---
 

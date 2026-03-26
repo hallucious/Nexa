@@ -17,3 +17,6 @@ def test_legacy_nex_runtime_uses_compat_plugin_module():
     source = Path("src/engine/cli_legacy_nex_runtime.py").read_text(encoding="utf-8")
     assert "from src.engine.cli_legacy_nex_plugins import" in source
     assert "from src.contracts.nex_plugin_integration import" not in source
+    assert "from src.contracts.nex_loader import" not in source
+    assert "from src.contracts.nex_engine_adapter import" not in source
+    assert "from src.contracts.nex_bundle_loader import" not in source
