@@ -1,5 +1,5 @@
 Spec ID: execution_config_prompt_binding_contract
-Version: 1.1.0
+Version: 1.2.0
 Status: Active
 Category: misc
 Depends On:
@@ -107,6 +107,15 @@ Rules:
 - Path B is retained only for symbolic prompt_ref values in legacy and test configs
 - Path B is NOT triggered when prompt_version is set (that always hard-fails)
 
+Current remaining Path B callers (as of v1.2.0):
+- test_step199 legacy fallback boundary tests — intentional documentation of the Path B contract
+  (test_step199_legacy_fallback_triggers_only_when_no_version_and_no_registry_entry,
+   test_step199_legacy_fallback_is_deterministic)
+
+Previously migrated to Path A (v1.2.0):
+- test_step132_runtime_keeps_existing_prompt_provider_contract_under_compiled_graph
+  (now uses registry-backed "prompt.basic" spec with explicit prompt_version: "v1")
+
 ---
 
 ## Runtime Resolution Algorithm
@@ -164,6 +173,8 @@ PromptRegistry: loads from registry/prompts/{id}/vX.md with PROMPT_SPEC header
 
 There is no standalone legacy prompt package in the repository anymore.
 Bounded legacy compatibility survives only as runtime behavior inside `NodeExecutionRuntime` Path B resolution for symbolic `prompt_ref` values without a registry entry.
+The Path B surface has been narrowed: as of v1.2.0, `test_step132` was migrated to Path A.
+The only remaining intentional Path B callers are the boundary-documentation tests in `test_step199`.
 New prompt features and contracts MUST use `src/platform/prompt_*.py`.
 
 ---

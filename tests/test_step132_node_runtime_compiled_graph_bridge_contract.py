@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from src.engine.node_execution_runtime import NodeExecutionRuntime
+from src.platform.prompt_registry import PromptRegistry
 from src.platform.provider_registry import ProviderRegistry
 from src.platform.provider_executor import ProviderExecutor
 from src.platform.plugin_result import PluginResult
@@ -14,6 +17,18 @@ class RecordingProvider:
             "output": f"provider:{request.prompt}",
             "trace": {"provider": "recording"},
         }
+
+
+def _stub_prompt_registry(tmp_path: Path, prompt_id: str, template: str = "stub prompt") -> PromptRegistry:
+    """Create a PromptRegistry backed by a minimal stub prompt spec."""
+    prompt_dir = tmp_path / "prompts" / prompt_id
+    prompt_dir.mkdir(parents=True)
+    (prompt_dir / "v1.md").write_text(
+        '<!--PROMPT_SPEC: {"id":"' + prompt_id + '/v1","version":"v1","inputs_schema":{}}-->\n'
+        + template,
+        encoding="utf-8",
+    )
+    return PromptRegistry(root=str(tmp_path / "prompts"))
 
 
 def test_step132_runtime_executes_compiled_graph_with_reverse_plugin_to_provider_dependency(tmp_path):
@@ -56,22 +71,32 @@ def test_step132_runtime_executes_compiled_graph_with_reverse_plugin_to_provider
 
 
 def test_step132_runtime_keeps_existing_prompt_provider_contract_under_compiled_graph(tmp_path):
+    """Verify that the compiled graph correctly routes prompt → provider output.
+
+    Migrated from Path B (legacy symbolic prompt_ref) to Path A (registry-backed prompt spec).
+    The core contract being tested is that compiled graph routing works correctly:
+    a rendered prompt is passed to the provider and surfaced via output_mapping.
+    """
     provider = RecordingProvider()
-    registry = ProviderRegistry()
-    registry.register("fake", provider)
+    provider_registry = ProviderRegistry()
+    provider_registry.register("fake", provider)
+    prompt_registry = _stub_prompt_registry(tmp_path, "prompt.basic", template="basic stub prompt")
     runtime = NodeExecutionRuntime(
-        provider_executor=ProviderExecutor(registry),
+        provider_executor=ProviderExecutor(provider_registry),
+        prompt_registry=prompt_registry,
         observability_file=str(tmp_path / "obs.jsonl"),
     )
 
     config = {
         "config_id": "ec_existing",
         "prompt_ref": "prompt.basic",
+        "prompt_version": "v1",
         "provider_ref": "fake",
         "output_mapping": {"answer": "provider.fake.output"},
     }
 
     result = runtime.execute(config, {"question": "test"})
 
-    assert result.output["answer"].startswith("provider:prompt.basic:")
+    assert result.output["answer"] == "provider:basic stub prompt"
+    assert provider.requests[0].prompt == "basic stub prompt"
     assert result.trace.provider_trace["provider"] == "recording"
