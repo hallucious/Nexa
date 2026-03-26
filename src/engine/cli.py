@@ -1,3 +1,11 @@
+"""Compatibility wrapper for the legacy engine CLI surface.
+
+The canonical public CLI entrypoint is ``src.cli.nexa_cli:main`` as exposed
+through ``pyproject.toml`` and ``nexa.py``. This module remains only as a
+bounded compatibility surface for engine-specific tests and old callers that
+still import ``src.engine.cli`` directly.
+"""
+
 from __future__ import annotations
 
 import argparse
@@ -26,11 +34,14 @@ from src.engine.execution_regression_policy import (
 )
 from src.engine.types import NodeStatus
 
+CANONICAL_PUBLIC_CLI = "src.cli.nexa_cli:main"
+
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hai-engine",
-        description="Hyper-AI Engine CLI (Engine-native execution)",
+        description="Hyper-AI Engine CLI compatibility wrapper",
     )
 
     subparsers = parser.add_subparsers(dest="command")
