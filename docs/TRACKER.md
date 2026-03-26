@@ -210,7 +210,7 @@ CLI
 
 * `NodeExecutionRuntime` is the practical prompt execution caller
 * prompt resolution is handled through `PromptRegistry` / `PromptSpec`
-* `legacy_prompts/` is not part of the live runtime prompt path; it now holds the bounded legacy/test prompt assets that were moved out of `src/`
+* No standalone legacy prompt package remains in the repository; the canonical runtime prompt path is the `src/platform/prompt_*` line.
 
 #### Provider side
 

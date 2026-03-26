@@ -1,3 +1,0 @@
-Final review: summarize run status and baseline recommendation.
-decision={{decision}}
-baseline_present={{baseline_present}}

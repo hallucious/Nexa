@@ -138,7 +138,7 @@ The current runtime line is intentionally concentrated into a smaller set of pra
 
 * `src.engine.node_execution_runtime.NodeExecutionRuntime` is the practical prompt execution caller
 * prompt resolution is handled through `src.platform.prompt_registry.PromptRegistry` and PromptSpec loading
-* `legacy_prompts/` is not part of the live runtime prompt path; it now holds the bounded legacy/test prompt assets that were moved out of `src/`
+* No standalone legacy prompt package remains in the repository; the canonical runtime prompt path is the `src/platform/prompt_*` line.
 
 ### Provider side
 
