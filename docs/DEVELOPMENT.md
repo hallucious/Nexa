@@ -112,7 +112,7 @@ pytest -q
 Current verified baseline:
 
 ```text
-1026 passed, 3 skipped
+1022 passed, 3 skipped
 ```
 
 All tests must pass. Never ignore failures.

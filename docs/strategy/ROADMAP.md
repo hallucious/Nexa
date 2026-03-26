@@ -25,7 +25,7 @@
 * CLI: run, compare, diff, export, replay, info, and task commands
 * Regression policy reason detail (trigger lines)
 
-Current baseline: 1026 passed, 3 skipped
+Current baseline: 1022 passed, 3 skipped
 
 ---
 
@@ -36,7 +36,7 @@ Current baseline: 1026 passed, 3 skipped
 * Canonical public CLI clarified as `src.cli.nexa_cli:main`
 * Legacy Nex compatibility isolated inside a single bounded runtime wrapper module
 * Legacy `.nex` reverse-conversion / writer support removed; compatibility is execution-only
-* Current repository baseline: 1026 passed, 3 skipped
+* Current repository baseline: 1022 passed, 3 skipped
 
 ---
 

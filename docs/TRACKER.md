@@ -38,7 +38,7 @@ The current repository state includes the following implemented surface:
 * legacy plugin registry shell removal
 * savefile-aligned plugin execution convergence onto the auto-loader bridge
 * savefile executor plugin-node path validated by regression coverage
-* legacy `.nex` runtime concentration into `src/engine/cli_legacy_nex_runtime.py`
+* legacy `.nex` runtime concentration inline into `src/engine/cli.py`
 * deletion of legacy nex contract leaves (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
 * deletion of remaining legacy nex contract support files (`nex_format`, `nex_serializer`, `nex_validator`)
 * deletion of legacy `.nex` reverse-conversion / writer surface (`build_nex_from_engine`, `serialize_nex`, `save_nex_file`)
@@ -61,7 +61,7 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1026 passed, 3 skipped
+1022 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
@@ -235,7 +235,7 @@ CLI
 * execution contract / safe execution side:
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
-  * `src/engine/cli_legacy_nex_runtime.py`
+  * `src/engine/cli.py` (inline legacy `.nex` execution-only compatibility path)
   * `src/contracts/savefile_executor_aligned.py`
 
 ---
@@ -243,7 +243,7 @@ CLI
 ### Current Status
 
 ```text
-1026 passed, 3 skipped
+1022 passed, 3 skipped
 ```
 
 ---
