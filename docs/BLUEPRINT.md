@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.10.0
+Version: 1.11.0
 
 ────────────────
 Architecture Constitution
@@ -178,6 +178,7 @@ This means new runtime work MUST build from the converged files above rather tha
 Legacy `.nex` compatibility runtime concentration:
 
 * `.nex` load / adapt / bundle handling is now concentrated in `src/engine/cli_legacy_nex_runtime.py`
+* legacy `.nex` support is execution-only; reverse conversion / writer / roundtrip preservation are no longer part of the supported runtime surface
 * deleted legacy contract leaves:
   * `src/contracts/nex_loader.py`
   * `src/contracts/nex_engine_adapter.py`

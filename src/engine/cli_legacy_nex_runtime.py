@@ -240,19 +240,6 @@ def validate_nex(circuit: NexCircuit) -> List[str]:
     return warnings
 
 
-def serialize_nex(circuit: NexCircuit) -> Dict[str, Any]:
-    return asdict(circuit)
-
-
-def save_nex_file(circuit: NexCircuit, file_path: str) -> None:
-    path = Path(file_path)
-    if path.suffix != ".nex":
-        raise ValueError("legacy NexCircuit files must use .nex extension")
-
-    data = serialize_nex(circuit)
-
-    with path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 ApplyBaselinePolicy = Callable[[Dict[str, Any], Optional[str], Optional[str]], tuple[Dict[str, Any], int]]
@@ -357,7 +344,7 @@ def build_engine_from_nex(circuit: NexCircuit) -> Engine:
 
     This adapter intentionally reconstructs only the structural/runtime state that
     the current Engine datamodel can represent. Prompt/provider/plugin resources
-    are preserved in engine.meta for reverse conversion.
+    are preserved in engine.meta for bounded legacy execution.
     """
     validate_nex(circuit)
 
@@ -401,92 +388,7 @@ def build_engine_from_nex(circuit: NexCircuit) -> Engine:
     )
 
 
-def build_nex_from_engine(engine: Engine) -> NexCircuit:
-    """Convert Engine back into NexCircuit.
 
-    If the Engine originated from a NexCircuit, rich metadata is restored from
-    engine.meta[_NEX_META_KEY]. Otherwise, sane defaults are used.
-    """
-    adapter_meta: Dict[str, Any] = dict(engine.meta.get(_NEX_META_KEY, {}))
-
-    format_meta = adapter_meta.get("format", {"kind": "nexa.circuit", "version": "1.0.0"})
-    circuit_meta = adapter_meta.get("circuit", {})
-    node_specs_map = adapter_meta.get("node_specs", {})
-    resources_raw = adapter_meta.get("resources", {})
-    plugins_raw = adapter_meta.get("plugins", [])
-    strict_determinism = bool(adapter_meta.get("strict_determinism", False))
-
-    nodes = []
-    for node_id in engine.node_ids:
-        spec = node_specs_map.get(node_id, {})
-        nodes.append(
-            NodeSpec(
-                node_id=node_id,
-                kind=spec.get("kind", "execution"),
-                prompt_ref=spec.get("prompt_ref"),
-                provider_ref=spec.get("provider_ref"),
-                plugin_refs=list(spec.get("plugin_refs", [])),
-            )
-        )
-
-    edges = [
-        EdgeSpec(
-            edge_id=channel.channel_id,
-            src_node_id=channel.src_node_id,
-            dst_node_id=channel.dst_node_id,
-        )
-        for channel in engine.channels
-    ]
-
-    flow = [
-        NexFlowRule(
-            rule_id=rule.rule_id,
-            node_id=rule.node_id,
-            policy=rule.policy.value,
-        )
-        for rule in engine.flow
-    ]
-
-    execution = ExecutionConfig(
-        strict_determinism=strict_determinism,
-        node_failure_policies={
-            node_id: policy.value for node_id, policy in engine.node_failure_policies.items()
-        },
-        node_fallback_map=dict(engine.node_fallback_map),
-        node_retry_policy={
-            node_id: NexRetryConfig(max_attempts=retry.max_attempts)
-            for node_id, retry in engine.node_retry_policy.items()
-        },
-    )
-
-    resources = ResourceSpec(
-        prompts={
-            key: PromptResource(**value)
-            for key, value in resources_raw.get("prompts", {}).items()
-        },
-        providers={
-            key: ProviderResource(**value)
-            for key, value in resources_raw.get("providers", {}).items()
-        },
-    )
-
-    plugins = [PluginSpec(**plugin) for plugin in plugins_raw]
-
-    return NexCircuit(
-        format=NexFormat(**format_meta),
-        circuit=CircuitMeta(
-            circuit_id=circuit_meta.get("circuit_id", engine.entry_node_id),
-            name=circuit_meta.get("name", engine.entry_node_id),
-            entry_node_id=engine.entry_node_id,
-            description=circuit_meta.get("description"),
-        ),
-        nodes=nodes,
-        edges=edges,
-        flow=flow,
-        execution=execution,
-        resources=resources,
-        plugins=plugins,
-    )
 
 
 def load_nex_bundle(bundle_path: str, *, require_plugins: bool = True) -> NexBundle:

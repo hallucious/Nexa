@@ -25,7 +25,7 @@
 * CLI: run, compare, diff, export, replay, info, and task commands
 * Regression policy reason detail (trigger lines)
 
-Current baseline: 1029 passed, 3 skipped
+Current baseline: 1026 passed, 3 skipped
 
 ---
 
@@ -35,7 +35,8 @@ Current baseline: 1029 passed, 3 skipped
 * Provider environment guidance unified across OpenAI, Codex, Claude, Gemini, and Perplexity
 * Canonical public CLI clarified as `src.cli.nexa_cli:main`
 * Legacy Nex compatibility isolated inside a single bounded runtime wrapper module
-* Current repository baseline: 1029 passed, 3 skipped
+* Legacy `.nex` reverse-conversion / writer support removed; compatibility is execution-only
+* Current repository baseline: 1026 passed, 3 skipped
 
 ---
 

@@ -1,6 +1,6 @@
 # Nexa CODING PLAN
 
-Version: 2.7.0
+Version: 2.8.0
 
 ---
 
@@ -41,6 +41,7 @@ The current repository state includes the following implemented surface:
 * legacy `.nex` runtime concentration into `src/engine/cli_legacy_nex_runtime.py`
 * deletion of legacy nex contract leaves (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
 * deletion of remaining legacy nex contract support files (`nex_format`, `nex_serializer`, `nex_validator`)
+* deletion of legacy `.nex` reverse-conversion / writer surface (`build_nex_from_engine`, `serialize_nex`, `save_nex_file`)
 
 ### 4. Diff / Replay / Audit Tooling
 
@@ -60,13 +61,13 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1029 passed, 3 skipped
+1026 passed, 3 skipped
 ```
 
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
 * canonical savefile lifecycle entry points exist across create / serialize / load / validate
 * savefile strictness requires explicit `ui` across create / serialize / load / validate
-* legacy `.nex` writer semantics remain separated from canonical savefile handling
+* legacy `.nex` writer / reverse-conversion semantics were removed; only bounded execution compatibility remains
 * `nexa savefile new <output.nex>` exposes canonical savefile creation through the CLI
 * `nexa savefile validate <file.nex>` exposes canonical savefile validation through the CLI
 
@@ -242,7 +243,7 @@ CLI
 ### Current Status
 
 ```text
-1029 passed, 3 skipped
+1026 passed, 3 skipped
 ```
 
 ---
