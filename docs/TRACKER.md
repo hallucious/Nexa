@@ -40,6 +40,7 @@ The current repository state includes the following implemented surface:
 * savefile executor plugin-node path validated by regression coverage
 * legacy `.nex` runtime concentration into `src/engine/cli_legacy_nex_runtime.py`
 * deletion of legacy nex contract leaves (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
+* deletion of remaining legacy nex contract support files (`nex_format`, `nex_serializer`, `nex_validator`)
 
 ### 4. Diff / Replay / Audit Tooling
 

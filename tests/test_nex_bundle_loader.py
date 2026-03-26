@@ -1,7 +1,6 @@
 import zipfile
 
-from src.engine.cli_legacy_nex_runtime import deserialize_nex, load_nex_bundle
-from src.contracts.nex_serializer import save_nex_file
+from src.engine.cli_legacy_nex_runtime import deserialize_nex, load_nex_bundle, save_nex_file
 
 
 def test_bundle_loader(tmp_path):

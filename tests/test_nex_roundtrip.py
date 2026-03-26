@@ -1,8 +1,12 @@
 from __future__ import annotations
 
-from src.engine.cli_legacy_nex_runtime import deserialize_nex, load_nex_file
-from src.contracts.nex_serializer import save_nex_file, serialize_nex
-from src.contracts.nex_validator import validate_nex
+from src.engine.cli_legacy_nex_runtime import (
+    deserialize_nex,
+    load_nex_file,
+    save_nex_file,
+    serialize_nex,
+    validate_nex,
+)
 
 
 def _example_nex_dict():

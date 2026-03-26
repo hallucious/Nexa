@@ -4,30 +4,155 @@ import json
 import shutil
 import tempfile
 import zipfile
-from dataclasses import asdict
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from src.cli.savefile_runtime import is_savefile_contract
-from src.contracts.nex_format import (
-    CircuitMeta,
-    EdgeSpec,
-    ExecutionConfig,
-    FlowRule as NexFlowRule,
-    NexCircuit,
-    NexFormat,
-    NodeSpec,
-    PluginSpec,
-    PromptResource,
-    ProviderResource,
-    ResourceSpec,
-    RetryConfig as NexRetryConfig,
-)
-from src.contracts.nex_validator import validate_nex
 from src.engine.cli_legacy_nex_plugins import validate_plugins_from_nex
 from src.engine.engine import Engine, RetryConfig as EngineRetryConfig
 from src.engine.model import Channel, FlowRule as EngineFlowRule
 from src.engine.types import FlowPolicy, NodeFailurePolicy, NodeStatus
+
+
+
+@dataclass
+class NexFormat:
+    kind: str
+    version: str
+
+
+@dataclass
+class CircuitMeta:
+    circuit_id: str
+    name: str
+    entry_node_id: str
+    description: Optional[str] = None
+
+
+@dataclass
+class NodeSpec:
+    node_id: str
+    kind: str
+    prompt_ref: Optional[str] = None
+    provider_ref: Optional[str] = None
+    plugin_refs: List[str] = field(default_factory=list)
+
+
+@dataclass
+class EdgeSpec:
+    edge_id: str
+    src_node_id: str
+    dst_node_id: str
+
+
+@dataclass
+class NexFlowRule:
+    rule_id: str
+    node_id: str
+    policy: str
+
+
+@dataclass
+class NexRetryConfig:
+    max_attempts: int
+
+
+@dataclass
+class ExecutionConfig:
+    strict_determinism: bool = False
+    node_failure_policies: Dict[str, str] = field(default_factory=dict)
+    node_fallback_map: Dict[str, str] = field(default_factory=dict)
+    node_retry_policy: Dict[str, NexRetryConfig] = field(default_factory=dict)
+
+
+@dataclass
+class PromptResource:
+    template: str
+
+
+@dataclass
+class ProviderResource:
+    provider_type: str
+    model: str
+    config: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class ResourceSpec:
+    prompts: Dict[str, PromptResource] = field(default_factory=dict)
+    providers: Dict[str, ProviderResource] = field(default_factory=dict)
+
+
+@dataclass
+class PluginSpec:
+    plugin_id: str
+    version: Optional[str] = None
+    required: bool = True
+
+
+@dataclass
+class NexCircuit:
+    format: NexFormat
+    circuit: CircuitMeta
+    nodes: List[NodeSpec]
+    edges: List[EdgeSpec]
+    flow: List[NexFlowRule]
+    execution: ExecutionConfig
+    resources: ResourceSpec
+    plugins: List[PluginSpec]
+
+
+class NexValidationError(Exception):
+    pass
+
+
+def validate_nex(circuit: NexCircuit) -> List[str]:
+    warnings: List[str] = []
+
+    if circuit.format.kind != "nexa.circuit":
+        raise NexValidationError("Invalid format.kind")
+
+    if circuit.format.version != "1.0.0":
+        warnings.append("Unknown format version")
+
+    node_ids = {node.node_id for node in circuit.nodes}
+    if circuit.circuit.entry_node_id not in node_ids:
+        raise NexValidationError("entry_node_id not found in nodes")
+
+    for edge in circuit.edges:
+        if edge.src_node_id not in node_ids:
+            raise NexValidationError(f"Edge src not found: {edge.src_node_id}")
+        if edge.dst_node_id not in node_ids:
+            raise NexValidationError(f"Edge dst not found: {edge.dst_node_id}")
+
+    for node_id, retry in circuit.execution.node_retry_policy.items():
+        if retry.max_attempts < 1:
+            raise NexValidationError(f"Invalid retry config for {node_id}")
+
+    plugin_ids = {p.plugin_id for p in circuit.plugins}
+    for node in circuit.nodes:
+        for ref in node.plugin_refs:
+            if ref not in plugin_ids:
+                warnings.append(f"Plugin not declared: {ref}")
+
+    return warnings
+
+
+def serialize_nex(circuit: NexCircuit) -> Dict[str, Any]:
+    return asdict(circuit)
+
+
+def save_nex_file(circuit: NexCircuit, file_path: str) -> None:
+    path = Path(file_path)
+    if path.suffix != ".nex":
+        raise ValueError("legacy NexCircuit files must use .nex extension")
+
+    data = serialize_nex(circuit)
+
+    with path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
 
 ApplyBaselinePolicy = Callable[[Dict[str, Any], Optional[str], Optional[str]], tuple[Dict[str, Any], int]]
 WritePayload = Callable[[Dict[str, Any], Optional[str]], None]

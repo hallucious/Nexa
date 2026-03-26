@@ -9,6 +9,8 @@ def test_engine_cli_delegates_legacy_nex_runtime_to_compat_module():
     assert "from src.contracts.nex_loader import" not in source
     assert "from src.contracts.nex_engine_adapter import" not in source
     assert "from src.contracts.nex_bundle_loader import" not in source
+    assert "from src.contracts.nex_serializer import" not in source
+    assert "from src.contracts.nex_validator import" not in source
     assert "from src.contracts.nex_plugin_integration import" not in source
 
 
@@ -20,3 +22,5 @@ def test_legacy_nex_runtime_uses_compat_plugin_module():
     assert "from src.contracts.nex_loader import" not in source
     assert "from src.contracts.nex_engine_adapter import" not in source
     assert "from src.contracts.nex_bundle_loader import" not in source
+    assert "from src.contracts.nex_serializer import" not in source
+    assert "from src.contracts.nex_validator import" not in source

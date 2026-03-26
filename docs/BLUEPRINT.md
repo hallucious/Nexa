@@ -183,6 +183,9 @@ Legacy `.nex` compatibility runtime concentration:
   * `src/contracts/nex_loader.py`
   * `src/contracts/nex_engine_adapter.py`
   * `src/contracts/nex_bundle_loader.py`
+  * `src/contracts/nex_format.py`
+  * `src/contracts/nex_serializer.py`
+  * `src/contracts/nex_validator.py`
 
 
 ---

@@ -4,8 +4,8 @@ from src.engine.cli_legacy_nex_runtime import (
     build_engine_from_nex,
     build_nex_from_engine,
     deserialize_nex,
+    serialize_nex,
 )
-from src.contracts.nex_serializer import serialize_nex
 from src.engine.types import NodeStatus
 
 
