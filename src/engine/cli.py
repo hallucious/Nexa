@@ -235,6 +235,65 @@ def _write_or_print_payload(payload: Dict[str, Any], out_path: Optional[str]) ->
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
+def _is_savefile_contract(circuit_path: str) -> bool:
+    try:
+        data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
+    except Exception:
+        return False
+
+    if not isinstance(data, dict):
+        return False
+
+    required = {"meta", "circuit", "resources", "state", "ui"}
+    return required.issubset(set(data.keys()))
+
+
+def build_savefile_trace_summary(savefile_name: str, trace: Any) -> Dict[str, Any]:
+    nodes: Dict[str, Dict[str, Any]] = {}
+    any_failure = False
+
+    for node_id, node_result in (getattr(trace, "node_results", {}) or {}).items():
+        status = str(getattr(node_result, "status", "failure")).upper()
+        nodes[node_id] = {
+            "status": status,
+            "attempts": 1 if status in ("SUCCESS", "FAILURE") else 0,
+        }
+        if status == "FAILURE":
+            any_failure = True
+
+    trace_status = str(getattr(trace, "status", "success")).upper()
+    if trace_status == "FAILURE":
+        any_failure = True
+
+    return {
+        "circuit_id": savefile_name,
+        "status": "FAILURE" if any_failure else "SUCCESS",
+        "nodes": nodes,
+    }
+
+
+def run_savefile_nex(
+    circuit_path: str,
+    out_path: Optional[str] = None,
+    baseline_path: Optional[str] = None,
+    policy_config_path: Optional[str] = None,
+) -> int:
+    from src.contracts.savefile_executor_aligned import SavefileExecutor
+    from src.contracts.savefile_loader import load_savefile_from_path
+    from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
+    from src.contracts.savefile_validator import validate_savefile
+
+    savefile = load_savefile_from_path(circuit_path)
+    validate_savefile(savefile)
+    provider_registry = build_provider_registry_from_savefile(savefile)
+    executor = SavefileExecutor(provider_registry)
+    trace = executor.execute(savefile, run_id="cli")
+    payload = build_savefile_trace_summary(savefile.meta.name, trace)
+    payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
+    _write_or_print_payload(payload, out_path)
+    return exit_code
+
+
 def run_nex(
     circuit_path: str,
     out_path: Optional[str] = None,
@@ -242,6 +301,9 @@ def run_nex(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
+    if _is_savefile_contract(circuit_path):
+        return run_savefile_nex(circuit_path, out_path, baseline_path, policy_config_path)
+
     if bundle_path:
         raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
         validate_plugins_from_nex(raw_data, bundle_path)

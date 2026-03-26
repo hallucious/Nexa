@@ -57,6 +57,38 @@ def _example_nex_dict():
     }
 
 
+
+def _example_savefile_dict():
+    return {
+        "meta": {
+            "name": "demo.savefile_pipeline",
+            "version": "1.0.0",
+            "description": "Minimal savefile example for engine CLI tests",
+        },
+        "circuit": {
+            "entry": "ai1",
+            "nodes": [
+                {
+                    "id": "ai1",
+                    "type": "ai",
+                    "resource_ref": {"prompt": "prompt.main", "provider": "provider.test"},
+                    "inputs": {"name": "state.input.name"},
+                    "outputs": {},
+                }
+            ],
+            "edges": [],
+        },
+        "resources": {
+            "prompts": {"prompt.main": {"template": "Hello {{name}}"}},
+            "providers": {
+                "provider.test": {"type": "test", "model": "test-model", "config": {}}
+            },
+            "plugins": {},
+        },
+        "state": {"input": {"name": "Nexa"}, "working": {}, "memory": {}},
+        "ui": {"layout": {}, "metadata": {}},
+    }
+
 def test_engine_cli_parser_accepts_run_and_out():
     parser = build_parser()
     args = parser.parse_args(["run", "example.nex", "--out", "result.json"])
@@ -88,3 +120,16 @@ def test_engine_cli_run_prints_summary_without_out(tmp_path, capsys):
     payload = json.loads(capsys.readouterr().out)
     assert payload["circuit_id"] == "demo.story_pipeline"
     assert payload["status"] == "SUCCESS"
+
+
+def test_engine_cli_run_savefile_native_contract_writes_summary_json(tmp_path):
+    circuit_path = tmp_path / "savefile.nex"
+    out_path = tmp_path / "result.json"
+    circuit_path.write_text(json.dumps(_example_savefile_dict(), indent=2), encoding="utf-8")
+
+    rc = main(["run", str(circuit_path), "--out", str(out_path)])
+    assert rc == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["circuit_id"] == "demo.savefile_pipeline"
+    assert payload["status"] == "SUCCESS"
+    assert payload["nodes"]["ai1"]["status"] == "SUCCESS"

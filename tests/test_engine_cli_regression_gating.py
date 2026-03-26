@@ -57,6 +57,38 @@ def _example_nex_dict():
     }
 
 
+
+def _example_savefile_dict():
+    return {
+        "meta": {
+            "name": "demo.savefile_pipeline",
+            "version": "1.0.0",
+            "description": "Minimal savefile example for engine CLI tests",
+        },
+        "circuit": {
+            "entry": "ai1",
+            "nodes": [
+                {
+                    "id": "ai1",
+                    "type": "ai",
+                    "resource_ref": {"prompt": "prompt.main", "provider": "provider.test"},
+                    "inputs": {"name": "state.input.name"},
+                    "outputs": {},
+                }
+            ],
+            "edges": [],
+        },
+        "resources": {
+            "prompts": {"prompt.main": {"template": "Hello {{name}}"}},
+            "providers": {
+                "provider.test": {"type": "test", "model": "test-model", "config": {}}
+            },
+            "plugins": {},
+        },
+        "state": {"input": {"name": "Nexa"}, "working": {}, "memory": {}},
+        "ui": {"layout": {}, "metadata": {}},
+    }
+
 def test_engine_cli_parser_accepts_baseline_flag():
     parser = build_parser()
     args = parser.parse_args(["run", "example.nex", "--baseline", "baseline.json"])
@@ -111,3 +143,26 @@ def test_engine_cli_run_with_failure_regression_returns_two(tmp_path):
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["policy"]["status"] == "FAIL"
     assert any("Trigger: node n3" in reason for reason in payload["policy"]["reasons"])
+
+
+def test_engine_cli_run_savefile_with_clean_baseline_returns_zero_and_emits_policy(tmp_path):
+    circuit_path = tmp_path / "savefile.nex"
+    circuit_path.write_text(json.dumps(_example_savefile_dict(), indent=2), encoding="utf-8")
+
+    baseline_payload = {
+        "circuit_id": "demo.savefile_pipeline",
+        "status": "SUCCESS",
+        "nodes": {
+            "ai1": {"status": "SUCCESS", "attempts": 1},
+        },
+    }
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline_payload, indent=2), encoding="utf-8")
+
+    out_path = tmp_path / "result.json"
+    rc = main(["run", str(circuit_path), "--baseline", str(baseline_path), "--out", str(out_path)])
+    assert rc == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["circuit_id"] == "demo.savefile_pipeline"
+    assert payload["policy"]["status"] == "PASS"
+    assert payload["policy"]["reasons"][0].startswith("PASS:")
