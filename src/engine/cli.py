@@ -18,10 +18,10 @@ from src.cli.savefile_runtime import (
     execute_savefile_summary,
     is_savefile_contract,
 )
-from src.contracts.nex_bundle_loader import load_nex_bundle
-from src.contracts.nex_engine_adapter import build_engine_from_nex
-from src.contracts.nex_loader import load_nex_file
-from src.contracts.nex_plugin_integration import validate_plugins_from_nex
+from src.engine.cli_legacy_nex_runtime import (
+    run_legacy_nex,
+    run_legacy_nex_bundle,
+)
 from src.contracts.regression_reason_codes import (
     NODE_REMOVED_SUCCESS,
     NODE_SUCCESS_TO_FAILURE,
@@ -90,36 +90,6 @@ def _parse_node_ids(node_ids_csv: Optional[str]) -> Optional[List[str]]:
     items = [s.strip() for s in node_ids_csv.split(",")]
     items = [s for s in items if s]
     return items or None
-
-
-def _node_attempts(node_meta: Optional[Dict[str, Any]], status: NodeStatus) -> int:
-    if node_meta and isinstance(node_meta.get("retry"), dict):
-        retry_meta = node_meta["retry"]
-        if isinstance(retry_meta.get("attempt_count"), int):
-            return retry_meta["attempt_count"]
-    if status in (NodeStatus.SUCCESS, NodeStatus.FAILURE):
-        return 1
-    return 0
-
-
-def build_trace_summary(circuit_id: str, trace) -> Dict[str, Any]:
-    nodes: Dict[str, Dict[str, Any]] = {}
-    any_failure = False
-
-    for node_id, node_trace in trace.nodes.items():
-        status = node_trace.node_status
-        nodes[node_id] = {
-            "status": status.value.upper(),
-            "attempts": _node_attempts(getattr(node_trace, "meta", None), status),
-        }
-        if status == NodeStatus.FAILURE:
-            any_failure = True
-
-    return {
-        "circuit_id": circuit_id,
-        "status": "FAILURE" if any_failure else "SUCCESS",
-        "nodes": nodes,
-    }
 
 
 def _build_regression_result_from_summaries(
@@ -271,17 +241,15 @@ def run_nex(
     if is_savefile_contract(circuit_path):
         return run_savefile_nex(circuit_path, out_path, baseline_path, policy_config_path)
 
-    if bundle_path:
-        raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
-        validate_plugins_from_nex(raw_data, bundle_path)
-
-    circuit = load_nex_file(circuit_path)
-    engine = build_engine_from_nex(circuit)
-    trace = engine.execute(revision_id="cli")
-    payload = build_trace_summary(circuit.circuit.circuit_id, trace)
-    payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
-    _write_or_print_payload(payload, out_path)
-    return exit_code
+    return run_legacy_nex(
+        circuit_path,
+        out_path=out_path,
+        bundle_path=bundle_path,
+        baseline_path=baseline_path,
+        policy_config_path=policy_config_path,
+        apply_baseline_policy=_apply_baseline_policy,
+        write_or_print_payload=_write_or_print_payload,
+    )
 
 
 def run_nex_bundle(
@@ -290,26 +258,15 @@ def run_nex_bundle(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    bundle = load_nex_bundle(bundle_path, require_plugins=False)
-    try:
-        if is_savefile_contract(str(bundle.circuit_path)):
-            return run_savefile_nex(str(bundle.circuit_path), out_path, baseline_path, policy_config_path)
-
-        if not bundle.plugins_dir.exists():
-            raise RuntimeError("plugins/ missing in bundle")
-
-        raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
-        validate_plugins_from_nex(raw_data, str(bundle.temp_dir))
-
-        circuit = load_nex_file(str(bundle.circuit_path))
-        engine = build_engine_from_nex(circuit)
-        trace = engine.execute(revision_id="cli")
-        payload = build_trace_summary(circuit.circuit.circuit_id, trace)
-        payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
-        _write_or_print_payload(payload, out_path)
-        return exit_code
-    finally:
-        bundle.cleanup()
+    return run_legacy_nex_bundle(
+        bundle_path,
+        out_path=out_path,
+        baseline_path=baseline_path,
+        policy_config_path=policy_config_path,
+        run_savefile_nex=run_savefile_nex,
+        apply_baseline_policy=_apply_baseline_policy,
+        write_or_print_payload=_write_or_print_payload,
+    )
 
 
 def run_engine(
