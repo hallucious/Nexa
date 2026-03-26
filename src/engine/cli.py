@@ -14,7 +14,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
-from src.cli.savefile_runtime import execute_savefile, is_savefile_contract
+from src.cli.savefile_runtime import (
+    execute_savefile_summary,
+    is_savefile_contract,
+)
 from src.contracts.nex_bundle_loader import load_nex_bundle
 from src.contracts.nex_engine_adapter import build_engine_from_nex
 from src.contracts.nex_loader import load_nex_file
@@ -37,11 +40,10 @@ from src.engine.types import NodeStatus
 CANONICAL_PUBLIC_CLI = "src.cli.nexa_cli:main"
 
 
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hai-engine",
-        description="Hyper-AI Engine CLI compatibility wrapper",
+        description="Hyper-AI Engine CLI (Engine-native execution)",
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -247,51 +249,13 @@ def _write_or_print_payload(payload: Dict[str, Any], out_path: Optional[str]) ->
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
-def _is_savefile_contract(circuit_path: str) -> bool:
-    try:
-        data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
-    except Exception:
-        return False
-
-    if not isinstance(data, dict):
-        return False
-
-    required = {"meta", "circuit", "resources", "state", "ui"}
-    return required.issubset(set(data.keys()))
-
-
-def build_savefile_trace_summary(savefile_name: str, trace: Any) -> Dict[str, Any]:
-    nodes: Dict[str, Dict[str, Any]] = {}
-    any_failure = False
-
-    for node_id, node_result in (getattr(trace, "node_results", {}) or {}).items():
-        status = str(getattr(node_result, "status", "failure")).upper()
-        nodes[node_id] = {
-            "status": status,
-            "attempts": 1 if status in ("SUCCESS", "FAILURE") else 0,
-        }
-        if status == "FAILURE":
-            any_failure = True
-
-    trace_status = str(getattr(trace, "status", "success")).upper()
-    if trace_status == "FAILURE":
-        any_failure = True
-
-    return {
-        "circuit_id": savefile_name,
-        "status": "FAILURE" if any_failure else "SUCCESS",
-        "nodes": nodes,
-    }
-
-
 def run_savefile_nex(
     circuit_path: str,
     out_path: Optional[str] = None,
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    savefile, trace = execute_savefile(circuit_path, run_id="cli")
-    payload = build_savefile_trace_summary(savefile.meta.name, trace)
+    _, _, payload = execute_savefile_summary(circuit_path, run_id="cli")
     payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
     _write_or_print_payload(payload, out_path)
     return exit_code
@@ -304,7 +268,7 @@ def run_nex(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    if _is_savefile_contract(circuit_path):
+    if is_savefile_contract(circuit_path):
         return run_savefile_nex(circuit_path, out_path, baseline_path, policy_config_path)
 
     if bundle_path:
@@ -328,7 +292,7 @@ def run_nex_bundle(
 ) -> int:
     bundle = load_nex_bundle(bundle_path, require_plugins=False)
     try:
-        if _is_savefile_contract(str(bundle.circuit_path)):
+        if is_savefile_contract(str(bundle.circuit_path)):
             return run_savefile_nex(str(bundle.circuit_path), out_path, baseline_path, policy_config_path)
 
         if not bundle.plugins_dir.exists():
