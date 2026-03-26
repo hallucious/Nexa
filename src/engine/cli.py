@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
+from src.cli.savefile_runtime import execute_savefile, is_savefile_contract
 from src.contracts.nex_bundle_loader import load_nex_bundle
 from src.contracts.nex_engine_adapter import build_engine_from_nex
 from src.contracts.nex_loader import load_nex_file
@@ -278,16 +279,7 @@ def run_savefile_nex(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    from src.contracts.savefile_executor_aligned import SavefileExecutor
-    from src.contracts.savefile_loader import load_savefile_from_path
-    from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
-    from src.contracts.savefile_validator import validate_savefile
-
-    savefile = load_savefile_from_path(circuit_path)
-    validate_savefile(savefile)
-    provider_registry = build_provider_registry_from_savefile(savefile)
-    executor = SavefileExecutor(provider_registry)
-    trace = executor.execute(savefile, run_id="cli")
+    savefile, trace = execute_savefile(circuit_path, run_id="cli")
     payload = build_savefile_trace_summary(savefile.meta.name, trace)
     payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
     _write_or_print_payload(payload, out_path)

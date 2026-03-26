@@ -18,6 +18,7 @@ except ModuleNotFoundError:
         return False
 
 from src.circuit.circuit_runner import CircuitRunner
+from src.cli.savefile_runtime import execute_savefile, is_savefile_contract
 from src.engine.run_comparator import RunComparator
 from src.providers.env_diagnostics import publish_dotenv_status
 
@@ -952,22 +953,13 @@ def _savefile_payload(savefile, trace, started_at, ended_at):
 
 
 def _run_savefile_command(args):
-    from src.contracts.savefile_loader import load_savefile_from_path
-    from src.contracts.savefile_validator import validate_savefile
-    from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
-    from src.contracts.savefile_executor_aligned import SavefileExecutor
-
     started_at = time.time()
-    savefile = load_savefile_from_path(args.circuit)
-
     cli_state = load_cli_state(args.state, args.var)
-    if cli_state:
-        savefile.state.input.update(cli_state)
-
-    validate_savefile(savefile)
-    provider_registry = build_provider_registry_from_savefile(savefile)
-    executor = SavefileExecutor(provider_registry)
-    trace = executor.execute(savefile, run_id=f"savefile-{int(started_at)}")
+    savefile, trace = execute_savefile(
+        args.circuit,
+        input_overrides=cli_state or None,
+        run_id=f"savefile-{int(started_at)}",
+    )
     ended_at = time.time()
 
     payload = _savefile_payload(savefile, trace, started_at, ended_at)
