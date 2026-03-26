@@ -323,8 +323,14 @@ def run_nex_bundle(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    bundle = load_nex_bundle(bundle_path)
+    bundle = load_nex_bundle(bundle_path, require_plugins=False)
     try:
+        if _is_savefile_contract(str(bundle.circuit_path)):
+            return run_savefile_nex(str(bundle.circuit_path), out_path, baseline_path, policy_config_path)
+
+        if not bundle.plugins_dir.exists():
+            raise RuntimeError("plugins/ missing in bundle")
+
         raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
         validate_plugins_from_nex(raw_data, str(bundle.temp_dir))
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 
 from src.engine.cli import build_parser, main
 
@@ -128,6 +129,25 @@ def test_engine_cli_run_savefile_native_contract_writes_summary_json(tmp_path):
     circuit_path.write_text(json.dumps(_example_savefile_dict(), indent=2), encoding="utf-8")
 
     rc = main(["run", str(circuit_path), "--out", str(out_path)])
+    assert rc == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["circuit_id"] == "demo.savefile_pipeline"
+    assert payload["status"] == "SUCCESS"
+    assert payload["nodes"]["ai1"]["status"] == "SUCCESS"
+
+
+def test_engine_cli_run_savefile_bundle_writes_summary_json(tmp_path):
+    bundle_path = tmp_path / "savefile.nexb"
+    out_path = tmp_path / "result.json"
+
+    temp = tmp_path / "bundle_build"
+    temp.mkdir()
+    (temp / "circuit.nex").write_text(json.dumps(_example_savefile_dict(), indent=2), encoding="utf-8")
+
+    with zipfile.ZipFile(bundle_path, "w") as zf:
+        zf.write(temp / "circuit.nex", "circuit.nex")
+
+    rc = main(["run", str(bundle_path), "--out", str(out_path)])
     assert rc == 0
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["circuit_id"] == "demo.savefile_pipeline"

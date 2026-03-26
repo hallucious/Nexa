@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import zipfile
 
 from src.engine.cli import build_parser, main
 
@@ -161,6 +162,35 @@ def test_engine_cli_run_savefile_with_clean_baseline_returns_zero_and_emits_poli
 
     out_path = tmp_path / "result.json"
     rc = main(["run", str(circuit_path), "--baseline", str(baseline_path), "--out", str(out_path)])
+    assert rc == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["circuit_id"] == "demo.savefile_pipeline"
+    assert payload["policy"]["status"] == "PASS"
+    assert payload["policy"]["reasons"][0].startswith("PASS:")
+
+
+def test_engine_cli_run_savefile_bundle_with_clean_baseline_returns_zero_and_emits_policy(tmp_path):
+    bundle_path = tmp_path / "savefile.nexb"
+
+    temp = tmp_path / "bundle_build"
+    temp.mkdir()
+    (temp / "circuit.nex").write_text(json.dumps(_example_savefile_dict(), indent=2), encoding="utf-8")
+
+    with zipfile.ZipFile(bundle_path, "w") as zf:
+        zf.write(temp / "circuit.nex", "circuit.nex")
+
+    baseline_payload = {
+        "circuit_id": "demo.savefile_pipeline",
+        "status": "SUCCESS",
+        "nodes": {
+            "ai1": {"status": "SUCCESS", "attempts": 1},
+        },
+    }
+    baseline_path = tmp_path / "baseline.json"
+    baseline_path.write_text(json.dumps(baseline_payload, indent=2), encoding="utf-8")
+
+    out_path = tmp_path / "result.json"
+    rc = main(["run", str(bundle_path), "--baseline", str(baseline_path), "--out", str(out_path)])
     assert rc == 0
     payload = json.loads(out_path.read_text(encoding="utf-8"))
     assert payload["circuit_id"] == "demo.savefile_pipeline"

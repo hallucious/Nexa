@@ -14,7 +14,7 @@ class NexBundle:
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
 
-def load_nex_bundle(bundle_path: str) -> NexBundle:
+def load_nex_bundle(bundle_path: str, *, require_plugins: bool = True) -> NexBundle:
     bundle_file = Path(bundle_path)
 
     if not bundle_file.exists():
@@ -31,7 +31,7 @@ def load_nex_bundle(bundle_path: str) -> NexBundle:
     if not circuit.exists():
         raise RuntimeError("circuit.nex missing in bundle")
 
-    if not plugins.exists():
+    if require_plugins and not plugins.exists():
         raise RuntimeError("plugins/ missing in bundle")
 
     return NexBundle(temp_dir)
