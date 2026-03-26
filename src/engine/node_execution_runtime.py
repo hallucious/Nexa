@@ -287,8 +287,13 @@ class NodeExecutionRuntime:
         try:
             spec = self._resolve_prompt_spec(prompt_ref, prompt_version)
         except (FileNotFoundError, RuntimeError) as exc:
-            # Backward compatibility for legacy prompt_ref-only execution configs.
-            # Modern prompt binding should fail hard when an explicit version is requested.
+            # Bounded legacy compatibility path.
+            # When prompt_version is explicit, always fail hard — there is no silent fallback.
+            # When prompt_version is absent and the registry cannot resolve the prompt,
+            # fall back to a deterministic placeholder string "{prompt_ref}:{context}".
+            # This path exists only for execution configs that do not yet have a registry-backed
+            # prompt spec (e.g. integration tests that use symbolic prompt_ref values).
+            # New code MUST use a PromptRegistry-backed prompt spec.
             if prompt_version is not None:
                 raise ValueError(
                     f"prompt resolution failed for '{prompt_ref}:{prompt_version}': {exc}"

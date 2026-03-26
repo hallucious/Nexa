@@ -137,7 +137,15 @@ The current runtime line is intentionally concentrated into a smaller set of pra
 ### Prompt side
 
 * `src.engine.node_execution_runtime.NodeExecutionRuntime` is the practical prompt execution caller
-* prompt resolution is handled through `src.platform.prompt_registry.PromptRegistry` and PromptSpec loading
+* **Modern path (Path A)**: prompt resolution via `src.platform.prompt_registry.PromptRegistry` + `PromptSpec`
+  * hard fail on resolution or render error
+  * required for all new execution configs
+* **Bounded legacy path (Path B)**: fallback placeholder `"{prompt_ref}:{context}"`
+  * triggered only when prompt_version is absent AND registry has no entry
+  * retained for symbolic prompt_ref configs; Path B removal is a future task
+* **Domain layer**: `src/prompts/*` is retained for domain-level contracts (test_step79, test_step80)
+  * NOT used by NodeExecutionRuntime; split is intentional
+* Boundary locked by `tests/test_step199_prompt_path_convergence.py`
 
 ### Provider side
 
