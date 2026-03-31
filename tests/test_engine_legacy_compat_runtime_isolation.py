@@ -4,27 +4,22 @@ from pathlib import Path
 
 
 
-def test_engine_cli_moves_legacy_nex_execution_helpers_out_of_cli() -> None:
+def test_engine_cli_is_now_a_thin_compatibility_wrapper() -> None:
     cli_source = Path("src/engine/cli.py").read_text(encoding="utf-8")
-    assert "def _run_legacy_nex(" not in cli_source
-    assert "def _run_legacy_nex_bundle(" not in cli_source
-    assert "def _node_attempts(" not in cli_source
-    assert "def _build_trace_summary(" not in cli_source
-    assert "from src.engine.cli_legacy_nex_runtime import" not in cli_source
-    assert "from src.contracts.nex_loader import" not in cli_source
-    assert "from src.contracts.nex_engine_adapter import" not in cli_source
-    assert "from src.contracts.nex_bundle_loader import" not in cli_source
-    assert "def _deserialize_legacy_nex(" not in cli_source
-    assert "def _load_legacy_nex_file(" not in cli_source
-    assert "def _load_legacy_nex_bundle(" not in cli_source
-    assert "def _build_engine_from_legacy_nex(" not in cli_source
-    assert "from src.circuit.loader import" not in cli_source
-    assert "from src.platform.external_loader import" not in cli_source
-    assert "from src.circuit.runtime_adapter import" not in cli_source
-    assert "from src.cli.savefile_runtime import (" in cli_source
-    assert "run_legacy_nex" in cli_source
-    assert "run_legacy_nex_bundle" in cli_source
-    assert "run_savefile_nex" in cli_source
+    compat_source = Path("src/engine/cli_compat_runner.py").read_text(encoding="utf-8")
+    assert "from src.engine.cli_compat_runner import (" in cli_source
+    assert "def build_parser(" not in cli_source
+    assert "def _parse_node_ids(" not in cli_source
+    assert "def _render_policy_output(" not in cli_source
+    assert "def run_engine(" not in cli_source
+    assert "def main(" not in cli_source
+    assert "def build_parser(" in compat_source
+    assert "def _parse_node_ids(" in compat_source
+    assert "def _render_policy_output(" in compat_source
+    assert "def run_engine(" in compat_source
+    assert "def main(" in compat_source
+    assert "run_legacy_nex" in compat_source
+    assert "run_legacy_nex_bundle" in compat_source
 
 
 

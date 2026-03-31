@@ -38,7 +38,7 @@ The current repository state includes the following implemented surface:
 * legacy plugin registry shell removal
 * savefile-aligned plugin execution convergence onto the auto-loader bridge
 * savefile executor plugin-node path validated by regression coverage
-* legacy `.nex` execution keeps only CLI branching and policy/output handling in `src/engine/cli.py`, while preparation and summary execution now concentrate in `src/circuit/runtime_adapter.py` over raw loader primitives in `src/circuit/loader.py`
+* legacy `.nex` execution compatibility is now split cleanly: `src/engine/cli.py` is a pure wrapper, `src/engine/cli_compat_runner.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns preparation/adaptation/summary logic
 * deletion of legacy nex contract leaves (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
 * deletion of remaining legacy nex contract support files (`nex_format`, `nex_serializer`, `nex_validator`)
 * deletion of legacy `.nex` reverse-conversion / writer surface (`build_nex_from_engine`, `serialize_nex`, `save_nex_file`)
@@ -235,7 +235,7 @@ CLI
 * execution contract / safe execution side:
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
-  * `src/engine/cli.py` (bounded legacy `.nex` execution orchestration path)
+  * `src/engine/cli.py` (pure bounded compatibility wrapper for the legacy engine CLI surface)
   * `src/contracts/savefile_executor_aligned.py`
 
 ---
@@ -258,4 +258,4 @@ CLI
 * legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling
 
 
-- Legacy engine CLI compatibility has been further narrowed: regression policy application and summary dispatch now live in src/cli/savefile_runtime.py, while src/engine/cli.py remains a thin compatibility wrapper.
+- Legacy engine CLI compatibility is now wrapper-oriented: `src/engine/cli.py` only re-exports the bounded engine CLI surface, `src/engine/cli_compat_runner.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation/summary logic.
