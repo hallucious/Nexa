@@ -161,7 +161,7 @@ The plugin surface is currently split by role rather than duplicated legacy owne
 * execution contract / safe execution side:
   * `src/platform/plugin.py`
 * bundle/savefile compatibility side:
-  * `src/engine/cli.py` (inline legacy `.nex` execution-only runtime path)
+  * `src/engine/cli.py` (bounded legacy `.nex` execution orchestration path)
   * `src/contracts/savefile_executor_aligned.py`
 
 Current savefile plugin execution delegates entry-path execution to
@@ -177,7 +177,7 @@ This means new runtime work MUST build from the converged files above rather tha
 
 Legacy `.nex` compatibility runtime concentration:
 
-* `.nex` load / adapt / bundle handling is now concentrated inline inside `src/engine/cli.py`
+* `.nex` execution remains bounded inside `src/engine/cli.py`, but load/bundle handling now lives in `src/circuit/loader.py` and Engine adaptation now lives in `src/circuit/runtime_adapter.py`
 * legacy `.nex` support is execution-only; reverse conversion / writer / roundtrip preservation are no longer part of the supported runtime surface
 * deleted legacy contract leaves:
   * `src/contracts/nex_loader.py`

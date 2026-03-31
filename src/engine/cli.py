@@ -10,138 +10,33 @@ from __future__ import annotations
 
 import argparse
 import json
-import shutil
 import sys
-import tempfile
-import zipfile
-from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from src.cli.savefile_runtime import execute_savefile_summary, is_savefile_contract
+from src.circuit.loader import load_legacy_nex_bundle, load_legacy_nex_file
+from src.circuit.runtime_adapter import build_engine_from_legacy_nex
 from src.platform.external_loader import validate_legacy_nex_plugins
 from src.contracts.regression_reason_codes import (
     NODE_REMOVED_SUCCESS,
     NODE_SUCCESS_TO_FAILURE,
     NODE_SUCCESS_TO_SKIPPED,
 )
-from src.engine.engine import Engine, RetryConfig as EngineRetryConfig
+from src.engine.engine import Engine
 from src.engine.execution_regression_detector import NodeRegression, RegressionResult
 from src.engine.execution_regression_policy import (
     POLICY_STATUS_FAIL,
     POLICY_STATUS_WARN,
     evaluate_regression_policy,
 )
-from src.engine.model import Channel, FlowRule as EngineFlowRule
-from src.engine.types import FlowPolicy, NodeFailurePolicy, NodeStatus
+from src.engine.types import NodeStatus
 
 CANONICAL_PUBLIC_CLI = "src.cli.nexa_cli:main"
-_NEX_META_KEY = "_nex_adapter"
 
 ApplyBaselinePolicy = Callable[[Dict[str, Any], Optional[str], Optional[str]], tuple[Dict[str, Any], int]]
 WritePayload = Callable[[Dict[str, Any], Optional[str]], None]
 RunSavefile = Callable[[str, Optional[str], Optional[str], Optional[str]], int]
-
-
-@dataclass
-class _LegacyNexFormat:
-    kind: str
-    version: str
-
-
-@dataclass
-class _LegacyCircuitMeta:
-    circuit_id: str
-    name: str
-    entry_node_id: str
-    description: Optional[str] = None
-
-
-@dataclass
-class _LegacyNodeSpec:
-    node_id: str
-    kind: str
-    prompt_ref: Optional[str] = None
-    provider_ref: Optional[str] = None
-    plugin_refs: List[str] = field(default_factory=list)
-
-
-@dataclass
-class _LegacyEdgeSpec:
-    edge_id: str
-    src_node_id: str
-    dst_node_id: str
-
-
-@dataclass
-class _LegacyFlowRule:
-    rule_id: str
-    node_id: str
-    policy: str
-
-
-@dataclass
-class _LegacyRetryConfig:
-    max_attempts: int
-
-
-@dataclass
-class _LegacyExecutionConfig:
-    strict_determinism: bool = False
-    node_failure_policies: Dict[str, str] = field(default_factory=dict)
-    node_fallback_map: Dict[str, str] = field(default_factory=dict)
-    node_retry_policy: Dict[str, _LegacyRetryConfig] = field(default_factory=dict)
-
-
-@dataclass
-class _LegacyPromptResource:
-    template: str
-
-
-@dataclass
-class _LegacyProviderResource:
-    provider_type: str
-    model: str
-    config: Dict[str, Any] = field(default_factory=dict)
-
-
-@dataclass
-class _LegacyResourceSpec:
-    prompts: Dict[str, _LegacyPromptResource] = field(default_factory=dict)
-    providers: Dict[str, _LegacyProviderResource] = field(default_factory=dict)
-
-
-@dataclass
-class _LegacyPluginSpec:
-    plugin_id: str
-    version: Optional[str] = None
-    required: bool = True
-
-
-@dataclass
-class _LegacyNexCircuit:
-    format: _LegacyNexFormat
-    circuit: _LegacyCircuitMeta
-    nodes: List[_LegacyNodeSpec]
-    edges: List[_LegacyEdgeSpec]
-    flow: List[_LegacyFlowRule]
-    execution: _LegacyExecutionConfig
-    resources: _LegacyResourceSpec
-    plugins: List[_LegacyPluginSpec]
-
-
-class _LegacyNexValidationError(Exception):
-    pass
-
-
-class _LegacyNexBundle:
-    def __init__(self, temp_dir: Path):
-        self.temp_dir = temp_dir
-        self.circuit_path = temp_dir / "circuit.nex"
-        self.plugins_dir = temp_dir / "plugins"
-
-    def cleanup(self) -> None:
-        shutil.rmtree(self.temp_dir, ignore_errors=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -195,160 +90,6 @@ def _parse_node_ids(node_ids_csv: Optional[str]) -> Optional[List[str]]:
     return items or None
 
 
-def _validate_legacy_nex(circuit: _LegacyNexCircuit) -> None:
-    if circuit.format.kind != "nexa.circuit":
-        raise _LegacyNexValidationError("Invalid format.kind")
-
-    node_ids = {node.node_id for node in circuit.nodes}
-    if circuit.circuit.entry_node_id not in node_ids:
-        raise _LegacyNexValidationError("entry_node_id not found in nodes")
-
-    for edge in circuit.edges:
-        if edge.src_node_id not in node_ids:
-            raise _LegacyNexValidationError(f"Edge src not found: {edge.src_node_id}")
-        if edge.dst_node_id not in node_ids:
-            raise _LegacyNexValidationError(f"Edge dst not found: {edge.dst_node_id}")
-
-    for node_id, retry in circuit.execution.node_retry_policy.items():
-        if retry.max_attempts < 1:
-            raise _LegacyNexValidationError(f"Invalid retry config for {node_id}")
-
-
-def _load_legacy_retry_policy(raw: Dict[str, Any]) -> Dict[str, _LegacyRetryConfig]:
-    return {
-        node_id: _LegacyRetryConfig(max_attempts=value["max_attempts"])
-        for node_id, value in raw.items()
-    }
-
-
-def _load_legacy_resources(raw: Dict[str, Any]) -> _LegacyResourceSpec:
-    prompts = {
-        key: _LegacyPromptResource(template=value["template"])
-        for key, value in raw.get("prompts", {}).items()
-    }
-    providers = {
-        key: _LegacyProviderResource(
-            provider_type=value["provider_type"],
-            model=value["model"],
-            config=value.get("config", {}),
-        )
-        for key, value in raw.get("providers", {}).items()
-    }
-    return _LegacyResourceSpec(prompts=prompts, providers=providers)
-
-
-def _deserialize_legacy_nex(data: Dict[str, Any]) -> _LegacyNexCircuit:
-    return _LegacyNexCircuit(
-        format=_LegacyNexFormat(**data["format"]),
-        circuit=_LegacyCircuitMeta(**data["circuit"]),
-        nodes=[_LegacyNodeSpec(**item) for item in data.get("nodes", [])],
-        edges=[_LegacyEdgeSpec(**item) for item in data.get("edges", [])],
-        flow=[_LegacyFlowRule(**item) for item in data.get("flow", [])],
-        execution=_LegacyExecutionConfig(
-            strict_determinism=data.get("execution", {}).get("strict_determinism", False),
-            node_failure_policies=data.get("execution", {}).get("node_failure_policies", {}),
-            node_fallback_map=data.get("execution", {}).get("node_fallback_map", {}),
-            node_retry_policy=_load_legacy_retry_policy(
-                data.get("execution", {}).get("node_retry_policy", {})
-            ),
-        ),
-        resources=_load_legacy_resources(data.get("resources", {})),
-        plugins=[_LegacyPluginSpec(**item) for item in data.get("plugins", [])],
-    )
-
-
-def _load_legacy_nex_file(file_path: str) -> _LegacyNexCircuit:
-    return _deserialize_legacy_nex(json.loads(Path(file_path).read_text(encoding="utf-8")))
-
-
-def _legacy_node_specs_map(circuit: _LegacyNexCircuit) -> Dict[str, Dict[str, Any]]:
-    return {
-        node.node_id: {
-            "kind": node.kind,
-            "prompt_ref": node.prompt_ref,
-            "provider_ref": node.provider_ref,
-            "plugin_refs": list(node.plugin_refs),
-        }
-        for node in circuit.nodes
-    }
-
-
-def _legacy_engine_meta_from_nex(circuit: _LegacyNexCircuit) -> Dict[str, Any]:
-    return {
-        _NEX_META_KEY: {
-            "format": asdict(circuit.format),
-            "circuit": {
-                "circuit_id": circuit.circuit.circuit_id,
-                "name": circuit.circuit.name,
-                "description": circuit.circuit.description,
-            },
-            "node_specs": _legacy_node_specs_map(circuit),
-            "resources": asdict(circuit.resources),
-            "plugins": [asdict(plugin) for plugin in circuit.plugins],
-            "strict_determinism": circuit.execution.strict_determinism,
-        }
-    }
-
-
-def _build_engine_from_legacy_nex(circuit: _LegacyNexCircuit) -> Engine:
-    _validate_legacy_nex(circuit)
-
-    channels: List[Channel] = [
-        Channel(
-            channel_id=edge.edge_id,
-            src_node_id=edge.src_node_id,
-            dst_node_id=edge.dst_node_id,
-        )
-        for edge in circuit.edges
-    ]
-    flow: List[EngineFlowRule] = [
-        EngineFlowRule(
-            rule_id=rule.rule_id,
-            node_id=rule.node_id,
-            policy=FlowPolicy(rule.policy),
-        )
-        for rule in circuit.flow
-    ]
-    node_failure_policies = {
-        node_id: NodeFailurePolicy(policy)
-        for node_id, policy in circuit.execution.node_failure_policies.items()
-    }
-    node_retry_policy = {
-        node_id: EngineRetryConfig(max_attempts=retry.max_attempts)
-        for node_id, retry in circuit.execution.node_retry_policy.items()
-    }
-
-    return Engine(
-        entry_node_id=circuit.circuit.entry_node_id,
-        node_ids=[node.node_id for node in circuit.nodes],
-        channels=channels,
-        flow=flow,
-        meta=_legacy_engine_meta_from_nex(circuit),
-        node_failure_policies=node_failure_policies,
-        node_fallback_map=dict(circuit.execution.node_fallback_map),
-        node_retry_policy=node_retry_policy,
-    )
-
-
-def _load_legacy_nex_bundle(bundle_path: str, *, require_plugins: bool = True) -> _LegacyNexBundle:
-    bundle_file = Path(bundle_path)
-    if not bundle_file.exists():
-        raise RuntimeError(f"Bundle not found: {bundle_path}")
-
-    temp_dir = Path(tempfile.mkdtemp(prefix="nexa_bundle_"))
-    with zipfile.ZipFile(bundle_file, "r") as zf:
-        zf.extractall(temp_dir)
-
-    bundle = _LegacyNexBundle(temp_dir)
-    if not bundle.circuit_path.exists():
-        bundle.cleanup()
-        raise RuntimeError("circuit.nex missing in bundle")
-    if require_plugins and not bundle.plugins_dir.exists():
-        bundle.cleanup()
-        raise RuntimeError("plugins/ missing in bundle")
-    return bundle
-
-
 def _node_attempts(node_meta: Optional[Dict[str, Any]], status: NodeStatus) -> int:
     if node_meta and isinstance(node_meta.get("retry"), dict):
         retry_meta = node_meta["retry"]
@@ -393,8 +134,8 @@ def _run_legacy_nex(
         raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
         validate_legacy_nex_plugins(raw_data, bundle_path)
 
-    circuit = _load_legacy_nex_file(circuit_path)
-    engine = _build_engine_from_legacy_nex(circuit)
+    circuit = load_legacy_nex_file(circuit_path)
+    engine = build_engine_from_legacy_nex(circuit)
     trace = engine.execute(revision_id="cli")
     payload = _build_trace_summary(circuit.circuit.circuit_id, trace)
     payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)
@@ -412,7 +153,7 @@ def _run_legacy_nex_bundle(
     apply_baseline_policy: ApplyBaselinePolicy,
     write_or_print_payload: WritePayload,
 ) -> int:
-    bundle = _load_legacy_nex_bundle(bundle_path, require_plugins=False)
+    bundle = load_legacy_nex_bundle(bundle_path, require_plugins=False)
     try:
         if is_savefile_contract(str(bundle.circuit_path)):
             return run_savefile_nex(
@@ -428,8 +169,8 @@ def _run_legacy_nex_bundle(
         raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
         validate_legacy_nex_plugins(raw_data, str(bundle.temp_dir))
 
-        circuit = _load_legacy_nex_file(str(bundle.circuit_path))
-        engine = _build_engine_from_legacy_nex(circuit)
+        circuit = load_legacy_nex_file(str(bundle.circuit_path))
+        engine = build_engine_from_legacy_nex(circuit)
         trace = engine.execute(revision_id="cli")
         payload = _build_trace_summary(circuit.circuit.circuit_id, trace)
         payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)

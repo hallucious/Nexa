@@ -156,3 +156,82 @@ def execute_circuit(model: CircuitModel, engine_executor: Union[Callable[[str, D
             trace.final_status = "success"
             trace.finished_at = now_iso()
         return last_result
+
+from dataclasses import asdict
+from typing import List
+
+from src.engine.engine import Engine, RetryConfig as EngineRetryConfig
+from src.engine.model import Channel, FlowRule as EngineFlowRule
+from src.engine.types import FlowPolicy, NodeFailurePolicy
+from src.circuit.loader import LegacyNexCircuit, validate_legacy_nex
+
+_NEX_META_KEY = "_nex_adapter"
+
+
+def _legacy_node_specs_map(circuit: LegacyNexCircuit) -> Dict[str, Dict[str, Any]]:
+    return {
+        node.node_id: {
+            "kind": node.kind,
+            "prompt_ref": node.prompt_ref,
+            "provider_ref": node.provider_ref,
+            "plugin_refs": list(node.plugin_refs),
+        }
+        for node in circuit.nodes
+    }
+
+
+def _legacy_engine_meta_from_nex(circuit: LegacyNexCircuit) -> Dict[str, Any]:
+    return {
+        _NEX_META_KEY: {
+            "format": asdict(circuit.format),
+            "circuit": {
+                "circuit_id": circuit.circuit.circuit_id,
+                "name": circuit.circuit.name,
+                "description": circuit.circuit.description,
+            },
+            "node_specs": _legacy_node_specs_map(circuit),
+            "resources": asdict(circuit.resources),
+            "plugins": [asdict(plugin) for plugin in circuit.plugins],
+            "strict_determinism": circuit.execution.strict_determinism,
+        }
+    }
+
+
+def build_engine_from_legacy_nex(circuit: LegacyNexCircuit) -> Engine:
+    validate_legacy_nex(circuit)
+
+    channels: List[Channel] = [
+        Channel(
+            channel_id=edge.edge_id,
+            src_node_id=edge.src_node_id,
+            dst_node_id=edge.dst_node_id,
+        )
+        for edge in circuit.edges
+    ]
+    flow: List[EngineFlowRule] = [
+        EngineFlowRule(
+            rule_id=rule.rule_id,
+            node_id=rule.node_id,
+            policy=FlowPolicy(rule.policy),
+        )
+        for rule in circuit.flow
+    ]
+    node_failure_policies = {
+        node_id: NodeFailurePolicy(policy)
+        for node_id, policy in circuit.execution.node_failure_policies.items()
+    }
+    node_retry_policy = {
+        node_id: EngineRetryConfig(max_attempts=retry.max_attempts)
+        for node_id, retry in circuit.execution.node_retry_policy.items()
+    }
+
+    return Engine(
+        entry_node_id=circuit.circuit.entry_node_id,
+        node_ids=[node.node_id for node in circuit.nodes],
+        channels=channels,
+        flow=flow,
+        meta=_legacy_engine_meta_from_nex(circuit),
+        node_failure_policies=node_failure_policies,
+        node_fallback_map=dict(circuit.execution.node_fallback_map),
+        node_retry_policy=node_retry_policy,
+    )
