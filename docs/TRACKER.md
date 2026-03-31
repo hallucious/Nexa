@@ -256,3 +256,6 @@ CLI
 
 
 * legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling
+
+
+- Legacy engine CLI compatibility has been further narrowed: regression policy application and summary dispatch now live in src/cli/savefile_runtime.py, while src/engine/cli.py remains a thin compatibility wrapper.

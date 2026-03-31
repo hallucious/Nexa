@@ -9,33 +9,19 @@ still import ``src.engine.cli`` directly.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
-from src.cli.savefile_runtime import execute_savefile_summary, is_savefile_contract
-from src.circuit.runtime_adapter import (
-    execute_legacy_nex_bundle_summary,
-    execute_legacy_nex_summary,
-    open_legacy_nex_bundle,
+from src.cli.savefile_runtime import (
+    run_legacy_nex,
+    run_legacy_nex_bundle,
+    run_savefile_nex,
 )
-from src.contracts.regression_reason_codes import (
-    NODE_REMOVED_SUCCESS,
-    NODE_SUCCESS_TO_FAILURE,
-    NODE_SUCCESS_TO_SKIPPED,
-)
+from src.engine.cli_policy_integration import render_regression_policy_output
 from src.engine.engine import Engine
-from src.engine.execution_regression_detector import NodeRegression, RegressionResult
-from src.engine.execution_regression_policy import (
-    POLICY_STATUS_FAIL,
-    POLICY_STATUS_WARN,
-    evaluate_regression_policy,
-)
 from src.engine.types import NodeStatus
 
 CANONICAL_PUBLIC_CLI = "src.cli.nexa_cli:main"
-
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -89,131 +75,9 @@ def _parse_node_ids(node_ids_csv: Optional[str]) -> Optional[List[str]]:
     return items or None
 
 
-def _build_regression_result_from_summaries(
-    baseline_payload: Dict[str, Any],
-    current_payload: Dict[str, Any],
-) -> RegressionResult:
-    baseline_nodes = baseline_payload.get("nodes") or {}
-    current_nodes = current_payload.get("nodes") or {}
-
-    regressions: List[NodeRegression] = []
-
-    for node_id in sorted(set(baseline_nodes) | set(current_nodes)):
-        left = baseline_nodes.get(node_id)
-        right = current_nodes.get(node_id)
-
-        left_status = (left or {}).get("status")
-        right_status = (right or {}).get("status")
-
-        if left_status == "SUCCESS" and right_status == "FAILURE":
-            regressions.append(
-                NodeRegression(
-                    node_id=node_id,
-                    reason_code=NODE_SUCCESS_TO_FAILURE,
-                    left_status="success",
-                    right_status="failure",
-                )
-            )
-        elif left_status == "SUCCESS" and right_status == "SKIPPED":
-            regressions.append(
-                NodeRegression(
-                    node_id=node_id,
-                    reason_code=NODE_SUCCESS_TO_SKIPPED,
-                    left_status="success",
-                    right_status="skipped",
-                )
-            )
-        elif left_status == "SUCCESS" and right is None:
-            regressions.append(
-                NodeRegression(
-                    node_id=node_id,
-                    reason_code=NODE_REMOVED_SUCCESS,
-                    left_status="success",
-                    right_status=None,
-                )
-            )
-
-    if regressions:
-        return RegressionResult(status="regression", nodes=regressions)
-    return RegressionResult(status="clean")
-
-
-def _load_policy_overrides(policy_config_path: Optional[str]) -> Optional[Dict[str, str]]:
-    if not policy_config_path:
-        return None
-    payload = json.loads(Path(policy_config_path).read_text(encoding="utf-8"))
-    overrides = payload.get("overrides")
-    if overrides is None:
-        return None
-    if not isinstance(overrides, dict):
-        raise ValueError("policy config 'overrides' must be an object")
-
-    normalized: Dict[str, str] = {}
-    for reason_code, severity in overrides.items():
-        if not isinstance(reason_code, str) or not isinstance(severity, str):
-            raise ValueError("policy config overrides must map strings to strings")
-        normalized[reason_code] = severity
-    return normalized
-
-
-def _render_policy_output(policy_result: Any) -> str:
-    status = getattr(policy_result, "status", None)
-    reasons = list(getattr(policy_result, "reasons", []) or [])
-
-    lines: List[str] = []
-    if status is not None:
-        lines.append(f"Status: {status}")
-    if reasons:
-        lines.extend(reasons)
-    return "\n".join(lines) if lines else str(policy_result)
-
-
-def _apply_baseline_policy(
-    payload: Dict[str, Any],
-    baseline_path: Optional[str],
-    policy_config_path: Optional[str] = None,
-) -> tuple[Dict[str, Any], int]:
-    if not baseline_path:
-        return payload, 0
-
-    baseline_payload = json.loads(Path(baseline_path).read_text(encoding="utf-8"))
-    regression_result = _build_regression_result_from_summaries(baseline_payload, payload)
-    overrides = _load_policy_overrides(policy_config_path)
-    decision = evaluate_regression_policy(regression_result, overrides)
-
-    enriched = dict(payload)
-    enriched["policy"] = {
-        "status": decision.status,
-        "reasons": list(decision.reasons),
-        "display": _render_policy_output(decision),
-    }
-
-    if decision.status == POLICY_STATUS_FAIL:
-        return enriched, 2
-    if decision.status == POLICY_STATUS_WARN:
-        return enriched, 1
-    return enriched, 0
-
-
-def _write_or_print_payload(payload: Dict[str, Any], out_path: Optional[str]) -> None:
-    if out_path:
-        out_file = Path(out_path)
-        out_file.parent.mkdir(parents=True, exist_ok=True)
-        out_file.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    else:
-        print(json.dumps(payload, indent=2, ensure_ascii=False))
-
-
-def run_savefile_nex(
-    circuit_path: str,
-    out_path: Optional[str] = None,
-    baseline_path: Optional[str] = None,
-    policy_config_path: Optional[str] = None,
-) -> int:
-    _, _, payload = execute_savefile_summary(circuit_path, run_id="cli")
-    payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
-    _write_or_print_payload(payload, out_path)
-    return exit_code
+# Compatibility export retained for older tests/importers.
+def _render_policy_output(policy_result):
+    return render_regression_policy_output(policy_result)
 
 
 def run_nex(
@@ -223,17 +87,14 @@ def run_nex(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    if is_savefile_contract(circuit_path):
-        return run_savefile_nex(circuit_path, out_path, baseline_path, policy_config_path)
-
-    payload = execute_legacy_nex_summary(
+    return run_legacy_nex(
         circuit_path,
-        bundle_path=bundle_path,
-        run_id="cli",
+        out_path,
+        bundle_path,
+        baseline_path,
+        policy_config_path,
     )
-    payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
-    _write_or_print_payload(payload, out_path)
-    return exit_code
+
 
 
 def run_nex_bundle(
@@ -242,22 +103,13 @@ def run_nex_bundle(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    bundle = open_legacy_nex_bundle(bundle_path)
-    try:
-        if is_savefile_contract(str(bundle.circuit_path)):
-            return run_savefile_nex(
-                str(bundle.circuit_path),
-                out_path,
-                baseline_path,
-                policy_config_path,
-            )
+    return run_legacy_nex_bundle(
+        bundle_path,
+        out_path,
+        baseline_path,
+        policy_config_path,
+    )
 
-        payload = execute_legacy_nex_bundle_summary(bundle, run_id="cli")
-        payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
-        _write_or_print_payload(payload, out_path)
-        return exit_code
-    finally:
-        bundle.cleanup()
 
 
 def run_engine(
@@ -284,6 +136,7 @@ def run_engine(
 
     print("[Engine CLI] Execution failed.")
     return 1
+
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 
+
 def test_engine_cli_moves_legacy_nex_execution_helpers_out_of_cli() -> None:
     cli_source = Path("src/engine/cli.py").read_text(encoding="utf-8")
     assert "def _run_legacy_nex(" not in cli_source
@@ -19,10 +20,12 @@ def test_engine_cli_moves_legacy_nex_execution_helpers_out_of_cli() -> None:
     assert "def _build_engine_from_legacy_nex(" not in cli_source
     assert "from src.circuit.loader import" not in cli_source
     assert "from src.platform.external_loader import" not in cli_source
-    assert "from src.circuit.runtime_adapter import (" in cli_source
-    assert "execute_legacy_nex_summary" in cli_source
-    assert "execute_legacy_nex_bundle_summary" in cli_source
-    assert "open_legacy_nex_bundle" in cli_source
+    assert "from src.circuit.runtime_adapter import" not in cli_source
+    assert "from src.cli.savefile_runtime import (" in cli_source
+    assert "run_legacy_nex" in cli_source
+    assert "run_legacy_nex_bundle" in cli_source
+    assert "run_savefile_nex" in cli_source
+
 
 
 def test_legacy_nex_plugin_validation_moves_to_external_loader() -> None:
@@ -32,11 +35,13 @@ def test_legacy_nex_plugin_validation_moves_to_external_loader() -> None:
     assert "def validate_legacy_nex_plugins(" in loader_source
 
 
+
 def test_legacy_nex_loader_and_bundle_handling_move_to_circuit_loader() -> None:
     loader_source = Path("src/circuit/loader.py").read_text(encoding="utf-8")
     assert "class LegacyNexBundle:" in loader_source
     assert "def load_legacy_nex_file(" in loader_source
     assert "def load_legacy_nex_bundle(" in loader_source
+
 
 
 def test_legacy_nex_runtime_preparation_and_summary_move_to_runtime_adapter() -> None:
@@ -48,6 +53,22 @@ def test_legacy_nex_runtime_preparation_and_summary_move_to_runtime_adapter() ->
     assert "def build_legacy_trace_summary(" in adapter_source
     assert "def execute_legacy_nex_summary(" in adapter_source
     assert "def execute_legacy_nex_bundle_summary(" in adapter_source
+
+
+
+def test_engine_cli_policy_and_summary_dispatch_move_to_savefile_runtime() -> None:
+    cli_source = Path("src/engine/cli.py").read_text(encoding="utf-8")
+    runtime_source = Path("src/cli/savefile_runtime.py").read_text(encoding="utf-8")
+    assert "def _build_regression_result_from_summaries(" not in cli_source
+    assert "def _load_policy_overrides(" not in cli_source
+    assert "def _apply_baseline_policy(" not in cli_source
+    assert "def _write_or_print_payload(" not in cli_source
+    assert "def run_nex(" not in runtime_source
+    assert "def run_legacy_nex(" in runtime_source
+    assert "def run_legacy_nex_bundle(" in runtime_source
+    assert "def run_savefile_nex(" in runtime_source
+    assert "def write_or_print_payload(" in runtime_source
+
 
 
 def test_legacy_nex_runtime_module_is_physically_absent() -> None:
