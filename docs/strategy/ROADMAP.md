@@ -75,4 +75,4 @@ Nexa as a general-purpose runtime for AI computation systems — production pipe
 End of Roadmap
 
 
-* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only the execution path
+* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling

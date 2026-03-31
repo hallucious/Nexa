@@ -427,4 +427,4 @@ Representation {
 
 
 
-* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only the execution path
+* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling

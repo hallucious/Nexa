@@ -38,7 +38,7 @@ The current repository state includes the following implemented surface:
 * legacy plugin registry shell removal
 * savefile-aligned plugin execution convergence onto the auto-loader bridge
 * savefile executor plugin-node path validated by regression coverage
-* legacy `.nex` execution remains in `src/engine/cli.py`, while pre-execution preparation now concentrates in `src/circuit/runtime_adapter.py` over raw loader primitives in `src/circuit/loader.py`
+* legacy `.nex` execution keeps only CLI branching and policy/output handling in `src/engine/cli.py`, while preparation and summary execution now concentrate in `src/circuit/runtime_adapter.py` over raw loader primitives in `src/circuit/loader.py`
 * deletion of legacy nex contract leaves (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
 * deletion of remaining legacy nex contract support files (`nex_format`, `nex_serializer`, `nex_validator`)
 * deletion of legacy `.nex` reverse-conversion / writer surface (`build_nex_from_engine`, `serialize_nex`, `save_nex_file`)
@@ -255,4 +255,4 @@ CLI
 * future plugin work should target boundary clarification or deeper unification only when it can be done without reopening removed legacy paths
 
 
-* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only the execution path
+* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling

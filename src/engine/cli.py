@@ -12,13 +12,13 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from src.cli.savefile_runtime import execute_savefile_summary, is_savefile_contract
 from src.circuit.runtime_adapter import (
-    load_engine_from_legacy_nex_path,
+    execute_legacy_nex_bundle_summary,
+    execute_legacy_nex_summary,
     open_legacy_nex_bundle,
-    prepare_engine_from_legacy_nex_bundle,
 )
 from src.contracts.regression_reason_codes import (
     NODE_REMOVED_SUCCESS,
@@ -36,9 +36,6 @@ from src.engine.types import NodeStatus
 
 CANONICAL_PUBLIC_CLI = "src.cli.nexa_cli:main"
 
-ApplyBaselinePolicy = Callable[[Dict[str, Any], Optional[str], Optional[str]], tuple[Dict[str, Any], int]]
-WritePayload = Callable[[Dict[str, Any], Optional[str]], None]
-RunSavefile = Callable[[str, Optional[str], Optional[str], Optional[str]], int]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -90,87 +87,6 @@ def _parse_node_ids(node_ids_csv: Optional[str]) -> Optional[List[str]]:
     items = [s.strip() for s in node_ids_csv.split(",")]
     items = [s for s in items if s]
     return items or None
-
-
-def _node_attempts(node_meta: Optional[Dict[str, Any]], status: NodeStatus) -> int:
-    if node_meta and isinstance(node_meta.get("retry"), dict):
-        retry_meta = node_meta["retry"]
-        if isinstance(retry_meta.get("attempt_count"), int):
-            return retry_meta["attempt_count"]
-    if status in (NodeStatus.SUCCESS, NodeStatus.FAILURE):
-        return 1
-    return 0
-
-
-def _build_trace_summary(circuit_id: str, trace: Any) -> Dict[str, Any]:
-    nodes: Dict[str, Dict[str, Any]] = {}
-    any_failure = False
-
-    for node_id, node_trace in trace.nodes.items():
-        status = node_trace.node_status
-        nodes[node_id] = {
-            "status": status.value.upper(),
-            "attempts": _node_attempts(getattr(node_trace, "meta", None), status),
-        }
-        if status == NodeStatus.FAILURE:
-            any_failure = True
-
-    return {
-        "circuit_id": circuit_id,
-        "status": "FAILURE" if any_failure else "SUCCESS",
-        "nodes": nodes,
-    }
-
-
-def _run_legacy_nex(
-    circuit_path: str,
-    *,
-    out_path: Optional[str] = None,
-    bundle_path: Optional[str] = None,
-    baseline_path: Optional[str] = None,
-    policy_config_path: Optional[str] = None,
-    apply_baseline_policy: ApplyBaselinePolicy,
-    write_or_print_payload: WritePayload,
-) -> int:
-    circuit, engine = load_engine_from_legacy_nex_path(
-        circuit_path,
-        bundle_path=bundle_path,
-    )
-    trace = engine.execute(revision_id="cli")
-    payload = _build_trace_summary(circuit.circuit.circuit_id, trace)
-    payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)
-    write_or_print_payload(payload, out_path)
-    return exit_code
-
-
-def _run_legacy_nex_bundle(
-    bundle_path: str,
-    *,
-    out_path: Optional[str] = None,
-    baseline_path: Optional[str] = None,
-    policy_config_path: Optional[str] = None,
-    run_savefile_nex: RunSavefile,
-    apply_baseline_policy: ApplyBaselinePolicy,
-    write_or_print_payload: WritePayload,
-) -> int:
-    bundle = open_legacy_nex_bundle(bundle_path)
-    try:
-        if is_savefile_contract(str(bundle.circuit_path)):
-            return run_savefile_nex(
-                str(bundle.circuit_path),
-                out_path,
-                baseline_path,
-                policy_config_path,
-            )
-
-        circuit, engine = prepare_engine_from_legacy_nex_bundle(bundle)
-        trace = engine.execute(revision_id="cli")
-        payload = _build_trace_summary(circuit.circuit.circuit_id, trace)
-        payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)
-        write_or_print_payload(payload, out_path)
-        return exit_code
-    finally:
-        bundle.cleanup()
 
 
 def _build_regression_result_from_summaries(
@@ -310,15 +226,14 @@ def run_nex(
     if is_savefile_contract(circuit_path):
         return run_savefile_nex(circuit_path, out_path, baseline_path, policy_config_path)
 
-    return _run_legacy_nex(
+    payload = execute_legacy_nex_summary(
         circuit_path,
-        out_path=out_path,
         bundle_path=bundle_path,
-        baseline_path=baseline_path,
-        policy_config_path=policy_config_path,
-        apply_baseline_policy=_apply_baseline_policy,
-        write_or_print_payload=_write_or_print_payload,
+        run_id="cli",
     )
+    payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
+    _write_or_print_payload(payload, out_path)
+    return exit_code
 
 
 def run_nex_bundle(
@@ -327,15 +242,22 @@ def run_nex_bundle(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    return _run_legacy_nex_bundle(
-        bundle_path,
-        out_path=out_path,
-        baseline_path=baseline_path,
-        policy_config_path=policy_config_path,
-        run_savefile_nex=run_savefile_nex,
-        apply_baseline_policy=_apply_baseline_policy,
-        write_or_print_payload=_write_or_print_payload,
-    )
+    bundle = open_legacy_nex_bundle(bundle_path)
+    try:
+        if is_savefile_contract(str(bundle.circuit_path)):
+            return run_savefile_nex(
+                str(bundle.circuit_path),
+                out_path,
+                baseline_path,
+                policy_config_path,
+            )
+
+        payload = execute_legacy_nex_bundle_summary(bundle, run_id="cli")
+        payload, exit_code = _apply_baseline_policy(payload, baseline_path, policy_config_path)
+        _write_or_print_payload(payload, out_path)
+        return exit_code
+    finally:
+        bundle.cleanup()
 
 
 def run_engine(
