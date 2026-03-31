@@ -15,9 +15,11 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from src.cli.savefile_runtime import execute_savefile_summary, is_savefile_contract
-from src.circuit.loader import load_legacy_nex_bundle, load_legacy_nex_file
-from src.circuit.runtime_adapter import build_engine_from_legacy_nex
-from src.platform.external_loader import validate_legacy_nex_plugins
+from src.circuit.runtime_adapter import (
+    load_engine_from_legacy_nex_path,
+    open_legacy_nex_bundle,
+    prepare_engine_from_legacy_nex_bundle,
+)
 from src.contracts.regression_reason_codes import (
     NODE_REMOVED_SUCCESS,
     NODE_SUCCESS_TO_FAILURE,
@@ -130,12 +132,10 @@ def _run_legacy_nex(
     apply_baseline_policy: ApplyBaselinePolicy,
     write_or_print_payload: WritePayload,
 ) -> int:
-    if bundle_path:
-        raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
-        validate_legacy_nex_plugins(raw_data, bundle_path)
-
-    circuit = load_legacy_nex_file(circuit_path)
-    engine = build_engine_from_legacy_nex(circuit)
+    circuit, engine = load_engine_from_legacy_nex_path(
+        circuit_path,
+        bundle_path=bundle_path,
+    )
     trace = engine.execute(revision_id="cli")
     payload = _build_trace_summary(circuit.circuit.circuit_id, trace)
     payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)
@@ -153,7 +153,7 @@ def _run_legacy_nex_bundle(
     apply_baseline_policy: ApplyBaselinePolicy,
     write_or_print_payload: WritePayload,
 ) -> int:
-    bundle = load_legacy_nex_bundle(bundle_path, require_plugins=False)
+    bundle = open_legacy_nex_bundle(bundle_path)
     try:
         if is_savefile_contract(str(bundle.circuit_path)):
             return run_savefile_nex(
@@ -163,14 +163,7 @@ def _run_legacy_nex_bundle(
                 policy_config_path,
             )
 
-        if not bundle.plugins_dir.exists():
-            raise RuntimeError("plugins/ missing in bundle")
-
-        raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
-        validate_legacy_nex_plugins(raw_data, str(bundle.temp_dir))
-
-        circuit = load_legacy_nex_file(str(bundle.circuit_path))
-        engine = build_engine_from_legacy_nex(circuit)
+        circuit, engine = prepare_engine_from_legacy_nex_bundle(bundle)
         trace = engine.execute(revision_id="cli")
         payload = _build_trace_summary(circuit.circuit.circuit_id, trace)
         payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)

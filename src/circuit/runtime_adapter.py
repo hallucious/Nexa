@@ -157,13 +157,22 @@ def execute_circuit(model: CircuitModel, engine_executor: Union[Callable[[str, D
             trace.finished_at = now_iso()
         return last_result
 
+import json
 from dataclasses import asdict
+from pathlib import Path
 from typing import List
 
+from src.circuit.loader import (
+    LegacyNexBundle,
+    LegacyNexCircuit,
+    load_legacy_nex_bundle,
+    load_legacy_nex_file,
+    validate_legacy_nex,
+)
 from src.engine.engine import Engine, RetryConfig as EngineRetryConfig
 from src.engine.model import Channel, FlowRule as EngineFlowRule
 from src.engine.types import FlowPolicy, NodeFailurePolicy
-from src.circuit.loader import LegacyNexCircuit, validate_legacy_nex
+from src.platform.external_loader import validate_legacy_nex_plugins
 
 _NEX_META_KEY = "_nex_adapter"
 
@@ -235,3 +244,34 @@ def build_engine_from_legacy_nex(circuit: LegacyNexCircuit) -> Engine:
         node_fallback_map=dict(circuit.execution.node_fallback_map),
         node_retry_policy=node_retry_policy,
     )
+
+
+def load_engine_from_legacy_nex_path(
+    circuit_path: str,
+    *,
+    bundle_path: Optional[str] = None,
+) -> tuple[LegacyNexCircuit, Engine]:
+    if bundle_path:
+        raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
+        validate_legacy_nex_plugins(raw_data, bundle_path)
+
+    circuit = load_legacy_nex_file(circuit_path)
+    engine = build_engine_from_legacy_nex(circuit)
+    return circuit, engine
+
+
+def open_legacy_nex_bundle(bundle_path: str) -> LegacyNexBundle:
+    return load_legacy_nex_bundle(bundle_path, require_plugins=False)
+
+
+def prepare_engine_from_legacy_nex_bundle(
+    bundle: LegacyNexBundle,
+) -> tuple[LegacyNexCircuit, Engine]:
+    if not bundle.plugins_dir.exists():
+        raise RuntimeError("plugins/ missing in bundle")
+
+    raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
+    validate_legacy_nex_plugins(raw_data, str(bundle.temp_dir))
+    circuit = load_legacy_nex_file(str(bundle.circuit_path))
+    engine = build_engine_from_legacy_nex(circuit)
+    return circuit, engine
