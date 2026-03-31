@@ -1,0 +1,78 @@
+# BLUEPRINT
+
+Version: 1.11.0
+
+────────────────
+Architecture Constitution
+────────────────
+
+Nexa follows an Execution Engine-based architecture.
+
+The core design principles follow the Constitution defined in `docs/architecture/FOUNDATION_RULES.md`.
+
+System invariants that MUST NOT be changed:
+
+1. Nexa is not a workflow tool but an execution engine.
+2. Node is the only execution unit.
+3. Circuit does not perform execution and is responsible only for connections.
+4. System-level execution is dependency-based. Fixed pipelines are prohibited.
+5. Pre/core/post phases exist inside a Node, but they are the internal contract of a single node.
+6. Artifacts are append-only immutable structures.
+7. Deterministic execution must be maintained.
+8. The plugin write scope is restricted to `plugin.<plugin_id>.*`.
+9. The working context schema follows a fixed key structure.
+10. Contract-driven architecture must be maintained.
+11. Spec-version synchronization must be maintained.
+
+Any implementation that violates these rules is considered a violation of the Nexa architecture.
+
+---
+
+## 0. Execution Philosophy (NEW)
+
+Nexa treats execution as a portable, reproducible unit rather than a runtime-only process.
+
+Execution is not defined by code alone, but by:
+
+* Circuit definition
+* Plugin environment
+* Execution contract
+* Deterministic runtime behavior
+
+This enables:
+
+* Reproducibility
+* Portability
+* Debuggability
+* Environment isolation
+
+---
+
+## 1. Foundation Layer
+
+The foundational design documents of this project are managed hierarchically by the following document:
+
+* `docs/FOUNDATION_MAP.md`
+
+When performing structure changes or contract changes, FOUNDATION_MAP must be referenced, and the status and SemVer of the affected documents must be checked.
+
+---
+
+## 2. Active Specifications
+
+Currently active spec documents that are synchronized with the code.
+
+Source-of-Truth: `docs/specs/_active_specs.yaml`
+
+### 2.1 Foundation / Terminology
+
+* `docs/specs/foundation/terminology.md`
+
+### 2.2 Architecture Core
+
+* `docs/specs/architecture/execution_model.md`
+* `docs/specs/architecture/trace_model.md`
+* `docs/specs/architecture/node_abstraction.md`
+* `docs/specs/architecture/node_execution_contract.md`
+* `docs/specs/architecture/circuit_contract.md`
+* `docs/sp
