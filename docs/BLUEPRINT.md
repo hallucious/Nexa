@@ -448,3 +448,6 @@ Representation {
 
 
 - Execution record foundation implemented in code: contract, model, serialization, and working-save summary integration.
+
+
+* Storage lifecycle linkage started: Working Save → Commit Snapshot creation and Execution Record → Working Save last-run summary update APIs

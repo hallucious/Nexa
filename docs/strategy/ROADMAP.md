@@ -38,6 +38,7 @@ Current baseline: 1022 passed, 3 skipped
 * Legacy `.nex` reverse-conversion / writer support removed; compatibility is execution-only
 * Current repository baseline: 1022 passed, 3 skipped
 * Role-aware `.nex` storage foundation started: `load_nex(...)`, `validate_working_save(...)`, `validate_commit_snapshot(...)`, and typed model split for `working_save` / `commit_snapshot`
+* Storage lifecycle linkage started: Working Save → Commit Snapshot creation and Execution Record → Working Save last-run summary update APIs
 
 ---
 
