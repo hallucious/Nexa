@@ -37,6 +37,7 @@ Current baseline: 1022 passed, 3 skipped
 * Legacy Nex compatibility is now wrapper-oriented: `src/engine/cli.py` is a bounded compatibility shim, `src/cli/savefile_runtime.py` owns execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic
 * Legacy `.nex` reverse-conversion / writer support removed; compatibility is execution-only
 * Current repository baseline: 1022 passed, 3 skipped
+* Role-aware `.nex` storage foundation started: `load_nex(...)`, `validate_working_save(...)`, `validate_commit_snapshot(...)`, and typed model split for `working_save` / `commit_snapshot`
 
 ---
 

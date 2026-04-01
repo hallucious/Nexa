@@ -239,6 +239,20 @@ Contract status:
 * `runtime` is not part of the canonical savefile root
 * canonical savefiles and legacy `.nex` writer behavior are kept distinct
 
+Role-aware `.nex` storage foundation now exists alongside the current canonical savefile v2 path:
+
+* public API → `src/storage/nex_api.py`
+  * `load_nex(...)`
+  * `validate_working_save(...)`
+  * `validate_commit_snapshot(...)`
+* typed models → `src/storage/models/`
+  * `WorkingSaveModel`
+  * `CommitSnapshotModel`
+  * `LoadedNexArtifact`
+* validator split → `src/storage/validators/shared_validator.py`
+
+This foundation is for the future `working_save` / `commit_snapshot` lifecycle split and does not replace the currently active savefile v2 CLI surface yet.
+
 Current official savefile CLI surface:
 
 * `nexa savefile new <output.nex>`

@@ -70,6 +70,7 @@ The current repository state includes the following implemented surface:
 * legacy `.nex` writer / reverse-conversion semantics were removed; only bounded execution compatibility remains
 * `nexa savefile new <output.nex>` exposes canonical savefile creation through the CLI
 * `nexa savefile validate <file.nex>` exposes canonical savefile validation through the CLI
+* role-aware `.nex` storage foundation introduced for future `working_save` / `commit_snapshot` branching via `src/storage/nex_api.py` and `src/storage/models/*`
 
 ---
 
