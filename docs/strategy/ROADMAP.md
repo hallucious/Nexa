@@ -34,7 +34,7 @@ Current baseline: 1022 passed, 3 skipped
 * Official retained demo consolidated to `examples/real_ai_bug_autopsy_multinode/`
 * Provider environment guidance unified across OpenAI, Codex, Claude, Gemini, and Perplexity
 * Canonical public CLI clarified as `src.cli.nexa_cli:main`
-* Legacy Nex compatibility is now wrapper-oriented: `src/engine/cli.py` is a pure compatibility wrapper, `src/engine/cli.py` owns engine-only parser/main behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation/summary logic
+* Legacy Nex compatibility is now wrapper-oriented: `src/engine/cli.py` is a pure compatibility wrapper, `src/engine/cli.py` owns engine-only parser/main behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic
 * Legacy `.nex` reverse-conversion / writer support removed; compatibility is execution-only
 * Current repository baseline: 1022 passed, 3 skipped
 
@@ -78,4 +78,4 @@ End of Roadmap
 * legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling
 
 
-- Legacy engine CLI compatibility is now fully wrapper-oriented: `src/engine/cli.py` only re-exports the bounded engine CLI surface, `src/engine/cli.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation/summary logic.
+- Legacy engine CLI compatibility is now fully wrapper-oriented: `src/engine/cli.py` only re-exports the bounded engine CLI surface, `src/engine/cli.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic.

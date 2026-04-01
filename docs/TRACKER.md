@@ -258,4 +258,4 @@ CLI
 * legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling
 
 
-- Legacy engine CLI compatibility is now wrapper-oriented: `src/engine/cli.py` only re-exports the bounded engine CLI surface, `src/engine/cli.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation/summary logic.
+- Legacy engine CLI compatibility is now wrapper-oriented: `src/engine/cli.py` only re-exports the bounded engine CLI surface, `src/engine/cli.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic.

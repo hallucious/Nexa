@@ -162,7 +162,6 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import List
 
-from src.engine.types import NodeStatus
 
 from src.circuit.loader import (
     LegacyNexBundle,
@@ -262,8 +261,6 @@ def load_engine_from_legacy_nex_path(
     return circuit, engine
 
 
-def open_legacy_nex_bundle(bundle_path: str) -> LegacyNexBundle:
-    return load_legacy_nex_bundle(bundle_path, require_plugins=False)
 
 
 def prepare_engine_from_legacy_nex_bundle(
@@ -277,57 +274,3 @@ def prepare_engine_from_legacy_nex_bundle(
     circuit = load_legacy_nex_file(str(bundle.circuit_path))
     engine = build_engine_from_legacy_nex(circuit)
     return circuit, engine
-
-
-def _legacy_node_attempts(node_meta: Optional[Dict[str, Any]], status: NodeStatus) -> int:
-    if node_meta and isinstance(node_meta.get("retry"), dict):
-        retry_meta = node_meta["retry"]
-        if isinstance(retry_meta.get("attempt_count"), int):
-            return retry_meta["attempt_count"]
-    if status in (NodeStatus.SUCCESS, NodeStatus.FAILURE):
-        return 1
-    return 0
-
-
-def build_legacy_trace_summary(circuit_id: str, trace: Any) -> Dict[str, Any]:
-    nodes: Dict[str, Dict[str, Any]] = {}
-    any_failure = False
-
-    for node_id, node_trace in trace.nodes.items():
-        status = node_trace.node_status
-        nodes[node_id] = {
-            "status": status.value.upper(),
-            "attempts": _legacy_node_attempts(getattr(node_trace, "meta", None), status),
-        }
-        if status == NodeStatus.FAILURE:
-            any_failure = True
-
-    return {
-        "circuit_id": circuit_id,
-        "status": "FAILURE" if any_failure else "SUCCESS",
-        "nodes": nodes,
-    }
-
-
-def execute_legacy_nex_summary(
-    circuit_path: str,
-    *,
-    bundle_path: Optional[str] = None,
-    run_id: str = "cli",
-) -> Dict[str, Any]:
-    circuit, engine = load_engine_from_legacy_nex_path(
-        circuit_path,
-        bundle_path=bundle_path,
-    )
-    trace = engine.execute(revision_id=run_id)
-    return build_legacy_trace_summary(circuit.circuit.circuit_id, trace)
-
-
-def execute_legacy_nex_bundle_summary(
-    bundle: LegacyNexBundle,
-    *,
-    run_id: str = "cli",
-) -> Dict[str, Any]:
-    circuit, engine = prepare_engine_from_legacy_nex_bundle(bundle)
-    trace = engine.execute(revision_id=run_id)
-    return build_legacy_trace_summary(circuit.circuit.circuit_id, trace)

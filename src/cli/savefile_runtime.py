@@ -4,10 +4,10 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from src.circuit.loader import load_legacy_nex_bundle
 from src.circuit.runtime_adapter import (
-    execute_legacy_nex_bundle_summary,
-    execute_legacy_nex_summary,
-    open_legacy_nex_bundle,
+    load_engine_from_legacy_nex_path,
+    prepare_engine_from_legacy_nex_bundle,
 )
 from src.contracts.savefile_executor_aligned import SavefileExecutor
 from src.contracts.savefile_loader import load_savefile_from_path
@@ -107,6 +107,56 @@ def run_savefile_nex(
     return exit_code
 
 
+def build_legacy_trace_summary(circuit_id: str, trace: Any) -> dict[str, Any]:
+    nodes: dict[str, dict[str, Any]] = {}
+    any_failure = False
+
+    for node_id, node_trace in trace.nodes.items():
+        status = node_trace.node_status
+        attempts = 1
+        node_meta = getattr(node_trace, "meta", None)
+        if node_meta and isinstance(node_meta.get("retry"), dict):
+            retry_meta = node_meta["retry"]
+            if isinstance(retry_meta.get("attempt_count"), int):
+                attempts = retry_meta["attempt_count"]
+        nodes[node_id] = {
+            "status": status.value.upper(),
+            "attempts": attempts if status.value.upper() in ("SUCCESS", "FAILURE") else 0,
+        }
+        if status.value.upper() == "FAILURE":
+            any_failure = True
+
+    return {
+        "circuit_id": circuit_id,
+        "status": "FAILURE" if any_failure else "SUCCESS",
+        "nodes": nodes,
+    }
+
+
+def execute_legacy_nex_summary(
+    circuit_path: str,
+    *,
+    bundle_path: Optional[str] = None,
+    run_id: str = "cli",
+) -> dict[str, Any]:
+    circuit, engine = load_engine_from_legacy_nex_path(
+        circuit_path,
+        bundle_path=bundle_path,
+    )
+    trace = engine.execute(revision_id=run_id)
+    return build_legacy_trace_summary(circuit.circuit.circuit_id, trace)
+
+
+def execute_legacy_nex_bundle_summary(
+    bundle,
+    *,
+    run_id: str = "cli",
+) -> dict[str, Any]:
+    circuit, engine = prepare_engine_from_legacy_nex_bundle(bundle)
+    trace = engine.execute(revision_id=run_id)
+    return build_legacy_trace_summary(circuit.circuit.circuit_id, trace)
+
+
 def run_legacy_nex(
     circuit_path: str,
     out_path: Optional[str] = None,
@@ -133,7 +183,7 @@ def run_legacy_nex_bundle(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    bundle = open_legacy_nex_bundle(bundle_path)
+    bundle = load_legacy_nex_bundle(bundle_path, require_plugins=False)
     try:
         if is_savefile_contract(str(bundle.circuit_path)):
             return run_savefile_nex(
