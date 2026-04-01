@@ -38,7 +38,7 @@ The current repository state includes the following implemented surface:
 * legacy plugin registry shell removal
 * savefile-aligned plugin execution convergence onto the auto-loader bridge
 * savefile executor plugin-node path validated by regression coverage
-* legacy `.nex` execution compatibility is now split cleanly: `src/engine/cli.py` is a pure wrapper, `src/engine/cli.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns preparation/adaptation/summary logic
+* legacy `.nex` execution compatibility is now split cleanly: `src/engine/cli.py` is a bounded compatibility shim, `src/cli/savefile_runtime.py` owns execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns preparation/adaptation logic
 * deletion of legacy nex contract leaves (`nex_loader`, `nex_engine_adapter`, `nex_bundle_loader`)
 * deletion of remaining legacy nex contract support files (`nex_format`, `nex_serializer`, `nex_validator`)
 * deletion of legacy `.nex` reverse-conversion / writer surface (`build_nex_from_engine`, `serialize_nex`, `save_nex_file`)
@@ -258,4 +258,4 @@ CLI
 * legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling
 
 
-- Legacy engine CLI compatibility is now wrapper-oriented: `src/engine/cli.py` only re-exports the bounded engine CLI surface, `src/engine/cli.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic.
+- Legacy engine CLI compatibility is now wrapper-oriented: `src/engine/cli.py` is a bounded shim, `src/cli/savefile_runtime.py` owns execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic.

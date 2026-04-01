@@ -177,7 +177,7 @@ This means new runtime work MUST build from the converged files above rather tha
 
 Legacy `.nex` compatibility runtime concentration:
 
-* `.nex` execution compatibility is now split across canonical modules: `src/engine/cli.py` is a pure wrapper, `src/engine/cli.py` owns engine-only parser/main behavior, `src/cli/savefile_runtime.py` owns savefile/legacy summary dispatch and output emission, `src/engine/cli_policy_integration.py` owns regression policy formatting/application, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic
+* `.nex` execution compatibility is now split across canonical modules: `src/engine/cli.py` is a bounded compatibility shim, `src/cli/savefile_runtime.py` owns savefile/legacy execution dispatch, summary building, payload emission, and baseline-policy application, `src/engine/cli_policy_integration.py` owns policy integration primitives, and `src/circuit/runtime_adapter.py` owns legacy preparation and adaptation logic
 * legacy `.nex` support is execution-only; reverse conversion / writer / roundtrip preservation are no longer part of the supported runtime surface
 * deleted legacy contract leaves:
   * `src/contracts/nex_loader.py`
@@ -430,4 +430,4 @@ Representation {
 * legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling
 
 
-- Legacy engine CLI compatibility is now fully wrapper-oriented: `src/engine/cli.py` only re-exports the bounded engine CLI surface, `src/engine/cli.py` owns engine-only parser/main/run_engine behavior, `src/cli/savefile_runtime.py` owns summary dispatch/output emission, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic, while `src/cli/savefile_runtime.py` owns savefile/legacy summary dispatch and output emission.
+- Legacy engine CLI compatibility is now fully wrapper-oriented: `src/engine/cli.py` is the bounded engine compatibility shim, `src/cli/savefile_runtime.py` owns savefile/legacy execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic.

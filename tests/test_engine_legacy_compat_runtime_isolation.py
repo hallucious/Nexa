@@ -37,8 +37,8 @@ def test_legacy_nex_runtime_preparation_stays_in_runtime_adapter_but_summary_dis
     assert "def prepare_engine_from_legacy_nex_bundle(" in adapter_source
     assert "def open_legacy_nex_bundle(" not in adapter_source
     assert "def build_legacy_trace_summary(" in runtime_source
-    assert "def execute_legacy_nex_summary(" in runtime_source
-    assert "def execute_legacy_nex_bundle_summary(" in runtime_source
+    assert "def execute_legacy_nex_summary(" not in runtime_source
+    assert "def execute_legacy_nex_bundle_summary(" not in runtime_source
 
 
 def test_engine_cli_policy_and_summary_dispatch_move_to_savefile_runtime() -> None:
@@ -50,11 +50,11 @@ def test_engine_cli_policy_and_summary_dispatch_move_to_savefile_runtime() -> No
     assert "def _write_or_print_payload(" not in cli_source
     assert "def run_nex(" not in runtime_source
     assert "def build_savefile_trace_summary(" in runtime_source
-    assert "def execute_legacy_nex_summary(" in runtime_source
-    assert "def execute_legacy_nex_bundle_summary(" in runtime_source
+    assert "def execute_savefile_summary(" not in runtime_source
     assert "def run_legacy_nex(" in runtime_source
     assert "def run_legacy_nex_bundle(" in runtime_source
     assert "def run_savefile_nex(" in runtime_source
+    assert "def _emit_policy_wrapped_payload(" in runtime_source
     assert "def write_or_print_payload(" in runtime_source
 
 

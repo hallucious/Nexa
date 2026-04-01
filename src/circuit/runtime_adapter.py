@@ -247,6 +247,17 @@ def build_engine_from_legacy_nex(circuit: LegacyNexCircuit) -> Engine:
     )
 
 
+
+
+def _validate_legacy_nex_plugins_for_root(raw_data: Dict[str, Any], plugin_root: str) -> None:
+    validate_legacy_nex_plugins(raw_data, plugin_root)
+
+
+def _load_legacy_circuit_and_build_engine(circuit_path: str) -> tuple[LegacyNexCircuit, Engine]:
+    circuit = load_legacy_nex_file(circuit_path)
+    engine = build_engine_from_legacy_nex(circuit)
+    return circuit, engine
+
 def load_engine_from_legacy_nex_path(
     circuit_path: str,
     *,
@@ -254,11 +265,9 @@ def load_engine_from_legacy_nex_path(
 ) -> tuple[LegacyNexCircuit, Engine]:
     if bundle_path:
         raw_data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
-        validate_legacy_nex_plugins(raw_data, bundle_path)
+        _validate_legacy_nex_plugins_for_root(raw_data, bundle_path)
 
-    circuit = load_legacy_nex_file(circuit_path)
-    engine = build_engine_from_legacy_nex(circuit)
-    return circuit, engine
+    return _load_legacy_circuit_and_build_engine(circuit_path)
 
 
 
@@ -270,7 +279,5 @@ def prepare_engine_from_legacy_nex_bundle(
         raise RuntimeError("plugins/ missing in bundle")
 
     raw_data = json.loads(bundle.circuit_path.read_text(encoding="utf-8"))
-    validate_legacy_nex_plugins(raw_data, str(bundle.temp_dir))
-    circuit = load_legacy_nex_file(str(bundle.circuit_path))
-    engine = build_engine_from_legacy_nex(circuit)
-    return circuit, engine
+    _validate_legacy_nex_plugins_for_root(raw_data, str(bundle.temp_dir))
+    return _load_legacy_circuit_and_build_engine(str(bundle.circuit_path))

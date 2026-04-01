@@ -71,21 +71,6 @@ def build_savefile_trace_summary(savefile_name: str, trace: Any) -> dict[str, An
     }
 
 
-def execute_savefile_summary(
-    circuit_path: str,
-    *,
-    input_overrides: Mapping[str, Any] | None = None,
-    run_id: str = "cli",
-) -> tuple[Any, Any, dict[str, Any]]:
-    savefile, trace = execute_savefile(
-        circuit_path,
-        input_overrides=input_overrides,
-        run_id=run_id,
-    )
-    payload = build_savefile_trace_summary(savefile.meta.name, trace)
-    return savefile, trace, payload
-
-
 def write_or_print_payload(payload: dict[str, Any], out_path: Optional[str]) -> None:
     if out_path:
         out_file = Path(out_path)
@@ -95,16 +80,26 @@ def write_or_print_payload(payload: dict[str, Any], out_path: Optional[str]) -> 
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
+def _emit_policy_wrapped_payload(
+    payload: dict[str, Any],
+    out_path: Optional[str],
+    baseline_path: Optional[str],
+    policy_config_path: Optional[str],
+) -> int:
+    payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)
+    write_or_print_payload(payload, out_path)
+    return exit_code
+
+
 def run_savefile_nex(
     circuit_path: str,
     out_path: Optional[str] = None,
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    _, _, payload = execute_savefile_summary(circuit_path, run_id="cli")
-    payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)
-    write_or_print_payload(payload, out_path)
-    return exit_code
+    savefile, trace = execute_savefile(circuit_path, run_id="cli")
+    payload = build_savefile_trace_summary(savefile.meta.name, trace)
+    return _emit_policy_wrapped_payload(payload, out_path, baseline_path, policy_config_path)
 
 
 def build_legacy_trace_summary(circuit_id: str, trace: Any) -> dict[str, Any]:
@@ -133,30 +128,6 @@ def build_legacy_trace_summary(circuit_id: str, trace: Any) -> dict[str, Any]:
     }
 
 
-def execute_legacy_nex_summary(
-    circuit_path: str,
-    *,
-    bundle_path: Optional[str] = None,
-    run_id: str = "cli",
-) -> dict[str, Any]:
-    circuit, engine = load_engine_from_legacy_nex_path(
-        circuit_path,
-        bundle_path=bundle_path,
-    )
-    trace = engine.execute(revision_id=run_id)
-    return build_legacy_trace_summary(circuit.circuit.circuit_id, trace)
-
-
-def execute_legacy_nex_bundle_summary(
-    bundle,
-    *,
-    run_id: str = "cli",
-) -> dict[str, Any]:
-    circuit, engine = prepare_engine_from_legacy_nex_bundle(bundle)
-    trace = engine.execute(revision_id=run_id)
-    return build_legacy_trace_summary(circuit.circuit.circuit_id, trace)
-
-
 def run_legacy_nex(
     circuit_path: str,
     out_path: Optional[str] = None,
@@ -167,14 +138,13 @@ def run_legacy_nex(
     if is_savefile_contract(circuit_path):
         return run_savefile_nex(circuit_path, out_path, baseline_path, policy_config_path)
 
-    payload = execute_legacy_nex_summary(
+    circuit, engine = load_engine_from_legacy_nex_path(
         circuit_path,
         bundle_path=bundle_path,
-        run_id="cli",
     )
-    payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)
-    write_or_print_payload(payload, out_path)
-    return exit_code
+    trace = engine.execute(revision_id="cli")
+    payload = build_legacy_trace_summary(circuit.circuit.circuit_id, trace)
+    return _emit_policy_wrapped_payload(payload, out_path, baseline_path, policy_config_path)
 
 
 def run_legacy_nex_bundle(
@@ -193,9 +163,9 @@ def run_legacy_nex_bundle(
                 policy_config_path,
             )
 
-        payload = execute_legacy_nex_bundle_summary(bundle, run_id="cli")
-        payload, exit_code = apply_baseline_policy(payload, baseline_path, policy_config_path)
-        write_or_print_payload(payload, out_path)
-        return exit_code
+        circuit, engine = prepare_engine_from_legacy_nex_bundle(bundle)
+        trace = engine.execute(revision_id="cli")
+        payload = build_legacy_trace_summary(circuit.circuit.circuit_id, trace)
+        return _emit_policy_wrapped_payload(payload, out_path, baseline_path, policy_config_path)
     finally:
         bundle.cleanup()
