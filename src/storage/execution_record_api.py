@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
@@ -36,8 +35,6 @@ def _ms_to_iso(timestamp_ms: Optional[int]) -> Optional[str]:
     return datetime.fromtimestamp(timestamp_ms / 1000.0, tz=timezone.utc).isoformat()
 
 
-
-
 def _to_json_safe(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
@@ -63,6 +60,19 @@ def _semantic_status_from_run(status: str, has_outputs: bool) -> str:
         return 'failed' if not has_outputs else 'partial'
     return 'normal' if has_outputs else 'failed'
 
+
+def _artifact_id_for_node(node_id: str) -> str:
+    return f'artifact::{node_id}'
+
+
+def _node_trace_ref(trace_ref: str | None, event_stream_ref: str | None, node_id: str) -> str | None:
+    if event_stream_ref:
+        return f'{event_stream_ref}#node:{node_id}'
+    if trace_ref:
+        return f'{trace_ref}#node:{node_id}'
+    return None
+
+
 def _build_timing_card(span: NodeExecutionSpan) -> NodeTimingCard:
     return NodeTimingCard(
         node_id=span.node_id,
@@ -73,7 +83,51 @@ def _build_timing_card(span: NodeExecutionSpan) -> NodeTimingCard:
     )
 
 
-def _build_node_result_cards(snapshot: ExecutionSnapshot) -> list[NodeResultCard]:
+def _build_artifact_cards(
+    snapshot: ExecutionSnapshot,
+    explicit_artifact_refs: Iterable[ArtifactRecordCard] | None,
+    output_cards: list[OutputResultCard],
+) -> list[ArtifactRecordCard]:
+    artifact_cards = list(explicit_artifact_refs or [])
+    existing_ids = {card.artifact_id for card in artifact_cards}
+    for node_hash in snapshot.node_hashes:
+        artifact_id = _artifact_id_for_node(node_hash.node_id)
+        if artifact_id in existing_ids:
+            continue
+        artifact_cards.append(
+            ArtifactRecordCard(
+                artifact_id=artifact_id,
+                artifact_type='node_output_hash',
+                producer_node=node_hash.node_id,
+                hash=node_hash.hash_value,
+                ref=f'hash://{node_hash.algorithm}/{node_hash.hash_value}',
+                summary=f'Output hash for node {node_hash.node_id}',
+            )
+        )
+        existing_ids.add(artifact_id)
+    for output_card in output_cards:
+        artifact_id = f'artifact::output::{output_card.output_ref}'
+        if artifact_id in existing_ids:
+            continue
+        artifact_cards.append(
+            ArtifactRecordCard(
+                artifact_id=artifact_id,
+                artifact_type='final_output',
+                ref=output_card.value_ref or f'output://{snapshot.execution_id}/{output_card.output_ref}',
+                summary=f'Final output artifact for {output_card.output_ref}',
+            )
+        )
+        existing_ids.add(artifact_id)
+    return artifact_cards
+
+
+def _build_node_result_cards(
+    snapshot: ExecutionSnapshot,
+    *,
+    trace_ref: str | None,
+    event_stream_ref: str | None,
+    artifact_id_by_node: dict[str, str],
+) -> list[NodeResultCard]:
     hash_map = {item.node_id: item for item in snapshot.node_hashes}
     cards: list[NodeResultCard] = []
     for span in snapshot.timeline.node_spans:
@@ -84,7 +138,11 @@ def _build_node_result_cards(snapshot: ExecutionSnapshot) -> list[NodeResultCard
         metrics = None
         node_hash = hash_map.get(span.node_id)
         if node_hash is not None:
-            metrics = {"output_hash": node_hash.hash_value, "hash_algorithm": node_hash.algorithm}
+            metrics = {'output_hash': node_hash.hash_value, 'hash_algorithm': node_hash.algorithm}
+        artifact_refs = []
+        artifact_id = artifact_id_by_node.get(span.node_id)
+        if artifact_id is not None:
+            artifact_refs.append(artifact_id)
         cards.append(
             NodeResultCard(
                 node_id=span.node_id,
@@ -92,15 +150,17 @@ def _build_node_result_cards(snapshot: ExecutionSnapshot) -> list[NodeResultCard
                 output_summary=summary,
                 output_type=output_type,
                 output_preview=output_preview,
+                artifact_refs=artifact_refs,
                 warning_count=0,
                 error_count=1 if span.status == 'failed' else 0,
+                trace_ref=_node_trace_ref(trace_ref, event_stream_ref, span.node_id),
                 metrics=metrics,
             )
         )
     return cards
 
 
-def _build_output_cards(final_outputs: dict[str, Any] | None) -> list[OutputResultCard]:
+def _build_output_cards(final_outputs: dict[str, Any] | None, *, trace_ref: str | None) -> list[OutputResultCard]:
     cards: list[OutputResultCard] = []
     for output_ref, value in (final_outputs or {}).items():
         cards.append(
@@ -109,6 +169,7 @@ def _build_output_cards(final_outputs: dict[str, Any] | None) -> list[OutputResu
                 value_summary=_summarize_value(value),
                 value_payload=_to_json_safe(value),
                 value_type=type(value).__name__,
+                value_ref=f'{trace_ref}#output:{output_ref}' if trace_ref else None,
             )
         )
     return cards
@@ -121,6 +182,26 @@ def _build_observability_metrics(snapshot: ExecutionSnapshot) -> dict[str, Any]:
         'node_count': len(snapshot.timeline.node_spans),
         'hashed_nodes': len(snapshot.node_hashes),
     }
+
+
+def _merge_observability_refs(
+    provided_refs: list[str] | None,
+    *,
+    trace_ref: str | None,
+    event_stream_ref: str | None,
+    artifact_cards: list[ArtifactRecordCard],
+) -> list[str] | None:
+    refs: list[str] = []
+    for item in provided_refs or []:
+        if item not in refs:
+            refs.append(item)
+    for item in [trace_ref, event_stream_ref]:
+        if item and item not in refs:
+            refs.append(item)
+    for card in artifact_cards:
+        if card.ref and card.ref not in refs:
+            refs.append(card.ref)
+    return refs or None
 
 
 def create_execution_record_from_snapshot(
@@ -158,9 +239,26 @@ def create_execution_record_from_snapshot(
     finished = finished_at or _ms_to_iso(snapshot.timeline.end_ms)
     timing_cards = [_build_timing_card(span) for span in snapshot.timeline.node_spans]
     node_order = [span.node_id for span in snapshot.timeline.node_spans]
-    output_cards = _build_output_cards(final_outputs if final_outputs is not None else snapshot.node_outputs)
-    artifact_card_list = list(artifact_refs or [])
-    trace_summary_value = trace_summary or f"Execution {snapshot.execution_id} observed {len(snapshot.timeline.node_spans)} node span(s)."
+    output_cards = _build_output_cards(final_outputs if final_outputs is not None else snapshot.node_outputs, trace_ref=trace_ref)
+    artifact_card_list = _build_artifact_cards(snapshot, artifact_refs, output_cards)
+    artifact_id_by_node = {
+        card.producer_node: card.artifact_id
+        for card in artifact_card_list
+        if card.producer_node
+    }
+    node_result_cards = _build_node_result_cards(
+        snapshot,
+        trace_ref=trace_ref,
+        event_stream_ref=event_stream_ref,
+        artifact_id_by_node=artifact_id_by_node,
+    )
+    trace_summary_value = trace_summary or f'Execution {snapshot.execution_id} observed {len(snapshot.timeline.node_spans)} node span(s).'
+    resolved_observability_refs = _merge_observability_refs(
+        observability_refs,
+        trace_ref=trace_ref,
+        event_stream_ref=event_stream_ref,
+        artifact_cards=artifact_card_list,
+    )
     return ExecutionRecordModel(
         meta=ExecutionMetaModel(
             run_id=snapshot.execution_id,
@@ -193,16 +291,16 @@ def create_execution_record_from_snapshot(
             trace_ref=trace_ref,
             event_stream_ref=event_stream_ref,
         ),
-        node_results=NodeResultsModel(results=_build_node_result_cards(snapshot)),
+        node_results=NodeResultsModel(results=node_result_cards),
         outputs=ExecutionOutputModel(
             final_outputs=output_cards,
-            output_summary=f"{len(output_cards)} output(s) recorded" if output_cards else 'No final outputs recorded',
+            output_summary=f'{len(output_cards)} output(s) recorded' if output_cards else 'No final outputs recorded',
             semantic_status=_semantic_status_from_run(status, bool(output_cards)),
         ),
         artifacts=ExecutionArtifactsModel(
             artifact_refs=artifact_card_list,
             artifact_count=len(artifact_card_list),
-            artifact_summary=f"{len(artifact_card_list)} artifact ref(s) recorded" if artifact_card_list else 'No artifact refs recorded',
+            artifact_summary=f'{len(artifact_card_list)} artifact ref(s) recorded' if artifact_card_list else 'No artifact refs recorded',
         ),
         diagnostics=ExecutionDiagnosticsModel(
             warnings=list(warnings or []),
@@ -215,7 +313,7 @@ def create_execution_record_from_snapshot(
             provider_usage_summary=provider_usage_summary,
             plugin_usage_summary=plugin_usage_summary,
             trace_summary=trace_summary_value,
-            observability_refs=observability_refs,
+            observability_refs=resolved_observability_refs,
         ),
     )
 
@@ -232,9 +330,11 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
         'output_refs': [item.output_ref for item in record.outputs.final_outputs],
         'semantic_status': record.outputs.semantic_status,
         'artifact_count': record.artifacts.artifact_count,
+        'artifact_ids': [item.artifact_id for item in record.artifacts.artifact_refs],
         'warning_count': len(record.diagnostics.warnings),
         'error_count': len(record.diagnostics.errors),
         'trace_ref': record.timeline.trace_ref,
+        'event_stream_ref': record.timeline.event_stream_ref,
     }
 
 

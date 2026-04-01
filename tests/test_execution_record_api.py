@@ -96,3 +96,31 @@ def test_summarize_execution_record_for_working_save_includes_output_refs_and_se
     assert summary['output_count'] == 1
     assert summary['output_refs'] == ['final_answer']
     assert summary['semantic_status'] == 'normal'
+
+
+def test_create_execution_record_from_snapshot_auto_links_hash_artifacts_and_observability_refs():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        trace_ref='trace://exec-1',
+        event_stream_ref='events://exec-1',
+    )
+    assert record.artifacts.artifact_count == 2
+    artifact = record.artifacts.artifact_refs[0]
+    assert artifact.artifact_id == 'artifact::node_a'
+    assert artifact.ref == 'hash://sha256/abc'
+    assert record.artifacts.artifact_refs[1].artifact_id == 'artifact::output::final_answer'
+    assert record.node_results.results[0].artifact_refs == ['artifact::node_a']
+    assert record.node_results.results[0].trace_ref == 'events://exec-1#node:node_a'
+    assert 'trace://exec-1' in (record.observability.observability_refs or [])
+    assert 'events://exec-1' in (record.observability.observability_refs or [])
+    assert 'hash://sha256/abc' in (record.observability.observability_refs or [])
+
+
+def test_create_execution_record_from_snapshot_builds_output_value_refs_from_trace_ref():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        trace_ref='trace://exec-1',
+    )
+    assert record.outputs.final_outputs[0].value_ref == 'trace://exec-1#output:final_answer'

@@ -117,3 +117,19 @@ def test_create_execution_record_and_update_working_save_propagates_output_summa
     assert updated.runtime.last_run['output_refs'] == ['out']
     assert updated.runtime.last_run['semantic_status'] == 'normal'
     assert record.outputs.final_outputs[0].value_payload == {'value': 'done'}
+
+
+def test_create_execution_record_and_update_working_save_propagates_trace_and_artifact_linkage_summary():
+    working = make_working_save()
+    commit_snapshot = create_commit_snapshot_from_working_save(working, commit_id='cs-1')
+    record, updated = create_execution_record_and_update_working_save(
+        make_snapshot(),
+        commit_snapshot,
+        working,
+        trace_ref='trace://exec-1',
+        event_stream_ref='events://exec-1',
+    )
+    assert updated.runtime.last_run['trace_ref'] == 'trace://exec-1'
+    assert updated.runtime.last_run['event_stream_ref'] == 'events://exec-1'
+    assert updated.runtime.last_run['artifact_ids'] == ['artifact::output::out']
+    assert record.node_results.results[0].artifact_refs == []
