@@ -6,6 +6,7 @@ from src.engine.execution_artifact_hashing import ExecutionHashReport, NodeOutpu
 from src.engine.execution_snapshot import ExecutionSnapshotBuilder
 from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
 from src.storage.execution_record_api import (
+    build_execution_record_reference_contract,
     create_execution_record_from_snapshot,
     summarize_execution_record_for_working_save,
 )
@@ -124,3 +125,34 @@ def test_create_execution_record_from_snapshot_builds_output_value_refs_from_tra
         trace_ref='trace://exec-1',
     )
     assert record.outputs.final_outputs[0].value_ref == 'trace://exec-1#output:final_answer'
+
+
+def test_build_execution_record_reference_contract_prefers_event_stream_and_indexes_refs():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        trace_ref='trace://exec-1',
+        event_stream_ref='events://exec-1',
+    )
+    contract = build_execution_record_reference_contract(record)
+    assert contract['primary_trace_ref'] == 'events://exec-1'
+    assert contract['node_trace_refs']['node_a'] == 'events://exec-1#node:node_a'
+    assert contract['output_value_refs']['final_answer'] == 'trace://exec-1#output:final_answer'
+    assert contract['artifact_refs']['artifact::output::final_answer'] == 'trace://exec-1#output:final_answer'
+    assert contract['unresolved_output_refs'] == []
+    assert contract['is_replay_ready'] is True
+    assert contract['is_audit_ready'] is True
+
+
+def test_build_execution_record_reference_contract_reports_unresolved_refs():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        trace_ref=None,
+    )
+    contract = build_execution_record_reference_contract(record)
+    assert contract['primary_trace_ref'] is None
+    assert contract['unresolved_output_refs'] == ['final_answer']
+    assert contract['unresolved_artifact_refs'] == []
+    assert contract['is_replay_ready'] is False
+    assert contract['is_audit_ready'] is False

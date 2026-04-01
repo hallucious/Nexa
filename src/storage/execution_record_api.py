@@ -318,7 +318,53 @@ def create_execution_record_from_snapshot(
     )
 
 
+def build_execution_record_reference_contract(record: ExecutionRecordModel) -> dict[str, Any]:
+    primary_trace_ref = record.timeline.event_stream_ref or record.timeline.trace_ref
+    node_trace_refs = {
+        item.node_id: item.trace_ref
+        for item in record.node_results.results
+        if item.trace_ref
+    }
+    output_value_refs = {
+        item.output_ref: item.value_ref
+        for item in record.outputs.final_outputs
+        if item.value_ref
+    }
+    artifact_ref_map = {
+        item.artifact_id: item.ref
+        for item in record.artifacts.artifact_refs
+        if item.ref
+    }
+    unresolved_output_refs = [
+        item.output_ref
+        for item in record.outputs.final_outputs
+        if not item.value_ref
+    ]
+    unresolved_artifact_refs = [
+        item.artifact_id
+        for item in record.artifacts.artifact_refs
+        if not item.ref
+    ]
+    observability_refs = list(record.observability.observability_refs or [])
+    return {
+        'run_id': record.meta.run_id,
+        'commit_id': record.source.commit_id,
+        'primary_trace_ref': primary_trace_ref,
+        'trace_ref': record.timeline.trace_ref,
+        'event_stream_ref': record.timeline.event_stream_ref,
+        'node_trace_refs': node_trace_refs,
+        'output_value_refs': output_value_refs,
+        'artifact_refs': artifact_ref_map,
+        'unresolved_output_refs': unresolved_output_refs,
+        'unresolved_artifact_refs': unresolved_artifact_refs,
+        'observability_refs': observability_refs,
+        'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
+        'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
+    }
+
+
 def summarize_execution_record_for_working_save(record: ExecutionRecordModel) -> dict[str, Any]:
+    reference_contract = build_execution_record_reference_contract(record)
     return {
         'run_id': record.meta.run_id,
         'commit_id': record.source.commit_id,
@@ -335,10 +381,14 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
         'error_count': len(record.diagnostics.errors),
         'trace_ref': record.timeline.trace_ref,
         'event_stream_ref': record.timeline.event_stream_ref,
+        'primary_trace_ref': reference_contract['primary_trace_ref'],
+        'replay_ready': reference_contract['is_replay_ready'],
+        'audit_ready': reference_contract['is_audit_ready'],
     }
 
 
 __all__ = [
+    'build_execution_record_reference_contract',
     'create_execution_record_from_snapshot',
     'summarize_execution_record_for_working_save',
     'serialize_execution_record',

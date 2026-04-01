@@ -131,5 +131,8 @@ def test_create_execution_record_and_update_working_save_propagates_trace_and_ar
     )
     assert updated.runtime.last_run['trace_ref'] == 'trace://exec-1'
     assert updated.runtime.last_run['event_stream_ref'] == 'events://exec-1'
+    assert updated.runtime.last_run['primary_trace_ref'] == 'events://exec-1'
     assert updated.runtime.last_run['artifact_ids'] == ['artifact::output::out']
+    assert updated.runtime.last_run['replay_ready'] is True
+    assert updated.runtime.last_run['audit_ready'] is True
     assert record.node_results.results[0].artifact_refs == []
