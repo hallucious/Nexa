@@ -84,3 +84,26 @@ def test_export_command_reads_result_json_and_writes_zip(tmp_path):
     rc = export_command(Args())
     assert rc == 0
     assert out_file.exists()
+
+
+def test_audit_pack_export_includes_execution_record_reference_contract_when_present(tmp_path):
+    out_file = tmp_path / "audit.zip"
+    payload = _sample_run_payload()
+    payload["execution_record_reference_contract"] = {
+        "primary_trace_ref": "events://hello-exec",
+        "is_replay_ready": True,
+        "is_audit_ready": True,
+    }
+
+    ExecutionAuditPackBuilder.export(payload, str(out_file))
+
+    with zipfile.ZipFile(out_file, "r") as zf:
+        names = set(zf.namelist())
+        metadata = json.loads(zf.read("metadata.json").decode("utf-8"))
+        contract = json.loads(zf.read("execution_record_reference_contract.json").decode("utf-8"))
+
+    assert "execution_record_reference_contract.json" in names
+    assert metadata["replay_ready"] is True
+    assert metadata["audit_ready"] is True
+    assert metadata["primary_trace_ref"] == "events://hello-exec"
+    assert contract["primary_trace_ref"] == "events://hello-exec"

@@ -91,6 +91,14 @@ class ExecutionAuditPackBuilder:
             replay_payload = ExecutionAuditPackBuilder._normalize(
                 payload.get('replay_payload', {}) if isinstance(payload, dict) else {}
             )
+            execution_record_reference_contract = ExecutionAuditPackBuilder._normalize(
+                payload.get('execution_record_reference_contract', {}) if isinstance(payload, dict) else {}
+            )
+
+            if isinstance(execution_record_reference_contract, dict) and execution_record_reference_contract:
+                metadata['replay_ready'] = bool(execution_record_reference_contract.get('is_replay_ready'))
+                metadata['audit_ready'] = bool(execution_record_reference_contract.get('is_audit_ready'))
+                metadata['primary_trace_ref'] = execution_record_reference_contract.get('primary_trace_ref')
 
             (root / 'execution_trace.json').write_text(
                 json.dumps(execution_trace_payload, indent=2, ensure_ascii=False, sort_keys=True),
@@ -108,6 +116,11 @@ class ExecutionAuditPackBuilder:
                 json.dumps(replay_payload, indent=2, ensure_ascii=False, sort_keys=True),
                 encoding='utf-8',
             )
+            if isinstance(execution_record_reference_contract, dict) and execution_record_reference_contract:
+                (root / 'execution_record_reference_contract.json').write_text(
+                    json.dumps(execution_record_reference_contract, indent=2, ensure_ascii=False, sort_keys=True),
+                    encoding='utf-8',
+                )
 
             if isinstance(artifacts, list):
                 for index, artifact in enumerate(artifacts, start=1):

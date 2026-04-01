@@ -71,6 +71,16 @@ def replay_audit_pack(audit_zip_path: str) -> dict:
         if not isinstance(replay_payload, dict):
             raise ValueError("replay_payload.json must contain a JSON object")
 
+        reference_contract_file = root / "execution_record_reference_contract.json"
+        reference_contract = {}
+        if reference_contract_file.exists():
+            try:
+                reference_contract = json.loads(reference_contract_file.read_text(encoding="utf-8"))
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"invalid execution_record_reference_contract.json: {exc}") from exc
+            if not isinstance(reference_contract, dict):
+                raise ValueError("execution_record_reference_contract.json must contain a JSON object")
+
         execution_id = replay_payload.get("execution_id", "unknown-execution")
         node_order = replay_payload.get("node_order", [])
         circuit = replay_payload.get("circuit", {})
@@ -117,9 +127,16 @@ def replay_audit_pack(audit_zip_path: str) -> dict:
                 reason = node_result.reason or "unknown difference"
                 differences.append(f"node {node_result.node_id}: {reason}")
 
+        if reference_contract and not reference_contract.get("is_replay_ready", False):
+            differences.append("execution record reference contract is not replay-ready")
+
+        status = "PASS" if report.deterministic and not differences else "FAIL"
+
         return {
-            "status": "PASS" if report.deterministic else "FAIL",
+            "status": status,
             "execution_id": execution_id,
             "differences": differences,
             "report": _normalize(report),
+            "reference_contract": _normalize(reference_contract),
+            "primary_trace_ref": reference_contract.get("primary_trace_ref"),
         }

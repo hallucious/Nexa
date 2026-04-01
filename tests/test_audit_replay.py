@@ -115,3 +115,34 @@ def test_export_includes_replay_payload_file(tmp_path):
 
     assert "replay_payload.json" in names
     assert replay_payload["execution_id"] == "hello-exec"
+
+
+def test_replay_audit_pack_uses_execution_record_reference_contract(tmp_path):
+    audit_zip = tmp_path / "audit.zip"
+    payload = _sample_run_payload()
+    payload["execution_record_reference_contract"] = {
+        "primary_trace_ref": "events://hello-exec",
+        "is_replay_ready": True,
+        "is_audit_ready": True,
+    }
+    ExecutionAuditPackBuilder.export(payload, str(audit_zip))
+
+    result = replay_audit_pack(str(audit_zip))
+    assert result["status"] == "PASS"
+    assert result["primary_trace_ref"] == "events://hello-exec"
+    assert result["reference_contract"]["is_replay_ready"] is True
+
+
+def test_replay_audit_pack_fails_when_reference_contract_is_not_replay_ready(tmp_path):
+    audit_zip = tmp_path / "audit.zip"
+    payload = _sample_run_payload()
+    payload["execution_record_reference_contract"] = {
+        "primary_trace_ref": "events://hello-exec",
+        "is_replay_ready": False,
+        "is_audit_ready": True,
+    }
+    ExecutionAuditPackBuilder.export(payload, str(audit_zip))
+
+    result = replay_audit_pack(str(audit_zip))
+    assert result["status"] == "FAIL"
+    assert "execution record reference contract is not replay-ready" in result["differences"]
