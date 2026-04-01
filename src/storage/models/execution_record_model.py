@@ -89,6 +89,8 @@ class NodeResultCard:
     node_id: str
     status: str
     output_summary: Optional[str] = None
+    output_type: Optional[str] = None
+    output_preview: Any = None
     artifact_refs: list[str] = field(default_factory=list)
     warning_count: int = 0
     error_count: int = 0
@@ -112,6 +114,8 @@ class OutputResultCard:
     output_ref: str
     source_node: Optional[str] = None
     value_summary: str = ''
+    value_payload: Any = None
+    value_type: Optional[str] = None
     value_ref: Optional[str] = None
 
     def __post_init__(self) -> None:

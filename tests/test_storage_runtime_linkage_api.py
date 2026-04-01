@@ -107,3 +107,13 @@ def test_create_execution_record_and_update_working_save_rejects_mismatched_work
     commit_snapshot = create_commit_snapshot_from_working_save(working, commit_id='cs-1')
     with pytest.raises(ValueError):
         create_execution_record_and_update_working_save(make_snapshot(), commit_snapshot, other_working)
+
+
+def test_create_execution_record_and_update_working_save_propagates_output_summary_fields():
+    working = make_working_save()
+    commit_snapshot = create_commit_snapshot_from_working_save(working, commit_id='cs-1')
+    record, updated = create_execution_record_and_update_working_save(make_snapshot(), commit_snapshot, working)
+    assert updated.runtime.last_run['output_count'] == 1
+    assert updated.runtime.last_run['output_refs'] == ['out']
+    assert updated.runtime.last_run['semantic_status'] == 'normal'
+    assert record.outputs.final_outputs[0].value_payload == {'value': 'done'}

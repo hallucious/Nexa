@@ -36,6 +36,33 @@ def _ms_to_iso(timestamp_ms: Optional[int]) -> Optional[str]:
     return datetime.fromtimestamp(timestamp_ms / 1000.0, tz=timezone.utc).isoformat()
 
 
+
+
+def _to_json_safe(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _to_json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_to_json_safe(item) for item in value]
+    return repr(value)
+
+
+def _summarize_value(value: Any) -> str:
+    safe_value = _to_json_safe(value)
+    text = str(safe_value)
+    return text if len(text) <= 500 else text[:497] + '...'
+
+
+def _semantic_status_from_run(status: str, has_outputs: bool) -> str:
+    if status == 'completed':
+        return 'normal' if has_outputs else 'failed'
+    if status == 'partial':
+        return 'partial'
+    if status in {'failed', 'cancelled'}:
+        return 'failed' if not has_outputs else 'partial'
+    return 'normal' if has_outputs else 'failed'
+
 def _build_timing_card(span: NodeExecutionSpan) -> NodeTimingCard:
     return NodeTimingCard(
         node_id=span.node_id,
@@ -51,7 +78,9 @@ def _build_node_result_cards(snapshot: ExecutionSnapshot) -> list[NodeResultCard
     cards: list[NodeResultCard] = []
     for span in snapshot.timeline.node_spans:
         output = snapshot.node_outputs.get(span.node_id)
-        summary = None if output is None else f"Output type: {type(output).__name__}"
+        summary = None if output is None else _summarize_value(output)
+        output_type = None if output is None else type(output).__name__
+        output_preview = None if output is None else _to_json_safe(output)
         metrics = None
         node_hash = hash_map.get(span.node_id)
         if node_hash is not None:
@@ -61,6 +90,8 @@ def _build_node_result_cards(snapshot: ExecutionSnapshot) -> list[NodeResultCard
                 node_id=span.node_id,
                 status=span.status if span.status in {"success", "failed", "skipped", "partial", "cancelled"} else "success",
                 output_summary=summary,
+                output_type=output_type,
+                output_preview=output_preview,
                 warning_count=0,
                 error_count=1 if span.status == 'failed' else 0,
                 metrics=metrics,
@@ -72,7 +103,14 @@ def _build_node_result_cards(snapshot: ExecutionSnapshot) -> list[NodeResultCard
 def _build_output_cards(final_outputs: dict[str, Any] | None) -> list[OutputResultCard]:
     cards: list[OutputResultCard] = []
     for output_ref, value in (final_outputs or {}).items():
-        cards.append(OutputResultCard(output_ref=output_ref, value_summary=str(value)[:500]))
+        cards.append(
+            OutputResultCard(
+                output_ref=output_ref,
+                value_summary=_summarize_value(value),
+                value_payload=_to_json_safe(value),
+                value_type=type(value).__name__,
+            )
+        )
     return cards
 
 
@@ -159,7 +197,7 @@ def create_execution_record_from_snapshot(
         outputs=ExecutionOutputModel(
             final_outputs=output_cards,
             output_summary=f"{len(output_cards)} output(s) recorded" if output_cards else 'No final outputs recorded',
-            semantic_status='normal' if output_cards else 'empty',
+            semantic_status=_semantic_status_from_run(status, bool(output_cards)),
         ),
         artifacts=ExecutionArtifactsModel(
             artifact_refs=artifact_card_list,
@@ -190,6 +228,9 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
         'started_at': record.meta.started_at,
         'finished_at': record.meta.finished_at,
         'output_summary': record.outputs.output_summary,
+        'output_count': len(record.outputs.final_outputs),
+        'output_refs': [item.output_ref for item in record.outputs.final_outputs],
+        'semantic_status': record.outputs.semantic_status,
         'artifact_count': record.artifacts.artifact_count,
         'warning_count': len(record.diagnostics.warnings),
         'error_count': len(record.diagnostics.errors),

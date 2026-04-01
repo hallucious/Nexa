@@ -67,3 +67,32 @@ def test_serialize_execution_record_returns_mapping():
     payload = serialize_execution_record(create_execution_record_from_snapshot(make_snapshot(), commit_id='commit-1'))
     assert payload['meta']['run_id'] == 'exec-1'
     assert payload['source']['commit_id'] == 'commit-1'
+
+
+def test_create_execution_record_from_snapshot_materializes_output_payloads_and_node_previews():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        final_outputs={'final_answer': {'text': 'hello'}, 'score': 0.9},
+    )
+    assert record.outputs.final_outputs[0].value_payload == {'text': 'hello'}
+    assert record.outputs.final_outputs[0].value_type == 'dict'
+    assert record.outputs.final_outputs[1].value_payload == 0.9
+
+
+def test_create_execution_record_from_snapshot_normalizes_non_json_safe_outputs():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        final_outputs={'final_answer': {'items': {'a', 'b'}}},
+    )
+    payload = record.outputs.final_outputs[0].value_payload
+    assert payload['items'] == ['a', 'b'] or payload['items'] == ['b', 'a']
+
+
+def test_summarize_execution_record_for_working_save_includes_output_refs_and_semantic_status():
+    record = create_execution_record_from_snapshot(make_snapshot(), commit_id='commit-1')
+    summary = summarize_execution_record_for_working_save(record)
+    assert summary['output_count'] == 1
+    assert summary['output_refs'] == ['final_answer']
+    assert summary['semantic_status'] == 'normal'
