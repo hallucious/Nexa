@@ -84,3 +84,6 @@ End of Roadmap
 
 
 - Execution record foundation implemented in code: contract, model, serialization, and working-save summary integration.
+
+
+* Storage runtime linkage implemented in code: Commit Snapshot–anchored Execution Record creation and Working Save last-run update can now be driven from one lifecycle path

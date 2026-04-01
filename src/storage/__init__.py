@@ -7,6 +7,8 @@ from src.storage.execution_record_api import (
 from src.storage.lifecycle_api import (
     apply_execution_record_to_working_save,
     create_commit_snapshot_from_working_save,
+    create_execution_record_and_update_working_save,
+    create_execution_record_from_commit_snapshot,
 )
 from src.storage.nex_api import load_nex, validate_commit_snapshot, validate_working_save
 
@@ -19,5 +21,7 @@ __all__ = [
     'serialize_execution_record',
     'save_execution_record_file',
     'create_commit_snapshot_from_working_save',
+    'create_execution_record_from_commit_snapshot',
+    'create_execution_record_and_update_working_save',
     'apply_execution_record_to_working_save',
 ]
