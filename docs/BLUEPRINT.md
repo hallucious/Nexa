@@ -445,3 +445,6 @@ Representation {
 
 
 - Legacy engine CLI compatibility is now fully wrapper-oriented: `src/engine/cli.py` is the bounded engine compatibility shim, `src/cli/savefile_runtime.py` owns savefile/legacy execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic.
+
+
+- Execution record foundation implemented in code: contract, model, serialization, and working-save summary integration.
