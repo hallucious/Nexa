@@ -940,7 +940,7 @@ def _savefile_payload(savefile, trace, started_at, ended_at):
         "expected_outputs": expected_outputs,
     }
 
-    return {
+    payload = {
         "result": {
             "state": getattr(trace, "final_state", {}) or {},
             "status": getattr(trace, "status", None),
@@ -948,8 +948,12 @@ def _savefile_payload(savefile, trace, started_at, ended_at):
             "artifacts": getattr(trace, "all_artifacts", []),
         },
         "summary": summary,
+        "trace": {"events": []},
+        "artifacts": getattr(trace, "all_artifacts", []),
         "replay_payload": replay_payload,
     }
+    _synthesize_execution_record_reference_contract(payload)
+    return payload
 
 
 def _run_savefile_command(args):
@@ -1061,8 +1065,11 @@ def run_command(args):
     payload = {
         "result": {"state": final_state},
         "summary": summary,
+        "trace": {"events": []},
+        "artifacts": [],
         "replay_payload": replay_payload,
     }
+    _synthesize_execution_record_reference_contract(payload)
 
     if args.out:
         file_already_existed = _canonical_output_path(args.out, args.circuit).exists()
@@ -1118,6 +1125,80 @@ def compare_command(args):
     return 0
 
 
+
+
+def _synthesize_execution_record_reference_contract(payload: dict[str, object]) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        return {}
+
+    existing = payload.get("execution_record_reference_contract")
+    if isinstance(existing, dict) and existing:
+        return existing
+
+    replay_payload = payload.get("replay_payload")
+    if not isinstance(replay_payload, dict) or not replay_payload:
+        return {}
+
+    execution_id = str(
+        replay_payload.get("execution_id")
+        or payload.get("run_id")
+        or "unknown-execution"
+    )
+
+    trace = payload.get("trace") or payload.get("execution_trace")
+    has_trace = isinstance(trace, dict) and bool(trace)
+    has_events = bool(isinstance(trace, dict) and trace.get("events"))
+
+    trace_ref = f"trace://{execution_id}" if has_trace else None
+    event_stream_ref = f"events://{execution_id}" if has_events else None
+    primary_trace_ref = event_stream_ref or trace_ref
+
+    node_order = replay_payload.get("node_order")
+    if not isinstance(node_order, list):
+        node_order = []
+    node_trace_refs = {
+        str(node_id): f"{primary_trace_ref}#node:{node_id}"
+        for node_id in node_order
+        if isinstance(node_id, str) and primary_trace_ref
+    }
+
+    expected_outputs = replay_payload.get("expected_outputs")
+    if not isinstance(expected_outputs, dict):
+        expected_outputs = {}
+    output_value_refs = {
+        str(output_ref): f"{primary_trace_ref}#output:{output_ref}"
+        for output_ref in expected_outputs.keys()
+        if primary_trace_ref
+    }
+    unresolved_output_refs = [] if primary_trace_ref else [str(output_ref) for output_ref in expected_outputs.keys()]
+
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        artifacts = []
+    artifact_refs = {
+        f"artifact_{index}": f"artifact://{execution_id}/{index}"
+        for index, _ in enumerate(artifacts, start=1)
+    }
+    unresolved_artifact_refs: list[str] = []
+
+    contract = {
+        "run_id": execution_id,
+        "commit_id": replay_payload.get("commit_id"),
+        "primary_trace_ref": primary_trace_ref,
+        "trace_ref": trace_ref,
+        "event_stream_ref": event_stream_ref,
+        "node_trace_refs": node_trace_refs,
+        "output_value_refs": output_value_refs,
+        "artifact_refs": artifact_refs,
+        "unresolved_output_refs": unresolved_output_refs,
+        "unresolved_artifact_refs": unresolved_artifact_refs,
+        "observability_refs": [item for item in [primary_trace_ref] if item],
+        "is_replay_ready": bool(primary_trace_ref and expected_outputs),
+        "is_audit_ready": bool(primary_trace_ref),
+    }
+    payload["execution_record_reference_contract"] = contract
+    return contract
+
 def export_command(args) -> int:
     from src.engine.execution_audit_pack import ExecutionAuditPackBuilder
 
@@ -1136,6 +1217,7 @@ def export_command(args) -> int:
         print(f"Error: {args.input} must contain a JSON object", file=sys.stderr)
         return 1
 
+    _synthesize_execution_record_reference_contract(payload)
     ExecutionAuditPackBuilder.export(payload, args.out)
     print(json.dumps({"status": "ok", "output": args.out}, indent=2, ensure_ascii=False))
     return 0

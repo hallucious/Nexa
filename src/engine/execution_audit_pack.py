@@ -18,6 +18,73 @@ class ExecutionAuditPack:
     regression_report: Any
 
 
+
+
+def _synthesize_execution_record_reference_contract(payload: Dict[str, Any]) -> Dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+
+    existing = payload.get("execution_record_reference_contract")
+    if isinstance(existing, dict) and existing:
+        return existing
+
+    replay_payload = payload.get("replay_payload")
+    if not isinstance(replay_payload, dict) or not replay_payload:
+        return {}
+
+    execution_id = str(replay_payload.get("execution_id") or payload.get("run_id") or "unknown-execution")
+    trace = payload.get("trace") or payload.get("execution_trace")
+    has_trace = isinstance(trace, dict) and bool(trace)
+    has_events = bool(isinstance(trace, dict) and trace.get("events"))
+
+    trace_ref = f"trace://{execution_id}" if has_trace else None
+    event_stream_ref = f"events://{execution_id}" if has_events else None
+    primary_trace_ref = event_stream_ref or trace_ref
+
+    node_order = replay_payload.get("node_order") if isinstance(replay_payload, dict) else []
+    if not isinstance(node_order, list):
+        node_order = []
+    node_trace_refs = {
+        str(node_id): f"{primary_trace_ref}#node:{node_id}"
+        for node_id in node_order
+        if isinstance(node_id, str) and primary_trace_ref
+    }
+
+    expected_outputs = replay_payload.get("expected_outputs") if isinstance(replay_payload, dict) else {}
+    if not isinstance(expected_outputs, dict):
+        expected_outputs = {}
+    output_value_refs = {
+        str(output_ref): f"{primary_trace_ref}#output:{output_ref}"
+        for output_ref in expected_outputs.keys()
+        if primary_trace_ref
+    }
+    unresolved_output_refs = [] if primary_trace_ref else [str(output_ref) for output_ref in expected_outputs.keys()]
+
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list):
+        artifacts = []
+    artifact_refs = {
+        f"artifact_{index}": f"artifact://{execution_id}/{index}"
+        for index, _ in enumerate(artifacts, start=1)
+    }
+
+    contract = {
+        "run_id": execution_id,
+        "commit_id": replay_payload.get("commit_id"),
+        "primary_trace_ref": primary_trace_ref,
+        "trace_ref": trace_ref,
+        "event_stream_ref": event_stream_ref,
+        "node_trace_refs": node_trace_refs,
+        "output_value_refs": output_value_refs,
+        "artifact_refs": artifact_refs,
+        "unresolved_output_refs": unresolved_output_refs,
+        "unresolved_artifact_refs": [],
+        "observability_refs": [item for item in [primary_trace_ref] if item],
+        "is_replay_ready": bool(primary_trace_ref and expected_outputs),
+        "is_audit_ready": bool(primary_trace_ref),
+    }
+    payload["execution_record_reference_contract"] = contract
+    return contract
 class ExecutionAuditPackBuilder:
     """
     Build an execution audit pack that aggregates
@@ -91,9 +158,8 @@ class ExecutionAuditPackBuilder:
             replay_payload = ExecutionAuditPackBuilder._normalize(
                 payload.get('replay_payload', {}) if isinstance(payload, dict) else {}
             )
-            execution_record_reference_contract = ExecutionAuditPackBuilder._normalize(
-                payload.get('execution_record_reference_contract', {}) if isinstance(payload, dict) else {}
-            )
+            synthesized_contract = _synthesize_execution_record_reference_contract(payload if isinstance(payload, dict) else {})
+            execution_record_reference_contract = ExecutionAuditPackBuilder._normalize(synthesized_contract)
 
             if isinstance(execution_record_reference_contract, dict) and execution_record_reference_contract:
                 metadata['replay_ready'] = bool(execution_record_reference_contract.get('is_replay_ready'))

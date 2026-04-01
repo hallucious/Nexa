@@ -112,9 +112,12 @@ def test_export_includes_replay_payload_file(tmp_path):
     with zipfile.ZipFile(out_file, "r") as zf:
         names = set(zf.namelist())
         replay_payload = json.loads(zf.read("replay_payload.json").decode("utf-8"))
+        contract = json.loads(zf.read("execution_record_reference_contract.json").decode("utf-8"))
 
     assert "replay_payload.json" in names
+    assert "execution_record_reference_contract.json" in names
     assert replay_payload["execution_id"] == "hello-exec"
+    assert contract["is_replay_ready"] is True
 
 
 def test_replay_audit_pack_uses_execution_record_reference_contract(tmp_path):

@@ -30,6 +30,33 @@ def _sample_run_payload() -> dict:
         "artifacts": [
             {"name": "greeting", "value": "Hello Nexa"}
         ],
+        "replay_payload": {
+            "execution_id": "hello-exec",
+            "node_order": ["hello_node"],
+            "circuit": {
+                "id": "hello-circuit",
+                "nodes": [
+                    {
+                        "id": "hello_node",
+                        "execution_config_ref": "cfg.hello",
+                        "depends_on": [],
+                    }
+                ],
+            },
+            "execution_configs": {
+                "cfg.hello": {
+                    "config_id": "cfg.hello",
+                    "provider_ref": "echo",
+                    "provider_inputs": {
+                        "message": "input.message"
+                    },
+                }
+            },
+            "input_state": {"message": "Hello Nexa"},
+            "expected_outputs": {
+                "hello_node": "Hello Nexa",
+            },
+        },
     }
 
 
@@ -53,6 +80,7 @@ def test_audit_pack_export_creates_zip(tmp_path):
     assert "metadata.json" in names
     assert "summary.json" in names
     assert "replay_payload.json" in names
+    assert "execution_record_reference_contract.json" in names
     assert "artifacts/artifact_1.json" in names
 
 
@@ -84,6 +112,13 @@ def test_export_command_reads_result_json_and_writes_zip(tmp_path):
     rc = export_command(Args())
     assert rc == 0
     assert out_file.exists()
+
+    with zipfile.ZipFile(out_file, "r") as zf:
+        contract = json.loads(zf.read("execution_record_reference_contract.json").decode("utf-8"))
+        metadata = json.loads(zf.read("metadata.json").decode("utf-8"))
+
+    assert contract["is_replay_ready"] is True
+    assert metadata["primary_trace_ref"] == contract["primary_trace_ref"]
 
 
 def test_audit_pack_export_includes_execution_record_reference_contract_when_present(tmp_path):
