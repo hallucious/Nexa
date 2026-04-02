@@ -22,6 +22,7 @@ from src.storage.models.commit_snapshot_model import (
     CommitValidationModel,
 )
 from src.storage.models.execution_record_model import ExecutionRecordModel
+from src.contracts.commit_snapshot_contract import COMMIT_SNAPSHOT_ALLOWED_VALIDATION_RESULTS
 from src.storage.models.working_save_model import RuntimeModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.serialization import (
     serialize_commit_snapshot,
@@ -168,6 +169,7 @@ def create_commit_snapshot_from_working_save(
         'warning_count': report.warning_count,
         'finding_count': len(report.findings),
     }
+    normalized_validation_result = _normalize_commit_snapshot_validation_result(validation_result)
     return CommitSnapshotModel(
         meta=CommitSnapshotMeta(
             format_version=working_save.meta.format_version,
@@ -183,7 +185,7 @@ def create_commit_snapshot_from_working_save(
         resources=working_save.resources,
         state=working_save.state,
         validation=CommitValidationModel(
-            validation_result=validation_result,
+            validation_result=normalized_validation_result,
             summary=summary,
         ),
         approval=CommitApprovalModel(
@@ -220,7 +222,7 @@ def create_serialized_commit_snapshot_from_working_save(
         validation_summary=validation_summary,
         created_at=created_at,
     )
-    return serialize_commit_snapshot(snapshot)
+    return _ensure_serialized_commit_snapshot_payload(serialize_commit_snapshot(snapshot))
 
 
 def create_serialized_execution_record_from_commit_snapshot(
@@ -282,7 +284,7 @@ def create_serialized_execution_record_from_commit_snapshot(
         trace_summary=trace_summary,
         observability_refs=observability_refs,
     )
-    return serialize_execution_record(record)
+    return _ensure_serialized_execution_record_payload(serialize_execution_record(record))
 
 
 def create_serialized_execution_transition(
@@ -345,8 +347,8 @@ def create_serialized_execution_transition(
         observability_refs=observability_refs,
     )
     return {
-        'execution_record': serialize_execution_record(record),
-        'updated_working_save': serialize_working_save(updated_working_save),
+        'execution_record': _ensure_serialized_execution_record_payload(serialize_execution_record(record)),
+        'updated_working_save': _ensure_serialized_working_save_payload(serialize_working_save(updated_working_save)),
         'execution_record_reference_contract': build_execution_record_reference_contract(record),
         'last_run_summary': dict(updated_working_save.runtime.last_run),
     }
@@ -356,10 +358,55 @@ _SUCCESS_STATUSES = {'completed'}
 _FAILURE_STATUSES = {'failed', 'partial', 'cancelled'}
 
 
+_COMMIT_SNAPSHOT_LEGACY_VALIDATION_RESULT_ALIASES = {
+    'passed_with_findings': 'passed_with_warnings',
+}
+
+
+def _normalize_commit_snapshot_validation_result(result: str) -> str:
+    normalized = _COMMIT_SNAPSHOT_LEGACY_VALIDATION_RESULT_ALIASES.get(result, result)
+    if normalized not in COMMIT_SNAPSHOT_ALLOWED_VALIDATION_RESULTS:
+        raise ValueError(
+            'Commit Snapshot validation_result must be one of '
+            f"{sorted(COMMIT_SNAPSHOT_ALLOWED_VALIDATION_RESULTS)}"
+        )
+    return normalized
+
+
+
+def _ensure_serialized_working_save_payload(payload: dict) -> dict:
+    meta = payload.get('meta', {}) if isinstance(payload, dict) else {}
+    if meta.get('storage_role') != 'working_save':
+        raise ValueError('Serialized working save payload must declare storage_role=working_save')
+    if not meta.get('working_save_id'):
+        raise ValueError('Serialized working save payload must include working_save_id')
+    return payload
+
+
+def _ensure_serialized_commit_snapshot_payload(payload: dict) -> dict:
+    meta = payload.get('meta', {}) if isinstance(payload, dict) else {}
+    if meta.get('storage_role') != 'commit_snapshot':
+        raise ValueError('Serialized commit snapshot payload must declare storage_role=commit_snapshot')
+    if not meta.get('commit_id'):
+        raise ValueError('Serialized commit snapshot payload must include commit_id')
+    return payload
+
+
+def _ensure_serialized_execution_record_payload(payload: dict) -> dict:
+    meta = payload.get('meta', {}) if isinstance(payload, dict) else {}
+    source = payload.get('source', {}) if isinstance(payload, dict) else {}
+    if not meta.get('run_id'):
+        raise ValueError('Serialized execution record payload must include run_id')
+    if not source.get('commit_id'):
+        raise ValueError('Serialized execution record payload must include source.commit_id')
+    return payload
+
+
 def _ensure_commit_snapshot_is_execution_ready(commit_snapshot: CommitSnapshotModel) -> None:
     if not commit_snapshot.approval.approval_completed:
         raise ValueError('Cannot create Execution Record from Commit Snapshot before approval is completed')
-    if commit_snapshot.validation.validation_result not in {'passed', 'passed_with_findings'}:
+    normalized_result = _normalize_commit_snapshot_validation_result(commit_snapshot.validation.validation_result)
+    if normalized_result not in COMMIT_SNAPSHOT_ALLOWED_VALIDATION_RESULTS:
         raise ValueError('Cannot create Execution Record from Commit Snapshot with failing validation result')
 
 
