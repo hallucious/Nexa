@@ -138,3 +138,30 @@ def test_diff_prefers_native_execution_record_truth_over_stale_replay_identity_a
     assert snapshot["nodes"]["native_node"]["output"] == {"value": "native"}
     assert "stale_node" not in snapshot["nodes"]
     assert snapshot["context"]["output.native_node"] == {"value": "native"}
+
+
+def test_diff_fallback_uses_canonicalized_replay_payload_when_native_record_is_minimal():
+    from src.cli.nexa_cli import _normalize_run_output_to_snapshot
+
+    payload = {
+        "execution_record": {
+            "meta": {"run_id": "native-minimal"},
+            "source": {"commit_id": "commit-native"},
+        },
+        "replay_payload": {
+            "execution_id": "stale-exec",
+            "expected_outputs": {"output": {"value": "stale"}},
+        },
+        "result": {
+            "execution_id": "result-exec",
+            "state": {
+                "node_a": {"output": {"value": "from-state"}},
+            },
+        },
+    }
+
+    snapshot = _normalize_run_output_to_snapshot(payload)
+
+    assert snapshot["run_id"] == "native-minimal"
+    assert snapshot["nodes"]["node_a"]["output"] == {"value": "from-state"}
+    assert snapshot["context"]["output.output"] == {"value": "stale"}

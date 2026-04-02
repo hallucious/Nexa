@@ -847,8 +847,8 @@ def _normalize_run_output_to_snapshot(raw: dict) -> dict:
 
     result = raw.get("result") or {}
     state = result.get("state") or {}
-    replay_payload = raw.get("replay_payload") or {}
-    expected_outputs = replay_payload.get("expected_outputs") or {}
+    replay_payload = components.get("replay_payload") if isinstance(components.get("replay_payload"), dict) else {}
+    expected_outputs = replay_payload.get("expected_outputs") if isinstance(replay_payload.get("expected_outputs"), dict) else {}
 
     nodes: dict[str, dict] = {}
     context: dict[str, object] = {}
@@ -869,7 +869,8 @@ def _normalize_run_output_to_snapshot(raw: dict) -> dict:
 
     return {
         "run_id": (
-            raw.get("run_id")
+            components.get("run_id")
+            or raw.get("run_id")
             or result.get("execution_id")
             or replay_payload.get("execution_id")
             or "unknown-run"
