@@ -163,8 +163,6 @@ def _canonicalize_storage_write_payload(
         return payload
 
     nested_record = payload.get('execution_record')
-    if _looks_like_serialized_execution_record(nested_record):
-        return _ensure_mapping(_drop_none(nested_record))
 
     if any(key in payload for key in ('execution_record', 'replay_payload', 'result', 'trace', 'summary')):
         from src.storage.execution_record_api import materialize_execution_record_from_payload
@@ -173,6 +171,9 @@ def _canonicalize_storage_write_payload(
         record = materialize_execution_record_from_payload(normalized_payload)
         if _looks_like_serialized_execution_record(record):
             return _ensure_mapping(_drop_none(record))
+
+    if _looks_like_serialized_execution_record(nested_record):
+        return _ensure_mapping(_drop_none(nested_record))
 
     return payload
 
