@@ -50,6 +50,12 @@ Blocking findings make the artifact unacceptable as committed structure.
 - warning_count
 - result
 
-## 7. Rule
+## 7. Ownership Rule
 
 `load_nex()` is the unified entry point, but validation semantics remain explicitly split by role.
+Execution truth canonicalization after load belongs to storage/lifecycle services rather than this API layer.
+
+## 8. Decision
+
+Role-aware `.nex` loading is current architecture.
+The public load / validate API is unified at entry and split at role semantics.

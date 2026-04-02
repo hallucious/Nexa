@@ -79,7 +79,7 @@ Active spec list: `docs/specs/_active_specs.yaml`
 
 - The repository keeps one official demo: `examples/real_ai_bug_autopsy_multinode/`
 - Provider environment guidance is implemented across OpenAI, Codex, Claude, Gemini, and Perplexity
-- Current verified baseline: `1022 passed, 3 skipped`
+- Current verified baseline: `1117 passed, 3 skipped`
 
 ---
 
@@ -95,3 +95,23 @@ pytest tests/test_foundation_autocheck_contract.py
 ---
 
 End of Documentation Index
+
+
+---
+
+# Storage / Format References
+
+These documents are currently the main supporting references for the role-aware storage direction and three-layer lifecycle:
+
+| File | Purpose |
+|---|---|
+| `docs/specs/storage/storage_architecture_overview.md` | three-layer storage overview |
+| `docs/specs/storage/storage_lifecycle_spec.md` | save / commit / execute lifecycle |
+| `docs/specs/storage/working_save_spec.md` | editable present-state layer |
+| `docs/specs/storage/commit_snapshot_spec.md` | approval-gated structural anchor |
+| `docs/specs/storage/execution_record_spec.md` | run-scoped historical artifact |
+| `docs/specs/storage/storage_format_mapping_spec.md` | lifecycle-to-format mapping |
+| `docs/specs/formats/nex_unified_schema.md` | unified `.nex` family schema |
+| `docs/specs/formats/nex_parser_validator_branch_rules.md` | role-aware load/validate branching |
+| `docs/specs/formats/nex_typed_model_spec.md` | typed model split for `.nex` roles |
+| `docs/specs/formats/nex_load_validate_api_spec.md` | public `.nex` load / validate API shape |

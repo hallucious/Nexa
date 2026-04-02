@@ -76,6 +76,11 @@ Example:
 - `state` in Working Save = editable current state
 - `state` in Commit Snapshot = approved baseline state
 
-## 6. Decision
+## 6. Current Direction
+
+The role-aware `.nex` family is current architecture, not future-only groundwork.
+Execution Record remains outside the `.nex` role split as the run-history layer.
+
+## 7. Decision
 
 `.nex` uses a common backbone plus explicit role-based branch sections.

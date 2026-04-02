@@ -63,7 +63,12 @@ LoadedNexArtifact
 
 The wrapper keeps role explicit after load.
 
-## 7. Decision
+## 7. Current Direction
+
+Role-aware typed model separation is current storage architecture.
+Generic one-model savefile handling is forbidden.
+Execution Record remains a separate run-history model family rather than part of the `.nex` role split.
+
+## 8. Decision
 
 Nexa typed `.nex` loading is role-aware and model-separated.
-Generic one-model savefile handling is forbidden.

@@ -20,7 +20,8 @@ It exists to support:
 2. It must reference the Commit Snapshot used for execution.
 3. It preserves execution history, not editable draft truth.
 4. It may contain detailed trace and artifact references.
-5. It is append-only after run completion, except clearly defined later indexing/annotation if allowed.
+5. It is append-only after run completion, except clearly defined later indexing / annotation if allowed.
+6. Stronger explicit or materializable execution truth must outrank weaker stale derived metadata during normalization.
 
 ## 3. Main Sections
 
@@ -42,27 +43,35 @@ ExecutionRecord
 Execution Record stores:
 - run identity
 - commit reference
-- input summary/reference
-- trace summary/reference
+- input summary / reference
+- trace summary / reference
 - node-level outcomes
 - artifact references
 - runtime metrics
-- warnings/errors/failure summary
+- warnings / errors / failure summary
 - final outputs
 - timing metadata
 
 It does NOT store:
 - editable current draft state
-- UI/editor transient state
+- UI / editor transient state
 - approval decision flow
 - unapproved designer ambiguity state
 
-## 5. Rule
+## 5. Truth-Ordering Rule
+
+If execution metadata disagrees during materialization or normalization:
+- sufficiently substantive native execution record wins first
+- richer materializable execution truth wins next
+- thin identity-only execution data may survive only where identity must be preserved
+- stale replay payload fields, stale derived contracts, and weak wrapper metadata must not override stronger truth
+
+## 6. Rule
 
 Execution Record must always reference one `commit_id`.
 It is an execution-history artifact, not a replacement for Working Save or Commit Snapshot.
 
-## 6. Decision
+## 7. Decision
 
 Execution Record is the run-scoped historical artifact of Nexa.
 It captures what actually happened during one execution of one approved structural snapshot.

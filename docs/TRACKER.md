@@ -61,16 +61,16 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1022 passed, 3 skipped
+1117 passed, 3 skipped
 ```
 
+* authoritative storage hardening baseline commit: `15031be`
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
 * canonical savefile lifecycle entry points exist across create / serialize / load / validate
-* savefile strictness requires explicit `ui` across create / serialize / load / validate
-* legacy `.nex` writer / reverse-conversion semantics were removed; only bounded execution compatibility remains
-* `nexa savefile new <output.nex>` exposes canonical savefile creation through the CLI
-* `nexa savefile validate <file.nex>` exposes canonical savefile validation through the CLI
-* role-aware `.nex` storage foundation introduced for future `working_save` / `commit_snapshot` branching via `src/storage/nex_api.py` and `src/storage/models/*`
+* bounded CLI savefile surface remains intact
+* role-aware `.nex` storage is now part of the active storage architecture, with `working_save` and `commit_snapshot` treated as official `.nex` roles and Execution Record treated as the run-history layer
+* storage semantics are owned by storage/lifecycle APIs rather than CLI/export/replay path-local interpretation
+* current storage-sector state is final hardening + spec ↔ implementation sync, not future-only foundation work
 
 ---
 
@@ -244,8 +244,14 @@ CLI
 ### Current Status
 
 ```text
-1022 passed, 3 skipped
+1117 passed, 3 skipped
 ```
+
+* storage-sector architecture work is no longer in foundation-building mode
+* current storage-sector stage: late-stage hardening / near-closure
+* Working Save -> Commit Snapshot -> Execution Record -> Updated Working Save summary is the intended active lifecycle
+* recent work progressively removed stale replay, stale contract, thin native, thin nested, top-level thin, and write-boundary over-trust paths
+* next storage work should prioritize spec ↔ implementation sync and completion judgment rather than broad storage refactoring
 
 ---
 

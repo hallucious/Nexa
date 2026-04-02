@@ -16,6 +16,8 @@ This specification defines the lifecycle relationship between:
 5. Execution history must not bloat Working Save.
 6. Temporary draft clutter must not leak into Commit Snapshot.
 7. Execution outcome must not rewrite structural truth.
+8. Canonical storage semantics must be owned by storage/lifecycle APIs.
+9. CLI / export / replay / audit paths must consume lifecycle-owned semantics rather than re-derive them locally.
 
 ## 3. Lifecycle States
 
@@ -46,7 +48,15 @@ This specification defines the lifecycle relationship between:
 -> Execution Record finalized
 -> optional last-run summary reflected back to Working Save
 
-## 5. Decision
+## 5. Truth-Ordering Rule
+
+If competing execution metadata exists during lifecycle normalization:
+- sufficiently substantive native execution truth wins first
+- richer materializable execution truth wins next
+- thin identity-only execution data may be preserved only where identity must survive
+- weaker stale derived metadata must not overwrite stronger truth
+
+## 6. Decision
 
 Nexa storage is a three-layer lifecycle system:
 Working Save preserves editable present state,

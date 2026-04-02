@@ -4,20 +4,21 @@
 
 Working Save is the editable, always-saveable storage artifact of Nexa.
 
-It preserves current working state, including:
-- incomplete circuit drafts
+It preserves:
+- incomplete drafts
 - invalid drafts
 - validation-failed drafts
-- Designer-generated but unapproved proposals
-- editor-facing state
+- designer-generated but unapproved proposals
+- editor-facing present state
 
 ## 2. Core Principles
 
 1. Working Save must always be saveable.
-2. Working Save may be incomplete or invalid.
-3. Working Save preserves user work even when execution is impossible.
-4. Working Save must remain lightweight.
-5. Working Save is current-state oriented, not approval-oriented, and not history-oriented.
+2. It may be incomplete or invalid.
+3. It preserves user work even when execution is impossible.
+4. It must remain lightweight enough for routine editing and inspection.
+5. It must not accumulate full historical trace or full artifact payload history.
+6. It is currentness-oriented, not approval-oriented and not history-oriented.
 
 ## 3. Main Sections
 
@@ -29,7 +30,7 @@ WorkingSave
 - state
 - runtime
 - ui
-- designer? (optional)
+- designer (optional)
 ```
 
 ## 4. Responsibilities
@@ -41,7 +42,7 @@ Working Save stores:
 - current validation summary
 - current error summary
 - latest execution summary (optional)
-- editor/UI state
+- editor / UI state
 - local design metadata
 
 Working Save does NOT store:
@@ -73,7 +74,15 @@ Typical values:
 - execution_failed
 - executed
 
-## 7. Decision
+`runtime.last_run` may keep lightweight execution summary, but it must not become a surrogate Execution Record.
+
+## 7. Boundary Rule
+
+Working Save may summarize execution, but it must not redefine structural truth or absorb full run history.
+Approved structural truth lives in Commit Snapshot.
+Historical run truth lives in Execution Record.
+
+## 8. Decision
 
 Working Save is the always-saveable present-state artifact of Nexa.
 It preserves editable current reality, even when incomplete, invalid, or unapproved.

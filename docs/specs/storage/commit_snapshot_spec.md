@@ -8,7 +8,7 @@ It serves as:
 - reproducible execution anchor
 - stable comparison target
 - rollback target
-- audit/reference point
+- audit / reference point
 
 ## 2. Core Principles
 
@@ -42,7 +42,7 @@ Commit Snapshot stores:
 - commit lineage metadata
 
 Commit Snapshot does NOT store:
-- active editor/UI state
+- active editor / UI state
 - pending designer ambiguity
 - full run history
 - full artifact payloads
@@ -53,8 +53,7 @@ Commit Snapshot does NOT store:
 A Commit Snapshot may be created only if:
 - proposal is not blocked
 - required approval decision points are satisfied
-- approved patch scope matches validated preview scope
-  or changed scope has been revalidated
+- approved patch scope matches validated preview scope or changed scope has been revalidated
 - no unresolved blocking findings remain
 - snapshot contents are structurally deterministic
 
@@ -62,7 +61,7 @@ A Commit Snapshot may be created only if:
 
 Working Save is editable present-state truth.
 Commit Snapshot is approved structural truth.
-
+Execution Record is run-history truth.
 They are related, but not interchangeable.
 
 ## 7. Decision

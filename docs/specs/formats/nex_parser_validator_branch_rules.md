@@ -30,7 +30,7 @@ This is for compatibility only.
 Allowed even with findings:
 - missing entry
 - missing output
-- unresolved provider/plugin
+- unresolved provider / plugin
 - validation_failed status
 - execution_failed status
 - pending designer metadata
@@ -54,19 +54,24 @@ Required:
 ### Working Save
 - invalid JSON -> reject
 - missing backbone -> reject
-- missing runtime/ui -> reject
-- missing entry/output -> load with findings
+- missing runtime / ui -> reject
+- missing entry / output -> load with findings
 - provider unresolved -> load with findings
 
 ### Commit Snapshot
 - invalid JSON -> reject
 - missing backbone -> reject
-- missing validation/approval/lineage -> reject
+- missing validation / approval / lineage -> reject
 - failed validation result -> reject
 - approval incomplete -> reject
 - blocked structure -> reject
 
-## 7. Decision
+## 7. Truth-Ordering Note
+
+Role-specific load / validate branching determines artifact acceptance, but execution truth canonicalization remains owned by storage/lifecycle APIs after load.
+Parser / validator branching must not become a competing execution-truth assembly layer.
+
+## 8. Decision
 
 Working Save is load-first.
 Commit Snapshot is reject-first.

@@ -76,3 +76,24 @@ The following rows marked Active MUST match the YAML list exactly.
 - If a valid document still reflects current code and contract behavior, it remains active.
 - If a document becomes obsolete or contradictory, it must be deleted or explicitly replaced.
 - Silent divergence between docs, specs, and code is forbidden.
+
+
+---
+
+## Supporting Storage / Format References
+
+The following storage and format documents are currently supporting references for the role-aware `.nex` direction and three-layer storage lifecycle.
+They are not part of the active spec YAML set yet, but they are valid supporting design references for storage-sector sync work.
+
+| Spec | Path | Status | Category |
+|---|---|---|---|
+| storage_architecture_overview | docs/specs/storage/storage_architecture_overview.md | Supporting | storage |
+| storage_lifecycle_spec | docs/specs/storage/storage_lifecycle_spec.md | Supporting | storage |
+| working_save_spec | docs/specs/storage/working_save_spec.md | Supporting | storage |
+| commit_snapshot_spec | docs/specs/storage/commit_snapshot_spec.md | Supporting | storage |
+| execution_record_spec | docs/specs/storage/execution_record_spec.md | Supporting | storage |
+| storage_format_mapping_spec | docs/specs/storage/storage_format_mapping_spec.md | Supporting | storage |
+| nex_unified_schema | docs/specs/formats/nex_unified_schema.md | Supporting | formats |
+| nex_parser_validator_branch_rules | docs/specs/formats/nex_parser_validator_branch_rules.md | Supporting | formats |
+| nex_typed_model_spec | docs/specs/formats/nex_typed_model_spec.md | Supporting | formats |
+| nex_load_validate_api_spec | docs/specs/formats/nex_load_validate_api_spec.md | Supporting | formats |

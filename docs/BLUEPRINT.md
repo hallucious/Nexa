@@ -192,68 +192,60 @@ Legacy `.nex` compatibility runtime concentration:
 
 ## 4. Savefile & Bundle System (NEW)
 
-### 4.1 Savefile (.nex)
+### 4.1 `.nex` Storage Family
 
-`.nex` is the primary executable savefile format.
+`.nex` remains the primary Nexa storage family, but it is now role-aware.
 
-It is not a circuit-only artifact.
-A valid `.nex` savefile includes both execution structure and execution state.
+The official storage-role split is:
 
-Current savefile root sections:
+* `meta.storage_role=working_save` -> Working Save
+* `meta.storage_role=commit_snapshot` -> Commit Snapshot
 
-* `meta`
-* `circuit`
-* `resources`
-* `state`
-* `ui`
+Execution history does not live as a `.nex` role.
+Execution history is represented by the Execution Record layer.
 
-This means a savefile includes:
+The official three-layer storage architecture is:
 
-* circuit structure
-* node definitions
-* prompt / provider / plugin resources
-* execution state (`input`, `working`, `memory`)
-* UI metadata
+* Working Save
+* Commit Snapshot
+* Execution Record
 
-Properties:
+The active lifecycle transition is:
 
-* deterministic
-* serializable
-* reproducible
-* portable as the primary execution artifact
+Working Save
+→ Commit Snapshot
+→ Execution Record
+→ Updated Working Save summary
 
-Canonical savefile lifecycle entry points currently implemented in code:
+This means Nexa storage now preserves three distinct truths:
 
-* create → `src/contracts/savefile_factory.py`
-  * `create_savefile(...)`
-  * `make_minimal_savefile(...)`
-* serialize / save → `src/contracts/savefile_serializer.py`
-  * `serialize_savefile(...)`
-  * `save_savefile_file(...)`
-* load → `src/contracts/savefile_loader.py`
-* validate → `src/contracts/savefile_validator.py`
+* editable present-state truth -> Working Save
+* approved structural truth -> Commit Snapshot
+* realized run history truth -> Execution Record
 
-Contract status:
+`Working Save` remains always-saveable and may remain incomplete or invalid.
+`Commit Snapshot` is approval-gated and must not be created from unresolved blocking state.
+`Execution Record` is run-scoped and must always reference one approved `commit_id`.
 
-* `ui` is required at create / serialize / load / validate time
-* `runtime` is not part of the canonical savefile root
-* canonical savefiles and legacy `.nex` writer behavior are kept distinct
+Canonical storage semantics must be owned by storage/lifecycle APIs, not by CLI/export/replay path-local assembly.
 
-Role-aware `.nex` storage foundation now exists alongside the current canonical savefile v2 path:
+Current storage-owned entry points implemented in code:
 
-* public API → `src/storage/nex_api.py`
+* `src/storage/nex_api.py`
   * `load_nex(...)`
   * `validate_working_save(...)`
   * `validate_commit_snapshot(...)`
-* typed models → `src/storage/models/`
+* `src/storage/lifecycle_api.py`
+  * shared serialized transition / execution-artifact component builders
+* `src/storage/serialization.py`
+  * role-aware write-path validation and canonicalization
+* `src/storage/models/`
   * `WorkingSaveModel`
   * `CommitSnapshotModel`
+  * `ExecutionRecordModel`
   * `LoadedNexArtifact`
-* validator split → `src/storage/validators/shared_validator.py`
 
-This foundation is for the future `working_save` / `commit_snapshot` lifecycle split and does not replace the currently active savefile v2 CLI surface yet.
-
-Current official savefile CLI surface:
+Current official savefile CLI surface remains bounded:
 
 * `nexa savefile new <output.nex>`
 * `nexa savefile validate <file.nex>`
@@ -265,8 +257,10 @@ Current official savefile CLI surface:
 
 Boundary status:
 
-* the current official edit surface is intentionally limited to minimal metadata / entry editing
-* broader structural editing, `resources` mutation, `state` mutation, and `ui` mutation are not yet part of the official CLI surface
+* bounded savefile CLI editing remains intentionally limited
+* broader structural editing is not yet a fully general CLI editing surface
+* storage role semantics, lifecycle boundaries, and execution-artifact truth ordering are now storage-owned concerns
+* CLI / export / replay must consume the same storage/lifecycle vocabulary rather than re-deriving semantics locally
 
 ---
 
