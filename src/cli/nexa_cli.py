@@ -8,7 +8,10 @@ import time
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
-from src.storage.execution_record_api import synthesize_execution_record_reference_contract_from_payload
+from src.storage.execution_record_api import (
+    materialize_execution_record_from_payload,
+    synthesize_execution_record_reference_contract_from_payload,
+)
 
 try:
     from dotenv import load_dotenv
@@ -954,6 +957,7 @@ def _savefile_payload(savefile, trace, started_at, ended_at):
         "artifacts": getattr(trace, "all_artifacts", []),
         "replay_payload": replay_payload,
     }
+    materialize_execution_record_from_payload(payload)
     synthesize_execution_record_reference_contract_from_payload(payload)
     return payload
 
@@ -1071,6 +1075,7 @@ def run_command(args):
         "artifacts": [],
         "replay_payload": replay_payload,
     }
+    materialize_execution_record_from_payload(payload)
     synthesize_execution_record_reference_contract_from_payload(payload)
 
     if args.out:
@@ -1148,6 +1153,7 @@ def export_command(args) -> int:
         print(f"Error: {args.input} must contain a JSON object", file=sys.stderr)
         return 1
 
+    materialize_execution_record_from_payload(payload)
     synthesize_execution_record_reference_contract_from_payload(payload)
     ExecutionAuditPackBuilder.export(payload, args.out)
     print(json.dumps({"status": "ok", "output": args.out}, indent=2, ensure_ascii=False))

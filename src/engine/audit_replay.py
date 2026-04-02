@@ -11,11 +11,11 @@ from typing import Any, Dict
 from src.circuit.circuit_runner import CircuitRunner
 from src.engine.execution_determinism_validator import ExecutionDeterminismValidator
 from src.engine.execution_replay import ExecutionReplayEngine, ReplayPlan
-from src.storage.execution_record_api import build_execution_record_reference_contract_from_serialized_record
 from src.engine.node_execution_runtime import NodeExecutionRuntime
 from src.platform.provider_executor import ProviderExecutor
 from src.platform.provider_registry import ProviderRegistry
 from src.contracts.provider_contract import ProviderRequest, ProviderResult
+from src.storage.execution_record_api import build_execution_record_reference_contract_from_serialized_record
 
 
 class _EchoProvider:
@@ -72,7 +72,9 @@ def replay_audit_pack(audit_zip_path: str) -> dict:
         if not isinstance(replay_payload, dict):
             raise ValueError("replay_payload.json must contain a JSON object")
 
+        reference_contract_file = root / "execution_record_reference_contract.json"
         execution_record_file = root / "execution_record.json"
+        reference_contract = {}
         execution_record = {}
         if execution_record_file.exists():
             try:
@@ -81,9 +83,6 @@ def replay_audit_pack(audit_zip_path: str) -> dict:
                 raise ValueError(f"invalid execution_record.json: {exc}") from exc
             if not isinstance(execution_record, dict):
                 raise ValueError("execution_record.json must contain a JSON object")
-
-        reference_contract_file = root / "execution_record_reference_contract.json"
-        reference_contract = {}
         if reference_contract_file.exists():
             try:
                 reference_contract = json.loads(reference_contract_file.read_text(encoding="utf-8"))
@@ -150,7 +149,7 @@ def replay_audit_pack(audit_zip_path: str) -> dict:
             "execution_id": execution_id,
             "differences": differences,
             "report": _normalize(report),
-            "execution_record": _normalize(execution_record),
             "reference_contract": _normalize(reference_contract),
+            "execution_record": _normalize(execution_record),
             "primary_trace_ref": reference_contract.get("primary_trace_ref"),
         }

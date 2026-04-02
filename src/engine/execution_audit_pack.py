@@ -8,7 +8,10 @@ from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, Dict
 
-from src.storage.execution_record_api import synthesize_execution_record_reference_contract_from_payload
+from src.storage.execution_record_api import (
+    materialize_execution_record_from_payload,
+    synthesize_execution_record_reference_contract_from_payload,
+)
 
 
 @dataclass
@@ -94,7 +97,9 @@ class ExecutionAuditPackBuilder:
             replay_payload = ExecutionAuditPackBuilder._normalize(
                 payload.get('replay_payload', {}) if isinstance(payload, dict) else {}
             )
-            execution_record_payload = ExecutionAuditPackBuilder._normalize(payload.get('execution_record', {}) if isinstance(payload, dict) else {})
+            execution_record = ExecutionAuditPackBuilder._normalize(
+                materialize_execution_record_from_payload(payload if isinstance(payload, dict) else {})
+            )
             synthesized_contract = synthesize_execution_record_reference_contract_from_payload(payload if isinstance(payload, dict) else {})
             execution_record_reference_contract = ExecutionAuditPackBuilder._normalize(synthesized_contract)
 
@@ -119,9 +124,9 @@ class ExecutionAuditPackBuilder:
                 json.dumps(replay_payload, indent=2, ensure_ascii=False, sort_keys=True),
                 encoding='utf-8',
             )
-            if isinstance(execution_record_payload, dict) and execution_record_payload:
+            if isinstance(execution_record, dict) and execution_record:
                 (root / 'execution_record.json').write_text(
-                    json.dumps(execution_record_payload, indent=2, ensure_ascii=False, sort_keys=True),
+                    json.dumps(execution_record, indent=2, ensure_ascii=False, sort_keys=True),
                     encoding='utf-8',
                 )
             if isinstance(execution_record_reference_contract, dict) and execution_record_reference_contract:

@@ -3,8 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
-from src.engine.execution_snapshot import ExecutionSnapshot
-from src.engine.execution_timeline import NodeExecutionSpan
+from src.engine.execution_artifact_hashing import ExecutionHashReport, NodeOutputHash
+from src.engine.execution_snapshot import ExecutionSnapshot, ExecutionSnapshotBuilder
+from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
 from src.storage.models.execution_record_model import (
     ArtifactRecordCard,
     ExecutionArtifactsModel,
@@ -318,6 +319,176 @@ def create_execution_record_from_snapshot(
     )
 
 
+
+
+def build_execution_record_reference_contract_from_serialized_record(record_payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(record_payload, dict):
+        return {}
+
+    timeline = record_payload.get('timeline') if isinstance(record_payload.get('timeline'), dict) else {}
+    outputs = record_payload.get('outputs') if isinstance(record_payload.get('outputs'), dict) else {}
+    artifacts = record_payload.get('artifacts') if isinstance(record_payload.get('artifacts'), dict) else {}
+    observability = record_payload.get('observability') if isinstance(record_payload.get('observability'), dict) else {}
+    source = record_payload.get('source') if isinstance(record_payload.get('source'), dict) else {}
+    meta = record_payload.get('meta') if isinstance(record_payload.get('meta'), dict) else {}
+
+    primary_trace_ref = timeline.get('event_stream_ref') or timeline.get('trace_ref')
+
+    node_trace_refs = {}
+    node_results = record_payload.get('node_results') if isinstance(record_payload.get('node_results'), dict) else {}
+    for item in node_results.get('results', []) if isinstance(node_results.get('results'), list) else []:
+        if isinstance(item, dict) and item.get('node_id') and item.get('trace_ref'):
+            node_trace_refs[str(item['node_id'])] = item['trace_ref']
+
+    output_value_refs = {}
+    unresolved_output_refs = []
+    for item in outputs.get('final_outputs', []) if isinstance(outputs.get('final_outputs'), list) else []:
+        if not isinstance(item, dict) or not item.get('output_ref'):
+            continue
+        output_ref = str(item['output_ref'])
+        value_ref = item.get('value_ref')
+        if value_ref:
+            output_value_refs[output_ref] = value_ref
+        else:
+            unresolved_output_refs.append(output_ref)
+
+    artifact_refs = {}
+    unresolved_artifact_refs = []
+    for item in artifacts.get('artifact_refs', []) if isinstance(artifacts.get('artifact_refs'), list) else []:
+        if not isinstance(item, dict) or not item.get('artifact_id'):
+            continue
+        artifact_id = str(item['artifact_id'])
+        ref = item.get('ref')
+        if ref:
+            artifact_refs[artifact_id] = ref
+        else:
+            unresolved_artifact_refs.append(artifact_id)
+
+    observability_refs = list(observability.get('observability_refs') or []) if isinstance(observability.get('observability_refs'), list) else []
+    return {
+        'run_id': meta.get('run_id'),
+        'commit_id': source.get('commit_id'),
+        'primary_trace_ref': primary_trace_ref,
+        'trace_ref': timeline.get('trace_ref'),
+        'event_stream_ref': timeline.get('event_stream_ref'),
+        'node_trace_refs': node_trace_refs,
+        'output_value_refs': output_value_refs,
+        'artifact_refs': artifact_refs,
+        'unresolved_output_refs': unresolved_output_refs,
+        'unresolved_artifact_refs': unresolved_artifact_refs,
+        'observability_refs': observability_refs,
+        'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
+        'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
+    }
+
+
+def _status_from_payload_node_result(node_data: Any) -> str:
+    if not isinstance(node_data, dict):
+        return 'success'
+    status = str(node_data.get('status') or 'success').lower()
+    if status in {'success', 'completed', 'ok'}:
+        return 'success'
+    if status in {'failure', 'failed', 'error'}:
+        return 'failed'
+    if status in {'skipped', 'partial', 'cancelled'}:
+        return status
+    return 'success'
+
+
+def _build_snapshot_from_payload(payload: dict[str, Any]) -> ExecutionSnapshot | None:
+    replay_payload = payload.get('replay_payload') if isinstance(payload.get('replay_payload'), dict) else {}
+    if not replay_payload:
+        return None
+
+    execution_id = str(replay_payload.get('execution_id') or payload.get('run_id') or 'unknown-execution')
+    node_order = replay_payload.get('node_order') if isinstance(replay_payload.get('node_order'), list) else []
+    result = payload.get('result') if isinstance(payload.get('result'), dict) else {}
+    result_node_results = result.get('node_results') if isinstance(result.get('node_results'), dict) else {}
+    expected_outputs = replay_payload.get('expected_outputs') if isinstance(replay_payload.get('expected_outputs'), dict) else {}
+
+    node_outputs: dict[str, Any] = {}
+    spans: list[NodeExecutionSpan] = []
+    start_ms = 0
+    for index, node_id in enumerate([n for n in node_order if isinstance(n, str)]):
+        node_data = result_node_results.get(node_id)
+        if isinstance(node_data, dict) and 'output' in node_data:
+            node_outputs[node_id] = node_data.get('output')
+        elif node_id in expected_outputs:
+            node_outputs[node_id] = expected_outputs.get(node_id)
+        elif node_id in result.get('state', {}):
+            node_outputs[node_id] = result['state'].get(node_id)
+        else:
+            node_outputs[node_id] = None
+        status = _status_from_payload_node_result(node_data)
+        spans.append(NodeExecutionSpan(node_id=node_id, start_ms=index, end_ms=index + 1, duration_ms=1, status=status))
+    if not spans and expected_outputs:
+        for index, (node_id, value) in enumerate(expected_outputs.items()):
+            if not isinstance(node_id, str):
+                continue
+            node_outputs[node_id] = value
+            spans.append(NodeExecutionSpan(node_id=node_id, start_ms=index, end_ms=index + 1, duration_ms=1, status='success'))
+
+    if not spans and not node_outputs:
+        return None
+
+    timeline = ExecutionTimeline(
+        execution_id=execution_id,
+        start_ms=start_ms,
+        end_ms=len(spans),
+        duration_ms=len(spans),
+        node_spans=spans,
+    )
+    hash_report = ExecutionHashReport(execution_id=execution_id, node_hashes=[])
+    return ExecutionSnapshotBuilder().build(
+        execution_id=execution_id,
+        timeline=timeline,
+        outputs=node_outputs,
+        hash_report=hash_report,
+    )
+
+
+def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {}
+    existing = payload.get('execution_record')
+    if isinstance(existing, dict) and existing:
+        return existing
+
+    snapshot = _build_snapshot_from_payload(payload)
+    if snapshot is None:
+        return {}
+
+    replay_payload = payload.get('replay_payload') if isinstance(payload.get('replay_payload'), dict) else {}
+    summary = payload.get('summary') if isinstance(payload.get('summary'), dict) else {}
+    trace = payload.get('trace') if isinstance(payload.get('trace'), dict) else {}
+    result = payload.get('result') if isinstance(payload.get('result'), dict) else {}
+    execution_id = snapshot.execution_id
+
+    trace_ref = f'trace://{execution_id}' if trace else None
+    event_stream_ref = f'events://{execution_id}' if trace.get('events') else None
+    status_raw = result.get('status')
+    status = 'completed'
+    if isinstance(status_raw, str) and status_raw.lower() in {'failure','failed','error'}:
+        status = 'failed'
+
+    final_outputs = replay_payload.get('expected_outputs') if isinstance(replay_payload.get('expected_outputs'), dict) and replay_payload.get('expected_outputs') else snapshot.node_outputs
+    record = create_execution_record_from_snapshot(
+        snapshot,
+        commit_id=str(replay_payload.get('commit_id') or f'uncommitted::{execution_id}'),
+        trigger_type='manual_run',
+        trigger_reason='cli_payload_materialization',
+        status=status,
+        input_summary=replay_payload.get('input_state') if isinstance(replay_payload.get('input_state'), dict) else {},
+        trace_ref=trace_ref,
+        event_stream_ref=event_stream_ref,
+        final_outputs=final_outputs,
+        provider_usage_summary=summary if summary else None,
+        observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
+    )
+    serialized = serialize_execution_record(record)
+    payload['execution_record'] = serialized
+    return serialized
+
 def build_execution_record_reference_contract(record: ExecutionRecordModel) -> dict[str, Any]:
     primary_trace_ref = record.timeline.event_stream_ref or record.timeline.trace_ref
     node_trace_refs = {
@@ -365,63 +536,6 @@ def build_execution_record_reference_contract(record: ExecutionRecordModel) -> d
 
 
 
-def build_execution_record_reference_contract_from_serialized_record(record_payload: dict[str, Any]) -> dict[str, Any]:
-    if not isinstance(record_payload, dict) or not record_payload:
-        return {}
-
-    meta = record_payload.get('meta') if isinstance(record_payload.get('meta'), dict) else {}
-    source = record_payload.get('source') if isinstance(record_payload.get('source'), dict) else {}
-    timeline = record_payload.get('timeline') if isinstance(record_payload.get('timeline'), dict) else {}
-    node_results = record_payload.get('node_results') if isinstance(record_payload.get('node_results'), dict) else {}
-    outputs = record_payload.get('outputs') if isinstance(record_payload.get('outputs'), dict) else {}
-    artifacts = record_payload.get('artifacts') if isinstance(record_payload.get('artifacts'), dict) else {}
-    observability = record_payload.get('observability') if isinstance(record_payload.get('observability'), dict) else {}
-
-    primary_trace_ref = timeline.get('event_stream_ref') or timeline.get('trace_ref')
-    node_trace_refs = {
-        str(item.get('node_id')): item.get('trace_ref')
-        for item in node_results.get('results', [])
-        if isinstance(item, dict) and item.get('node_id') and item.get('trace_ref')
-    }
-    output_value_refs = {
-        str(item.get('output_ref')): item.get('value_ref')
-        for item in outputs.get('final_outputs', [])
-        if isinstance(item, dict) and item.get('output_ref') and item.get('value_ref')
-    }
-    artifact_ref_map = {
-        str(item.get('artifact_id')): item.get('ref')
-        for item in artifacts.get('artifact_refs', [])
-        if isinstance(item, dict) and item.get('artifact_id') and item.get('ref')
-    }
-    unresolved_output_refs = [
-        str(item.get('output_ref'))
-        for item in outputs.get('final_outputs', [])
-        if isinstance(item, dict) and item.get('output_ref') and not item.get('value_ref')
-    ]
-    unresolved_artifact_refs = [
-        str(item.get('artifact_id'))
-        for item in artifacts.get('artifact_refs', [])
-        if isinstance(item, dict) and item.get('artifact_id') and not item.get('ref')
-    ]
-    observability_refs = list(observability.get('observability_refs') or [])
-
-    return {
-        'run_id': meta.get('run_id'),
-        'commit_id': source.get('commit_id'),
-        'primary_trace_ref': primary_trace_ref,
-        'trace_ref': timeline.get('trace_ref'),
-        'event_stream_ref': timeline.get('event_stream_ref'),
-        'node_trace_refs': node_trace_refs,
-        'output_value_refs': output_value_refs,
-        'artifact_refs': artifact_ref_map,
-        'unresolved_output_refs': unresolved_output_refs,
-        'unresolved_artifact_refs': unresolved_artifact_refs,
-        'observability_refs': observability_refs,
-        'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
-        'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
-    }
-
-
 def synthesize_execution_record_reference_contract_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
@@ -430,12 +544,14 @@ def synthesize_execution_record_reference_contract_from_payload(payload: dict[st
     if isinstance(existing, dict) and existing:
         return existing
 
-    execution_record_payload = payload.get('execution_record')
-    if isinstance(execution_record_payload, dict) and execution_record_payload:
-        contract = build_execution_record_reference_contract_from_serialized_record(execution_record_payload)
-        if contract:
-            payload['execution_record_reference_contract'] = contract
-            return contract
+    execution_record = payload.get('execution_record')
+    if not (isinstance(execution_record, dict) and execution_record):
+        execution_record = materialize_execution_record_from_payload(payload)
+
+    if isinstance(execution_record, dict) and execution_record:
+        contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+        payload['execution_record_reference_contract'] = contract
+        return contract
 
     replay_payload = payload.get('replay_payload')
     if not isinstance(replay_payload, dict) or not replay_payload:
@@ -527,6 +643,7 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
 __all__ = [
     'build_execution_record_reference_contract',
     'build_execution_record_reference_contract_from_serialized_record',
+    'materialize_execution_record_from_payload',
     'create_execution_record_from_snapshot',
     'summarize_execution_record_for_working_save',
     'synthesize_execution_record_reference_contract_from_payload',

@@ -151,41 +151,18 @@ def test_replay_audit_pack_fails_when_reference_contract_is_not_replay_ready(tmp
     assert "execution record reference contract is not replay-ready" in result["differences"]
 
 
-def test_replay_audit_pack_derives_reference_contract_from_execution_record_when_contract_file_missing(tmp_path):
-    from src.engine.execution_snapshot import ExecutionSnapshotBuilder
-    from src.engine.execution_artifact_hashing import ExecutionHashReport, NodeOutputHash
-    from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
-    from src.storage.execution_record_api import create_execution_record_from_snapshot
-    from src.storage.serialization import serialize_execution_record
+def test_replay_audit_pack_uses_execution_record_when_contract_file_absent(tmp_path):
+    audit_zip = tmp_path / "audit.zip"
+    ExecutionAuditPackBuilder.export(_sample_run_payload(), str(audit_zip))
 
-    payload = _sample_run_payload()
-    timeline = ExecutionTimeline(
-        execution_id='hello-exec',
-        start_ms=1000,
-        end_ms=1200,
-        duration_ms=200,
-        node_spans=[NodeExecutionSpan('hello_node', 1000, 1200, 200, 'success')],
-    )
-    snapshot = ExecutionSnapshotBuilder().build(
-        execution_id='hello-exec',
-        timeline=timeline,
-        outputs={'hello_node': 'Hello Nexa'},
-        hash_report=ExecutionHashReport(execution_id='hello-exec', node_hashes=[NodeOutputHash(node_id='hello_node', algorithm='sha256', hash_value='abc')]),
-    )
-    record = create_execution_record_from_snapshot(snapshot, commit_id='commit-1', trace_ref='trace://hello-exec', event_stream_ref='events://hello-exec')
-    payload['execution_record'] = serialize_execution_record(record)
-
-    audit_zip = tmp_path / 'audit.zip'
-    ExecutionAuditPackBuilder.export(payload, str(audit_zip))
-
-    derived_zip = tmp_path / 'audit_no_contract.zip'
-    with zipfile.ZipFile(audit_zip, 'r') as src_zip, zipfile.ZipFile(derived_zip, 'w', compression=zipfile.ZIP_DEFLATED) as dst_zip:
-        for name in src_zip.namelist():
-            if name == 'execution_record_reference_contract.json':
+    rewritten = tmp_path / "audit_without_contract.zip"
+    with zipfile.ZipFile(audit_zip, "r") as src, zipfile.ZipFile(rewritten, "w", compression=zipfile.ZIP_DEFLATED) as dst:
+        for info in src.infolist():
+            if info.filename == "execution_record_reference_contract.json":
                 continue
-            dst_zip.writestr(name, src_zip.read(name))
+            dst.writestr(info, src.read(info.filename))
 
-    result = replay_audit_pack(str(derived_zip))
-    assert result['status'] == 'PASS'
-    assert result['reference_contract']['primary_trace_ref'] == 'events://hello-exec'
-    assert result['execution_record']['meta']['run_id'] == 'hello-exec'
+    result = replay_audit_pack(str(rewritten))
+    assert result["status"] == "PASS"
+    assert result["execution_record"]["meta"]["run_id"] == "hello-exec"
+    assert result["reference_contract"]["is_replay_ready"] is True
