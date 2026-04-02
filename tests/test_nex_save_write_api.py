@@ -191,3 +191,33 @@ def test_save_nex_artifact_file_prefers_materialized_record_over_thin_nested_exe
     assert data['source']['commit_id'] == 'commit-thin'
     assert data['timeline']['event_stream_ref'] == 'events://run-123'
     assert data['outputs']['final_outputs'][0]['output_ref'] == 'node_a'
+
+
+
+def test_save_nex_artifact_file_prefers_materialized_record_over_top_level_thin_execution_record(tmp_path):
+    payload = {
+        'meta': {'run_id': 'run-123', 'status': 'completed'},
+        'source': {'commit_id': 'commit-thin'},
+        'replay_payload': {
+            'execution_id': 'run-123',
+            'node_order': ['node_a'],
+            'input_state': {'message': 'hi'},
+            'expected_outputs': {'node_a': {'value': 'ok'}},
+        },
+        'result': {
+            'status': 'success',
+            'state': {'node_a': {'value': 'ok'}},
+            'node_results': {
+                'node_a': {'status': 'success', 'output': {'value': 'ok'}},
+            },
+        },
+        'trace': {'events': ['started', 'completed']},
+    }
+
+    path = save_nex_artifact_file(payload, tmp_path / 'top_level_materialized.json')
+    data = json.loads(path.read_text(encoding='utf-8'))
+
+    assert data['meta']['run_id'] == 'run-123'
+    assert data['source']['commit_id'] == 'commit-thin'
+    assert data['timeline']['event_stream_ref'] == 'events://run-123'
+    assert data['outputs']['final_outputs'][0]['output_ref'] == 'node_a'

@@ -159,19 +159,31 @@ def _canonicalize_storage_write_payload(
     payload = serialize_nex_artifact(model)
     meta = payload.get('meta') if isinstance(payload.get('meta'), dict) else {}
     storage_role = meta.get('storage_role')
-    if storage_role in ALLOWED_STORAGE_ROLES or _looks_like_serialized_execution_record(payload):
+    if storage_role in ALLOWED_STORAGE_ROLES:
         return payload
 
-    nested_record = payload.get('execution_record')
-
     if any(key in payload for key in ('execution_record', 'replay_payload', 'result', 'trace', 'summary')):
-        from src.storage.execution_record_api import materialize_execution_record_from_payload
+        from src.storage.execution_record_api import (
+            _is_substantive_serialized_execution_record,
+            _payload_supports_richer_execution_record_materialization,
+            materialize_execution_record_from_payload,
+        )
+
+        if _looks_like_serialized_execution_record(payload):
+            if _is_substantive_serialized_execution_record(payload):
+                return payload
+            if not _payload_supports_richer_execution_record_materialization(payload):
+                return payload
 
         normalized_payload = dict(payload)
         record = materialize_execution_record_from_payload(normalized_payload)
         if _looks_like_serialized_execution_record(record):
             return _ensure_mapping(_drop_none(record))
 
+    if _looks_like_serialized_execution_record(payload):
+        return payload
+
+    nested_record = payload.get('execution_record')
     if _looks_like_serialized_execution_record(nested_record):
         return _ensure_mapping(_drop_none(nested_record))
 
