@@ -9,6 +9,7 @@ from src.storage.execution_record_api import (
     build_execution_record_reference_contract,
     create_execution_record_from_snapshot,
     summarize_execution_record_for_working_save,
+    synthesize_execution_record_reference_contract_from_payload,
 )
 from src.storage.serialization import save_execution_record_file, serialize_execution_record
 
@@ -156,3 +157,44 @@ def test_build_execution_record_reference_contract_reports_unresolved_refs():
     assert contract['unresolved_artifact_refs'] == []
     assert contract['is_replay_ready'] is False
     assert contract['is_audit_ready'] is False
+
+
+
+def test_synthesize_execution_record_reference_contract_from_payload_creates_contract_when_missing():
+    payload = {
+        "trace": {"events": ["started", "completed"]},
+        "artifacts": [{"name": "a"}],
+        "replay_payload": {
+            "execution_id": "run-123",
+            "node_order": ["node_a"],
+            "expected_outputs": {"node_a": {"value": "ok"}},
+        },
+    }
+
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+
+    assert contract["run_id"] == "run-123"
+    assert contract["primary_trace_ref"] == "events://run-123"
+    assert contract["node_trace_refs"]["node_a"] == "events://run-123#node:node_a"
+    assert contract["output_value_refs"]["node_a"] == "events://run-123#output:node_a"
+    assert contract["is_replay_ready"] is True
+    assert payload["execution_record_reference_contract"] == contract
+
+
+def test_synthesize_execution_record_reference_contract_from_payload_keeps_existing_contract():
+    payload = {
+        "execution_record_reference_contract": {
+            "primary_trace_ref": "events://existing",
+            "is_replay_ready": True,
+            "is_audit_ready": True,
+        },
+        "replay_payload": {
+            "execution_id": "run-123",
+            "expected_outputs": {"node_a": {"value": "ok"}},
+        },
+    }
+
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+
+    assert contract["primary_trace_ref"] == "events://existing"
+    assert contract["is_replay_ready"] is True
