@@ -7,6 +7,7 @@ import zipfile
 from src.cli.nexa_cli import build_parser, replay_command
 from src.engine.audit_replay import replay_audit_pack
 from src.engine.execution_audit_pack import ExecutionAuditPackBuilder
+from src.storage.execution_record_api import materialize_execution_record_from_payload
 
 
 def _sample_run_payload() -> dict:
@@ -139,20 +140,13 @@ def test_replay_audit_pack_uses_execution_record_reference_contract(tmp_path):
 def test_replay_audit_pack_fails_when_native_execution_record_is_not_replay_ready(tmp_path):
     audit_zip = tmp_path / "audit.zip"
     payload = _sample_run_payload()
-    payload["execution_record"] = {
-        "meta": {"run_id": "hello-exec", "status": "completed"},
-        "source": {"commit_id": "commit::unknown"},
-        "timeline": {"trace_ref": "trace://hello-exec", "event_stream_ref": "events://hello-exec"},
-        "outputs": {
-            "final_outputs": [
-                {"output_ref": "hello_node", "value_payload": "Hello Nexa"}
-            ]
-        },
-        "artifacts": {"artifact_refs": []},
-        "node_results": {"results": []},
-        "diagnostics": {"warnings": [], "errors": []},
-        "observability": {"trace_summary": "", "provider_usage_summary": {}, "plugin_usage_summary": {}, "observability_refs": []},
-    }
+    payload["execution_record"] = materialize_execution_record_from_payload(payload)
+    payload["execution_record"]["outputs"]["final_outputs"] = [
+        {
+            "output_ref": "hello_node",
+            "value_summary": "Hello Nexa",
+        }
+    ]
     ExecutionAuditPackBuilder.export(payload, str(audit_zip))
 
     result = replay_audit_pack(str(audit_zip))
@@ -175,3 +169,20 @@ def test_replay_audit_pack_uses_execution_record_when_contract_file_absent(tmp_p
     assert result["status"] == "PASS"
     assert result["execution_record"]["meta"]["run_id"] == "hello-exec"
     assert result["reference_contract"]["is_replay_ready"] is True
+
+
+def test_replay_audit_pack_prefers_native_execution_record_over_stale_contract(tmp_path):
+    audit_zip = tmp_path / "audit.zip"
+    payload = _sample_run_payload()
+    payload["execution_record_reference_contract"] = {
+        "run_id": "stale-exec",
+        "primary_trace_ref": "events://stale-exec",
+        "is_replay_ready": False,
+        "is_audit_ready": False,
+    }
+    ExecutionAuditPackBuilder.export(payload, str(audit_zip))
+
+    result = replay_audit_pack(str(audit_zip))
+    assert result["status"] == "PASS"
+    assert result["reference_contract"]["run_id"] == "hello-exec"
+    assert result["primary_trace_ref"] == "events://hello-exec"

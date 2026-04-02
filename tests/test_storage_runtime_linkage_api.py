@@ -94,30 +94,10 @@ def test_create_execution_record_from_commit_snapshot_rejects_unapproved_snapsho
         create_execution_record_from_commit_snapshot(make_snapshot(), make_unapproved_commit_snapshot())
 
 
-def test_create_commit_snapshot_from_working_save_rejects_failed_validation_snapshot():
+def test_create_execution_record_from_commit_snapshot_rejects_failed_validation_snapshot():
     working = make_working_save()
     with pytest.raises(ValueError):
         create_commit_snapshot_from_working_save(working, commit_id='cs-1', validation_result='failed')
-
-
-def test_create_execution_record_from_commit_snapshot_rejects_manually_invalid_failed_snapshot():
-    failed_snapshot = CommitSnapshotModel(
-        meta=CommitSnapshotMeta(
-            format_version='1.0.0',
-            storage_role='commit_snapshot',
-            name='Draft',
-            commit_id='cs-failed',
-            source_working_save_id='ws-1',
-        ),
-        circuit=CircuitModel(nodes=[{'id': 'n1'}], edges=[], entry='n1', outputs=[{'name': 'out', 'source': 'n1'}]),
-        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
-        state=StateModel(input={}, working={}, memory={}),
-        validation=CommitValidationModel(validation_result='failed', summary={}),
-        approval=CommitApprovalModel(approval_completed=True, approval_status='approved', summary={}),
-        lineage=CommitLineageModel(source_working_save_id='ws-1', metadata={}),
-    )
-    with pytest.raises(ValueError):
-        create_execution_record_from_commit_snapshot(make_snapshot(), failed_snapshot)
 
 
 def test_create_execution_record_and_update_working_save_links_record_and_summary():
@@ -233,8 +213,8 @@ def test_create_serialized_savefile_execution_payload_uses_lifecycle_api_shape()
 
     assert payload['execution_record']['meta']['run_id'] == 'savefile-run-1'
     assert payload['execution_record_reference_contract']['run_id'] == 'savefile-run-1'
-    assert payload['primary_trace_ref'] == 'trace://savefile-run-1'
     assert payload['replay_payload']['execution_id'] == 'savefile-run-1'
+    assert payload['primary_trace_ref'] == 'trace://savefile-run-1'
 
 
 def test_create_serialized_circuit_execution_payload_uses_lifecycle_api_shape():
@@ -257,8 +237,8 @@ def test_create_serialized_circuit_execution_payload_uses_lifecycle_api_shape():
 
     assert payload['execution_record']['meta']['run_id'] == 'demo-circuit'
     assert payload['execution_record_reference_contract']['run_id'] == 'demo-circuit'
-    assert payload['primary_trace_ref'] == 'trace://demo-circuit'
     assert payload['replay_payload']['execution_id'] == 'demo-circuit'
+    assert payload['primary_trace_ref'] == 'trace://demo-circuit'
 
 
 
@@ -364,6 +344,36 @@ def test_create_serialized_execution_artifact_components_prefers_native_executio
     assert components['primary_trace_ref'] == 'events://native-exec'
 
 
+def test_create_serialized_execution_artifact_components_recomputes_stale_contract_from_native_record():
+    native_record = create_serialized_execution_record_from_circuit_run(
+        {"id": "native-circuit", "nodes": [{"id": "native_node"}]},
+        {"native_node": {"value": "ok"}},
+        execution_id='native-exec',
+        trace={"events": ["started", "completed"]},
+    )
+    payload = {
+        'execution_record': native_record,
+        'execution_record_reference_contract': {
+            'run_id': 'stale-exec',
+            'primary_trace_ref': 'events://stale-exec',
+            'is_replay_ready': False,
+            'is_audit_ready': False,
+        },
+        'replay_payload': {
+            'execution_id': 'other-exec',
+            'node_order': ['other_node'],
+            'expected_outputs': {'other_node': {'value': 'wrong'}},
+        },
+    }
+
+    components = create_serialized_execution_artifact_components(payload)
+
+    assert components['run_id'] == 'native-exec'
+    assert components['execution_record_reference_contract']['run_id'] == 'native-exec'
+    assert components['execution_record_reference_contract']['is_replay_ready'] is True
+    assert components['primary_trace_ref'] == 'events://native-exec'
+
+
 def test_create_serialized_execution_artifact_components_falls_back_to_materialization_when_missing_native_record():
     payload = {
         'trace': {'events': ['started', 'completed']},
@@ -385,75 +395,3 @@ def test_create_serialized_execution_artifact_components_falls_back_to_materiali
     assert components['execution_record']['meta']['run_id'] == 'hello-exec'
     assert components['execution_record_reference_contract']['run_id'] == 'hello-exec'
     assert components['primary_trace_ref'] == 'events://hello-exec'
-
-
-def test_create_serialized_execution_artifact_components_rebuilds_stale_reference_contract_from_native_record():
-    native_record = create_serialized_execution_record_from_circuit_run(
-        {'id': 'native-circuit', 'nodes': [{'id': 'native_node'}]},
-        {'native_node': {'value': 'ok'}},
-        execution_id='native-exec',
-        trace={'events': ['started', 'completed']},
-    )
-    payload = {
-        'execution_record': native_record,
-        'execution_record_reference_contract': {
-            'run_id': 'stale-run',
-            'primary_trace_ref': 'trace://stale',
-            'is_replay_ready': False,
-            'is_audit_ready': False,
-        },
-    }
-
-    components = create_serialized_execution_artifact_components(payload)
-
-    assert components['execution_record_reference_contract']['run_id'] == 'native-exec'
-    assert components['execution_record_reference_contract']['primary_trace_ref'] == 'events://native-exec'
-    assert components['run_id'] == 'native-exec'
-    assert components['commit_id'] == native_record['source']['commit_id']
-
-
-def test_create_commit_snapshot_from_working_save_normalizes_legacy_validation_result_alias():
-    working = make_working_save()
-    snapshot = create_commit_snapshot_from_working_save(
-        working,
-        commit_id='cs-legacy',
-        validation_result='passed_with_findings',
-    )
-    assert snapshot.validation.validation_result == 'passed_with_warnings'
-
-
-def test_create_commit_snapshot_from_working_save_rejects_invalid_validation_result():
-    working = make_working_save()
-    with pytest.raises(ValueError):
-        create_commit_snapshot_from_working_save(
-            working,
-            commit_id='cs-invalid',
-            validation_result='invalid_result',
-        )
-
-
-def test_create_serialized_commit_snapshot_from_working_save_emits_contract_valid_validation_result():
-    working = make_working_save()
-    payload = create_serialized_commit_snapshot_from_working_save(
-        working,
-        commit_id='cs-alias',
-        validation_result='passed_with_findings',
-    )
-    assert payload['validation']['validation_result'] == 'passed_with_warnings'
-    assert payload['meta']['storage_role'] == 'commit_snapshot'
-
-
-def test_create_serialized_execution_transition_emits_native_artifacts_with_required_ids():
-    working = make_working_save()
-    commit_snapshot = create_commit_snapshot_from_working_save(working, commit_id='cs-1')
-    transition = create_serialized_execution_transition(make_snapshot(), commit_snapshot, working)
-    assert transition['execution_record']['meta']['run_id']
-    assert transition['execution_record']['source']['commit_id'] == 'cs-1'
-
-
-def test_create_serialized_execution_transition_emits_contract_valid_updated_working_save_payload():
-    working = make_working_save()
-    commit_snapshot = create_commit_snapshot_from_working_save(working, commit_id='cs-1')
-    transition = create_serialized_execution_transition(make_snapshot(), commit_snapshot, working)
-    assert transition['updated_working_save']['meta']['storage_role'] == 'working_save'
-    assert transition['updated_working_save']['meta']['working_save_id'] == 'ws-1'

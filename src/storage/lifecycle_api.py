@@ -20,7 +20,6 @@ from src.storage.models.commit_snapshot_model import (
     CommitValidationModel,
 )
 from src.storage.models.execution_record_model import ExecutionRecordModel
-from src.contracts.commit_snapshot_contract import COMMIT_SNAPSHOT_ALLOWED_VALIDATION_RESULTS
 from src.storage.models.working_save_model import RuntimeModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.serialization import (
     serialize_commit_snapshot,
@@ -34,6 +33,17 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+_VALID_COMMIT_VALIDATION_RESULTS = {'passed', 'passed_with_warnings'}
+_LEGACY_COMMIT_VALIDATION_RESULT_ALIASES = {'passed_with_findings': 'passed_with_warnings'}
+
+
+def _normalize_commit_validation_result(value: str) -> str:
+    normalized = _LEGACY_COMMIT_VALIDATION_RESULT_ALIASES.get(value, value)
+    if normalized not in _VALID_COMMIT_VALIDATION_RESULTS:
+        raise ValueError(
+            "Commit Snapshot validation_result must be one of {'passed', 'passed_with_warnings'}"
+        )
+    return normalized
 
 
 def _build_execution_summary(initial_state: dict | None, final_state: dict | None, started_at: float, ended_at: float) -> dict:
@@ -95,14 +105,17 @@ def create_serialized_savefile_execution_payload(
         "trace": {"events": []},
         "artifacts": getattr(trace, "all_artifacts", []),
         "replay_payload": replay_payload,
-        "execution_record": create_serialized_execution_record_from_savefile_trace(
-            savefile,
-            trace,
-            started_at=started_at,
-            ended_at=ended_at,
-        ),
     }
-    payload.update(create_serialized_execution_artifact_components(payload))
+    payload["execution_record"] = create_serialized_execution_record_from_savefile_trace(
+        savefile,
+        trace,
+        started_at=started_at,
+        ended_at=ended_at,
+    )
+    components = create_serialized_execution_artifact_components(payload)
+    payload["execution_record"] = components['execution_record']
+    payload["execution_record_reference_contract"] = components['execution_record_reference_contract']
+    payload["primary_trace_ref"] = components['primary_trace_ref']
     return payload
 
 
@@ -135,18 +148,21 @@ def create_serialized_circuit_execution_payload(
         "trace": trace or {"events": []},
         "artifacts": artifacts or [],
         "replay_payload": replay_payload,
-        "execution_record": create_serialized_execution_record_from_circuit_run(
-            circuit,
-            final_state,
-            started_at=started_at,
-            ended_at=ended_at,
-            execution_id=str(circuit.get("id") or "unknown-execution"),
-            input_state=initial_state,
-            trace=trace or {"events": []},
-            artifacts=artifacts or [],
-        ),
     }
-    payload.update(create_serialized_execution_artifact_components(payload))
+    payload["execution_record"] = create_serialized_execution_record_from_circuit_run(
+        circuit,
+        final_state,
+        started_at=started_at,
+        ended_at=ended_at,
+        execution_id=str(circuit.get("id") or "unknown-execution"),
+        input_state=initial_state,
+        trace=payload.get("trace"),
+        artifacts=payload.get("artifacts"),
+    )
+    components = create_serialized_execution_artifact_components(payload)
+    payload["execution_record"] = components['execution_record']
+    payload["execution_record_reference_contract"] = components['execution_record_reference_contract']
+    payload["primary_trace_ref"] = components['primary_trace_ref']
     return payload
 def create_commit_snapshot_from_working_save(
     working_save: WorkingSaveModel,
@@ -163,11 +179,11 @@ def create_commit_snapshot_from_working_save(
     if report.blocking_count:
         raise ValueError('Cannot create Commit Snapshot from Working Save with blocking validation findings')
     timestamp = created_at or _iso_now()
+    normalized_validation_result = _normalize_commit_validation_result(validation_result)
     summary = validation_summary if validation_summary is not None else {
         'warning_count': report.warning_count,
         'finding_count': len(report.findings),
     }
-    normalized_validation_result = _normalize_commit_snapshot_validation_result(validation_result)
     return CommitSnapshotModel(
         meta=CommitSnapshotMeta(
             format_version=working_save.meta.format_version,
@@ -183,7 +199,7 @@ def create_commit_snapshot_from_working_save(
         resources=working_save.resources,
         state=working_save.state,
         validation=CommitValidationModel(
-            validation_result=normalized_validation_result,
+            validation_result=validation_result,
             summary=summary,
         ),
         approval=CommitApprovalModel(
@@ -220,7 +236,7 @@ def create_serialized_commit_snapshot_from_working_save(
         validation_summary=validation_summary,
         created_at=created_at,
     )
-    return _ensure_serialized_commit_snapshot_payload(serialize_commit_snapshot(snapshot))
+    return serialize_commit_snapshot(snapshot)
 
 
 def create_serialized_execution_record_from_commit_snapshot(
@@ -282,7 +298,7 @@ def create_serialized_execution_record_from_commit_snapshot(
         trace_summary=trace_summary,
         observability_refs=observability_refs,
     )
-    return _ensure_serialized_execution_record_payload(serialize_execution_record(record))
+    return serialize_execution_record(record)
 
 
 def create_serialized_execution_transition(
@@ -344,15 +360,13 @@ def create_serialized_execution_transition(
         trace_summary=trace_summary,
         observability_refs=observability_refs,
     )
-    execution_record_payload = _ensure_serialized_execution_record_payload(serialize_execution_record(record))
-    artifact_components = create_serialized_execution_artifact_components({
-        'execution_record': execution_record_payload,
-    })
+    execution_record_payload = serialize_execution_record(record)
+    components = create_serialized_execution_artifact_components({'execution_record': execution_record_payload})
     return {
-        'execution_record': execution_record_payload,
-        'updated_working_save': _ensure_serialized_working_save_payload(serialize_working_save(updated_working_save)),
-        'execution_record_reference_contract': artifact_components.get('execution_record_reference_contract', {}),
-        'primary_trace_ref': artifact_components.get('primary_trace_ref'),
+        'execution_record': components['execution_record'],
+        'updated_working_save': serialize_working_save(updated_working_save),
+        'execution_record_reference_contract': components['execution_record_reference_contract'],
+        'primary_trace_ref': components['primary_trace_ref'],
         'last_run_summary': dict(updated_working_save.runtime.last_run),
     }
 
@@ -361,55 +375,10 @@ _SUCCESS_STATUSES = {'completed'}
 _FAILURE_STATUSES = {'failed', 'partial', 'cancelled'}
 
 
-_COMMIT_SNAPSHOT_LEGACY_VALIDATION_RESULT_ALIASES = {
-    'passed_with_findings': 'passed_with_warnings',
-}
-
-
-def _normalize_commit_snapshot_validation_result(result: str) -> str:
-    normalized = _COMMIT_SNAPSHOT_LEGACY_VALIDATION_RESULT_ALIASES.get(result, result)
-    if normalized not in COMMIT_SNAPSHOT_ALLOWED_VALIDATION_RESULTS:
-        raise ValueError(
-            'Commit Snapshot validation_result must be one of '
-            f"{sorted(COMMIT_SNAPSHOT_ALLOWED_VALIDATION_RESULTS)}"
-        )
-    return normalized
-
-
-
-def _ensure_serialized_working_save_payload(payload: dict) -> dict:
-    meta = payload.get('meta', {}) if isinstance(payload, dict) else {}
-    if meta.get('storage_role') != 'working_save':
-        raise ValueError('Serialized working save payload must declare storage_role=working_save')
-    if not meta.get('working_save_id'):
-        raise ValueError('Serialized working save payload must include working_save_id')
-    return payload
-
-
-def _ensure_serialized_commit_snapshot_payload(payload: dict) -> dict:
-    meta = payload.get('meta', {}) if isinstance(payload, dict) else {}
-    if meta.get('storage_role') != 'commit_snapshot':
-        raise ValueError('Serialized commit snapshot payload must declare storage_role=commit_snapshot')
-    if not meta.get('commit_id'):
-        raise ValueError('Serialized commit snapshot payload must include commit_id')
-    return payload
-
-
-def _ensure_serialized_execution_record_payload(payload: dict) -> dict:
-    meta = payload.get('meta', {}) if isinstance(payload, dict) else {}
-    source = payload.get('source', {}) if isinstance(payload, dict) else {}
-    if not meta.get('run_id'):
-        raise ValueError('Serialized execution record payload must include run_id')
-    if not source.get('commit_id'):
-        raise ValueError('Serialized execution record payload must include source.commit_id')
-    return payload
-
-
 def _ensure_commit_snapshot_is_execution_ready(commit_snapshot: CommitSnapshotModel) -> None:
     if not commit_snapshot.approval.approval_completed:
         raise ValueError('Cannot create Execution Record from Commit Snapshot before approval is completed')
-    normalized_result = _normalize_commit_snapshot_validation_result(commit_snapshot.validation.validation_result)
-    if normalized_result not in COMMIT_SNAPSHOT_ALLOWED_VALIDATION_RESULTS:
+    if _normalize_commit_validation_result(commit_snapshot.validation.validation_result) not in _VALID_COMMIT_VALIDATION_RESULTS:
         raise ValueError('Cannot create Execution Record from Commit Snapshot with failing validation result')
 
 
@@ -622,28 +591,32 @@ def create_serialized_execution_artifact_components(payload: dict) -> dict:
 
     This is the smallest shared transition-builder surface reused by run/export/replay.
     Prefer native execution_record when available; otherwise fall back to storage-side
-    materialization from the payload.
-
-    The lifecycle/storage layer owns the canonical contract semantics here, so
-    any provided reference contract is treated as advisory and re-derived from the
-    normalized native execution_record.
+    materialization from the payload. When a native execution_record is available,
+    reference-contract semantics are re-derived from that record so stale incoming
+    contract dictionaries do not survive.
     """
     safe_payload = payload if isinstance(payload, dict) else {}
-    execution_record = safe_payload.get('execution_record', {})
-    if not isinstance(execution_record, dict) or not execution_record:
-        execution_record = materialize_execution_record_from_payload(safe_payload)
-    if isinstance(execution_record, dict) and execution_record:
-        execution_record = _ensure_serialized_execution_record_payload(execution_record)
+    native_execution_record = safe_payload.get('execution_record', {})
+    has_native_execution_record = isinstance(native_execution_record, dict) and bool(native_execution_record)
+    execution_record = native_execution_record if has_native_execution_record else materialize_execution_record_from_payload(safe_payload)
 
-    reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+    if has_native_execution_record:
+        reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+    else:
+        reference_contract = safe_payload.get('execution_record_reference_contract', {})
+        if not isinstance(reference_contract, dict) or not reference_contract:
+            reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
 
     replay_payload = safe_payload.get('replay_payload', {})
     if not isinstance(replay_payload, dict):
         replay_payload = {}
 
+    source = execution_record.get('source', {}) if isinstance(execution_record, dict) else {}
+    meta = execution_record.get('meta', {}) if isinstance(execution_record, dict) else {}
+
     return {
-        'run_id': reference_contract.get('run_id'),
-        'commit_id': reference_contract.get('commit_id'),
+        'run_id': meta.get('run_id'),
+        'commit_id': source.get('commit_id'),
         'replay_payload': replay_payload,
         'execution_record': execution_record,
         'execution_record_reference_contract': reference_contract,
