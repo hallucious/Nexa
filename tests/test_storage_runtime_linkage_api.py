@@ -395,3 +395,27 @@ def test_create_serialized_execution_artifact_components_falls_back_to_materiali
     assert components['execution_record']['meta']['run_id'] == 'hello-exec'
     assert components['execution_record_reference_contract']['run_id'] == 'hello-exec'
     assert components['primary_trace_ref'] == 'events://hello-exec'
+
+
+
+def test_create_serialized_commit_snapshot_normalizes_legacy_validation_result():
+    payload = create_serialized_commit_snapshot_from_working_save(
+        make_working_save(),
+        commit_id='commit-normalized',
+        validation_result='passed_with_findings',
+    )
+    assert payload['validation']['validation_result'] == 'passed_with_warnings'
+
+
+def test_create_serialized_execution_transition_emits_contract_valid_artifacts():
+    working = make_working_save()
+    commit_snapshot = create_commit_snapshot_from_working_save(working, commit_id="commit-1")
+    transition = create_serialized_execution_transition(
+        make_snapshot(),
+        commit_snapshot,
+        working,
+    )
+    assert transition['execution_record']['meta']['run_id']
+    assert transition['execution_record']['source']['commit_id'] == 'commit-1'
+    assert transition['updated_working_save']['meta']['storage_role'] == 'working_save'
+    assert transition['updated_working_save']['meta']['working_save_id'] == 'ws-1'

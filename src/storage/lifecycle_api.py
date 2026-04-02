@@ -199,7 +199,7 @@ def create_commit_snapshot_from_working_save(
         resources=working_save.resources,
         state=working_save.state,
         validation=CommitValidationModel(
-            validation_result=validation_result,
+            validation_result=normalized_validation_result,
             summary=summary,
         ),
         approval=CommitApprovalModel(

@@ -17,6 +17,7 @@ from src.storage.serialization import (
     serialize_commit_snapshot,
     serialize_nex_artifact,
     serialize_working_save,
+    validate_serialized_storage_artifact_for_write,
 )
 
 
@@ -65,3 +66,36 @@ def test_save_nex_artifact_file_writes_json(tmp_path):
     data = json.loads(path.read_text(encoding='utf-8'))
     assert data['meta']['commit_id'] == 'cs-1'
     assert data['meta']['storage_role'] == COMMIT_SNAPSHOT_ROLE
+
+
+
+def test_validate_serialized_storage_artifact_for_write_rejects_incomplete_working_save():
+    try:
+        validate_serialized_storage_artifact_for_write({
+            'meta': {'storage_role': WORKING_SAVE_ROLE, 'working_save_id': 'ws-1'},
+            'circuit': {},
+            'resources': {},
+            'state': {},
+        })
+    except ValueError as exc:
+        assert 'Working Save write payload missing required object section' in str(exc)
+    else:
+        raise AssertionError('Expected ValueError for incomplete Working Save payload')
+
+
+def test_save_nex_artifact_file_rejects_invalid_commit_snapshot_dict(tmp_path):
+    invalid = {
+        'meta': {'storage_role': COMMIT_SNAPSHOT_ROLE, 'commit_id': 'cs-1'},
+        'circuit': {},
+        'resources': {'prompts': {}, 'providers': {}, 'plugins': {}},
+        'state': {'input': {}, 'working': {}, 'memory': {}},
+        'validation': {'validation_result': 'passed_with_findings'},
+        'approval': {'approval_completed': True, 'approval_status': 'approved'},
+        'lineage': {},
+    }
+    try:
+        save_nex_artifact_file(invalid, tmp_path / 'invalid.nex')
+    except ValueError as exc:
+        assert 'validation.validation_result' in str(exc)
+    else:
+        raise AssertionError('Expected ValueError for invalid Commit Snapshot write payload')
