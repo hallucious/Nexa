@@ -15,7 +15,7 @@ from src.engine.node_execution_runtime import NodeExecutionRuntime
 from src.platform.provider_executor import ProviderExecutor
 from src.platform.provider_registry import ProviderRegistry
 from src.contracts.provider_contract import ProviderRequest, ProviderResult
-from src.storage.execution_record_api import build_execution_record_reference_contract_from_serialized_record
+from src.storage.lifecycle_api import create_serialized_audit_replay_input
 
 
 class _EchoProvider:
@@ -90,8 +90,15 @@ def replay_audit_pack(audit_zip_path: str) -> dict:
                 raise ValueError(f"invalid execution_record_reference_contract.json: {exc}") from exc
             if not isinstance(reference_contract, dict):
                 raise ValueError("execution_record_reference_contract.json must contain a JSON object")
-        elif execution_record:
-            reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+
+        replay_input = create_serialized_audit_replay_input({
+            "replay_payload": replay_payload,
+            "execution_record": execution_record,
+            "execution_record_reference_contract": reference_contract,
+        })
+        replay_payload = replay_input.get("replay_payload", {})
+        execution_record = replay_input.get("execution_record", {})
+        reference_contract = replay_input.get("execution_record_reference_contract", {})
 
         execution_id = replay_payload.get("execution_id", "unknown-execution")
         node_order = replay_payload.get("node_order", [])

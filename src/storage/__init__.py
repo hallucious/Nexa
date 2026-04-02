@@ -15,6 +15,7 @@ from src.storage.lifecycle_api import (
     create_serialized_savefile_execution_payload,
     create_serialized_circuit_execution_payload,
     create_serialized_audit_export_payload,
+    create_serialized_audit_replay_input,
 )
 from src.storage.nex_api import load_nex, validate_commit_snapshot, validate_working_save
 
@@ -33,4 +34,8 @@ __all__ = [
     'create_execution_record_and_update_working_save',
     'create_serialized_execution_transition',
     'apply_execution_record_to_working_save',
+    'create_serialized_savefile_execution_payload',
+    'create_serialized_circuit_execution_payload',
+    'create_serialized_audit_export_payload',
+    'create_serialized_audit_replay_input',
 ]

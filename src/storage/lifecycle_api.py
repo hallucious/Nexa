@@ -561,6 +561,21 @@ __all__ = [
 ]
 
 
+
+
+def create_serialized_audit_replay_input(payload: dict) -> dict:
+    """Normalize replay-facing serialized components from an audit payload.
+
+    This centralizes replay input interpretation so replay consumers share the
+    same storage/lifecycle transition vocabulary used by audit export.
+    """
+    audit_payload = create_serialized_audit_export_payload(payload if isinstance(payload, dict) else {})
+    return {
+        'replay_payload': audit_payload.get('replay_payload', {}),
+        'execution_record': audit_payload.get('execution_record', {}),
+        'execution_record_reference_contract': audit_payload.get('execution_record_reference_contract', {}),
+        'primary_trace_ref': (audit_payload.get('execution_record_reference_contract', {}) or {}).get('primary_trace_ref'),
+    }
 def create_serialized_audit_export_payload(payload: dict) -> dict:
     """Build normalized audit-export components from a run payload.
 
