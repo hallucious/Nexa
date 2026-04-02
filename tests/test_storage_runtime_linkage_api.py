@@ -344,6 +344,30 @@ def test_create_serialized_execution_artifact_components_prefers_native_executio
     assert components['primary_trace_ref'] == 'events://native-exec'
 
 
+def test_create_serialized_execution_artifact_components_canonicalizes_replay_payload_identity_from_native_record():
+    native_record = create_serialized_execution_record_from_circuit_run(
+        {"id": "native-circuit", "nodes": [{"id": "native_node"}]},
+        {"native_node": {"value": "ok"}},
+        execution_id='native-exec',
+        commit_id='commit-native',
+        trace={"events": ["started", "completed"]},
+    )
+    payload = {
+        'execution_record': native_record,
+        'replay_payload': {
+            'execution_id': 'stale-exec',
+            'commit_id': 'stale-commit',
+            'node_order': ['other_node'],
+            'expected_outputs': {'other_node': {'value': 'wrong'}},
+        },
+    }
+
+    components = create_serialized_execution_artifact_components(payload)
+
+    assert components['replay_payload']['execution_id'] == 'native-exec'
+    assert components['replay_payload']['commit_id'] == 'commit-native'
+
+
 def test_create_serialized_execution_artifact_components_recomputes_stale_contract_from_native_record():
     native_record = create_serialized_execution_record_from_circuit_run(
         {"id": "native-circuit", "nodes": [{"id": "native_node"}]},
@@ -395,6 +419,31 @@ def test_create_serialized_execution_artifact_components_falls_back_to_materiali
     assert components['execution_record']['meta']['run_id'] == 'hello-exec'
     assert components['execution_record_reference_contract']['run_id'] == 'hello-exec'
     assert components['primary_trace_ref'] == 'events://hello-exec'
+
+
+def test_create_serialized_execution_artifact_components_rebuilds_invalid_native_execution_record_when_possible():
+    payload = {
+        'execution_record': {'meta': {'run_id': 'broken'}},
+        'trace': {'events': ['started', 'completed']},
+        'replay_payload': {
+            'execution_id': 'run-123',
+            'node_order': ['node_a'],
+            'expected_outputs': {'node_a': {'value': 'ok'}},
+        },
+        'result': {
+            'status': 'success',
+            'state': {'node_a': {'value': 'ok'}},
+            'node_results': {
+                'node_a': {'status': 'success', 'output': {'value': 'ok'}},
+            },
+        },
+    }
+
+    components = create_serialized_execution_artifact_components(payload)
+
+    assert components['execution_record']['meta']['run_id'] == 'run-123'
+    assert components['execution_record_reference_contract']['run_id'] == 'run-123'
+    assert components['primary_trace_ref'] == 'events://run-123'
 
 
 

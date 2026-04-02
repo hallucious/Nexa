@@ -586,43 +586,54 @@ __all__ = [
 ]
 
 
+def _looks_like_minimal_execution_record(record: dict) -> bool:
+    if not isinstance(record, dict) or not record:
+        return False
+    meta = record.get('meta') if isinstance(record.get('meta'), dict) else {}
+    source = record.get('source') if isinstance(record.get('source'), dict) else {}
+    return bool(meta.get('run_id') and source.get('commit_id'))
+
+
 def create_serialized_execution_artifact_components(payload: dict) -> dict:
     """Normalize the shared execution-artifact component surface.
 
     This is the smallest shared transition-builder surface reused by run/export/replay.
-    Prefer native execution_record when available; otherwise fall back to storage-side
-    materialization from the payload. When a native execution_record is available,
-    reference-contract semantics are re-derived from that record so stale incoming
-    contract dictionaries do not survive.
+    Prefer a valid native execution_record when available; otherwise fall back to
+    storage-side materialization from the payload. When a native execution_record is
+    available, reference-contract semantics are re-derived from that record so stale
+    incoming contract dictionaries do not survive. replay_payload identity is also
+    canonicalized from the native record when possible.
     """
     safe_payload = payload if isinstance(payload, dict) else {}
     native_execution_record = safe_payload.get('execution_record', {})
-    has_native_execution_record = isinstance(native_execution_record, dict) and bool(native_execution_record)
+    has_native_execution_record = _looks_like_minimal_execution_record(native_execution_record)
     execution_record = native_execution_record if has_native_execution_record else materialize_execution_record_from_payload(safe_payload)
 
-    if has_native_execution_record:
-        reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
-    else:
-        reference_contract = safe_payload.get('execution_record_reference_contract', {})
-        if not isinstance(reference_contract, dict) or not reference_contract:
-            reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+    reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
 
     replay_payload = safe_payload.get('replay_payload', {})
     if not isinstance(replay_payload, dict):
         replay_payload = {}
 
     source = execution_record.get('source', {}) if isinstance(execution_record, dict) else {}
-    meta = execution_record.get('meta', {}) if isinstance(execution_record, dict) else {}
+    meta = execution_record.get('meta', {}) if isinstance(execution_record.get('meta'), dict) else {}
+    run_id = meta.get('run_id')
+    commit_id = source.get('commit_id')
+    if run_id:
+        replay_payload = dict(replay_payload)
+        replay_payload['execution_id'] = run_id
+    if commit_id:
+        replay_payload = dict(replay_payload)
+        replay_payload['commit_id'] = commit_id
 
     return {
-        'run_id': meta.get('run_id'),
-        'commit_id': source.get('commit_id'),
+        'run_id': run_id,
+        'commit_id': commit_id,
         'replay_payload': replay_payload,
         'execution_record': execution_record,
         'execution_record_reference_contract': reference_contract,
         'primary_trace_ref': reference_contract.get('primary_trace_ref'),
     }
-
 
 def create_serialized_audit_replay_input(payload: dict) -> dict:
     """Normalize replay-facing serialized components from an audit payload.

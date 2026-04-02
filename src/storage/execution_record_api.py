@@ -624,11 +624,19 @@ def create_serialized_execution_record_from_savefile_trace(
     return serialize_execution_record(record)
 
 
+def _is_minimal_serialized_execution_record(record: dict[str, Any]) -> bool:
+    if not isinstance(record, dict) or not record:
+        return False
+    meta = record.get('meta') if isinstance(record.get('meta'), dict) else {}
+    source = record.get('source') if isinstance(record.get('source'), dict) else {}
+    return bool(meta.get('run_id') and source.get('commit_id'))
+
+
 def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
     existing = payload.get('execution_record')
-    if isinstance(existing, dict) and existing:
+    if _is_minimal_serialized_execution_record(existing):
         return existing
 
     snapshot = _build_snapshot_from_payload(payload)
