@@ -218,7 +218,7 @@ def test_synthesize_execution_record_reference_contract_from_payload_creates_con
     assert payload["execution_record_reference_contract"] == contract
 
 
-def test_synthesize_execution_record_reference_contract_from_payload_keeps_existing_contract_without_native_record():
+def test_synthesize_execution_record_reference_contract_from_payload_keeps_existing_contract_without_materializable_native_truth():
     payload = {
         "execution_record_reference_contract": {
             "primary_trace_ref": "events://existing",
@@ -227,7 +227,6 @@ def test_synthesize_execution_record_reference_contract_from_payload_keeps_exist
         },
         "replay_payload": {
             "execution_id": "run-123",
-            "expected_outputs": {"node_a": {"value": "ok"}},
         },
     }
 
@@ -379,5 +378,38 @@ def test_synthesize_execution_record_reference_contract_recomputes_stale_existin
     assert contract['run_id'] == 'native-exec'
     assert contract['primary_trace_ref'] == 'events://native-exec'
     assert 'native_node' in contract['node_trace_refs']
+    assert 'other_node' not in contract['node_trace_refs']
+    assert payload['execution_record_reference_contract'] == contract
+
+
+def test_synthesize_execution_record_reference_contract_prefers_materialized_execution_truth_over_stale_existing_contract():
+    payload = {
+        "execution_record_reference_contract": {
+            "run_id": "stale-exec",
+            "primary_trace_ref": "events://stale-exec",
+            "node_trace_refs": {"other_node": "events://stale-exec#node:other_node"},
+            "is_replay_ready": True,
+            "is_audit_ready": True,
+        },
+        "trace": {"events": ["started", "completed"]},
+        "replay_payload": {
+            "execution_id": "run-123",
+            "node_order": ["node_a"],
+            "expected_outputs": {"node_a": {"value": "ok"}},
+        },
+        "result": {
+            "status": "success",
+            "state": {"node_a": {"value": "ok"}},
+            "node_results": {
+                "node_a": {"status": "success", "output": {"value": "ok"}},
+            },
+        },
+    }
+
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+
+    assert contract['run_id'] == 'run-123'
+    assert contract['primary_trace_ref'] == 'events://run-123'
+    assert 'node_a' in contract['node_trace_refs']
     assert 'other_node' not in contract['node_trace_refs']
     assert payload['execution_record_reference_contract'] == contract
