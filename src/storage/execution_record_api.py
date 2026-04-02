@@ -714,7 +714,7 @@ def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[s
     if isinstance(status_raw, str) and status_raw.lower() in {'failure','failed','error'}:
         status = 'failed'
 
-    final_outputs = replay_payload.get('expected_outputs') if isinstance(replay_payload.get('expected_outputs'), dict) and replay_payload.get('expected_outputs') else snapshot.node_outputs
+    final_outputs = snapshot.node_outputs if snapshot.node_outputs else (replay_payload.get('expected_outputs') if isinstance(replay_payload.get('expected_outputs'), dict) else {})
     record = create_execution_record_from_snapshot(
         snapshot,
         commit_id=str(existing_source.get('commit_id') or replay_payload.get('commit_id') or f'uncommitted::{execution_id}'),
@@ -803,15 +803,15 @@ def synthesize_execution_record_reference_contract_from_payload(payload: dict[st
         payload['execution_record_reference_contract'] = contract
         return contract
 
-    existing = payload.get('execution_record_reference_contract')
-    if isinstance(existing, dict) and existing:
-        return existing
-
     execution_record = materialize_execution_record_from_payload(payload)
-    if isinstance(execution_record, dict) and execution_record:
+    if isinstance(execution_record, dict) and execution_record and _has_serialized_execution_record_identity(execution_record):
         contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
         payload['execution_record_reference_contract'] = contract
         return contract
+
+    existing = payload.get('execution_record_reference_contract')
+    if isinstance(existing, dict) and existing:
+        return existing
 
     replay_payload = payload.get('replay_payload')
     if not isinstance(replay_payload, dict) or not replay_payload:

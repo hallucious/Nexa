@@ -218,7 +218,11 @@ def test_synthesize_execution_record_reference_contract_from_payload_creates_con
     assert payload["execution_record_reference_contract"] == contract
 
 
-def test_synthesize_execution_record_reference_contract_from_payload_keeps_existing_contract_without_native_record():
+def test_synthesize_execution_record_reference_contract_from_payload_prefers_materialized_over_stale_contract():
+    # Stale on-disk contract claims is_replay_ready=True with a trace ref.
+    # Payload has only replay_payload.expected_outputs — no structural detail (trace/node_order/input_state).
+    # After the fix, unconditional materialization runs before the stale fallback and produces a fresh
+    # identity-bearing record from expected_outputs. The fresh contract wins; stale primary_trace_ref is discarded.
     payload = {
         "execution_record_reference_contract": {
             "primary_trace_ref": "events://existing",
@@ -233,8 +237,28 @@ def test_synthesize_execution_record_reference_contract_from_payload_keeps_exist
 
     contract = synthesize_execution_record_reference_contract_from_payload(payload)
 
-    assert contract["primary_trace_ref"] == "events://existing"
-    assert contract["is_replay_ready"] is True
+    # Fresh contract built from materialized record — no trace in payload so primary_trace_ref is None.
+    assert contract["run_id"] == "run-123"
+    assert contract["primary_trace_ref"] is None
+    assert contract["is_replay_ready"] is False
+
+
+def test_synthesize_execution_record_reference_contract_from_payload_falls_back_to_stale_only_when_materialization_fails():
+    # Stale contract is returned only when materialization cannot produce an identity-bearing record.
+    # Here replay_payload is absent, so materialize_execution_record_from_payload returns nothing useful.
+    payload = {
+        "execution_record_reference_contract": {
+            "run_id": "stale-run",
+            "primary_trace_ref": "events://stale",
+            "is_replay_ready": True,
+            "is_audit_ready": True,
+        },
+    }
+
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+
+    assert contract["run_id"] == "stale-run"
+    assert contract["primary_trace_ref"] == "events://stale"
 
 
 
@@ -515,3 +539,93 @@ def test_synthesize_execution_record_reference_contract_prefers_materialized_tru
     assert "node_a" in contract["node_trace_refs"]
     assert "other_node" not in contract["node_trace_refs"]
     assert payload["execution_record_reference_contract"] == contract
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Regression tests for truth-ordering fixes (F1 + F2)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def test_f1_synthesize_and_create_artifact_components_agree_on_primary_trace_ref_for_expected_outputs_only_payload():
+    """F1 regression: synthesize_* and create_serialized_execution_artifact_components must agree
+    on primary_trace_ref when the payload has only replay_payload.expected_outputs (no trace, no
+    node_order, no node_results, no input_state) and a stale execution_record_reference_contract.
+
+    Before the fix, synthesize_* returned the stale contract's primary_trace_ref ('events://stale')
+    while create_serialized_execution_artifact_components returned None.
+    After the fix, both return None (fresh contract from materialized record, no trace in payload).
+    """
+    from src.storage.lifecycle_api import create_serialized_execution_artifact_components
+
+    payload = {
+        "execution_record_reference_contract": {
+            "run_id": "run-123",
+            "primary_trace_ref": "events://stale",
+            "is_replay_ready": True,
+            "is_audit_ready": True,
+        },
+        "replay_payload": {
+            "execution_id": "run-123",
+            "expected_outputs": {"node_a": {"value": "ok"}},
+        },
+    }
+
+    # synthesize_* path
+    import copy
+    payload_for_synth = copy.deepcopy(payload)
+    synth_contract = synthesize_execution_record_reference_contract_from_payload(payload_for_synth)
+
+    # create_serialized_execution_artifact_components path
+    payload_for_components = copy.deepcopy(payload)
+    components = create_serialized_execution_artifact_components(payload_for_components)
+    components_contract = components.get("execution_record_reference_contract", {})
+
+    assert synth_contract.get("primary_trace_ref") == components_contract.get("primary_trace_ref"), (
+        f"synthesize_* returned {synth_contract.get('primary_trace_ref')!r} but "
+        f"create_serialized_execution_artifact_components returned {components_contract.get('primary_trace_ref')!r}"
+    )
+    # Both should have discarded the stale "events://stale" in favour of the fresh (None) value.
+    assert synth_contract.get("primary_trace_ref") is None
+    assert components_contract.get("primary_trace_ref") is None
+
+
+def test_f2_materialize_prefers_result_node_results_over_stale_expected_outputs_for_final_outputs():
+    """F2 regression: materialize_execution_record_from_payload must prefer snapshot.node_outputs
+    (built from result.node_results, which has actual execution truth) over the stale
+    replay_payload.expected_outputs when they differ.
+
+    Before the fix, expected_outputs won unconditionally when non-empty, so a stale
+    replay_payload.expected_outputs would shadow the richer result.node_results output.
+    """
+    payload = {
+        "replay_payload": {
+            "execution_id": "run-stale-test",
+            "node_order": ["node_a"],
+            "input_state": {"message": "hi"},
+            "expected_outputs": {"node_a": "STALE_VALUE"},   # stale from a prior run
+        },
+        "result": {
+            "status": "success",
+            "state": {"node_a": "FRESH_VALUE"},
+            "node_results": {
+                "node_a": {"status": "success", "output": "FRESH_VALUE"},
+            },
+        },
+        "trace": {"events": ["started", "completed"]},
+    }
+
+    record = materialize_execution_record_from_payload(payload)
+
+    final_outputs = record.get("outputs", {}).get("final_outputs", [])
+    assert final_outputs, "Expected at least one final_output entry"
+
+    node_a_output = next(
+        (item for item in final_outputs if item.get("output_ref") == "node_a"),
+        None,
+    )
+    assert node_a_output is not None, "node_a not found in final_outputs"
+
+    # value_payload comes from snapshot.node_outputs, which resolved result.node_results first.
+    assert node_a_output.get("value_payload") == "FRESH_VALUE", (
+        f"Expected 'FRESH_VALUE' from result.node_results but got {node_a_output.get('value_payload')!r}. "
+        "Stale replay_payload.expected_outputs appears to have outranked richer result truth."
+    )
