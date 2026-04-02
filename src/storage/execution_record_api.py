@@ -447,6 +447,183 @@ def _build_snapshot_from_payload(payload: dict[str, Any]) -> ExecutionSnapshot |
     )
 
 
+def _artifact_record_cards_from_raw_artifacts(artifacts: list[Any] | None, execution_id: str) -> list[ArtifactRecordCard]:
+    cards: list[ArtifactRecordCard] = []
+    for index, artifact in enumerate(artifacts or [], start=1):
+        artifact_type = type(artifact).__name__
+        artifact_ref = None
+        summary_source = artifact
+        if isinstance(artifact, dict):
+            artifact_type = str(artifact.get('type') or artifact.get('artifact_type') or artifact_type)
+            artifact_ref = artifact.get('ref') if isinstance(artifact.get('ref'), str) else None
+            summary_source = artifact.get('summary') if artifact.get('summary') is not None else artifact
+        cards.append(
+            ArtifactRecordCard(
+                artifact_id=f'artifact::raw::{index}',
+                artifact_type=artifact_type,
+                ref=artifact_ref or f'artifact://{execution_id}/raw/{index}',
+                summary=_summarize_value(summary_source),
+            )
+        )
+    return cards
+
+
+
+
+def create_serialized_execution_record_from_circuit_run(
+    circuit: dict[str, Any],
+    final_state: dict[str, Any],
+    *,
+    started_at: float | None = None,
+    ended_at: float | None = None,
+    execution_id: str | None = None,
+    input_state: dict[str, Any] | None = None,
+    trace: dict[str, Any] | None = None,
+    artifacts: list[Any] | None = None,
+    commit_id: str | None = None,
+) -> dict[str, Any]:
+    if not isinstance(circuit, dict):
+        return {}
+
+    circuit_nodes = circuit.get('nodes') if isinstance(circuit.get('nodes'), list) else []
+    node_order = [node.get('id') for node in circuit_nodes if isinstance(node, dict) and isinstance(node.get('id'), str)]
+    resolved_execution_id = str(execution_id or circuit.get('id') or 'unknown-execution')
+
+    spans: list[NodeExecutionSpan] = []
+    outputs: dict[str, Any] = {}
+    hash_nodes: list[NodeOutputHash] = []
+    for index, node_id in enumerate(node_order):
+        output = final_state.get(node_id) if isinstance(final_state, dict) else None
+        outputs[node_id] = output
+        spans.append(NodeExecutionSpan(node_id=node_id, start_ms=index, end_ms=index + 1, duration_ms=1, status='success'))
+        if output is not None:
+            safe_output = _to_json_safe(output)
+            hash_nodes.append(NodeOutputHash(node_id=node_id, algorithm='repr', hash_value=str(abs(hash(repr(safe_output))))))
+
+    timeline = ExecutionTimeline(
+        execution_id=resolved_execution_id,
+        start_ms=0,
+        end_ms=len(spans),
+        duration_ms=len(spans),
+        node_spans=spans,
+    )
+    hash_report = ExecutionHashReport(execution_id=resolved_execution_id, node_hashes=hash_nodes)
+    snapshot = ExecutionSnapshotBuilder().build(
+        execution_id=resolved_execution_id,
+        timeline=timeline,
+        outputs=outputs,
+        hash_report=hash_report,
+    )
+
+    trace_ref = f'trace://{resolved_execution_id}' if isinstance(trace, dict) and trace else None
+    event_stream_ref = f'events://{resolved_execution_id}' if isinstance(trace, dict) and trace.get('events') else None
+    explicit_artifact_refs = _artifact_record_cards_from_raw_artifacts(artifacts, resolved_execution_id)
+
+    created_at = _iso_now()
+    started_iso = None
+    finished_iso = None
+    if started_at is not None:
+        started_iso = datetime.fromtimestamp(started_at, tz=timezone.utc).isoformat()
+    if ended_at is not None:
+        finished_iso = datetime.fromtimestamp(ended_at, tz=timezone.utc).isoformat()
+
+    record = create_execution_record_from_snapshot(
+        snapshot,
+        commit_id=str(commit_id or f'uncommitted::{resolved_execution_id}'),
+        trigger_type='manual_run',
+        trigger_reason='circuit_run_materialization',
+        status='completed',
+        title=str(circuit.get('id') or 'circuit-run'),
+        input_summary=input_state or {},
+        trace_ref=trace_ref,
+        event_stream_ref=event_stream_ref,
+        final_outputs=outputs,
+        artifact_refs=explicit_artifact_refs,
+        provider_usage_summary={'circuit_id': circuit.get('id')},
+        trace_summary=f'Circuit run materialized for {resolved_execution_id} with {len(node_order)} node(s).',
+        observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
+    )
+    return serialize_execution_record(record)
+def create_serialized_execution_record_from_savefile_trace(
+    savefile: Any,
+    trace: Any,
+    *,
+    started_at: float | None = None,
+    ended_at: float | None = None,
+    commit_id: str | None = None,
+    working_save_id: str | None = None,
+) -> dict[str, Any]:
+    if savefile is None or trace is None:
+        return {}
+
+    run_id = str(getattr(trace, 'run_id', None) or 'unknown-execution')
+    node_results = getattr(trace, 'node_results', {}) or {}
+    node_order = [getattr(node, 'id', None) for node in getattr(getattr(savefile, 'circuit', None), 'nodes', [])]
+    node_order = [node_id for node_id in node_order if isinstance(node_id, str)]
+    if not node_order:
+        node_order = [str(node_id) for node_id in node_results.keys() if isinstance(node_id, str)]
+
+    spans: list[NodeExecutionSpan] = []
+    outputs: dict[str, Any] = {}
+    hash_nodes: list[NodeOutputHash] = []
+    for index, node_id in enumerate(node_order):
+        node_result = node_results.get(node_id)
+        raw_status = str(getattr(node_result, 'status', 'success')).lower()
+        status = 'success' if raw_status in {'success', 'completed', 'ok'} else 'failed'
+        spans.append(NodeExecutionSpan(node_id=node_id, start_ms=index, end_ms=index + 1, duration_ms=1, status=status))
+        output = getattr(node_result, 'output', None)
+        if output is not None:
+            outputs[node_id] = output
+            safe_output = _to_json_safe(output)
+            hash_nodes.append(NodeOutputHash(node_id=node_id, algorithm='repr', hash_value=str(abs(hash(repr(safe_output))))))
+
+    timeline = ExecutionTimeline(execution_id=run_id, start_ms=0, end_ms=len(spans), duration_ms=len(spans), node_spans=spans)
+    hash_report = ExecutionHashReport(execution_id=run_id, node_hashes=hash_nodes)
+    snapshot = ExecutionSnapshotBuilder().build(execution_id=run_id, timeline=timeline, outputs=outputs, hash_report=hash_report)
+
+    overall_status = str(getattr(trace, 'status', 'success')).lower()
+    record_status = 'failed' if overall_status in {'failure', 'failed', 'error'} else 'completed'
+    raw_artifacts = list(getattr(trace, 'all_artifacts', []) or [])
+    explicit_artifact_refs = _artifact_record_cards_from_raw_artifacts(raw_artifacts, run_id)
+    errors: list[ExecutionIssue] = []
+    for node_id, node_result in node_results.items():
+        error_message = getattr(node_result, 'error', None)
+        if error_message:
+            errors.append(ExecutionIssue(issue_code='NODE_EXECUTION_ERROR', category='runtime', severity='high', location=str(node_id), message=str(error_message)))
+
+    created_at = _iso_now()
+    started_iso = None
+    finished_iso = None
+    if started_at is not None:
+        started_iso = datetime.fromtimestamp(started_at, tz=timezone.utc).isoformat()
+    if ended_at is not None:
+        finished_iso = datetime.fromtimestamp(ended_at, tz=timezone.utc).isoformat()
+
+    record = create_execution_record_from_snapshot(
+        snapshot,
+        commit_id=str(commit_id or f'uncommitted::{run_id}'),
+        trigger_type='manual_run',
+        working_save_id=working_save_id,
+        trigger_reason='savefile_trace_materialization',
+        status=record_status,
+        title=getattr(getattr(savefile, 'meta', None), 'name', None),
+        description=getattr(getattr(savefile, 'meta', None), 'description', None),
+        created_at=created_at,
+        started_at=started_iso,
+        finished_at=finished_iso,
+        input_summary=getattr(getattr(savefile, 'state', None), 'input', {}) or {},
+        trace_ref=f'trace://{run_id}',
+        event_stream_ref=None,
+        final_outputs=outputs,
+        artifact_refs=explicit_artifact_refs,
+        errors=errors,
+        provider_usage_summary={'savefile_name': getattr(getattr(savefile, 'meta', None), 'name', None)},
+        trace_summary=f'Savefile trace materialized for {run_id} with {len(node_order)} node(s).',
+        observability_refs=[f'trace://{run_id}'],
+    )
+    return serialize_execution_record(record)
+
+
 def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
@@ -642,6 +819,8 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
 
 __all__ = [
     'build_execution_record_reference_contract',
+    'create_serialized_execution_record_from_circuit_run',
+    'create_serialized_execution_record_from_savefile_trace',
     'build_execution_record_reference_contract_from_serialized_record',
     'materialize_execution_record_from_payload',
     'create_execution_record_from_snapshot',

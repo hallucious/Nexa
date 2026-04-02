@@ -11,6 +11,8 @@ from pathlib import Path
 from src.storage.execution_record_api import (
     materialize_execution_record_from_payload,
     synthesize_execution_record_reference_contract_from_payload,
+    create_serialized_execution_record_from_savefile_trace,
+    create_serialized_execution_record_from_circuit_run,
 )
 
 try:
@@ -957,7 +959,12 @@ def _savefile_payload(savefile, trace, started_at, ended_at):
         "artifacts": getattr(trace, "all_artifacts", []),
         "replay_payload": replay_payload,
     }
-    materialize_execution_record_from_payload(payload)
+    payload["execution_record"] = create_serialized_execution_record_from_savefile_trace(
+        savefile,
+        trace,
+        started_at=started_at,
+        ended_at=ended_at,
+    )
     synthesize_execution_record_reference_contract_from_payload(payload)
     return payload
 
@@ -1075,7 +1082,16 @@ def run_command(args):
         "artifacts": [],
         "replay_payload": replay_payload,
     }
-    materialize_execution_record_from_payload(payload)
+    payload["execution_record"] = create_serialized_execution_record_from_circuit_run(
+        circuit,
+        final_state,
+        started_at=started_at,
+        ended_at=ended_at,
+        execution_id=str(circuit.get("id") or "unknown-execution"),
+        input_state=initial_state,
+        trace=payload.get("trace"),
+        artifacts=payload.get("artifacts"),
+    )
     synthesize_execution_record_reference_contract_from_payload(payload)
 
     if args.out:

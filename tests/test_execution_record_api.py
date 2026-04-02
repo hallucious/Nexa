@@ -12,9 +12,44 @@ from src.storage.execution_record_api import (
     synthesize_execution_record_reference_contract_from_payload,
     materialize_execution_record_from_payload,
     build_execution_record_reference_contract_from_serialized_record,
+    create_serialized_execution_record_from_savefile_trace,
+    create_serialized_execution_record_from_circuit_run,
 )
 from src.storage.serialization import save_execution_record_file, serialize_execution_record
 
+
+
+from src.contracts.savefile_executor_aligned import NodeExecutionResult, SavefileExecutionTrace
+from tests.savefile_test_helpers import make_demo_savefile
+
+
+def test_create_serialized_execution_record_from_savefile_trace_preserves_native_trace_details():
+    savefile = make_demo_savefile(name='demo-savefile')
+    trace = SavefileExecutionTrace(
+        run_id='savefile-run-1',
+        savefile_name='demo-savefile',
+        status='success',
+        node_results={
+            'node1': NodeExecutionResult(
+                node_id='node1',
+                status='success',
+                output={'answer': 'hello'},
+                artifacts=[{'type': 'report', 'summary': 'artifact-summary'}],
+                trace={'provider': 'echo'},
+            )
+        },
+        final_state={'input': {'text': 'hello'}, 'working': {'answer': 'hello'}, 'memory': {}},
+        all_artifacts=[{'type': 'report', 'summary': 'artifact-summary'}],
+    )
+
+    payload = create_serialized_execution_record_from_savefile_trace(savefile, trace, started_at=1.0, ended_at=2.0)
+
+    assert payload['meta']['run_id'] == 'savefile-run-1'
+    assert payload['timeline']['trace_ref'] == 'trace://savefile-run-1'
+    assert payload['source']['trigger_reason'] == 'savefile_trace_materialization'
+    assert payload['outputs']['final_outputs'][0]['output_ref'] == 'node1'
+    assert payload['artifacts']['artifact_count'] >= 2
+    assert payload['node_results']['results'][0]['trace_ref'] == 'trace://savefile-run-1#node:node1'
 
 def make_snapshot():
     timeline = ExecutionTimeline(
@@ -251,3 +286,63 @@ def test_build_execution_record_reference_contract_from_serialized_record_indexe
     assert contract["run_id"] == "run-123"
     assert contract["primary_trace_ref"] == "events://run-123"
     assert contract["is_replay_ready"] is True
+
+
+def test_create_serialized_execution_record_from_circuit_run_builds_native_record_directly():
+    circuit = {
+        "id": "hello-circuit",
+        "nodes": [
+            {"id": "hello_node"},
+            {"id": "judge_node"},
+        ],
+    }
+    final_state = {
+        "hello_node": {"value": "hello"},
+        "judge_node": {"value": "approved"},
+    }
+
+    payload = create_serialized_execution_record_from_circuit_run(
+        circuit,
+        final_state,
+        started_at=1.0,
+        ended_at=2.0,
+        execution_id='hello-exec',
+        input_state={"message": "hi"},
+        trace={"events": ["started", "completed"]},
+        artifacts=[{"type": "report", "summary": "artifact-summary"}],
+    )
+
+    assert payload['meta']['run_id'] == 'hello-exec'
+    assert payload['source']['trigger_reason'] == 'circuit_run_materialization'
+    assert payload['timeline']['trace_ref'] == 'trace://hello-exec'
+    assert payload['timeline']['event_stream_ref'] == 'events://hello-exec'
+    assert payload['outputs']['final_outputs'][0]['output_ref'] == 'hello_node'
+    assert payload['outputs']['final_outputs'][1]['output_ref'] == 'judge_node'
+    assert payload['artifacts']['artifact_count'] >= 3
+
+
+def test_synthesize_execution_record_reference_contract_prefers_native_execution_record_over_replay_reconstruction():
+    native_record = create_serialized_execution_record_from_circuit_run(
+        {
+            "id": "native-circuit",
+            "nodes": [{"id": "native_node"}],
+        },
+        {"native_node": {"value": "ok"}},
+        execution_id='native-exec',
+        trace={"events": ["started", "completed"]},
+    )
+    payload = {
+        "execution_record": native_record,
+        "replay_payload": {
+            "execution_id": "different-exec",
+            "node_order": ["other_node"],
+            "expected_outputs": {"other_node": {"value": "wrong"}},
+        },
+    }
+
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+
+    assert contract['run_id'] == 'native-exec'
+    assert contract['primary_trace_ref'] == 'events://native-exec'
+    assert 'native_node' in contract['node_trace_refs']
+    assert 'other_node' not in contract['node_trace_refs']
