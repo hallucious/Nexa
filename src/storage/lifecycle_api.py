@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from src.engine.execution_snapshot import ExecutionSnapshot
 from src.storage.execution_record_api import (
+    build_execution_record_reference_contract,
     create_execution_record_from_snapshot,
     summarize_execution_record_for_working_save,
 )
@@ -17,6 +18,11 @@ from src.storage.models.commit_snapshot_model import (
 )
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.working_save_model import RuntimeModel, WorkingSaveMeta, WorkingSaveModel
+from src.storage.serialization import (
+    serialize_commit_snapshot,
+    serialize_execution_record,
+    serialize_working_save,
+)
 from src.storage.validators.shared_validator import validate_working_save
 
 
@@ -72,6 +78,159 @@ def create_commit_snapshot_from_working_save(
             metadata={},
         ),
     )
+
+
+def create_serialized_commit_snapshot_from_working_save(
+    working_save: WorkingSaveModel,
+    *,
+    commit_id: str,
+    parent_commit_id: str | None = None,
+    approval_status: str = 'approved',
+    approval_summary: dict | None = None,
+    validation_result: str = 'passed',
+    validation_summary: dict | None = None,
+    created_at: str | None = None,
+) -> dict:
+    snapshot = create_commit_snapshot_from_working_save(
+        working_save,
+        commit_id=commit_id,
+        parent_commit_id=parent_commit_id,
+        approval_status=approval_status,
+        approval_summary=approval_summary,
+        validation_result=validation_result,
+        validation_summary=validation_summary,
+        created_at=created_at,
+    )
+    return serialize_commit_snapshot(snapshot)
+
+
+def create_serialized_execution_record_from_commit_snapshot(
+    snapshot: ExecutionSnapshot,
+    commit_snapshot: CommitSnapshotModel,
+    *,
+    trigger_type: str = 'manual_run',
+    working_save_id: str | None = None,
+    trigger_reason: str | None = None,
+    status: str = 'completed',
+    title: str | None = None,
+    description: str | None = None,
+    created_at: str | None = None,
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    input_summary: dict | None = None,
+    input_ref: str | None = None,
+    input_hash: str | None = None,
+    schema_summary: str | None = None,
+    trace_ref: str | None = None,
+    event_stream_ref: str | None = None,
+    final_outputs: dict | None = None,
+    artifact_refs=None,
+    warnings=None,
+    errors=None,
+    failure_point: str | None = None,
+    termination_reason: str | None = None,
+    provider_usage_summary: dict | None = None,
+    plugin_usage_summary: dict | None = None,
+    trace_summary: str | None = None,
+    observability_refs: list[str] | None = None,
+) -> dict:
+    record = create_execution_record_from_commit_snapshot(
+        snapshot,
+        commit_snapshot,
+        trigger_type=trigger_type,
+        working_save_id=working_save_id,
+        trigger_reason=trigger_reason,
+        status=status,
+        title=title,
+        description=description,
+        created_at=created_at,
+        started_at=started_at,
+        finished_at=finished_at,
+        input_summary=input_summary,
+        input_ref=input_ref,
+        input_hash=input_hash,
+        schema_summary=schema_summary,
+        trace_ref=trace_ref,
+        event_stream_ref=event_stream_ref,
+        final_outputs=final_outputs,
+        artifact_refs=artifact_refs,
+        warnings=warnings,
+        errors=errors,
+        failure_point=failure_point,
+        termination_reason=termination_reason,
+        provider_usage_summary=provider_usage_summary,
+        plugin_usage_summary=plugin_usage_summary,
+        trace_summary=trace_summary,
+        observability_refs=observability_refs,
+    )
+    return serialize_execution_record(record)
+
+
+def create_serialized_execution_transition(
+    snapshot: ExecutionSnapshot,
+    commit_snapshot: CommitSnapshotModel,
+    working_save: WorkingSaveModel,
+    *,
+    trigger_type: str = 'manual_run',
+    trigger_reason: str | None = None,
+    status: str = 'completed',
+    title: str | None = None,
+    description: str | None = None,
+    created_at: str | None = None,
+    started_at: str | None = None,
+    finished_at: str | None = None,
+    input_summary: dict | None = None,
+    input_ref: str | None = None,
+    input_hash: str | None = None,
+    schema_summary: str | None = None,
+    trace_ref: str | None = None,
+    event_stream_ref: str | None = None,
+    final_outputs: dict | None = None,
+    artifact_refs=None,
+    warnings=None,
+    errors=None,
+    failure_point: str | None = None,
+    termination_reason: str | None = None,
+    provider_usage_summary: dict | None = None,
+    plugin_usage_summary: dict | None = None,
+    trace_summary: str | None = None,
+    observability_refs: list[str] | None = None,
+) -> dict:
+    record, updated_working_save = create_execution_record_and_update_working_save(
+        snapshot,
+        commit_snapshot,
+        working_save,
+        trigger_type=trigger_type,
+        trigger_reason=trigger_reason,
+        status=status,
+        title=title,
+        description=description,
+        created_at=created_at,
+        started_at=started_at,
+        finished_at=finished_at,
+        input_summary=input_summary,
+        input_ref=input_ref,
+        input_hash=input_hash,
+        schema_summary=schema_summary,
+        trace_ref=trace_ref,
+        event_stream_ref=event_stream_ref,
+        final_outputs=final_outputs,
+        artifact_refs=artifact_refs,
+        warnings=warnings,
+        errors=errors,
+        failure_point=failure_point,
+        termination_reason=termination_reason,
+        provider_usage_summary=provider_usage_summary,
+        plugin_usage_summary=plugin_usage_summary,
+        trace_summary=trace_summary,
+        observability_refs=observability_refs,
+    )
+    return {
+        'execution_record': serialize_execution_record(record),
+        'updated_working_save': serialize_working_save(updated_working_save),
+        'execution_record_reference_contract': build_execution_record_reference_contract(record),
+        'last_run_summary': dict(updated_working_save.runtime.last_run),
+    }
 
 
 _SUCCESS_STATUSES = {'completed'}
@@ -275,7 +434,10 @@ def apply_execution_record_to_working_save(
 
 __all__ = [
     'create_commit_snapshot_from_working_save',
+    'create_serialized_commit_snapshot_from_working_save',
     'create_execution_record_from_commit_snapshot',
+    'create_serialized_execution_record_from_commit_snapshot',
     'create_execution_record_and_update_working_save',
+    'create_serialized_execution_transition',
     'apply_execution_record_to_working_save',
 ]

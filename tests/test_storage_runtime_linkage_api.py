@@ -9,6 +9,9 @@ from src.storage.lifecycle_api import (
     create_commit_snapshot_from_working_save,
     create_execution_record_and_update_working_save,
     create_execution_record_from_commit_snapshot,
+    create_serialized_commit_snapshot_from_working_save,
+    create_serialized_execution_record_from_commit_snapshot,
+    create_serialized_execution_transition,
 )
 from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
@@ -136,3 +139,41 @@ def test_create_execution_record_and_update_working_save_propagates_trace_and_ar
     assert updated.runtime.last_run['replay_ready'] is True
     assert updated.runtime.last_run['audit_ready'] is True
     assert record.node_results.results[0].artifact_refs == []
+
+
+def test_create_serialized_commit_snapshot_from_working_save_exposes_commit_boundary_payload():
+    working = make_working_save()
+    payload = create_serialized_commit_snapshot_from_working_save(working, commit_id='cs-1')
+    assert payload['meta']['storage_role'] == 'commit_snapshot'
+    assert payload['meta']['commit_id'] == 'cs-1'
+    assert payload['meta']['source_working_save_id'] == 'ws-1'
+
+
+def test_create_serialized_execution_record_from_commit_snapshot_exposes_native_record_payload():
+    working = make_working_save()
+    commit_snapshot = create_commit_snapshot_from_working_save(working, commit_id='cs-1')
+    payload = create_serialized_execution_record_from_commit_snapshot(
+        make_snapshot(),
+        commit_snapshot,
+        trace_ref='trace://exec-1',
+        event_stream_ref='events://exec-1',
+    )
+    assert payload['source']['commit_id'] == 'cs-1'
+    assert payload['timeline']['trace_ref'] == 'trace://exec-1'
+    assert payload['timeline']['event_stream_ref'] == 'events://exec-1'
+
+
+def test_create_serialized_execution_transition_returns_execution_record_updated_working_save_and_contract():
+    working = make_working_save()
+    commit_snapshot = create_commit_snapshot_from_working_save(working, commit_id='cs-1')
+    transition = create_serialized_execution_transition(
+        make_snapshot(),
+        commit_snapshot,
+        working,
+        trace_ref='trace://exec-1',
+        event_stream_ref='events://exec-1',
+    )
+    assert transition['execution_record']['source']['commit_id'] == 'cs-1'
+    assert transition['updated_working_save']['runtime']['status'] == 'executed'
+    assert transition['execution_record_reference_contract']['primary_trace_ref'] == 'events://exec-1'
+    assert transition['last_run_summary']['replay_ready'] is True
