@@ -14,9 +14,11 @@ from src.storage.lifecycle_api import (
     create_serialized_execution_transition,
     create_serialized_savefile_execution_payload,
     create_serialized_circuit_execution_payload,
+    create_serialized_execution_record_from_circuit_run,
     create_serialized_audit_export_payload,
     create_serialized_audit_bundle_contents,
     create_serialized_audit_replay_components,
+    create_serialized_execution_artifact_components,
 )
 from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
@@ -315,3 +317,49 @@ def test_create_serialized_audit_replay_components_normalizes_replay_inputs():
     assert components['execution_record']['meta']['run_id'] == 'audit-demo'
     assert components['execution_record_reference_contract']['run_id'] == 'audit-demo'
     assert components['primary_trace_ref'] == 'events://audit-demo'
+
+
+def test_create_serialized_execution_artifact_components_prefers_native_execution_record_when_present():
+    native_record = create_serialized_execution_record_from_circuit_run(
+        {"id": "native-circuit", "nodes": [{"id": "native_node"}]},
+        {"native_node": {"value": "ok"}},
+        execution_id='native-exec',
+        trace={"events": ["started", "completed"]},
+    )
+    payload = {
+        'execution_record': native_record,
+        'replay_payload': {
+            'execution_id': 'other-exec',
+            'node_order': ['other_node'],
+            'expected_outputs': {'other_node': {'value': 'wrong'}},
+        },
+    }
+
+    components = create_serialized_execution_artifact_components(payload)
+
+    assert components['execution_record']['meta']['run_id'] == 'native-exec'
+    assert components['execution_record_reference_contract']['run_id'] == 'native-exec'
+    assert components['primary_trace_ref'] == 'events://native-exec'
+
+
+def test_create_serialized_execution_artifact_components_falls_back_to_materialization_when_missing_native_record():
+    payload = {
+        'trace': {'events': ['started', 'completed']},
+        'replay_payload': {
+            'execution_id': 'hello-exec',
+            'node_order': ['hello_node'],
+            'circuit': {'id': 'hello-circuit', 'nodes': [{'id': 'hello_node'}]},
+            'execution_configs': {},
+            'input_state': {'message': 'hello'},
+            'expected_outputs': {'hello_node': {'value': 'hello'}},
+        },
+        'result': {
+            'state': {'hello_node': {'value': 'hello'}},
+        },
+    }
+
+    components = create_serialized_execution_artifact_components(payload)
+
+    assert components['execution_record']['meta']['run_id'] == 'hello-exec'
+    assert components['execution_record_reference_contract']['run_id'] == 'hello-exec'
+    assert components['primary_trace_ref'] == 'events://hello-exec'

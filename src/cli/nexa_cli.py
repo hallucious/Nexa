@@ -8,10 +8,6 @@ import time
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
-from src.storage.execution_record_api import (
-    materialize_execution_record_from_payload,
-    synthesize_execution_record_reference_contract_from_payload,
-)
 from src.storage.lifecycle_api import (
     create_serialized_circuit_execution_payload,
     create_serialized_savefile_execution_payload,

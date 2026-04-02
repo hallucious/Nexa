@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from src.engine.execution_snapshot import ExecutionSnapshot
 from src.storage.execution_record_api import (
     build_execution_record_reference_contract,
+    build_execution_record_reference_contract_from_serialized_record,
     create_execution_record_from_snapshot,
     create_serialized_execution_record_from_circuit_run,
     create_serialized_execution_record_from_savefile_trace,
@@ -558,9 +559,40 @@ __all__ = [
     'create_execution_record_and_update_working_save',
     'create_serialized_execution_transition',
     'apply_execution_record_to_working_save',
+    'create_serialized_execution_artifact_components',
+    'create_serialized_audit_replay_input',
+    'create_serialized_audit_export_payload',
+    'create_serialized_audit_bundle_contents',
+    'create_serialized_audit_replay_components',
 ]
 
 
+def create_serialized_execution_artifact_components(payload: dict) -> dict:
+    """Normalize the shared execution-artifact component surface.
+
+    This is the smallest shared transition-builder surface reused by run/export/replay.
+    Prefer native execution_record when available; otherwise fall back to storage-side
+    materialization from the payload.
+    """
+    safe_payload = payload if isinstance(payload, dict) else {}
+    execution_record = safe_payload.get('execution_record', {})
+    if not isinstance(execution_record, dict) or not execution_record:
+        execution_record = materialize_execution_record_from_payload(safe_payload)
+
+    reference_contract = safe_payload.get('execution_record_reference_contract', {})
+    if not isinstance(reference_contract, dict) or not reference_contract:
+        reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+
+    replay_payload = safe_payload.get('replay_payload', {})
+    if not isinstance(replay_payload, dict):
+        replay_payload = {}
+
+    return {
+        'replay_payload': replay_payload,
+        'execution_record': execution_record,
+        'execution_record_reference_contract': reference_contract,
+        'primary_trace_ref': reference_contract.get('primary_trace_ref'),
+    }
 
 
 def create_serialized_audit_replay_input(payload: dict) -> dict:
@@ -569,13 +601,8 @@ def create_serialized_audit_replay_input(payload: dict) -> dict:
     This centralizes replay input interpretation so replay consumers share the
     same storage/lifecycle transition vocabulary used by audit export.
     """
-    audit_payload = create_serialized_audit_export_payload(payload if isinstance(payload, dict) else {})
-    return {
-        'replay_payload': audit_payload.get('replay_payload', {}),
-        'execution_record': audit_payload.get('execution_record', {}),
-        'execution_record_reference_contract': audit_payload.get('execution_record_reference_contract', {}),
-        'primary_trace_ref': (audit_payload.get('execution_record_reference_contract', {}) or {}).get('primary_trace_ref'),
-    }
+    return create_serialized_execution_artifact_components(payload if isinstance(payload, dict) else {})
+
 def create_serialized_audit_export_payload(payload: dict) -> dict:
     """Build normalized audit-export components from a run payload.
 
@@ -583,8 +610,7 @@ def create_serialized_audit_export_payload(payload: dict) -> dict:
     consumers do not need to reconstruct execution payload semantics on their own.
     """
     safe_payload = payload if isinstance(payload, dict) else {}
-    materialized = materialize_execution_record_from_payload(safe_payload)
-    contract = synthesize_execution_record_reference_contract_from_payload(safe_payload)
+    components = create_serialized_execution_artifact_components(safe_payload)
 
     result = safe_payload.get('result', {}) if isinstance(safe_payload.get('result'), dict) else {}
     state = result.get('state', {}) if isinstance(result, dict) else {}
@@ -595,10 +621,8 @@ def create_serialized_audit_export_payload(payload: dict) -> dict:
     artifacts = safe_payload.get('artifacts', [])
     if not isinstance(artifacts, list):
         artifacts = []
-    replay_payload = safe_payload.get('replay_payload', {})
-    if not isinstance(replay_payload, dict):
-        replay_payload = {}
 
+    contract = components.get('execution_record_reference_contract', {})
     metadata = {
         'format': 'nexa.audit_pack',
         'version': '1.0.0',
@@ -619,12 +643,11 @@ def create_serialized_audit_export_payload(payload: dict) -> dict:
         'summary_payload': {
             'summary': summary,
         },
-        'replay_payload': replay_payload,
-        'execution_record': materialized,
+        'replay_payload': components.get('replay_payload', {}),
+        'execution_record': components.get('execution_record', {}),
         'execution_record_reference_contract': contract,
         'artifacts': artifacts,
     }
-
 
 def create_serialized_audit_bundle_contents(payload: dict) -> dict:
     """Build file-oriented audit bundle contents from a run payload.
@@ -656,10 +679,4 @@ def create_serialized_audit_replay_components(payload: dict) -> dict:
     This is intentionally file-agnostic so replay consumers can normalize input
     using the same storage/lifecycle vocabulary used by export.
     """
-    replay_input = create_serialized_audit_replay_input(payload if isinstance(payload, dict) else {})
-    return {
-        'replay_payload': replay_input.get('replay_payload', {}),
-        'execution_record': replay_input.get('execution_record', {}),
-        'execution_record_reference_contract': replay_input.get('execution_record_reference_contract', {}),
-        'primary_trace_ref': replay_input.get('primary_trace_ref'),
-    }
+    return create_serialized_execution_artifact_components(payload if isinstance(payload, dict) else {})
