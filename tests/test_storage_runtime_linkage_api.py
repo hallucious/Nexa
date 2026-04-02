@@ -14,6 +14,7 @@ from src.storage.lifecycle_api import (
     create_serialized_execution_transition,
     create_serialized_savefile_execution_payload,
     create_serialized_circuit_execution_payload,
+    create_serialized_audit_export_payload,
 )
 from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
@@ -232,3 +233,29 @@ def test_create_serialized_circuit_execution_payload_uses_lifecycle_api_shape():
     assert payload['execution_record']['meta']['run_id'] == 'demo-circuit'
     assert payload['execution_record_reference_contract']['run_id'] == 'demo-circuit'
     assert payload['replay_payload']['execution_id'] == 'demo-circuit'
+
+
+
+def test_create_serialized_audit_export_payload_centralizes_audit_components():
+    payload = {
+        'result': {'state': {'node_a': {'value': 'hello'}}},
+        'summary': {'duration_ms': 1},
+        'trace': {'events': []},
+        'artifacts': [{'name': 'greeting', 'value': 'hello'}],
+        'replay_payload': {
+            'execution_id': 'audit-demo',
+            'node_order': ['node_a'],
+            'circuit': {'id': 'audit-demo', 'nodes': [{'id': 'node_a'}]},
+            'execution_configs': {},
+            'input_state': {'message': 'hello'},
+            'expected_outputs': {'node_a': {'value': 'hello'}},
+        },
+    }
+
+    audit_payload = create_serialized_audit_export_payload(payload)
+
+    assert audit_payload['metadata']['format'] == 'nexa.audit_pack'
+    assert audit_payload['replay_payload']['execution_id'] == 'audit-demo'
+    assert audit_payload['execution_record']['meta']['run_id'] == 'audit-demo'
+    assert audit_payload['execution_record_reference_contract']['run_id'] == 'audit-demo'
+    assert audit_payload['execution_trace_payload']['state']['node_a']['value'] == 'hello'

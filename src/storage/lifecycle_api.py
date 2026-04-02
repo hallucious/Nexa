@@ -9,6 +9,7 @@ from src.storage.execution_record_api import (
     create_execution_record_from_snapshot,
     create_serialized_execution_record_from_circuit_run,
     create_serialized_execution_record_from_savefile_trace,
+    materialize_execution_record_from_payload,
     summarize_execution_record_for_working_save,
     synthesize_execution_record_reference_contract_from_payload,
 )
@@ -558,3 +559,53 @@ __all__ = [
     'create_serialized_execution_transition',
     'apply_execution_record_to_working_save',
 ]
+
+
+def create_serialized_audit_export_payload(payload: dict) -> dict:
+    """Build normalized audit-export components from a run payload.
+
+    This centralizes storage/lifecycle-owned artifact assembly so audit/export
+    consumers do not need to reconstruct execution payload semantics on their own.
+    """
+    safe_payload = payload if isinstance(payload, dict) else {}
+    materialized = materialize_execution_record_from_payload(safe_payload)
+    contract = synthesize_execution_record_reference_contract_from_payload(safe_payload)
+
+    result = safe_payload.get('result', {}) if isinstance(safe_payload.get('result'), dict) else {}
+    state = result.get('state', {}) if isinstance(result, dict) else {}
+    summary = safe_payload.get('summary', {}) if isinstance(safe_payload.get('summary'), dict) else {}
+    trace = safe_payload.get('trace', safe_payload.get('execution_trace', {}))
+    if not isinstance(trace, dict):
+        trace = {}
+    artifacts = safe_payload.get('artifacts', [])
+    if not isinstance(artifacts, list):
+        artifacts = []
+    replay_payload = safe_payload.get('replay_payload', {})
+    if not isinstance(replay_payload, dict):
+        replay_payload = {}
+
+    metadata = {
+        'format': 'nexa.audit_pack',
+        'version': '1.0.0',
+        'artifact_count': len(artifacts),
+        'state_key_count': len(state) if isinstance(state, dict) else 0,
+    }
+    if isinstance(contract, dict) and contract:
+        metadata['replay_ready'] = bool(contract.get('is_replay_ready'))
+        metadata['audit_ready'] = bool(contract.get('is_audit_ready'))
+        metadata['primary_trace_ref'] = contract.get('primary_trace_ref')
+
+    return {
+        'metadata': metadata,
+        'execution_trace_payload': {
+            'trace': trace,
+            'state': state,
+        },
+        'summary_payload': {
+            'summary': summary,
+        },
+        'replay_payload': replay_payload,
+        'execution_record': materialized,
+        'execution_record_reference_contract': contract,
+        'artifacts': artifacts,
+    }

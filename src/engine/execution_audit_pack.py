@@ -8,10 +8,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import Any, Dict
 
-from src.storage.execution_record_api import (
-    materialize_execution_record_from_payload,
-    synthesize_execution_record_reference_contract_from_payload,
-)
+from src.storage.lifecycle_api import create_serialized_audit_export_payload
 
 
 @dataclass
@@ -74,39 +71,16 @@ class ExecutionAuditPackBuilder:
             root.mkdir(parents=True, exist_ok=True)
             artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-            result = payload.get('result', {}) if isinstance(payload, dict) else {}
-            state = result.get('state', {}) if isinstance(result, dict) else {}
-            summary = payload.get('summary', {}) if isinstance(payload, dict) else {}
-            artifacts = payload.get('artifacts', []) if isinstance(payload, dict) else []
-            trace = payload.get('trace', payload.get('execution_trace', {})) if isinstance(payload, dict) else {}
-
-            metadata = {
-                'format': 'nexa.audit_pack',
-                'version': '1.0.0',
-                'artifact_count': len(artifacts) if isinstance(artifacts, list) else 0,
-                'state_key_count': len(state) if isinstance(state, dict) else 0,
-            }
-
-            execution_trace_payload = {
-                'trace': ExecutionAuditPackBuilder._normalize(trace),
-                'state': ExecutionAuditPackBuilder._normalize(state),
-            }
-            summary_payload = {
-                'summary': ExecutionAuditPackBuilder._normalize(summary),
-            }
-            replay_payload = ExecutionAuditPackBuilder._normalize(
-                payload.get('replay_payload', {}) if isinstance(payload, dict) else {}
+            audit_payload = create_serialized_audit_export_payload(payload if isinstance(payload, dict) else {})
+            metadata = ExecutionAuditPackBuilder._normalize(audit_payload.get('metadata', {}))
+            execution_trace_payload = ExecutionAuditPackBuilder._normalize(audit_payload.get('execution_trace_payload', {}))
+            summary_payload = ExecutionAuditPackBuilder._normalize(audit_payload.get('summary_payload', {}))
+            replay_payload = ExecutionAuditPackBuilder._normalize(audit_payload.get('replay_payload', {}))
+            execution_record = ExecutionAuditPackBuilder._normalize(audit_payload.get('execution_record', {}))
+            execution_record_reference_contract = ExecutionAuditPackBuilder._normalize(
+                audit_payload.get('execution_record_reference_contract', {})
             )
-            execution_record = ExecutionAuditPackBuilder._normalize(
-                materialize_execution_record_from_payload(payload if isinstance(payload, dict) else {})
-            )
-            synthesized_contract = synthesize_execution_record_reference_contract_from_payload(payload if isinstance(payload, dict) else {})
-            execution_record_reference_contract = ExecutionAuditPackBuilder._normalize(synthesized_contract)
-
-            if isinstance(execution_record_reference_contract, dict) and execution_record_reference_contract:
-                metadata['replay_ready'] = bool(execution_record_reference_contract.get('is_replay_ready'))
-                metadata['audit_ready'] = bool(execution_record_reference_contract.get('is_audit_ready'))
-                metadata['primary_trace_ref'] = execution_record_reference_contract.get('primary_trace_ref')
+            artifacts = ExecutionAuditPackBuilder._normalize(audit_payload.get('artifacts', []))
 
             (root / 'execution_trace.json').write_text(
                 json.dumps(execution_trace_payload, indent=2, ensure_ascii=False, sort_keys=True),
