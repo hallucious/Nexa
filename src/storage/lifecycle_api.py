@@ -5,14 +5,12 @@ from datetime import datetime, timezone
 
 from src.engine.execution_snapshot import ExecutionSnapshot
 from src.storage.execution_record_api import (
-    build_execution_record_reference_contract,
     build_execution_record_reference_contract_from_serialized_record,
     create_execution_record_from_snapshot,
     create_serialized_execution_record_from_circuit_run,
     create_serialized_execution_record_from_savefile_trace,
     materialize_execution_record_from_payload,
     summarize_execution_record_for_working_save,
-    synthesize_execution_record_reference_contract_from_payload,
 )
 from src.storage.models.commit_snapshot_model import (
     CommitApprovalModel,
@@ -97,14 +95,14 @@ def create_serialized_savefile_execution_payload(
         "trace": {"events": []},
         "artifacts": getattr(trace, "all_artifacts", []),
         "replay_payload": replay_payload,
+        "execution_record": create_serialized_execution_record_from_savefile_trace(
+            savefile,
+            trace,
+            started_at=started_at,
+            ended_at=ended_at,
+        ),
     }
-    payload["execution_record"] = create_serialized_execution_record_from_savefile_trace(
-        savefile,
-        trace,
-        started_at=started_at,
-        ended_at=ended_at,
-    )
-    synthesize_execution_record_reference_contract_from_payload(payload)
+    payload.update(create_serialized_execution_artifact_components(payload))
     return payload
 
 
@@ -137,18 +135,18 @@ def create_serialized_circuit_execution_payload(
         "trace": trace or {"events": []},
         "artifacts": artifacts or [],
         "replay_payload": replay_payload,
+        "execution_record": create_serialized_execution_record_from_circuit_run(
+            circuit,
+            final_state,
+            started_at=started_at,
+            ended_at=ended_at,
+            execution_id=str(circuit.get("id") or "unknown-execution"),
+            input_state=initial_state,
+            trace=trace or {"events": []},
+            artifacts=artifacts or [],
+        ),
     }
-    payload["execution_record"] = create_serialized_execution_record_from_circuit_run(
-        circuit,
-        final_state,
-        started_at=started_at,
-        ended_at=ended_at,
-        execution_id=str(circuit.get("id") or "unknown-execution"),
-        input_state=initial_state,
-        trace=payload.get("trace"),
-        artifacts=payload.get("artifacts"),
-    )
-    synthesize_execution_record_reference_contract_from_payload(payload)
+    payload.update(create_serialized_execution_artifact_components(payload))
     return payload
 def create_commit_snapshot_from_working_save(
     working_save: WorkingSaveModel,
@@ -346,10 +344,15 @@ def create_serialized_execution_transition(
         trace_summary=trace_summary,
         observability_refs=observability_refs,
     )
+    execution_record_payload = _ensure_serialized_execution_record_payload(serialize_execution_record(record))
+    artifact_components = create_serialized_execution_artifact_components({
+        'execution_record': execution_record_payload,
+    })
     return {
-        'execution_record': _ensure_serialized_execution_record_payload(serialize_execution_record(record)),
+        'execution_record': execution_record_payload,
         'updated_working_save': _ensure_serialized_working_save_payload(serialize_working_save(updated_working_save)),
-        'execution_record_reference_contract': build_execution_record_reference_contract(record),
+        'execution_record_reference_contract': artifact_components.get('execution_record_reference_contract', {}),
+        'primary_trace_ref': artifact_components.get('primary_trace_ref'),
         'last_run_summary': dict(updated_working_save.runtime.last_run),
     }
 
@@ -620,21 +623,27 @@ def create_serialized_execution_artifact_components(payload: dict) -> dict:
     This is the smallest shared transition-builder surface reused by run/export/replay.
     Prefer native execution_record when available; otherwise fall back to storage-side
     materialization from the payload.
+
+    The lifecycle/storage layer owns the canonical contract semantics here, so
+    any provided reference contract is treated as advisory and re-derived from the
+    normalized native execution_record.
     """
     safe_payload = payload if isinstance(payload, dict) else {}
     execution_record = safe_payload.get('execution_record', {})
     if not isinstance(execution_record, dict) or not execution_record:
         execution_record = materialize_execution_record_from_payload(safe_payload)
+    if isinstance(execution_record, dict) and execution_record:
+        execution_record = _ensure_serialized_execution_record_payload(execution_record)
 
-    reference_contract = safe_payload.get('execution_record_reference_contract', {})
-    if not isinstance(reference_contract, dict) or not reference_contract:
-        reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+    reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
 
     replay_payload = safe_payload.get('replay_payload', {})
     if not isinstance(replay_payload, dict):
         replay_payload = {}
 
     return {
+        'run_id': reference_contract.get('run_id'),
+        'commit_id': reference_contract.get('commit_id'),
         'replay_payload': replay_payload,
         'execution_record': execution_record,
         'execution_record_reference_contract': reference_contract,

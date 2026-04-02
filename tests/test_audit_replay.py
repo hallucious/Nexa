@@ -136,13 +136,22 @@ def test_replay_audit_pack_uses_execution_record_reference_contract(tmp_path):
     assert result["reference_contract"]["is_replay_ready"] is True
 
 
-def test_replay_audit_pack_fails_when_reference_contract_is_not_replay_ready(tmp_path):
+def test_replay_audit_pack_fails_when_native_execution_record_is_not_replay_ready(tmp_path):
     audit_zip = tmp_path / "audit.zip"
     payload = _sample_run_payload()
-    payload["execution_record_reference_contract"] = {
-        "primary_trace_ref": "events://hello-exec",
-        "is_replay_ready": False,
-        "is_audit_ready": True,
+    payload["execution_record"] = {
+        "meta": {"run_id": "hello-exec", "status": "completed"},
+        "source": {"commit_id": "commit::unknown"},
+        "timeline": {"trace_ref": "trace://hello-exec", "event_stream_ref": "events://hello-exec"},
+        "outputs": {
+            "final_outputs": [
+                {"output_ref": "hello_node", "value_payload": "Hello Nexa"}
+            ]
+        },
+        "artifacts": {"artifact_refs": []},
+        "node_results": {"results": []},
+        "diagnostics": {"warnings": [], "errors": []},
+        "observability": {"trace_summary": "", "provider_usage_summary": {}, "plugin_usage_summary": {}, "observability_refs": []},
     }
     ExecutionAuditPackBuilder.export(payload, str(audit_zip))
 

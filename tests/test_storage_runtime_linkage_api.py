@@ -202,6 +202,7 @@ def test_create_serialized_execution_transition_returns_execution_record_updated
     assert transition['execution_record']['source']['commit_id'] == 'cs-1'
     assert transition['updated_working_save']['runtime']['status'] == 'executed'
     assert transition['execution_record_reference_contract']['primary_trace_ref'] == 'events://exec-1'
+    assert transition['primary_trace_ref'] == 'events://exec-1'
     assert transition['last_run_summary']['replay_ready'] is True
 
 
@@ -232,6 +233,7 @@ def test_create_serialized_savefile_execution_payload_uses_lifecycle_api_shape()
 
     assert payload['execution_record']['meta']['run_id'] == 'savefile-run-1'
     assert payload['execution_record_reference_contract']['run_id'] == 'savefile-run-1'
+    assert payload['primary_trace_ref'] == 'trace://savefile-run-1'
     assert payload['replay_payload']['execution_id'] == 'savefile-run-1'
 
 
@@ -255,6 +257,7 @@ def test_create_serialized_circuit_execution_payload_uses_lifecycle_api_shape():
 
     assert payload['execution_record']['meta']['run_id'] == 'demo-circuit'
     assert payload['execution_record_reference_contract']['run_id'] == 'demo-circuit'
+    assert payload['primary_trace_ref'] == 'trace://demo-circuit'
     assert payload['replay_payload']['execution_id'] == 'demo-circuit'
 
 
@@ -382,6 +385,31 @@ def test_create_serialized_execution_artifact_components_falls_back_to_materiali
     assert components['execution_record']['meta']['run_id'] == 'hello-exec'
     assert components['execution_record_reference_contract']['run_id'] == 'hello-exec'
     assert components['primary_trace_ref'] == 'events://hello-exec'
+
+
+def test_create_serialized_execution_artifact_components_rebuilds_stale_reference_contract_from_native_record():
+    native_record = create_serialized_execution_record_from_circuit_run(
+        {'id': 'native-circuit', 'nodes': [{'id': 'native_node'}]},
+        {'native_node': {'value': 'ok'}},
+        execution_id='native-exec',
+        trace={'events': ['started', 'completed']},
+    )
+    payload = {
+        'execution_record': native_record,
+        'execution_record_reference_contract': {
+            'run_id': 'stale-run',
+            'primary_trace_ref': 'trace://stale',
+            'is_replay_ready': False,
+            'is_audit_ready': False,
+        },
+    }
+
+    components = create_serialized_execution_artifact_components(payload)
+
+    assert components['execution_record_reference_contract']['run_id'] == 'native-exec'
+    assert components['execution_record_reference_contract']['primary_trace_ref'] == 'events://native-exec'
+    assert components['run_id'] == 'native-exec'
+    assert components['commit_id'] == native_record['source']['commit_id']
 
 
 def test_create_commit_snapshot_from_working_save_normalizes_legacy_validation_result_alias():
