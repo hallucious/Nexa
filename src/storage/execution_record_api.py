@@ -687,6 +687,8 @@ def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[s
     if not isinstance(payload, dict):
         return {}
     existing = payload.get('execution_record')
+    if not _has_serialized_execution_record_identity(existing) and _has_serialized_execution_record_identity(payload):
+        existing = payload
     if _is_substantive_serialized_execution_record(existing):
         return existing
     if _has_serialized_execution_record_identity(existing) and not _payload_supports_richer_execution_record_materialization(payload):
@@ -782,6 +784,8 @@ def synthesize_execution_record_reference_contract_from_payload(payload: dict[st
         return {}
 
     explicit_execution_record = payload.get('execution_record')
+    if not _has_serialized_execution_record_identity(explicit_execution_record) and _has_serialized_execution_record_identity(payload):
+        explicit_execution_record = payload
     if _is_substantive_serialized_execution_record(explicit_execution_record):
         contract = build_execution_record_reference_contract_from_serialized_record(explicit_execution_record)
         payload['execution_record_reference_contract'] = contract

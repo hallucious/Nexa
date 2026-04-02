@@ -452,3 +452,66 @@ def test_synthesize_execution_record_reference_contract_recomputes_stale_existin
     assert 'native_node' in contract['node_trace_refs']
     assert 'other_node' not in contract['node_trace_refs']
     assert payload['execution_record_reference_contract'] == contract
+
+
+def test_materialize_execution_record_from_payload_rebuilds_top_level_thin_record_when_richer_payload_exists():
+    payload = {
+        "meta": {"run_id": "run-123", "status": "completed"},
+        "source": {"commit_id": "commit-thin"},
+        "trace": {"events": ["started", "completed"]},
+        "replay_payload": {
+            "execution_id": "run-123",
+            "node_order": ["node_a"],
+            "input_state": {"message": "hi"},
+            "expected_outputs": {"node_a": {"value": "ok"}},
+        },
+        "result": {
+            "status": "success",
+            "state": {"node_a": {"value": "ok"}},
+            "node_results": {
+                "node_a": {"status": "success", "output": {"value": "ok"}},
+            },
+        },
+    }
+
+    record = materialize_execution_record_from_payload(payload)
+
+    assert record["meta"]["run_id"] == "run-123"
+    assert record["source"]["commit_id"] == "commit-thin"
+    assert record["timeline"]["event_stream_ref"] == "events://run-123"
+
+
+def test_synthesize_execution_record_reference_contract_prefers_materialized_truth_over_top_level_thin_record():
+    payload = {
+        "meta": {"run_id": "run-123", "status": "completed"},
+        "source": {"commit_id": "commit-thin"},
+        "execution_record_reference_contract": {
+            "run_id": "stale-exec",
+            "primary_trace_ref": "events://stale-exec",
+            "node_trace_refs": {"other_node": "events://stale-exec#node:other_node"},
+            "is_replay_ready": True,
+            "is_audit_ready": True,
+        },
+        "trace": {"events": ["started", "completed"]},
+        "replay_payload": {
+            "execution_id": "run-123",
+            "node_order": ["node_a"],
+            "expected_outputs": {"node_a": {"value": "ok"}},
+        },
+        "result": {
+            "status": "success",
+            "state": {"node_a": {"value": "ok"}},
+            "node_results": {
+                "node_a": {"status": "success", "output": {"value": "ok"}},
+            },
+        },
+    }
+
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+
+    assert contract["run_id"] == "run-123"
+    assert contract["commit_id"] == "commit-thin"
+    assert contract["primary_trace_ref"] == "events://run-123"
+    assert "node_a" in contract["node_trace_refs"]
+    assert "other_node" not in contract["node_trace_refs"]
+    assert payload["execution_record_reference_contract"] == contract
