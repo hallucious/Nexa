@@ -594,6 +594,54 @@ def _looks_like_minimal_execution_record(record: dict) -> bool:
     return bool(meta.get('run_id') and source.get('commit_id'))
 
 
+def _replay_payload_supplements_from_execution_record(execution_record: dict) -> dict:
+    if not _looks_like_minimal_execution_record(execution_record):
+        return {}
+
+    timeline = execution_record.get('timeline') if isinstance(execution_record.get('timeline'), dict) else {}
+    input_section = execution_record.get('input') if isinstance(execution_record.get('input'), dict) else {}
+    outputs_section = execution_record.get('outputs') if isinstance(execution_record.get('outputs'), dict) else {}
+
+    supplements: dict[str, object] = {}
+
+    node_order = timeline.get('node_order')
+    if isinstance(node_order, list) and node_order:
+        normalized_node_order = [node_id for node_id in node_order if isinstance(node_id, str) and node_id]
+        if normalized_node_order:
+            supplements['node_order'] = normalized_node_order
+
+    input_summary = input_section.get('input_summary')
+    if isinstance(input_summary, dict) and input_summary:
+        supplements['input_state'] = input_summary
+
+    final_outputs = outputs_section.get('final_outputs')
+    if isinstance(final_outputs, list) and final_outputs:
+        expected_outputs: dict[str, object] = {}
+        for item in final_outputs:
+            if not isinstance(item, dict):
+                continue
+            output_ref = item.get('output_ref')
+            if not isinstance(output_ref, str) or not output_ref:
+                continue
+            if 'value_payload' in item:
+                expected_outputs[output_ref] = item.get('value_payload')
+        if expected_outputs:
+            supplements['expected_outputs'] = expected_outputs
+
+    return supplements
+
+
+def _merge_replay_payload_with_execution_record(replay_payload: dict, execution_record: dict) -> dict:
+    merged = dict(replay_payload) if isinstance(replay_payload, dict) else {}
+    supplements = _replay_payload_supplements_from_execution_record(execution_record)
+
+    for key in ('node_order', 'input_state', 'expected_outputs'):
+        if key in supplements:
+            merged[key] = supplements[key]
+
+    return merged
+
+
 def create_serialized_execution_artifact_components(payload: dict) -> dict:
     """Normalize the shared execution-artifact component surface.
 
@@ -619,6 +667,7 @@ def create_serialized_execution_artifact_components(payload: dict) -> dict:
     meta = execution_record.get('meta', {}) if isinstance(execution_record.get('meta'), dict) else {}
     run_id = meta.get('run_id')
     commit_id = source.get('commit_id')
+    replay_payload = _merge_replay_payload_with_execution_record(replay_payload, execution_record)
     if run_id:
         replay_payload = dict(replay_payload)
         replay_payload['execution_id'] = run_id

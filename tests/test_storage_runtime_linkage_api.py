@@ -368,6 +368,36 @@ def test_create_serialized_execution_artifact_components_canonicalizes_replay_pa
     assert components['replay_payload']['commit_id'] == 'commit-native'
 
 
+def test_create_serialized_execution_artifact_components_backfills_replay_payload_fields_from_native_record():
+    native_record = create_serialized_execution_record_from_circuit_run(
+        {"id": "native-circuit", "nodes": [{"id": "node_a"}, {"id": "node_b"}]},
+        {"node_a": {"value": "A"}, "node_b": {"value": "B"}},
+        execution_id='native-exec',
+        input_state={'question': 'hello'},
+        commit_id='commit-native',
+        trace={"events": ["started", "completed"]},
+    )
+    payload = {
+        'execution_record': native_record,
+        'replay_payload': {
+            'execution_id': 'stale-exec',
+            'commit_id': 'stale-commit',
+            'node_order': ['other_node'],
+            'input_state': {'question': 'stale'},
+            'expected_outputs': {'other_node': {'value': 'wrong'}},
+        },
+    }
+
+    components = create_serialized_execution_artifact_components(payload)
+
+    assert components['replay_payload']['node_order'] == ['node_a', 'node_b']
+    assert components['replay_payload']['input_state'] == {'question': 'hello'}
+    assert components['replay_payload']['expected_outputs'] == {
+        'node_a': {'value': 'A'},
+        'node_b': {'value': 'B'},
+    }
+
+
 def test_create_serialized_execution_artifact_components_recomputes_stale_contract_from_native_record():
     native_record = create_serialized_execution_record_from_circuit_run(
         {"id": "native-circuit", "nodes": [{"id": "native_node"}]},

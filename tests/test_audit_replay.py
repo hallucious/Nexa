@@ -186,3 +186,19 @@ def test_replay_audit_pack_prefers_native_execution_record_over_stale_contract(t
     assert result["status"] == "PASS"
     assert result["reference_contract"]["run_id"] == "hello-exec"
     assert result["primary_trace_ref"] == "events://hello-exec"
+
+
+def test_replay_audit_pack_prefers_native_execution_record_over_stale_replay_fields(tmp_path):
+    audit_zip = tmp_path / "audit.zip"
+    payload = _sample_run_payload()
+    payload['execution_record'] = materialize_execution_record_from_payload(payload)
+    payload['replay_payload']['node_order'] = ['other_node']
+    payload['replay_payload']['input_state'] = {'message': 'stale'}
+    payload['replay_payload']['expected_outputs'] = {'other_node': 'Wrong Value'}
+    ExecutionAuditPackBuilder.export(payload, str(audit_zip))
+
+    result = replay_audit_pack(str(audit_zip))
+    assert result['status'] == 'PASS'
+    assert result['execution_record']['meta']['run_id'] == 'hello-exec'
+    assert result['execution_record']['source']['commit_id'] == 'uncommitted::hello-exec'
+
