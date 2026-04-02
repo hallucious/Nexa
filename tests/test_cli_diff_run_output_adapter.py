@@ -105,3 +105,36 @@ def test_diff_preserves_existing_snapshot_contract():
 
         assert result.returncode == 0
         assert "status: identical" in result.stdout.lower()
+
+
+def test_diff_prefers_native_execution_record_truth_over_stale_replay_identity_and_outputs():
+    from src.cli.nexa_cli import _normalize_run_output_to_snapshot
+    from src.storage.execution_record_api import create_serialized_execution_record_from_circuit_run
+
+    native_record = create_serialized_execution_record_from_circuit_run(
+        {"id": "native-circuit", "nodes": [{"id": "native_node"}]},
+        {"native_node": {"value": "native"}},
+        execution_id="native-exec",
+        trace={"events": ["started", "completed"]},
+        commit_id="commit-native",
+    )
+    payload = {
+        "execution_record": native_record,
+        "replay_payload": {
+            "execution_id": "stale-exec",
+            "node_order": ["stale_node"],
+            "expected_outputs": {"stale_node": {"value": "stale"}},
+        },
+        "result": {
+            "state": {
+                "stale_node": {"output": {"value": "stale"}},
+            },
+        },
+    }
+
+    snapshot = _normalize_run_output_to_snapshot(payload)
+
+    assert snapshot["run_id"] == "native-exec"
+    assert snapshot["nodes"]["native_node"]["output"] == {"value": "native"}
+    assert "stale_node" not in snapshot["nodes"]
+    assert snapshot["context"]["output.native_node"] == {"value": "native"}

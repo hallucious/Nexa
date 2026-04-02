@@ -10,6 +10,7 @@ from pathlib import Path
 
 from src.storage.lifecycle_api import (
     create_serialized_circuit_execution_payload,
+    create_serialized_execution_artifact_components,
     create_serialized_savefile_execution_payload,
 )
 
@@ -781,12 +782,68 @@ def _load_run_snapshot(path: str) -> dict:
     return data
 
 
+def _snapshot_from_execution_record_payload(execution_record: dict) -> dict | None:
+    if not isinstance(execution_record, dict) or not execution_record:
+        return None
+
+    meta = execution_record.get("meta") if isinstance(execution_record.get("meta"), dict) else {}
+    run_id = meta.get("run_id") or "unknown-run"
+
+    artifact_map: dict[str, dict] = {}
+    artifacts_section = execution_record.get("artifacts") if isinstance(execution_record.get("artifacts"), dict) else {}
+    for item in artifacts_section.get("artifact_refs", []):
+        if not isinstance(item, dict) or not item.get("artifact_id"):
+            continue
+        artifact_map[str(item["artifact_id"])] = {
+            "hash": item.get("hash"),
+            "kind": item.get("artifact_type"),
+        }
+
+    nodes: dict[str, dict] = {}
+    context: dict[str, object] = {}
+    node_results = execution_record.get("node_results") if isinstance(execution_record.get("node_results"), dict) else {}
+    for item in node_results.get("results", []):
+        if not isinstance(item, dict) or not item.get("node_id"):
+            continue
+        node_id = str(item["node_id"])
+        output_preview = item.get("output_preview")
+        artifact_ids = item.get("artifact_refs") if isinstance(item.get("artifact_refs"), list) else []
+        nodes[node_id] = {
+            "status": item.get("status"),
+            "output": output_preview,
+            "artifacts": {artifact_id: artifact_map[artifact_id] for artifact_id in artifact_ids if artifact_id in artifact_map},
+        }
+        context[f"{node_id}.output"] = output_preview
+
+    outputs = execution_record.get("outputs") if isinstance(execution_record.get("outputs"), dict) else {}
+    for item in outputs.get("final_outputs", []):
+        if not isinstance(item, dict) or not item.get("output_ref"):
+            continue
+        context[f"output.{item['output_ref']}"] = item.get("value_payload")
+
+    if not nodes and not context and not artifact_map:
+        return None
+
+    return {
+        "run_id": run_id,
+        "nodes": nodes,
+        "artifacts": artifact_map,
+        "context": context,
+    }
+
+
 def _normalize_run_output_to_snapshot(raw: dict) -> dict:
     if not isinstance(raw, dict):
         return raw
 
     if any(key in raw for key in ("nodes", "artifacts", "context")):
         return raw
+
+    components = create_serialized_execution_artifact_components(raw)
+    execution_record = components.get("execution_record")
+    snapshot = _snapshot_from_execution_record_payload(execution_record)
+    if snapshot is not None:
+        return snapshot
 
     result = raw.get("result") or {}
     state = result.get("state") or {}
