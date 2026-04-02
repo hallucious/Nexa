@@ -165,3 +165,41 @@ def test_diff_fallback_uses_canonicalized_replay_payload_when_native_record_is_m
     assert snapshot["run_id"] == "native-minimal"
     assert snapshot["nodes"]["node_a"]["output"] == {"value": "from-state"}
     assert snapshot["context"]["output.output"] == {"value": "stale"}
+
+
+def test_diff_preserves_minimal_existing_snapshot_contract_without_context_or_artifacts():
+    left_run = {
+        "run_id": "left",
+        "nodes": {
+            "n1": {"status": "success", "output": "x"},
+        },
+    }
+
+    right_run = {
+        "run_id": "right",
+        "nodes": {
+            "n1": {"status": "failure", "output": "x"},
+        },
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        left_path = Path(tmpdir) / "left.json"
+        right_path = Path(tmpdir) / "right.json"
+        _write_json_file(left_path, left_run)
+        _write_json_file(right_path, right_run)
+
+        result = subprocess.run(
+            [
+                "python", "-m", "src.cli.nexa_cli",
+                "diff",
+                str(left_path),
+                str(right_path),
+                "--regression",
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        assert result.returncode == 0
+        assert "status: regression" in result.stdout.lower()
+        assert "n1: success -> failure" in result.stdout.lower()

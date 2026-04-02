@@ -836,8 +836,23 @@ def _normalize_run_output_to_snapshot(raw: dict) -> dict:
     if not isinstance(raw, dict):
         return raw
 
-    if any(key in raw for key in ("nodes", "artifacts", "context")):
-        return raw
+    if isinstance(raw.get("nodes"), dict) and not any(
+        key in raw for key in (
+            "result",
+            "replay_payload",
+            "execution_record",
+            "execution_record_reference_contract",
+            "summary",
+            "trace",
+            "primary_trace_ref",
+        )
+    ):
+        return {
+            "run_id": raw.get("run_id") or "unknown-run",
+            "nodes": raw.get("nodes") or {},
+            "artifacts": raw.get("artifacts") if isinstance(raw.get("artifacts"), dict) else {},
+            "context": raw.get("context") if isinstance(raw.get("context"), dict) else {},
+        }
 
     components = create_serialized_execution_artifact_components(raw)
     execution_record = components.get("execution_record")
