@@ -451,6 +451,38 @@ def test_create_serialized_execution_artifact_components_falls_back_to_materiali
     assert components['primary_trace_ref'] == 'events://hello-exec'
 
 
+
+
+def test_create_serialized_execution_artifact_components_rebuilds_thin_native_execution_record_when_richer_payload_exists():
+    payload = {
+        'execution_record': {
+            'meta': {'run_id': 'run-123', 'status': 'completed'},
+            'source': {'commit_id': 'commit-thin'},
+        },
+        'trace': {'events': ['started', 'completed']},
+        'replay_payload': {
+            'execution_id': 'run-123',
+            'node_order': ['node_a'],
+            'input_state': {'message': 'hi'},
+            'expected_outputs': {'node_a': {'value': 'ok'}},
+        },
+        'result': {
+            'status': 'success',
+            'state': {'node_a': {'value': 'ok'}},
+            'node_results': {
+                'node_a': {'status': 'success', 'output': {'value': 'ok'}},
+            },
+        },
+    }
+
+    components = create_serialized_execution_artifact_components(payload)
+
+    assert components['execution_record']['meta']['run_id'] == 'run-123'
+    assert components['execution_record']['source']['commit_id'] == 'commit-thin'
+    assert components['execution_record_reference_contract']['primary_trace_ref'] == 'events://run-123'
+    assert components['replay_payload']['node_order'] == ['node_a']
+
+
 def test_create_serialized_execution_artifact_components_rebuilds_invalid_native_execution_record_when_possible():
     payload = {
         'execution_record': {'meta': {'run_id': 'broken'}},

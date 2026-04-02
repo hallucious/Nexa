@@ -218,7 +218,7 @@ def test_synthesize_execution_record_reference_contract_from_payload_creates_con
     assert payload["execution_record_reference_contract"] == contract
 
 
-def test_synthesize_execution_record_reference_contract_from_payload_keeps_existing_contract_without_materializable_native_truth():
+def test_synthesize_execution_record_reference_contract_from_payload_keeps_existing_contract_without_native_record():
     payload = {
         "execution_record_reference_contract": {
             "primary_trace_ref": "events://existing",
@@ -227,6 +227,7 @@ def test_synthesize_execution_record_reference_contract_from_payload_keeps_exist
         },
         "replay_payload": {
             "execution_id": "run-123",
+            "expected_outputs": {"node_a": {"value": "ok"}},
         },
     }
 
@@ -234,6 +235,38 @@ def test_synthesize_execution_record_reference_contract_from_payload_keeps_exist
 
     assert contract["primary_trace_ref"] == "events://existing"
     assert contract["is_replay_ready"] is True
+
+
+
+
+def test_materialize_execution_record_from_payload_rebuilds_thin_native_record_when_richer_payload_exists():
+    payload = {
+        "execution_record": {
+            "meta": {"run_id": "run-123", "status": "completed"},
+            "source": {"commit_id": "commit-thin"},
+        },
+        "trace": {"events": ["started", "completed"]},
+        "replay_payload": {
+            "execution_id": "run-123",
+            "node_order": ["node_a"],
+            "input_state": {"message": "hi"},
+            "expected_outputs": {"node_a": {"value": "ok"}},
+        },
+        "result": {
+            "status": "success",
+            "state": {"node_a": {"value": "ok"}},
+            "node_results": {
+                "node_a": {"status": "success", "output": {"value": "ok"}},
+            },
+        },
+    }
+
+    record = materialize_execution_record_from_payload(payload)
+
+    assert record["meta"]["run_id"] == "run-123"
+    assert record["source"]["commit_id"] == "commit-thin"
+    assert record["timeline"]["event_stream_ref"] == "events://run-123"
+    assert record["outputs"]["final_outputs"][0]["output_ref"] == "node_a"
 
 
 def test_materialize_execution_record_from_payload_creates_native_record_and_contract_inputs():
@@ -347,6 +380,45 @@ def test_synthesize_execution_record_reference_contract_prefers_native_execution
     assert 'other_node' not in contract['node_trace_refs']
 
 
+
+
+def test_synthesize_execution_record_reference_contract_prefers_materialized_truth_over_stale_existing_contract():
+    payload = {
+        "execution_record": {
+            "meta": {"run_id": "run-123", "status": "completed"},
+            "source": {"commit_id": "commit-thin"},
+        },
+        "execution_record_reference_contract": {
+            "run_id": "stale-exec",
+            "primary_trace_ref": "events://stale-exec",
+            "node_trace_refs": {"other_node": "events://stale-exec#node:other_node"},
+            "is_replay_ready": True,
+            "is_audit_ready": True,
+        },
+        "trace": {"events": ["started", "completed"]},
+        "replay_payload": {
+            "execution_id": "run-123",
+            "node_order": ["node_a"],
+            "expected_outputs": {"node_a": {"value": "ok"}},
+        },
+        "result": {
+            "status": "success",
+            "state": {"node_a": {"value": "ok"}},
+            "node_results": {
+                "node_a": {"status": "success", "output": {"value": "ok"}},
+            },
+        },
+    }
+
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+
+    assert contract["run_id"] == "run-123"
+    assert contract["primary_trace_ref"] == "events://run-123"
+    assert "node_a" in contract["node_trace_refs"]
+    assert "other_node" not in contract["node_trace_refs"]
+    assert payload["execution_record_reference_contract"] == contract
+
+
 def test_synthesize_execution_record_reference_contract_recomputes_stale_existing_contract_from_native_record():
     native_record = create_serialized_execution_record_from_circuit_run(
         {
@@ -378,38 +450,5 @@ def test_synthesize_execution_record_reference_contract_recomputes_stale_existin
     assert contract['run_id'] == 'native-exec'
     assert contract['primary_trace_ref'] == 'events://native-exec'
     assert 'native_node' in contract['node_trace_refs']
-    assert 'other_node' not in contract['node_trace_refs']
-    assert payload['execution_record_reference_contract'] == contract
-
-
-def test_synthesize_execution_record_reference_contract_prefers_materialized_execution_truth_over_stale_existing_contract():
-    payload = {
-        "execution_record_reference_contract": {
-            "run_id": "stale-exec",
-            "primary_trace_ref": "events://stale-exec",
-            "node_trace_refs": {"other_node": "events://stale-exec#node:other_node"},
-            "is_replay_ready": True,
-            "is_audit_ready": True,
-        },
-        "trace": {"events": ["started", "completed"]},
-        "replay_payload": {
-            "execution_id": "run-123",
-            "node_order": ["node_a"],
-            "expected_outputs": {"node_a": {"value": "ok"}},
-        },
-        "result": {
-            "status": "success",
-            "state": {"node_a": {"value": "ok"}},
-            "node_results": {
-                "node_a": {"status": "success", "output": {"value": "ok"}},
-            },
-        },
-    }
-
-    contract = synthesize_execution_record_reference_contract_from_payload(payload)
-
-    assert contract['run_id'] == 'run-123'
-    assert contract['primary_trace_ref'] == 'events://run-123'
-    assert 'node_a' in contract['node_trace_refs']
     assert 'other_node' not in contract['node_trace_refs']
     assert payload['execution_record_reference_contract'] == contract

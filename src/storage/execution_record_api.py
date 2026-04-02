@@ -624,7 +624,7 @@ def create_serialized_execution_record_from_savefile_trace(
     return serialize_execution_record(record)
 
 
-def _is_minimal_serialized_execution_record(record: dict[str, Any]) -> bool:
+def _has_serialized_execution_record_identity(record: dict[str, Any]) -> bool:
     if not isinstance(record, dict) or not record:
         return False
     meta = record.get('meta') if isinstance(record.get('meta'), dict) else {}
@@ -632,22 +632,78 @@ def _is_minimal_serialized_execution_record(record: dict[str, Any]) -> bool:
     return bool(meta.get('run_id') and source.get('commit_id'))
 
 
+def _payload_supports_richer_execution_record_materialization(payload: dict[str, Any]) -> bool:
+    if not isinstance(payload, dict):
+        return False
+
+    replay_payload = payload.get('replay_payload') if isinstance(payload.get('replay_payload'), dict) else {}
+    result = payload.get('result') if isinstance(payload.get('result'), dict) else {}
+    trace = payload.get('trace') if isinstance(payload.get('trace'), dict) else {}
+
+    node_order = replay_payload.get('node_order') if isinstance(replay_payload.get('node_order'), list) else []
+    input_state = replay_payload.get('input_state') if isinstance(replay_payload.get('input_state'), dict) else {}
+    expected_outputs = replay_payload.get('expected_outputs') if isinstance(replay_payload.get('expected_outputs'), dict) else {}
+    node_results = result.get('node_results') if isinstance(result.get('node_results'), dict) else {}
+
+    has_structural_or_trace_detail = bool(trace) or bool(node_order) or bool(node_results) or bool(input_state)
+    has_output_detail = bool(expected_outputs)
+    return has_structural_or_trace_detail and has_output_detail
+
+
+def _is_substantive_serialized_execution_record(record: dict[str, Any]) -> bool:
+    if not _has_serialized_execution_record_identity(record):
+        return False
+
+    timeline = record.get('timeline') if isinstance(record.get('timeline'), dict) else {}
+    outputs = record.get('outputs') if isinstance(record.get('outputs'), dict) else {}
+    node_results = record.get('node_results') if isinstance(record.get('node_results'), dict) else {}
+
+    primary_trace_ref = timeline.get('event_stream_ref') or timeline.get('trace_ref')
+    if isinstance(primary_trace_ref, str) and primary_trace_ref:
+        return True
+
+    node_order = timeline.get('node_order')
+    if isinstance(node_order, list) and any(isinstance(node_id, str) and node_id for node_id in node_order):
+        return True
+
+    final_outputs = outputs.get('final_outputs')
+    if isinstance(final_outputs, list) and any(
+        isinstance(item, dict) and isinstance(item.get('output_ref'), str) and item.get('output_ref')
+        for item in final_outputs
+    ):
+        return True
+
+    results = node_results.get('results')
+    if isinstance(results, list) and any(
+        isinstance(item, dict) and isinstance(item.get('node_id'), str) and item.get('node_id')
+        for item in results
+    ):
+        return True
+
+    return False
+
+
 def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
     existing = payload.get('execution_record')
-    if _is_minimal_serialized_execution_record(existing):
+    if _is_substantive_serialized_execution_record(existing):
+        return existing
+    if _has_serialized_execution_record_identity(existing) and not _payload_supports_richer_execution_record_materialization(payload):
         return existing
 
     snapshot = _build_snapshot_from_payload(payload)
     if snapshot is None:
-        return {}
+        return existing if _has_serialized_execution_record_identity(existing) else {}
 
     replay_payload = payload.get('replay_payload') if isinstance(payload.get('replay_payload'), dict) else {}
     summary = payload.get('summary') if isinstance(payload.get('summary'), dict) else {}
     trace = payload.get('trace') if isinstance(payload.get('trace'), dict) else {}
     result = payload.get('result') if isinstance(payload.get('result'), dict) else {}
-    execution_id = snapshot.execution_id
+    existing_meta = existing.get('meta') if isinstance(existing, dict) and isinstance(existing.get('meta'), dict) else {}
+    existing_source = existing.get('source') if isinstance(existing, dict) and isinstance(existing.get('source'), dict) else {}
+    preferred_existing_run_id = existing_meta.get('run_id') if _has_serialized_execution_record_identity(existing) else None
+    execution_id = str(preferred_existing_run_id or snapshot.execution_id)
 
     trace_ref = f'trace://{execution_id}' if trace else None
     event_stream_ref = f'events://{execution_id}' if trace.get('events') else None
@@ -659,7 +715,7 @@ def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[s
     final_outputs = replay_payload.get('expected_outputs') if isinstance(replay_payload.get('expected_outputs'), dict) and replay_payload.get('expected_outputs') else snapshot.node_outputs
     record = create_execution_record_from_snapshot(
         snapshot,
-        commit_id=str(replay_payload.get('commit_id') or f'uncommitted::{execution_id}'),
+        commit_id=str(existing_source.get('commit_id') or replay_payload.get('commit_id') or f'uncommitted::{execution_id}'),
         trigger_type='manual_run',
         trigger_reason='cli_payload_materialization',
         status=status,
@@ -726,20 +782,32 @@ def synthesize_execution_record_reference_contract_from_payload(payload: dict[st
         return {}
 
     explicit_execution_record = payload.get('execution_record')
-    if _is_minimal_serialized_execution_record(explicit_execution_record):
+    if _is_substantive_serialized_execution_record(explicit_execution_record):
         contract = build_execution_record_reference_contract_from_serialized_record(explicit_execution_record)
         payload['execution_record_reference_contract'] = contract
         return contract
 
-    execution_record = materialize_execution_record_from_payload(payload)
-    if isinstance(execution_record, dict) and execution_record:
-        contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+    if _payload_supports_richer_execution_record_materialization(payload):
+        execution_record = materialize_execution_record_from_payload(payload)
+        if isinstance(execution_record, dict) and execution_record and _has_serialized_execution_record_identity(execution_record):
+            contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+            payload['execution_record_reference_contract'] = contract
+            return contract
+
+    if _has_serialized_execution_record_identity(explicit_execution_record):
+        contract = build_execution_record_reference_contract_from_serialized_record(explicit_execution_record)
         payload['execution_record_reference_contract'] = contract
         return contract
 
     existing = payload.get('execution_record_reference_contract')
     if isinstance(existing, dict) and existing:
         return existing
+
+    execution_record = materialize_execution_record_from_payload(payload)
+    if isinstance(execution_record, dict) and execution_record:
+        contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
+        payload['execution_record_reference_contract'] = contract
+        return contract
 
     replay_payload = payload.get('replay_payload')
     if not isinstance(replay_payload, dict) or not replay_payload:

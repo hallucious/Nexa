@@ -586,7 +586,7 @@ __all__ = [
 ]
 
 
-def _looks_like_minimal_execution_record(record: dict) -> bool:
+def _has_execution_record_identity(record: dict) -> bool:
     if not isinstance(record, dict) or not record:
         return False
     meta = record.get('meta') if isinstance(record.get('meta'), dict) else {}
@@ -594,8 +594,41 @@ def _looks_like_minimal_execution_record(record: dict) -> bool:
     return bool(meta.get('run_id') and source.get('commit_id'))
 
 
+def _looks_like_substantive_execution_record(record: dict) -> bool:
+    if not _has_execution_record_identity(record):
+        return False
+
+    timeline = record.get('timeline') if isinstance(record.get('timeline'), dict) else {}
+    outputs = record.get('outputs') if isinstance(record.get('outputs'), dict) else {}
+    node_results = record.get('node_results') if isinstance(record.get('node_results'), dict) else {}
+
+    primary_trace_ref = timeline.get('event_stream_ref') or timeline.get('trace_ref')
+    if isinstance(primary_trace_ref, str) and primary_trace_ref:
+        return True
+
+    node_order = timeline.get('node_order')
+    if isinstance(node_order, list) and any(isinstance(node_id, str) and node_id for node_id in node_order):
+        return True
+
+    final_outputs = outputs.get('final_outputs')
+    if isinstance(final_outputs, list) and any(
+        isinstance(item, dict) and isinstance(item.get('output_ref'), str) and item.get('output_ref')
+        for item in final_outputs
+    ):
+        return True
+
+    results = node_results.get('results')
+    if isinstance(results, list) and any(
+        isinstance(item, dict) and isinstance(item.get('node_id'), str) and item.get('node_id')
+        for item in results
+    ):
+        return True
+
+    return False
+
+
 def _replay_payload_supplements_from_execution_record(execution_record: dict) -> dict:
-    if not _looks_like_minimal_execution_record(execution_record):
+    if not _looks_like_substantive_execution_record(execution_record):
         return {}
 
     timeline = execution_record.get('timeline') if isinstance(execution_record.get('timeline'), dict) else {}
@@ -646,16 +679,40 @@ def create_serialized_execution_artifact_components(payload: dict) -> dict:
     """Normalize the shared execution-artifact component surface.
 
     This is the smallest shared transition-builder surface reused by run/export/replay.
-    Prefer a valid native execution_record when available; otherwise fall back to
-    storage-side materialization from the payload. When a native execution_record is
-    available, reference-contract semantics are re-derived from that record so stale
-    incoming contract dictionaries do not survive. replay_payload identity is also
-    canonicalized from the native record when possible.
+    Prefer a substantive native execution_record when available; otherwise fall back to
+    storage-side materialization from the payload when richer execution truth exists.
+    When only a thin identity-bearing native execution_record exists, preserve its
+    identity unless richer payload data allows a better reconstruction.
     """
     safe_payload = payload if isinstance(payload, dict) else {}
     native_execution_record = safe_payload.get('execution_record', {})
-    has_native_execution_record = _looks_like_minimal_execution_record(native_execution_record)
-    execution_record = native_execution_record if has_native_execution_record else materialize_execution_record_from_payload(safe_payload)
+    has_substantive_native_execution_record = _looks_like_substantive_execution_record(native_execution_record)
+    has_identity_native_execution_record = (
+        isinstance(native_execution_record, dict)
+        and isinstance(native_execution_record.get('meta'), dict)
+        and isinstance(native_execution_record.get('source'), dict)
+        and bool(native_execution_record['meta'].get('run_id'))
+        and bool(native_execution_record['source'].get('commit_id'))
+    )
+    can_materialize_richer_truth = (
+        isinstance(safe_payload.get('replay_payload'), dict)
+        and isinstance(safe_payload['replay_payload'].get('expected_outputs'), dict)
+        and bool(safe_payload['replay_payload'].get('expected_outputs'))
+        and (
+            bool((safe_payload.get('trace') if isinstance(safe_payload.get('trace'), dict) else {}))
+            or bool((safe_payload['replay_payload'].get('node_order') if isinstance(safe_payload['replay_payload'].get('node_order'), list) else []))
+            or bool(((safe_payload.get('result') if isinstance(safe_payload.get('result'), dict) else {}).get('node_results') if isinstance((safe_payload.get('result') if isinstance(safe_payload.get('result'), dict) else {}).get('node_results'), dict) else {}))
+            or bool((safe_payload['replay_payload'].get('input_state') if isinstance(safe_payload['replay_payload'].get('input_state'), dict) else {}))
+        )
+    )
+    if has_substantive_native_execution_record:
+        execution_record = native_execution_record
+    elif can_materialize_richer_truth:
+        execution_record = materialize_execution_record_from_payload(safe_payload)
+    elif has_identity_native_execution_record:
+        execution_record = native_execution_record
+    else:
+        execution_record = materialize_execution_record_from_payload(safe_payload)
 
     reference_contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
 
