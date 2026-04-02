@@ -218,7 +218,7 @@ def test_synthesize_execution_record_reference_contract_from_payload_creates_con
     assert payload["execution_record_reference_contract"] == contract
 
 
-def test_synthesize_execution_record_reference_contract_from_payload_keeps_existing_contract():
+def test_synthesize_execution_record_reference_contract_from_payload_keeps_existing_contract_without_native_record():
     payload = {
         "execution_record_reference_contract": {
             "primary_trace_ref": "events://existing",
@@ -346,3 +346,38 @@ def test_synthesize_execution_record_reference_contract_prefers_native_execution
     assert contract['primary_trace_ref'] == 'events://native-exec'
     assert 'native_node' in contract['node_trace_refs']
     assert 'other_node' not in contract['node_trace_refs']
+
+
+def test_synthesize_execution_record_reference_contract_recomputes_stale_existing_contract_from_native_record():
+    native_record = create_serialized_execution_record_from_circuit_run(
+        {
+            "id": "native-circuit",
+            "nodes": [{"id": "native_node"}],
+        },
+        {"native_node": {"value": "ok"}},
+        execution_id='native-exec',
+        trace={"events": ["started", "completed"]},
+    )
+    payload = {
+        "execution_record": native_record,
+        "execution_record_reference_contract": {
+            "run_id": "stale-exec",
+            "primary_trace_ref": "events://stale-exec",
+            "node_trace_refs": {"other_node": "events://stale-exec#node:other_node"},
+            "is_replay_ready": True,
+            "is_audit_ready": True,
+        },
+        "replay_payload": {
+            "execution_id": "different-exec",
+            "node_order": ["other_node"],
+            "expected_outputs": {"other_node": {"value": "wrong"}},
+        },
+    }
+
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+
+    assert contract['run_id'] == 'native-exec'
+    assert contract['primary_trace_ref'] == 'events://native-exec'
+    assert 'native_node' in contract['node_trace_refs']
+    assert 'other_node' not in contract['node_trace_refs']
+    assert payload['execution_record_reference_contract'] == contract

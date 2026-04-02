@@ -725,14 +725,17 @@ def synthesize_execution_record_reference_contract_from_payload(payload: dict[st
     if not isinstance(payload, dict):
         return {}
 
+    explicit_execution_record = payload.get('execution_record')
+    if _is_minimal_serialized_execution_record(explicit_execution_record):
+        contract = build_execution_record_reference_contract_from_serialized_record(explicit_execution_record)
+        payload['execution_record_reference_contract'] = contract
+        return contract
+
     existing = payload.get('execution_record_reference_contract')
     if isinstance(existing, dict) and existing:
         return existing
 
-    execution_record = payload.get('execution_record')
-    if not (isinstance(execution_record, dict) and execution_record):
-        execution_record = materialize_execution_record_from_payload(payload)
-
+    execution_record = materialize_execution_record_from_payload(payload)
     if isinstance(execution_record, dict) and execution_record:
         contract = build_execution_record_reference_contract_from_serialized_record(execution_record)
         payload['execution_record_reference_contract'] = contract
