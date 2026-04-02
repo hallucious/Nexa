@@ -365,6 +365,63 @@ def build_execution_record_reference_contract(record: ExecutionRecordModel) -> d
 
 
 
+def build_execution_record_reference_contract_from_serialized_record(record_payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(record_payload, dict) or not record_payload:
+        return {}
+
+    meta = record_payload.get('meta') if isinstance(record_payload.get('meta'), dict) else {}
+    source = record_payload.get('source') if isinstance(record_payload.get('source'), dict) else {}
+    timeline = record_payload.get('timeline') if isinstance(record_payload.get('timeline'), dict) else {}
+    node_results = record_payload.get('node_results') if isinstance(record_payload.get('node_results'), dict) else {}
+    outputs = record_payload.get('outputs') if isinstance(record_payload.get('outputs'), dict) else {}
+    artifacts = record_payload.get('artifacts') if isinstance(record_payload.get('artifacts'), dict) else {}
+    observability = record_payload.get('observability') if isinstance(record_payload.get('observability'), dict) else {}
+
+    primary_trace_ref = timeline.get('event_stream_ref') or timeline.get('trace_ref')
+    node_trace_refs = {
+        str(item.get('node_id')): item.get('trace_ref')
+        for item in node_results.get('results', [])
+        if isinstance(item, dict) and item.get('node_id') and item.get('trace_ref')
+    }
+    output_value_refs = {
+        str(item.get('output_ref')): item.get('value_ref')
+        for item in outputs.get('final_outputs', [])
+        if isinstance(item, dict) and item.get('output_ref') and item.get('value_ref')
+    }
+    artifact_ref_map = {
+        str(item.get('artifact_id')): item.get('ref')
+        for item in artifacts.get('artifact_refs', [])
+        if isinstance(item, dict) and item.get('artifact_id') and item.get('ref')
+    }
+    unresolved_output_refs = [
+        str(item.get('output_ref'))
+        for item in outputs.get('final_outputs', [])
+        if isinstance(item, dict) and item.get('output_ref') and not item.get('value_ref')
+    ]
+    unresolved_artifact_refs = [
+        str(item.get('artifact_id'))
+        for item in artifacts.get('artifact_refs', [])
+        if isinstance(item, dict) and item.get('artifact_id') and not item.get('ref')
+    ]
+    observability_refs = list(observability.get('observability_refs') or [])
+
+    return {
+        'run_id': meta.get('run_id'),
+        'commit_id': source.get('commit_id'),
+        'primary_trace_ref': primary_trace_ref,
+        'trace_ref': timeline.get('trace_ref'),
+        'event_stream_ref': timeline.get('event_stream_ref'),
+        'node_trace_refs': node_trace_refs,
+        'output_value_refs': output_value_refs,
+        'artifact_refs': artifact_ref_map,
+        'unresolved_output_refs': unresolved_output_refs,
+        'unresolved_artifact_refs': unresolved_artifact_refs,
+        'observability_refs': observability_refs,
+        'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
+        'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
+    }
+
+
 def synthesize_execution_record_reference_contract_from_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
@@ -372,6 +429,13 @@ def synthesize_execution_record_reference_contract_from_payload(payload: dict[st
     existing = payload.get('execution_record_reference_contract')
     if isinstance(existing, dict) and existing:
         return existing
+
+    execution_record_payload = payload.get('execution_record')
+    if isinstance(execution_record_payload, dict) and execution_record_payload:
+        contract = build_execution_record_reference_contract_from_serialized_record(execution_record_payload)
+        if contract:
+            payload['execution_record_reference_contract'] = contract
+            return contract
 
     replay_payload = payload.get('replay_payload')
     if not isinstance(replay_payload, dict) or not replay_payload:
@@ -462,6 +526,7 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
 
 __all__ = [
     'build_execution_record_reference_contract',
+    'build_execution_record_reference_contract_from_serialized_record',
     'create_execution_record_from_snapshot',
     'summarize_execution_record_for_working_save',
     'synthesize_execution_record_reference_contract_from_payload',

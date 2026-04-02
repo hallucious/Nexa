@@ -10,6 +10,7 @@ from src.storage.execution_record_api import (
     create_execution_record_from_snapshot,
     summarize_execution_record_for_working_save,
     synthesize_execution_record_reference_contract_from_payload,
+    build_execution_record_reference_contract_from_serialized_record,
 )
 from src.storage.serialization import save_execution_record_file, serialize_execution_record
 
@@ -198,3 +199,37 @@ def test_synthesize_execution_record_reference_contract_from_payload_keeps_exist
 
     assert contract["primary_trace_ref"] == "events://existing"
     assert contract["is_replay_ready"] is True
+
+
+def test_build_execution_record_reference_contract_from_serialized_record_matches_model_contract():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        trace_ref='trace://exec-1',
+        event_stream_ref='events://exec-1',
+    )
+    payload = serialize_execution_record(record)
+    contract = build_execution_record_reference_contract_from_serialized_record(payload)
+    assert contract['primary_trace_ref'] == 'events://exec-1'
+    assert contract['node_trace_refs']['node_a'] == 'events://exec-1#node:node_a'
+    assert contract['artifact_refs']['artifact::output::final_answer'] == 'trace://exec-1#output:final_answer'
+
+
+def test_synthesize_execution_record_reference_contract_from_payload_prefers_native_execution_record():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        trace_ref='trace://exec-1',
+        event_stream_ref='events://exec-1',
+    )
+    payload = {
+        'execution_record': serialize_execution_record(record),
+        'replay_payload': {
+            'execution_id': 'run-123',
+            'node_order': ['node_a'],
+            'expected_outputs': {'node_a': {'value': 'ok'}},
+        },
+    }
+    contract = synthesize_execution_record_reference_contract_from_payload(payload)
+    assert contract['run_id'] == 'exec-1'
+    assert contract['primary_trace_ref'] == 'events://exec-1'

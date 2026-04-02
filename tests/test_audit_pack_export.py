@@ -142,3 +142,38 @@ def test_audit_pack_export_includes_execution_record_reference_contract_when_pre
     assert metadata["audit_ready"] is True
     assert metadata["primary_trace_ref"] == "events://hello-exec"
     assert contract["primary_trace_ref"] == "events://hello-exec"
+
+
+def test_audit_pack_export_includes_execution_record_json_when_present(tmp_path):
+    from src.engine.execution_snapshot import ExecutionSnapshotBuilder
+    from src.engine.execution_artifact_hashing import ExecutionHashReport, NodeOutputHash
+    from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
+    from src.storage.execution_record_api import create_execution_record_from_snapshot
+    from src.storage.serialization import serialize_execution_record
+
+    timeline = ExecutionTimeline(
+        execution_id='hello-exec',
+        start_ms=1000,
+        end_ms=1200,
+        duration_ms=200,
+        node_spans=[NodeExecutionSpan('hello_node', 1000, 1200, 200, 'success')],
+    )
+    snapshot = ExecutionSnapshotBuilder().build(
+        execution_id='hello-exec',
+        timeline=timeline,
+        outputs={'hello_node': 'Hello Nexa'},
+        hash_report=ExecutionHashReport(execution_id='hello-exec', node_hashes=[NodeOutputHash(node_id='hello_node', algorithm='sha256', hash_value='abc')]),
+    )
+    record = create_execution_record_from_snapshot(snapshot, commit_id='commit-1', trace_ref='trace://hello-exec', event_stream_ref='events://hello-exec')
+    payload = _sample_run_payload()
+    payload['execution_record'] = serialize_execution_record(record)
+
+    out_file = tmp_path / 'audit.zip'
+    ExecutionAuditPackBuilder.export(payload, str(out_file))
+
+    with zipfile.ZipFile(out_file, 'r') as zf:
+        names = set(zf.namelist())
+        execution_record = json.loads(zf.read('execution_record.json').decode('utf-8'))
+
+    assert 'execution_record.json' in names
+    assert execution_record['meta']['run_id'] == 'hello-exec'
