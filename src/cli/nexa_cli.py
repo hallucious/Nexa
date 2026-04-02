@@ -11,8 +11,10 @@ from pathlib import Path
 from src.storage.execution_record_api import (
     materialize_execution_record_from_payload,
     synthesize_execution_record_reference_contract_from_payload,
-    create_serialized_execution_record_from_savefile_trace,
-    create_serialized_execution_record_from_circuit_run,
+)
+from src.storage.lifecycle_api import (
+    create_serialized_circuit_execution_payload,
+    create_serialized_savefile_execution_payload,
 )
 
 try:
@@ -918,55 +920,12 @@ def _extract_savefile_metrics(trace) -> dict:
 
 
 def _savefile_payload(savefile, trace, started_at, ended_at):
-    summary = build_execution_summary(
-        initial_state=getattr(savefile.state, "input", {}) or {},
-        final_state=getattr(trace, "final_state", {}) or {},
-        started_at=started_at,
-        ended_at=ended_at,
-    )
-
-    expected_outputs = {}
-    for node_id, result in (getattr(trace, "node_results", {}) or {}).items():
-        expected_outputs[node_id] = {
-            "status": getattr(result, "status", None),
-            "output": getattr(result, "output", None),
-            "error": getattr(result, "error", None),
-            "artifacts": getattr(result, "artifacts", []),
-            "trace": getattr(result, "trace", {}),
-        }
-
-    replay_payload = {
-        "execution_id": getattr(trace, "run_id", "unknown-execution"),
-        "node_order": [node.id for node in savefile.circuit.nodes],
-        "circuit": _to_json_safe({
-            "id": savefile.meta.name,
-            "nodes": [{"id": node.id} for node in savefile.circuit.nodes],
-        }),
-        "execution_configs": {},
-        "input_state": getattr(savefile.state, "input", {}) or {},
-        "expected_outputs": expected_outputs,
-    }
-
-    payload = {
-        "result": {
-            "state": getattr(trace, "final_state", {}) or {},
-            "status": getattr(trace, "status", None),
-            "node_results": expected_outputs,
-            "artifacts": getattr(trace, "all_artifacts", []),
-        },
-        "summary": summary,
-        "trace": {"events": []},
-        "artifacts": getattr(trace, "all_artifacts", []),
-        "replay_payload": replay_payload,
-    }
-    payload["execution_record"] = create_serialized_execution_record_from_savefile_trace(
+    return create_serialized_savefile_execution_payload(
         savefile,
         trace,
         started_at=started_at,
         ended_at=ended_at,
     )
-    synthesize_execution_record_reference_contract_from_payload(payload)
-    return payload
 
 
 def _run_savefile_command(args):
@@ -1055,44 +1014,16 @@ def run_command(args):
     final_state = runner.execute(circuit, initial_state)
     ended_at = time.time()
 
-    summary = build_execution_summary(
-        initial_state=initial_state,
-        final_state=final_state,
-        started_at=started_at,
-        ended_at=ended_at,
-    )
-
-    replay_payload = {
-        "execution_id": circuit.get("id", "unknown-execution"),
-        "node_order": [node.get("id") for node in circuit.get("nodes", []) if node.get("id")],
-        "circuit": circuit,
-        "execution_configs": dict(getattr(config_registry, "_configs", {})),
-        "input_state": initial_state,
-        "expected_outputs": {
-            node.get("id"): final_state.get(node.get("id"))
-            for node in circuit.get("nodes", [])
-            if node.get("id") in final_state
-        },
-    }
-
-    payload = {
-        "result": {"state": final_state},
-        "summary": summary,
-        "trace": {"events": []},
-        "artifacts": [],
-        "replay_payload": replay_payload,
-    }
-    payload["execution_record"] = create_serialized_execution_record_from_circuit_run(
+    payload = create_serialized_circuit_execution_payload(
         circuit,
         final_state,
+        initial_state=initial_state,
+        execution_configs=dict(getattr(config_registry, "_configs", {})),
         started_at=started_at,
         ended_at=ended_at,
-        execution_id=str(circuit.get("id") or "unknown-execution"),
-        input_state=initial_state,
-        trace=payload.get("trace"),
-        artifacts=payload.get("artifacts"),
+        trace={"events": []},
+        artifacts=[],
     )
-    synthesize_execution_record_reference_contract_from_payload(payload)
 
     if args.out:
         file_already_existed = _canonical_output_path(args.out, args.circuit).exists()

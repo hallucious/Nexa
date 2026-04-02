@@ -7,7 +7,10 @@ from src.engine.execution_snapshot import ExecutionSnapshot
 from src.storage.execution_record_api import (
     build_execution_record_reference_contract,
     create_execution_record_from_snapshot,
+    create_serialized_execution_record_from_circuit_run,
+    create_serialized_execution_record_from_savefile_trace,
     summarize_execution_record_for_working_save,
+    synthesize_execution_record_reference_contract_from_payload,
 )
 from src.storage.models.commit_snapshot_model import (
     CommitApprovalModel,
@@ -30,6 +33,120 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+
+
+def _build_execution_summary(initial_state: dict | None, final_state: dict | None, started_at: float, ended_at: float) -> dict:
+    duration_ms = max(0, int((ended_at - started_at) * 1000))
+    initial_keys = sorted((initial_state or {}).keys())
+    final_keys = sorted((final_state or {}).keys())
+    return {
+        "duration_ms": duration_ms,
+        "initial_keys": initial_keys,
+        "final_keys": final_keys,
+        "state_changed": (initial_state or {}) != (final_state or {}),
+    }
+
+
+def create_serialized_savefile_execution_payload(
+    savefile,
+    trace,
+    *,
+    started_at: float,
+    ended_at: float,
+) -> dict:
+    final_state = getattr(trace, "final_state", {}) or {}
+    node_results = getattr(trace, "node_results", {}) or {}
+    expected_outputs: dict[str, dict] = {}
+    for node_id, result in node_results.items():
+        expected_outputs[str(node_id)] = {
+            "status": getattr(result, "status", None),
+            "output": getattr(result, "output", None),
+            "error": getattr(result, "error", None),
+            "artifacts": getattr(result, "artifacts", []),
+            "trace": getattr(result, "trace", {}),
+        }
+
+    replay_payload = {
+        "execution_id": getattr(trace, "run_id", "unknown-execution"),
+        "node_order": [node.id for node in getattr(savefile.circuit, "nodes", [])],
+        "circuit": {
+            "id": savefile.meta.name,
+            "nodes": [{"id": node.id} for node in getattr(savefile.circuit, "nodes", [])],
+        },
+        "execution_configs": {},
+        "input_state": getattr(savefile.state, "input", {}) or {},
+        "expected_outputs": expected_outputs,
+    }
+
+    payload = {
+        "result": {
+            "state": final_state,
+            "status": getattr(trace, "status", None),
+            "node_results": expected_outputs,
+            "artifacts": getattr(trace, "all_artifacts", []),
+        },
+        "summary": _build_execution_summary(
+            getattr(savefile.state, "input", {}) or {},
+            final_state,
+            started_at,
+            ended_at,
+        ),
+        "trace": {"events": []},
+        "artifacts": getattr(trace, "all_artifacts", []),
+        "replay_payload": replay_payload,
+    }
+    payload["execution_record"] = create_serialized_execution_record_from_savefile_trace(
+        savefile,
+        trace,
+        started_at=started_at,
+        ended_at=ended_at,
+    )
+    synthesize_execution_record_reference_contract_from_payload(payload)
+    return payload
+
+
+def create_serialized_circuit_execution_payload(
+    circuit: dict,
+    final_state: dict,
+    *,
+    initial_state: dict,
+    execution_configs: dict,
+    started_at: float,
+    ended_at: float,
+    trace: dict | None = None,
+    artifacts: list | None = None,
+) -> dict:
+    replay_payload = {
+        "execution_id": circuit.get("id", "unknown-execution"),
+        "node_order": [node.get("id") for node in circuit.get("nodes", []) if node.get("id")],
+        "circuit": circuit,
+        "execution_configs": dict(execution_configs),
+        "input_state": initial_state,
+        "expected_outputs": {
+            node.get("id"): final_state.get(node.get("id"))
+            for node in circuit.get("nodes", [])
+            if node.get("id") in final_state
+        },
+    }
+    payload = {
+        "result": {"state": final_state},
+        "summary": _build_execution_summary(initial_state, final_state, started_at, ended_at),
+        "trace": trace or {"events": []},
+        "artifacts": artifacts or [],
+        "replay_payload": replay_payload,
+    }
+    payload["execution_record"] = create_serialized_execution_record_from_circuit_run(
+        circuit,
+        final_state,
+        started_at=started_at,
+        ended_at=ended_at,
+        execution_id=str(circuit.get("id") or "unknown-execution"),
+        input_state=initial_state,
+        trace=payload.get("trace"),
+        artifacts=payload.get("artifacts"),
+    )
+    synthesize_execution_record_reference_contract_from_payload(payload)
+    return payload
 def create_commit_snapshot_from_working_save(
     working_save: WorkingSaveModel,
     *,

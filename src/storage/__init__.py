@@ -12,6 +12,8 @@ from src.storage.lifecycle_api import (
     create_serialized_commit_snapshot_from_working_save,
     create_serialized_execution_record_from_commit_snapshot,
     create_serialized_execution_transition,
+    create_serialized_savefile_execution_payload,
+    create_serialized_circuit_execution_payload,
 )
 from src.storage.nex_api import load_nex, validate_commit_snapshot, validate_working_save
 

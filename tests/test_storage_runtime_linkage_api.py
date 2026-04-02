@@ -12,6 +12,8 @@ from src.storage.lifecycle_api import (
     create_serialized_commit_snapshot_from_working_save,
     create_serialized_execution_record_from_commit_snapshot,
     create_serialized_execution_transition,
+    create_serialized_savefile_execution_payload,
+    create_serialized_circuit_execution_payload,
 )
 from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
@@ -177,3 +179,56 @@ def test_create_serialized_execution_transition_returns_execution_record_updated
     assert transition['updated_working_save']['runtime']['status'] == 'executed'
     assert transition['execution_record_reference_contract']['primary_trace_ref'] == 'events://exec-1'
     assert transition['last_run_summary']['replay_ready'] is True
+
+
+from src.contracts.savefile_executor_aligned import NodeExecutionResult, SavefileExecutionTrace
+from tests.savefile_test_helpers import make_demo_savefile
+
+
+def test_create_serialized_savefile_execution_payload_uses_lifecycle_api_shape():
+    savefile = make_demo_savefile(name='demo-savefile')
+    trace = SavefileExecutionTrace(
+        run_id='savefile-run-1',
+        savefile_name='demo-savefile',
+        status='success',
+        node_results={
+            'node1': NodeExecutionResult(
+                node_id='node1',
+                status='success',
+                output={'answer': 'hello'},
+                artifacts=[{'type': 'report', 'summary': 'artifact-summary'}],
+                trace={'provider': 'echo'},
+            )
+        },
+        final_state={'input': {'text': 'hello'}, 'working': {'answer': 'hello'}, 'memory': {}},
+        all_artifacts=[{'type': 'report', 'summary': 'artifact-summary'}],
+    )
+
+    payload = create_serialized_savefile_execution_payload(savefile, trace, started_at=1.0, ended_at=2.0)
+
+    assert payload['execution_record']['meta']['run_id'] == 'savefile-run-1'
+    assert payload['execution_record_reference_contract']['run_id'] == 'savefile-run-1'
+    assert payload['replay_payload']['execution_id'] == 'savefile-run-1'
+
+
+def test_create_serialized_circuit_execution_payload_uses_lifecycle_api_shape():
+    circuit = {
+        'id': 'demo-circuit',
+        'nodes': [{'id': 'node_a'}, {'id': 'node_b'}],
+    }
+    final_state = {'node_a': {'value': 'hello'}, 'node_b': {'value': 'world'}}
+
+    payload = create_serialized_circuit_execution_payload(
+        circuit,
+        final_state,
+        initial_state={'message': 'Hello Nexa'},
+        execution_configs={'node_a': {'provider': 'echo'}},
+        started_at=1.0,
+        ended_at=2.0,
+        trace={'events': []},
+        artifacts=[],
+    )
+
+    assert payload['execution_record']['meta']['run_id'] == 'demo-circuit'
+    assert payload['execution_record_reference_contract']['run_id'] == 'demo-circuit'
+    assert payload['replay_payload']['execution_id'] == 'demo-circuit'
