@@ -91,14 +91,14 @@ def replay_audit_pack(audit_zip_path: str) -> dict:
             if not isinstance(reference_contract, dict):
                 raise ValueError("execution_record_reference_contract.json must contain a JSON object")
 
-        replay_input = create_serialized_audit_replay_components(
-            replay_payload=replay_payload,
-            execution_record=execution_record,
-            execution_record_reference_contract=reference_contract,
-        )
-        replay_payload = replay_input.get("replay_payload", {})
-        execution_record = replay_input.get("execution_record", {})
-        reference_contract = replay_input.get("execution_record_reference_contract", {})
+        replay_components = create_serialized_audit_replay_components({
+            "replay_payload": replay_payload,
+            "execution_record": execution_record,
+            "execution_record_reference_contract": reference_contract,
+        })
+        replay_payload = replay_components.get("replay_payload", {})
+        execution_record = replay_components.get("execution_record", {})
+        reference_contract = replay_components.get("execution_record_reference_contract", {})
 
         execution_id = replay_payload.get("execution_id", "unknown-execution")
         node_order = replay_payload.get("node_order", [])

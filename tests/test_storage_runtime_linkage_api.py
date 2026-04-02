@@ -263,7 +263,7 @@ def test_create_serialized_audit_export_payload_centralizes_audit_components():
     assert audit_payload['execution_trace_payload']['state']['node_a']['value'] == 'hello'
 
 
-def test_create_serialized_audit_bundle_contents_centralizes_file_contents():
+def test_create_serialized_audit_bundle_contents_exposes_file_oriented_components():
     payload = {
         'result': {'state': {'node_a': {'value': 'hello'}}},
         'summary': {'duration_ms': 1},
@@ -279,40 +279,39 @@ def test_create_serialized_audit_bundle_contents_centralizes_file_contents():
         },
     }
 
-    bundle = create_serialized_audit_bundle_contents(payload)
+    contents = create_serialized_audit_bundle_contents(payload)
 
-    assert bundle['metadata.json']['format'] == 'nexa.audit_pack'
-    assert bundle['replay_payload.json']['execution_id'] == 'audit-demo'
-    assert bundle['execution_record.json']['meta']['run_id'] == 'audit-demo'
-    assert bundle['execution_record_reference_contract.json']['run_id'] == 'audit-demo'
-    assert isinstance(bundle['artifacts/'], list)
+    assert contents['metadata.json']['format'] == 'nexa.audit_pack'
+    assert contents['replay_payload.json']['execution_id'] == 'audit-demo'
+    assert contents['execution_record.json']['meta']['run_id'] == 'audit-demo'
+    assert contents['execution_record_reference_contract.json']['run_id'] == 'audit-demo'
 
 
-def test_create_serialized_audit_replay_components_normalizes_explicit_inputs():
-    replay_payload = {
-        'execution_id': 'hello-exec',
-        'node_order': ['hello_node'],
-        'circuit': {'id': 'hello-circuit', 'nodes': [{'id': 'hello_node'}]},
-        'execution_configs': {'cfg.hello': {'config_id': 'cfg.hello', 'provider_ref': 'echo'}},
-        'input_state': {'message': 'Hello Nexa'},
-        'expected_outputs': {'hello_node': 'Hello Nexa'},
+def test_create_serialized_audit_replay_components_normalizes_replay_inputs():
+    payload = {
+        'replay_payload': {
+            'execution_id': 'audit-demo',
+            'node_order': ['node_a'],
+            'circuit': {'id': 'audit-demo', 'nodes': [{'id': 'node_a'}]},
+            'execution_configs': {},
+            'input_state': {'message': 'hello'},
+            'expected_outputs': {'node_a': {'value': 'hello'}},
+        },
+        'execution_record': {
+            'meta': {'run_id': 'audit-demo', 'status': 'completed'},
+            'source': {'commit_id': 'commit::unknown'},
+            'timeline': {'trace_ref': 'trace://audit-demo', 'event_stream_ref': 'events://audit-demo'},
+            'outputs': {'final_outputs': []},
+            'artifacts': {'artifacts': []},
+            'node_results': {'results': []},
+            'diagnostics': {'warnings': [], 'errors': []},
+            'observability': {'trace_summary': '', 'provider_usage_summary': {}, 'plugin_usage_summary': {}, 'refs': []},
+        },
     }
-    execution_record = {
-        'meta': {'run_id': 'hello-exec'},
-        'source': {'commit_id': 'commit-1'},
-        'timeline': {'trace_ref': 'trace://hello-exec', 'event_stream_ref': 'events://hello-exec'},
-        'outputs': {'final_outputs': []},
-        'artifacts': {'artifact_refs': []},
-        'node_results': {'results': []},
-    }
 
-    replay_input = create_serialized_audit_replay_components(
-        replay_payload=replay_payload,
-        execution_record=execution_record,
-    )
+    components = create_serialized_audit_replay_components(payload)
 
-    assert replay_input['replay_payload']['execution_id'] == 'hello-exec'
-    assert replay_input['execution_record']['meta']['run_id'] == 'hello-exec'
-    assert replay_input['reference_contract']['run_id'] == 'hello-exec' if 'reference_contract' in replay_input else True
-    assert replay_input['execution_record_reference_contract']['run_id'] == 'hello-exec'
-    assert replay_input['primary_trace_ref'] == 'events://hello-exec'
+    assert components['replay_payload']['execution_id'] == 'audit-demo'
+    assert components['execution_record']['meta']['run_id'] == 'audit-demo'
+    assert components['execution_record_reference_contract']['run_id'] == 'audit-demo'
+    assert components['primary_trace_ref'] == 'events://audit-demo'

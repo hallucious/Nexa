@@ -72,18 +72,43 @@ class ExecutionAuditPackBuilder:
             artifacts_dir.mkdir(parents=True, exist_ok=True)
 
             bundle_contents = create_serialized_audit_bundle_contents(payload if isinstance(payload, dict) else {})
+            metadata = ExecutionAuditPackBuilder._normalize(bundle_contents.get('metadata.json', {}))
+            execution_trace_payload = ExecutionAuditPackBuilder._normalize(bundle_contents.get('execution_trace.json', {}))
+            summary_payload = ExecutionAuditPackBuilder._normalize(bundle_contents.get('summary.json', {}))
+            replay_payload = ExecutionAuditPackBuilder._normalize(bundle_contents.get('replay_payload.json', {}))
+            execution_record = ExecutionAuditPackBuilder._normalize(bundle_contents.get('execution_record.json', {}))
+            execution_record_reference_contract = ExecutionAuditPackBuilder._normalize(
+                bundle_contents.get('execution_record_reference_contract.json', {})
+            )
+            artifacts = ExecutionAuditPackBuilder._normalize(bundle_contents.get('artifacts', []))
 
-            for filename, content in sorted(bundle_contents.items()):
-                if filename == 'artifacts/':
-                    continue
-                file_path = root / filename
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_path.write_text(
-                    json.dumps(ExecutionAuditPackBuilder._normalize(content), indent=2, ensure_ascii=False, sort_keys=True),
+            (root / 'execution_trace.json').write_text(
+                json.dumps(execution_trace_payload, indent=2, ensure_ascii=False, sort_keys=True),
+                encoding='utf-8',
+            )
+            (root / 'metadata.json').write_text(
+                json.dumps(metadata, indent=2, ensure_ascii=False, sort_keys=True),
+                encoding='utf-8',
+            )
+            (root / 'summary.json').write_text(
+                json.dumps(summary_payload, indent=2, ensure_ascii=False, sort_keys=True),
+                encoding='utf-8',
+            )
+            (root / 'replay_payload.json').write_text(
+                json.dumps(replay_payload, indent=2, ensure_ascii=False, sort_keys=True),
+                encoding='utf-8',
+            )
+            if isinstance(execution_record, dict) and execution_record:
+                (root / 'execution_record.json').write_text(
+                    json.dumps(execution_record, indent=2, ensure_ascii=False, sort_keys=True),
+                    encoding='utf-8',
+                )
+            if isinstance(execution_record_reference_contract, dict) and execution_record_reference_contract:
+                (root / 'execution_record_reference_contract.json').write_text(
+                    json.dumps(execution_record_reference_contract, indent=2, ensure_ascii=False, sort_keys=True),
                     encoding='utf-8',
                 )
 
-            artifacts = ExecutionAuditPackBuilder._normalize(bundle_contents.get('artifacts/', []))
             if isinstance(artifacts, list):
                 for index, artifact in enumerate(artifacts, start=1):
                     artifact_path = artifacts_dir / f'artifact_{index}.json'

@@ -154,3 +154,25 @@ def test_audit_pack_export_includes_execution_record_when_materialized(tmp_path)
 
     assert "execution_record.json" in names
     assert execution_record["meta"]["run_id"] == "hello-exec"
+
+
+def test_export_command_does_not_need_cli_pre_materialization(tmp_path):
+    input_file = tmp_path / "result.json"
+    out_file = tmp_path / "audit.zip"
+    payload = _sample_run_payload()
+    payload.pop("execution_record", None)
+    payload.pop("execution_record_reference_contract", None)
+    input_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    class Args:
+        input = str(input_file)
+        out = str(out_file)
+
+    rc = export_command(Args())
+    assert rc == 0
+
+    with zipfile.ZipFile(out_file, "r") as zf:
+        names = set(zf.namelist())
+
+    assert "execution_record.json" in names
+    assert "execution_record_reference_contract.json" in names
