@@ -14,11 +14,13 @@ from src.storage.models.shared_sections import CircuitModel, ResourcesModel, Sta
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.serialization import (
     save_nex_artifact_file,
+    save_execution_record_file,
     serialize_commit_snapshot,
     serialize_nex_artifact,
     serialize_working_save,
     validate_serialized_storage_artifact_for_write,
 )
+from tests.test_execution_record_api import make_snapshot
 
 
 def make_working_save() -> WorkingSaveModel:
@@ -99,3 +101,62 @@ def test_save_nex_artifact_file_rejects_invalid_commit_snapshot_dict(tmp_path):
         assert 'validation.validation_result' in str(exc)
     else:
         raise AssertionError('Expected ValueError for invalid Commit Snapshot write payload')
+
+
+
+def test_save_execution_record_file_accepts_wrapper_payload_and_writes_canonical_record(tmp_path):
+    payload = {
+        'replay_payload': {
+            'execution_id': 'run-123',
+            'commit_id': 'commit-123',
+            'node_order': ['node_a'],
+            'expected_outputs': {'node_a': {'value': 'ok'}},
+        },
+        'result': {
+            'status': 'success',
+            'state': {'node_a': {'value': 'ok'}},
+            'node_results': {
+                'node_a': {'status': 'success', 'output': {'value': 'ok'}},
+            },
+        },
+        'trace': {'events': ['started', 'completed']},
+    }
+
+    path = save_execution_record_file(payload, tmp_path / 'run_123.json')
+    data = json.loads(path.read_text(encoding='utf-8'))
+
+    assert data['meta']['run_id'] == 'run-123'
+    assert data['source']['commit_id'] == 'commit-123'
+    assert data['timeline']['event_stream_ref'] == 'events://run-123'
+
+
+
+def test_save_nex_artifact_file_unwraps_nested_valid_execution_record_payload(tmp_path):
+    record = save_execution_record_file(
+        {
+            'replay_payload': {
+                'execution_id': 'run-xyz',
+                'commit_id': 'commit-xyz',
+                'node_order': ['node_a'],
+                'expected_outputs': {'node_a': {'value': 'ok'}},
+            },
+            'result': {
+                'status': 'success',
+                'state': {'node_a': {'value': 'ok'}},
+                'node_results': {
+                    'node_a': {'status': 'success', 'output': {'value': 'ok'}},
+                },
+            },
+            'trace': {'events': ['started', 'completed']},
+        },
+        tmp_path / 'seed.json',
+    )
+    seeded = json.loads(record.read_text(encoding='utf-8'))
+
+    wrapped = {'execution_record': seeded, 'replay_payload': {'execution_id': 'stale-id'}}
+    path = save_nex_artifact_file(wrapped, tmp_path / 'wrapped.json')
+    data = json.loads(path.read_text(encoding='utf-8'))
+
+    assert data['meta']['run_id'] == 'run-xyz'
+    assert data['source']['commit_id'] == 'commit-xyz'
+    assert 'execution_record' not in data

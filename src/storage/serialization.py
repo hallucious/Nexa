@@ -140,17 +140,50 @@ def serialize_nex_artifact(model: WorkingSaveModel | CommitSnapshotModel | Execu
         return _ensure_mapping(_drop_none(model))
     if is_dataclass(model):
         return _ensure_mapping(_drop_none(asdict(model)))
-    raise TypeError('serialize_nex_artifact expects WorkingSaveModel, CommitSnapshotModel, or dict')
+    raise TypeError('serialize_nex_artifact expects WorkingSaveModel, CommitSnapshotModel, ExecutionRecordModel, or dict')
 
+
+
+
+def _looks_like_serialized_execution_record(payload: dict[str, Any]) -> bool:
+    if not isinstance(payload, dict) or not payload:
+        return False
+    meta = payload.get('meta') if isinstance(payload.get('meta'), dict) else {}
+    source = payload.get('source') if isinstance(payload.get('source'), dict) else {}
+    return bool(meta.get('run_id') and source.get('commit_id'))
+
+
+def _canonicalize_storage_write_payload(
+    model: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | dict[str, Any],
+) -> dict[str, Any]:
+    payload = serialize_nex_artifact(model)
+    meta = payload.get('meta') if isinstance(payload.get('meta'), dict) else {}
+    storage_role = meta.get('storage_role')
+    if storage_role in ALLOWED_STORAGE_ROLES or _looks_like_serialized_execution_record(payload):
+        return payload
+
+    nested_record = payload.get('execution_record')
+    if _looks_like_serialized_execution_record(nested_record):
+        return _ensure_mapping(_drop_none(nested_record))
+
+    if any(key in payload for key in ('execution_record', 'replay_payload', 'result', 'trace', 'summary')):
+        from src.storage.execution_record_api import materialize_execution_record_from_payload
+
+        normalized_payload = dict(payload)
+        record = materialize_execution_record_from_payload(normalized_payload)
+        if _looks_like_serialized_execution_record(record):
+            return _ensure_mapping(_drop_none(record))
+
+    return payload
 
 def save_nex_artifact_file(model: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | dict[str, Any], destination: str | Path) -> Path:
     path = Path(destination)
-    payload = validate_serialized_storage_artifact_for_write(serialize_nex_artifact(model))
+    payload = validate_serialized_storage_artifact_for_write(_canonicalize_storage_write_payload(model))
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + '\n', encoding='utf-8')
     return path
 
 
-def save_execution_record_file(model: ExecutionRecordModel, destination: str | Path) -> Path:
+def save_execution_record_file(model: ExecutionRecordModel | dict[str, Any], destination: str | Path) -> Path:
     return save_nex_artifact_file(model, destination)
 
 
