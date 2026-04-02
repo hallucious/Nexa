@@ -1100,8 +1100,6 @@ def export_command(args) -> int:
         print(f"Error: {args.input} must contain a JSON object", file=sys.stderr)
         return 1
 
-    materialize_execution_record_from_payload(payload)
-    synthesize_execution_record_reference_contract_from_payload(payload)
     ExecutionAuditPackBuilder.export(payload, args.out)
     print(json.dumps({"status": "ok", "output": args.out}, indent=2, ensure_ascii=False))
     return 0

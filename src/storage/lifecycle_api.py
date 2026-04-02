@@ -563,19 +563,49 @@ __all__ = [
 
 
 
+def create_serialized_audit_replay_components(
+    *,
+    replay_payload: dict | None = None,
+    execution_record: dict | None = None,
+    execution_record_reference_contract: dict | None = None,
+) -> dict:
+    """Normalize replay-facing serialized components from explicit serialized inputs.
+
+    This keeps replay-side interpretation aligned with storage/lifecycle-owned
+    transition vocabulary without requiring consumers to reconstruct contract
+    meaning on their own.
+    """
+    payload: dict = {
+        'replay_payload': replay_payload if isinstance(replay_payload, dict) else {},
+    }
+    if isinstance(execution_record, dict) and execution_record:
+        payload['execution_record'] = execution_record
+    if isinstance(execution_record_reference_contract, dict) and execution_record_reference_contract:
+        payload['execution_record_reference_contract'] = execution_record_reference_contract
+
+    audit_payload = create_serialized_audit_export_payload(payload)
+    contract = audit_payload.get('execution_record_reference_contract', {}) or {}
+    return {
+        'replay_payload': audit_payload.get('replay_payload', {}),
+        'execution_record': audit_payload.get('execution_record', {}),
+        'execution_record_reference_contract': contract,
+        'primary_trace_ref': contract.get('primary_trace_ref'),
+    }
+
+
 def create_serialized_audit_replay_input(payload: dict) -> dict:
     """Normalize replay-facing serialized components from an audit payload.
 
     This centralizes replay input interpretation so replay consumers share the
     same storage/lifecycle transition vocabulary used by audit export.
     """
-    audit_payload = create_serialized_audit_export_payload(payload if isinstance(payload, dict) else {})
-    return {
-        'replay_payload': audit_payload.get('replay_payload', {}),
-        'execution_record': audit_payload.get('execution_record', {}),
-        'execution_record_reference_contract': audit_payload.get('execution_record_reference_contract', {}),
-        'primary_trace_ref': (audit_payload.get('execution_record_reference_contract', {}) or {}).get('primary_trace_ref'),
-    }
+    safe_payload = payload if isinstance(payload, dict) else {}
+    return create_serialized_audit_replay_components(
+        replay_payload=safe_payload.get('replay_payload'),
+        execution_record=safe_payload.get('execution_record'),
+        execution_record_reference_contract=safe_payload.get('execution_record_reference_contract'),
+    )
+
 def create_serialized_audit_export_payload(payload: dict) -> dict:
     """Build normalized audit-export components from a run payload.
 
@@ -624,3 +654,26 @@ def create_serialized_audit_export_payload(payload: dict) -> dict:
         'execution_record_reference_contract': contract,
         'artifacts': artifacts,
     }
+
+
+def create_serialized_audit_bundle_contents(payload: dict) -> dict[str, object]:
+    """Build deterministic audit-bundle file contents from a run payload.
+
+    The returned mapping is storage/lifecycle-owned and can be written directly
+    by export consumers without reinterpreting payload semantics.
+    """
+    audit_payload = create_serialized_audit_export_payload(payload if isinstance(payload, dict) else {})
+    bundle: dict[str, object] = {
+        'metadata.json': audit_payload.get('metadata', {}),
+        'execution_trace.json': audit_payload.get('execution_trace_payload', {}),
+        'summary.json': audit_payload.get('summary_payload', {}),
+        'replay_payload.json': audit_payload.get('replay_payload', {}),
+        'artifacts/': audit_payload.get('artifacts', []),
+    }
+    execution_record = audit_payload.get('execution_record', {})
+    contract = audit_payload.get('execution_record_reference_contract', {})
+    if isinstance(execution_record, dict) and execution_record:
+        bundle['execution_record.json'] = execution_record
+    if isinstance(contract, dict) and contract:
+        bundle['execution_record_reference_contract.json'] = contract
+    return bundle

@@ -15,6 +15,8 @@ from src.storage.lifecycle_api import (
     create_serialized_savefile_execution_payload,
     create_serialized_circuit_execution_payload,
     create_serialized_audit_export_payload,
+    create_serialized_audit_bundle_contents,
+    create_serialized_audit_replay_components,
     create_serialized_audit_replay_input,
 )
 from src.storage.nex_api import load_nex, validate_commit_snapshot, validate_working_save
@@ -37,5 +39,7 @@ __all__ = [
     'create_serialized_savefile_execution_payload',
     'create_serialized_circuit_execution_payload',
     'create_serialized_audit_export_payload',
+    'create_serialized_audit_bundle_contents',
+    'create_serialized_audit_replay_components',
     'create_serialized_audit_replay_input',
 ]
