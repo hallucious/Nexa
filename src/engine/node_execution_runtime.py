@@ -267,6 +267,11 @@ class NodeExecutionRuntime:
 
         payload.setdefault("reason", "plugin_requested_review")
         payload.setdefault("is_blocking", False)
+        payload.setdefault("resume", {
+            "can_resume": True,
+            "resume_strategy": "restart_from_node",
+            "requires_revalidation": ["structural_validation", "determinism_pre_validation"],
+        })
         return payload
 
     def _emit_review_required_event_from_plugin_result(
@@ -732,6 +737,12 @@ class NodeExecutionRuntime:
                 plugin_result=plugin_result,
             )
             if review_required_payload is not None and self._review_gate_enabled(dict(config.get("runtime_config") or {})):
+                resume_payload = dict(review_required_payload.get("resume") or {})
+                resume_payload.setdefault("can_resume", True)
+                resume_payload.setdefault("resume_strategy", "restart_from_node")
+                resume_payload.setdefault("requires_revalidation", ["structural_validation", "determinism_pre_validation"])
+                resume_payload.setdefault("resume_from_node_id", runtime_node_id)
+                review_required_payload["resume"] = resume_payload
                 raise ReviewRequiredPause(node_id=runtime_node_id, payload=review_required_payload)
 
             return plugin_result
@@ -899,6 +910,7 @@ class NodeExecutionRuntime:
                     "artifact_count": len(artifacts),
                     "metrics": self.get_metrics(),
                     "review_required": exc.payload,
+                    "resume": dict(exc.payload.get("resume") or {}),
                     "error": str(exc),
                     "error_type": type(exc).__name__,
                 },

@@ -85,6 +85,24 @@ def _extract_cross_node_refs(value: Any) -> Set[str]:
     return refs
 
 
+@dataclass(frozen=True)
+class ReviewGateResumeRequest:
+    """Minimal explicit resume contract for a paused review-gated run."""
+
+    resume_from_node_id: str
+    previous_execution_id: Optional[str] = None
+    reason: str = "review_gate_resume"
+
+    def to_payload(self) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "resume_from_node_id": self.resume_from_node_id,
+            "reason": self.reason,
+        }
+        if self.previous_execution_id:
+            payload["previous_execution_id"] = self.previous_execution_id
+        return payload
+
+
 # ── Circuit governance trace ──────────────────────────────────────────────────
 
 @dataclass
@@ -442,6 +460,77 @@ class CircuitRunner:
                         f"node cross-reference missing depends_on: {node_id} requires {rid}"
                     )
 
+    # ── Review-gate resume helpers ─────────────────────────────────────────────
+
+    def _extract_resume_request(self, state: Dict[str, Any]) -> Optional[ReviewGateResumeRequest]:
+        raw = state.pop("__resume__", None)
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise TypeError("state['__resume__'] must be a dict when provided")
+
+        resume_from_node_id = raw.get("resume_from_node_id") or raw.get("pause_node_id")
+        if not isinstance(resume_from_node_id, str) or not resume_from_node_id:
+            raise ValueError("resume request requires non-empty resume_from_node_id")
+
+        previous_execution_id = raw.get("previous_execution_id")
+        if previous_execution_id is not None and not isinstance(previous_execution_id, str):
+            raise TypeError("previous_execution_id must be a string when provided")
+
+        reason = raw.get("reason") or "review_gate_resume"
+        if not isinstance(reason, str):
+            raise TypeError("resume reason must be a string when provided")
+
+        return ReviewGateResumeRequest(
+            resume_from_node_id=resume_from_node_id,
+            previous_execution_id=previous_execution_id,
+            reason=reason,
+        )
+
+    def _build_resume_nodes(
+        self,
+        nodes: List[Dict[str, Any]],
+        state: Dict[str, Any],
+        resume_request: ReviewGateResumeRequest,
+    ) -> List[Dict[str, Any]]:
+        node_map = {node.get("id"): node for node in nodes if node.get("id")}
+        if resume_request.resume_from_node_id not in node_map:
+            raise ValueError(f"resume target node not found in circuit: {resume_request.resume_from_node_id}")
+
+        node_outputs = state.get("__node_outputs__")
+        if not isinstance(node_outputs, dict):
+            raise ValueError("resume execution requires state['__node_outputs__'] dict")
+
+        completed_nodes = {node_id for node_id in node_outputs if isinstance(node_id, str) and node_id}
+        completed_nodes.discard(resume_request.resume_from_node_id)
+
+        resume_node = node_map[resume_request.resume_from_node_id]
+        missing_deps = [
+            dep for dep in resume_node.get("depends_on", [])
+            if dep not in completed_nodes
+        ]
+        if missing_deps:
+            raise ValueError(
+                "resume execution requires completed dependency outputs for "
+                f"{resume_request.resume_from_node_id}: missing {', '.join(sorted(missing_deps))}"
+            )
+
+        resume_nodes: List[Dict[str, Any]] = []
+        for node in nodes:
+            node_id = node.get("id")
+            if not isinstance(node_id, str) or not node_id:
+                continue
+            if node_id in completed_nodes:
+                continue
+            cloned = dict(node)
+            cloned["depends_on"] = [
+                dep for dep in node.get("depends_on", [])
+                if dep not in completed_nodes
+            ]
+            resume_nodes.append(cloned)
+
+        return resume_nodes
+
     # ── Node execution ────────────────────────────────────────────────────────
 
     def _execute_node(self, node: Dict[str, Any], state: Dict[str, Any]):
@@ -492,6 +581,7 @@ class CircuitRunner:
         circuit_id = circuit.get("id")
 
         current_state: Dict[str, Any] = dict(state)
+        resume_request = self._extract_resume_request(current_state)
         current_state.setdefault("__node_outputs__", {})
         nodes: List[Dict[str, Any]] = circuit.get("nodes", [])
 
@@ -533,22 +623,30 @@ class CircuitRunner:
             return CircuitRunResult(current_state, governance)
 
         # ── Phase 3: Node execution ───────────────────────────────────────────
-        scheduler = CircuitScheduler(nodes)
+        execution_nodes = nodes if resume_request is None else self._build_resume_nodes(nodes, current_state, resume_request)
+        scheduler = CircuitScheduler(execution_nodes)
         waves = scheduler.execution_waves()
 
         set_execution_id_fn = getattr(self.runtime, "set_execution_id", None)
         if callable(set_execution_id_fn):
             set_execution_id_fn(execution_id)
 
-        self._emit_runtime_event(
-            "execution_started",
-            {
-                "circuit_id": circuit_id,
-                "execution_id": execution_id,
-                "total_nodes": len(nodes),
-                "total_waves": len(waves),
-            },
-        )
+        started_payload = {
+            "circuit_id": circuit_id,
+            "execution_id": execution_id,
+            "total_nodes": len(execution_nodes),
+            "total_nodes_in_circuit": len(nodes),
+            "total_waves": len(waves),
+            "is_resume": resume_request is not None,
+        }
+        if resume_request is not None:
+            started_payload["resume_from_node_id"] = resume_request.resume_from_node_id
+            if resume_request.previous_execution_id:
+                started_payload["previous_execution_id"] = resume_request.previous_execution_id
+
+        self._emit_runtime_event("execution_started", started_payload)
+        if resume_request is not None:
+            self._emit_runtime_event("execution_resumed", resume_request.to_payload())
 
         execution_failed = False
         execution_error: Optional[Exception] = None
@@ -598,6 +696,13 @@ class CircuitRunner:
             if pause_signal is not None:
                 completed_payload["reason"] = str(pause_signal.payload.get("reason") or "review_required")
                 completed_payload["review_required"] = dict(pause_signal.payload)
+                completed_payload["resume"] = {
+                    "can_resume": True,
+                    "resume_from_node_id": pause_signal.node_id,
+                    "resume_strategy": "restart_from_node",
+                    "requires_revalidation": ["structural_validation", "determinism_pre_validation"],
+                    "previous_execution_id": execution_id,
+                }
                 completed_payload["pause_node_id"] = pause_signal.node_id
 
             self._emit_runtime_event(

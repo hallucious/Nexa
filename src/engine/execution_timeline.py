@@ -61,6 +61,11 @@ class ExecutionTimelineBuilder:
             elif event.type in {"execution_completed", "execution_failed", "execution_paused"}:
                 execution_end = event.timestamp_ms
 
+            elif event.type == "execution_resumed":
+                # Resume is an informational run-linking event; start/end remain anchored
+                # to execution_started / terminal execution_* events.
+                continue
+
             elif event.type == "node_started":
                 if event.node_id:
                     node_start_times[event.node_id] = event.timestamp_ms

@@ -1,6 +1,6 @@
 # Nexa CODING PLAN
 
-Version: 2.8.0
+Version: 2.9.0
 
 ---
 
@@ -18,6 +18,7 @@ The current repository state includes the following implemented surface:
 * savefile-based `.nex` execution
 * observability and runtime metrics
 * execution event stream foundation (started/completed/failed/warning/progress/artifact preview/review_required)
+* execution resume contract foundation for paused review-gated runs
 * graph-only runtime execution in `NodeExecutionRuntime`
 
 ### 2. Prompt / Provider Runtime
@@ -294,3 +295,10 @@ CLI
 * minimal payload defaults include `reason` and non-blocking semantics
 * review-required signaling remains separate from structural truth and does not yet force runtime pause/block behavior by itself
 * focused execution-event tests passed after the alignment
+
+
+### Latest Increment
+
+* paused review-gated runs now expose a minimal explicit resume contract
+* resumed runs emit `execution_resumed` with linkage to prior execution when provided
+* resumed execution re-runs validation before continuing from the paused node

@@ -211,6 +211,8 @@ def test_circuit_runner_emits_execution_paused_event_on_review_gate_signal():
     assert paused.payload["reason"] == "sample_validation"
     assert paused.payload["pause_node_id"] == "node_a"
     assert paused.payload["review_required"]["is_blocking"] is True
+    assert paused.payload["resume"]["can_resume"] is True
+    assert paused.payload["resume"]["resume_from_node_id"] == "node_a"
 
 
 def test_timeline_builder_accepts_execution_paused_as_terminal_event():
@@ -227,3 +229,18 @@ def test_timeline_builder_accepts_execution_paused_as_terminal_event():
     assert bundle.profile.failed_nodes == 0
     assert bundle.profile.succeeded_nodes == 0
     assert bundle.timeline.node_spans[0].status == "partial"
+
+
+def test_timeline_builder_tolerates_execution_resumed_event():
+    events = [
+        ExecutionEvent("execution_started", "run2", None, 0, {"is_resume": True}),
+        ExecutionEvent("execution_resumed", "run2", None, 1, {"resume_from_node_id": "B"}),
+        ExecutionEvent("node_started", "run2", "B", 10, {}),
+        ExecutionEvent("node_completed", "run2", "B", 20, {"status": "success"}),
+        ExecutionEvent("execution_completed", "run2", None, 25, {}),
+    ]
+
+    bundle = ExecutionTimelineBuilder().build(events)
+    assert bundle.timeline.duration_ms == 25
+    assert bundle.profile.total_nodes == 1
+    assert bundle.profile.succeeded_nodes == 1

@@ -342,3 +342,66 @@ def test_engine_execute_delegates_to_orchestrator_not_inline():
         "Engine must delegate governance rather than owning it inline."
     )
     assert run_pre_calls[0]["revision_id"] == "r_delegate_proof"
+
+
+def test_resume_request_emits_execution_resumed_and_skips_completed_nodes():
+    r = _SimpleRegistry()
+    r.register({"config_id": "cfg.a"})
+    r.register({"config_id": "cfg.b"})
+    r.register({"config_id": "cfg.c"})
+
+    class _EventRuntime(_SimpleRuntime):
+        def __init__(self, outputs=None):
+            super().__init__(outputs)
+            self.events = []
+        def _emit_event(self, event_type, payload, node_id=None):
+            self.events.append((event_type, payload, node_id))
+
+    rt = _EventRuntime({"cfg.b": "out:b", "cfg.c": "out:c"})
+    runner = CircuitRunner(rt, r)
+    circuit = {
+        "id": "tc-resume",
+        "nodes": [
+            {"id": "a", "execution_config_ref": "cfg.a"},
+            {"id": "b", "execution_config_ref": "cfg.b", "depends_on": ["a"]},
+            {"id": "c", "execution_config_ref": "cfg.c", "depends_on": ["b"]},
+        ],
+    }
+    state = {
+        "__node_outputs__": {"a": "out:a"},
+        "__resume__": {
+            "resume_from_node_id": "b",
+            "previous_execution_id": "exec-paused-1",
+        },
+    }
+
+    result = runner.execute(circuit, state)
+
+    assert rt.executed == ["cfg.b", "cfg.c"]
+    assert result["b"] == "out:b"
+    assert result["c"] == "out:c"
+    assert [event[0] for event in rt.events[:2]] == ["execution_started", "execution_resumed"]
+    assert rt.events[0][1]["is_resume"] is True
+    assert rt.events[1][1]["previous_execution_id"] == "exec-paused-1"
+
+
+def test_resume_request_requires_completed_dependency_outputs():
+    r = _SimpleRegistry()
+    r.register({"config_id": "cfg.a"})
+    r.register({"config_id": "cfg.b"})
+    rt = _SimpleRuntime({"cfg.b": "out:b"})
+    runner = CircuitRunner(rt, r)
+    circuit = {
+        "id": "tc-resume-invalid",
+        "nodes": [
+            {"id": "a", "execution_config_ref": "cfg.a"},
+            {"id": "b", "execution_config_ref": "cfg.b", "depends_on": ["a"]},
+        ],
+    }
+    state = {
+        "__node_outputs__": {},
+        "__resume__": {"resume_from_node_id": "b"},
+    }
+
+    with pytest.raises(ValueError, match="resume execution requires completed dependency outputs"):
+        runner.execute(circuit, state)

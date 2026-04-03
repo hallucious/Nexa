@@ -1,5 +1,5 @@
 Spec ID: execution_model
-Version: 1.10.0
+Version: 1.11.0
 Status: Active
 Category: architecture
 Depends On:
@@ -98,6 +98,7 @@ Minimum stable event vocabulary:
 - `execution_completed`
 - `execution_failed`
 - `execution_paused`
+- `execution_resumed`
 
 Rules:
 
@@ -112,4 +113,6 @@ Rules:
 9. `artifact_preview` is preview-safe observability data only and must not redefine final artifact truth.
 10. `artifact_preview` payloads should explicitly mark that they are non-final and may include lightweight preview summaries.
 11. `review_required` may surface review metadata for downstream consumers, and when an explicit runtime review-gate policy is enabled it may trigger a paused terminal state.
-12. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.
+12. `execution_resumed` is emitted only for an explicit resume request against a previously paused review-gated run and must carry linkage back to the prior execution when available.
+13. Resumed execution must re-run structural and pre-determinism validation before continuing.
+14. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.

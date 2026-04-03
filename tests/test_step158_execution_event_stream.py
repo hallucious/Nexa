@@ -213,3 +213,27 @@ def test_runtime_pauses_for_review_when_review_gate_is_enabled(tmp_path):
     assert completed.payload["status"] == "partial"
     assert completed.payload["error_type"] == "ReviewRequiredPause"
     assert completed.payload["review_required"]["reason"] == "sample_validation"
+
+
+def test_review_required_payload_contains_minimal_resume_contract():
+    runtime = NodeExecutionRuntime(
+        provider_executor=DummyProviderExecutor(),
+        plugin_registry={},
+        event_emitter=ExecutionEventEmitter(event_file=None),
+    )
+
+    payload = runtime._extract_review_required_payload(
+        plugin_id="demo.plugin",
+        plugin_result=PluginResult(
+            output={"x": 1},
+            trace={"review_required": {"reason": "human_check"}},
+        ),
+    )
+
+    assert payload is not None
+    assert payload["resume"]["can_resume"] is True
+    assert payload["resume"]["resume_strategy"] == "restart_from_node"
+    assert payload["resume"]["requires_revalidation"] == [
+        "structural_validation",
+        "determinism_pre_validation",
+    ]
