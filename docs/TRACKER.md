@@ -17,7 +17,7 @@ The current repository state includes the following implemented surface:
 * ExecutionConfig registry, hashing, validation, and loading
 * savefile-based `.nex` execution
 * observability and runtime metrics
-* execution event stream foundation (started/completed/failed/warning/progress/artifact preview)
+* execution event stream foundation (started/completed/failed/warning/progress/artifact preview/review_required)
 * graph-only runtime execution in `NodeExecutionRuntime`
 
 ### 2. Prompt / Provider Runtime
@@ -285,3 +285,11 @@ CLI
 * lightweight `preview_kind` / `preview_summary` metadata added for preview consumers
 * full artifact truth remains separate from preview observability payloads
 * focused execution-event / timeline tests passed after the alignment
+
+### Step162: Review-Required Event Foundation
+
+* runtime can now emit `review_required` as a first-class execution event
+* plugin trace metadata may request review through a bounded runtime-owned event surface
+* minimal payload defaults include `reason` and non-blocking semantics
+* review-required signaling remains separate from structural truth and does not yet force runtime pause/block behavior by itself
+* focused execution-event tests passed after the alignment

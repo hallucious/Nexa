@@ -230,6 +230,36 @@ class NodeExecutionRuntime:
 
         self._emit_event("progress", payload, node_id=node_id)
 
+    def _emit_review_required_event_from_plugin_result(
+        self,
+        node_id: str,
+        plugin_id: str,
+        plugin_result: PluginResult,
+    ) -> None:
+        if not isinstance(plugin_result.trace, dict):
+            return
+
+        review_required = plugin_result.trace.get("review_required")
+        if review_required is None:
+            return
+
+        payload: Dict[str, Any] = {"plugin_id": plugin_id}
+
+        if isinstance(review_required, dict):
+            payload.update(review_required)
+        elif isinstance(review_required, str):
+            payload["reason"] = review_required
+        elif isinstance(review_required, bool):
+            if not review_required:
+                return
+        else:
+            payload["reason"] = str(review_required)
+
+        payload.setdefault("reason", "plugin_requested_review")
+        payload.setdefault("is_blocking", False)
+
+        self._emit_event("review_required", payload, node_id=node_id)
+
     # ------------------------------------------------------------------
     # Execution internals
     # ------------------------------------------------------------------
@@ -657,8 +687,14 @@ class NodeExecutionRuntime:
                 if isinstance(artifact, Artifact):
                     artifacts.append(artifact)
 
+            runtime_node_id = config.get("node_id") or config.get("config_id") or "execution_config"
             self._emit_progress_event_from_plugin_result(
-                node_id=config.get("node_id") or config.get("config_id") or "execution_config",
+                node_id=runtime_node_id,
+                plugin_id=plugin_id,
+                plugin_result=plugin_result,
+            )
+            self._emit_review_required_event_from_plugin_result(
+                node_id=runtime_node_id,
                 plugin_id=plugin_id,
                 plugin_result=plugin_result,
             )

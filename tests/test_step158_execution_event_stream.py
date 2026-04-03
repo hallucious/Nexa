@@ -123,3 +123,38 @@ def test_artifact_preview_event_marks_preview_as_non_final_truth():
     assert payload["is_final_artifact"] is False
     assert payload["preview_kind"] == "mapping"
     assert payload["preview_summary"] == "mapping[1]"
+
+
+def test_runtime_emits_review_required_event_from_plugin_result():
+    runtime = NodeExecutionRuntime(
+        provider_executor=DummyProviderExecutor(),
+        plugin_registry={},
+        event_emitter=ExecutionEventEmitter(event_file=None),
+    )
+    runtime.set_execution_id("exec-review")
+
+    result = PluginResult(
+        output={"result": "needs-review"},
+        trace={
+            "review_required": {
+                "reason": "sample_validation",
+                "sample_size": 5,
+            }
+        },
+    )
+
+    runtime._emit_review_required_event_from_plugin_result(
+        node_id="node-review",
+        plugin_id="demo.plugin",
+        plugin_result=result,
+    )
+
+    events = runtime.get_execution_events()
+    assert len(events) == 1
+    assert events[0].type == "review_required"
+    assert events[0].execution_id == "exec-review"
+    assert events[0].node_id == "node-review"
+    assert events[0].payload["plugin_id"] == "demo.plugin"
+    assert events[0].payload["reason"] == "sample_validation"
+    assert events[0].payload["sample_size"] == 5
+    assert events[0].payload["is_blocking"] is False
