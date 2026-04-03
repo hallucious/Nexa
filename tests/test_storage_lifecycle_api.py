@@ -584,3 +584,47 @@ def test_apply_execution_record_to_working_save_keeps_resume_ready_true_when_exe
     validation = updated.runtime.last_run['resume_anchor_validation']
     assert validation['anchor_valid'] is True
     assert validation['effective_resume_ready'] is True
+
+
+def test_apply_execution_record_to_working_save_keeps_replay_run_distinct_from_resume_ready():
+    working = make_working_save(node_ids=['n_done', 'n1'], source_commit_id='commit-1')
+    execution_surface = compute_execution_surface_fingerprint({
+        'circuit': {
+            'nodes': [{'id': 'n_done'}, {'id': 'n1'}],
+            'edges': [],
+            'entry': 'n1',
+            'outputs': [{'name': 'out', 'source': 'n1'}],
+        },
+        'resources': {'providers': {}, 'prompts': {}, 'plugins': {}},
+    })
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n1',
+        completed_node_ids=frozenset({'n_done'}),
+        review_required={'reason': 'human_review_required'},
+        source_commit_id='commit-1',
+        execution_surface_fingerprint=execution_surface,
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        trigger_type='replay_run',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n1',
+            'resume_from_node_id': 'n1',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['trigger_type'] == 'replay_run'
+    assert updated.runtime.last_run['replay_run'] is True
+    assert updated.runtime.last_run['resume_ready'] is False
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is False
+    assert any(issue['code'] == 'PAUSED_RUN_REPLAY_TRIGGER_CONFLICT' for issue in validation['issues'])

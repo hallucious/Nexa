@@ -205,6 +205,28 @@ def test_build_execution_record_reference_contract_exposes_pause_boundary_when_p
     assert contract['is_resume_ready'] is True
 
 
+def test_build_execution_record_reference_contract_marks_replay_run_without_resume_semantics():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        trigger_type='replay_run',
+        status='paused',
+        trace_ref='trace://exec-1',
+        event_stream_ref='events://exec-1',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'node_a',
+            'resume_from_node_id': 'node_a',
+            'resume_strategy': 'restart_from_node',
+        },
+    )
+    contract = build_execution_record_reference_contract(record)
+    assert contract['trigger_type'] == 'replay_run'
+    assert contract['is_replay_run'] is True
+    assert contract['is_replay_ready'] is True
+    assert contract['is_resume_ready'] is False
+
+
 def test_build_execution_record_reference_contract_reports_unresolved_refs():
     record = create_execution_record_from_snapshot(
         make_snapshot(),

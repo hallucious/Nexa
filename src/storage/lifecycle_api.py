@@ -417,6 +417,15 @@ def _validate_paused_run_resume_anchor(
 
     issues: list[dict[str, str]] = []
 
+    if execution_record.source.trigger_type == 'replay_run':
+        issues.append({
+            'code': 'PAUSED_RUN_REPLAY_TRIGGER_CONFLICT',
+            'message': (
+                'paused execution record originated from replay_run; replay semantics must not be '
+                'treated as resumability semantics'
+            ),
+        })
+
     pause_node_id = paused_run_state.get('paused_node_id') or pause_boundary.get('pause_node_id')
     resume_from_node_id = resume_request.get('resume_from_node_id') or pause_boundary.get('resume_from_node_id')
     paused_source_commit_id = paused_run_state.get('source_commit_id') if isinstance(paused_run_state.get('source_commit_id'), str) else None
@@ -754,6 +763,8 @@ def apply_execution_record_to_working_save(
     execution_record: ExecutionRecordModel,
 ) -> WorkingSaveModel:
     last_run = summarize_execution_record_for_working_save(execution_record)
+    if last_run.get('replay_run'):
+        last_run['resume_ready'] = False
     resume_anchor_validation = _validate_paused_run_resume_anchor(working_save, execution_record, last_run)
     if isinstance(resume_anchor_validation, dict):
         last_run['resume_anchor_validation'] = resume_anchor_validation

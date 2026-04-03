@@ -485,9 +485,13 @@ def build_execution_record_reference_contract_from_serialized_record(record_payl
     pause_boundary = diagnostics.get('pause_boundary') if isinstance(diagnostics.get('pause_boundary'), dict) else {}
     paused_run_state = diagnostics.get('paused_run_state') if isinstance(diagnostics.get('paused_run_state'), dict) else {}
     resume_request = _resume_request_from_paused_run_state_payload(paused_run_state)
+    trigger_type = source.get('trigger_type') if isinstance(source.get('trigger_type'), str) else 'manual_run'
+    is_replay_run = trigger_type == 'replay_run'
     return {
         'run_id': meta.get('run_id'),
         'commit_id': source.get('commit_id'),
+        'trigger_type': trigger_type,
+        'is_replay_run': is_replay_run,
         'primary_trace_ref': primary_trace_ref,
         'trace_ref': timeline.get('trace_ref'),
         'event_stream_ref': timeline.get('event_stream_ref'),
@@ -503,7 +507,7 @@ def build_execution_record_reference_contract_from_serialized_record(record_payl
         'resume_request': dict(resume_request) if resume_request else None,
         'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
         'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
-        'is_resume_ready': bool((pause_boundary.get('can_resume')) or resume_request),
+        'is_resume_ready': bool(not is_replay_run and ((pause_boundary.get('can_resume')) or resume_request)),
     }
 
 
@@ -896,9 +900,13 @@ def build_execution_record_reference_contract(record: ExecutionRecordModel) -> d
     pause_boundary = dict(record.diagnostics.pause_boundary or {}) if isinstance(record.diagnostics.pause_boundary, dict) else {}
     paused_run_state = dict(record.diagnostics.paused_run_state or {}) if isinstance(record.diagnostics.paused_run_state, dict) else {}
     resume_request = _resume_request_from_paused_run_state_payload(paused_run_state)
+    trigger_type = record.source.trigger_type
+    is_replay_run = trigger_type == 'replay_run'
     return {
         'run_id': record.meta.run_id,
         'commit_id': record.source.commit_id,
+        'trigger_type': trigger_type,
+        'is_replay_run': is_replay_run,
         'primary_trace_ref': primary_trace_ref,
         'trace_ref': record.timeline.trace_ref,
         'event_stream_ref': record.timeline.event_stream_ref,
@@ -914,7 +922,7 @@ def build_execution_record_reference_contract(record: ExecutionRecordModel) -> d
         'resume_request': dict(resume_request) if resume_request else None,
         'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
         'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
-        'is_resume_ready': bool((pause_boundary.get('can_resume')) or resume_request),
+        'is_resume_ready': bool(not is_replay_run and ((pause_boundary.get('can_resume')) or resume_request)),
     }
 
 
@@ -1002,6 +1010,8 @@ def synthesize_execution_record_reference_contract_from_payload(payload: dict[st
     contract = {
         'run_id': execution_id,
         'commit_id': replay_payload.get('commit_id'),
+        'trigger_type': 'replay_run',
+        'is_replay_run': True,
         'primary_trace_ref': primary_trace_ref,
         'trace_ref': trace_ref,
         'event_stream_ref': event_stream_ref,
@@ -1025,6 +1035,8 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
     return {
         'run_id': record.meta.run_id,
         'commit_id': record.source.commit_id,
+        'trigger_type': record.source.trigger_type,
+        'replay_run': reference_contract.get('is_replay_run', False),
         'status': record.meta.status,
         'started_at': record.meta.started_at,
         'finished_at': record.meta.finished_at,
