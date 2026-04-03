@@ -1,5 +1,5 @@
 Spec ID: execution_model
-Version: 1.6.0
+Version: 1.7.0
 Status: Active
 Category: architecture
 Depends On:
@@ -80,3 +80,30 @@ Reason codes (minimal, informational):
 
 - `ENG-UPSTREAM-FAIL`: upstream failure prevents `ALL_SUCCESS`
 - `ENG-UPSTREAM-NO-SUCCESS`: no upstream success can satisfy `ANY_SUCCESS`
+
+## 6. Runtime Execution Event Surface
+
+The engine may emit a runtime-owned execution event stream as an observability surface.
+This event stream is UI-agnostic and does not replace `ExecutionTrace`.
+
+Minimum stable event vocabulary:
+
+- `execution_started`
+- `node_started`
+- `progress`
+- `artifact_preview`
+- `warning`
+- `node_completed`
+- `execution_completed`
+- `execution_failed`
+
+Rules:
+
+1. Event ordering must follow real runtime ordering.
+2. `execution_id` must be preserved across all events from the same run.
+3. `node_started` / `node_completed` must use real node identity.
+4. `execution_completed` is emitted only for successful run completion.
+5. `execution_failed` is emitted only for failed run completion.
+6. `warning` is advisory and must not redefine structural or execution truth.
+7. `artifact_preview` is preview-safe observability data only and must not redefine final artifact truth.
+8. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.

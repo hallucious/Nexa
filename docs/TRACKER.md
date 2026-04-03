@@ -17,6 +17,7 @@ The current repository state includes the following implemented surface:
 * ExecutionConfig registry, hashing, validation, and loading
 * savefile-based `.nex` execution
 * observability and runtime metrics
+* execution event stream foundation (started/completed/failed/warning/progress/artifact preview)
 * graph-only runtime execution in `NodeExecutionRuntime`
 
 ### 2. Prompt / Provider Runtime
@@ -61,7 +62,7 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1117 passed, 3 skipped
+1212 passed, 3 skipped
 ```
 
 * authoritative storage hardening baseline commit: `15031be`

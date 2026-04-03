@@ -1,5 +1,5 @@
 Spec ID: trace_model
-Version: 1.4.0
+Version: 1.5.0
 Status: Official Contract
 Category: architecture
 Depends On:
@@ -346,3 +346,21 @@ SHA256(structural_fingerprint + ":" + environment_fingerprint)
 Rules:
 - structural_fingerprint MUST remain environment invariant.
 - execution_fingerprint MUST change if environment_fingerprint changes.
+
+----------------------------------------------------------------------
+8) Relationship to Runtime Execution Events
+----------------------------------------------------------------------
+
+Nexa may emit a runtime execution event stream for observability, progress,
+artifact preview, and later timeline construction.
+
+The execution event stream is related to Trace but is not a replacement for Trace.
+
+Rules:
+
+- Trace remains the authoritative execution evidence record.
+- Event streams may be used to build timelines and progress views.
+- Event streams may carry preview-safe artifact summaries.
+- Event streams must not redefine final artifact truth, approval truth, or storage truth.
+- Event streams must preserve real `execution_id` / `node_id` identity when emitted.
+- Failure terminal events (`execution_failed`) and success terminal events (`execution_completed`) must remain distinct.

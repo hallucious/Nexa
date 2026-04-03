@@ -550,6 +550,8 @@ class CircuitRunner:
         )
 
         execution_failed = False
+        execution_error: Optional[Exception] = None
+        executed_nodes_count = 0
         try:
             for wave_index, wave in enumerate(waves):
                 with ThreadPoolExecutor() as executor:
@@ -562,24 +564,32 @@ class CircuitRunner:
                     for node_id, future in futures.items():
                         node_output = future.result()
                         current_state[node_id] = node_output
+                        executed_nodes_count += 1
                         node_outputs = current_state.setdefault("__node_outputs__", {})
                         if isinstance(node_outputs, dict):
                             node_outputs[node_id] = node_output
-        except Exception:
+        except Exception as exc:
             execution_failed = True
+            execution_error = exc
             raise
         finally:
             visible_keys = len([k for k in current_state if k != "__node_outputs__"])
+            completed_event_type = "execution_failed" if execution_failed else "execution_completed"
+            completed_payload = {
+                "circuit_id": circuit_id,
+                "execution_id": execution_id,
+                "total_nodes": len(nodes),
+                "total_waves": len(waves),
+                "executed_nodes": executed_nodes_count,
+                "state_keys": visible_keys,
+            }
+            if execution_error is not None:
+                completed_payload["error"] = str(execution_error)
+                completed_payload["error_type"] = type(execution_error).__name__
+
             self._emit_runtime_event(
-                "execution_completed",
-                {
-                    "circuit_id": circuit_id,
-                    "execution_id": execution_id,
-                    "total_nodes": len(nodes),
-                    "total_waves": len(waves),
-                    "executed_nodes": len(nodes),
-                    "state_keys": visible_keys,
-                },
+                completed_event_type,
+                completed_payload,
             )
             finished_ms = time.monotonic()
 
@@ -594,6 +604,17 @@ class CircuitRunner:
             post_decision: PostDecisionResult = self._policy.decide_post(
                 post_det_result, strict_determinism=strict_determinism
             )
+            if post_decision.decision is ValidationDecision.WARN:
+                warning_count = len(post_det_result.violations) if post_det_result is not None else 0
+                self._emit_runtime_event(
+                    "warning",
+                    {
+                        "circuit_id": circuit_id,
+                        "execution_id": execution_id,
+                        "reason": post_decision.reason,
+                        "warning_count": warning_count,
+                    },
+                )
 
             final_status = "failed" if execution_failed else "success"
 

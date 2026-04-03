@@ -747,52 +747,69 @@ class NodeExecutionRuntime:
         node_started_at = time.time()
         self._emit_event("node_started", {}, node_id=node_id)
 
-        graph = self._compile_execution_plan(config)
-        provider_output = self._execute_compiled_graph(config, graph, flat_context, trace, artifacts) if graph is not None else None
-
-
-        def validation_stage():
-            trace.events.append("validation")
-            compat_context = self._build_compat_context(flat_context)
-            for rule in config.get("validation_rules", []):
-                self._run_validation(rule, compat_context)
-
-        self._measure("validation", validation_stage, trace)
-
         try:
-            final_output = self._resolve_final_output(
-                config=config,
-                graph=graph,
-                flat_context=flat_context,
+            graph = self._compile_execution_plan(config)
+            provider_output = self._execute_compiled_graph(config, graph, flat_context, trace, artifacts) if graph is not None else None
+
+            def validation_stage():
+                trace.events.append("validation")
+                compat_context = self._build_compat_context(flat_context)
+                for rule in config.get("validation_rules", []):
+                    self._run_validation(rule, compat_context)
+
+            self._measure("validation", validation_stage, trace)
+
+            try:
+                final_output = self._resolve_final_output(
+                    config=config,
+                    graph=graph,
+                    flat_context=flat_context,
+                    trace=trace,
+                    provider_output=provider_output,
+                )
+            except FinalOutputResolverError as exc:
+                raise ValueError(f"final output resolution failed: {exc}") from exc
+
+            result = NodeResult(
+                node_id=node_id,
+                output=final_output,
+                artifacts=artifacts,
                 trace=trace,
-                provider_output=provider_output,
             )
-        except FinalOutputResolverError as exc:
-            raise ValueError(f"final output resolution failed: {exc}") from exc
 
-        result = NodeResult(
-            node_id=node_id,
-            output=final_output,
-            artifacts=artifacts,
-            trace=trace,
-        )
+            self._emit_artifact_preview_events(node_id, artifacts)
 
-        self._emit_artifact_preview_events(node_id, artifacts)
+            duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
+            self._emit_event(
+                "node_completed",
+                {
+                    "status": "success",
+                    "duration_ms": duration_ms,
+                    "artifact_count": len(artifacts),
+                    "metrics": self.get_metrics(),
+                },
+                node_id=node_id,
+            )
 
-        duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
-        self._emit_event(
-            "node_completed",
-            {
-                "duration_ms": duration_ms,
-                "artifact_count": len(artifacts),
-                "metrics": self.get_metrics(),
-            },
-            node_id=node_id,
-        )
-
-        if runtime_config.get("write_observability", True):
-            self._write_observability(node_id, trace)
-        return result
+            return result
+        except Exception as exc:
+            duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
+            self._emit_event(
+                "node_completed",
+                {
+                    "status": "failed",
+                    "duration_ms": duration_ms,
+                    "artifact_count": len(artifacts),
+                    "metrics": self.get_metrics(),
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                node_id=node_id,
+            )
+            raise
+        finally:
+            if runtime_config.get("write_observability", True):
+                self._write_observability(node_id, trace)
 
     def execute(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
         normalized_node = self._normalize_node_payload(node)
