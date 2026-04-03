@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Generic, List, Set, TypeVar
+from typing import Callable, Dict, Generic, List, Optional, Set, TypeVar
 
 from src.engine.compiled_resource_graph import CompiledResourceGraph
 
@@ -91,12 +92,30 @@ class GraphScheduler:
     def execute(
         self,
         executor: Callable[[str], T],
+        *,
+        max_workers: Optional[int] = None,
     ) -> GraphExecutionResult[T]:
         waves = self.build_waves()
         results = GraphExecutionResult[T](waves=waves)
 
-        for wave in waves:
-            for resource_id in wave.resource_ids:
-                results.resource_results[resource_id] = executor(resource_id)
+        worker_limit = max_workers if isinstance(max_workers, int) and max_workers > 0 else None
+
+        with ThreadPoolExecutor(max_workers=worker_limit) as pool:
+            for wave in waves:
+                if len(wave.resource_ids) <= 1:
+                    for resource_id in wave.resource_ids:
+                        results.resource_results[resource_id] = executor(resource_id)
+                    continue
+
+                future_map = {
+                    resource_id: pool.submit(executor, resource_id)
+                    for resource_id in wave.resource_ids
+                }
+                wave_results = {
+                    resource_id: future.result()
+                    for resource_id, future in future_map.items()
+                }
+                for resource_id in wave.resource_ids:
+                    results.resource_results[resource_id] = wave_results[resource_id]
 
         return results
