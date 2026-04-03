@@ -148,18 +148,35 @@ def test_apply_execution_record_to_working_save_propagates_pause_boundary_summar
     assert updated.runtime.last_run['termination_reason'] == 'review_required'
     assert updated.runtime.last_run['pause_boundary']['pause_node_id'] == 'node_b'
     assert updated.runtime.last_run['pause_boundary']['resume_from_node_id'] == 'node_b'
-    assert updated.runtime.last_run['resume_ready'] is True
-    assert updated.runtime.last_run['resume_anchor_validation']['anchor_valid'] is True
+    assert updated.runtime.last_run['resume_ready'] is False
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is False
+    assert any(issue['code'] == 'PAUSED_RUN_EXECUTION_SURFACE_FINGERPRINT_MISSING' for issue in validation['issues'])
+    assert any(issue['code'] == 'PAUSED_RUN_RESUME_REQUEST_EXECUTION_SURFACE_FINGERPRINT_MISSING' for issue in validation['issues'])
 
 
 def test_apply_execution_record_to_working_save_propagates_paused_run_state_and_resume_request_summary():
     working = make_working_save(source_commit_id='commit-1')
+    execution_surface = compute_execution_surface_fingerprint({
+        'circuit': {
+            'nodes': [{'id': 'n1'}],
+            'edges': [],
+            'entry': 'n1',
+            'outputs': [{'name': 'out', 'source': 'n1'}],
+        },
+        'resources': {
+            'providers': {},
+            'prompts': {},
+            'plugins': {},
+        },
+    })
     paused_run_state = PausedRunState.build(
         paused_execution_id='exec-paused',
         paused_node_id='n1',
         completed_node_ids=frozenset(),
         review_required={'reason': 'human_review_required'},
         source_commit_id='commit-1',
+        execution_surface_fingerprint=execution_surface,
     )
     record = create_execution_record_from_snapshot(
         make_snapshot(status='partial'),
@@ -195,6 +212,15 @@ def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_wh
         completed_node_ids=frozenset(),
         review_required={'reason': 'human_review_required'},
         source_commit_id='commit-1',
+        execution_surface_fingerprint=compute_execution_surface_fingerprint({
+            'circuit': {
+                'nodes': [{'id': 'n_current'}],
+                'edges': [],
+                'entry': 'n1',
+                'outputs': [{'name': 'out', 'source': 'n1'}],
+            },
+            'resources': {'providers': {}, 'prompts': {}, 'plugins': {}},
+        }),
     )
     record = create_execution_record_from_snapshot(
         make_snapshot(status='partial'),
@@ -226,6 +252,16 @@ def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_wh
         paused_node_id='n1',
         completed_node_ids=frozenset({'n_stale'}),
         review_required={'reason': 'human_review_required'},
+        source_commit_id='commit-1',
+        execution_surface_fingerprint=compute_execution_surface_fingerprint({
+            'circuit': {
+                'nodes': [{'id': 'n1'}],
+                'edges': [],
+                'entry': 'n1',
+                'outputs': [{'name': 'out', 'source': 'n1'}],
+            },
+            'resources': {'providers': {}, 'prompts': {}, 'plugins': {}},
+        }),
     )
     record = create_execution_record_from_snapshot(
         make_snapshot(status='partial'),
@@ -251,11 +287,25 @@ def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_wh
 
 def test_apply_execution_record_to_working_save_keeps_resume_ready_true_when_current_circuit_matches_paused_boundary():
     working = make_working_save(node_ids=['n_done', 'n1'], source_commit_id='commit-1')
+    execution_surface = compute_execution_surface_fingerprint({
+        'circuit': {
+            'nodes': [{'id': 'n_done'}, {'id': 'n1'}],
+            'edges': [],
+            'entry': 'n1',
+            'outputs': [{'name': 'out', 'source': 'n1'}],
+        },
+        'resources': {
+            'providers': {},
+            'prompts': {},
+            'plugins': {},
+        },
+    })
     paused_run_state = PausedRunState.build(
         paused_execution_id='exec-paused',
         paused_node_id='n1',
         completed_node_ids=frozenset({'n_done'}),
         review_required={'reason': 'human_review_required'},
+        execution_surface_fingerprint=execution_surface,
     )
     record = create_execution_record_from_snapshot(
         make_snapshot(status='partial'),
@@ -310,6 +360,39 @@ def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_on
     assert validation['anchor_valid'] is False
     assert validation['working_save_commit_anchor_id'] == 'commit-current'
     assert any(issue['code'] == 'PAUSED_RUN_WORKING_SAVE_COMMIT_ANCHOR_MISMATCH' for issue in validation['issues'])
+
+
+
+def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_when_execution_surface_fingerprint_missing():
+    working = make_working_save(node_ids=['n_done', 'n1'], source_commit_id='commit-1')
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n1',
+        completed_node_ids=frozenset({'n_done'}),
+        review_required={'reason': 'human_review_required'},
+        source_commit_id='commit-1',
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n1',
+            'resume_from_node_id': 'n1',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['resume_ready'] is False
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is False
+    assert any(issue['code'] == 'PAUSED_RUN_EXECUTION_SURFACE_FINGERPRINT_MISSING' for issue in validation['issues'])
+    assert any(issue['code'] == 'PAUSED_RUN_RESUME_REQUEST_EXECUTION_SURFACE_FINGERPRINT_MISSING' for issue in validation['issues'])
 
 
 def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_on_execution_surface_fingerprint_mismatch():

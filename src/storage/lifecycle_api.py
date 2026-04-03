@@ -441,6 +441,33 @@ def _validate_paused_run_resume_anchor(
     })
     record_source_commit_id = execution_record.source.commit_id
 
+    if not paused_execution_surface_fingerprint:
+        issues.append({
+            'code': 'PAUSED_RUN_EXECUTION_SURFACE_FINGERPRINT_MISSING',
+            'message': (
+                'paused_run_state execution_surface_fingerprint is missing; '
+                'resume readiness cannot be trusted without a stored execution-surface fingerprint'
+            ),
+        })
+
+    if not resume_execution_surface_fingerprint:
+        issues.append({
+            'code': 'PAUSED_RUN_RESUME_REQUEST_EXECUTION_SURFACE_FINGERPRINT_MISSING',
+            'message': (
+                'resume_request execution_surface_fingerprint is missing; '
+                'resume readiness cannot be trusted without a resume-request execution-surface fingerprint'
+            ),
+        })
+
+    if not current_execution_surface_fingerprint:
+        issues.append({
+            'code': 'PAUSED_RUN_WORKING_SAVE_EXECUTION_SURFACE_FINGERPRINT_MISSING',
+            'message': (
+                'current Working Save execution_surface_fingerprint is missing; '
+                'resume readiness cannot be trusted without a current execution-surface fingerprint'
+            ),
+        })
+
     if paused_source_commit_id and paused_source_commit_id != record_source_commit_id:
         issues.append({
             'code': 'PAUSED_RUN_SOURCE_COMMIT_MISMATCH',

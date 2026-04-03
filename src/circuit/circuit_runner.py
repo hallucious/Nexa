@@ -600,6 +600,8 @@ class CircuitRunner:
         execution_surface_fingerprint = raw.get("execution_surface_fingerprint")
         if execution_surface_fingerprint is not None and not isinstance(execution_surface_fingerprint, str):
             raise TypeError("execution_surface_fingerprint must be a string when provided")
+        if isinstance(execution_surface_fingerprint, str) and not execution_surface_fingerprint:
+            raise ValueError("execution_surface_fingerprint must be non-empty when provided")
 
         current_structure_fingerprint = None
         current_execution_surface_fingerprint = None
@@ -609,6 +611,17 @@ class CircuitRunner:
 
         required_revalidation = _normalize_required_revalidation(raw.get("requires_revalidation"))
         if persisted is not None:
+            if not persisted.execution_surface_fingerprint:
+                raise ValueError(
+                    "persisted paused run state is missing execution_surface_fingerprint; "
+                    "resume is not allowed without an execution-surface fingerprint"
+                )
+            if not execution_surface_fingerprint:
+                raise ValueError(
+                    "__resume__ is missing execution_surface_fingerprint; "
+                    "resume is not allowed without an execution-surface fingerprint"
+                )
+
             persisted_required_revalidation = tuple(persisted.required_revalidation)
             if required_revalidation and required_revalidation != persisted_required_revalidation:
                 raise ValueError(
@@ -651,6 +664,12 @@ class CircuitRunner:
             raise ValueError(
                 "current circuit structure_fingerprint does not match paused run state; "
                 "resume is not allowed across structurally drifted drafts"
+            )
+
+        if persisted is not None and not current_execution_surface_fingerprint:
+            raise ValueError(
+                "current circuit execution_surface_fingerprint is missing; "
+                "resume is not allowed without a current execution-surface fingerprint"
             )
 
         if (

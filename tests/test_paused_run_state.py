@@ -366,6 +366,7 @@ class TestResumeWithPausedRunState:
             "review_required": {"reason": "quality"},
             "created_at": "2024-01-01T00:00:00+00:00",
             "paused_at": "2024-01-01T00:00:00+00:00",
+            "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
         }
         base.update(kwargs)
         return base
@@ -377,6 +378,7 @@ class TestResumeWithPausedRunState:
             "__resume__": {
                 "resume_from_node_id": "n_b",
                 "previous_execution_id": "exec-paused-1",
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(),
             "__node_outputs__": {"n_a": "out-a"},
@@ -389,7 +391,10 @@ class TestResumeWithPausedRunState:
         runner = self._runner()
         # paused_node_id = "n_missing" which doesn't exist in the circuit
         state = {
-            "__resume__": {"resume_from_node_id": "n_b"},
+            "__resume__": {
+                "resume_from_node_id": "n_b",
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
+            },
             "__paused_run_state__": self._prs_dict(paused_node_id="n_missing"),
             "__node_outputs__": {"n_a": "out-a"},
         }
@@ -400,7 +405,10 @@ class TestResumeWithPausedRunState:
         """If a completed node no longer exists in the circuit, resume must fail."""
         runner = self._runner()
         state = {
-            "__resume__": {"resume_from_node_id": "n_b"},
+            "__resume__": {
+                "resume_from_node_id": "n_b",
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
+            },
             "__paused_run_state__": self._prs_dict(completed_node_ids=["n_a", "n_removed"]),
             "__node_outputs__": {"n_a": "out-a"},
         }
@@ -411,7 +419,10 @@ class TestResumeWithPausedRunState:
         """A non-dict __paused_run_state__ must be rejected with TypeError."""
         runner = self._runner()
         state = {
-            "__resume__": {"resume_from_node_id": "n_b"},
+            "__resume__": {
+                "resume_from_node_id": "n_b",
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
+            },
             "__paused_run_state__": "not-a-dict",
             "__node_outputs__": {"n_a": "out-a"},
         }
@@ -425,6 +436,7 @@ class TestResumeWithPausedRunState:
             "__resume__": {
                 "resume_from_node_id": "n_b",
                 "previous_execution_id": "exec-paused-1",
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(),
             "__node_outputs__": {"n_a": "out-a"},
@@ -442,6 +454,7 @@ class TestResumeWithPausedRunState:
         state = {
             "__resume__": {
                 "resume_from_node_id": "n_a",   # mismatch: prs says n_b
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(),  # paused_node_id = "n_b"
             "__node_outputs__": {"n_a": "out-a"},
@@ -461,6 +474,31 @@ class TestResumeWithPausedRunState:
             "__node_outputs__": {"n_a": "out-a"},
         }
         with pytest.raises(ValueError, match="__paused_run_state__.*__resume__ is absent"):
+            runner.execute(self._two_node_circuit(), state)
+
+    def test_persisted_paused_run_state_without_execution_surface_fingerprint_is_rejected(self):
+        runner = self._runner()
+        state = {
+            "__resume__": {
+                "resume_from_node_id": "n_b",
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
+            },
+            "__paused_run_state__": self._prs_dict(execution_surface_fingerprint=None),
+            "__node_outputs__": {"n_a": "out-a"},
+        }
+        with pytest.raises(ValueError, match="paused run state is missing execution_surface_fingerprint"):
+            runner.execute(self._two_node_circuit(), state)
+
+    def test_resume_request_without_execution_surface_fingerprint_is_rejected_when_persisted_state_present(self):
+        runner = self._runner()
+        state = {
+            "__resume__": {
+                "resume_from_node_id": "n_b",
+            },
+            "__paused_run_state__": self._prs_dict(),
+            "__node_outputs__": {"n_a": "out-a"},
+        }
+        with pytest.raises(ValueError, match="__resume__ is missing execution_surface_fingerprint"):
             runner.execute(self._two_node_circuit(), state)
 
 
