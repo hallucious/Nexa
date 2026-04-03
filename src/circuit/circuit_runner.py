@@ -55,6 +55,7 @@ from src.engine.validation.result import (
     Violation,
 )
 from src.engine.node_execution_runtime import ReviewRequiredPause
+from src.engine.paused_run_state import PausedRunState, PausedRunStateError
 
 
 # ── Cross-node reference extraction ──────────────────────────────────────────
@@ -267,13 +268,30 @@ class CircuitRunResult(dict):
     typed boundary, not mixed into execution state.
     """
 
-    def __init__(self, state: Dict[str, Any], governance: CircuitGovernanceTrace):
+    def __init__(
+        self,
+        state: Dict[str, Any],
+        governance: CircuitGovernanceTrace,
+        paused_run_state: Optional["PausedRunState"] = None,
+    ):
         super().__init__(state)
         self._governance = governance
+        self._paused_run_state = paused_run_state
 
     @property
     def governance(self) -> CircuitGovernanceTrace:
         return self._governance
+
+    @property
+    def paused_run_state(self) -> Optional["PausedRunState"]:
+        """
+        The persisted pause-state produced when execution was paused.
+
+        None unless the run terminated with final_status == "paused".
+        Callers may serialise this and pass it back via state["__paused_run_state__"]
+        on resume to enable explicit structural drift detection.
+        """
+        return self._paused_run_state
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -462,8 +480,48 @@ class CircuitRunner:
 
     # ── Review-gate resume helpers ─────────────────────────────────────────────
 
-    def _extract_resume_request(self, state: Dict[str, Any]) -> Optional[ReviewGateResumeRequest]:
+    def _extract_resume_request(
+        self,
+        state: Dict[str, Any],
+        circuit_nodes: Optional[List[Dict[str, Any]]] = None,
+    ) -> Optional[ReviewGateResumeRequest]:
+        """
+        Extract and validate a resume request from execution state.
+
+        If state contains ``__paused_run_state__`` (a serialised PausedRunState
+        dict), it is loaded and validated against the current circuit before
+        the resume is permitted.  This is the explicit stale/invalid-state
+        rejection contract.
+
+        The ``__resume__`` key is always consumed (popped) regardless of whether
+        a paused_run_state is also present.  ``__paused_run_state__`` is also
+        consumed so it does not pollute working state.
+        """
+        # Extract optional persisted pause state first (consume before __resume__)
+        raw_prs = state.pop("__paused_run_state__", None)
+        persisted: Optional[PausedRunState] = None
+        if raw_prs is not None:
+            if not isinstance(raw_prs, dict):
+                raise TypeError("state['__paused_run_state__'] must be a dict when provided")
+            try:
+                persisted = PausedRunState.from_dict(raw_prs)
+            except PausedRunStateError as exc:
+                raise ValueError(f"cannot load persisted paused run state: {exc}") from exc
+            # Validate structural integrity against the current circuit
+            if circuit_nodes is not None:
+                persisted.validate_for_resume(circuit_nodes)
+
         raw = state.pop("__resume__", None)
+
+        # If a persisted pause state is present but no __resume__ was provided,
+        # reject explicitly.  Auto-deriving the resume target would hide the
+        # caller's intent and make the boundary less observable.
+        if persisted is not None and raw is None:
+            raise ValueError(
+                "__paused_run_state__ was provided but __resume__ is absent; "
+                "supply __resume__ with resume_from_node_id to proceed"
+            )
+
         if raw is None:
             return None
         if not isinstance(raw, dict):
@@ -473,9 +531,25 @@ class CircuitRunner:
         if not isinstance(resume_from_node_id, str) or not resume_from_node_id:
             raise ValueError("resume request requires non-empty resume_from_node_id")
 
+        # Enforce durable boundary: __resume__.resume_from_node_id must exactly
+        # match the persisted paused_node_id.  A mismatch means the caller is
+        # attempting to resume from a different node than the one that was paused,
+        # which violates the durable boundary contract.
+        if persisted is not None and resume_from_node_id != persisted.paused_node_id:
+            raise ValueError(
+                f"resume_from_node_id '{resume_from_node_id}' does not match "
+                f"persisted paused_node_id '{persisted.paused_node_id}'; "
+                "resume must restart from the node recorded in the paused run state"
+            )
+
         previous_execution_id = raw.get("previous_execution_id")
         if previous_execution_id is not None and not isinstance(previous_execution_id, str):
             raise TypeError("previous_execution_id must be a string when provided")
+
+        # If a persisted paused run state was also provided, use its execution ID
+        # as the authoritative prior-run linkage (overrides __resume__ field).
+        if persisted is not None and not previous_execution_id:
+            previous_execution_id = persisted.paused_execution_id
 
         reason = raw.get("reason") or "review_gate_resume"
         if not isinstance(reason, str):
@@ -581,9 +655,9 @@ class CircuitRunner:
         circuit_id = circuit.get("id")
 
         current_state: Dict[str, Any] = dict(state)
-        resume_request = self._extract_resume_request(current_state)
-        current_state.setdefault("__node_outputs__", {})
         nodes: List[Dict[str, Any]] = circuit.get("nodes", [])
+        resume_request = self._extract_resume_request(current_state, circuit_nodes=nodes)
+        current_state.setdefault("__node_outputs__", {})
 
         # ── Phase 1: Structural pre-validation ───────────────────────────────
         structural_result = self._run_structural_validation(circuit)
@@ -653,6 +727,7 @@ class CircuitRunner:
         execution_paused = False
         pause_signal: Optional[ReviewRequiredPause] = None
         executed_nodes_count = 0
+        produced_paused_run_state: Optional[PausedRunState] = None
         try:
             for wave_index, wave in enumerate(waves):
                 with ThreadPoolExecutor() as executor:
@@ -742,6 +817,24 @@ class CircuitRunner:
 
             final_status = "paused" if execution_paused else ("failed" if execution_failed else "success")
 
+            # ── Build persisted pause-state on pause ──────────────────────────
+            produced_paused_run_state: Optional[PausedRunState] = None
+            if execution_paused and pause_signal is not None:
+                node_outputs = current_state.get("__node_outputs__") or {}
+                completed = frozenset(
+                    nid for nid in node_outputs
+                    if isinstance(nid, str) and nid != pause_signal.node_id
+                )
+                produced_paused_run_state = PausedRunState.build(
+                    paused_execution_id=execution_id,
+                    paused_node_id=pause_signal.node_id,
+                    completed_node_ids=completed,
+                    review_required=dict(pause_signal.payload),
+                    previous_execution_id=(
+                        resume_request.previous_execution_id if resume_request else None
+                    ),
+                )
+
             governance = self._build_governance_trace(
                 execution_id=execution_id,
                 circuit_id=circuit_id,
@@ -757,4 +850,4 @@ class CircuitRunner:
                 finished_at_ms=finished_ms,
             )
 
-        return CircuitRunResult(current_state, governance)
+        return CircuitRunResult(current_state, governance, paused_run_state=produced_paused_run_state)
