@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import json
 
+from src.circuit.circuit_runner import CircuitGovernanceTrace, CircuitRunResult
 from src.engine.execution_artifact_hashing import ExecutionHashReport, NodeOutputHash
+from src.engine.paused_run_state import PausedRunState
 from src.engine.execution_snapshot import ExecutionSnapshotBuilder
 from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
 from src.storage.execution_record_api import (
@@ -788,3 +790,103 @@ def test_materialized_paused_record_summary_exposes_resume_ready_boundary():
     assert contract['pause_boundary']['pause_node_id'] == 'node_a'
     assert contract['pause_boundary']['resume_from_node_id'] == 'node_a'
     assert contract['is_resume_ready'] is True
+
+
+def _make_governance(final_status: str = 'paused') -> CircuitGovernanceTrace:
+    return CircuitGovernanceTrace(
+        execution_id='exec-paused',
+        circuit_id='demo-circuit',
+        structural_success=True,
+        structural_violations=[],
+        determinism_pre_performed=False,
+        determinism_pre_success=True,
+        determinism_pre_violations=[],
+        pre_decision='allow',
+        pre_decision_reason='ok',
+        execution_allowed=True,
+        determinism_post_performed=False,
+        determinism_post_success=True,
+        determinism_post_violations=[],
+        post_decision='allow',
+        post_decision_reason='ok',
+        execution_completed=(final_status == 'success'),
+        final_status=final_status,
+        started_at_ms=0,
+        finished_at_ms=1,
+        duration_ms=1,
+    )
+
+
+def test_create_execution_record_from_snapshot_preserves_paused_run_state_and_resume_request():
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='node_a',
+        completed_node_ids=frozenset({'node_done'}),
+        review_required={'reason': 'human_review_required'},
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        status='paused',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'node_a',
+            'resume_from_node_id': 'node_a',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    assert record.diagnostics.paused_run_state is not None
+    assert record.diagnostics.paused_run_state['paused_node_id'] == 'node_a'
+
+    contract = build_execution_record_reference_contract(record)
+    assert contract['paused_run_state']['paused_execution_id'] == 'exec-paused'
+    assert contract['resume_request']['resume_from_node_id'] == 'node_a'
+    assert contract['resume_request']['previous_execution_id'] == 'exec-paused'
+    assert contract['is_resume_ready'] is True
+
+
+def test_create_serialized_execution_record_from_circuit_run_auto_reads_circuit_run_result_paused_state():
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='node_pause',
+        completed_node_ids=frozenset({'node_done'}),
+        review_required={'reason': 'quality_review_required'},
+    )
+    final_state = CircuitRunResult(
+        {'node_done': {'value': 'done'}, 'node_pause': {'status': 'review_required'}},
+        _make_governance('paused'),
+        paused_run_state=paused_run_state,
+    )
+    payload = create_serialized_execution_record_from_circuit_run(
+        {'id': 'demo-circuit', 'nodes': [{'id': 'node_done'}, {'id': 'node_pause'}]},
+        final_state,
+        execution_id='exec-paused',
+        trace={
+            'events': [
+                {
+                    'type': 'execution_paused',
+                    'payload': {
+                        'pause_node_id': 'node_pause',
+                        'reason': 'quality_review_required',
+                        'resume': {
+                            'can_resume': True,
+                            'resume_from_node_id': 'node_pause',
+                            'resume_strategy': 'restart_from_node',
+                            'requires_revalidation': ['structural_validation'],
+                        },
+                    },
+                }
+            ]
+        },
+    )
+
+    diagnostics = payload['diagnostics']
+    assert diagnostics['paused_run_state']['paused_execution_id'] == 'exec-paused'
+    assert diagnostics['paused_run_state']['paused_node_id'] == 'node_pause'
+
+    contract = build_execution_record_reference_contract_from_serialized_record(payload)
+    assert contract['paused_run_state']['paused_node_id'] == 'node_pause'
+    assert contract['resume_request']['resume_from_node_id'] == 'node_pause'
+    assert contract['resume_request']['previous_execution_id'] == 'exec-paused'

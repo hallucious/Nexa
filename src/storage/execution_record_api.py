@@ -6,6 +6,7 @@ from typing import Any, Iterable, Optional
 from src.engine.execution_artifact_hashing import ExecutionHashReport, NodeOutputHash
 from src.engine.execution_snapshot import ExecutionSnapshot, ExecutionSnapshotBuilder
 from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
+from src.engine.paused_run_state import PausedRunState, PausedRunStateError
 from src.storage.models.execution_record_model import (
     ArtifactRecordCard,
     ExecutionArtifactsModel,
@@ -145,6 +146,28 @@ def _pause_boundary_from_trace(trace: dict[str, Any] | None, *, status: str) -> 
             boundary['requires_revalidation'] = [str(item) for item in required_revalidation if item is not None]
         return boundary
     return None
+
+
+def _normalize_paused_run_state_payload(paused_run_state: Any) -> dict[str, Any] | None:
+    if paused_run_state is None:
+        return None
+    if isinstance(paused_run_state, PausedRunState):
+        return paused_run_state.to_dict()
+    if isinstance(paused_run_state, dict):
+        try:
+            return PausedRunState.from_dict(paused_run_state).to_dict()
+        except PausedRunStateError as exc:
+            raise ValueError(f'invalid paused_run_state payload: {exc}') from exc
+    raise TypeError('paused_run_state must be a PausedRunState or dict when provided')
+
+
+def _resume_request_from_paused_run_state_payload(paused_run_state: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(paused_run_state, dict) or not paused_run_state:
+        return None
+    try:
+        return PausedRunState.from_dict(paused_run_state).to_resume_request_payload()
+    except PausedRunStateError:
+        return None
 
 
 def _artifact_id_for_node(node_id: str) -> str:
@@ -316,6 +339,7 @@ def create_execution_record_from_snapshot(
     failure_point: str | None = None,
     termination_reason: str | None = None,
     pause_boundary: dict[str, Any] | None = None,
+    paused_run_state: Any = None,
     provider_usage_summary: dict[str, Any] | None = None,
     plugin_usage_summary: dict[str, Any] | None = None,
     trace_summary: str | None = None,
@@ -346,6 +370,7 @@ def create_execution_record_from_snapshot(
         event_stream_ref=event_stream_ref,
         artifact_cards=artifact_card_list,
     )
+    normalized_paused_run_state = _normalize_paused_run_state_payload(paused_run_state)
     return ExecutionRecordModel(
         meta=ExecutionMetaModel(
             run_id=snapshot.execution_id,
@@ -395,6 +420,7 @@ def create_execution_record_from_snapshot(
             failure_point=failure_point,
             termination_reason=termination_reason,
             pause_boundary=_to_json_safe(pause_boundary) if pause_boundary is not None else None,
+            paused_run_state=normalized_paused_run_state,
         ),
         observability=ExecutionObservabilityModel(
             metrics=_build_observability_metrics(snapshot),
@@ -454,6 +480,8 @@ def build_execution_record_reference_contract_from_serialized_record(record_payl
     observability_refs = list(observability.get('observability_refs') or []) if isinstance(observability.get('observability_refs'), list) else []
     diagnostics = record_payload.get('diagnostics') if isinstance(record_payload.get('diagnostics'), dict) else {}
     pause_boundary = diagnostics.get('pause_boundary') if isinstance(diagnostics.get('pause_boundary'), dict) else {}
+    paused_run_state = diagnostics.get('paused_run_state') if isinstance(diagnostics.get('paused_run_state'), dict) else {}
+    resume_request = _resume_request_from_paused_run_state_payload(paused_run_state)
     return {
         'run_id': meta.get('run_id'),
         'commit_id': source.get('commit_id'),
@@ -468,9 +496,11 @@ def build_execution_record_reference_contract_from_serialized_record(record_payl
         'observability_refs': observability_refs,
         'termination_reason': diagnostics.get('termination_reason'),
         'pause_boundary': dict(pause_boundary) if pause_boundary else None,
+        'paused_run_state': dict(paused_run_state) if paused_run_state else None,
+        'resume_request': dict(resume_request) if resume_request else None,
         'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
         'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
-        'is_resume_ready': bool(pause_boundary.get('can_resume')),
+        'is_resume_ready': bool((pause_boundary.get('can_resume')) or resume_request),
     }
 
 
@@ -573,6 +603,7 @@ def create_serialized_execution_record_from_circuit_run(
     trace: dict[str, Any] | None = None,
     artifacts: list[Any] | None = None,
     commit_id: str | None = None,
+    paused_run_state: Any = None,
 ) -> dict[str, Any]:
     if not isinstance(circuit, dict):
         return {}
@@ -611,6 +642,10 @@ def create_serialized_execution_record_from_circuit_run(
     event_stream_ref = f'events://{resolved_execution_id}' if isinstance(trace, dict) and trace.get('events') else None
     explicit_artifact_refs = _artifact_record_cards_from_raw_artifacts(artifacts, resolved_execution_id)
 
+    resolved_paused_run_state = paused_run_state
+    if resolved_paused_run_state is None:
+        resolved_paused_run_state = getattr(final_state, 'paused_run_state', None)
+
     created_at = _iso_now()
     started_iso = None
     finished_iso = None
@@ -636,6 +671,7 @@ def create_serialized_execution_record_from_circuit_run(
         trace_summary=f'Circuit run materialized for {resolved_execution_id} with {len(node_order)} node(s).',
         termination_reason=_termination_reason_from_trace(trace, status=record_status),
         pause_boundary=_pause_boundary_from_trace(trace, status=record_status),
+        paused_run_state=resolved_paused_run_state,
         observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
     )
     return serialize_execution_record(record)
@@ -855,6 +891,8 @@ def build_execution_record_reference_contract(record: ExecutionRecordModel) -> d
     ]
     observability_refs = list(record.observability.observability_refs or [])
     pause_boundary = dict(record.diagnostics.pause_boundary or {}) if isinstance(record.diagnostics.pause_boundary, dict) else {}
+    paused_run_state = dict(record.diagnostics.paused_run_state or {}) if isinstance(record.diagnostics.paused_run_state, dict) else {}
+    resume_request = _resume_request_from_paused_run_state_payload(paused_run_state)
     return {
         'run_id': record.meta.run_id,
         'commit_id': record.source.commit_id,
@@ -869,9 +907,11 @@ def build_execution_record_reference_contract(record: ExecutionRecordModel) -> d
         'observability_refs': observability_refs,
         'termination_reason': record.diagnostics.termination_reason,
         'pause_boundary': pause_boundary or None,
+        'paused_run_state': paused_run_state or None,
+        'resume_request': dict(resume_request) if resume_request else None,
         'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
         'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
-        'is_resume_ready': bool(pause_boundary.get('can_resume')),
+        'is_resume_ready': bool((pause_boundary.get('can_resume')) or resume_request),
     }
 
 
@@ -968,8 +1008,11 @@ def synthesize_execution_record_reference_contract_from_payload(payload: dict[st
         'unresolved_output_refs': unresolved_output_refs,
         'unresolved_artifact_refs': [],
         'observability_refs': [item for item in [primary_trace_ref] if item],
+        'paused_run_state': None,
+        'resume_request': None,
         'is_replay_ready': bool(primary_trace_ref and expected_outputs),
         'is_audit_ready': bool(primary_trace_ref),
+        'is_resume_ready': False,
     }
     payload['execution_record_reference_contract'] = contract
     return contract
@@ -995,6 +1038,8 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
         'event_stream_ref': record.timeline.event_stream_ref,
         'primary_trace_ref': reference_contract['primary_trace_ref'],
         'pause_boundary': reference_contract.get('pause_boundary'),
+        'paused_run_state': reference_contract.get('paused_run_state'),
+        'resume_request': reference_contract.get('resume_request'),
         'resume_ready': reference_contract.get('is_resume_ready', False),
         'replay_ready': reference_contract['is_replay_ready'],
         'audit_ready': reference_contract['is_audit_ready'],

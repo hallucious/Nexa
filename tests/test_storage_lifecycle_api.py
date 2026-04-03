@@ -5,6 +5,7 @@ import pytest
 from src.engine.execution_artifact_hashing import ExecutionHashReport
 from src.engine.execution_snapshot import ExecutionSnapshotBuilder
 from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
+from src.engine.paused_run_state import PausedRunState
 from src.storage.execution_record_api import create_execution_record_from_snapshot
 from src.storage.lifecycle_api import (
     apply_execution_record_to_working_save,
@@ -126,4 +127,35 @@ def test_apply_execution_record_to_working_save_propagates_pause_boundary_summar
     assert updated.runtime.last_run['termination_reason'] == 'review_required'
     assert updated.runtime.last_run['pause_boundary']['pause_node_id'] == 'node_b'
     assert updated.runtime.last_run['pause_boundary']['resume_from_node_id'] == 'node_b'
+    assert updated.runtime.last_run['resume_ready'] is True
+
+
+def test_apply_execution_record_to_working_save_propagates_paused_run_state_and_resume_request_summary():
+    working = make_working_save()
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n1',
+        completed_node_ids=frozenset(),
+        review_required={'reason': 'human_review_required'},
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n1',
+            'resume_from_node_id': 'n1',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['paused_run_state']['paused_execution_id'] == 'exec-paused'
+    assert updated.runtime.last_run['paused_run_state']['paused_node_id'] == 'n1'
+    assert updated.runtime.last_run['resume_request']['resume_from_node_id'] == 'n1'
+    assert updated.runtime.last_run['resume_request']['previous_execution_id'] == 'exec-paused'
     assert updated.runtime.last_run['resume_ready'] is True

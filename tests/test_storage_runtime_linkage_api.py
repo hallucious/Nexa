@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from src.circuit.circuit_runner import CircuitGovernanceTrace, CircuitRunResult
 from src.engine.execution_artifact_hashing import ExecutionHashReport
+from src.engine.paused_run_state import PausedRunState
 from src.engine.execution_snapshot import ExecutionSnapshotBuilder
 from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
 from src.storage.lifecycle_api import (
@@ -530,3 +532,75 @@ def test_create_serialized_execution_transition_emits_contract_valid_artifacts()
     assert transition['execution_record']['source']['commit_id'] == 'commit-1'
     assert transition['updated_working_save']['meta']['storage_role'] == 'working_save'
     assert transition['updated_working_save']['meta']['working_save_id'] == 'ws-1'
+
+
+def _make_governance_trace(final_status: str = 'paused') -> CircuitGovernanceTrace:
+    return CircuitGovernanceTrace(
+        execution_id='demo-circuit',
+        circuit_id='demo-circuit',
+        structural_success=True,
+        structural_violations=[],
+        determinism_pre_performed=False,
+        determinism_pre_success=True,
+        determinism_pre_violations=[],
+        pre_decision='allow',
+        pre_decision_reason='ok',
+        execution_allowed=True,
+        determinism_post_performed=False,
+        determinism_post_success=True,
+        determinism_post_violations=[],
+        post_decision='allow',
+        post_decision_reason='ok',
+        execution_completed=(final_status == 'success'),
+        final_status=final_status,
+        started_at_ms=0,
+        finished_at_ms=1,
+        duration_ms=1,
+    )
+
+
+def test_create_serialized_circuit_execution_payload_preserves_paused_run_state_summary_from_circuit_run_result():
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='demo-circuit',
+        paused_node_id='node_b',
+        completed_node_ids=frozenset({'node_a'}),
+        review_required={'reason': 'review_required'},
+    )
+    final_state = CircuitRunResult(
+        {'node_a': {'value': 'done'}, 'node_b': {'status': 'review_required'}},
+        _make_governance_trace('paused'),
+        paused_run_state=paused_run_state,
+    )
+
+    payload = create_serialized_circuit_execution_payload(
+        {'id': 'demo-circuit', 'nodes': [{'id': 'node_a'}, {'id': 'node_b'}]},
+        final_state,
+        initial_state={'message': 'Hello Nexa'},
+        execution_configs={'node_a': {'provider': 'echo'}},
+        started_at=1.0,
+        ended_at=2.0,
+        trace={
+            'events': [
+                {
+                    'type': 'execution_paused',
+                    'payload': {
+                        'pause_node_id': 'node_b',
+                        'reason': 'review_required',
+                        'resume': {
+                            'can_resume': True,
+                            'resume_from_node_id': 'node_b',
+                            'resume_strategy': 'restart_from_node',
+                        },
+                    },
+                }
+            ]
+        },
+        artifacts=[],
+    )
+
+    record = payload['execution_record']
+    contract = payload['execution_record_reference_contract']
+    assert record['diagnostics']['paused_run_state']['paused_node_id'] == 'node_b'
+    assert contract['paused_run_state']['paused_execution_id'] == 'demo-circuit'
+    assert contract['resume_request']['resume_from_node_id'] == 'node_b'
+    assert contract['resume_request']['previous_execution_id'] == 'demo-circuit'
