@@ -441,6 +441,24 @@ def _validate_paused_run_resume_anchor(
     })
     record_source_commit_id = execution_record.source.commit_id
 
+    if not paused_source_commit_id:
+        issues.append({
+            'code': 'PAUSED_RUN_SOURCE_COMMIT_ID_MISSING',
+            'message': (
+                'paused_run_state source_commit_id is missing; '
+                'resume readiness cannot be trusted without a stored paused-run commit anchor'
+            ),
+        })
+
+    if not resume_source_commit_id:
+        issues.append({
+            'code': 'PAUSED_RUN_RESUME_REQUEST_SOURCE_COMMIT_ID_MISSING',
+            'message': (
+                'resume_request source_commit_id is missing; '
+                'resume readiness cannot be trusted without a resume-request commit anchor'
+            ),
+        })
+
     if not paused_execution_surface_fingerprint:
         issues.append({
             'code': 'PAUSED_RUN_EXECUTION_SURFACE_FINGERPRINT_MISSING',

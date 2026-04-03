@@ -611,6 +611,16 @@ class CircuitRunner:
 
         required_revalidation = _normalize_required_revalidation(raw.get("requires_revalidation"))
         if persisted is not None:
+            if not persisted.source_commit_id:
+                raise ValueError(
+                    "persisted paused run state is missing source_commit_id; "
+                    "resume is not allowed without a stored source commit anchor"
+                )
+            if not source_commit_id:
+                raise ValueError(
+                    "__resume__ is missing source_commit_id; "
+                    "resume is not allowed without a resume source commit anchor"
+                )
             if not persisted.execution_surface_fingerprint:
                 raise ValueError(
                     "persisted paused run state is missing execution_surface_fingerprint; "

@@ -366,6 +366,7 @@ class TestResumeWithPausedRunState:
             "review_required": {"reason": "quality"},
             "created_at": "2024-01-01T00:00:00+00:00",
             "paused_at": "2024-01-01T00:00:00+00:00",
+            "source_commit_id": "commit-1",
             "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
         }
         base.update(kwargs)
@@ -378,6 +379,7 @@ class TestResumeWithPausedRunState:
             "__resume__": {
                 "resume_from_node_id": "n_b",
                 "previous_execution_id": "exec-paused-1",
+                "source_commit_id": "commit-1",
                 "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(),
@@ -393,6 +395,7 @@ class TestResumeWithPausedRunState:
         state = {
             "__resume__": {
                 "resume_from_node_id": "n_b",
+                "source_commit_id": "commit-1",
                 "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(paused_node_id="n_missing"),
@@ -407,6 +410,7 @@ class TestResumeWithPausedRunState:
         state = {
             "__resume__": {
                 "resume_from_node_id": "n_b",
+                "source_commit_id": "commit-1",
                 "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(completed_node_ids=["n_a", "n_removed"]),
@@ -421,6 +425,7 @@ class TestResumeWithPausedRunState:
         state = {
             "__resume__": {
                 "resume_from_node_id": "n_b",
+                "source_commit_id": "commit-1",
                 "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": "not-a-dict",
@@ -436,6 +441,8 @@ class TestResumeWithPausedRunState:
             "__resume__": {
                 "resume_from_node_id": "n_b",
                 "previous_execution_id": "exec-paused-1",
+                "source_commit_id": "commit-1",
+                "source_commit_id": "commit-1",
                 "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(),
@@ -454,6 +461,8 @@ class TestResumeWithPausedRunState:
         state = {
             "__resume__": {
                 "resume_from_node_id": "n_a",   # mismatch: prs says n_b
+                "source_commit_id": "commit-1",
+                "source_commit_id": "commit-1",
                 "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(),  # paused_node_id = "n_b"
@@ -481,6 +490,7 @@ class TestResumeWithPausedRunState:
         state = {
             "__resume__": {
                 "resume_from_node_id": "n_b",
+                "source_commit_id": "commit-1",
                 "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
             },
             "__paused_run_state__": self._prs_dict(execution_surface_fingerprint=None),
@@ -494,11 +504,39 @@ class TestResumeWithPausedRunState:
         state = {
             "__resume__": {
                 "resume_from_node_id": "n_b",
+                "source_commit_id": "commit-1",
             },
             "__paused_run_state__": self._prs_dict(),
             "__node_outputs__": {"n_a": "out-a"},
         }
         with pytest.raises(ValueError, match="__resume__ is missing execution_surface_fingerprint"):
+            runner.execute(self._two_node_circuit(), state)
+
+    def test_persisted_paused_run_state_without_source_commit_id_is_rejected(self):
+        runner = self._runner()
+        state = {
+            "__resume__": {
+                "resume_from_node_id": "n_b",
+                "source_commit_id": "commit-1",
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
+            },
+            "__paused_run_state__": self._prs_dict(source_commit_id=None),
+            "__node_outputs__": {"n_a": "out-a"},
+        }
+        with pytest.raises(ValueError, match="paused run state is missing source_commit_id"):
+            runner.execute(self._two_node_circuit(), state)
+
+    def test_resume_request_without_source_commit_id_is_rejected_when_persisted_state_present(self):
+        runner = self._runner()
+        state = {
+            "__resume__": {
+                "resume_from_node_id": "n_b",
+                "execution_surface_fingerprint": compute_execution_surface_fingerprint(self._two_node_circuit()),
+            },
+            "__paused_run_state__": self._prs_dict(),
+            "__node_outputs__": {"n_a": "out-a"},
+        }
+        with pytest.raises(ValueError, match="__resume__ is missing source_commit_id"):
             runner.execute(self._two_node_circuit(), state)
 
 
