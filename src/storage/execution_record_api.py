@@ -55,11 +55,63 @@ def _summarize_value(value: Any) -> str:
 def _semantic_status_from_run(status: str, has_outputs: bool) -> str:
     if status == 'completed':
         return 'normal' if has_outputs else 'failed'
+    if status == 'paused':
+        return 'paused'
     if status == 'partial':
         return 'partial'
     if status in {'failed', 'cancelled'}:
         return 'failed' if not has_outputs else 'partial'
     return 'normal' if has_outputs else 'failed'
+
+
+def _trace_event_types(trace: dict[str, Any] | None) -> list[str]:
+    events = trace.get('events') if isinstance(trace, dict) else None
+    if not isinstance(events, list):
+        return []
+    result: list[str] = []
+    for event in events:
+        event_type = None
+        if isinstance(event, str):
+            event_type = event
+        elif isinstance(event, dict):
+            candidate = event.get('type')
+            if isinstance(candidate, str):
+                event_type = candidate
+        if isinstance(event_type, str) and event_type:
+            result.append(event_type)
+    return result
+
+
+def _infer_record_status(*, trace: dict[str, Any] | None = None, status: str | None = None) -> str:
+    normalized_status = str(status).lower() if isinstance(status, str) and status else None
+    event_types = {event_type.lower() for event_type in _trace_event_types(trace)}
+
+    if 'execution_paused' in event_types or normalized_status == 'paused':
+        return 'paused'
+    if 'execution_failed' in event_types or normalized_status in {'failure', 'failed', 'error'}:
+        return 'failed'
+    if normalized_status in {'partial', 'cancelled'}:
+        return normalized_status
+    return 'completed'
+
+
+def _termination_reason_from_trace(trace: dict[str, Any] | None, *, status: str) -> str | None:
+    if status != 'paused' or not isinstance(trace, dict):
+        return None
+    events = trace.get('events')
+    if not isinstance(events, list):
+        return None
+    for event in reversed(events):
+        if not isinstance(event, dict):
+            continue
+        if str(event.get('type') or '').lower() != 'execution_paused':
+            continue
+        payload = event.get('payload')
+        if isinstance(payload, dict):
+            reason = payload.get('reason')
+            if reason is not None:
+                return str(reason)
+    return None
 
 
 def _artifact_id_for_node(node_id: str) -> str:
@@ -527,12 +579,13 @@ def create_serialized_execution_record_from_circuit_run(
     if ended_at is not None:
         finished_iso = datetime.fromtimestamp(ended_at, tz=timezone.utc).isoformat()
 
+    record_status = _infer_record_status(trace=trace)
     record = create_execution_record_from_snapshot(
         snapshot,
         commit_id=str(commit_id or f'uncommitted::{resolved_execution_id}'),
         trigger_type='manual_run',
         trigger_reason='circuit_run_materialization',
-        status='completed',
+        status=record_status,
         title=str(circuit.get('id') or 'circuit-run'),
         input_summary=input_state or {},
         trace_ref=trace_ref,
@@ -541,6 +594,7 @@ def create_serialized_execution_record_from_circuit_run(
         artifact_refs=explicit_artifact_refs,
         provider_usage_summary={'circuit_id': circuit.get('id')},
         trace_summary=f'Circuit run materialized for {resolved_execution_id} with {len(node_order)} node(s).',
+        termination_reason=_termination_reason_from_trace(trace, status=record_status),
         observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
     )
     return serialize_execution_record(record)
@@ -582,7 +636,7 @@ def create_serialized_execution_record_from_savefile_trace(
     snapshot = ExecutionSnapshotBuilder().build(execution_id=run_id, timeline=timeline, outputs=outputs, hash_report=hash_report)
 
     overall_status = str(getattr(trace, 'status', 'success')).lower()
-    record_status = 'failed' if overall_status in {'failure', 'failed', 'error'} else 'completed'
+    record_status = _infer_record_status(status=overall_status)
     raw_artifacts = list(getattr(trace, 'all_artifacts', []) or [])
     explicit_artifact_refs = _artifact_record_cards_from_raw_artifacts(raw_artifacts, run_id)
     errors: list[ExecutionIssue] = []
@@ -709,10 +763,7 @@ def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[s
 
     trace_ref = f'trace://{execution_id}' if trace else None
     event_stream_ref = f'events://{execution_id}' if trace.get('events') else None
-    status_raw = result.get('status')
-    status = 'completed'
-    if isinstance(status_raw, str) and status_raw.lower() in {'failure','failed','error'}:
-        status = 'failed'
+    status = _infer_record_status(trace=trace, status=result.get('status'))
 
     final_outputs = snapshot.node_outputs if snapshot.node_outputs else (replay_payload.get('expected_outputs') if isinstance(replay_payload.get('expected_outputs'), dict) else {})
     record = create_execution_record_from_snapshot(
@@ -726,6 +777,7 @@ def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[s
         event_stream_ref=event_stream_ref,
         final_outputs=final_outputs,
         provider_usage_summary=summary if summary else None,
+        termination_reason=_termination_reason_from_trace(trace, status=status),
         observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
     )
     serialized = serialize_execution_record(record)

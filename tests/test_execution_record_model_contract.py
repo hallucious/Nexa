@@ -65,3 +65,15 @@ def test_execution_issue_validates_category_and_severity():
     assert issue.category == 'runtime'
     with pytest.raises(ValueError):
         ExecutionIssue(issue_code='E1', category='bad', severity='high', message='boom')
+
+
+def test_execution_record_meta_accepts_paused_status():
+    meta = ExecutionMetaModel(
+        run_id='run-paused',
+        record_format_version='1.0.0',
+        created_at='2026-04-01T00:00:00Z',
+        started_at='2026-04-01T00:00:00Z',
+        finished_at='2026-04-01T00:01:00Z',
+        status='paused',
+    )
+    assert meta.status == 'paused'

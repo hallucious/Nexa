@@ -17,6 +17,7 @@ WORKING_SAVE_ALLOWED_RUNTIME_STATUSES = {
     "ready_for_review",
     "validated",
     "execution_failed",
+    "execution_paused",
     "executed",
 }
 WORKING_SAVE_IDENTITY_FIELD = "working_save_id"

@@ -629,3 +629,66 @@ def test_f2_materialize_prefers_result_node_results_over_stale_expected_outputs_
         f"Expected 'FRESH_VALUE' from result.node_results but got {node_a_output.get('value_payload')!r}. "
         "Stale replay_payload.expected_outputs appears to have outranked richer result truth."
     )
+
+
+def test_create_execution_record_from_snapshot_supports_paused_status_and_semantic_summary():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='quality_review_required',
+    )
+    assert record.meta.status == 'paused'
+    assert record.outputs.semantic_status == 'paused'
+    assert record.diagnostics.termination_reason == 'quality_review_required'
+
+
+def test_create_serialized_execution_record_from_circuit_run_infers_paused_status_from_trace_event():
+    circuit = {
+        'id': 'paused-circuit',
+        'nodes': [{'id': 'n1'}],
+    }
+    payload = create_serialized_execution_record_from_circuit_run(
+        circuit,
+        {'n1': {'value': 'draft'}},
+        execution_id='paused-exec',
+        trace={
+            'events': [
+                {'type': 'execution_started'},
+                {'type': 'execution_paused', 'payload': {'reason': 'quality_review_required'}},
+            ]
+        },
+    )
+    assert payload['meta']['status'] == 'paused'
+    assert payload['outputs']['semantic_status'] == 'paused'
+    assert payload['diagnostics']['termination_reason'] == 'quality_review_required'
+
+
+def test_materialize_execution_record_from_payload_preserves_paused_status_from_trace():
+    payload = {
+        'trace': {
+            'events': [
+                {'type': 'execution_started'},
+                {'type': 'execution_paused', 'payload': {'reason': 'human_review_required'}},
+            ]
+        },
+        'replay_payload': {
+            'execution_id': 'run-paused',
+            'node_order': ['node_a'],
+            'input_state': {'message': 'hi'},
+            'expected_outputs': {'node_a': {'value': 'draft'}},
+        },
+        'result': {
+            'status': 'success',
+            'state': {'node_a': {'value': 'draft'}},
+            'node_results': {
+                'node_a': {'status': 'partial', 'output': {'value': 'draft'}},
+            },
+        },
+    }
+
+    record = materialize_execution_record_from_payload(payload)
+
+    assert record['meta']['status'] == 'paused'
+    assert record['outputs']['semantic_status'] == 'paused'
+    assert record['diagnostics']['termination_reason'] == 'human_review_required'

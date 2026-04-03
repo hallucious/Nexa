@@ -90,3 +90,18 @@ def test_apply_execution_record_to_working_save_marks_execution_failed_and_copie
     updated = apply_execution_record_to_working_save(working, record)
     assert updated.runtime.status == 'execution_failed'
     assert updated.runtime.last_run['status'] == 'failed'
+
+
+def test_apply_execution_record_to_working_save_marks_execution_paused_and_preserves_summary():
+    working = make_working_save()
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='cs-1',
+        status='paused',
+        termination_reason='review_required',
+    )
+    updated = apply_execution_record_to_working_save(working, record)
+    assert updated.runtime.status == 'execution_paused'
+    assert updated.runtime.last_run['status'] == 'paused'
+    assert updated.runtime.last_run['semantic_status'] == 'paused'
+    assert updated.runtime.errors == []

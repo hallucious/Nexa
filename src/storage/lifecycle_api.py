@@ -372,6 +372,7 @@ def create_serialized_execution_transition(
 
 
 _SUCCESS_STATUSES = {'completed'}
+_PAUSED_STATUSES = {'paused'}
 _FAILURE_STATUSES = {'failed', 'partial', 'cancelled'}
 
 
@@ -533,6 +534,9 @@ def apply_execution_record_to_working_save(
     if execution_record.meta.status in _SUCCESS_STATUSES:
         status = 'executed'
         errors: list[dict] = []
+    elif execution_record.meta.status in _PAUSED_STATUSES:
+        status = 'execution_paused'
+        errors = []
     elif execution_record.meta.status in _FAILURE_STATUSES:
         status = 'execution_failed'
         errors = [

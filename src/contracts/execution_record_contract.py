@@ -6,6 +6,7 @@ EXECUTION_RECORD_ALLOWED_STATUSES = {
     "failed",
     "partial",
     "cancelled",
+    "paused",
 }
 
 EXECUTION_RECORD_ALLOWED_TRIGGER_TYPES = {
@@ -22,6 +23,7 @@ EXECUTION_RECORD_ALLOWED_NODE_OUTCOMES = {
     "skipped",
     "partial",
     "cancelled",
+    "paused",
 }
 
 EXECUTION_RECORD_ALLOWED_ISSUE_CATEGORIES = {
