@@ -67,6 +67,10 @@ class PausedRunState:
     previous_execution_id : Optional[str]
         If this run was itself a resume of a prior run, the prior run's ID.
         Enables chained run linkage in events and timeline.
+
+    source_commit_id     : Optional[str]
+        Structural commit anchor for this paused run. When present, resume
+        must not silently cross commit boundaries.
     """
 
     paused_execution_id: str
@@ -77,6 +81,7 @@ class PausedRunState:
     created_at: str
     paused_at: str
     previous_execution_id: Optional[str] = None
+    source_commit_id: Optional[str] = None
 
     # ── Construction helpers ─────────────────────────────────────────────────
 
@@ -93,6 +98,7 @@ class PausedRunState:
             "determinism_pre_validation",
         ),
         previous_execution_id: Optional[str] = None,
+        source_commit_id: Optional[str] = None,
         now: Optional[str] = None,
     ) -> "PausedRunState":
         """
@@ -121,6 +127,7 @@ class PausedRunState:
             created_at=ts,
             paused_at=ts,
             previous_execution_id=previous_execution_id,
+            source_commit_id=source_commit_id,
         )
 
     # ── Validation ────────────────────────────────────────────────────────────
@@ -181,6 +188,7 @@ class PausedRunState:
             "review_required": dict(self.review_required),
             "created_at": self.created_at,
             "paused_at": self.paused_at,
+            "source_commit_id": self.source_commit_id,
         }
 
     @classmethod
@@ -199,6 +207,7 @@ class PausedRunState:
                 created_at=data["created_at"],
                 paused_at=data["paused_at"],
                 previous_execution_id=data.get("previous_execution_id"),
+                source_commit_id=data.get("source_commit_id"),
             )
         except KeyError as exc:
             raise PausedRunStateError(
@@ -218,6 +227,7 @@ class PausedRunState:
             "previous_execution_id": self.paused_execution_id,
             "reason": "review_gate_resume",
             "requires_revalidation": list(self.required_revalidation),
+            "source_commit_id": self.source_commit_id,
         }
 
     def __repr__(self) -> str:

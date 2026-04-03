@@ -842,10 +842,11 @@ def test_create_execution_record_from_snapshot_preserves_paused_run_state_and_re
 
     contract = build_execution_record_reference_contract(record)
     assert contract['paused_run_state']['paused_execution_id'] == 'exec-paused'
+    assert contract['paused_run_state']['source_commit_id'] == 'commit-1'
     assert contract['resume_request']['resume_from_node_id'] == 'node_a'
     assert contract['resume_request']['previous_execution_id'] == 'exec-paused'
     assert contract['resume_request']['requires_revalidation'] == ['structural_validation', 'determinism_pre_validation']
-    assert contract['resume_request']['requires_revalidation'] == ['structural_validation', 'determinism_pre_validation']
+    assert contract['resume_request']['source_commit_id'] == 'commit-1'
     assert contract['is_resume_ready'] is True
 
 
@@ -887,8 +888,10 @@ def test_create_serialized_execution_record_from_circuit_run_auto_reads_circuit_
     diagnostics = payload['diagnostics']
     assert diagnostics['paused_run_state']['paused_execution_id'] == 'exec-paused'
     assert diagnostics['paused_run_state']['paused_node_id'] == 'node_pause'
+    assert diagnostics['paused_run_state']['source_commit_id'] == 'uncommitted::exec-paused'
 
     contract = build_execution_record_reference_contract_from_serialized_record(payload)
     assert contract['paused_run_state']['paused_node_id'] == 'node_pause'
     assert contract['resume_request']['resume_from_node_id'] == 'node_pause'
     assert contract['resume_request']['previous_execution_id'] == 'exec-paused'
+    assert contract['resume_request']['source_commit_id'] == 'uncommitted::exec-paused'

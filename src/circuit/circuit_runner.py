@@ -94,6 +94,7 @@ class ReviewGateResumeRequest:
     previous_execution_id: Optional[str] = None
     reason: str = "review_gate_resume"
     required_revalidation: Tuple[str, ...] = ()
+    source_commit_id: Optional[str] = None
 
     def to_payload(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -104,6 +105,8 @@ class ReviewGateResumeRequest:
             payload["previous_execution_id"] = self.previous_execution_id
         if self.required_revalidation:
             payload["requires_revalidation"] = list(self.required_revalidation)
+        if self.source_commit_id:
+            payload["source_commit_id"] = self.source_commit_id
         return payload
 
 
@@ -578,6 +581,10 @@ class CircuitRunner:
         if previous_execution_id is not None and not isinstance(previous_execution_id, str):
             raise TypeError("previous_execution_id must be a string when provided")
 
+        source_commit_id = raw.get("source_commit_id")
+        if source_commit_id is not None and not isinstance(source_commit_id, str):
+            raise TypeError("source_commit_id must be a string when provided")
+
         required_revalidation = _normalize_required_revalidation(raw.get("requires_revalidation"))
         if persisted is not None:
             persisted_required_revalidation = tuple(persisted.required_revalidation)
@@ -587,6 +594,14 @@ class CircuitRunner:
                     "resume must use the revalidation requirements recorded in paused_run_state"
                 )
             required_revalidation = persisted_required_revalidation
+
+            persisted_source_commit_id = persisted.source_commit_id
+            if persisted_source_commit_id and source_commit_id and source_commit_id != persisted_source_commit_id:
+                raise ValueError(
+                    "resume source_commit_id does not match persisted paused run state; "
+                    "resume must use the commit anchor recorded in paused_run_state"
+                )
+            source_commit_id = persisted_source_commit_id or source_commit_id
 
         # If a persisted paused run state was also provided, use its execution ID
         # as the authoritative prior-run linkage (overrides __resume__ field).
@@ -602,6 +617,7 @@ class CircuitRunner:
             previous_execution_id=previous_execution_id,
             reason=reason,
             required_revalidation=required_revalidation,
+            source_commit_id=source_commit_id,
         )
 
     def _build_resume_nodes(

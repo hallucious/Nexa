@@ -386,6 +386,19 @@ def _working_save_node_ids(working_save: WorkingSaveModel) -> set[str]:
     return node_ids
 
 
+def _working_save_commit_anchor_id(working_save: WorkingSaveModel) -> str | None:
+    validation_summary = (
+        working_save.runtime.validation_summary
+        if isinstance(getattr(working_save.runtime, 'validation_summary', None), dict)
+        else {}
+    )
+    for key in ('source_commit_id', 'current_commit_id', 'commit_id'):
+        value = validation_summary.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
 def _validate_paused_run_resume_anchor(
     working_save: WorkingSaveModel,
     execution_record: ExecutionRecordModel,
@@ -398,11 +411,43 @@ def _validate_paused_run_resume_anchor(
     pause_boundary = last_run_summary.get('pause_boundary') if isinstance(last_run_summary.get('pause_boundary'), dict) else {}
     paused_run_state = last_run_summary.get('paused_run_state') if isinstance(last_run_summary.get('paused_run_state'), dict) else {}
     resume_request = last_run_summary.get('resume_request') if isinstance(last_run_summary.get('resume_request'), dict) else {}
+    working_save_commit_anchor_id = _working_save_commit_anchor_id(working_save)
 
     issues: list[dict[str, str]] = []
 
     pause_node_id = paused_run_state.get('paused_node_id') or pause_boundary.get('pause_node_id')
     resume_from_node_id = resume_request.get('resume_from_node_id') or pause_boundary.get('resume_from_node_id')
+    paused_source_commit_id = paused_run_state.get('source_commit_id') if isinstance(paused_run_state.get('source_commit_id'), str) else None
+    resume_source_commit_id = resume_request.get('source_commit_id') if isinstance(resume_request.get('source_commit_id'), str) else None
+    record_source_commit_id = execution_record.source.commit_id
+
+    if paused_source_commit_id and paused_source_commit_id != record_source_commit_id:
+        issues.append({
+            'code': 'PAUSED_RUN_SOURCE_COMMIT_MISMATCH',
+            'message': (
+                f"paused_run_state source_commit_id '{paused_source_commit_id}' does not match "
+                f"Execution Record source commit_id '{record_source_commit_id}'"
+            ),
+        })
+
+    if resume_source_commit_id and resume_source_commit_id != record_source_commit_id:
+        issues.append({
+            'code': 'PAUSED_RUN_RESUME_REQUEST_COMMIT_MISMATCH',
+            'message': (
+                f"resume_request source_commit_id '{resume_source_commit_id}' does not match "
+                f"Execution Record source commit_id '{record_source_commit_id}'"
+            ),
+        })
+
+    effective_source_commit_id = paused_source_commit_id or resume_source_commit_id or record_source_commit_id
+    if working_save_commit_anchor_id and effective_source_commit_id and working_save_commit_anchor_id != effective_source_commit_id:
+        issues.append({
+            'code': 'PAUSED_RUN_WORKING_SAVE_COMMIT_ANCHOR_MISMATCH',
+            'message': (
+                f"paused run source commit_id '{effective_source_commit_id}' does not match current "
+                f"Working Save commit anchor '{working_save_commit_anchor_id}'"
+            ),
+        })
 
     if isinstance(pause_node_id, str) and pause_node_id and pause_node_id not in node_ids:
         issues.append({
@@ -429,7 +474,8 @@ def _validate_paused_run_resume_anchor(
     stored_resume_ready = bool(last_run_summary.get('resume_ready', False))
     return {
         'checked': True,
-        'source_commit_id': execution_record.source.commit_id,
+        'source_commit_id': effective_source_commit_id,
+        'working_save_commit_anchor_id': working_save_commit_anchor_id,
         'pause_node_id': pause_node_id,
         'resume_from_node_id': resume_from_node_id,
         'anchor_valid': anchor_valid,

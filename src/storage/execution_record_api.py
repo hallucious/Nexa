@@ -371,6 +371,9 @@ def create_execution_record_from_snapshot(
         artifact_cards=artifact_card_list,
     )
     normalized_paused_run_state = _normalize_paused_run_state_payload(paused_run_state)
+    if normalized_paused_run_state is not None and commit_id and not normalized_paused_run_state.get('source_commit_id'):
+        normalized_paused_run_state = dict(normalized_paused_run_state)
+        normalized_paused_run_state['source_commit_id'] = commit_id
     return ExecutionRecordModel(
         meta=ExecutionMetaModel(
             run_id=snapshot.execution_id,

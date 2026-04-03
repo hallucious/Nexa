@@ -166,6 +166,7 @@ class TestPausedRunStateModel:
             completed_node_ids=frozenset({"n_a", "n_b"}),
             review_required={"reason": "quality_check"},
             previous_execution_id="exec-prior",
+            source_commit_id="commit-1",
         )
         restored = PausedRunState.from_dict(original.to_dict())
         assert restored.paused_execution_id == original.paused_execution_id
@@ -173,6 +174,7 @@ class TestPausedRunStateModel:
         assert restored.completed_node_ids == original.completed_node_ids
         assert restored.required_revalidation == original.required_revalidation
         assert restored.previous_execution_id == original.previous_execution_id
+        assert restored.source_commit_id == original.source_commit_id
 
     def test_from_dict_missing_required_field_raises(self):
         with pytest.raises(PausedRunStateError, match="missing field"):
@@ -318,15 +320,20 @@ class TestCircuitRunnerPausedRunState:
         assert len(d["required_revalidation"]) > 0
 
     def test_paused_run_state_to_resume_request_payload(self):
-        runner = self._pausing_runner()
-        result = runner.execute(self._pausing_circuit(), {})
-        payload = result.paused_run_state.to_resume_request_payload()
+        payload = PausedRunState.build(
+            paused_execution_id="exec-pause",
+            paused_node_id="n_pause",
+            completed_node_ids=frozenset({"n_a"}),
+            review_required={"reason": "quality_review_required"},
+            source_commit_id="commit-1",
+        ).to_resume_request_payload()
         assert payload["resume_from_node_id"] == "n_pause"
-        assert payload["previous_execution_id"] == result.paused_run_state.paused_execution_id
+        assert payload["previous_execution_id"] == "exec-pause"
         assert payload["requires_revalidation"] == [
             "structural_validation",
             "determinism_pre_validation",
         ]
+        assert payload["source_commit_id"] == "commit-1"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -359,6 +366,7 @@ class TestResumeWithPausedRunState:
             "review_required": {"reason": "quality"},
             "created_at": "2024-01-01T00:00:00+00:00",
             "paused_at": "2024-01-01T00:00:00+00:00",
+            "source_commit_id": "commit-1",
         }
         base.update(kwargs)
         return base
@@ -440,6 +448,19 @@ class TestResumeWithPausedRunState:
             "__node_outputs__": {"n_a": "out-a"},
         }
         with pytest.raises(ValueError, match="resume_from_node_id.*n_a.*paused_node_id.*n_b|paused_node_id.*n_b.*resume_from_node_id.*n_a"):
+            runner.execute(self._two_node_circuit(), state)
+
+    def test_resume_source_commit_id_mismatch_with_persisted_state_rejected(self):
+        runner = self._runner()
+        state = {
+            "__resume__": {
+                "resume_from_node_id": "n_b",
+                "source_commit_id": "other-commit",
+            },
+            "__paused_run_state__": self._prs_dict(source_commit_id="commit-1"),
+            "__node_outputs__": {"n_a": "out-a"},
+        }
+        with pytest.raises(ValueError, match="source_commit_id"):
             runner.execute(self._two_node_circuit(), state)
 
     def test_paused_run_state_without_resume_is_rejected(self):
