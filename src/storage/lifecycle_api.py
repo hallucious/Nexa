@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+
+from src.circuit.fingerprint import compute_circuit_fingerprint
 from datetime import datetime, timezone
 
 from src.engine.execution_snapshot import ExecutionSnapshot
@@ -419,6 +421,9 @@ def _validate_paused_run_resume_anchor(
     resume_from_node_id = resume_request.get('resume_from_node_id') or pause_boundary.get('resume_from_node_id')
     paused_source_commit_id = paused_run_state.get('source_commit_id') if isinstance(paused_run_state.get('source_commit_id'), str) else None
     resume_source_commit_id = resume_request.get('source_commit_id') if isinstance(resume_request.get('source_commit_id'), str) else None
+    paused_structure_fingerprint = paused_run_state.get('structure_fingerprint') if isinstance(paused_run_state.get('structure_fingerprint'), str) else None
+    resume_structure_fingerprint = resume_request.get('structure_fingerprint') if isinstance(resume_request.get('structure_fingerprint'), str) else None
+    current_structure_fingerprint = compute_circuit_fingerprint({'nodes': [dict(node) for node in getattr(working_save.circuit, 'nodes', []) or []], 'edges': [dict(edge) for edge in getattr(working_save.circuit, 'edges', []) or []], 'entry': getattr(working_save.circuit, 'entry', None), 'outputs': [dict(output) for output in getattr(working_save.circuit, 'outputs', []) or []]})
     record_source_commit_id = execution_record.source.commit_id
 
     if paused_source_commit_id and paused_source_commit_id != record_source_commit_id:
@@ -439,7 +444,17 @@ def _validate_paused_run_resume_anchor(
             ),
         })
 
+    if paused_structure_fingerprint and resume_structure_fingerprint and paused_structure_fingerprint != resume_structure_fingerprint:
+        issues.append({
+            'code': 'PAUSED_RUN_RESUME_REQUEST_FINGERPRINT_MISMATCH',
+            'message': (
+                f"resume_request structure_fingerprint '{resume_structure_fingerprint}' does not match "
+                f"paused_run_state structure_fingerprint '{paused_structure_fingerprint}'"
+            ),
+        })
+
     effective_source_commit_id = paused_source_commit_id or resume_source_commit_id or record_source_commit_id
+    effective_structure_fingerprint = paused_structure_fingerprint or resume_structure_fingerprint
 
     if not working_save_commit_anchor_id:
         issues.append({
@@ -455,6 +470,15 @@ def _validate_paused_run_resume_anchor(
             'message': (
                 f"paused run source commit_id '{effective_source_commit_id}' does not match current "
                 f"Working Save commit anchor '{working_save_commit_anchor_id}'"
+            ),
+        })
+
+    if effective_structure_fingerprint and current_structure_fingerprint != effective_structure_fingerprint:
+        issues.append({
+            'code': 'PAUSED_RUN_STRUCTURE_FINGERPRINT_MISMATCH',
+            'message': (
+                f"paused run structure_fingerprint '{effective_structure_fingerprint}' does not match current "
+                f"Working Save structure_fingerprint '{current_structure_fingerprint}'"
             ),
         })
 
@@ -484,6 +508,8 @@ def _validate_paused_run_resume_anchor(
     return {
         'checked': True,
         'source_commit_id': effective_source_commit_id,
+        'structure_fingerprint': effective_structure_fingerprint,
+        'working_save_structure_fingerprint': current_structure_fingerprint,
         'working_save_commit_anchor_id': working_save_commit_anchor_id,
         'pause_node_id': pause_node_id,
         'resume_from_node_id': resume_from_node_id,

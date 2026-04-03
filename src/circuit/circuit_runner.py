@@ -37,6 +37,7 @@ import re
 
 from src.circuit.circuit_scheduler import CircuitScheduler
 from src.circuit.circuit_validator import CircuitValidator, CircuitValidationError
+from src.circuit.fingerprint import compute_circuit_fingerprint
 from src.engine.validation.decision_policy import (
     PostDecisionResult,
     PreDecisionResult,
@@ -95,6 +96,7 @@ class ReviewGateResumeRequest:
     reason: str = "review_gate_resume"
     required_revalidation: Tuple[str, ...] = ()
     source_commit_id: Optional[str] = None
+    structure_fingerprint: Optional[str] = None
 
     def to_payload(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -107,6 +109,8 @@ class ReviewGateResumeRequest:
             payload["requires_revalidation"] = list(self.required_revalidation)
         if self.source_commit_id:
             payload["source_commit_id"] = self.source_commit_id
+        if self.structure_fingerprint:
+            payload["structure_fingerprint"] = self.structure_fingerprint
         return payload
 
 
@@ -519,6 +523,7 @@ class CircuitRunner:
         self,
         state: Dict[str, Any],
         circuit_nodes: Optional[List[Dict[str, Any]]] = None,
+        circuit_definition: Optional[Dict[str, Any]] = None,
     ) -> Optional[ReviewGateResumeRequest]:
         """
         Extract and validate a resume request from execution state.
@@ -585,6 +590,14 @@ class CircuitRunner:
         if source_commit_id is not None and not isinstance(source_commit_id, str):
             raise TypeError("source_commit_id must be a string when provided")
 
+        structure_fingerprint = raw.get("structure_fingerprint")
+        if structure_fingerprint is not None and not isinstance(structure_fingerprint, str):
+            raise TypeError("structure_fingerprint must be a string when provided")
+
+        current_structure_fingerprint = None
+        if circuit_definition is not None:
+            current_structure_fingerprint = compute_circuit_fingerprint(circuit_definition)
+
         required_revalidation = _normalize_required_revalidation(raw.get("requires_revalidation"))
         if persisted is not None:
             persisted_required_revalidation = tuple(persisted.required_revalidation)
@@ -603,6 +616,20 @@ class CircuitRunner:
                 )
             source_commit_id = persisted_source_commit_id or source_commit_id
 
+            persisted_structure_fingerprint = persisted.structure_fingerprint
+            if persisted_structure_fingerprint and structure_fingerprint and structure_fingerprint != persisted_structure_fingerprint:
+                raise ValueError(
+                    "resume structure_fingerprint does not match persisted paused run state; "
+                    "resume must use the structural fingerprint recorded in paused_run_state"
+                )
+            structure_fingerprint = persisted_structure_fingerprint or structure_fingerprint
+
+        if current_structure_fingerprint and structure_fingerprint and current_structure_fingerprint != structure_fingerprint:
+            raise ValueError(
+                "current circuit structure_fingerprint does not match paused run state; "
+                "resume is not allowed across structurally drifted drafts"
+            )
+
         # If a persisted paused run state was also provided, use its execution ID
         # as the authoritative prior-run linkage (overrides __resume__ field).
         if persisted is not None and not previous_execution_id:
@@ -618,6 +645,7 @@ class CircuitRunner:
             reason=reason,
             required_revalidation=required_revalidation,
             source_commit_id=source_commit_id,
+            structure_fingerprint=structure_fingerprint or current_structure_fingerprint,
         )
 
     def _build_resume_nodes(
@@ -715,7 +743,7 @@ class CircuitRunner:
 
         current_state: Dict[str, Any] = dict(state)
         nodes: List[Dict[str, Any]] = circuit.get("nodes", [])
-        resume_request = self._extract_resume_request(current_state, circuit_nodes=nodes)
+        resume_request = self._extract_resume_request(current_state, circuit_nodes=nodes, circuit_definition=circuit)
         current_state.setdefault("__node_outputs__", {})
 
         # ── Phase 1: Structural pre-validation ───────────────────────────────
@@ -899,6 +927,7 @@ class CircuitRunner:
                     previous_execution_id=(
                         resume_request.previous_execution_id if resume_request else None
                     ),
+                    structure_fingerprint=compute_circuit_fingerprint(circuit),
                 )
 
             governance = self._build_governance_trace(

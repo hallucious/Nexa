@@ -71,6 +71,11 @@ class PausedRunState:
     source_commit_id     : Optional[str]
         Structural commit anchor for this paused run. When present, resume
         must not silently cross commit boundaries.
+
+    structure_fingerprint : Optional[str]
+        Deterministic structural fingerprint of the circuit at pause time.
+        This prevents false-positive resume readiness when the current Working
+        Save has drifted structurally while still pointing at the same commit.
     """
 
     paused_execution_id: str
@@ -82,6 +87,7 @@ class PausedRunState:
     paused_at: str
     previous_execution_id: Optional[str] = None
     source_commit_id: Optional[str] = None
+    structure_fingerprint: Optional[str] = None
 
     # ── Construction helpers ─────────────────────────────────────────────────
 
@@ -99,6 +105,7 @@ class PausedRunState:
         ),
         previous_execution_id: Optional[str] = None,
         source_commit_id: Optional[str] = None,
+        structure_fingerprint: Optional[str] = None,
         now: Optional[str] = None,
     ) -> "PausedRunState":
         """
@@ -128,6 +135,7 @@ class PausedRunState:
             paused_at=ts,
             previous_execution_id=previous_execution_id,
             source_commit_id=source_commit_id,
+            structure_fingerprint=structure_fingerprint,
         )
 
     # ── Validation ────────────────────────────────────────────────────────────
@@ -189,6 +197,7 @@ class PausedRunState:
             "created_at": self.created_at,
             "paused_at": self.paused_at,
             "source_commit_id": self.source_commit_id,
+            "structure_fingerprint": self.structure_fingerprint,
         }
 
     @classmethod
@@ -208,6 +217,7 @@ class PausedRunState:
                 paused_at=data["paused_at"],
                 previous_execution_id=data.get("previous_execution_id"),
                 source_commit_id=data.get("source_commit_id"),
+                structure_fingerprint=data.get("structure_fingerprint"),
             )
         except KeyError as exc:
             raise PausedRunStateError(
@@ -228,6 +238,7 @@ class PausedRunState:
             "reason": "review_gate_resume",
             "requires_revalidation": list(self.required_revalidation),
             "source_commit_id": self.source_commit_id,
+            "structure_fingerprint": self.structure_fingerprint,
         }
 
     def __repr__(self) -> str:
