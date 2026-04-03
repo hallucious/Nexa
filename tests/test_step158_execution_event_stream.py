@@ -237,3 +237,21 @@ def test_review_required_payload_contains_minimal_resume_contract():
         "structural_validation",
         "determinism_pre_validation",
     ]
+
+
+
+def test_execution_event_emitter_default_is_opt_in_file_writing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    emitter = ExecutionEventEmitter()
+
+    emitter.emit(
+        ExecutionEvent.now(
+            "warning",
+            {"message": "x"},
+            execution_id="exec-no-file",
+            node_id="n1",
+        )
+    )
+
+    assert emitter.get_events()[0].type == "warning"
+    assert not (tmp_path / "EXECUTION_EVENTS.jsonl").exists()

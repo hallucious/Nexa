@@ -16,7 +16,7 @@ class ExecutionEventEmitter:
     - optionally append them to a JSONL file
     """
 
-    def __init__(self, event_file: Optional[str] = "EXECUTION_EVENTS.jsonl"):
+    def __init__(self, event_file: Optional[str] = None):
         self._events: List[ExecutionEvent] = []
         self._event_file = Path(event_file) if event_file else None
 
