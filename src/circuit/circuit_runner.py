@@ -37,7 +37,7 @@ import re
 
 from src.circuit.circuit_scheduler import CircuitScheduler
 from src.circuit.circuit_validator import CircuitValidator, CircuitValidationError
-from src.circuit.fingerprint import compute_circuit_fingerprint
+from src.circuit.fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
 from src.engine.validation.decision_policy import (
     PostDecisionResult,
     PreDecisionResult,
@@ -97,6 +97,7 @@ class ReviewGateResumeRequest:
     required_revalidation: Tuple[str, ...] = ()
     source_commit_id: Optional[str] = None
     structure_fingerprint: Optional[str] = None
+    execution_surface_fingerprint: Optional[str] = None
 
     def to_payload(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -111,6 +112,8 @@ class ReviewGateResumeRequest:
             payload["source_commit_id"] = self.source_commit_id
         if self.structure_fingerprint:
             payload["structure_fingerprint"] = self.structure_fingerprint
+        if self.execution_surface_fingerprint:
+            payload["execution_surface_fingerprint"] = self.execution_surface_fingerprint
         return payload
 
 
@@ -594,9 +597,15 @@ class CircuitRunner:
         if structure_fingerprint is not None and not isinstance(structure_fingerprint, str):
             raise TypeError("structure_fingerprint must be a string when provided")
 
+        execution_surface_fingerprint = raw.get("execution_surface_fingerprint")
+        if execution_surface_fingerprint is not None and not isinstance(execution_surface_fingerprint, str):
+            raise TypeError("execution_surface_fingerprint must be a string when provided")
+
         current_structure_fingerprint = None
+        current_execution_surface_fingerprint = None
         if circuit_definition is not None:
             current_structure_fingerprint = compute_circuit_fingerprint(circuit_definition)
+            current_execution_surface_fingerprint = compute_execution_surface_fingerprint(circuit_definition)
 
         required_revalidation = _normalize_required_revalidation(raw.get("requires_revalidation"))
         if persisted is not None:
@@ -624,10 +633,34 @@ class CircuitRunner:
                 )
             structure_fingerprint = persisted_structure_fingerprint or structure_fingerprint
 
+            persisted_execution_surface_fingerprint = persisted.execution_surface_fingerprint
+            if (
+                persisted_execution_surface_fingerprint
+                and execution_surface_fingerprint
+                and execution_surface_fingerprint != persisted_execution_surface_fingerprint
+            ):
+                raise ValueError(
+                    "resume execution_surface_fingerprint does not match persisted paused run state; "
+                    "resume must use the execution-surface fingerprint recorded in paused_run_state"
+                )
+            execution_surface_fingerprint = (
+                persisted_execution_surface_fingerprint or execution_surface_fingerprint
+            )
+
         if current_structure_fingerprint and structure_fingerprint and current_structure_fingerprint != structure_fingerprint:
             raise ValueError(
                 "current circuit structure_fingerprint does not match paused run state; "
                 "resume is not allowed across structurally drifted drafts"
+            )
+
+        if (
+            current_execution_surface_fingerprint
+            and execution_surface_fingerprint
+            and current_execution_surface_fingerprint != execution_surface_fingerprint
+        ):
+            raise ValueError(
+                "current circuit execution_surface_fingerprint does not match paused run state; "
+                "resume is not allowed across execution-surface drift"
             )
 
         # If a persisted paused run state was also provided, use its execution ID
@@ -646,6 +679,9 @@ class CircuitRunner:
             required_revalidation=required_revalidation,
             source_commit_id=source_commit_id,
             structure_fingerprint=structure_fingerprint or current_structure_fingerprint,
+            execution_surface_fingerprint=(
+                execution_surface_fingerprint or current_execution_surface_fingerprint
+            ),
         )
 
     def _build_resume_nodes(
@@ -928,6 +964,7 @@ class CircuitRunner:
                         resume_request.previous_execution_id if resume_request else None
                     ),
                     structure_fingerprint=compute_circuit_fingerprint(circuit),
+                    execution_surface_fingerprint=compute_execution_surface_fingerprint(circuit),
                 )
 
             governance = self._build_governance_trace(

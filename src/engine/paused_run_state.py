@@ -76,6 +76,11 @@ class PausedRunState:
         Deterministic structural fingerprint of the circuit at pause time.
         This prevents false-positive resume readiness when the current Working
         Save has drifted structurally while still pointing at the same commit.
+
+    execution_surface_fingerprint : Optional[str]
+        Deterministic fingerprint of the resume-relevant execution surface at
+        pause time. This covers not just graph topology but also execution-
+        relevant resources/config surfaces such as prompt/provider/plugin data.
     """
 
     paused_execution_id: str
@@ -88,6 +93,7 @@ class PausedRunState:
     previous_execution_id: Optional[str] = None
     source_commit_id: Optional[str] = None
     structure_fingerprint: Optional[str] = None
+    execution_surface_fingerprint: Optional[str] = None
 
     # ── Construction helpers ─────────────────────────────────────────────────
 
@@ -106,6 +112,7 @@ class PausedRunState:
         previous_execution_id: Optional[str] = None,
         source_commit_id: Optional[str] = None,
         structure_fingerprint: Optional[str] = None,
+        execution_surface_fingerprint: Optional[str] = None,
         now: Optional[str] = None,
     ) -> "PausedRunState":
         """
@@ -136,6 +143,7 @@ class PausedRunState:
             previous_execution_id=previous_execution_id,
             source_commit_id=source_commit_id,
             structure_fingerprint=structure_fingerprint,
+            execution_surface_fingerprint=execution_surface_fingerprint,
         )
 
     # ── Validation ────────────────────────────────────────────────────────────
@@ -198,6 +206,7 @@ class PausedRunState:
             "paused_at": self.paused_at,
             "source_commit_id": self.source_commit_id,
             "structure_fingerprint": self.structure_fingerprint,
+            "execution_surface_fingerprint": self.execution_surface_fingerprint,
         }
 
     @classmethod
@@ -218,6 +227,7 @@ class PausedRunState:
                 previous_execution_id=data.get("previous_execution_id"),
                 source_commit_id=data.get("source_commit_id"),
                 structure_fingerprint=data.get("structure_fingerprint"),
+                execution_surface_fingerprint=data.get("execution_surface_fingerprint"),
             )
         except KeyError as exc:
             raise PausedRunStateError(
@@ -239,6 +249,7 @@ class PausedRunState:
             "requires_revalidation": list(self.required_revalidation),
             "source_commit_id": self.source_commit_id,
             "structure_fingerprint": self.structure_fingerprint,
+            "execution_surface_fingerprint": self.execution_surface_fingerprint,
         }
 
     def __repr__(self) -> str:

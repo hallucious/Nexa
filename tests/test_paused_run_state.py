@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import pytest
 from src.engine.paused_run_state import PausedRunState, PausedRunStateError
+from src.circuit.fingerprint import compute_execution_surface_fingerprint
 from src.engine.node_execution_runtime import ReviewRequiredPause
 from src.circuit.circuit_runner import (
     CircuitRunner,
@@ -328,6 +329,12 @@ class TestCircuitRunnerPausedRunState:
             "determinism_pre_validation",
         ]
 
+    def test_paused_run_state_to_resume_request_payload_includes_execution_surface_fingerprint(self):
+        runner = self._pausing_runner()
+        result = runner.execute(self._pausing_circuit(), {})
+        payload = result.paused_run_state.to_resume_request_payload()
+        assert payload["execution_surface_fingerprint"] == result.paused_run_state.execution_surface_fingerprint
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 4. Resume with __paused_run_state__ — structural drift detection
@@ -625,3 +632,4 @@ class TestPauseResumeRegression:
         circuit = {"id": "tc", "nodes": [{"id": "n_a", "execution_config_ref": "cfg.a"}]}
         with pytest.raises(RuntimeError):
             runner.execute(circuit, {})
+

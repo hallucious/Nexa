@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from src.circuit.fingerprint import compute_circuit_fingerprint
+from src.circuit.fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
 from datetime import datetime, timezone
 
 from src.engine.execution_snapshot import ExecutionSnapshot
@@ -423,7 +423,22 @@ def _validate_paused_run_resume_anchor(
     resume_source_commit_id = resume_request.get('source_commit_id') if isinstance(resume_request.get('source_commit_id'), str) else None
     paused_structure_fingerprint = paused_run_state.get('structure_fingerprint') if isinstance(paused_run_state.get('structure_fingerprint'), str) else None
     resume_structure_fingerprint = resume_request.get('structure_fingerprint') if isinstance(resume_request.get('structure_fingerprint'), str) else None
+    paused_execution_surface_fingerprint = paused_run_state.get('execution_surface_fingerprint') if isinstance(paused_run_state.get('execution_surface_fingerprint'), str) else None
+    resume_execution_surface_fingerprint = resume_request.get('execution_surface_fingerprint') if isinstance(resume_request.get('execution_surface_fingerprint'), str) else None
     current_structure_fingerprint = compute_circuit_fingerprint({'nodes': [dict(node) for node in getattr(working_save.circuit, 'nodes', []) or []], 'edges': [dict(edge) for edge in getattr(working_save.circuit, 'edges', []) or []], 'entry': getattr(working_save.circuit, 'entry', None), 'outputs': [dict(output) for output in getattr(working_save.circuit, 'outputs', []) or []]})
+    current_execution_surface_fingerprint = compute_execution_surface_fingerprint({
+        'circuit': {
+            'nodes': [dict(node) for node in getattr(working_save.circuit, 'nodes', []) or []],
+            'edges': [dict(edge) for edge in getattr(working_save.circuit, 'edges', []) or []],
+            'entry': getattr(working_save.circuit, 'entry', None),
+            'outputs': [dict(output) for output in getattr(working_save.circuit, 'outputs', []) or []],
+        },
+        'resources': {
+            'prompts': dict(getattr(working_save.resources, 'prompts', {}) or {}),
+            'providers': dict(getattr(working_save.resources, 'providers', {}) or {}),
+            'plugins': dict(getattr(working_save.resources, 'plugins', {}) or {}),
+        },
+    })
     record_source_commit_id = execution_record.source.commit_id
 
     if paused_source_commit_id and paused_source_commit_id != record_source_commit_id:
@@ -482,6 +497,25 @@ def _validate_paused_run_resume_anchor(
             ),
         })
 
+    if paused_execution_surface_fingerprint and resume_execution_surface_fingerprint and paused_execution_surface_fingerprint != resume_execution_surface_fingerprint:
+        issues.append({
+            'code': 'PAUSED_RUN_RESUME_REQUEST_EXECUTION_SURFACE_FINGERPRINT_MISMATCH',
+            'message': (
+                f"resume_request execution_surface_fingerprint '{resume_execution_surface_fingerprint}' does not match "
+                f"paused_run_state execution_surface_fingerprint '{paused_execution_surface_fingerprint}'"
+            ),
+        })
+
+    effective_execution_surface_fingerprint = paused_execution_surface_fingerprint or resume_execution_surface_fingerprint
+    if effective_execution_surface_fingerprint and current_execution_surface_fingerprint != effective_execution_surface_fingerprint:
+        issues.append({
+            'code': 'PAUSED_RUN_EXECUTION_SURFACE_FINGERPRINT_MISMATCH',
+            'message': (
+                f"paused run execution_surface_fingerprint '{effective_execution_surface_fingerprint}' does not match current "
+                f"Working Save execution_surface_fingerprint '{current_execution_surface_fingerprint}'"
+            ),
+        })
+
     if isinstance(pause_node_id, str) and pause_node_id and pause_node_id not in node_ids:
         issues.append({
             'code': 'PAUSED_RUN_ANCHOR_NODE_MISSING',
@@ -511,6 +545,8 @@ def _validate_paused_run_resume_anchor(
         'structure_fingerprint': effective_structure_fingerprint,
         'working_save_structure_fingerprint': current_structure_fingerprint,
         'working_save_commit_anchor_id': working_save_commit_anchor_id,
+        'execution_surface_fingerprint': effective_execution_surface_fingerprint,
+        'working_save_execution_surface_fingerprint': current_execution_surface_fingerprint,
         'pause_node_id': pause_node_id,
         'resume_from_node_id': resume_from_node_id,
         'anchor_valid': anchor_valid,

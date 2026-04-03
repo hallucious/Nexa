@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.circuit.fingerprint import compute_execution_surface_fingerprint
 from src.engine.execution_artifact_hashing import ExecutionHashReport
 from src.engine.execution_snapshot import ExecutionSnapshotBuilder
 from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
@@ -21,6 +22,9 @@ def make_working_save(
     outputs: list[dict] | None = None,
     node_ids: list[str] | None = None,
     source_commit_id: str | None = None,
+    providers: dict | None = None,
+    prompts: dict | None = None,
+    plugins: dict | None = None,
 ) -> WorkingSaveModel:
     resolved_node_ids = node_ids if node_ids is not None else ['n1']
     return WorkingSaveModel(
@@ -36,7 +40,11 @@ def make_working_save(
             entry=entry,
             outputs=outputs if outputs is not None else [{'name': 'out', 'source': 'n1'}],
         ),
-        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        resources=ResourcesModel(
+            prompts=prompts or {},
+            providers=providers or {},
+            plugins=plugins or {},
+        ),
         state=StateModel(input={'question': 'What is AI?'}, working={}, memory={}),
         runtime=RuntimeModel(
             status='validated',
@@ -302,3 +310,105 @@ def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_on
     assert validation['anchor_valid'] is False
     assert validation['working_save_commit_anchor_id'] == 'commit-current'
     assert any(issue['code'] == 'PAUSED_RUN_WORKING_SAVE_COMMIT_ANCHOR_MISMATCH' for issue in validation['issues'])
+
+
+def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_on_execution_surface_fingerprint_mismatch():
+    working = make_working_save(
+        node_ids=['n_done', 'n1'],
+        source_commit_id='commit-1',
+        providers={'prov.main': {'model': 'claude-3'}},
+        prompts={'p.main': {'template': 'draft'}},
+    )
+    paused_surface = compute_execution_surface_fingerprint({
+        'circuit': {
+            'nodes': [{'id': 'n_done'}, {'id': 'n1'}],
+            'edges': [],
+            'entry': 'n1',
+            'outputs': [{'name': 'out', 'source': 'n1'}],
+        },
+        'resources': {
+            'providers': {'prov.main': {'model': 'gpt-4'}},
+            'prompts': {'p.main': {'template': 'draft'}},
+            'plugins': {},
+        },
+    })
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n1',
+        completed_node_ids=frozenset({'n_done'}),
+        review_required={'reason': 'human_review_required'},
+        source_commit_id='commit-1',
+        execution_surface_fingerprint=paused_surface,
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n1',
+            'resume_from_node_id': 'n1',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['resume_ready'] is False
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is False
+    assert any(issue['code'] == 'PAUSED_RUN_EXECUTION_SURFACE_FINGERPRINT_MISMATCH' for issue in validation['issues'])
+
+
+def test_apply_execution_record_to_working_save_keeps_resume_ready_true_when_execution_surface_matches():
+    providers = {'prov.main': {'model': 'gpt-4'}}
+    prompts = {'p.main': {'template': 'draft'}}
+    working = make_working_save(
+        node_ids=['n_done', 'n1'],
+        source_commit_id='commit-1',
+        providers=providers,
+        prompts=prompts,
+    )
+    paused_surface = compute_execution_surface_fingerprint({
+        'circuit': {
+            'nodes': [{'id': 'n_done'}, {'id': 'n1'}],
+            'edges': [],
+            'entry': 'n1',
+            'outputs': [{'name': 'out', 'source': 'n1'}],
+        },
+        'resources': {
+            'providers': providers,
+            'prompts': prompts,
+            'plugins': {},
+        },
+    })
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n1',
+        completed_node_ids=frozenset({'n_done'}),
+        review_required={'reason': 'human_review_required'},
+        source_commit_id='commit-1',
+        execution_surface_fingerprint=paused_surface,
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n1',
+            'resume_from_node_id': 'n1',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['resume_ready'] is True
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is True
+    assert validation['effective_resume_ready'] is True
