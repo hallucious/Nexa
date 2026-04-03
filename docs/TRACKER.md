@@ -276,3 +276,12 @@ CLI
 
 
 * Storage runtime linkage implemented in code: Commit Snapshot–anchored Execution Record creation and Working Save last-run update can now be driven from one lifecycle path
+
+
+### Step161: Artifact Preview Event Safety Alignment
+
+* runtime artifact preview emission now builds explicit preview-safe payloads
+* `artifact_preview` events now declare non-final semantics (`is_final_artifact = false`)
+* lightweight `preview_kind` / `preview_summary` metadata added for preview consumers
+* full artifact truth remains separate from preview observability payloads
+* focused execution-event / timeline tests passed after the alignment

@@ -170,6 +170,37 @@ class NodeExecutionRuntime:
             )
         )
 
+    def _build_artifact_preview_payload(self, artifact: Artifact) -> Dict[str, Any]:
+        preview_data = artifact.data
+        preview_kind = "unknown"
+        preview_summary = None
+
+        if isinstance(preview_data, dict):
+            preview_kind = "mapping"
+            preview_summary = f"mapping[{len(preview_data)}]"
+        elif isinstance(preview_data, (list, tuple)):
+            preview_kind = "sequence"
+            preview_summary = f"sequence[{len(preview_data)}]"
+        elif isinstance(preview_data, str):
+            preview_kind = "text"
+            preview_summary = preview_data[:120]
+        elif preview_data is None:
+            preview_kind = "empty"
+            preview_summary = None
+        else:
+            preview_kind = type(preview_data).__name__
+            preview_summary = str(preview_data)[:120]
+
+        return {
+            "artifact_name": artifact.name,
+            "artifact_type": artifact.type,
+            "data": preview_data,
+            "metadata": artifact.metadata,
+            "is_final_artifact": False,
+            "preview_kind": preview_kind,
+            "preview_summary": preview_summary,
+        }
+
     def _emit_artifact_preview_events(self, node_id: str, artifacts: List[Artifact]) -> None:
         for artifact in artifacts:
             if artifact.type != "preview":
@@ -177,12 +208,7 @@ class NodeExecutionRuntime:
 
             self._emit_event(
                 "artifact_preview",
-                {
-                    "artifact_name": artifact.name,
-                    "artifact_type": artifact.type,
-                    "data": artifact.data,
-                    "metadata": artifact.metadata,
-                },
+                self._build_artifact_preview_payload(artifact),
                 node_id=node_id,
             )
 

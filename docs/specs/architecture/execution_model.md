@@ -1,5 +1,5 @@
 Spec ID: execution_model
-Version: 1.7.0
+Version: 1.8.0
 Status: Active
 Category: architecture
 Depends On:
@@ -106,4 +106,5 @@ Rules:
 5. `execution_failed` is emitted only for failed run completion.
 6. `warning` is advisory and must not redefine structural or execution truth.
 7. `artifact_preview` is preview-safe observability data only and must not redefine final artifact truth.
-8. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.
+8. `artifact_preview` payloads should explicitly mark that they are non-final and may include lightweight preview summaries.
+9. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.

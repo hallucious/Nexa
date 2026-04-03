@@ -100,3 +100,26 @@ def test_runtime_emits_progress_event_from_plugin_result():
     assert events[0].payload["plugin_id"] == "demo.plugin"
     assert events[0].payload["processed"] == 3
     assert events[0].payload["total"] == 10
+
+def test_artifact_preview_event_marks_preview_as_non_final_truth():
+    runtime = NodeExecutionRuntime(
+        provider_executor=DummyProviderExecutor(),
+        plugin_registry={},
+        event_emitter=ExecutionEventEmitter(event_file=None),
+    )
+    runtime.set_execution_id("exec-preview-safe")
+
+    artifact = Artifact(
+        type="preview",
+        name="partial_summary",
+        data={"chunks": ["a", "b"]},
+        metadata={"stage": "intermediate"},
+    )
+
+    payload = runtime._build_artifact_preview_payload(artifact)
+
+    assert payload["artifact_name"] == "partial_summary"
+    assert payload["artifact_type"] == "preview"
+    assert payload["is_final_artifact"] is False
+    assert payload["preview_kind"] == "mapping"
+    assert payload["preview_summary"] == "mapping[1]"
