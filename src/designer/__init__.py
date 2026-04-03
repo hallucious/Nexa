@@ -9,3 +9,5 @@ from src.designer.text_preview_renderer import TextPreviewRenderer
 
 from src.designer.approval_flow import DesignerApprovalCoordinator
 from src.designer.commit_gateway import DesignerCommitGateway, DesignerCommitResult
+
+from src.designer.patch_applier import DesignerPatchApplier, DesignerPatchApplicationResult

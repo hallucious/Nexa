@@ -82,7 +82,7 @@ class DesignerRequestNormalizer:
     ) -> TargetScope:
         text = request_text.casefold()
         broad = any(term in text for term in ("all ", "entire", "whole", "across the circuit", "every"))
-        node_refs = tuple(re.findall(r"node\s+([A-Za-z0-9_\-\.]+)", request_text, flags=re.IGNORECASE))
+        node_refs = self._extract_node_refs(request_text)
         max_change_scope = "broad" if broad else "bounded"
         if category == "CREATE_CIRCUIT":
             return TargetScope(mode="new_circuit", node_refs=node_refs, max_change_scope=max_change_scope)
@@ -315,9 +315,30 @@ class DesignerRequestNormalizer:
             return "schema.validate"
         return "tool.generic"
 
+    def _extract_node_refs(self, request_text: str) -> tuple[str, ...]:
+        prioritized_patterns = (
+            r"\bin\s+node\s+([A-Za-z0-9_\-\.]+)",
+            r"\bon\s+node\s+([A-Za-z0-9_\-\.]+)",
+            r"\bfor\s+node\s+([A-Za-z0-9_\-\.]+)",
+            r"\bat\s+node\s+([A-Za-z0-9_\-\.]+)",
+            r"\bnode\s+([A-Za-z0-9_\-\.]+)",
+        )
+        stopwords = {"before", "after", "between", "final", "a", "an", "the"}
+        ordered_refs: list[str] = []
+        seen: set[str] = set()
+        for pattern in prioritized_patterns:
+            for match in re.finditer(pattern, request_text, flags=re.IGNORECASE):
+                ref = match.group(1)
+                if ref.casefold() in stopwords:
+                    continue
+                if ref not in seen:
+                    ordered_refs.append(ref)
+                    seen.add(ref)
+        return tuple(ordered_refs)
+
     def _first_node_ref(self, request_text: str) -> str | None:
-        match = re.search(r"node\s+([A-Za-z0-9_\-\.]+)", request_text, flags=re.IGNORECASE)
-        return match.group(1) if match else None
+        refs = self._extract_node_refs(request_text)
+        return refs[0] if refs else None
 
 
 def _stable_id(prefix: str, raw: str) -> str:
