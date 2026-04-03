@@ -1,5 +1,5 @@
 Spec ID: execution_model
-Version: 1.11.0
+Version: 1.12.0
 Status: Active
 Category: architecture
 Depends On:
@@ -116,3 +116,5 @@ Rules:
 12. `execution_resumed` is emitted only for an explicit resume request against a previously paused review-gated run and must carry linkage back to the prior execution when available.
 13. Resumed execution must re-run structural and pre-determinism validation before continuing.
 14. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.
+15. Replay-triggered runs must remain semantically distinct from resumed runs; replay must not be inferred from pause metadata as a hidden resume path.
+16. `execution_resumed` must never be used to represent replay, audit, or history-verification execution paths.

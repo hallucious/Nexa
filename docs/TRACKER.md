@@ -63,10 +63,10 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1214 passed, 3 skipped
+1283 passed, 3 skipped
 ```
 
-* authoritative storage hardening baseline commit: `15031be`
+* authoritative storage/runtime durability baseline commit: `8fef812`
 * root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
 * canonical savefile lifecycle entry points exist across create / serialize / load / validate
 * bounded CLI savefile surface remains intact
@@ -246,7 +246,7 @@ CLI
 ### Current Status
 
 ```text
-1117 passed, 3 skipped
+1283 passed, 3 skipped
 ```
 
 * storage-sector architecture work is no longer in foundation-building mode
@@ -302,3 +302,9 @@ CLI
 * paused review-gated runs now expose a minimal explicit resume contract
 * resumed runs emit `execution_resumed` with linkage to prior execution when provided
 * resumed execution re-runs validation before continuing from the paused node
+
+### Phase 1 Closure Judgment
+
+* paused-run durability line is now evidence-based across commit anchor, structure fingerprint, execution-surface fingerprint, and source-commit evidence
+* replay-triggered runs are now kept semantically distinct from resume-ready paused runs in execution-record and working-save summaries
+* current Phase 1 state is closure-ready: remaining work should focus on final spec ↔ implementation sync and explicit completion judgment rather than new runtime feature expansion

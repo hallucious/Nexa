@@ -2,7 +2,7 @@
 
 ---
 
-# Phase 1 — Core Engine Stabilization ✓ Complete
+# Phase 1 — Core Engine Stabilization + Runtime Durability Closure ✓ Complete
 
 * DAG-based circuit execution
 * Dependency-based node scheduling
@@ -25,7 +25,7 @@
 * CLI: run, compare, diff, export, replay, info, and task commands
 * Regression policy reason detail (trigger lines)
 
-Current baseline: 1022 passed, 3 skipped
+Current baseline: 1283 passed, 3 skipped
 
 ---
 
@@ -36,9 +36,11 @@ Current baseline: 1022 passed, 3 skipped
 * Canonical public CLI clarified as `src.cli.nexa_cli:main`
 * Legacy Nex compatibility is now wrapper-oriented: `src/engine/cli.py` is a bounded compatibility shim, `src/cli/savefile_runtime.py` owns execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic
 * Legacy `.nex` reverse-conversion / writer support removed; compatibility is execution-only
-* Current repository baseline: 1022 passed, 3 skipped
+* Current repository baseline: 1283 passed, 3 skipped
 * Role-aware `.nex` storage foundation started: `load_nex(...)`, `validate_working_save(...)`, `validate_commit_snapshot(...)`, and typed model split for `working_save` / `commit_snapshot`
 * Storage lifecycle linkage started: Working Save → Commit Snapshot creation and Execution Record → Working Save last-run summary update APIs
+* Pause/resume durability line now enforces commit-anchor, structure-fingerprint, execution-surface-fingerprint, and source-commit evidence presence before `resume_ready` may be true
+* Replay-triggered runs are explicitly separated from resume-ready paused runs in storage/runtime summaries
 
 ---
 
