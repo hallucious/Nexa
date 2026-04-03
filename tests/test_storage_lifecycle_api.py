@@ -15,7 +15,13 @@ from src.storage.models.shared_sections import CircuitModel, ResourcesModel, Sta
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 
 
-def make_working_save(*, entry: str | None = 'n1', outputs: list[dict] | None = None) -> WorkingSaveModel:
+def make_working_save(
+    *,
+    entry: str | None = 'n1',
+    outputs: list[dict] | None = None,
+    node_ids: list[str] | None = None,
+) -> WorkingSaveModel:
+    resolved_node_ids = node_ids if node_ids is not None else ['n1']
     return WorkingSaveModel(
         meta=WorkingSaveMeta(
             format_version='1.0.0',
@@ -24,7 +30,7 @@ def make_working_save(*, entry: str | None = 'n1', outputs: list[dict] | None = 
             working_save_id='ws-1',
         ),
         circuit=CircuitModel(
-            nodes=[{'id': 'n1'}],
+            nodes=[{'id': node_id} for node_id in resolved_node_ids],
             edges=[],
             entry=entry,
             outputs=outputs if outputs is not None else [{'name': 'out', 'source': 'n1'}],
@@ -109,7 +115,7 @@ def test_apply_execution_record_to_working_save_marks_execution_paused_and_prese
 
 
 def test_apply_execution_record_to_working_save_propagates_pause_boundary_summary():
-    working = make_working_save()
+    working = make_working_save(entry='node_b', outputs=[{'name': 'out', 'source': 'node_b'}], node_ids=['node_b'])
     record = create_execution_record_from_snapshot(
         make_snapshot(status='partial'),
         commit_id='cs-1',
@@ -128,6 +134,7 @@ def test_apply_execution_record_to_working_save_propagates_pause_boundary_summar
     assert updated.runtime.last_run['pause_boundary']['pause_node_id'] == 'node_b'
     assert updated.runtime.last_run['pause_boundary']['resume_from_node_id'] == 'node_b'
     assert updated.runtime.last_run['resume_ready'] is True
+    assert updated.runtime.last_run['resume_anchor_validation']['anchor_valid'] is True
 
 
 def test_apply_execution_record_to_working_save_propagates_paused_run_state_and_resume_request_summary():
@@ -160,3 +167,95 @@ def test_apply_execution_record_to_working_save_propagates_paused_run_state_and_
     assert updated.runtime.last_run['resume_request']['previous_execution_id'] == 'exec-paused'
     assert updated.runtime.last_run['resume_request']['requires_revalidation'] == ['structural_validation', 'determinism_pre_validation']
     assert updated.runtime.last_run['resume_ready'] is True
+
+
+def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_when_paused_node_missing_in_current_circuit():
+    working = make_working_save(node_ids=['n_current'])
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n_missing',
+        completed_node_ids=frozenset(),
+        review_required={'reason': 'human_review_required'},
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n_missing',
+            'resume_from_node_id': 'n_missing',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['resume_ready'] is False
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is False
+    assert validation['effective_resume_ready'] is False
+    assert validation['issues'][0]['code'] == 'PAUSED_RUN_ANCHOR_NODE_MISSING'
+
+
+def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_when_completed_boundary_is_stale():
+    working = make_working_save(node_ids=['n1'])
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n1',
+        completed_node_ids=frozenset({'n_stale'}),
+        review_required={'reason': 'human_review_required'},
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n1',
+            'resume_from_node_id': 'n1',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['resume_ready'] is False
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is False
+    assert any(issue['code'] == 'PAUSED_RUN_COMPLETED_BOUNDARY_STALE' for issue in validation['issues'])
+
+
+def test_apply_execution_record_to_working_save_keeps_resume_ready_true_when_current_circuit_matches_paused_boundary():
+    working = make_working_save(node_ids=['n_done', 'n1'])
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n1',
+        completed_node_ids=frozenset({'n_done'}),
+        review_required={'reason': 'human_review_required'},
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n1',
+            'resume_from_node_id': 'n1',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['resume_ready'] is True
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is True
+    assert validation['effective_resume_ready'] is True
+    assert validation['issues'] == []

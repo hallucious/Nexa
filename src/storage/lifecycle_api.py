@@ -376,6 +376,69 @@ _PAUSED_STATUSES = {'paused'}
 _FAILURE_STATUSES = {'failed', 'partial', 'cancelled'}
 
 
+def _working_save_node_ids(working_save: WorkingSaveModel) -> set[str]:
+    node_ids: set[str] = set()
+    for node in getattr(working_save.circuit, 'nodes', []) or []:
+        if isinstance(node, dict):
+            node_id = node.get('id') or node.get('node_id')
+            if isinstance(node_id, str) and node_id:
+                node_ids.add(node_id)
+    return node_ids
+
+
+def _validate_paused_run_resume_anchor(
+    working_save: WorkingSaveModel,
+    execution_record: ExecutionRecordModel,
+    last_run_summary: dict[str, object],
+) -> dict[str, object] | None:
+    if execution_record.meta.status not in _PAUSED_STATUSES:
+        return None
+
+    node_ids = _working_save_node_ids(working_save)
+    pause_boundary = last_run_summary.get('pause_boundary') if isinstance(last_run_summary.get('pause_boundary'), dict) else {}
+    paused_run_state = last_run_summary.get('paused_run_state') if isinstance(last_run_summary.get('paused_run_state'), dict) else {}
+    resume_request = last_run_summary.get('resume_request') if isinstance(last_run_summary.get('resume_request'), dict) else {}
+
+    issues: list[dict[str, str]] = []
+
+    pause_node_id = paused_run_state.get('paused_node_id') or pause_boundary.get('pause_node_id')
+    resume_from_node_id = resume_request.get('resume_from_node_id') or pause_boundary.get('resume_from_node_id')
+
+    if isinstance(pause_node_id, str) and pause_node_id and pause_node_id not in node_ids:
+        issues.append({
+            'code': 'PAUSED_RUN_ANCHOR_NODE_MISSING',
+            'message': f"paused node '{pause_node_id}' is not present in current Working Save circuit",
+        })
+
+    if isinstance(resume_from_node_id, str) and resume_from_node_id and resume_from_node_id not in node_ids:
+        issues.append({
+            'code': 'PAUSED_RUN_RESUME_TARGET_MISSING',
+            'message': f"resume target node '{resume_from_node_id}' is not present in current Working Save circuit",
+        })
+
+    completed_node_ids = paused_run_state.get('completed_node_ids')
+    if isinstance(completed_node_ids, list):
+        for node_id in completed_node_ids:
+            if isinstance(node_id, str) and node_id and node_id not in node_ids:
+                issues.append({
+                    'code': 'PAUSED_RUN_COMPLETED_BOUNDARY_STALE',
+                    'message': f"completed boundary node '{node_id}' is not present in current Working Save circuit",
+                })
+
+    anchor_valid = not issues
+    stored_resume_ready = bool(last_run_summary.get('resume_ready', False))
+    return {
+        'checked': True,
+        'source_commit_id': execution_record.source.commit_id,
+        'pause_node_id': pause_node_id,
+        'resume_from_node_id': resume_from_node_id,
+        'anchor_valid': anchor_valid,
+        'issue_count': len(issues),
+        'issues': issues,
+        'effective_resume_ready': bool(stored_resume_ready and anchor_valid),
+    }
+
+
 def _ensure_commit_snapshot_is_execution_ready(commit_snapshot: CommitSnapshotModel) -> None:
     if not commit_snapshot.approval.approval_completed:
         raise ValueError('Cannot create Execution Record from Commit Snapshot before approval is completed')
@@ -529,6 +592,10 @@ def apply_execution_record_to_working_save(
     execution_record: ExecutionRecordModel,
 ) -> WorkingSaveModel:
     last_run = summarize_execution_record_for_working_save(execution_record)
+    resume_anchor_validation = _validate_paused_run_resume_anchor(working_save, execution_record, last_run)
+    if isinstance(resume_anchor_validation, dict):
+        last_run['resume_anchor_validation'] = resume_anchor_validation
+        last_run['resume_ready'] = bool(resume_anchor_validation.get('effective_resume_ready', False))
     prior_errors = list(working_save.runtime.errors)
     status = working_save.runtime.status
     if execution_record.meta.status in _SUCCESS_STATUSES:
