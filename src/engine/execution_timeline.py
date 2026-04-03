@@ -58,7 +58,7 @@ class ExecutionTimelineBuilder:
             if event.type == "execution_started":
                 execution_start = event.timestamp_ms
 
-            elif event.type in {"execution_completed", "execution_failed"}:
+            elif event.type in {"execution_completed", "execution_failed", "execution_paused"}:
                 execution_end = event.timestamp_ms
 
             elif event.type == "node_started":

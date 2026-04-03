@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.engine.execution_event import ExecutionEvent
 from src.engine.execution_event_emitter import ExecutionEventEmitter
-from src.engine.node_execution_runtime import Artifact, NodeExecutionRuntime
+from src.engine.node_execution_runtime import Artifact, NodeExecutionRuntime, ReviewRequiredPause
 from src.platform.plugin_result import PluginResult
 
 
@@ -158,3 +158,58 @@ def test_runtime_emits_review_required_event_from_plugin_result():
     assert events[0].payload["reason"] == "sample_validation"
     assert events[0].payload["sample_size"] == 5
     assert events[0].payload["is_blocking"] is False
+
+
+def test_runtime_pauses_for_review_when_review_gate_is_enabled(tmp_path):
+    runtime = NodeExecutionRuntime(
+        provider_executor=DummyProviderExecutor(),
+        plugin_registry={
+            "demo.plugin": lambda **kwargs: PluginResult(
+                output={"result": "needs-review"},
+                trace={
+                    "review_required": {
+                        "reason": "sample_validation",
+                        "sample_size": 3,
+                        "is_blocking": True,
+                    }
+                },
+            )
+        },
+        event_emitter=ExecutionEventEmitter(event_file=None),
+        observability_file=str(tmp_path / "obs.jsonl"),
+    )
+    runtime.set_execution_id("exec-review-gate")
+
+    config = {
+        "config_id": "cfg.review.gate",
+        "plugins": [
+            {
+                "plugin_id": "demo.plugin",
+                "inputs": {},
+            }
+        ],
+        "runtime_config": {
+            "pause_on_review_required": True,
+            "write_observability": False,
+        },
+    }
+
+    try:
+        runtime.execute(config, {})
+    except ReviewRequiredPause as exc:
+        assert exc.node_id == "cfg.review.gate"
+        assert exc.payload["reason"] == "sample_validation"
+        assert exc.payload["is_blocking"] is True
+    else:
+        raise AssertionError("expected review-required pause")
+
+    events = runtime.get_execution_events()
+    assert [event.type for event in events] == [
+        "node_started",
+        "review_required",
+        "node_completed",
+    ]
+    completed = events[-1]
+    assert completed.payload["status"] == "partial"
+    assert completed.payload["error_type"] == "ReviewRequiredPause"
+    assert completed.payload["review_required"]["reason"] == "sample_validation"

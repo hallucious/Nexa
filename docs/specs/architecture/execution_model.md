@@ -1,5 +1,5 @@
 Spec ID: execution_model
-Version: 1.9.0
+Version: 1.10.0
 Status: Active
 Category: architecture
 Depends On:
@@ -97,6 +97,7 @@ Minimum stable event vocabulary:
 - `node_completed`
 - `execution_completed`
 - `execution_failed`
+- `execution_paused`
 
 Rules:
 
@@ -105,9 +106,10 @@ Rules:
 3. `node_started` / `node_completed` must use real node identity.
 4. `execution_completed` is emitted only for successful run completion.
 5. `execution_failed` is emitted only for failed run completion.
-6. `review_required` is a runtime-owned observability/control signal and must not redefine structural or execution truth by itself.
-7. `warning` is advisory and must not redefine structural or execution truth.
-8. `artifact_preview` is preview-safe observability data only and must not redefine final artifact truth.
-9. `artifact_preview` payloads should explicitly mark that they are non-final and may include lightweight preview summaries.
-10. `review_required` may surface review metadata for downstream consumers, but in the minimal foundation it does not itself pause or block execution unless a later runtime policy explicitly consumes it.
-11. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.
+6. `execution_paused` is emitted only for runtime-owned paused terminal state (for example, an explicit review gate pause).
+7. `review_required` is a runtime-owned observability/control signal and must not redefine structural or execution truth by itself.
+8. `warning` is advisory and must not redefine structural or execution truth.
+9. `artifact_preview` is preview-safe observability data only and must not redefine final artifact truth.
+10. `artifact_preview` payloads should explicitly mark that they are non-final and may include lightweight preview summaries.
+11. `review_required` may surface review metadata for downstream consumers, and when an explicit runtime review-gate policy is enabled it may trigger a paused terminal state.
+12. The event stream is an observability surface, not the canonical replacement of `ExecutionTrace`.

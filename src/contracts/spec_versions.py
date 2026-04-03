@@ -28,8 +28,8 @@ def _extract_version(rel_path: str, default: str) -> str:
 
 
 # Keep these as literal string constants because contract tests regex-match them directly.
-ENGINE_EXECUTION_MODEL_VERSION = "1.9.0"
-ENGINE_TRACE_MODEL_VERSION = "1.6.0"
+ENGINE_EXECUTION_MODEL_VERSION = "1.10.0"
+ENGINE_TRACE_MODEL_VERSION = "1.7.0"
 VALIDATION_ENGINE_CONTRACT_VERSION = "2.0.0"
 VALIDATION_RULE_CATALOG_VERSION = "2.0.0"
 VALIDATION_RULE_LIFECYCLE_VERSION = "1.0.0"

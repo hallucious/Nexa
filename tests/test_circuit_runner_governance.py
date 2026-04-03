@@ -158,7 +158,7 @@ def test_final_governance_trace_required_fields():
     assert gov.started_at_ms > 0
     assert gov.finished_at_ms is not None
     assert gov.duration_ms is not None and gov.duration_ms >= 0
-    assert gov.final_status in ("success", "blocked", "failed")
+    assert gov.final_status in ("success", "blocked", "failed", "paused")
     assert gov.pre_decision in [d.value for d in ValidationDecision]
     assert gov.post_decision in [d.value for d in ValidationDecision]
     assert isinstance(gov.structural_violations, list)

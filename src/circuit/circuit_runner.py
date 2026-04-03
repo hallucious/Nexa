@@ -54,6 +54,7 @@ from src.engine.validation.result import (
     ValidationResult,
     Violation,
 )
+from src.engine.node_execution_runtime import ReviewRequiredPause
 
 
 # ── Cross-node reference extraction ──────────────────────────────────────────
@@ -122,7 +123,7 @@ class CircuitGovernanceTrace:
     post_decision: str                     # ValidationDecision.value
     post_decision_reason: str
     execution_completed: bool
-    final_status: str                      # "success" | "blocked" | "failed"
+    final_status: str                      # "success" | "blocked" | "failed" | "paused"
 
     # Timing
     started_at_ms: float
@@ -551,6 +552,8 @@ class CircuitRunner:
 
         execution_failed = False
         execution_error: Optional[Exception] = None
+        execution_paused = False
+        pause_signal: Optional[ReviewRequiredPause] = None
         executed_nodes_count = 0
         try:
             for wave_index, wave in enumerate(waves):
@@ -568,13 +571,19 @@ class CircuitRunner:
                         node_outputs = current_state.setdefault("__node_outputs__", {})
                         if isinstance(node_outputs, dict):
                             node_outputs[node_id] = node_output
+        except ReviewRequiredPause as exc:
+            execution_paused = True
+            pause_signal = exc
         except Exception as exc:
             execution_failed = True
             execution_error = exc
             raise
         finally:
             visible_keys = len([k for k in current_state if k != "__node_outputs__"])
-            completed_event_type = "execution_failed" if execution_failed else "execution_completed"
+            if execution_paused:
+                completed_event_type = "execution_paused"
+            else:
+                completed_event_type = "execution_failed" if execution_failed else "execution_completed"
             completed_payload = {
                 "circuit_id": circuit_id,
                 "execution_id": execution_id,
@@ -586,6 +595,10 @@ class CircuitRunner:
             if execution_error is not None:
                 completed_payload["error"] = str(execution_error)
                 completed_payload["error_type"] = type(execution_error).__name__
+            if pause_signal is not None:
+                completed_payload["reason"] = str(pause_signal.payload.get("reason") or "review_required")
+                completed_payload["review_required"] = dict(pause_signal.payload)
+                completed_payload["pause_node_id"] = pause_signal.node_id
 
             self._emit_runtime_event(
                 completed_event_type,
@@ -595,16 +608,22 @@ class CircuitRunner:
 
             # ── Phase 4: Determinism post-validation (advisory, non-strict) ───
             post_det_result: Optional[ValidationResult] = None
-            if not strict_determinism:
+            if not strict_determinism and not execution_paused:
                 post_det_result = self._run_determinism_validation(
                     circuit, strict_determinism=False
                 )
 
             # ── Phase 5: Post-decision + trace finalization ───────────────────
-            post_decision: PostDecisionResult = self._policy.decide_post(
-                post_det_result, strict_determinism=strict_determinism
-            )
-            if post_decision.decision is ValidationDecision.WARN:
+            if execution_paused:
+                post_decision = PostDecisionResult(
+                    decision=ValidationDecision.ACCEPT,
+                    reason="execution paused; no post-validation performed",
+                )
+            else:
+                post_decision = self._policy.decide_post(
+                    post_det_result, strict_determinism=strict_determinism
+                )
+            if (not execution_paused) and post_decision.decision is ValidationDecision.WARN:
                 warning_count = len(post_det_result.violations) if post_det_result is not None else 0
                 self._emit_runtime_event(
                     "warning",
@@ -616,7 +635,7 @@ class CircuitRunner:
                     },
                 )
 
-            final_status = "failed" if execution_failed else "success"
+            final_status = "paused" if execution_paused else ("failed" if execution_failed else "success")
 
             governance = self._build_governance_trace(
                 execution_id=execution_id,
@@ -627,7 +646,7 @@ class CircuitRunner:
                 execution_allowed=True,
                 post_det_result=post_det_result,
                 post_decision=post_decision,
-                execution_completed=not execution_failed,
+                execution_completed=(not execution_failed and not execution_paused),
                 final_status=final_status,
                 started_at_ms=started_at_ms,
                 finished_at_ms=finished_ms,

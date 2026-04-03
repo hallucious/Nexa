@@ -67,6 +67,16 @@ class RuntimeMetrics:
         }
 
 
+@dataclass
+class ReviewRequiredPause(Exception):
+    node_id: str
+    payload: Dict[str, Any]
+
+    def __str__(self) -> str:
+        reason = self.payload.get("reason") or "review_required"
+        return f"execution paused for review: {reason}"
+
+
 class NodeExecutionRuntime:
     """
     Step135+ runtime coordinator.
@@ -230,18 +240,18 @@ class NodeExecutionRuntime:
 
         self._emit_event("progress", payload, node_id=node_id)
 
-    def _emit_review_required_event_from_plugin_result(
+    def _extract_review_required_payload(
         self,
-        node_id: str,
+        *,
         plugin_id: str,
         plugin_result: PluginResult,
-    ) -> None:
+    ) -> Optional[Dict[str, Any]]:
         if not isinstance(plugin_result.trace, dict):
-            return
+            return None
 
         review_required = plugin_result.trace.get("review_required")
         if review_required is None:
-            return
+            return None
 
         payload: Dict[str, Any] = {"plugin_id": plugin_id}
 
@@ -251,14 +261,37 @@ class NodeExecutionRuntime:
             payload["reason"] = review_required
         elif isinstance(review_required, bool):
             if not review_required:
-                return
+                return None
         else:
             payload["reason"] = str(review_required)
 
         payload.setdefault("reason", "plugin_requested_review")
         payload.setdefault("is_blocking", False)
+        return payload
+
+    def _emit_review_required_event_from_plugin_result(
+        self,
+        node_id: str,
+        plugin_id: str,
+        plugin_result: PluginResult,
+    ) -> Optional[Dict[str, Any]]:
+        payload = self._extract_review_required_payload(
+            plugin_id=plugin_id,
+            plugin_result=plugin_result,
+        )
+        if payload is None:
+            return None
 
         self._emit_event("review_required", payload, node_id=node_id)
+        return payload
+
+    def _review_gate_enabled(self, runtime_config: Dict[str, Any]) -> bool:
+        if runtime_config.get("pause_on_review_required") is True:
+            return True
+        review_gate = runtime_config.get("review_gate")
+        if isinstance(review_gate, dict):
+            return review_gate.get("pause_on_review_required") is True
+        return False
 
     # ------------------------------------------------------------------
     # Execution internals
@@ -693,11 +726,13 @@ class NodeExecutionRuntime:
                 plugin_id=plugin_id,
                 plugin_result=plugin_result,
             )
-            self._emit_review_required_event_from_plugin_result(
+            review_required_payload = self._emit_review_required_event_from_plugin_result(
                 node_id=runtime_node_id,
                 plugin_id=plugin_id,
                 plugin_result=plugin_result,
             )
+            if review_required_payload is not None and self._review_gate_enabled(dict(config.get("runtime_config") or {})):
+                raise ReviewRequiredPause(node_id=runtime_node_id, payload=review_required_payload)
 
             return plugin_result
 
@@ -854,6 +889,22 @@ class NodeExecutionRuntime:
             )
 
             return result
+        except ReviewRequiredPause as exc:
+            duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
+            self._emit_event(
+                "node_completed",
+                {
+                    "status": "partial",
+                    "duration_ms": duration_ms,
+                    "artifact_count": len(artifacts),
+                    "metrics": self.get_metrics(),
+                    "review_required": exc.payload,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                node_id=node_id,
+            )
+            raise
         except Exception as exc:
             duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
             self._emit_event(

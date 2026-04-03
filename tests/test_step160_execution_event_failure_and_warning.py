@@ -4,7 +4,7 @@ from src.circuit.circuit_runner import CircuitRunner
 from src.engine.execution_event_emitter import ExecutionEventEmitter
 from src.engine.execution_event import ExecutionEvent
 from src.engine.execution_timeline import ExecutionTimelineBuilder
-from src.engine.node_execution_runtime import NodeExecutionRuntime
+from src.engine.node_execution_runtime import NodeExecutionRuntime, ReviewRequiredPause
 from src.engine.validation.result import Severity, ValidationResult, ValidationDecision, Violation
 
 
@@ -53,6 +53,17 @@ class SuccessRuntime:
 class FailingRuntime(SuccessRuntime):
     def execute_by_config_id(self, registry, config_id, state):
         raise RuntimeError(f"boom:{config_id}")
+
+
+class ReviewPauseRuntime(SuccessRuntime):
+    def execute_by_config_id(self, registry, config_id, state):
+        raise ReviewRequiredPause(
+            node_id="node_a",
+            payload={
+                "reason": "sample_validation",
+                "is_blocking": True,
+            },
+        )
 
 
 class WarningCircuitRunner(CircuitRunner):
@@ -176,3 +187,43 @@ def test_timeline_builder_accepts_execution_failed_as_terminal_event():
     assert bundle.profile.succeeded_nodes == 0
     assert bundle.timeline.node_spans[0].status == "failed"
     assert bundle.timeline.node_spans[0].error == "boom"
+
+
+def test_circuit_runner_emits_execution_paused_event_on_review_gate_signal():
+    runtime = ReviewPauseRuntime()
+    registry = DummyRegistry()
+    runner = CircuitRunner(runtime, registry)
+
+    circuit = {
+        "id": "sample-circuit",
+        "nodes": [
+            {"id": "node_a", "execution_config_ref": "cfg.ok", "depends_on": []},
+        ],
+    }
+
+    result = runner.execute(circuit, {"input_value": "x"})
+    assert result.governance.final_status == "paused"
+    assert result.governance.execution_completed is False
+
+    events = runtime.event_emitter.get_events()
+    assert [event.type for event in events] == ["execution_started", "execution_paused"]
+    paused = events[-1]
+    assert paused.payload["reason"] == "sample_validation"
+    assert paused.payload["pause_node_id"] == "node_a"
+    assert paused.payload["review_required"]["is_blocking"] is True
+
+
+def test_timeline_builder_accepts_execution_paused_as_terminal_event():
+    events = [
+        ExecutionEvent("execution_started", "run1", None, 0, {}),
+        ExecutionEvent("node_started", "run1", "A", 10, {}),
+        ExecutionEvent("node_completed", "run1", "A", 20, {"status": "partial", "error": "execution paused for review: sample_validation"}),
+        ExecutionEvent("execution_paused", "run1", None, 25, {"reason": "sample_validation"}),
+    ]
+
+    bundle = ExecutionTimelineBuilder().build(events)
+    assert bundle.timeline.duration_ms == 25
+    assert bundle.profile.total_nodes == 1
+    assert bundle.profile.failed_nodes == 0
+    assert bundle.profile.succeeded_nodes == 0
+    assert bundle.timeline.node_spans[0].status == "partial"

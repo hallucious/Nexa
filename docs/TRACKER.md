@@ -62,7 +62,7 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1212 passed, 3 skipped
+1214 passed, 3 skipped
 ```
 
 * authoritative storage hardening baseline commit: `15031be`
@@ -289,6 +289,7 @@ CLI
 ### Step162: Review-Required Event Foundation
 
 * runtime can now emit `review_required` as a first-class execution event
+* explicit runtime review-gate pause foundation now exists (`execution_paused` + `ReviewRequiredPause`)
 * plugin trace metadata may request review through a bounded runtime-owned event surface
 * minimal payload defaults include `reason` and non-blocking semantics
 * review-required signaling remains separate from structural truth and does not yet force runtime pause/block behavior by itself

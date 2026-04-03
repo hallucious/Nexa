@@ -1,5 +1,5 @@
 Spec ID: trace_model
-Version: 1.6.0
+Version: 1.7.0
 Status: Official Contract
 Category: architecture
 Depends On:
@@ -363,5 +363,5 @@ Rules:
 - Event streams may carry preview-safe artifact summaries.
 - Event streams must not redefine final artifact truth, approval truth, or storage truth.
 - Event streams must preserve real `execution_id` / `node_id` identity when emitted.
-- Failure terminal events (`execution_failed`) and success terminal events (`execution_completed`) must remain distinct.
+- Failure terminal events (`execution_failed`), paused terminal events (`execution_paused`), and success terminal events (`execution_completed`) must remain distinct.
 - `artifact_preview` events must remain explicitly preview-only and must not be interpreted as final artifact truth.
