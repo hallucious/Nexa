@@ -217,6 +217,7 @@ class PausedRunState:
             "resume_from_node_id": self.paused_node_id,
             "previous_execution_id": self.paused_execution_id,
             "reason": "review_gate_resume",
+            "requires_revalidation": list(self.required_revalidation),
         }
 
     def __repr__(self) -> str:

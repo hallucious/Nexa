@@ -844,6 +844,8 @@ def test_create_execution_record_from_snapshot_preserves_paused_run_state_and_re
     assert contract['paused_run_state']['paused_execution_id'] == 'exec-paused'
     assert contract['resume_request']['resume_from_node_id'] == 'node_a'
     assert contract['resume_request']['previous_execution_id'] == 'exec-paused'
+    assert contract['resume_request']['requires_revalidation'] == ['structural_validation', 'determinism_pre_validation']
+    assert contract['resume_request']['requires_revalidation'] == ['structural_validation', 'determinism_pre_validation']
     assert contract['is_resume_ready'] is True
 
 

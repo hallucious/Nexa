@@ -71,6 +71,19 @@ class _PausingRuntime(_SimpleRuntime):
         return super().execute_by_config_id(registry, config_id, state)
 
 
+class _TrackingDeterminismRunner(CircuitRunner):
+    def __init__(self, runtime, registry):
+        super().__init__(runtime, registry)
+        self.determinism_calls = []
+
+    def _run_determinism_validation(self, circuit, *, strict_determinism=False):
+        self.determinism_calls.append(strict_determinism)
+        return super()._run_determinism_validation(
+            circuit,
+            strict_determinism=strict_determinism,
+        )
+
+
 def _reg(*config_ids):
     r = _SimpleRegistry()
     for cid in config_ids:
@@ -310,6 +323,10 @@ class TestCircuitRunnerPausedRunState:
         payload = result.paused_run_state.to_resume_request_payload()
         assert payload["resume_from_node_id"] == "n_pause"
         assert payload["previous_execution_id"] == result.paused_run_state.paused_execution_id
+        assert payload["requires_revalidation"] == [
+            "structural_validation",
+            "determinism_pre_validation",
+        ]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

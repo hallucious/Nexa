@@ -32,7 +32,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 import re
 
 from src.circuit.circuit_scheduler import CircuitScheduler
@@ -93,6 +93,7 @@ class ReviewGateResumeRequest:
     resume_from_node_id: str
     previous_execution_id: Optional[str] = None
     reason: str = "review_gate_resume"
+    required_revalidation: Tuple[str, ...] = ()
 
     def to_payload(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -101,7 +102,38 @@ class ReviewGateResumeRequest:
         }
         if self.previous_execution_id:
             payload["previous_execution_id"] = self.previous_execution_id
+        if self.required_revalidation:
+            payload["requires_revalidation"] = list(self.required_revalidation)
         return payload
+
+
+
+_ALLOWED_RESUME_REVALIDATION_PHASES = frozenset({
+    "structural_validation",
+    "determinism_pre_validation",
+})
+
+
+def _normalize_required_revalidation(raw: Any) -> Tuple[str, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise TypeError("resume requires_revalidation must be a list when provided")
+
+    phases: list[str] = []
+    seen: Set[str] = set()
+    for item in raw:
+        if not isinstance(item, str) or not item:
+            raise TypeError("resume requires_revalidation entries must be non-empty strings")
+        if item not in _ALLOWED_RESUME_REVALIDATION_PHASES:
+            raise ValueError(
+                f"unsupported resume revalidation phase: {item}; "
+                f"allowed: {', '.join(sorted(_ALLOWED_RESUME_REVALIDATION_PHASES))}"
+            )
+        if item not in seen:
+            phases.append(item)
+            seen.add(item)
+    return tuple(phases)
 
 
 # ── Circuit governance trace ──────────────────────────────────────────────────
@@ -546,6 +578,16 @@ class CircuitRunner:
         if previous_execution_id is not None and not isinstance(previous_execution_id, str):
             raise TypeError("previous_execution_id must be a string when provided")
 
+        required_revalidation = _normalize_required_revalidation(raw.get("requires_revalidation"))
+        if persisted is not None:
+            persisted_required_revalidation = tuple(persisted.required_revalidation)
+            if required_revalidation and required_revalidation != persisted_required_revalidation:
+                raise ValueError(
+                    "resume requires_revalidation does not match persisted paused run state; "
+                    "resume must use the revalidation requirements recorded in paused_run_state"
+                )
+            required_revalidation = persisted_required_revalidation
+
         # If a persisted paused run state was also provided, use its execution ID
         # as the authoritative prior-run linkage (overrides __resume__ field).
         if persisted is not None and not previous_execution_id:
@@ -559,6 +601,7 @@ class CircuitRunner:
             resume_from_node_id=resume_from_node_id,
             previous_execution_id=previous_execution_id,
             reason=reason,
+            required_revalidation=required_revalidation,
         )
 
     def _build_resume_nodes(
@@ -664,7 +707,14 @@ class CircuitRunner:
 
         # ── Phase 1b: Determinism pre-validation (strict mode only) ──────────
         pre_det_result: Optional[ValidationResult] = None
-        if strict_determinism:
+        should_run_determinism_pre = bool(
+            strict_determinism
+            or (
+                resume_request is not None
+                and "determinism_pre_validation" in resume_request.required_revalidation
+            )
+        )
+        if should_run_determinism_pre:
             pre_det_result = self._run_determinism_validation(
                 circuit, strict_determinism=True
             )
@@ -788,7 +838,7 @@ class CircuitRunner:
 
             # ── Phase 4: Determinism post-validation (advisory, non-strict) ───
             post_det_result: Optional[ValidationResult] = None
-            if not strict_determinism and not execution_paused:
+            if not should_run_determinism_pre and not execution_paused:
                 post_det_result = self._run_determinism_validation(
                     circuit, strict_determinism=False
                 )

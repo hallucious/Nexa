@@ -158,4 +158,5 @@ def test_apply_execution_record_to_working_save_propagates_paused_run_state_and_
     assert updated.runtime.last_run['paused_run_state']['paused_node_id'] == 'n1'
     assert updated.runtime.last_run['resume_request']['resume_from_node_id'] == 'n1'
     assert updated.runtime.last_run['resume_request']['previous_execution_id'] == 'exec-paused'
+    assert updated.runtime.last_run['resume_request']['requires_revalidation'] == ['structural_validation', 'determinism_pre_validation']
     assert updated.runtime.last_run['resume_ready'] is True
