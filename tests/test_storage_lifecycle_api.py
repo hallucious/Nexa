@@ -122,7 +122,7 @@ def test_apply_execution_record_to_working_save_marks_execution_paused_and_prese
 
 
 def test_apply_execution_record_to_working_save_propagates_pause_boundary_summary():
-    working = make_working_save(entry='node_b', outputs=[{'name': 'out', 'source': 'node_b'}], node_ids=['node_b'])
+    working = make_working_save(entry='node_b', outputs=[{'name': 'out', 'source': 'node_b'}], node_ids=['node_b'], source_commit_id='cs-1')
     record = create_execution_record_from_snapshot(
         make_snapshot(status='partial'),
         commit_id='cs-1',
@@ -145,7 +145,7 @@ def test_apply_execution_record_to_working_save_propagates_pause_boundary_summar
 
 
 def test_apply_execution_record_to_working_save_propagates_paused_run_state_and_resume_request_summary():
-    working = make_working_save()
+    working = make_working_save(source_commit_id='commit-1')
     paused_run_state = PausedRunState.build(
         paused_execution_id='exec-paused',
         paused_node_id='n1',
@@ -179,7 +179,7 @@ def test_apply_execution_record_to_working_save_propagates_paused_run_state_and_
 
 
 def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_when_paused_node_missing_in_current_circuit():
-    working = make_working_save(node_ids=['n_current'])
+    working = make_working_save(node_ids=['n_current'], source_commit_id='commit-1')
     paused_run_state = PausedRunState.build(
         paused_execution_id='exec-paused',
         paused_node_id='n_missing',
@@ -206,11 +206,11 @@ def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_wh
     validation = updated.runtime.last_run['resume_anchor_validation']
     assert validation['anchor_valid'] is False
     assert validation['effective_resume_ready'] is False
-    assert validation['issues'][0]['code'] == 'PAUSED_RUN_ANCHOR_NODE_MISSING'
+    assert any(issue['code'] == 'PAUSED_RUN_ANCHOR_NODE_MISSING' for issue in validation['issues'])
 
 
 def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_when_completed_boundary_is_stale():
-    working = make_working_save(node_ids=['n1'])
+    working = make_working_save(node_ids=['n1'], source_commit_id='commit-1')
     paused_run_state = PausedRunState.build(
         paused_execution_id='exec-paused',
         paused_node_id='n1',
@@ -240,7 +240,7 @@ def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_wh
 
 
 def test_apply_execution_record_to_working_save_keeps_resume_ready_true_when_current_circuit_matches_paused_boundary():
-    working = make_working_save(node_ids=['n_done', 'n1'])
+    working = make_working_save(node_ids=['n_done', 'n1'], source_commit_id='commit-1')
     paused_run_state = PausedRunState.build(
         paused_execution_id='exec-paused',
         paused_node_id='n1',
@@ -300,3 +300,36 @@ def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_on
     assert validation['anchor_valid'] is False
     assert validation['working_save_commit_anchor_id'] == 'commit-current'
     assert any(issue['code'] == 'PAUSED_RUN_WORKING_SAVE_COMMIT_ANCHOR_MISMATCH' for issue in validation['issues'])
+
+
+def test_apply_execution_record_to_working_save_recomputes_resume_ready_false_when_working_save_commit_anchor_missing():
+    working = make_working_save(node_ids=['n_done', 'n1'])
+    paused_run_state = PausedRunState.build(
+        paused_execution_id='exec-paused',
+        paused_node_id='n1',
+        completed_node_ids=frozenset({'n_done'}),
+        review_required={'reason': 'human_review_required'},
+        source_commit_id='commit-1',
+    )
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='human_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'n1',
+            'resume_from_node_id': 'n1',
+            'resume_strategy': 'restart_from_node',
+        },
+        paused_run_state=paused_run_state,
+    )
+
+    updated = apply_execution_record_to_working_save(working, record)
+
+    assert updated.runtime.last_run['resume_ready'] is False
+    validation = updated.runtime.last_run['resume_anchor_validation']
+    assert validation['anchor_valid'] is False
+    assert validation['working_save_commit_anchor_id'] is None
+    assert any(issue['code'] == 'PAUSED_RUN_WORKING_SAVE_COMMIT_ANCHOR_MISSING' for issue in validation['issues'])
+

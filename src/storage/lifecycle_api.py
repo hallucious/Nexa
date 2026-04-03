@@ -440,7 +440,16 @@ def _validate_paused_run_resume_anchor(
         })
 
     effective_source_commit_id = paused_source_commit_id or resume_source_commit_id or record_source_commit_id
-    if working_save_commit_anchor_id and effective_source_commit_id and working_save_commit_anchor_id != effective_source_commit_id:
+
+    if not working_save_commit_anchor_id:
+        issues.append({
+            'code': 'PAUSED_RUN_WORKING_SAVE_COMMIT_ANCHOR_MISSING',
+            'message': (
+                'current Working Save commit anchor is missing; resumability cannot be trusted '
+                'without an explicit current commit anchor'
+            ),
+        })
+    elif effective_source_commit_id and working_save_commit_anchor_id != effective_source_commit_id:
         issues.append({
             'code': 'PAUSED_RUN_WORKING_SAVE_COMMIT_ANCHOR_MISMATCH',
             'message': (
