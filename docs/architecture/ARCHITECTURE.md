@@ -105,7 +105,7 @@ Runtime responsibilities:
 
 Shared data space. All resources read and write through this context.
 
-Schema: `<context-domain>.<resource-id>.<field>`
+Schema: `input.<field>` / `output.<field>` / `<context-domain>.<resource-id>.<field>`
 
 ```
 input.text

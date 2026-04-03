@@ -157,7 +157,7 @@ Forbidden: prompt.*, provider.*, output.*, artifact.*, input.*
 8. Working Context Schema
 ────────────────
 
-<context-domain>.<resource-id>.<field>
+input.<field> / output.<field> / <context-domain>.<resource-id>.<field>
 
 Examples:
 input.text

@@ -91,6 +91,8 @@ input.*
 # Working Context Schema
 
 ```
+input.<field>
+output.<field>
 <context-domain>.<resource-id>.<field>
 
 input.text

@@ -356,12 +356,12 @@ def test_top_level_artifact_unchanged():
 
 def test_context_key_added():
     left = _run("r1", context={})
-    right = _run("r2", context={"input.text.value": "hello"})
+    right = _run("r2", context={"input.text": "hello"})
     diff = compare_runs(left, right)
     assert diff.status == RUN_DIFF_STATUS_CHANGED
     assert len(diff.context_diffs) == 1
     cd = diff.context_diffs[0]
-    assert cd.context_key == "input.text.value"
+    assert cd.context_key == "input.text"
     assert cd.change_type == CHANGE_TYPE_ADDED
     assert cd.right_value == "hello"
     assert diff.summary.context_keys_changed == 1
@@ -377,8 +377,8 @@ def test_context_key_removed():
 
 
 def test_context_key_modified():
-    left = _run("r1", context={"output.summary.value": "v1"})
-    right = _run("r2", context={"output.summary.value": "v2"})
+    left = _run("r1", context={"output.value": "v1"})
+    right = _run("r2", context={"output.value": "v2"})
     diff = compare_runs(left, right)
     cd = diff.context_diffs[0]
     assert cd.change_type == CHANGE_TYPE_MODIFIED
@@ -387,7 +387,7 @@ def test_context_key_modified():
 
 
 def test_context_unchanged():
-    ctx = {"input.text.value": "same", "plugin.rank.score": 0.9}
+    ctx = {"input.text": "same", "plugin.rank.score": 0.9}
     diff = compare_runs(_run("r1", context=ctx), _run("r2", context=ctx))
     assert diff.context_diffs == []
 

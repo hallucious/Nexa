@@ -178,8 +178,8 @@ class ContextDiff:
     """Records a change in a Working Context key value between two runs.
 
     context_key must follow the Working Context Key Schema Contract:
-        <context-domain>.<resource-id>.<field>
-    e.g. "input.text.value", "provider.openai.output", "plugin.rank.score"
+        input.<field>, output.<field>, or <context-domain>.<resource-id>.<field>
+    e.g. "input.text", "provider.openai.output", "plugin.rank.score"
     """
 
     context_key: str

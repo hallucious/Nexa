@@ -153,7 +153,7 @@ def test_format_regression_with_context_regressions():
         summary=RegressionSummary(context_regressions=1),
         context=[
             ContextRegression(
-                context_key="input.text.value",
+                context_key="input.text",
                 reason_code=CONTEXT_VALUE_CHANGED,
                 left_value="old",
                 right_value="new",
@@ -164,7 +164,7 @@ def test_format_regression_with_context_regressions():
     output = format_regression(result)
     
     assert "Context Regressions" in output
-    assert "input.text.value: value changed" in output
+    assert "input.text: value changed" in output
 
 
 def test_format_regression_all_sections():

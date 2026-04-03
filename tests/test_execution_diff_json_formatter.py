@@ -37,7 +37,7 @@ def _full() -> RunDiff:
                          left_kind="provider_output", right_kind="provider_output"),
         ],
         context_diffs=[
-            ContextDiff(context_key="input.text.value", change_type=CHANGE_TYPE_MODIFIED,
+            ContextDiff(context_key="input.text", change_type=CHANGE_TYPE_MODIFIED,
                         left_value="hello", right_value="world"),
         ],
         summary=DiffSummary(
@@ -172,7 +172,7 @@ def test_context_has_required_fields():
 
 def test_context_values():
     cd = format_diff_json(_full())["context"][0]
-    assert cd["context_key"] == "input.text.value"
+    assert cd["context_key"] == "input.text"
     assert cd["left_value"] == "hello"
     assert cd["right_value"] == "world"
 

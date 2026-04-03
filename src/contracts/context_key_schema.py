@@ -4,76 +4,94 @@ context_key_schema.py
 Contract-level definition of the Nexa Working Context key schema.
 
 This module belongs to the contracts layer.
-It defines constants, regex, allowed domains, and a validator function
-for the canonical Working Context key format:
+It defines constants, regex, allowed domains, and validator helpers
+for the canonical Working Context key family:
 
+    input.<field>
+    output.<field>
     <context-domain>.<resource-id>.<field>
+
+where the three-segment form is used for prompt/provider/plugin/system.
 
 This module must not import from the runtime layer.
 """
 from __future__ import annotations
 
 import re
+from typing import FrozenSet
 
-# ---------------------------------------------------------------------------
-# Canonical key format
-# ---------------------------------------------------------------------------
-
-# regex fragment for a single identifier segment (resource-id or field)
 _IDENT = r"[a-z0-9_]+"
 
-# Full canonical key regex
+TWO_SEGMENT_DOMAINS: FrozenSet[str] = frozenset({"input", "output"})
+THREE_SEGMENT_DOMAINS: FrozenSet[str] = frozenset({"prompt", "provider", "plugin", "system"})
+ALLOWED_DOMAINS: FrozenSet[str] = frozenset(TWO_SEGMENT_DOMAINS | THREE_SEGMENT_DOMAINS)
+
 CONTEXT_KEY_PATTERN = re.compile(
-    r"^(input|prompt|provider|plugin|system|output)\." + _IDENT + r"\." + _IDENT + r"$"
+    rf"^(?:"
+    rf"(?:input|output)\.{_IDENT}"
+    rf"|"
+    rf"(?:prompt|provider|plugin|system)\.{_IDENT}\.{_IDENT}"
+    rf")$"
 )
 
-# Allowed top-level domains
-ALLOWED_DOMAINS: frozenset[str] = frozenset(
-    {"input", "prompt", "provider", "plugin", "system", "output"}
-)
+PLUGIN_FORBIDDEN_WRITE_DOMAINS: FrozenSet[str] = frozenset(ALLOWED_DOMAINS - {"plugin"})
 
-# Domains that plugins are NOT permitted to write into
-PLUGIN_FORBIDDEN_WRITE_DOMAINS: frozenset[str] = frozenset(
-    {"input", "prompt", "provider", "system", "output"}
-)
+RESOURCE_ALLOWED_WRITE_DOMAINS: dict[str, FrozenSet[str]] = {
+    "prompt": frozenset({"prompt"}),
+    "provider": frozenset({"provider"}),
+    "plugin": frozenset({"plugin"}),
+    "runtime": frozenset({"system", "output"}),
+}
 
-# Canonical examples referenced in the spec
 CANONICAL_EXAMPLES: tuple[str, ...] = (
-    "input.text.value",
+    "input.text",
     "prompt.main.rendered",
     "provider.openai.output",
     "plugin.search.result",
     "system.trace.status",
-    "output.summary.value",
+    "output.value",
 )
 
 
-# ---------------------------------------------------------------------------
-# Validator
-# ---------------------------------------------------------------------------
-
 def is_valid_context_key(key: str) -> bool:
-    """Return True if key conforms to the canonical Working Context key schema."""
     return bool(CONTEXT_KEY_PATTERN.match(key))
 
 
 def validate_context_key(key: str) -> None:
-    """Raise ValueError if key does not conform to the canonical schema."""
     if not is_valid_context_key(key):
         raise ValueError(
             f"Invalid Working Context key: {key!r}. "
-            f"Expected format: <domain>.<resource_id>.<field> "
-            f"where domain is one of {sorted(ALLOWED_DOMAINS)}."
+            f"Expected canonical forms: input.<field>, output.<field>, or "
+            f"<domain>.<resource_id>.<field> for domains in {sorted(THREE_SEGMENT_DOMAINS)}."
         )
 
 
-def is_plugin_write_allowed(key: str) -> bool:
-    """Return True if a plugin is permitted to write to this key.
+def get_context_key_domain(key: str) -> str | None:
+    if not is_valid_context_key(key):
+        return None
+    return key.split(".", 1)[0]
 
-    Plugins may only write under plugin.<plugin_id>.<field>.
-    Writing to input.*, prompt.*, provider.*, system.*, or output.* is forbidden.
-    """
+
+def is_plugin_write_allowed(key: str) -> bool:
+    return is_resource_write_allowed("plugin", key)
+
+
+def is_resource_write_allowed(resource_type: str, key: str) -> bool:
     if not is_valid_context_key(key):
         return False
-    domain = key.split(".")[0]
-    return domain == "plugin"
+    allowed_domains = RESOURCE_ALLOWED_WRITE_DOMAINS.get(resource_type)
+    if allowed_domains is None:
+        return False
+    domain = key.split('.', 1)[0]
+    return domain in allowed_domains
+
+
+def validate_resource_write_key(resource_type: str, key: str) -> None:
+    if not is_resource_write_allowed(resource_type, key):
+        allowed_domains = RESOURCE_ALLOWED_WRITE_DOMAINS.get(resource_type)
+        if allowed_domains is None:
+            raise ValueError(f"Unknown resource_type for write-boundary validation: {resource_type!r}")
+        raise ValueError(
+            f"Invalid write key for {resource_type!r}: {key!r}. "
+            f"Allowed domains: {sorted(allowed_domains)}."
+        )

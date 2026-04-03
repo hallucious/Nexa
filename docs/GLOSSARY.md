@@ -82,7 +82,7 @@ An immutable complete record of runtime behavior. Contains per-node status, phas
 
 ## Working Context
 
-Shared data space used during execution. Key schema: `<context-domain>.<resource-id>.<field>`.
+Shared data space used during execution. Key schema: `input.<field>` / `output.<field>` / `<context-domain>.<resource-id>.<field>`.
 
 ---
 

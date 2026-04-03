@@ -214,7 +214,7 @@ def test_context_regression_removed():
     """Test detection of context key removed regression."""
     context_diffs = [
         ContextDiff(
-            context_key="input.text.value",
+            context_key="input.text",
             change_type=CHANGE_TYPE_REMOVED,
             left_value="some value",
         )
@@ -232,7 +232,7 @@ def test_context_regression_removed():
     assert result.status == REGRESSION_STATUS_REGRESSION
     assert result.summary.context_regressions == 1
     assert len(result.context) == 1
-    assert result.context[0].context_key == "input.text.value"
+    assert result.context[0].context_key == "input.text"
     assert result.context[0].reason_code == CONTEXT_KEY_REMOVED
     assert result.context[0].reason == "context key removed"
 

@@ -92,9 +92,13 @@ Plugins MUST NOT write to:
 
 ## 9. Working Context Schema
 
-The working context key MUST follow:
+The working context key MUST follow the canonical key family:
 
+input.<field>
+output.<field>
 <context-domain>.<resource-id>.<field>
+
+where the three-segment form is used for prompt/provider/plugin/system.
 
 Example:
 

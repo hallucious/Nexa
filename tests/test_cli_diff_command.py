@@ -48,7 +48,7 @@ def _changed_run(run_id: str = "r2") -> dict:
             "n2": {"status": "success"},
         },
         "artifacts": {"art_1": {"hash": "h1", "kind": "provider_output"}},
-        "context": {"input.text.value": "world"},
+        "context": {"input.text": "world"},
     }
 
 

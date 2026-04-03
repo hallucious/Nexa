@@ -222,12 +222,12 @@ def test_trace_diff_none_values():
 
 def test_context_diff_canonical_key():
     cd = ContextDiff(
-        context_key="input.text.value",
+        context_key="input.text",
         change_type=CHANGE_TYPE_MODIFIED,
         left_value="hello",
         right_value="world",
     )
-    assert cd.context_key == "input.text.value"
+    assert cd.context_key == "input.text"
     assert cd.left_value == "hello"
     assert cd.right_value == "world"
 
@@ -254,7 +254,7 @@ def test_context_diff_plugin_key():
 
 def test_context_diff_added():
     cd = ContextDiff(
-        context_key="output.summary.value",
+        context_key="output.value",
         change_type=CHANGE_TYPE_ADDED,
         right_value="new output",
     )
@@ -300,9 +300,9 @@ def test_trace_diff_to_dict():
 
 
 def test_context_diff_to_dict():
-    cd = ContextDiff(context_key="input.text.value", change_type=CHANGE_TYPE_MODIFIED, left_value="a")
+    cd = ContextDiff(context_key="input.text", change_type=CHANGE_TYPE_MODIFIED, left_value="a")
     d = cd.to_dict()
-    assert d["context_key"] == "input.text.value"
+    assert d["context_key"] == "input.text"
     assert d["left_value"] == "a"
 
 
@@ -353,7 +353,7 @@ def test_run_diff_full_json_roundtrip():
         status=RUN_DIFF_STATUS_CHANGED,
         node_diffs=[NodeDiff(node_id="n1", change_type=CHANGE_TYPE_MODIFIED)],
         artifact_diffs=[ArtifactDiff(artifact_id="art_1", change_type=CHANGE_TYPE_ADDED)],
-        context_diffs=[ContextDiff(context_key="input.text.value", change_type=CHANGE_TYPE_MODIFIED)],
+        context_diffs=[ContextDiff(context_key="input.text", change_type=CHANGE_TYPE_MODIFIED)],
         summary=DiffSummary(nodes_changed=1, artifacts_added=1, context_keys_changed=1),
     )
     j = rd.to_json()
@@ -363,7 +363,7 @@ def test_run_diff_full_json_roundtrip():
     assert len(parsed["node_diffs"]) == 1
     assert parsed["node_diffs"][0]["node_id"] == "n1"
     assert parsed["artifact_diffs"][0]["artifact_id"] == "art_1"
-    assert parsed["context_diffs"][0]["context_key"] == "input.text.value"
+    assert parsed["context_diffs"][0]["context_key"] == "input.text"
     assert parsed["summary"]["nodes_changed"] == 1
 
 

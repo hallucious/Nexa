@@ -33,7 +33,7 @@ def _right_changed() -> dict:
             "n2": {"status": "success"},
         },
         "artifacts": {"art_1": {"hash": "h1", "kind": "provider_output"}},
-        "context": {"input.text.value": "hi"},
+        "context": {"input.text": "hi"},
     }
 
 

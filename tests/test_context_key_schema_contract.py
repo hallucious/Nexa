@@ -4,10 +4,10 @@ tests/test_context_key_schema_contract.py
 Contract tests for the Nexa Working Context key schema.
 
 Spec: docs/specs/contracts/context_key_schema_contract.md
-Version: 1.0.0
+Version: 1.1.0
 
-These tests lock the canonical key format, allowed domains, and plugin
-write restrictions defined in the contract.
+These tests lock the canonical key family, allowed domains, and write
+restrictions defined in the contract.
 """
 from __future__ import annotations
 
@@ -18,53 +18,48 @@ from src.contracts.context_key_schema import (
     CANONICAL_EXAMPLES,
     CONTEXT_KEY_PATTERN,
     PLUGIN_FORBIDDEN_WRITE_DOMAINS,
+    RESOURCE_ALLOWED_WRITE_DOMAINS,
+    THREE_SEGMENT_DOMAINS,
+    TWO_SEGMENT_DOMAINS,
+    get_context_key_domain,
     is_plugin_write_allowed,
+    is_resource_write_allowed,
     is_valid_context_key,
     validate_context_key,
+    validate_resource_write_key,
 )
 
 
-# ---------------------------------------------------------------------------
-# 1. Canonical examples must be valid
-# ---------------------------------------------------------------------------
-
 @pytest.mark.contract
 @pytest.mark.parametrize("key", [
-    "input.text.value",
+    "input.text",
     "prompt.main.rendered",
     "provider.openai.output",
     "plugin.search.result",
     "system.trace.status",
-    "output.summary.value",
+    "output.value",
 ])
 def test_canonical_examples_are_valid(key):
-    assert is_valid_context_key(key), f"canonical key must be valid: {key!r}"
+    assert is_valid_context_key(key)
 
 
 @pytest.mark.contract
 def test_canonical_examples_constant_is_complete():
-    """The CANONICAL_EXAMPLES tuple must contain all six spec-defined examples."""
     required = {
-        "input.text.value",
+        "input.text",
         "prompt.main.rendered",
         "provider.openai.output",
         "plugin.search.result",
         "system.trace.status",
-        "output.summary.value",
+        "output.value",
     }
-    assert required.issubset(set(CANONICAL_EXAMPLES)), (
-        f"CANONICAL_EXAMPLES is missing spec-required keys: {required - set(CANONICAL_EXAMPLES)}"
-    )
+    assert required.issubset(set(CANONICAL_EXAMPLES))
 
-
-# ---------------------------------------------------------------------------
-# 2. Valid keys for every allowed domain
-# ---------------------------------------------------------------------------
 
 @pytest.mark.contract
 @pytest.mark.parametrize("key", [
-    "input.story.raw",
-    "input.question.text",
+    "input.story",
+    "input.question",
     "prompt.expand.rendered",
     "prompt.summary.template",
     "provider.anthropic.output",
@@ -73,95 +68,74 @@ def test_canonical_examples_constant_is_complete():
     "plugin.format_output.result",
     "system.runtime.version",
     "system.trace.node_id",
-    "output.final.value",
-    "output.script.text",
+    "output.final",
+    "output.script",
 ])
 def test_valid_keys_pass(key):
-    assert is_valid_context_key(key), f"expected valid: {key!r}"
+    assert is_valid_context_key(key)
 
-
-# ---------------------------------------------------------------------------
-# 3. Invalid domains must be rejected
-# ---------------------------------------------------------------------------
 
 @pytest.mark.contract
 @pytest.mark.parametrize("key", [
-    "inputs.text.value",       # plural
-    "metadata.run.id",         # not in allowed domains
-    "context.main.value",      # not in allowed domains
-    "state.node.output",       # not in allowed domains
-    "debug.trace.flag",        # not in allowed domains
-    "runtime.info.version",    # not in allowed domains
+    "inputs.text",
+    "metadata.run.id",
+    "context.main.value",
+    "state.node.output",
+    "debug.trace.flag",
+    "runtime.info.version",
 ])
 def test_invalid_domains_fail(key):
-    assert not is_valid_context_key(key), f"expected invalid (bad domain): {key!r}"
+    assert not is_valid_context_key(key)
 
-
-# ---------------------------------------------------------------------------
-# 4. Uppercase / hyphenated / special characters in identifiers must fail
-# ---------------------------------------------------------------------------
 
 @pytest.mark.contract
 @pytest.mark.parametrize("key", [
-    "input.Text.value",           # uppercase in resource-id
-    "prompt.main.Rendered",       # uppercase in field
-    "provider.OpenAI.output",     # uppercase in resource-id
-    "plugin.search-rank.result",  # hyphen in resource-id
-    "input.text-raw.value",       # hyphen in resource-id
-    "output.summary.final-text",  # hyphen in field
-    "input.text value.raw",       # space in resource-id
-    "provider.gpt 4.output",      # space in resource-id
+    "input.Text",
+    "prompt.main.Rendered",
+    "provider.OpenAI.output",
+    "plugin.search-rank.result",
+    "input.text-raw",
+    "output.final-text",
+    "input.text value",
+    "provider.gpt 4.output",
 ])
 def test_uppercase_and_hyphen_keys_fail(key):
-    assert not is_valid_context_key(key), f"expected invalid (case/hyphen): {key!r}"
+    assert not is_valid_context_key(key)
 
-
-# ---------------------------------------------------------------------------
-# 5. Malformed keys must fail (wrong number of parts)
-# ---------------------------------------------------------------------------
 
 @pytest.mark.contract
 @pytest.mark.parametrize("key", [
-    "",                         # empty
-    "input",                    # one part only
-    "input.text",               # two parts only (missing field)
-    "input.text.value.extra",   # four parts (too many)
-    ".text.value",              # empty domain
-    "input..value",             # empty resource-id
-    "input.text.",              # empty field
-    "input.text.value.",        # trailing dot
-    ".input.text.value",        # leading dot
+    "",
+    "input",
+    "prompt.main",
+    "input.text.value",
+    "output.final.value",
+    "provider.openai",
+    "input.",
+    ".text",
+    "prompt..rendered",
+    "provider.openai.output.extra",
 ])
 def test_malformed_keys_fail(key):
-    assert not is_valid_context_key(key), f"expected invalid (malformed): {key!r}"
+    assert not is_valid_context_key(key)
 
-
-# ---------------------------------------------------------------------------
-# 6. validate_context_key raises ValueError for invalid keys
-# ---------------------------------------------------------------------------
 
 @pytest.mark.contract
 def test_validate_context_key_raises_for_invalid():
     with pytest.raises(ValueError):
         validate_context_key("bad.key")
-
     with pytest.raises(ValueError):
         validate_context_key("metadata.run.id")
-
     with pytest.raises(ValueError):
-        validate_context_key("input.Text.value")
+        validate_context_key("input.Text")
 
 
 @pytest.mark.contract
 def test_validate_context_key_does_not_raise_for_valid():
-    validate_context_key("input.text.value")   # must not raise
-    validate_context_key("plugin.rank.score")  # must not raise
-    validate_context_key("output.final.value") # must not raise
+    validate_context_key("input.text")
+    validate_context_key("plugin.rank.score")
+    validate_context_key("output.final")
 
-
-# ---------------------------------------------------------------------------
-# 7. Plugin write restriction
-# ---------------------------------------------------------------------------
 
 @pytest.mark.contract
 @pytest.mark.parametrize("key", [
@@ -171,50 +145,97 @@ def test_validate_context_key_does_not_raise_for_valid():
     "plugin.validator.passed",
 ])
 def test_plugin_write_allowed_for_plugin_domain(key):
-    assert is_plugin_write_allowed(key), f"plugin write must be allowed for: {key!r}"
+    assert is_plugin_write_allowed(key)
 
 
 @pytest.mark.contract
 @pytest.mark.parametrize("key", [
-    "input.text.value",
+    "input.text",
     "prompt.main.rendered",
     "provider.openai.output",
     "system.trace.status",
-    "output.summary.value",
+    "output.value",
 ])
 def test_plugin_write_forbidden_for_other_domains(key):
-    assert not is_plugin_write_allowed(key), (
-        f"plugin write must be FORBIDDEN for: {key!r}"
-    )
+    assert not is_plugin_write_allowed(key)
 
 
 @pytest.mark.contract
 def test_plugin_write_forbidden_domains_constant():
-    """PLUGIN_FORBIDDEN_WRITE_DOMAINS must cover all non-plugin allowed domains."""
     non_plugin = ALLOWED_DOMAINS - {"plugin"}
-    assert non_plugin == PLUGIN_FORBIDDEN_WRITE_DOMAINS, (
-        "PLUGIN_FORBIDDEN_WRITE_DOMAINS must exactly match all non-plugin allowed domains"
-    )
+    assert non_plugin == PLUGIN_FORBIDDEN_WRITE_DOMAINS
 
-
-# ---------------------------------------------------------------------------
-# 8. ALLOWED_DOMAINS constant is exactly the spec-defined set
-# ---------------------------------------------------------------------------
 
 @pytest.mark.contract
 def test_allowed_domains_are_exactly_spec_defined():
-    expected = frozenset({"input", "prompt", "provider", "plugin", "system", "output"})
-    assert ALLOWED_DOMAINS == expected, (
-        f"ALLOWED_DOMAINS mismatch. got: {ALLOWED_DOMAINS}, expected: {expected}"
-    )
+    assert ALLOWED_DOMAINS == frozenset({"input", "prompt", "provider", "plugin", "system", "output"})
 
-
-# ---------------------------------------------------------------------------
-# 9. CONTEXT_KEY_PATTERN is usable as a compiled regex
-# ---------------------------------------------------------------------------
 
 @pytest.mark.contract
 def test_context_key_pattern_is_compiled_regex():
-    assert hasattr(CONTEXT_KEY_PATTERN, "match"), "CONTEXT_KEY_PATTERN must be a compiled regex"
-    assert CONTEXT_KEY_PATTERN.match("input.text.value")
+    assert hasattr(CONTEXT_KEY_PATTERN, "match")
+    assert CONTEXT_KEY_PATTERN.match("input.text")
+    assert CONTEXT_KEY_PATTERN.match("provider.openai.output")
     assert not CONTEXT_KEY_PATTERN.match("bad.key")
+
+
+@pytest.mark.contract
+def test_domain_shape_sets_are_exact():
+    assert TWO_SEGMENT_DOMAINS == frozenset({"input", "output"})
+    assert THREE_SEGMENT_DOMAINS == frozenset({"prompt", "provider", "plugin", "system"})
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("resource_type", "key"),
+    [
+        ("prompt", "prompt.main.rendered"),
+        ("provider", "provider.openai.output"),
+        ("plugin", "plugin.search.result"),
+        ("runtime", "system.trace.status"),
+        ("runtime", "output.value"),
+    ],
+)
+def test_resource_write_boundary_allows_expected_domains(resource_type, key):
+    assert is_resource_write_allowed(resource_type, key)
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize(
+    ("resource_type", "key"),
+    [
+        ("prompt", "output.value"),
+        ("provider", "prompt.main.rendered"),
+        ("plugin", "provider.openai.output"),
+        ("plugin", "output.value"),
+        ("runtime", "plugin.search.result"),
+    ],
+)
+def test_resource_write_boundary_rejects_cross_domain_writes(resource_type, key):
+    assert not is_resource_write_allowed(resource_type, key)
+
+
+@pytest.mark.contract
+def test_validate_resource_write_key_raises_for_invalid_boundary():
+    with pytest.raises(ValueError):
+        validate_resource_write_key("plugin", "output.value")
+    with pytest.raises(ValueError):
+        validate_resource_write_key("unknown", "output.value")
+
+
+@pytest.mark.contract
+def test_get_context_key_domain_returns_domain_for_valid_keys():
+    assert get_context_key_domain("input.text") == "input"
+    assert get_context_key_domain("provider.openai.output") == "provider"
+    assert get_context_key_domain("output.value") == "output"
+    assert get_context_key_domain("bad.key") is None
+
+
+@pytest.mark.contract
+def test_resource_allowed_write_domains_constant_is_exact():
+    assert RESOURCE_ALLOWED_WRITE_DOMAINS == {
+        "prompt": frozenset({"prompt"}),
+        "provider": frozenset({"provider"}),
+        "plugin": frozenset({"plugin"}),
+        "runtime": frozenset({"system", "output"}),
+    }

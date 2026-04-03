@@ -1,5 +1,5 @@
 Spec ID: context_key_schema_contract
-Version: 1.0.0
+Version: 1.1.0
 Status: Active
 Category: contracts
 Depends On: docs/specs/architecture/context_key_schema.md
@@ -21,16 +21,27 @@ Without a stable key schema, the following degrade:
 
 ## 2. Canonical Key Format
 
-All Working Context keys must conform to the following shape:
+All Working Context keys must conform to one of the following canonical forms:
 
 ```
+input.<field>
+output.<field>
 <context-domain>.<resource-id>.<field>
+```
+
+where the three-segment form is used only for:
+
+```
+prompt
+provider
+plugin
+system
 ```
 
 Canonical regex:
 
 ```
-^(input|prompt|provider|plugin|system|output)\.[a-z0-9_]+\.[a-z0-9_]+$
+^(?:input\.[a-z0-9_]+|output\.[a-z0-9_]+|(?:prompt|provider|plugin|system)\.[a-z0-9_]+\.[a-z0-9_]+)$
 ```
 
 ## 3. Allowed Domains
@@ -60,12 +71,12 @@ Uppercase letters, hyphens, spaces, and dots within a segment are forbidden.
 The following keys are canonical and must remain valid:
 
 ```
-input.text.value
+input.text
 prompt.main.rendered
 provider.openai.output
 plugin.search.result
 system.trace.status
-output.summary.value
+output.value
 ```
 
 ## 6. Plugin Write Restriction
@@ -99,4 +110,5 @@ This contract is enforced by:
 
 | Version | Change                        |
 |---------|-------------------------------|
+| 1.1.0   | Domain-aware key family: input/output use short form; prompt/provider/plugin/system remain resource-scoped |
 | 1.0.0   | Initial contract definition   |

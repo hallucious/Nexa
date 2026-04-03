@@ -53,8 +53,8 @@ def _changed_diff() -> RunDiff:
             ArtifactDiff(artifact_id="art_1", change_type=CHANGE_TYPE_ADDED),
         ],
         context_diffs=[
-            ContextDiff(context_key="input.text.value", change_type=CHANGE_TYPE_MODIFIED),
-            ContextDiff(context_key="output.summary.value", change_type=CHANGE_TYPE_ADDED),
+            ContextDiff(context_key="input.text", change_type=CHANGE_TYPE_MODIFIED),
+            ContextDiff(context_key="output.value", change_type=CHANGE_TYPE_ADDED),
         ],
         summary=DiffSummary(
             nodes_added=1,
