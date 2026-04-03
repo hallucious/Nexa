@@ -114,6 +114,39 @@ def _termination_reason_from_trace(trace: dict[str, Any] | None, *, status: str)
     return None
 
 
+def _pause_boundary_from_trace(trace: dict[str, Any] | None, *, status: str) -> dict[str, Any] | None:
+    if status != 'paused' or not isinstance(trace, dict):
+        return None
+    events = trace.get('events')
+    if not isinstance(events, list):
+        return None
+    for event in reversed(events):
+        if not isinstance(event, dict):
+            continue
+        if str(event.get('type') or '').lower() != 'execution_paused':
+            continue
+        payload = event.get('payload')
+        if not isinstance(payload, dict):
+            return None
+        resume = payload.get('resume') if isinstance(payload.get('resume'), dict) else {}
+        boundary: dict[str, Any] = {
+            'can_resume': bool(resume.get('can_resume', False)),
+        }
+        for field in ('pause_node_id', 'reason'):
+            value = payload.get(field)
+            if value is not None:
+                boundary[field] = value
+        for field in ('resume_from_node_id', 'resume_strategy', 'previous_execution_id'):
+            value = resume.get(field)
+            if value is not None:
+                boundary[field] = value
+        required_revalidation = resume.get('requires_revalidation')
+        if isinstance(required_revalidation, list):
+            boundary['requires_revalidation'] = [str(item) for item in required_revalidation if item is not None]
+        return boundary
+    return None
+
+
 def _artifact_id_for_node(node_id: str) -> str:
     return f'artifact::{node_id}'
 
@@ -282,6 +315,7 @@ def create_execution_record_from_snapshot(
     errors: Iterable[ExecutionIssue] | None = None,
     failure_point: str | None = None,
     termination_reason: str | None = None,
+    pause_boundary: dict[str, Any] | None = None,
     provider_usage_summary: dict[str, Any] | None = None,
     plugin_usage_summary: dict[str, Any] | None = None,
     trace_summary: str | None = None,
@@ -360,6 +394,7 @@ def create_execution_record_from_snapshot(
             errors=list(errors or []),
             failure_point=failure_point,
             termination_reason=termination_reason,
+            pause_boundary=_to_json_safe(pause_boundary) if pause_boundary is not None else None,
         ),
         observability=ExecutionObservabilityModel(
             metrics=_build_observability_metrics(snapshot),
@@ -417,6 +452,8 @@ def build_execution_record_reference_contract_from_serialized_record(record_payl
             unresolved_artifact_refs.append(artifact_id)
 
     observability_refs = list(observability.get('observability_refs') or []) if isinstance(observability.get('observability_refs'), list) else []
+    diagnostics = record_payload.get('diagnostics') if isinstance(record_payload.get('diagnostics'), dict) else {}
+    pause_boundary = diagnostics.get('pause_boundary') if isinstance(diagnostics.get('pause_boundary'), dict) else {}
     return {
         'run_id': meta.get('run_id'),
         'commit_id': source.get('commit_id'),
@@ -429,8 +466,11 @@ def build_execution_record_reference_contract_from_serialized_record(record_payl
         'unresolved_output_refs': unresolved_output_refs,
         'unresolved_artifact_refs': unresolved_artifact_refs,
         'observability_refs': observability_refs,
+        'termination_reason': diagnostics.get('termination_reason'),
+        'pause_boundary': dict(pause_boundary) if pause_boundary else None,
         'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
         'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
+        'is_resume_ready': bool(pause_boundary.get('can_resume')),
     }
 
 
@@ -595,6 +635,7 @@ def create_serialized_execution_record_from_circuit_run(
         provider_usage_summary={'circuit_id': circuit.get('id')},
         trace_summary=f'Circuit run materialized for {resolved_execution_id} with {len(node_order)} node(s).',
         termination_reason=_termination_reason_from_trace(trace, status=record_status),
+        pause_boundary=_pause_boundary_from_trace(trace, status=record_status),
         observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
     )
     return serialize_execution_record(record)
@@ -778,6 +819,7 @@ def materialize_execution_record_from_payload(payload: dict[str, Any]) -> dict[s
         final_outputs=final_outputs,
         provider_usage_summary=summary if summary else None,
         termination_reason=_termination_reason_from_trace(trace, status=status),
+        pause_boundary=_pause_boundary_from_trace(trace, status=status),
         observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
     )
     serialized = serialize_execution_record(record)
@@ -812,6 +854,7 @@ def build_execution_record_reference_contract(record: ExecutionRecordModel) -> d
         if not item.ref
     ]
     observability_refs = list(record.observability.observability_refs or [])
+    pause_boundary = dict(record.diagnostics.pause_boundary or {}) if isinstance(record.diagnostics.pause_boundary, dict) else {}
     return {
         'run_id': record.meta.run_id,
         'commit_id': record.source.commit_id,
@@ -824,8 +867,11 @@ def build_execution_record_reference_contract(record: ExecutionRecordModel) -> d
         'unresolved_output_refs': unresolved_output_refs,
         'unresolved_artifact_refs': unresolved_artifact_refs,
         'observability_refs': observability_refs,
+        'termination_reason': record.diagnostics.termination_reason,
+        'pause_boundary': pause_boundary or None,
         'is_replay_ready': bool(primary_trace_ref and not unresolved_output_refs),
         'is_audit_ready': bool(primary_trace_ref and not unresolved_artifact_refs),
+        'is_resume_ready': bool(pause_boundary.get('can_resume')),
     }
 
 
@@ -940,6 +986,7 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
         'output_count': len(record.outputs.final_outputs),
         'output_refs': [item.output_ref for item in record.outputs.final_outputs],
         'semantic_status': record.outputs.semantic_status,
+        'termination_reason': record.diagnostics.termination_reason,
         'artifact_count': record.artifacts.artifact_count,
         'artifact_ids': [item.artifact_id for item in record.artifacts.artifact_refs],
         'warning_count': len(record.diagnostics.warnings),
@@ -947,6 +994,8 @@ def summarize_execution_record_for_working_save(record: ExecutionRecordModel) ->
         'trace_ref': record.timeline.trace_ref,
         'event_stream_ref': record.timeline.event_stream_ref,
         'primary_trace_ref': reference_contract['primary_trace_ref'],
+        'pause_boundary': reference_contract.get('pause_boundary'),
+        'resume_ready': reference_contract.get('is_resume_ready', False),
         'replay_ready': reference_contract['is_replay_ready'],
         'audit_ready': reference_contract['is_audit_ready'],
     }

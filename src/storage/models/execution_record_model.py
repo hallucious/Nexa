@@ -186,6 +186,7 @@ class ExecutionDiagnosticsModel:
     failure_point: Optional[str] = None
     retry_summary: Optional[RetrySummary] = None
     termination_reason: Optional[str] = None
+    pause_boundary: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)

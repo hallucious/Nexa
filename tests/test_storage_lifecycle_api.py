@@ -105,3 +105,25 @@ def test_apply_execution_record_to_working_save_marks_execution_paused_and_prese
     assert updated.runtime.last_run['status'] == 'paused'
     assert updated.runtime.last_run['semantic_status'] == 'paused'
     assert updated.runtime.errors == []
+
+
+def test_apply_execution_record_to_working_save_propagates_pause_boundary_summary():
+    working = make_working_save()
+    record = create_execution_record_from_snapshot(
+        make_snapshot(status='partial'),
+        commit_id='cs-1',
+        status='paused',
+        termination_reason='review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'node_b',
+            'resume_from_node_id': 'node_b',
+            'resume_strategy': 'restart_from_node',
+            'requires_revalidation': ['structural_validation'],
+        },
+    )
+    updated = apply_execution_record_to_working_save(working, record)
+    assert updated.runtime.last_run['termination_reason'] == 'review_required'
+    assert updated.runtime.last_run['pause_boundary']['pause_node_id'] == 'node_b'
+    assert updated.runtime.last_run['pause_boundary']['resume_from_node_id'] == 'node_b'
+    assert updated.runtime.last_run['resume_ready'] is True

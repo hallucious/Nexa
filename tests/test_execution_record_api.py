@@ -182,6 +182,27 @@ def test_build_execution_record_reference_contract_prefers_event_stream_and_inde
     assert contract['is_audit_ready'] is True
 
 
+def test_build_execution_record_reference_contract_exposes_pause_boundary_when_present():
+    record = create_execution_record_from_snapshot(
+        make_snapshot(),
+        commit_id='commit-1',
+        status='paused',
+        termination_reason='quality_review_required',
+        pause_boundary={
+            'can_resume': True,
+            'pause_node_id': 'node_a',
+            'resume_from_node_id': 'node_a',
+            'resume_strategy': 'restart_from_node',
+            'requires_revalidation': ['structural_validation'],
+        },
+    )
+    contract = build_execution_record_reference_contract(record)
+    assert contract['termination_reason'] == 'quality_review_required'
+    assert contract['pause_boundary']['pause_node_id'] == 'node_a'
+    assert contract['pause_boundary']['resume_from_node_id'] == 'node_a'
+    assert contract['is_resume_ready'] is True
+
+
 def test_build_execution_record_reference_contract_reports_unresolved_refs():
     record = create_execution_record_from_snapshot(
         make_snapshot(),
@@ -664,6 +685,42 @@ def test_create_serialized_execution_record_from_circuit_run_infers_paused_statu
     assert payload['diagnostics']['termination_reason'] == 'quality_review_required'
 
 
+def test_create_serialized_execution_record_from_circuit_run_preserves_pause_boundary_summary_from_trace():
+    circuit = {'id': 'paused-circuit', 'nodes': [{'id': 'n1'}]}
+    payload = create_serialized_execution_record_from_circuit_run(
+        circuit,
+        {'n1': {'value': 'draft'}},
+        execution_id='paused-exec',
+        trace={
+            'events': [
+                {'type': 'execution_started'},
+                {
+                    'type': 'execution_paused',
+                    'payload': {
+                        'reason': 'quality_review_required',
+                        'pause_node_id': 'n1',
+                        'resume': {
+                            'can_resume': True,
+                            'resume_from_node_id': 'n1',
+                            'resume_strategy': 'restart_from_node',
+                            'requires_revalidation': ['structural_validation', 'determinism_pre_validation'],
+                            'previous_execution_id': 'paused-exec',
+                        },
+                    },
+                },
+            ]
+        },
+    )
+    assert payload['diagnostics']['pause_boundary']['pause_node_id'] == 'n1'
+    assert payload['diagnostics']['pause_boundary']['resume_from_node_id'] == 'n1'
+    assert payload['diagnostics']['pause_boundary']['resume_strategy'] == 'restart_from_node'
+    assert payload['diagnostics']['pause_boundary']['can_resume'] is True
+    contract = build_execution_record_reference_contract_from_serialized_record(payload)
+    assert contract['termination_reason'] == 'quality_review_required'
+    assert contract['pause_boundary']['pause_node_id'] == 'n1'
+    assert contract['is_resume_ready'] is True
+
+
 def test_materialize_execution_record_from_payload_preserves_paused_status_from_trace():
     payload = {
         'trace': {
@@ -692,3 +749,42 @@ def test_materialize_execution_record_from_payload_preserves_paused_status_from_
     assert record['meta']['status'] == 'paused'
     assert record['outputs']['semantic_status'] == 'paused'
     assert record['diagnostics']['termination_reason'] == 'human_review_required'
+
+
+def test_materialized_paused_record_summary_exposes_resume_ready_boundary():
+    payload = {
+        'trace': {
+            'events': [
+                {'type': 'execution_started'},
+                {
+                    'type': 'execution_paused',
+                    'payload': {
+                        'reason': 'human_review_required',
+                        'pause_node_id': 'node_a',
+                        'resume': {
+                            'can_resume': True,
+                            'resume_from_node_id': 'node_a',
+                            'resume_strategy': 'restart_from_node',
+                            'requires_revalidation': ['structural_validation'],
+                        },
+                    },
+                },
+            ]
+        },
+        'replay_payload': {
+            'execution_id': 'run-paused',
+            'node_order': ['node_a'],
+            'input_state': {'message': 'hi'},
+            'expected_outputs': {'node_a': {'value': 'draft'}},
+        },
+        'result': {
+            'status': 'success',
+            'state': {'node_a': {'value': 'draft'}},
+            'node_results': {'node_a': {'status': 'partial', 'output': {'value': 'draft'}}},
+        },
+    }
+    record = materialize_execution_record_from_payload(payload)
+    contract = build_execution_record_reference_contract_from_serialized_record(record)
+    assert contract['pause_boundary']['pause_node_id'] == 'node_a'
+    assert contract['pause_boundary']['resume_from_node_id'] == 'node_a'
+    assert contract['is_resume_ready'] is True
