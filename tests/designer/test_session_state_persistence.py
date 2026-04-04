@@ -15,12 +15,14 @@ from src.designer.models.designer_session_state_card import (
 )
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
 from src.designer.approval_flow import DesignerApprovalCoordinator
+from src.designer.patch_applier import DesignerPatchApplier
 from src.designer.proposal_control import DesignerProposalControlPlane
 from src.designer.proposal_flow import DesignerProposalFlow
 from src.designer.precheck_builder import DesignerPrecheckBuilder
 from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
 from src.designer.session_state_persistence import (
     load_persisted_approval_flow_state,
+    load_persisted_commit_candidate_state,
     load_persisted_proposal_control_state,
     load_persisted_session_state_card,
     persist_designer_session_state,
@@ -301,3 +303,38 @@ def test_approval_resolution_appends_revision_note_and_normalizer_uses_persisted
     assert "Change provider only in node reviewer and keep the rest unchanged." in updated.revision_state.user_corrections
     assert rebuilt.revision_state.user_corrections[-1] == "Change provider only in node reviewer and keep the rest unchanged."
     assert intent.target_scope.node_refs == ("node.reviewer",)
+
+
+def test_persisted_commit_candidate_state_round_trips_and_builder_surfaces_resume_hint() -> None:
+    working_save = make_working_save()
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    state = coordinator.create_state(bundle)
+    approved = coordinator.resolve(
+        state,
+        tuple(UserDecision(decision_point_id=point.decision_id, outcome="approve") for point in state.required_decision_points),
+    )
+    applier = DesignerPatchApplier()
+    application = applier.apply_bundle(working_save, bundle)
+    candidate_state = applier.build_commit_candidate_state(application, approved, source_working_save_ref="ws-001")
+
+    persisted = persist_designer_session_state(
+        application.candidate_working_save,
+        session_state_card=make_card(),
+        approval_flow_state=approved,
+        commit_candidate_state=candidate_state,
+    )
+    restored = load_persisted_commit_candidate_state(persisted)
+
+    assert restored is not None
+    assert restored.ready_for_commit is True
+    assert restored.patch_ref == bundle.patch.patch_id
+
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Add a review node before final output in node reviewer",
+        artifact=persisted,
+    )
+    assert rebuilt.approval_state.approval_status == "approved"
+    assert rebuilt.notes["resume_commit_candidate_ready"] is True
+    assert rebuilt.notes["resume_commit_candidate_patch_ref"] == bundle.patch.patch_id

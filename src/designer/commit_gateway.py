@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.designer.approval_flow import DesignerApprovalCoordinator
+from src.designer.session_state_persistence import load_persisted_approval_flow_state, load_persisted_commit_candidate_state
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.storage.lifecycle_api import create_commit_snapshot_from_working_save
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
@@ -27,6 +28,40 @@ class DesignerCommitGateway:
 
     def __init__(self, *, coordinator: DesignerApprovalCoordinator | None = None) -> None:
         self._coordinator = coordinator or DesignerApprovalCoordinator()
+
+    def commit_persisted_candidate(
+        self,
+        candidate_working_save: WorkingSaveModel,
+        *,
+        commit_id: str,
+        parent_commit_id: str | None = None,
+        approval_summary: dict | None = None,
+        validation_result: str = "passed",
+        validation_summary: dict | None = None,
+        created_at: str | None = None,
+    ) -> DesignerCommitResult:
+        approval_state = load_persisted_approval_flow_state(candidate_working_save)
+        if approval_state is None:
+            raise ValueError("Cannot resume persisted commit candidate without a persisted approval flow state")
+        candidate_state = load_persisted_commit_candidate_state(candidate_working_save)
+        if candidate_state is None:
+            raise ValueError("Cannot resume persisted commit candidate without persisted commit-candidate metadata")
+        if candidate_state.approval_id != approval_state.approval_id:
+            raise ValueError("Persisted commit candidate approval_id does not match the persisted approval flow state")
+        if candidate_state.patch_ref != approval_state.patch_ref:
+            raise ValueError("Persisted commit candidate patch_ref does not match the persisted approval flow state")
+        if not candidate_state.ready_for_commit:
+            raise ValueError("Persisted commit candidate is not marked ready_for_commit")
+        return self.commit_candidate(
+            candidate_working_save,
+            approval_state,
+            commit_id=commit_id,
+            parent_commit_id=parent_commit_id,
+            approval_summary=approval_summary,
+            validation_result=validation_result,
+            validation_summary=validation_summary,
+            created_at=created_at,
+        )
 
     def commit_candidate(
         self,

@@ -6,6 +6,8 @@ import re
 from typing import Any
 
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan, PatchOperation
+from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
+from src.designer.models.designer_commit_candidate import DesignerCommitCandidateState
 from src.designer.proposal_flow import DesignerProposalBundle
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import (
@@ -138,6 +140,33 @@ class DesignerPatchApplier:
             intent_ref=bundle.intent.intent_id,
             precheck_ref=bundle.precheck.precheck_id,
             preview_ref=bundle.preview.preview_id,
+        )
+
+    def build_commit_candidate_state(
+        self,
+        application: DesignerPatchApplicationResult,
+        approval_state: DesignerApprovalFlowState,
+        *,
+        source_working_save_ref: str | None = None,
+    ) -> DesignerCommitCandidateState:
+        designer_data = application.candidate_working_save.designer.data if application.candidate_working_save.designer is not None else {}
+        candidate_ref = application.candidate_working_save.meta.working_save_id or application.candidate_working_save.meta.name
+        return DesignerCommitCandidateState(
+            approval_id=approval_state.approval_id,
+            intent_ref=str(designer_data.get("last_intent_ref") or approval_state.intent_ref),
+            patch_ref=application.patch_ref,
+            precheck_ref=str(designer_data.get("last_precheck_ref") or approval_state.precheck_ref),
+            preview_ref=str(designer_data.get("last_preview_ref") or approval_state.preview_ref),
+            approval_stage=approval_state.current_stage,
+            approval_outcome=approval_state.final_outcome,
+            ready_for_commit=approval_state.commit_eligible,
+            source_working_save_ref=source_working_save_ref,
+            candidate_working_save_ref=candidate_ref,
+            validated_scope_ref=approval_state.validated_scope_ref,
+            approved_scope_ref=approval_state.approved_scope_ref,
+            applied_operation_ids=application.applied_operation_ids,
+            created_node_ids=application.created_node_ids,
+            candidate_origin=str(designer_data.get("candidate_origin") or "designer_patch_application"),
         )
 
     def _apply_operation(

@@ -20,7 +20,7 @@ from src.designer.models.designer_session_state_card import (
 )
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.designer.session_state_persistence import load_persisted_session_state_card
+from src.designer.session_state_persistence import load_persisted_commit_candidate_state, load_persisted_session_state_card
 
 
 class DesignerSessionStateCardBuilder:
@@ -42,6 +42,7 @@ class DesignerSessionStateCardBuilder:
     ) -> DesignerSessionStateCard:
         storage_role = getattr(getattr(artifact, 'meta', None), 'storage_role', 'none') if artifact is not None else 'none'
         persisted_card = load_persisted_session_state_card(artifact if isinstance(artifact, WorkingSaveModel) else None)
+        persisted_candidate = load_persisted_commit_candidate_state(artifact if isinstance(artifact, WorkingSaveModel) else None)
         current_working_save = self._build_working_save_reality(artifact)
         persisted_scope = persisted_card.target_scope if persisted_card is not None else None
         scope_mode = target_scope_mode or (persisted_scope.mode if persisted_scope is not None else self._default_scope_mode(storage_role))
@@ -58,9 +59,12 @@ class DesignerSessionStateCardBuilder:
         available_resources = self._build_available_resources(artifact)
         findings = self._build_findings(artifact)
         risks = self._build_risks(artifact)
+        approval_status = persisted_card.approval_state.approval_status if persisted_card is not None else "not_started"
+        if persisted_candidate is not None and persisted_candidate.ready_for_commit:
+            approval_status = "approved"
         approval_state = ApprovalState(
             approval_required=scope_mode not in {"read_only"},
-            approval_status=persisted_card.approval_state.approval_status if persisted_card is not None else "not_started",
+            approval_status=approval_status,
             confirmation_required=bool(findings.confirmation_findings)
             or (persisted_card.approval_state.confirmation_required if persisted_card is not None else False),
             blocking_before_commit=bool(findings.blocking_findings)
@@ -71,6 +75,15 @@ class DesignerSessionStateCardBuilder:
         persisted_selection = persisted_card.current_selection if persisted_card is not None else None
         persisted_revision = persisted_card.revision_state if persisted_card is not None else None
         persisted_conversation = persisted_card.conversation_context if persisted_card is not None else None
+        notes = dict(persisted_card.notes) if persisted_card is not None else {}
+        if persisted_candidate is not None:
+            notes.update({
+                "resume_commit_candidate_ready": persisted_candidate.ready_for_commit,
+                "resume_commit_candidate_patch_ref": persisted_candidate.patch_ref,
+                "resume_commit_candidate_approval_id": persisted_candidate.approval_id,
+                "resume_commit_candidate_working_save_ref": persisted_candidate.candidate_working_save_ref,
+            })
+
         return DesignerSessionStateCard(
             card_version="0.1",
             session_id=session_id or (persisted_card.session_id if persisted_card is not None else self._stable_id("session", request_text)),
@@ -110,7 +123,7 @@ class DesignerSessionStateCardBuilder:
                     persisted_conversation.explicit_user_preferences if persisted_conversation is not None else ()
                 ),
             ),
-            notes=dict(persisted_card.notes) if persisted_card is not None else {},
+            notes=notes,
         )
 
     def _build_working_save_reality(self, artifact: WorkingSaveModel | CommitSnapshotModel | None) -> WorkingSaveReality:

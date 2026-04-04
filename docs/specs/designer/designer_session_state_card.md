@@ -28,6 +28,7 @@ Official rule:
 
 - Designer AI receives a structured session state card.
 - The card defines the current design reality and boundaries.
+It may also surface persisted approval-ready continuation hints through notes when a commit candidate can be resumed explicitly.
 - Designer AI produces proposals from this card.
 - Designer AI must not silently assume hidden structure or hidden authority.
 

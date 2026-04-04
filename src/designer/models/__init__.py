@@ -33,6 +33,7 @@ from src.designer.models.designer_approval_flow import (
     DesignerApprovalFlowState,
     UserDecision,
 )
+from src.designer.models.designer_commit_candidate import DesignerCommitCandidateState
 from src.designer.models.designer_proposal_control import (
     DesignerControlledProposalResult,
     DesignerProposalControlState,
@@ -78,6 +79,7 @@ __all__ = [
     "DecisionPoint",
     "DependencyEffectReport",
     "DesignerApprovalFlowState",
+    "DesignerCommitCandidateState",
     "DesignerControlledProposalResult",
     "DesignerProposalControlState",
     "ProposalAttemptRecord",

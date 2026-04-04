@@ -11,6 +11,7 @@ from src.designer.models.designer_approval_flow import (
     DesignerApprovalFlowState,
     UserDecision,
 )
+from src.designer.models.designer_commit_candidate import DesignerCommitCandidateState
 from src.designer.models.designer_proposal_control import (
     DesignerProposalControlState,
     ProposalAttemptRecord,
@@ -36,6 +37,7 @@ from src.storage.models.working_save_model import DesignerDraftModel, WorkingSav
 _SESSION_CARD_KEY = "designer_session_state_card"
 _CONTROL_STATE_KEY = "designer_proposal_control_state"
 _APPROVAL_FLOW_STATE_KEY = "designer_approval_flow_state"
+_COMMIT_CANDIDATE_STATE_KEY = "designer_commit_candidate_state"
 
 
 def serialize_session_state_card(card: DesignerSessionStateCard) -> dict[str, Any]:
@@ -358,6 +360,46 @@ def deserialize_approval_flow_state(data: Mapping[str, Any]) -> DesignerApproval
     )
 
 
+
+def serialize_commit_candidate_state(state: DesignerCommitCandidateState) -> dict[str, Any]:
+    return {
+        "approval_id": state.approval_id,
+        "intent_ref": state.intent_ref,
+        "patch_ref": state.patch_ref,
+        "precheck_ref": state.precheck_ref,
+        "preview_ref": state.preview_ref,
+        "approval_stage": state.approval_stage,
+        "approval_outcome": state.approval_outcome,
+        "ready_for_commit": state.ready_for_commit,
+        "source_working_save_ref": state.source_working_save_ref,
+        "candidate_working_save_ref": state.candidate_working_save_ref,
+        "validated_scope_ref": state.validated_scope_ref,
+        "approved_scope_ref": state.approved_scope_ref,
+        "applied_operation_ids": list(state.applied_operation_ids),
+        "created_node_ids": list(state.created_node_ids),
+        "candidate_origin": state.candidate_origin,
+    }
+
+
+def deserialize_commit_candidate_state(data: Mapping[str, Any]) -> DesignerCommitCandidateState:
+    return DesignerCommitCandidateState(
+        approval_id=str(data.get("approval_id", "approval-restored")),
+        intent_ref=str(data.get("intent_ref", "intent-restored")),
+        patch_ref=str(data.get("patch_ref", "patch-restored")),
+        precheck_ref=str(data.get("precheck_ref", "precheck-restored")),
+        preview_ref=str(data.get("preview_ref", "preview-restored")),
+        approval_stage=str(data.get("approval_stage", "awaiting_decision")),
+        approval_outcome=str(data.get("approval_outcome", "pending")),
+        ready_for_commit=bool(data.get("ready_for_commit", False)),
+        source_working_save_ref=data.get("source_working_save_ref"),
+        candidate_working_save_ref=data.get("candidate_working_save_ref"),
+        validated_scope_ref=data.get("validated_scope_ref"),
+        approved_scope_ref=data.get("approved_scope_ref"),
+        applied_operation_ids=tuple(data.get("applied_operation_ids", ())),
+        created_node_ids=tuple(data.get("created_node_ids", ())),
+        candidate_origin=str(data.get("candidate_origin", "designer_patch_application")),
+    )
+
 def serialize_proposal_control_state(state: DesignerProposalControlState) -> dict[str, Any]:
     return {
         "session_id": state.session_id,
@@ -426,6 +468,15 @@ def load_persisted_proposal_control_state(working_save: WorkingSaveModel | None)
     return deserialize_proposal_control_state(snapshot)
 
 
+
+def load_persisted_commit_candidate_state(working_save: WorkingSaveModel | None) -> DesignerCommitCandidateState | None:
+    if working_save is None or working_save.designer is None:
+        return None
+    snapshot = working_save.designer.data.get(_COMMIT_CANDIDATE_STATE_KEY)
+    if not isinstance(snapshot, Mapping):
+        return None
+    return deserialize_commit_candidate_state(snapshot)
+
 def load_persisted_approval_flow_state(working_save: WorkingSaveModel | None) -> DesignerApprovalFlowState | None:
     if working_save is None or working_save.designer is None:
         return None
@@ -441,6 +492,7 @@ def persist_designer_session_state(
     session_state_card: DesignerSessionStateCard,
     control_state: DesignerProposalControlState | None = None,
     approval_flow_state: DesignerApprovalFlowState | None = None,
+    commit_candidate_state: DesignerCommitCandidateState | None = None,
 ) -> WorkingSaveModel:
     designer_data = deepcopy(working_save.designer.data if working_save.designer is not None else {})
     designer_data[_SESSION_CARD_KEY] = serialize_session_state_card(session_state_card)
@@ -448,6 +500,8 @@ def persist_designer_session_state(
         designer_data[_CONTROL_STATE_KEY] = serialize_proposal_control_state(control_state)
     if approval_flow_state is not None:
         designer_data[_APPROVAL_FLOW_STATE_KEY] = serialize_approval_flow_state(approval_flow_state)
+    if commit_candidate_state is not None:
+        designer_data[_COMMIT_CANDIDATE_STATE_KEY] = serialize_commit_candidate_state(commit_candidate_state)
     return replace(working_save, designer=DesignerDraftModel(data=designer_data))
 
 

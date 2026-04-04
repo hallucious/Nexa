@@ -4,6 +4,9 @@ import pytest
 
 from src.designer.approval_flow import DesignerApprovalCoordinator
 from src.designer.commit_gateway import DesignerCommitGateway
+from src.designer.patch_applier import DesignerPatchApplier
+from src.designer.session_state_card_builder import DesignerSessionStateCardBuilder
+from src.designer.session_state_persistence import persist_designer_session_state
 from src.designer.models.designer_approval_flow import UserDecision
 from src.designer.proposal_flow import DesignerProposalFlow
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
@@ -126,3 +129,31 @@ def test_commit_gateway_rejects_non_commit_eligible_state() -> None:
 
     with pytest.raises(ValueError):
         gateway.commit_candidate(make_candidate_working_save(), state, commit_id="commit-1")
+
+
+def test_commit_gateway_can_resume_persisted_approval_ready_candidate() -> None:
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node judge", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    state = coordinator.create_state(bundle)
+    approved = coordinator.resolve(
+        state,
+        tuple(UserDecision(decision_point_id=point.decision_id, outcome="approve") for point in state.required_decision_points),
+    )
+    applier = DesignerPatchApplier()
+    base = make_candidate_working_save()
+    application = applier.apply_bundle(base, bundle)
+    candidate_state = applier.build_commit_candidate_state(application, approved, source_working_save_ref="ws-001")
+    card = DesignerSessionStateCardBuilder().build(request_text=bundle.request_text, artifact=application.candidate_working_save)
+    persisted = persist_designer_session_state(
+        application.candidate_working_save,
+        session_state_card=card,
+        approval_flow_state=approved,
+        commit_candidate_state=candidate_state,
+    )
+    gateway = DesignerCommitGateway(coordinator=coordinator)
+
+    result = gateway.commit_persisted_candidate(persisted, commit_id="commit-resume-1")
+
+    assert result.approval_state.current_stage == "committed"
+    assert result.commit_snapshot.meta.commit_id == "commit-resume-1"
