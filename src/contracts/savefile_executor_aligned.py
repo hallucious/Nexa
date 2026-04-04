@@ -353,6 +353,7 @@ def execute_subcircuit_node(
     provider_registry: ProviderRegistry,
     *,
     _depth: int = 0,
+    _max_child_depth: Optional[int] = None,
 ) -> NodeExecutionResult:
     sub = node.execution.get("subcircuit", {})
     child_ref = sub.get("child_circuit_ref")
@@ -365,8 +366,11 @@ def execute_subcircuit_node(
         return NodeExecutionResult(node_id=node.id, status="failure", error=f"Child subcircuit not found: {child_ref}")
 
     runtime_policy = sub.get("runtime_policy", {}) if isinstance(sub.get("runtime_policy"), dict) else {}
-    max_child_depth = int(runtime_policy.get("max_child_depth", 2))
-    if _depth >= max_child_depth:
+    local_max_child_depth = int(runtime_policy.get("max_child_depth", 2))
+    effective_max_child_depth = local_max_child_depth
+    if _max_child_depth is not None:
+        effective_max_child_depth = min(effective_max_child_depth, _max_child_depth)
+    if _depth >= effective_max_child_depth:
         return NodeExecutionResult(node_id=node.id, status="failure", error="Subcircuit max depth exceeded")
 
     input_mapping = sub.get("input_mapping", {})
@@ -414,6 +418,7 @@ def execute_subcircuit_node(
         child_savefile,
         run_id=f"subcircuit:{node.id}:{name}",
         _depth=_depth + 1,
+        _max_child_depth=effective_max_child_depth,
     )
     trace_mode = str(runtime_policy.get("trace_mode", "summary"))
     trace_summary = _subcircuit_trace_summary(child_ref=child_ref, child_trace=child_trace)
@@ -469,6 +474,7 @@ class SavefileExecutor:
         run_id: str = "savefile-run",
         *,
         _depth: int = 0,
+        _max_child_depth: Optional[int] = None,
     ) -> SavefileExecutionTrace:
         """Execute savefile using Nexa subsystems."""
         state = {
@@ -502,7 +508,13 @@ class SavefileExecutor:
                 )
             elif node_kind == "subcircuit":
                 result = execute_subcircuit_node(
-                    node, savefile, state, node_outputs, self.provider_registry, _depth=_depth
+                    node,
+                    savefile,
+                    state,
+                    node_outputs,
+                    self.provider_registry,
+                    _depth=_depth,
+                    _max_child_depth=_max_child_depth,
                 )
             else:
                 result = NodeExecutionResult(
