@@ -89,3 +89,47 @@ def test_official_savefile_examples_include_explicit_ui_section(path):
     savefile = load_savefile(raw)
     warnings = validate_savefile(savefile)
     assert warnings == []
+
+
+def test_save_savefile_file_roundtrips_subcircuits_and_outputs(tmp_path):
+    payload = make_demo_savefile_payload()
+    payload["circuit"]["nodes"] = [
+        {
+            "id": "review_bundle_stage",
+            "kind": "subcircuit",
+            "label": "Review Bundle Stage",
+            "execution": {
+                "subcircuit": {
+                    "child_circuit_ref": "internal:review_bundle",
+                    "input_mapping": {"question": "input.question"},
+                    "output_binding": {"result": "child.output.result"},
+                }
+            },
+        }
+    ]
+    payload["circuit"]["edges"] = []
+    payload["circuit"]["entry"] = "review_bundle_stage"
+    payload["circuit"]["outputs"] = [{"name": "final_result", "source": "node.review_bundle_stage.output.result"}]
+    payload["circuit"]["subcircuits"] = {
+        "review_bundle": {
+            "nodes": [
+                {
+                    "id": "critic",
+                    "kind": "provider",
+                    "execution": {
+                        "provider": {"provider_id": "provider.openai", "prompt_ref": "prompt.main"}
+                    },
+                }
+            ],
+            "edges": [],
+            "outputs": [{"name": "result", "source": "node.critic.output.result"}],
+        }
+    }
+
+    savefile = load_savefile(payload)
+    path = tmp_path / "subcircuit_roundtrip.nex"
+    save_savefile_file(savefile, str(path))
+
+    loaded = load_savefile_from_path(str(path))
+    assert loaded.circuit.outputs == [{"name": "final_result", "source": "node.review_bundle_stage.output.result"}]
+    assert "review_bundle" in loaded.circuit.subcircuits

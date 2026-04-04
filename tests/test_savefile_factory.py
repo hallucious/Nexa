@@ -92,3 +92,52 @@ def test_create_savefile_deepcopies_mutable_input_dicts():
     assert savefile.circuit.nodes[0].inputs == {"text": "state.input.text"}
     assert savefile.ui.layout == {"n1": {"x": 10, "y": 20}}
     assert savefile.state.input == {"text": "hello"}
+
+
+def test_create_savefile_preserves_subcircuits_and_outputs():
+    savefile = create_savefile(
+        name="demo",
+        version="2.0.0",
+        entry="review_bundle_stage",
+        nodes=[
+            {
+                "id": "review_bundle_stage",
+                "kind": "subcircuit",
+                "label": "Review Bundle Stage",
+                "execution": {
+                    "subcircuit": {
+                        "child_circuit_ref": "internal:review_bundle",
+                        "input_mapping": {"question": "input.question"},
+                        "output_binding": {"result": "child.output.result"},
+                    }
+                },
+            }
+        ],
+        outputs=[{"name": "final_result", "source": "node.review_bundle_stage.output.result"}],
+        subcircuits={
+            "review_bundle": {
+                "nodes": [
+                    {
+                        "id": "critic",
+                        "kind": "provider",
+                        "execution": {
+                            "provider": {"provider_id": "provider.review", "prompt_ref": "prompt.review"}
+                        },
+                    }
+                ],
+                "edges": [],
+                "outputs": [{"name": "result", "source": "node.critic.output.result"}],
+            }
+        },
+        prompts={"prompt.review": {"template": "Review {{question}}"}},
+        providers={"provider.review": {"type": "openai", "model": "gpt-5"}},
+        state_input={"question": "What is safer?"},
+    )
+
+    payload = serialize_savefile(savefile)
+    loaded = load_savefile(payload)
+
+    assert payload["circuit"]["outputs"] == [{"name": "final_result", "source": "node.review_bundle_stage.output.result"}]
+    assert "review_bundle" in payload["circuit"]["subcircuits"]
+    assert loaded.circuit.outputs == [{"name": "final_result", "source": "node.review_bundle_stage.output.result"}]
+    assert "review_bundle" in loaded.circuit.subcircuits

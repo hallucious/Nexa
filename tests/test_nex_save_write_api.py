@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import json
 
 from src.contracts.nex_contract import COMMIT_SNAPSHOT_ROLE, WORKING_SAVE_ROLE
@@ -221,3 +223,48 @@ def test_save_nex_artifact_file_prefers_materialized_record_over_top_level_thin_
     assert data['source']['commit_id'] == 'commit-thin'
     assert data['timeline']['event_stream_ref'] == 'events://run-123'
     assert data['outputs']['final_outputs'][0]['output_ref'] == 'node_a'
+
+
+def test_serialize_working_save_preserves_subcircuits():
+    model = make_working_save()
+    model = replace(
+        model,
+        circuit=replace(
+            model.circuit,
+            subcircuits={
+                "review_bundle": {
+                    "nodes": [{"id": "critic", "kind": "provider"}],
+                    "edges": [],
+                    "outputs": [{"name": "result", "source": "node.critic.output.result"}],
+                }
+            },
+        ),
+    )
+
+    payload = serialize_working_save(model)
+
+    assert payload["circuit"]["subcircuits"]["review_bundle"]["outputs"] == [
+        {"name": "result", "source": "node.critic.output.result"}
+    ]
+
+
+def test_save_nex_artifact_file_writes_working_save_with_subcircuits(tmp_path):
+    model = make_working_save()
+    model = replace(
+        model,
+        circuit=replace(
+            model.circuit,
+            subcircuits={
+                "review_bundle": {
+                    "nodes": [{"id": "critic", "kind": "provider"}],
+                    "edges": [],
+                    "outputs": [{"name": "result", "source": "node.critic.output.result"}],
+                }
+            },
+        ),
+    )
+
+    path = save_nex_artifact_file(model, tmp_path / "working_with_subcircuits.nex")
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    assert data["circuit"]["subcircuits"]["review_bundle"]["nodes"][0]["id"] == "critic"

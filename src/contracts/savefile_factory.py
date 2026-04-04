@@ -107,6 +107,8 @@ def create_savefile(
     nodes: Sequence[NodeSpec | Mapping[str, Any]],
     description: str | None = None,
     edges: Sequence[EdgeSpec | Mapping[str, Any]] | None = None,
+    outputs: Sequence[Mapping[str, Any]] | None = None,
+    subcircuits: Mapping[str, Mapping[str, Any]] | None = None,
     prompts: Mapping[str, PromptResource | Mapping[str, Any]] | None = None,
     providers: Mapping[str, ProviderResource | Mapping[str, Any]] | None = None,
     plugins: Mapping[str, PluginResource | Mapping[str, Any]] | None = None,
@@ -129,6 +131,8 @@ def create_savefile(
             entry=entry,
             nodes=[_materialize_node(node) for node in nodes],
             edges=[_materialize_edge(edge) for edge in (edges or [])],
+            outputs=copy.deepcopy(list(outputs or [])),
+            subcircuits=copy.deepcopy(dict(subcircuits or {})),
         ),
         resources=ResourcesSpec(
             prompts={
@@ -167,6 +171,8 @@ def make_minimal_savefile(
     outputs: Mapping[str, str] | None = None,
     description: str | None = None,
     prompts: Mapping[str, PromptResource | Mapping[str, Any]] | None = None,
+    circuit_outputs: Sequence[Mapping[str, Any]] | None = None,
+    subcircuits: Mapping[str, Mapping[str, Any]] | None = None,
     providers: Mapping[str, ProviderResource | Mapping[str, Any]] | None = None,
     plugins: Mapping[str, PluginResource | Mapping[str, Any]] | None = None,
     state_input: Mapping[str, Any] | None = None,
@@ -196,6 +202,8 @@ def make_minimal_savefile(
             }
         ],
         prompts=prompts,
+        outputs=circuit_outputs,
+        subcircuits=subcircuits,
         providers=providers,
         plugins=plugins,
         state_input=state_input,
