@@ -4,8 +4,7 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-
-OBS_FILE_NAME = "OBSERVABILITY.jsonl"
+from src.utils.nexa_config import get_observability_filename
 
 
 def append_observability_event(*, run_dir: str, event: Dict[str, Any]) -> None:
@@ -16,7 +15,7 @@ def append_observability_event(*, run_dir: str, event: Dict[str, Any]) -> None:
     try:
         rd = Path(run_dir)
         rd.mkdir(parents=True, exist_ok=True)
-        path = rd / OBS_FILE_NAME
+        path = rd / get_observability_filename()
         line = json.dumps(event, ensure_ascii=False)
         with path.open("a", encoding="utf-8") as f:
             f.write(line + "\n")
@@ -27,7 +26,7 @@ def append_observability_event(*, run_dir: str, event: Dict[str, Any]) -> None:
 def read_observability_events(*, run_dir: str):
     """Read OBSERVABILITY.jsonl events. Returns [] if missing/unreadable."""
     try:
-        path = Path(run_dir) / OBS_FILE_NAME
+        path = Path(run_dir) / get_observability_filename()
         if not path.exists():
             return []
         events = []

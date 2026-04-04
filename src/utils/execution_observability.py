@@ -3,12 +3,13 @@ import os
 import time
 from typing import Dict, Any
 
-OBSERVABILITY_FILE = "OBSERVABILITY.jsonl"
+from src.utils.nexa_config import get_observability_path
 
 
 def _ensure_file():
-    if not os.path.exists(OBSERVABILITY_FILE):
-        with open(OBSERVABILITY_FILE, "w", encoding="utf-8"):
+    path = get_observability_path()
+    if not os.path.exists(path):
+        with open(path, "w", encoding="utf-8"):
             pass
 
 
@@ -18,7 +19,7 @@ def _now_ts():
 
 def write_execution_record(record: Dict[str, Any]) -> None:
     _ensure_file()
-    with open(OBSERVABILITY_FILE, "a", encoding="utf-8") as f:
+    with open(get_observability_path(), "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 

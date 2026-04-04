@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -27,8 +28,10 @@ from src.circuit.circuit_runner import CircuitRunner
 from src.cli.savefile_runtime import execute_savefile, is_savefile_contract
 from src.engine.run_comparator import RunComparator
 from src.providers.env_diagnostics import publish_dotenv_status
+from src.utils.nexa_config import get_observability_path
 
-OBSERVABILITY_FILE = Path("OBSERVABILITY.jsonl")
+
+OBSERVABILITY_FILE = Path(get_observability_path())
 
 
 from src.platform.provider_executor import GenerateTextProviderBridge
@@ -425,8 +428,15 @@ def print_error_payload(payload):
 
 
 def append_observability_record(record):
-    OBSERVABILITY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(OBSERVABILITY_FILE, "a", encoding="utf-8") as f:
+    import os as _os
+    _configured = globals().get("OBSERVABILITY_FILE")
+    if _configured is None:
+        _path = get_observability_path()
+    else:
+        _path = str(_configured)
+    _dir = _os.path.dirname(_os.path.abspath(_path))
+    _os.makedirs(_dir, exist_ok=True)
+    with open(_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False))
         f.write("\n")
 
@@ -1080,7 +1090,7 @@ def run_command(args):
 
     started_at = time.time()
     circuit = load_circuit(args.circuit)
-    final_state = runner.execute(circuit, initial_state)
+    final_state = asyncio.run(runner.execute_async(circuit, initial_state))
     ended_at = time.time()
 
     payload = create_serialized_circuit_execution_payload(

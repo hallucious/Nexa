@@ -6,6 +6,13 @@ import time
 from dataclasses import dataclass
 from typing import Callable, Optional, Tuple, List, Sequence, Any
 
+from src.utils.nexa_config import (
+    get_safe_mode_enabled as _get_safe_mode_enabled,
+    get_safe_mode_link_mode as _get_safe_mode_link_mode,
+    get_safe_mode_reason_override,
+    get_safe_mode_strict_recovery_enabled as _get_safe_mode_strict_recovery_enabled,
+)
+
 
 # --- SAFE_MODE linkage controls -------------------------------------------------
 # Gate2 can optionally consume SAFE_MODE metadata to explain (or refine) continuity decisions.
@@ -22,8 +29,7 @@ _LAST_SAFE_MODE_RESULT: Optional["SafeModeResult"] = None
 
 
 def get_safe_mode_link_mode() -> str:
-    return (os.environ.get("HAI_SAFE_MODE_LINK_MODE") or "OFF").strip().upper()
-
+    return _get_safe_mode_link_mode()
 
 
 def get_safe_mode_strict_recovery_enabled() -> bool:
@@ -33,8 +39,7 @@ def get_safe_mode_strict_recovery_enabled() -> bool:
     appears to have dropped MUST-KEEP anchors (meaning-preservation failure).
     This is OFF by default to keep behavior stable and tests deterministic.
     """
-    v = (os.environ.get("HAI_SAFE_MODE_STRICT_RECOVERY") or "0").strip().lower()
-    return v in ("1", "true", "yes", "on")
+    return _get_safe_mode_strict_recovery_enabled()
 
 def get_last_safe_mode_result() -> Optional["SafeModeResult"]:
     """Return last SAFE_MODE result produced in this process (best-effort)."""
@@ -93,7 +98,7 @@ def classify_error(err: BaseException) -> str:
     - Prefer explicit env override if present (useful in tests).
     - Tries to use structured fields (status_code/code) when available.
     """
-    override = _env("HAI_SAFE_MODE_REASON", "")
+    override = get_safe_mode_reason_override()
     if override:
         return override
 
@@ -138,7 +143,7 @@ def classify_error(err: BaseException) -> str:
 
 
 def apply_safe_mode_prefix(prompt: str) -> str:
-    if _env("HAI_SAFE_MODE", "0") == "1":
+    if _get_safe_mode_enabled():
         return SAFE_PREFIX + "\n\n" + prompt
     return prompt
 

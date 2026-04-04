@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from typing import Callable, Dict, Generic, List, Optional, Set, TypeVar
+from typing import Awaitable, Callable, Dict, Generic, List, Optional, Set, TypeVar
 
 from src.engine.compiled_resource_graph import CompiledResourceGraph
 
@@ -35,6 +36,12 @@ class GraphScheduler:
     - runtime consumes a DAG only (cycle must already be rejected at compile time)
     - ready-set is rebuilt from dependency counts
     - output resolution is NOT handled here
+
+    Execution modes
+    ---------------
+    execute()        — sync path; same-wave resources run via ThreadPoolExecutor
+    execute_async()  — true async path; same-wave resources run via asyncio.gather()
+                       Caller must be inside a running event loop.
     """
 
     def __init__(self, graph: CompiledResourceGraph):
@@ -89,12 +96,17 @@ class GraphScheduler:
 
         return waves
 
+    # ------------------------------------------------------------------
+    # Sync execution path (ThreadPoolExecutor)
+    # ------------------------------------------------------------------
+
     def execute(
         self,
         executor: Callable[[str], T],
         *,
         max_workers: Optional[int] = None,
     ) -> GraphExecutionResult[T]:
+        """Execute waves synchronously; same-wave resources run in a ThreadPoolExecutor."""
         waves = self.build_waves()
         results = GraphExecutionResult[T](waves=waves)
 
@@ -117,5 +129,39 @@ class GraphScheduler:
                 }
                 for resource_id in wave.resource_ids:
                     results.resource_results[resource_id] = wave_results[resource_id]
+
+        return results
+
+    # ------------------------------------------------------------------
+    # True async execution path (asyncio.gather)
+    # ------------------------------------------------------------------
+
+    async def execute_async(
+        self,
+        executor: Callable[[str], Awaitable[T]],
+    ) -> GraphExecutionResult[T]:
+        """Execute waves using asyncio.gather for same-wave concurrency.
+
+        Requirements
+        ------------
+        - ``executor`` must be an async callable: ``async def executor(resource_id) -> T``
+        - Wave ordering is preserved: wave N+1 starts only after all of wave N completes
+        - Same-wave resources execute concurrently via ``asyncio.gather()``
+        - Must be called from inside a running asyncio event loop
+        """
+        waves = self.build_waves()
+        results = GraphExecutionResult[T](waves=waves)
+
+        for wave in waves:
+            if len(wave.resource_ids) == 1:
+                # Single resource: no gather overhead needed
+                rid = wave.resource_ids[0]
+                results.resource_results[rid] = await executor(rid)
+            else:
+                # Multiple resources: execute concurrently within this wave
+                tasks = [executor(rid) for rid in wave.resource_ids]
+                wave_results = await asyncio.gather(*tasks)
+                for rid, result in zip(wave.resource_ids, wave_results):
+                    results.resource_results[rid] = result
 
         return results

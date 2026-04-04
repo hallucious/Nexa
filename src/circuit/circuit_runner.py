@@ -28,6 +28,7 @@ No-double-application:
 """
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -1012,3 +1013,264 @@ class CircuitRunner:
             )
 
         return CircuitRunResult(current_state, governance, paused_run_state=produced_paused_run_state)
+
+
+    # ── Async execution path ──────────────────────────────────────────────────
+
+    async def _execute_node_async(
+        self, node: Dict[str, Any], state: Dict[str, Any]
+    ):
+        """Async counterpart to _execute_node.
+
+        Delegates to NodeExecutionRuntime.execute_async() which uses
+        asyncio.gather() internally for same-wave resource concurrency.
+        I/O-bound work (provider HTTP calls, plugin execution) is offloaded
+        via asyncio.to_thread() so the event loop is never blocked.
+        """
+        if "execution_config_ref" not in node:
+            raise ValueError(f"node missing execution_config_ref: {node.get('id')}")
+        config_id = node["execution_config_ref"]
+        # Resolve config from registry synchronously (cheap CPU work)
+        config = self.registry.get(config_id)
+        if not isinstance(config, dict):
+            raise TypeError("execution config registry must return dict config")
+        result = await self.runtime.execute_async(config, state)
+        return result.output
+
+    async def execute_async(
+        self,
+        circuit: Dict[str, Any],
+        state: Dict[str, Any],
+        *,
+        strict_determinism: bool = False,
+    ) -> "CircuitRunResult":
+        """True async execution path for a circuit.
+
+        Same governance lifecycle as execute() but the node execution phase
+        (Phase 3) uses asyncio.gather() to run same-wave nodes concurrently.
+
+        Wave ordering is preserved: wave N+1 begins only after all tasks in
+        wave N have resolved.
+
+        Usage
+        -----
+        result = await runner.execute_async(circuit, state)
+
+        Or from sync context (no running loop):
+            result = asyncio.run(runner.execute_async(circuit, state))
+        """
+        started_at_ms = time.monotonic()
+        execution_id = str(uuid.uuid4())
+        circuit_id = circuit.get("id")
+
+        current_state: Dict[str, Any] = dict(state)
+        nodes: List[Dict[str, Any]] = circuit.get("nodes", [])
+        resume_request = self._extract_resume_request(
+            current_state, circuit_nodes=nodes, circuit_definition=circuit
+        )
+        current_state.setdefault("__node_outputs__", {})
+
+        # ── Phase 1: Structural pre-validation ───────────────────────────────
+        structural_result = self._run_structural_validation(circuit)
+
+        # ── Phase 1b: Determinism pre-validation (strict mode only) ──────────
+        pre_det_result: Optional[ValidationResult] = None
+        should_run_determinism_pre = bool(
+            strict_determinism
+            or (
+                resume_request is not None
+                and "determinism_pre_validation" in resume_request.required_revalidation
+            )
+        )
+        if should_run_determinism_pre:
+            pre_det_result = self._run_determinism_validation(
+                circuit, strict_determinism=True
+            )
+
+        # ── Pre-decision ──────────────────────────────────────────────────────
+        pre_decision: PreDecisionResult = self._policy.decide_pre(
+            structural_result, pre_det_result
+        )
+
+        if pre_decision.blocks_execution:
+            finished_ms = time.monotonic()
+            governance = self._build_governance_trace(
+                execution_id=execution_id,
+                circuit_id=circuit_id,
+                structural_result=structural_result,
+                pre_det_result=pre_det_result,
+                pre_decision=pre_decision,
+                execution_allowed=False,
+                post_det_result=None,
+                post_decision=PostDecisionResult(
+                    decision=ValidationDecision.ACCEPT,
+                    reason="execution blocked; no post-validation performed",
+                ),
+                execution_completed=False,
+                final_status="blocked",
+                started_at_ms=started_at_ms,
+                finished_at_ms=finished_ms,
+            )
+            return CircuitRunResult(current_state, governance)
+
+        # ── Phase 3: Node execution (async wave loop) ─────────────────────────
+        execution_nodes = (
+            nodes if resume_request is None
+            else self._build_resume_nodes(nodes, current_state, resume_request)
+        )
+        scheduler = CircuitScheduler(execution_nodes)
+        waves = scheduler.execution_waves()
+
+        set_execution_id_fn = getattr(self.runtime, "set_execution_id", None)
+        if callable(set_execution_id_fn):
+            set_execution_id_fn(execution_id)
+
+        started_payload = {
+            "circuit_id": circuit_id,
+            "execution_id": execution_id,
+            "total_nodes": len(execution_nodes),
+            "total_nodes_in_circuit": len(nodes),
+            "total_waves": len(waves),
+            "is_resume": resume_request is not None,
+            "execution_mode": "async",
+        }
+        if resume_request is not None:
+            started_payload["resume_from_node_id"] = resume_request.resume_from_node_id
+            if resume_request.previous_execution_id:
+                started_payload["previous_execution_id"] = resume_request.previous_execution_id
+
+        self._emit_runtime_event("execution_started", started_payload)
+        if resume_request is not None:
+            self._emit_runtime_event("execution_resumed", resume_request.to_payload())
+
+        execution_failed = False
+        execution_error: Optional[Exception] = None
+        execution_paused = False
+        pause_signal: Optional[ReviewRequiredPause] = None
+        executed_nodes_count = 0
+        produced_paused_run_state: Optional[PausedRunState] = None
+
+        try:
+            for wave in waves:
+                if len(wave) == 1:
+                    # Single node: run directly without gather overhead
+                    node_id = wave[0]
+                    node = scheduler.nodes[node_id]
+                    node_output = await self._execute_node_async(node, current_state)
+                    current_state[node_id] = node_output
+                    executed_nodes_count += 1
+                    node_outputs = current_state.setdefault("__node_outputs__", {})
+                    if isinstance(node_outputs, dict):
+                        node_outputs[node_id] = node_output
+                else:
+                    # Multiple nodes in this wave: run concurrently via asyncio.gather
+                    async def _run_one(nid: str) -> tuple:
+                        n = scheduler.nodes[nid]
+                        output = await self._execute_node_async(n, current_state)
+                        return nid, output
+
+                    wave_results = await asyncio.gather(*[_run_one(nid) for nid in wave])
+                    for node_id, node_output in wave_results:
+                        current_state[node_id] = node_output
+                        executed_nodes_count += 1
+                        node_outputs = current_state.setdefault("__node_outputs__", {})
+                        if isinstance(node_outputs, dict):
+                            node_outputs[node_id] = node_output
+
+        except ReviewRequiredPause as exc:
+            execution_paused = True
+            pause_signal = exc
+        except Exception as exc:
+            execution_failed = True
+            execution_error = exc
+            raise
+        finally:
+            visible_keys = len([k for k in current_state if k != "__node_outputs__"])
+            if execution_paused:
+                completed_event_type = "execution_paused"
+            else:
+                completed_event_type = "execution_failed" if execution_failed else "execution_completed"
+            completed_payload = {
+                "circuit_id": circuit_id,
+                "execution_id": execution_id,
+                "total_nodes": len(nodes),
+                "total_waves": len(waves),
+                "executed_nodes": executed_nodes_count,
+                "state_keys": visible_keys,
+                "execution_mode": "async",
+            }
+            if execution_error is not None:
+                completed_payload["error"] = str(execution_error)
+                completed_payload["error_type"] = type(execution_error).__name__
+            if pause_signal is not None:
+                completed_payload["reason"] = str(
+                    pause_signal.payload.get("reason") or "review_required"
+                )
+                completed_payload["review_required"] = dict(pause_signal.payload)
+                completed_payload["resume"] = {
+                    "can_resume": True,
+                    "resume_from_node_id": pause_signal.node_id,
+                    "resume_strategy": "restart_from_node",
+                    "requires_revalidation": [
+                        "structural_validation",
+                        "determinism_pre_validation",
+                    ],
+                    "previous_execution_id": execution_id,
+                }
+                completed_payload["pause_node_id"] = pause_signal.node_id
+            self._emit_runtime_event(completed_event_type, completed_payload)
+
+        # ── Phase 4: Determinism post-validation ──────────────────────────────
+        if not execution_failed and not execution_paused:
+            post_det_result = self._run_determinism_validation(
+                circuit, strict_determinism=False
+            )
+        else:
+            post_det_result = None
+
+        post_decision = self._policy.decide_post(
+            post_det_result, strict_determinism=strict_determinism
+        )
+
+        final_status = (
+            "paused" if execution_paused
+            else ("failed" if execution_failed else "success")
+        )
+
+        finished_ms = time.monotonic()
+
+        if execution_paused and pause_signal is not None:
+            completed = set(
+                nid for nid in current_state
+                if isinstance(nid, str) and nid != pause_signal.node_id
+            )
+            produced_paused_run_state = PausedRunState.build(
+                paused_execution_id=execution_id,
+                paused_node_id=pause_signal.node_id,
+                completed_node_ids=completed,
+                review_required=dict(pause_signal.payload),
+                previous_execution_id=(
+                    resume_request.previous_execution_id if resume_request else None
+                ),
+                structure_fingerprint=compute_circuit_fingerprint(circuit),
+                execution_surface_fingerprint=compute_execution_surface_fingerprint(circuit),
+            )
+
+        governance = self._build_governance_trace(
+            execution_id=execution_id,
+            circuit_id=circuit_id,
+            structural_result=structural_result,
+            pre_det_result=pre_det_result,
+            pre_decision=pre_decision,
+            execution_allowed=True,
+            post_det_result=post_det_result,
+            post_decision=post_decision,
+            execution_completed=(not execution_failed and not execution_paused),
+            final_status=final_status,
+            started_at_ms=started_at_ms,
+            finished_at_ms=finished_ms,
+        )
+
+        return CircuitRunResult(
+            current_state, governance, paused_run_state=produced_paused_run_state
+        )

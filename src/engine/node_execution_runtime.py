@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict, dataclass, field, is_dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -952,3 +953,221 @@ class NodeExecutionRuntime:
         if not isinstance(config, dict):
             raise TypeError("execution config registry must return dict config")
         return self.execute(config, state)
+
+    # ------------------------------------------------------------------
+    # Async execution path
+    # ------------------------------------------------------------------
+
+    async def _execute_resource_from_graph_async(
+        self,
+        resource_id: str,
+        config: Dict[str, Any],
+        graph,
+        flat_context: Dict[str, Any],
+        trace,
+        artifacts: List,
+        prompt_configs: Dict[str, Any],
+        provider_configs: Dict[str, Any],
+        plugin_configs: Dict[str, Any],
+        state_holder: Dict[str, Any],
+    ) -> Any:
+        """Async wrapper: executes a single graph resource.
+
+        The underlying resource execution (provider HTTP call, plugin call,
+        prompt rendering) is I/O bound.  We offload it to a thread via
+        asyncio.to_thread so the event loop is never blocked and
+        other wave-sibling coroutines can make progress concurrently.
+        """
+        return await asyncio.to_thread(
+            self._execute_resource_from_graph,
+            resource_id,
+            config,
+            graph,
+            flat_context,
+            trace,
+            artifacts,
+            prompt_configs,
+            provider_configs,
+            plugin_configs,
+            state_holder,
+        )
+
+    async def _execute_compiled_graph_async(
+        self,
+        config: Dict[str, Any],
+        graph,
+        flat_context: Dict[str, Any],
+        trace,
+        artifacts: List,
+    ) -> Any:
+        """Async version of _execute_compiled_graph.
+
+        Uses GraphScheduler.execute_async() with asyncio.gather() so
+        same-wave resources execute concurrently.
+        """
+        compiled_config = self._normalize_config_for_compilation(config)
+        prompt_configs = {
+            f"prompt.{item['prompt_id']}": item
+            for item in [compiled_config.get("prompt")]
+            if isinstance(item, dict) and isinstance(item.get("prompt_id"), str)
+        }
+        provider_configs = {
+            f"provider.{item['provider_id']}": item
+            for item in [compiled_config.get("provider")]
+            if isinstance(item, dict) and isinstance(item.get("provider_id"), str)
+        }
+        plugin_configs = {}
+        for plugin_cfg in compiled_config.get("plugins", []):
+            plugin_id = plugin_cfg.get("plugin_id")
+            instance_id = plugin_cfg.get("id") or plugin_id
+            if isinstance(instance_id, str):
+                plugin_configs[f"plugin.{instance_id}"] = plugin_cfg
+
+        self._validate_external_graph_inputs(graph, flat_context)
+
+        scheduler = GraphScheduler(graph)
+        state_holder = {"last_provider_output": None}
+
+        async def resource_executor_async(resource_id: str) -> Any:
+            return await self._execute_resource_from_graph_async(
+                resource_id=resource_id,
+                config=config,
+                graph=graph,
+                flat_context=flat_context,
+                trace=trace,
+                artifacts=artifacts,
+                prompt_configs=prompt_configs,
+                provider_configs=provider_configs,
+                plugin_configs=plugin_configs,
+                state_holder=state_holder,
+            )
+
+        execution_result = await scheduler.execute_async(resource_executor_async)
+        for wave in execution_result.waves:
+            self.record_wave()
+            trace.events.append(f"wave:{wave.index}:{','.join(wave.resource_ids)}")
+        return state_holder["last_provider_output"]
+
+    async def _execute_execution_config_async(
+        self,
+        config: Dict[str, Any],
+        state: Dict[str, Any],
+        *,
+        plan_extras: Optional[Dict[str, Any]] = None,
+    ) -> NodeResult:
+        """Async version of _execute_execution_config.
+
+        Uses _execute_compiled_graph_async for true async wave execution.
+        All other phases (validation, output resolution, events) are
+        lightweight CPU work and run directly in the event loop thread.
+        """
+        runtime_config = dict(config.get("runtime_config") or {})
+        node_id = (
+            config.get("node_id")
+            or config.get("config_id")
+            or "execution_config"
+        )
+        trace = NodeTrace()
+        artifacts: List[Artifact] = []
+        flat_context = self._build_flat_context(state)
+
+        node_started_at = time.time()
+        self._emit_event("node_started", {}, node_id=node_id)
+
+        try:
+            graph = self._compile_execution_plan(config)
+            if graph is not None:
+                provider_output = await self._execute_compiled_graph_async(
+                    config, graph, flat_context, trace, artifacts
+                )
+            else:
+                provider_output = None
+
+            def validation_stage():
+                trace.events.append("validation")
+                compat_context = self._build_compat_context(flat_context)
+                for rule in config.get("validation_rules", []):
+                    self._run_validation(rule, compat_context)
+
+            self._measure("validation", validation_stage, trace)
+
+            try:
+                final_output = self._resolve_final_output(
+                    config=config,
+                    graph=graph,
+                    flat_context=flat_context,
+                    trace=trace,
+                    provider_output=provider_output,
+                )
+            except FinalOutputResolverError as exc:
+                raise ValueError(f"final output resolution failed: {exc}") from exc
+
+            result = NodeResult(
+                node_id=node_id,
+                output=final_output,
+                artifacts=artifacts,
+                trace=trace,
+            )
+
+            self._emit_artifact_preview_events(node_id, artifacts)
+
+            duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
+            self._emit_event(
+                "node_completed",
+                {
+                    "status": "success",
+                    "duration_ms": duration_ms,
+                    "artifact_count": len(artifacts),
+                    "metrics": self.get_metrics(),
+                },
+                node_id=node_id,
+            )
+            return result
+
+        except ReviewRequiredPause as exc:
+            duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
+            self._emit_event(
+                "node_completed",
+                {
+                    "status": "partial",
+                    "duration_ms": duration_ms,
+                    "artifact_count": len(artifacts),
+                    "metrics": self.get_metrics(),
+                    "review_required": exc.payload,
+                    "resume": dict(exc.payload.get("resume") or {}),
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                node_id=node_id,
+            )
+            raise
+        except Exception as exc:
+            duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
+            self._emit_event(
+                "node_completed",
+                {
+                    "status": "failed",
+                    "duration_ms": duration_ms,
+                    "artifact_count": len(artifacts),
+                    "metrics": self.get_metrics(),
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                node_id=node_id,
+            )
+            raise
+        finally:
+            if runtime_config.get("write_observability", True):
+                self._write_observability(node_id, trace)
+
+    async def execute_async(self, node: Dict[str, Any], state: Dict[str, Any]) -> NodeResult:
+        """True async entry point for node execution.
+
+        Same contract as execute() but uses asyncio.gather() for
+        same-wave resource concurrency inside _execute_compiled_graph_async.
+        """
+        normalized_node = self._normalize_node_payload(node)
+        execution_plan, plan_extras = self._coerce_node_to_execution_plan(normalized_node)
+        return await self._execute_execution_config_async(
+            execution_plan, state, plan_extras=plan_extras
+        )
