@@ -89,6 +89,7 @@ class DesignerControlledProposalResult:
     control_state: DesignerProposalControlState
     bundle: object | None = None
     explanation: str = ""
+    updated_session_state_card: object | None = None
 
     @property
     def ready_for_approval(self) -> bool:

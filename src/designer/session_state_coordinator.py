@@ -1,0 +1,126 @@
+from __future__ import annotations
+
+from dataclasses import replace
+
+from src.designer.models.designer_proposal_control import DesignerControlledProposalResult
+from src.designer.models.designer_session_state_card import (
+    ApprovalState,
+    ConversationContext,
+    CurrentFindingsState,
+    DesignerSessionStateCard,
+    RevisionAttemptSummary,
+    RevisionState,
+    SessionTargetScope,
+)
+
+
+class DesignerSessionStateCoordinator:
+    """Updates the session card from proposal-control outcomes.
+
+    This keeps revision state, findings, approval hints, and read-only fallback
+    direction synchronized with the explicit proposal control result.
+    """
+
+    def evolve_after_control_result(
+        self,
+        session_state_card: DesignerSessionStateCard,
+        control_result: DesignerControlledProposalResult,
+    ) -> DesignerSessionStateCard:
+        control_state = control_result.control_state
+        bundle = control_result.bundle
+
+        next_scope = session_state_card.target_scope
+        if control_state.next_action == "fallback_to_read_only":
+            next_scope = replace(
+                session_state_card.target_scope,
+                mode="read_only",
+                touch_budget="minimal",
+            )
+
+        next_findings = session_state_card.current_findings
+        next_approval = session_state_card.approval_state
+        if bundle is not None:
+            next_findings = CurrentFindingsState(
+                blocking_findings=tuple(f.message for f in bundle.precheck.blocking_findings),
+                warning_findings=tuple(f.message for f in bundle.precheck.warning_findings),
+                confirmation_findings=tuple(f.message for f in bundle.precheck.confirmation_findings),
+                finding_summary=bundle.precheck.explanation,
+            )
+            next_approval = ApprovalState(
+                approval_required=control_state.next_action != "fallback_to_read_only",
+                approval_status="pending" if control_state.terminal_status == "ready_for_approval" else "not_started",
+                confirmation_required=bundle.precheck.overall_status == "confirmation_required",
+                blocking_before_commit=bundle.precheck.overall_status == "blocked" or bool(bundle.precheck.blocking_findings),
+            )
+        elif control_state.next_action == "fallback_to_read_only":
+            next_approval = ApprovalState(
+                approval_required=False,
+                approval_status="not_started",
+                confirmation_required=False,
+                blocking_before_commit=False,
+            )
+
+        prior_rejections = session_state_card.revision_state.prior_rejection_reasons
+        if control_state.next_action in {"request_user_revision", "abort"} and control_state.pending_reason:
+            prior_rejections = prior_rejections + (control_state.pending_reason,)
+        # preserve uniqueness while keeping order
+        deduped_rejections = tuple(dict.fromkeys(prior_rejections))
+
+        next_revision = RevisionState(
+            revision_index=control_state.revision_rounds,
+            based_on_intent_id=bundle.intent.intent_id if bundle is not None else session_state_card.revision_state.based_on_intent_id,
+            based_on_patch_id=bundle.patch.patch_id if bundle is not None else session_state_card.revision_state.based_on_patch_id,
+            prior_rejection_reasons=deduped_rejections,
+            retry_reason=control_state.pending_reason,
+            user_corrections=session_state_card.revision_state.user_corrections,
+            last_control_action=control_state.next_action,
+            last_terminal_status=control_state.terminal_status,
+            attempt_history=tuple(
+                RevisionAttemptSummary(
+                    attempt_index=item.attempt_index,
+                    stage=item.stage,
+                    outcome=item.outcome,
+                    reason_code=item.reason_code,
+                    message=item.message,
+                )
+                for item in control_state.history
+            ),
+        )
+
+        next_conversation = ConversationContext(
+            user_request_text=session_state_card.conversation_context.user_request_text,
+            clarified_interpretation=session_state_card.conversation_context.clarified_interpretation,
+            unresolved_questions=self._next_unresolved_questions(session_state_card, control_state, bundle),
+            explicit_user_preferences=session_state_card.conversation_context.explicit_user_preferences,
+        )
+
+        return replace(
+            session_state_card,
+            target_scope=next_scope,
+            current_findings=next_findings,
+            revision_state=next_revision,
+            approval_state=next_approval,
+            conversation_context=next_conversation,
+            notes={
+                **session_state_card.notes,
+                "last_control_action": control_state.next_action,
+                "last_terminal_status": control_state.terminal_status,
+            },
+        )
+
+    def _next_unresolved_questions(
+        self,
+        session_state_card: DesignerSessionStateCard,
+        control_state,
+        bundle,
+    ) -> tuple[str, ...]:
+        existing = list(session_state_card.conversation_context.unresolved_questions)
+        if control_state.next_action == "choose_interpretation":
+            existing.append(control_state.pending_reason or "A structural interpretation must be chosen before proceeding.")
+        elif control_state.next_action == "await_user_confirmation":
+            existing.append(control_state.pending_reason or "User confirmation is required before approval can begin.")
+        elif control_state.next_action == "request_user_revision":
+            existing.append(control_state.pending_reason or "A user revision is required before another proposal attempt.")
+        elif control_state.next_action == "fallback_to_read_only":
+            existing.append("The request should continue through a read-only explain/analyze path instead of mutation flow.")
+        return tuple(dict.fromkeys(existing))

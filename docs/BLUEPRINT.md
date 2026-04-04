@@ -154,6 +154,7 @@ Current implementation baseline:
 * Subcircuit Batch 1 is closed across parser -> validator -> runtime -> load/write preservation -> Review Bundle example lock
 * Subcircuit Batch 2 core observability / inspectability is implemented at a practical level
 * Designer Session State Card is now a code-backed foundation rather than a spec-only direction
+* Designer proposal control is now connected to session-state persistence and revision history accumulation
 * the next rational implementation move is formal Phase 2 entry through Designer proposal-flow retry / fallback control-plane work
 
 Interpretation rule:

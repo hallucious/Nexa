@@ -3,7 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.contracts.designer_contract import CHANGE_SCOPE_LEVELS, TARGET_SCOPE_MODES
+from src.contracts.designer_contract import (
+    CHANGE_SCOPE_LEVELS,
+    PROPOSAL_CONTROL_ACTIONS,
+    PROPOSAL_CONTROL_ATTEMPT_OUTCOMES,
+    PROPOSAL_CONTROL_STAGES,
+    PROPOSAL_CONTROL_TERMINAL_STATUSES,
+    TARGET_SCOPE_MODES,
+)
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
 
 _SELECTION_MODES = {"none", "node", "edge", "output", "subgraph", "whole_circuit"}
@@ -98,6 +105,27 @@ class CurrentRisksState:
 
 
 @dataclass(frozen=True)
+class RevisionAttemptSummary:
+    attempt_index: int
+    stage: str
+    outcome: str
+    reason_code: str
+    message: str
+
+    def __post_init__(self) -> None:
+        if self.attempt_index < 1:
+            raise ValueError("RevisionAttemptSummary.attempt_index must be >= 1")
+        if self.stage not in PROPOSAL_CONTROL_STAGES:
+            raise ValueError(f"Unsupported RevisionAttemptSummary.stage: {self.stage}")
+        if self.outcome not in PROPOSAL_CONTROL_ATTEMPT_OUTCOMES:
+            raise ValueError(f"Unsupported RevisionAttemptSummary.outcome: {self.outcome}")
+        if not self.reason_code.strip():
+            raise ValueError("RevisionAttemptSummary.reason_code must be non-empty")
+        if not self.message.strip():
+            raise ValueError("RevisionAttemptSummary.message must be non-empty")
+
+
+@dataclass(frozen=True)
 class RevisionState:
     revision_index: int = 0
     based_on_intent_id: str | None = None
@@ -105,6 +133,17 @@ class RevisionState:
     prior_rejection_reasons: tuple[str, ...] = ()
     retry_reason: str | None = None
     user_corrections: tuple[str, ...] = ()
+    last_control_action: str | None = None
+    last_terminal_status: str | None = None
+    attempt_history: tuple[RevisionAttemptSummary, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.revision_index < 0:
+            raise ValueError("RevisionState.revision_index must be non-negative")
+        if self.last_control_action is not None and self.last_control_action not in PROPOSAL_CONTROL_ACTIONS:
+            raise ValueError(f"Unsupported RevisionState.last_control_action: {self.last_control_action}")
+        if self.last_terminal_status is not None and self.last_terminal_status not in PROPOSAL_CONTROL_TERMINAL_STATUSES:
+            raise ValueError(f"Unsupported RevisionState.last_terminal_status: {self.last_terminal_status}")
 
 
 @dataclass(frozen=True)

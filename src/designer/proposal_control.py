@@ -10,6 +10,7 @@ from src.designer.models.designer_proposal_control import (
 )
 from src.designer.models.designer_session_state_card import DesignerSessionStateCard
 from src.designer.proposal_flow import DesignerProposalBundle, DesignerProposalFlow
+from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
 
 
 class DesignerProposalControlPlane:
@@ -20,8 +21,9 @@ class DesignerProposalControlPlane:
     non-committing proposal flow.
     """
 
-    def __init__(self, *, proposal_flow: DesignerProposalFlow | None = None) -> None:
+    def __init__(self, *, proposal_flow: DesignerProposalFlow | None = None, session_state_coordinator: DesignerSessionStateCoordinator | None = None) -> None:
         self._proposal_flow = proposal_flow or DesignerProposalFlow()
+        self._session_state_coordinator = session_state_coordinator or DesignerSessionStateCoordinator()
 
     def run(
         self,
@@ -41,8 +43,19 @@ class DesignerProposalControlPlane:
                 session_state_card=session_state_card,
             )
         except ValueError as exc:
-            return self._from_exception(state, policy, exc)
-        return self._from_bundle(state, policy, bundle)
+            result = self._from_exception(state, policy, exc)
+        else:
+            result = self._from_bundle(state, policy, bundle)
+
+        if session_state_card is not None:
+            return replace(
+                result,
+                updated_session_state_card=self._session_state_coordinator.evolve_after_control_result(
+                    session_state_card,
+                    result,
+                ),
+            )
+        return result
 
     def _initial_state(self, session_state_card: DesignerSessionStateCard | None) -> DesignerProposalControlState:
         if session_state_card is None:

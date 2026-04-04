@@ -20,6 +20,7 @@ from src.designer.models.designer_session_state_card import (
 )
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.designer.session_state_persistence import load_persisted_session_state_card
 
 
 class DesignerSessionStateCardBuilder:
@@ -40,33 +41,45 @@ class DesignerSessionStateCardBuilder:
         user_corrections: tuple[str, ...] = (),
     ) -> DesignerSessionStateCard:
         storage_role = getattr(getattr(artifact, 'meta', None), 'storage_role', 'none') if artifact is not None else 'none'
+        persisted_card = load_persisted_session_state_card(artifact if isinstance(artifact, WorkingSaveModel) else None)
         current_working_save = self._build_working_save_reality(artifact)
-        scope_mode = target_scope_mode or self._default_scope_mode(storage_role)
+        persisted_scope = persisted_card.target_scope if persisted_card is not None else None
+        scope_mode = target_scope_mode or (persisted_scope.mode if persisted_scope is not None else self._default_scope_mode(storage_role))
         target_scope = SessionTargetScope(
             mode=scope_mode,
-            touch_budget=touch_budget,
+            touch_budget=persisted_scope.touch_budget if persisted_scope is not None else touch_budget,
             allowed_node_refs=tuple(current_working_save.node_list),
             allowed_edge_refs=tuple(current_working_save.edge_list),
             allowed_output_refs=tuple(current_working_save.output_list),
-            destructive_edit_allowed=destructive_edit_allowed,
+            destructive_edit_allowed=(
+                persisted_scope.destructive_edit_allowed if persisted_scope is not None else destructive_edit_allowed
+            ),
         )
         available_resources = self._build_available_resources(artifact)
         findings = self._build_findings(artifact)
         risks = self._build_risks(artifact)
         approval_state = ApprovalState(
             approval_required=scope_mode not in {"read_only"},
-            approval_status="not_started",
-            confirmation_required=bool(findings.confirmation_findings),
-            blocking_before_commit=bool(findings.blocking_findings),
+            approval_status=persisted_card.approval_state.approval_status if persisted_card is not None else "not_started",
+            confirmation_required=bool(findings.confirmation_findings)
+            or (persisted_card.approval_state.confirmation_required if persisted_card is not None else False),
+            blocking_before_commit=bool(findings.blocking_findings)
+            or (persisted_card.approval_state.blocking_before_commit if persisted_card is not None else False),
         )
         objective = ObjectiveSpec(primary_goal=request_text.strip())
-        constraints = ConstraintSet()
+        constraints = persisted_card.constraints if persisted_card is not None else ConstraintSet()
+        persisted_selection = persisted_card.current_selection if persisted_card is not None else None
+        persisted_revision = persisted_card.revision_state if persisted_card is not None else None
+        persisted_conversation = persisted_card.conversation_context if persisted_card is not None else None
         return DesignerSessionStateCard(
             card_version="0.1",
-            session_id=session_id or self._stable_id("session", request_text),
+            session_id=session_id or (persisted_card.session_id if persisted_card is not None else self._stable_id("session", request_text)),
             storage_role=storage_role,
             current_working_save=current_working_save,
-            current_selection=CurrentSelectionState(selection_mode=selection_mode, selected_refs=selected_refs),
+            current_selection=CurrentSelectionState(
+                selection_mode=selection_mode if selection_mode != "none" or not persisted_selection else persisted_selection.selection_mode,
+                selected_refs=selected_refs if selected_refs or not persisted_selection else persisted_selection.selected_refs,
+            ),
             target_scope=target_scope,
             available_resources=available_resources,
             objective=objective,
@@ -74,13 +87,30 @@ class DesignerSessionStateCardBuilder:
             current_findings=findings,
             current_risks=risks,
             revision_state=RevisionState(
-                revision_index=revision_index,
-                prior_rejection_reasons=prior_rejection_reasons,
-                retry_reason=retry_reason,
-                user_corrections=user_corrections,
+                revision_index=revision_index if revision_index != 0 else (persisted_revision.revision_index if persisted_revision is not None else 0),
+                based_on_intent_id=persisted_revision.based_on_intent_id if persisted_revision is not None else None,
+                based_on_patch_id=persisted_revision.based_on_patch_id if persisted_revision is not None else None,
+                prior_rejection_reasons=prior_rejection_reasons or (persisted_revision.prior_rejection_reasons if persisted_revision is not None else ()),
+                retry_reason=retry_reason if retry_reason is not None else (persisted_revision.retry_reason if persisted_revision is not None else None),
+                user_corrections=user_corrections or (persisted_revision.user_corrections if persisted_revision is not None else ()),
+                last_control_action=persisted_revision.last_control_action if persisted_revision is not None else None,
+                last_terminal_status=persisted_revision.last_terminal_status if persisted_revision is not None else None,
+                attempt_history=persisted_revision.attempt_history if persisted_revision is not None else (),
             ),
             approval_state=approval_state,
-            conversation_context=ConversationContext(user_request_text=request_text.strip()),
+            conversation_context=ConversationContext(
+                user_request_text=request_text.strip(),
+                clarified_interpretation=(
+                    persisted_conversation.clarified_interpretation if persisted_conversation is not None else None
+                ),
+                unresolved_questions=(
+                    persisted_conversation.unresolved_questions if persisted_conversation is not None else ()
+                ),
+                explicit_user_preferences=(
+                    persisted_conversation.explicit_user_preferences if persisted_conversation is not None else ()
+                ),
+            ),
+            notes=dict(persisted_card.notes) if persisted_card is not None else {},
         )
 
     def _build_working_save_reality(self, artifact: WorkingSaveModel | CommitSnapshotModel | None) -> WorkingSaveReality:

@@ -246,10 +246,14 @@ Minimum content:
 - prior_rejection_reasons
 - retry_reason
 - user_corrections
+- last_control_action
+- last_terminal_status
+- attempt_history
 
 Purpose:
 - prevents Designer from forgetting why prior proposals were rejected
 - keeps proposal evolution explicit
+- preserves bounded retry/fallback history across session rebuilds
 
 ### 5.13 `approval_state`
 Current approval boundary status.
@@ -464,6 +468,14 @@ DesignerSessionStateCard
     retry_reason: "narrow patch to selected reviewer node"
     user_corrections:
       - "modify only reviewer node"
+    last_control_action: "request_user_revision"
+    last_terminal_status: "awaiting_user_input"
+    attempt_history:
+      - attempt_index: 1
+        stage: "precheck"
+        outcome: "blocked"
+        reason_code: "DESIGNER-PRECHECK-BLOCKED"
+        message: "The patch is blocked and must be revised."
 
   approval_state:
     approval_required: true

@@ -92,6 +92,8 @@ def test_control_plane_returns_ready_for_approval_for_safe_bundle() -> None:
     assert result.ready_for_approval is True
     assert result.control_state.next_action == "proceed_to_approval"
     assert result.control_state.terminal_status == "ready_for_approval"
+    assert result.updated_session_state_card is not None
+    assert result.updated_session_state_card.approval_state.approval_status == "pending"
 
 
 def test_control_plane_requests_interpretation_for_ambiguous_confirmation_bundle() -> None:
@@ -114,6 +116,8 @@ def test_control_plane_falls_back_to_read_only_for_explain_request() -> None:
     assert result.control_state.next_action == "fallback_to_read_only"
     assert result.control_state.terminal_status == "awaiting_user_input"
     assert result.control_state.normalization_attempts == 1
+    assert result.updated_session_state_card is not None
+    assert result.updated_session_state_card.target_scope.mode == "read_only"
 
 
 def test_control_plane_requests_revision_for_blocked_precheck_with_remaining_budget() -> None:

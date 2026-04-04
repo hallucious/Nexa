@@ -257,6 +257,8 @@ CLI
 * Review Bundle remains an executable regression target rather than a docs-only reference
 * Designer Session State Card now has a real code foundation:
   typed model -> session-state-card builder -> request normalizer integration -> proposal-flow integration
+* Designer proposal control now persists into session-state semantics:
+  control result -> updated session state card -> persisted working-save designer snapshot -> builder restore path
 * current project position is best described as:
   Phase 1 closure complete enough -> formal Phase 2 entry
 * next work should avoid reopening Batch 1 fundamentals unless a real regression is found

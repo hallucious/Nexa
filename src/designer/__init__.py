@@ -12,3 +12,14 @@ from src.designer.approval_flow import DesignerApprovalCoordinator
 from src.designer.commit_gateway import DesignerCommitGateway, DesignerCommitResult
 
 from src.designer.patch_applier import DesignerPatchApplier, DesignerPatchApplicationResult
+
+from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
+from src.designer.session_state_persistence import (
+    deserialize_proposal_control_state,
+    deserialize_session_state_card,
+    load_persisted_proposal_control_state,
+    load_persisted_session_state_card,
+    persist_designer_session_state,
+    serialize_proposal_control_state,
+    serialize_session_state_card,
+)
