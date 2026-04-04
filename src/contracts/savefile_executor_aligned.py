@@ -56,14 +56,20 @@ def resolve_input_value(
     elif path.startswith("state.memory."):
         key = path[len("state.memory."):]
         return _get_nested(state.get("memory", {}), key)
+    elif path.startswith("input."):
+        key = path[len("input."):]
+        return _get_nested(state.get("input", {}), key)
     elif path.startswith("node."):
-        parts = path.split(".", 2)
+        parts = path.split(".", 3)
         if len(parts) < 3:
             raise KeyError(f"Invalid node path: {path}")
         node_id = parts[1]
-        output_key = parts[2]
         if node_id not in node_outputs:
             raise KeyError(f"Node output not available: {node_id}")
+        if len(parts) >= 4 and parts[2] == "output":
+            output_key = parts[3]
+        else:
+            output_key = path.split(".", 2)[2]
         return _get_nested(node_outputs[node_id], output_key)
     else:
         raise KeyError(f"Invalid path format: {path}")
@@ -297,6 +303,109 @@ def execute_ai_node(
     )
 
 
+def _child_output_source_map(child_circuit: Dict[str, Any]) -> Dict[str, str]:
+    mapping: Dict[str, str] = {}
+    for item in child_circuit.get("outputs", []):
+        if isinstance(item, dict) and isinstance(item.get("name"), str) and isinstance(item.get("source"), str):
+            mapping[item["name"]] = item["source"]
+    return mapping
+
+
+def execute_subcircuit_node(
+    node: NodeSpec,
+    savefile: Savefile,
+    state: Dict[str, Any],
+    node_outputs: Dict[str, Any],
+    provider_registry: ProviderRegistry,
+    *,
+    _depth: int = 0,
+) -> NodeExecutionResult:
+    sub = node.execution.get("subcircuit", {})
+    child_ref = sub.get("child_circuit_ref")
+    if not isinstance(child_ref, str) or not child_ref.startswith("internal:"):
+        return NodeExecutionResult(node_id=node.id, status="failure", error="Unsupported child_circuit_ref")
+
+    name = child_ref.split(":", 1)[1]
+    child_circuit = savefile.circuit.subcircuits.get(name)
+    if not isinstance(child_circuit, dict):
+        return NodeExecutionResult(node_id=node.id, status="failure", error=f"Child subcircuit not found: {child_ref}")
+
+    runtime_policy = sub.get("runtime_policy", {}) if isinstance(sub.get("runtime_policy"), dict) else {}
+    max_child_depth = int(runtime_policy.get("max_child_depth", 2))
+    if _depth >= max_child_depth:
+        return NodeExecutionResult(node_id=node.id, status="failure", error="Subcircuit max depth exceeded")
+
+    input_mapping = sub.get("input_mapping", {})
+    child_input: Dict[str, Any] = {}
+    try:
+        for input_key, input_path in input_mapping.items():
+            child_input[input_key] = resolve_input_value(input_path, state, node_outputs)
+    except KeyError as e:
+        return NodeExecutionResult(node_id=node.id, status="failure", error=f"Input resolution failed: {e}")
+
+    child_nodes = [
+        NodeSpec(
+            id=n["id"],
+            type=n.get("type"),
+            resource_ref=dict(n.get("resource_ref", {})),
+            inputs=dict(n.get("inputs", {})),
+            outputs=dict(n.get("outputs", {})),
+            kind=n.get("kind"),
+            label=n.get("label"),
+            execution=dict(n.get("execution", {})),
+        )
+        for n in child_circuit.get("nodes", [])
+    ]
+    child_edges = [
+        type(savefile.circuit.edges[0])(from_node=e.get("from") or e.get("from_node"), to_node=e.get("to") or e.get("to_node"))
+        if savefile.circuit.edges else __import__("src.contracts.savefile_format", fromlist=["EdgeSpec"]).EdgeSpec(from_node=e.get("from") or e.get("from_node"), to_node=e.get("to") or e.get("to_node"))
+        for e in child_circuit.get("edges", [])
+    ]
+    from src.contracts.savefile_format import CircuitSpec, Savefile as SavefileModel
+    child_savefile = SavefileModel(
+        meta=savefile.meta,
+        circuit=CircuitSpec(
+            entry=child_circuit.get("entry") or (child_nodes[0].id if child_nodes else ""),
+            nodes=child_nodes,
+            edges=child_edges,
+            outputs=list(child_circuit.get("outputs", [])),
+            subcircuits=dict(savefile.circuit.subcircuits),
+        ),
+        resources=savefile.resources,
+        state=type(savefile.state)(input=child_input, working={}, memory={}),
+        ui=savefile.ui,
+    )
+
+    child_trace = SavefileExecutor(provider_registry).execute(child_savefile, run_id=f"subcircuit:{node.id}:{name}", _depth=_depth+1)
+    if child_trace.status != "success":
+        return NodeExecutionResult(node_id=node.id, status="failure", error="Child subcircuit execution failed", trace={"child_trace": child_trace})
+
+    source_map = _child_output_source_map(child_circuit)
+    child_final_state = child_trace.final_state
+    child_node_outputs = {nid: res.output for nid, res in child_trace.node_results.items() if res.status == "success"}
+
+    bound_output: Dict[str, Any] = {}
+    for parent_key, binding in sub.get("output_binding", {}).items():
+        if not isinstance(binding, str) or not binding.startswith("child.output."):
+            continue
+        child_name = binding[len("child.output."):]
+        source = source_map.get(child_name)
+        if source is None:
+            continue
+        try:
+            bound_output[parent_key] = resolve_input_value(source, child_final_state, child_node_outputs)
+        except Exception:
+            continue
+
+    return NodeExecutionResult(
+        node_id=node.id,
+        status="success",
+        output=bound_output,
+        artifacts=list(child_trace.all_artifacts),
+        trace={"child_run_id": child_trace.run_id, "child_status": child_trace.status},
+    )
+
+
 class SavefileExecutor:
     """Savefile executor aligned with Nexa architecture."""
 
@@ -307,6 +416,8 @@ class SavefileExecutor:
         self,
         savefile: Savefile,
         run_id: str = "savefile-run",
+        *,
+        _depth: int = 0,
     ) -> SavefileExecutionTrace:
         """Execute savefile using Nexa subsystems."""
         state = {
@@ -326,22 +437,27 @@ class SavefileExecutor:
             if node is None:
                 continue
 
-            if node.type == "plugin":
+            node_kind = node.node_kind
+            if node_kind == "plugin":
                 result = execute_plugin_node(
                     node=node,
                     savefile=savefile,
                     state=state,
                     node_outputs=node_outputs,
                 )
-            elif node.type == "ai":
+            elif node_kind == "ai":
                 result = execute_ai_node(
                     node, savefile, state, node_outputs, self.provider_registry
+                )
+            elif node_kind == "subcircuit":
+                result = execute_subcircuit_node(
+                    node, savefile, state, node_outputs, self.provider_registry, _depth=_depth
                 )
             else:
                 result = NodeExecutionResult(
                     node_id=node_id,
                     status="failure",
-                    error=f"Unknown node type: {node.type}",
+                    error=f"Unknown node type: {node_kind}",
                 )
 
             node_results[node_id] = result

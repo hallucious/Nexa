@@ -22,6 +22,7 @@ class CircuitModel:
     edges: list[dict[str, Any]] = field(default_factory=list)
     entry: Optional[str] = None
     outputs: list[dict[str, Any]] = field(default_factory=list)
+    subcircuits: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

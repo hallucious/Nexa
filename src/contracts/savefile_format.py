@@ -8,6 +8,10 @@ Root contract (required 5 sections):
 - resources
 - state
 - ui
+
+The legacy savefile contract remains supported, but node/circuit structures are
+extended so newer schemas such as SubcircuitNode can be represented without
+breaking older savefile tests and callers.
 """
 
 from __future__ import annotations
@@ -34,12 +38,24 @@ class SavefileMeta:
 
 @dataclass
 class NodeSpec:
-    """Node specification in circuit."""
+    """Node specification in circuit.
+
+    Legacy canonical nodes use ``type`` + ``resource_ref``.
+    Extended schemas may additionally use ``kind`` + ``execution``.
+    """
+
     id: str
-    type: str  # "plugin" | "ai"
-    resource_ref: Dict[str, str]
+    type: Optional[str] = None  # legacy: "plugin" | "ai"
+    resource_ref: Dict[str, str] = field(default_factory=dict)
     inputs: Dict[str, str] = field(default_factory=dict)
     outputs: Dict[str, str] = field(default_factory=dict)
+    kind: Optional[str] = None
+    label: Optional[str] = None
+    execution: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def node_kind(self) -> str:
+        return self.kind or self.type or "unknown"
 
 
 @dataclass
@@ -55,6 +71,8 @@ class CircuitSpec:
     entry: str  # entry node id
     nodes: List[NodeSpec]
     edges: List[EdgeSpec] = field(default_factory=list)
+    outputs: List[Dict[str, Any]] = field(default_factory=list)
+    subcircuits: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 # =========================================================
@@ -122,17 +140,10 @@ class UISpec:
 
 @dataclass
 class Savefile:
-    """Root savefile structure - complete executable contract.
-    
-    Required 5 sections:
-    - meta: Savefile metadata
-    - circuit: Execution topology
-    - resources: Prompt/provider/plugin definitions
-    - state: Execution state
-    - ui: Visual layout (execution-independent)
-    """
+    """Root savefile structure - complete executable contract."""
+
     meta: SavefileMeta
     circuit: CircuitSpec
     resources: ResourcesSpec
     state: StateSpec
-    ui: UISpec
+    ui: Optional[UISpec]

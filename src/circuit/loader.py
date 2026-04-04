@@ -146,6 +146,7 @@ def load_definition(path: Path) -> CircuitModel:
         edges=edges,
         entry_node_id=data["entry_node_id"],
         raw=data,
+        subcircuits=dict(data.get("subcircuits", {})),
     )
 
 

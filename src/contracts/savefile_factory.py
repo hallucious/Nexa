@@ -46,13 +46,19 @@ def _materialize_node(node: NodeSpec | Mapping[str, Any]) -> NodeSpec:
             resource_ref=_deepcopy_dict(node.resource_ref),
             inputs=_deepcopy_dict(node.inputs),
             outputs=_deepcopy_dict(node.outputs),
+            kind=node.kind,
+            label=node.label,
+            execution=copy.deepcopy(node.execution),
         )
     return NodeSpec(
         id=str(node["id"]),
-        type=str(node["type"]),
+        type=str(node["type"]) if node.get("type") is not None else None,
         resource_ref=_deepcopy_dict(node.get("resource_ref")),
         inputs=_deepcopy_dict(node.get("inputs")),
         outputs=_deepcopy_dict(node.get("outputs")),
+        kind=str(node.get("kind")) if node.get("kind") is not None else None,
+        label=str(node.get("label")) if node.get("label") is not None else None,
+        execution=copy.deepcopy(dict(node.get("execution", {}))),
     )
 
 

@@ -39,11 +39,14 @@ def serialize_savefile(savefile: Savefile) -> Dict[str, Any]:
             "entry": savefile.circuit.entry,
             "nodes": [
                 {
-                    "id": node.id,
-                    "type": node.type,
+                    **({"id": node.id}),
+                    **({"type": node.type} if node.type is not None else {}),
+                    **({"kind": node.kind} if node.kind is not None else {}),
+                    **({"label": node.label} if node.label is not None else {}),
                     "resource_ref": _deepcopy_dict(node.resource_ref),
                     "inputs": _deepcopy_dict(node.inputs),
                     "outputs": _deepcopy_dict(node.outputs),
+                    **({"execution": copy.deepcopy(node.execution)} if node.execution else {}),
                 }
                 for node in savefile.circuit.nodes
             ],
@@ -54,6 +57,8 @@ def serialize_savefile(savefile: Savefile) -> Dict[str, Any]:
                 }
                 for edge in savefile.circuit.edges
             ],
+            "outputs": copy.deepcopy(savefile.circuit.outputs),
+            "subcircuits": copy.deepcopy(savefile.circuit.subcircuits),
         },
         "resources": {
             "prompts": {

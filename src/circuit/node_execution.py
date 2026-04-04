@@ -101,6 +101,22 @@ def _obs_ctx(input_payload: Dict[str, Any], node_raw: Dict[str, Any]) -> Optiona
     if isinstance(ctx, dict):
         return ctx
     return None
+def _run_subcircuit_node(*, node_id: str, node_raw: Dict[str, Any], input_payload: Dict[str, Any]) -> Dict[str, Any]:
+    sub = node_raw.get("execution", {}).get("subcircuit", {})
+    input_mapping = sub.get("input_mapping", {}) if isinstance(sub, dict) else {}
+    output_binding = sub.get("output_binding", {}) if isinstance(sub, dict) else {}
+    child_input = {k: input_payload.get(v.split(".")[-1]) if isinstance(v, str) else None for k, v in input_mapping.items()}
+    # Batch 1 minimal helper only: when full runtime adapter is not provided, preserve
+    # mapping-based wrapper shape instead of silently flattening child state.
+    result: Dict[str, Any] = {}
+    for parent_key, binding in output_binding.items():
+        if isinstance(binding, str) and binding.startswith("child.output."):
+            child_key = binding[len("child.output."):]
+            if child_key in child_input:
+                result[parent_key] = child_input[child_key]
+    return result
+
+
 def run_node_stages(
     *,
     node_id: str,
@@ -112,6 +128,10 @@ def run_node_stages(
     pre_fn: Optional[PreHandler] = None
     core_fn: Optional[CoreHandler] = None
     post_fn: Optional[PostHandler] = None
+
+    node_kind = str(node_raw.get("kind") or node_raw.get("type") or "")
+    if node_kind == "subcircuit":
+        return _run_subcircuit_node(node_id=node_id, node_raw=node_raw, input_payload=input_payload)
 
     if callable(handler):
         core_fn = handler  # type: ignore[assignment]
