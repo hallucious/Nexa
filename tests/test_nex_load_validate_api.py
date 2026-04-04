@@ -187,3 +187,30 @@ def test_commit_snapshot_rejects_runtime_ui_designer_sections() -> None:
     assert loaded.load_status == "rejected"
     codes = {f.code for f in loaded.findings}
     assert "COMMIT_SNAPSHOT_FORBIDDEN_SECTION_PRESENT" in codes
+
+
+def test_load_nex_preserves_subcircuits_in_working_save_typed_model() -> None:
+    payload = _working_save_payload()
+    payload["circuit"]["subcircuits"] = {
+        "review_bundle": {
+            "nodes": [],
+            "edges": [],
+            "outputs": [],
+        }
+    }
+
+    loaded = load_nex(payload)
+
+    assert isinstance(loaded.parsed_model, WorkingSaveModel)
+    assert "review_bundle" in loaded.parsed_model.circuit.subcircuits
+
+
+def test_load_nex_reports_invalid_subcircuits_shape() -> None:
+    payload = _working_save_payload()
+    payload["circuit"]["subcircuits"] = []
+
+    loaded = load_nex(payload)
+
+    assert loaded.load_status == "loaded_with_findings"
+    codes = {f.code for f in loaded.findings}
+    assert "NEX_CIRCUIT_SUBCIRCUITS_INVALID" in codes

@@ -160,6 +160,16 @@ def _validate_shared_schema(data: dict[str, Any], *, strict_unknown_fields: bool
         findings.append(_finding("NEX_CIRCUIT_EDGES_INVALID", "shared_schema", "high", True, "circuit.edges", "circuit.edges must be a list"))
     if "outputs" in circuit and not isinstance(circuit.get("outputs"), list):
         findings.append(_finding("NEX_CIRCUIT_OUTPUTS_INVALID", "shared_schema", "high", True, "circuit.outputs", "circuit.outputs must be a list"))
+    if "subcircuits" in circuit and not isinstance(circuit.get("subcircuits"), dict):
+        findings.append(_finding("NEX_CIRCUIT_SUBCIRCUITS_INVALID", "shared_schema", "high", True, "circuit.subcircuits", "circuit.subcircuits must be an object"))
+    elif isinstance(circuit.get("subcircuits"), dict):
+        for child_name, child in circuit.get("subcircuits", {}).items():
+            if not isinstance(child, dict):
+                findings.append(_finding("NEX_SUBCIRCUIT_DEFINITION_INVALID", "shared_schema", "high", True, f"circuit.subcircuits.{child_name}", f"Subcircuit '{child_name}' must be an object"))
+                continue
+            for field_name in ("nodes", "edges", "outputs"):
+                if field_name in child and not isinstance(child.get(field_name), list):
+                    findings.append(_finding("NEX_SUBCIRCUIT_SECTION_INVALID", "shared_schema", "high", True, f"circuit.subcircuits.{child_name}.{field_name}", f"Subcircuit '{child_name}' field '{field_name}' must be a list"))
 
     if strict_unknown_fields:
         allowed_meta = {"format_version", "storage_role", "name", "description", "created_at", "updated_at", WORKING_SAVE_IDENTITY_FIELD, COMMIT_SNAPSHOT_IDENTITY_FIELD, "source_working_save_id"}
@@ -291,6 +301,7 @@ def _construct_shared_models(data: dict[str, Any]) -> tuple[CircuitModel, Resour
             edges=list(circuit.get("edges", [])),
             entry=circuit.get("entry"),
             outputs=list(circuit.get("outputs", [])),
+            subcircuits=dict(circuit.get("subcircuits", {})),
         ),
         ResourcesModel(
             prompts=dict(resources.get("prompts", {})),

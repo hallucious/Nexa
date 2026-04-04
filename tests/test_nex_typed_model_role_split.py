@@ -64,3 +64,17 @@ def test_commit_snapshot_model_keeps_approval_validation_lineage() -> None:
     assert loaded.parsed_model.validation.validation_result == "passed"
     assert loaded.parsed_model.approval.approval_completed is True
     assert loaded.parsed_model.lineage.parent_commit_id is None
+
+
+def test_typed_models_preserve_subcircuits_when_present() -> None:
+    payload = _minimal_working_save()
+    payload["circuit"]["subcircuits"] = {
+        "child": {"nodes": [], "edges": [], "outputs": []}
+    }
+
+    loaded = load_nex(payload)
+
+    assert isinstance(loaded.parsed_model, WorkingSaveModel)
+    assert loaded.parsed_model.circuit.subcircuits == {
+        "child": {"nodes": [], "edges": [], "outputs": []}
+    }
