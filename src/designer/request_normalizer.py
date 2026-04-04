@@ -40,12 +40,13 @@ class DesignerRequestNormalizer:
                 working_save_ref=context.session_state_card.current_working_save.savefile_ref,
                 session_state_card=context.session_state_card,
             )
-        category = self._infer_category(request_text)
-        scope = self._build_scope(category, request_text, context)
-        actions = self._build_actions(category, request_text)
-        assumptions = self._build_assumptions(category, request_text, context)
-        ambiguity_flags = self._build_ambiguity_flags(category, request_text, context)
-        risk_flags = self._build_risk_flags(request_text)
+        effective_request_text = self._compose_effective_request_text(request_text, context)
+        category = self._infer_category(effective_request_text)
+        scope = self._build_scope(category, effective_request_text, context)
+        actions = self._build_actions(category, effective_request_text)
+        assumptions = self._build_assumptions(category, effective_request_text, context)
+        ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
+        risk_flags = self._build_risk_flags(effective_request_text)
         requires_confirmation = bool(ambiguity_flags or [flag for flag in risk_flags if flag.severity == "high"])
         constraints = self._build_constraints(request_text, context)
         objective = self._build_objective(request_text, context)
@@ -65,6 +66,22 @@ class DesignerRequestNormalizer:
             confidence=self._estimate_confidence(ambiguity_flags),
             explanation=explanation,
         )
+
+
+    def _compose_effective_request_text(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+    ) -> str:
+        card = context.session_state_card
+        if card is None:
+            return request_text
+        parts = [request_text.strip()]
+        if card.conversation_context.clarified_interpretation:
+            parts.append(card.conversation_context.clarified_interpretation.strip())
+        if card.revision_state.user_corrections:
+            parts.extend(item.strip() for item in card.revision_state.user_corrections if item.strip())
+        return " ".join(part for part in parts if part)
 
     def _infer_category(self, request_text: str) -> str:
         text = request_text.casefold()
@@ -90,7 +107,7 @@ class DesignerRequestNormalizer:
     ) -> TargetScope:
         text = request_text.casefold()
         broad = any(term in text for term in ("all ", "entire", "whole", "across the circuit", "every"))
-        node_refs = self._extract_node_refs(request_text)
+        node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
         max_change_scope = "broad" if broad else "bounded"
         card_scope = context.session_state_card.target_scope if context.session_state_card is not None else None
         if category == "CREATE_CIRCUIT":
@@ -106,7 +123,7 @@ class DesignerRequestNormalizer:
             )
         if card_scope is not None:
             if card_scope.mode == "node_only":
-                refs = tuple(card_scope.allowed_node_refs) or tuple(node_refs)
+                refs = tuple(node_refs) or tuple(card_scope.allowed_node_refs)
                 return TargetScope(
                     mode="node_only",
                     savefile_ref=context.working_save_ref,
@@ -320,7 +337,11 @@ class DesignerRequestNormalizer:
                     description="The request does not identify which working save should be mutated.",
                 )
             )
-        if any(term in text for term in ("all ", "entire", "whole")):
+        has_clarification = bool(
+            context.session_state_card is not None
+            and context.session_state_card.conversation_context.clarified_interpretation
+        )
+        if any(term in text for term in ("all ", "entire", "whole")) and not has_clarification:
             flags.append(
                 AmbiguityFlag(
                     type="broad_scope",
@@ -377,6 +398,33 @@ class DesignerRequestNormalizer:
             return "schema.validate"
         return "tool.generic"
 
+
+    def _resolve_node_refs(
+        self,
+        node_refs: tuple[str, ...],
+        context: RequestNormalizationContext,
+    ) -> tuple[str, ...]:
+        if not node_refs:
+            return node_refs
+        candidates: tuple[str, ...] = ()
+        if context.session_state_card is not None:
+            candidates = tuple(context.session_state_card.current_working_save.node_list)
+            if not candidates:
+                candidates = tuple(context.session_state_card.target_scope.allowed_node_refs)
+        if not candidates:
+            return node_refs
+        resolved: list[str] = []
+        for ref in node_refs:
+            if ref in candidates:
+                resolved.append(ref)
+                continue
+            suffix_matches = [item for item in candidates if item.endswith(f".{ref}")]
+            if len(suffix_matches) == 1:
+                resolved.append(suffix_matches[0])
+            else:
+                resolved.append(ref)
+        return tuple(dict.fromkeys(resolved))
+
     def _extract_node_refs(self, request_text: str) -> tuple[str, ...]:
         prioritized_patterns = (
             r"\bin\s+node\s+([A-Za-z0-9_\-\.]+)",
@@ -390,7 +438,7 @@ class DesignerRequestNormalizer:
         seen: set[str] = set()
         for pattern in prioritized_patterns:
             for match in re.finditer(pattern, request_text, flags=re.IGNORECASE):
-                ref = match.group(1)
+                ref = match.group(1).rstrip('.,;:')
                 if ref.casefold() in stopwords:
                     continue
                 if ref not in seen:

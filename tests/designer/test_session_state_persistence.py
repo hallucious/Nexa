@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.designer.models.designer_approval_flow import UserDecision
 from src.designer.models.designer_proposal_control import DesignerProposalControlState, ProposalControlPolicy
 from src.designer.models.designer_session_state_card import (
     ApprovalState,
@@ -13,10 +14,13 @@ from src.designer.models.designer_session_state_card import (
     WorkingSaveReality,
 )
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
+from src.designer.approval_flow import DesignerApprovalCoordinator
 from src.designer.proposal_control import DesignerProposalControlPlane
 from src.designer.proposal_flow import DesignerProposalFlow
 from src.designer.precheck_builder import DesignerPrecheckBuilder
+from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
 from src.designer.session_state_persistence import (
+    load_persisted_approval_flow_state,
     load_persisted_proposal_control_state,
     load_persisted_session_state_card,
     persist_designer_session_state,
@@ -208,3 +212,92 @@ def test_control_plane_evolves_session_state_card_for_blocked_precheck_revision(
 
 def test_load_persisted_session_state_card_returns_none_without_designer_snapshot() -> None:
     assert load_persisted_session_state_card(make_working_save()) is None
+
+
+
+def test_persisted_approval_flow_state_round_trips_from_working_save() -> None:
+    working_save = make_working_save()
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    approval = DesignerApprovalCoordinator().create_state(bundle)
+
+    persisted = persist_designer_session_state(
+        working_save,
+        session_state_card=make_card(),
+        approval_flow_state=approval,
+    )
+    restored = load_persisted_approval_flow_state(persisted)
+
+    assert restored is not None
+    assert restored.approval_id == approval.approval_id
+    assert restored.current_stage == "awaiting_decision"
+    assert restored.required_decision_points[0].decision_id == approval.required_decision_points[0].decision_id
+
+
+def test_approval_resolution_updates_session_state_for_interpretation_choice_and_persists() -> None:
+    working_save = make_working_save()
+    card = make_card()
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    approval = coordinator.create_state(bundle)
+    resolved = coordinator.resolve(
+        approval,
+        (
+            UserDecision(
+                decision_point_id=approval.required_decision_points[0].decision_id,
+                outcome="choose_interpretation",
+                selected_option="Insert a manual review gate after node.reviewer only.",
+            ),
+        ),
+    )
+
+    session_coordinator = DesignerSessionStateCoordinator()
+    updated = session_coordinator.evolve_after_approval_resolution(card, resolved)
+    persisted = persist_designer_session_state(working_save, session_state_card=updated, approval_flow_state=resolved)
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Add a review node before final output in node reviewer",
+        artifact=persisted,
+    )
+
+    assert updated.revision_state.revision_index == card.revision_state.revision_index + 1
+    assert updated.revision_state.last_control_action == "choose_interpretation"
+    assert updated.conversation_context.clarified_interpretation == "Insert a manual review gate after node.reviewer only."
+    assert rebuilt.conversation_context.clarified_interpretation == "Insert a manual review gate after node.reviewer only."
+    assert rebuilt.approval_state.approval_status == "not_started"
+
+
+def test_approval_resolution_appends_revision_note_and_normalizer_uses_persisted_context() -> None:
+    working_save = make_working_save()
+    card = make_card()
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    approval = coordinator.create_state(bundle)
+    resolved = coordinator.resolve(
+        approval,
+        (
+            UserDecision(
+                decision_point_id=approval.required_decision_points[0].decision_id,
+                outcome="request_revision",
+                note="Change provider only in node reviewer and keep the rest unchanged.",
+            ),
+        ),
+    )
+
+    session_coordinator = DesignerSessionStateCoordinator()
+    updated = session_coordinator.evolve_after_approval_resolution(card, resolved)
+    persisted = persist_designer_session_state(working_save, session_state_card=updated, approval_flow_state=resolved)
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Change provider",
+        artifact=persisted,
+    )
+    intent = DesignerProposalFlow().propose(
+        "Change provider",
+        working_save_ref="ws-001",
+        session_state_card=rebuilt,
+    ).intent
+
+    assert "Change provider only in node reviewer and keep the rest unchanged." in updated.revision_state.user_corrections
+    assert rebuilt.revision_state.user_corrections[-1] == "Change provider only in node reviewer and keep the rest unchanged."
+    assert intent.target_scope.node_refs == ("node.reviewer",)

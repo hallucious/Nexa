@@ -2,6 +2,15 @@ from __future__ import annotations
 
 from src.designer.proposal_flow import DesignerProposalFlow
 from src.designer.request_normalizer import DesignerRequestNormalizer, RequestNormalizationContext
+from src.designer.models.designer_session_state_card import (
+    AvailableResources,
+    ConversationContext,
+    CurrentSelectionState,
+    DesignerSessionStateCard,
+    SessionTargetScope,
+    WorkingSaveReality,
+)
+from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
 
 
 def test_request_normalizer_creates_new_circuit_intent() -> None:
@@ -65,3 +74,35 @@ def test_request_normalizer_creates_target_ambiguity_flag_without_working_save_r
     )
     assert intent.ambiguity_flags
     assert intent.requires_user_confirmation is True
+
+
+
+def test_request_normalizer_uses_clarified_interpretation_to_bound_scope() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-clarified",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(
+            user_request_text="Change provider across the whole circuit",
+            clarified_interpretation="Only change provider in node reviewer",
+        ),
+    )
+
+    intent = normalizer.normalize(
+        "Change provider across the whole circuit",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert all(flag.type != "broad_scope" for flag in intent.ambiguity_flags)
+    assert intent.target_scope.node_refs == ("node.reviewer",)

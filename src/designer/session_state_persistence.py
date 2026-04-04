@@ -5,6 +5,12 @@ from dataclasses import replace
 from typing import Any, Mapping
 
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
+from src.designer.models.designer_approval_flow import (
+    ApprovalPolicy,
+    DecisionPoint,
+    DesignerApprovalFlowState,
+    UserDecision,
+)
 from src.designer.models.designer_proposal_control import (
     DesignerProposalControlState,
     ProposalAttemptRecord,
@@ -29,6 +35,7 @@ from src.storage.models.working_save_model import DesignerDraftModel, WorkingSav
 
 _SESSION_CARD_KEY = "designer_session_state_card"
 _CONTROL_STATE_KEY = "designer_proposal_control_state"
+_APPROVAL_FLOW_STATE_KEY = "designer_approval_flow_state"
 
 
 def serialize_session_state_card(card: DesignerSessionStateCard) -> dict[str, Any]:
@@ -256,6 +263,101 @@ def deserialize_session_state_card(data: Mapping[str, Any]) -> DesignerSessionSt
     )
 
 
+
+
+def serialize_approval_flow_state(state: DesignerApprovalFlowState) -> dict[str, Any]:
+    return {
+        "approval_id": state.approval_id,
+        "intent_ref": state.intent_ref,
+        "patch_ref": state.patch_ref,
+        "precheck_ref": state.precheck_ref,
+        "preview_ref": state.preview_ref,
+        "current_stage": state.current_stage,
+        "approval_policy": {
+            "policy_name": state.approval_policy.policy_name,
+            "allow_auto_commit": state.approval_policy.allow_auto_commit,
+        },
+        "required_decision_points": [
+            {
+                "decision_id": point.decision_id,
+                "label": point.label,
+                "required": point.required,
+                "reason": point.reason,
+            }
+            for point in state.required_decision_points
+        ],
+        "current_decision_point_id": state.current_decision_point_id,
+        "user_decisions": [
+            {
+                "decision_point_id": decision.decision_point_id,
+                "outcome": decision.outcome,
+                "note": decision.note,
+                "selected_option": decision.selected_option,
+            }
+            for decision in state.user_decisions
+        ],
+        "final_outcome": state.final_outcome,
+        "explanation": state.explanation,
+        "precheck_status": state.precheck_status,
+        "blocking_finding_count": state.blocking_finding_count,
+        "confirmation_finding_count": state.confirmation_finding_count,
+        "confirmation_resolved": state.confirmation_resolved,
+        "validated_scope_ref": state.validated_scope_ref,
+        "approved_scope_ref": state.approved_scope_ref,
+        "scope_revalidated": state.scope_revalidated,
+        "destructive_edit_present": state.destructive_edit_present,
+        "major_output_semantic_change": state.major_output_semantic_change,
+        "critical_provider_replacement": state.critical_provider_replacement,
+    }
+
+
+def deserialize_approval_flow_state(data: Mapping[str, Any]) -> DesignerApprovalFlowState:
+    approval_policy = data.get("approval_policy", {})
+    return DesignerApprovalFlowState(
+        approval_id=str(data.get("approval_id", "approval-restored")),
+        intent_ref=str(data.get("intent_ref", "intent-restored")),
+        patch_ref=str(data.get("patch_ref", "patch-restored")),
+        precheck_ref=str(data.get("precheck_ref", "precheck-restored")),
+        preview_ref=str(data.get("preview_ref", "preview-restored")),
+        current_stage=str(data.get("current_stage", "awaiting_decision")),
+        approval_policy=ApprovalPolicy(
+            policy_name=str(approval_policy.get("policy_name", "manual_review")),
+            allow_auto_commit=bool(approval_policy.get("allow_auto_commit", False)),
+        ),
+        required_decision_points=tuple(
+            DecisionPoint(
+                decision_id=str(item.get("decision_id", "decision-restored")),
+                label=str(item.get("label", "Restored decision point")),
+                required=bool(item.get("required", True)),
+                reason=item.get("reason"),
+            )
+            for item in data.get("required_decision_points", ())
+        ),
+        current_decision_point_id=data.get("current_decision_point_id"),
+        user_decisions=tuple(
+            UserDecision(
+                decision_point_id=str(item.get("decision_point_id", "decision-restored")),
+                outcome=str(item.get("outcome", "approve")),
+                note=item.get("note"),
+                selected_option=item.get("selected_option"),
+            )
+            for item in data.get("user_decisions", ())
+        ),
+        final_outcome=str(data.get("final_outcome", "pending")),
+        explanation=str(data.get("explanation", "")),
+        precheck_status=str(data.get("precheck_status", "pass")),
+        blocking_finding_count=int(data.get("blocking_finding_count", 0)),
+        confirmation_finding_count=int(data.get("confirmation_finding_count", 0)),
+        confirmation_resolved=bool(data.get("confirmation_resolved", True)),
+        validated_scope_ref=data.get("validated_scope_ref"),
+        approved_scope_ref=data.get("approved_scope_ref"),
+        scope_revalidated=bool(data.get("scope_revalidated", False)),
+        destructive_edit_present=bool(data.get("destructive_edit_present", False)),
+        major_output_semantic_change=bool(data.get("major_output_semantic_change", False)),
+        critical_provider_replacement=bool(data.get("critical_provider_replacement", False)),
+    )
+
+
 def serialize_proposal_control_state(state: DesignerProposalControlState) -> dict[str, Any]:
     return {
         "session_id": state.session_id,
@@ -324,16 +426,28 @@ def load_persisted_proposal_control_state(working_save: WorkingSaveModel | None)
     return deserialize_proposal_control_state(snapshot)
 
 
+def load_persisted_approval_flow_state(working_save: WorkingSaveModel | None) -> DesignerApprovalFlowState | None:
+    if working_save is None or working_save.designer is None:
+        return None
+    snapshot = working_save.designer.data.get(_APPROVAL_FLOW_STATE_KEY)
+    if not isinstance(snapshot, Mapping):
+        return None
+    return deserialize_approval_flow_state(snapshot)
+
+
 def persist_designer_session_state(
     working_save: WorkingSaveModel,
     *,
     session_state_card: DesignerSessionStateCard,
     control_state: DesignerProposalControlState | None = None,
+    approval_flow_state: DesignerApprovalFlowState | None = None,
 ) -> WorkingSaveModel:
     designer_data = deepcopy(working_save.designer.data if working_save.designer is not None else {})
     designer_data[_SESSION_CARD_KEY] = serialize_session_state_card(session_state_card)
     if control_state is not None:
         designer_data[_CONTROL_STATE_KEY] = serialize_proposal_control_state(control_state)
+    if approval_flow_state is not None:
+        designer_data[_APPROVAL_FLOW_STATE_KEY] = serialize_approval_flow_state(approval_flow_state)
     return replace(working_save, designer=DesignerDraftModel(data=designer_data))
 
 

@@ -254,6 +254,7 @@ Purpose:
 - prevents Designer from forgetting why prior proposals were rejected
 - keeps proposal evolution explicit
 - preserves bounded retry/fallback history across session rebuilds
+- carries clarification and revision context forward when approval decisions request interpretation choice or proposal revision
 
 ### 5.13 `approval_state`
 Current approval boundary status.
@@ -266,6 +267,7 @@ Minimum content:
 
 Rules:
 - Designer must not act as if approved when approval is pending or rejected
+- approval-boundary outcomes that request interpretation or revision must be reflected back into session continuity rather than disappearing after one step
 
 ### 5.14 `conversation_context`
 A bounded summary of the active design conversation.

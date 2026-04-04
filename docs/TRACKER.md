@@ -259,6 +259,8 @@ CLI
   typed model -> session-state-card builder -> request normalizer integration -> proposal-flow integration
 * Designer proposal control now persists into session-state semantics:
   control result -> updated session state card -> persisted working-save designer snapshot -> builder restore path
+* approval-boundary continuation is now partially connected to the same persistence line:
+  approval decision -> session-state evolution -> persisted clarification / revision context -> next proposal rebuild
 * current project position is best described as:
   Phase 1 closure complete enough -> formal Phase 2 entry
 * next work should avoid reopening Batch 1 fundamentals unless a real regression is found
@@ -270,13 +272,15 @@ CLI
 * formally treat SubcircuitNode Batch 1 as closed unless a new concrete regression is found
 * formally treat Subcircuit Batch 2 core observability as implemented, not as speculative future work
 * sync top-level status docs to the current `62c081d` reality before opening new implementation
-* preferred next implementation target is now Phase 2 entry work:
-  - Designer proposal-flow retry / fallback control-plane foundation
-* the next control-plane line should make explicit how the Designer session handles:
-  - failed normalization
-  - ambiguous-intent retry
-  - blocked-precheck fallback
-  - bounded revision loops
+* Phase 2 now includes a real Designer control line rather than only a handoff target:
+  - retry / fallback control foundation
+  - session-state persistence for control results
+  - approval-boundary continuation into persisted clarification / revision context
+* the next control-plane line should deepen:
+  - approval re-entry after interpretation choice
+  - approval re-entry after revision request
+  - longer multi-step revision histories
+  - richer policy semantics around continuation
 * if attention returns to Subcircuit later, it should be from the current stable closure point, not by reopening Batch 1 or pretending Batch 2 core observability is still missing
 
 ### Step161: Artifact Preview Event Safety Alignment

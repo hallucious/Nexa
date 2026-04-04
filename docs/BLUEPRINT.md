@@ -155,7 +155,8 @@ Current implementation baseline:
 * Subcircuit Batch 2 core observability / inspectability is implemented at a practical level
 * Designer Session State Card is now a code-backed foundation rather than a spec-only direction
 * Designer proposal control is now connected to session-state persistence and revision history accumulation
-* the next rational implementation move is formal Phase 2 entry through Designer proposal-flow retry / fallback control-plane work
+* approval-boundary continuation now feeds persisted clarification / revision context back into later proposal attempts
+* the next rational implementation move is continued Phase 2 control-plane maturation, especially deeper approval re-entry and longer revision-history semantics
 
 Interpretation rule:
 

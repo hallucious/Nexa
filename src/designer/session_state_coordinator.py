@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.models.designer_proposal_control import DesignerControlledProposalResult
 from src.designer.models.designer_session_state_card import (
     ApprovalState,
@@ -124,3 +125,108 @@ class DesignerSessionStateCoordinator:
         elif control_state.next_action == "fallback_to_read_only":
             existing.append("The request should continue through a read-only explain/analyze path instead of mutation flow.")
         return tuple(dict.fromkeys(existing))
+
+
+    def evolve_after_approval_resolution(
+        self,
+        session_state_card: DesignerSessionStateCard,
+        approval_state: DesignerApprovalFlowState,
+    ) -> DesignerSessionStateCard:
+        choose_decisions = tuple(
+            decision for decision in approval_state.user_decisions if decision.outcome == "choose_interpretation"
+        )
+        revision_decisions = tuple(
+            decision for decision in approval_state.user_decisions if decision.outcome in {"request_revision", "narrow_scope"}
+        )
+
+        clarified_interpretation = session_state_card.conversation_context.clarified_interpretation
+        if choose_decisions:
+            clarified_interpretation = next(
+                (decision.selected_option for decision in reversed(choose_decisions) if decision.selected_option),
+                clarified_interpretation,
+            )
+
+        correction_notes = tuple(
+            decision.note.strip()
+            for decision in revision_decisions
+            if decision.note is not None and decision.note.strip()
+        )
+        user_corrections = session_state_card.revision_state.user_corrections + correction_notes
+        user_corrections = tuple(dict.fromkeys(user_corrections))
+
+        unresolved_questions = list(session_state_card.conversation_context.unresolved_questions)
+        if clarified_interpretation is not None:
+            unresolved_questions = [
+                item for item in unresolved_questions if "interpret" not in item.casefold()
+            ]
+        if approval_state.final_outcome == "revision_requested" and not correction_notes and not choose_decisions:
+            unresolved_questions.append(
+                "A revised designer request is required before another approval attempt."
+            )
+        if approval_state.final_outcome == "approved_for_commit":
+            unresolved_questions = []
+        next_conversation = ConversationContext(
+            user_request_text=session_state_card.conversation_context.user_request_text,
+            clarified_interpretation=clarified_interpretation,
+            unresolved_questions=tuple(dict.fromkeys(unresolved_questions)),
+            explicit_user_preferences=session_state_card.conversation_context.explicit_user_preferences,
+        )
+
+        prior_rejections = list(session_state_card.revision_state.prior_rejection_reasons)
+        if approval_state.final_outcome in {"revision_requested", "rejected", "aborted"}:
+            if approval_state.explanation.strip():
+                prior_rejections.append(approval_state.explanation.strip())
+        next_action = session_state_card.revision_state.last_control_action
+        next_terminal = session_state_card.revision_state.last_terminal_status
+        next_retry_reason = session_state_card.revision_state.retry_reason
+        revision_index = session_state_card.revision_state.revision_index
+        if approval_state.final_outcome == "revision_requested":
+            revision_index += 1
+            next_action = "choose_interpretation" if choose_decisions else "request_user_revision"
+            next_terminal = "awaiting_user_input"
+            next_retry_reason = "approval_revision_requested"
+        elif approval_state.final_outcome == "approved_for_commit":
+            next_action = "proceed_to_approval"
+            next_terminal = "ready_for_approval"
+            next_retry_reason = None
+
+        next_revision = RevisionState(
+            revision_index=revision_index,
+            based_on_intent_id=session_state_card.revision_state.based_on_intent_id,
+            based_on_patch_id=session_state_card.revision_state.based_on_patch_id,
+            prior_rejection_reasons=tuple(dict.fromkeys(prior_rejections)),
+            retry_reason=next_retry_reason,
+            user_corrections=user_corrections,
+            last_control_action=next_action,
+            last_terminal_status=next_terminal,
+            attempt_history=session_state_card.revision_state.attempt_history,
+        )
+
+        summary_status = "not_started"
+        if approval_state.final_outcome == "approved_for_commit":
+            summary_status = "approved"
+        elif approval_state.final_outcome in {"rejected", "aborted"}:
+            summary_status = "rejected"
+        elif approval_state.final_outcome == "revision_requested":
+            summary_status = "not_started"
+        elif approval_state.final_outcome == "pending" or approval_state.current_stage == "awaiting_decision":
+            summary_status = "pending"
+
+        next_approval = ApprovalState(
+            approval_required=approval_state.final_outcome != "revision_requested",
+            approval_status=summary_status,
+            confirmation_required=bool(approval_state.unanswered_required_decision_points),
+            blocking_before_commit=(approval_state.precheck_status == "blocked" or approval_state.blocking_finding_count > 0),
+        )
+
+        return replace(
+            session_state_card,
+            revision_state=next_revision,
+            approval_state=next_approval,
+            conversation_context=next_conversation,
+            notes={
+                **session_state_card.notes,
+                "last_approval_stage": approval_state.current_stage,
+                "last_approval_outcome": approval_state.final_outcome,
+            },
+        )
