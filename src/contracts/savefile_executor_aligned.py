@@ -311,6 +311,40 @@ def _child_output_source_map(child_circuit: Dict[str, Any]) -> Dict[str, str]:
     return mapping
 
 
+
+
+def _subcircuit_trace_summary(*, child_ref: str, child_trace: SavefileExecutionTrace) -> Dict[str, Any]:
+    failed_nodes = [nid for nid, res in child_trace.node_results.items() if res.status == "failure"]
+    return {
+        "child_circuit_ref": child_ref,
+        "child_run_id": child_trace.run_id,
+        "child_status": child_trace.status,
+        "child_failed_nodes": failed_nodes,
+        "child_artifact_count": len(child_trace.all_artifacts),
+    }
+
+
+def _resolve_bound_subcircuit_outputs(
+    *,
+    output_binding: Dict[str, Any],
+    source_map: Dict[str, str],
+    child_final_state: Dict[str, Any],
+    child_node_outputs: Dict[str, Any],
+) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+    bound_output: Dict[str, Any] = {}
+    for parent_key, binding in output_binding.items():
+        if not isinstance(binding, str) or not binding.startswith("child.output."):
+            return None, f"Invalid subcircuit output binding target: {binding!r}"
+        child_name = binding[len("child.output."):]
+        source = source_map.get(child_name)
+        if source is None:
+            return None, f"Subcircuit binding references missing child output: {child_name}"
+        try:
+            bound_output[parent_key] = resolve_input_value(source, child_final_state, child_node_outputs)
+        except Exception as exc:
+            return None, f"Subcircuit output resolution failed for '{child_name}': {exc}"
+    return bound_output, None
+
 def execute_subcircuit_node(
     node: NodeSpec,
     savefile: Savefile,
@@ -376,33 +410,50 @@ def execute_subcircuit_node(
         ui=savefile.ui,
     )
 
-    child_trace = SavefileExecutor(provider_registry).execute(child_savefile, run_id=f"subcircuit:{node.id}:{name}", _depth=_depth+1)
+    child_trace = SavefileExecutor(provider_registry).execute(
+        child_savefile,
+        run_id=f"subcircuit:{node.id}:{name}",
+        _depth=_depth + 1,
+    )
+    trace_mode = str(runtime_policy.get("trace_mode", "summary"))
+    trace_summary = _subcircuit_trace_summary(child_ref=child_ref, child_trace=child_trace)
+    if trace_mode == "full":
+        trace_summary["child_trace"] = child_trace
+
     if child_trace.status != "success":
-        return NodeExecutionResult(node_id=node.id, status="failure", error="Child subcircuit execution failed", trace={"child_trace": child_trace})
+        return NodeExecutionResult(
+            node_id=node.id,
+            status="failure",
+            error="Child subcircuit execution failed",
+            trace=trace_summary,
+        )
 
     source_map = _child_output_source_map(child_circuit)
     child_final_state = child_trace.final_state
-    child_node_outputs = {nid: res.output for nid, res in child_trace.node_results.items() if res.status == "success"}
+    child_node_outputs = {
+        nid: res.output for nid, res in child_trace.node_results.items() if res.status == "success"
+    }
 
-    bound_output: Dict[str, Any] = {}
-    for parent_key, binding in sub.get("output_binding", {}).items():
-        if not isinstance(binding, str) or not binding.startswith("child.output."):
-            continue
-        child_name = binding[len("child.output."):]
-        source = source_map.get(child_name)
-        if source is None:
-            continue
-        try:
-            bound_output[parent_key] = resolve_input_value(source, child_final_state, child_node_outputs)
-        except Exception:
-            continue
+    bound_output, binding_error = _resolve_bound_subcircuit_outputs(
+        output_binding=sub.get("output_binding", {}),
+        source_map=source_map,
+        child_final_state=child_final_state,
+        child_node_outputs=child_node_outputs,
+    )
+    if binding_error is not None or bound_output is None:
+        return NodeExecutionResult(
+            node_id=node.id,
+            status="failure",
+            error=binding_error or "Subcircuit output binding failed",
+            trace=trace_summary,
+        )
 
     return NodeExecutionResult(
         node_id=node.id,
         status="success",
         output=bound_output,
         artifacts=list(child_trace.all_artifacts),
-        trace={"child_run_id": child_trace.run_id, "child_status": child_trace.status},
+        trace=trace_summary,
     )
 
 
