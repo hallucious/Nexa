@@ -15,6 +15,7 @@ from src.designer.models.designer_session_state_card import (
 )
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
 from src.designer.approval_flow import DesignerApprovalCoordinator
+from src.designer.commit_gateway import DesignerCommitGateway
 from src.designer.patch_applier import DesignerPatchApplier
 from src.designer.proposal_control import DesignerProposalControlPlane
 from src.designer.proposal_flow import DesignerProposalFlow
@@ -338,3 +339,48 @@ def test_persisted_commit_candidate_state_round_trips_and_builder_surfaces_resum
     assert rebuilt.approval_state.approval_status == "approved"
     assert rebuilt.notes["resume_commit_candidate_ready"] is True
     assert rebuilt.notes["resume_commit_candidate_patch_ref"] == bundle.patch.patch_id
+
+
+def test_cleanup_after_commit_clears_resume_state_and_preserves_revision_history() -> None:
+    working_save = make_working_save()
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    state = coordinator.create_state(bundle)
+    approved = coordinator.resolve(
+        state,
+        tuple(UserDecision(decision_point_id=point.decision_id, outcome="approve") for point in state.required_decision_points),
+    )
+    applier = DesignerPatchApplier()
+    application = applier.apply_bundle(working_save, bundle)
+    candidate_state = applier.build_commit_candidate_state(application, approved, source_working_save_ref="ws-001")
+    persisted = persist_designer_session_state(
+        application.candidate_working_save,
+        session_state_card=make_card(),
+        control_state=DesignerProposalControlState(
+            session_id="sess-persist",
+            current_stage="approval_boundary",
+            next_action="proceed_to_approval",
+            terminal_status="ready_for_approval",
+        ),
+        approval_flow_state=approved,
+        commit_candidate_state=candidate_state,
+    )
+    gateway = DesignerCommitGateway(coordinator=coordinator)
+    result = gateway.commit_persisted_candidate(persisted, commit_id="commit-clean-1")
+    cleaned = result.cleaned_candidate_working_save
+
+    cleaned_card = load_persisted_session_state_card(cleaned)
+    assert cleaned_card is not None
+    assert cleaned_card.approval_state.approval_status == "committed"
+    assert cleaned_card.approval_state.approval_required is False
+    assert cleaned_card.revision_state.retry_reason is None
+    assert cleaned_card.revision_state.attempt_history[0].reason_code == "DESIGNER-PRECHECK-BLOCKED"
+    assert cleaned_card.notes["post_commit_cleanup_applied"] is True
+    assert cleaned_card.notes["last_commit_id"] == "commit-clean-1"
+    assert "resume_commit_candidate_ready" not in cleaned_card.notes
+    assert load_persisted_commit_candidate_state(cleaned) is None
+    assert load_persisted_proposal_control_state(cleaned) is None
+    restored_approval = load_persisted_approval_flow_state(cleaned)
+    assert restored_approval is not None
+    assert restored_approval.current_stage == "committed"

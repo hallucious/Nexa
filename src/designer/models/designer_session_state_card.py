@@ -14,7 +14,7 @@ from src.contracts.designer_contract import (
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
 
 _SELECTION_MODES = {"none", "node", "edge", "output", "subgraph", "whole_circuit"}
-_APPROVAL_STATUSES = {"not_started", "pending", "approved", "rejected"}
+_APPROVAL_STATUSES = {"not_started", "pending", "approved", "rejected", "committed"}
 _STORAGE_ROLES = {"working_save", "commit_snapshot", "none"}
 _RESOURCE_STATUSES = {"available", "unavailable", "unknown"}
 

@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.designer.approval_flow import DesignerApprovalCoordinator
-from src.designer.session_state_persistence import load_persisted_approval_flow_state, load_persisted_commit_candidate_state
+from src.designer.session_state_persistence import (
+    cleanup_designer_session_state_after_commit,
+    load_persisted_approval_flow_state,
+    load_persisted_commit_candidate_state,
+)
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.storage.lifecycle_api import create_commit_snapshot_from_working_save
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
@@ -16,6 +20,7 @@ class DesignerCommitResult:
     approval_state: DesignerApprovalFlowState
     commit_snapshot: CommitSnapshotModel
     serialized_commit_snapshot: dict
+    cleaned_candidate_working_save: WorkingSaveModel
 
 
 class DesignerCommitGateway:
@@ -94,8 +99,14 @@ class DesignerCommitGateway:
             created_at=created_at,
         )
         committed_state = self._coordinator.mark_committed(approval_state)
+        cleaned_candidate = cleanup_designer_session_state_after_commit(
+            candidate_working_save,
+            committed_approval_state=committed_state,
+            commit_snapshot=commit_snapshot,
+        )
         return DesignerCommitResult(
             approval_state=committed_state,
             commit_snapshot=commit_snapshot,
             serialized_commit_snapshot=serialize_commit_snapshot(commit_snapshot),
+            cleaned_candidate_working_save=cleaned_candidate,
         )

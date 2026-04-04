@@ -63,7 +63,7 @@ The current repository state includes the following implemented surface:
 ### 6. Current Verified Baseline
 
 ```text
-1283 passed, 3 skipped
+1354 passed, 3 skipped
 ```
 
 * authoritative storage/runtime durability baseline commit: `8fef812`

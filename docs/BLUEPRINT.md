@@ -157,6 +157,7 @@ Current implementation baseline:
 * Designer proposal control is now connected to session-state persistence and revision history accumulation
 * approval-boundary continuation now feeds persisted clarification / revision context back into later proposal attempts
 * approval-ready patch-applied candidates can now be resumed more explicitly through persisted commit-candidate state
+* successful commit now reduces stale ready-for-commit continuation state into post-commit summary semantics
 * the next rational implementation move is continued Phase 2 control-plane maturation, especially deeper approval-ready re-entry and longer revision-history semantics
 
 Interpretation rule:

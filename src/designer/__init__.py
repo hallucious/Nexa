@@ -15,6 +15,7 @@ from src.designer.patch_applier import DesignerPatchApplier, DesignerPatchApplic
 
 from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
 from src.designer.session_state_persistence import (
+    cleanup_designer_session_state_after_commit,
     deserialize_approval_flow_state,
     deserialize_commit_candidate_state,
     deserialize_proposal_control_state,

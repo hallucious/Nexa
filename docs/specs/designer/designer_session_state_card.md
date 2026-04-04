@@ -29,6 +29,7 @@ Official rule:
 - Designer AI receives a structured session state card.
 - The card defines the current design reality and boundaries.
 It may also surface persisted approval-ready continuation hints through notes when a commit candidate can be resumed explicitly.
+After successful commit, approval-ready continuation must be reduced into a post-commit summary rather than left as a stale resume path.
 - Designer AI produces proposals from this card.
 - Designer AI must not silently assume hidden structure or hidden authority.
 
@@ -67,6 +68,7 @@ DesignerSessionStateCard
 - current_risks: object
 - revision_state: object
 - approval_state: object
+- notes may include post-commit cleanup summary
 - conversation_context: object
 - output_contract: object
 - forbidden_authority: object
@@ -525,3 +527,19 @@ It must provide:
 - forbidden authority
 
 Without this card, Designer AI is under-specified and unsafe.
+
+## 6. Approval-State Continuation Rules
+
+Preferred approval_state status values in session continuity include:
+- not_started
+- pending
+- approved
+- rejected
+- committed
+
+Post-commit cleanup rules:
+- ready-for-commit resume metadata must be removed after successful commit
+- approval_state should move to `committed`
+- unresolved approval questions should be cleared
+- retry_reason should be cleared
+- revision history and user corrections may remain for continuity/audit

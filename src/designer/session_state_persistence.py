@@ -32,6 +32,7 @@ from src.designer.models.designer_session_state_card import (
     SessionTargetScope,
     WorkingSaveReality,
 )
+from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import DesignerDraftModel, WorkingSaveModel
 
 _SESSION_CARD_KEY = "designer_session_state_card"
@@ -502,6 +503,57 @@ def persist_designer_session_state(
         designer_data[_APPROVAL_FLOW_STATE_KEY] = serialize_approval_flow_state(approval_flow_state)
     if commit_candidate_state is not None:
         designer_data[_COMMIT_CANDIDATE_STATE_KEY] = serialize_commit_candidate_state(commit_candidate_state)
+    return replace(working_save, designer=DesignerDraftModel(data=designer_data))
+
+
+def cleanup_designer_session_state_after_commit(
+    working_save: WorkingSaveModel,
+    *,
+    committed_approval_state: DesignerApprovalFlowState,
+    commit_snapshot: CommitSnapshotModel,
+) -> WorkingSaveModel:
+    designer_data = deepcopy(working_save.designer.data if working_save.designer is not None else {})
+    persisted_card = load_persisted_session_state_card(working_save)
+    persisted_candidate = load_persisted_commit_candidate_state(working_save)
+
+    if persisted_card is not None:
+        cleaned_notes = {
+            key: value
+            for key, value in dict(persisted_card.notes).items()
+            if not key.startswith("resume_commit_candidate_")
+        }
+        cleaned_notes.update(
+            {
+                "post_commit_cleanup_applied": True,
+                "last_commit_id": commit_snapshot.meta.commit_id,
+                "last_commit_parent_id": commit_snapshot.lineage.parent_commit_id,
+                "last_commit_candidate_consumed": persisted_candidate is not None,
+                "last_committed_patch_ref": (persisted_candidate.patch_ref if persisted_candidate is not None else committed_approval_state.patch_ref),
+                "last_approval_stage": committed_approval_state.current_stage,
+                "last_approval_outcome": committed_approval_state.final_outcome,
+            }
+        )
+        cleaned_card = replace(
+            persisted_card,
+            revision_state=replace(persisted_card.revision_state, retry_reason=None),
+            approval_state=ApprovalState(
+                approval_required=False,
+                approval_status="committed",
+                confirmation_required=False,
+                blocking_before_commit=False,
+            ),
+            conversation_context=replace(
+                persisted_card.conversation_context,
+                unresolved_questions=(),
+            ),
+            notes=cleaned_notes,
+        )
+        designer_data[_SESSION_CARD_KEY] = serialize_session_state_card(cleaned_card)
+
+    designer_data[_APPROVAL_FLOW_STATE_KEY] = serialize_approval_flow_state(committed_approval_state)
+    designer_data.pop(_CONTROL_STATE_KEY, None)
+    designer_data.pop(_COMMIT_CANDIDATE_STATE_KEY, None)
+
     return replace(working_save, designer=DesignerDraftModel(data=designer_data))
 
 

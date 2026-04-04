@@ -6,7 +6,12 @@ from src.designer.approval_flow import DesignerApprovalCoordinator
 from src.designer.commit_gateway import DesignerCommitGateway
 from src.designer.patch_applier import DesignerPatchApplier
 from src.designer.session_state_card_builder import DesignerSessionStateCardBuilder
-from src.designer.session_state_persistence import persist_designer_session_state
+from src.designer.session_state_persistence import (
+    load_persisted_approval_flow_state,
+    load_persisted_commit_candidate_state,
+    load_persisted_proposal_control_state,
+    persist_designer_session_state,
+)
 from src.designer.models.designer_approval_flow import UserDecision
 from src.designer.proposal_flow import DesignerProposalFlow
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
@@ -118,6 +123,13 @@ def test_commit_gateway_creates_commit_snapshot_from_commit_eligible_candidate()
     assert result.commit_snapshot.meta.storage_role == "commit_snapshot"
     assert result.commit_snapshot.approval.summary["approval_id"] == approved.approval_id
     assert result.serialized_commit_snapshot["meta"]["storage_role"] == "commit_snapshot"
+    assert load_persisted_commit_candidate_state(result.cleaned_candidate_working_save) is None
+    assert load_persisted_proposal_control_state(result.cleaned_candidate_working_save) is None
+    restored_approval = load_persisted_approval_flow_state(result.cleaned_candidate_working_save)
+    assert restored_approval is not None
+    assert restored_approval.current_stage == "committed"
+    rebuilt = DesignerSessionStateCardBuilder().build(request_text=bundle.request_text, artifact=result.cleaned_candidate_working_save)
+    assert rebuilt.approval_state.approval_status == "committed"
 
 
 def test_commit_gateway_rejects_non_commit_eligible_state() -> None:
@@ -157,3 +169,13 @@ def test_commit_gateway_can_resume_persisted_approval_ready_candidate() -> None:
 
     assert result.approval_state.current_stage == "committed"
     assert result.commit_snapshot.meta.commit_id == "commit-resume-1"
+    assert load_persisted_commit_candidate_state(result.cleaned_candidate_working_save) is None
+    assert load_persisted_proposal_control_state(result.cleaned_candidate_working_save) is None
+    cleaned_card = DesignerSessionStateCardBuilder().build(request_text=bundle.request_text, artifact=result.cleaned_candidate_working_save)
+    assert cleaned_card.approval_state.approval_status == "committed"
+    assert cleaned_card.notes["post_commit_cleanup_applied"] is True
+    assert cleaned_card.notes["last_commit_id"] == "commit-resume-1"
+    assert "resume_commit_candidate_ready" not in cleaned_card.notes
+
+    with pytest.raises(ValueError):
+        gateway.commit_persisted_candidate(result.cleaned_candidate_working_save, commit_id="commit-resume-2")
