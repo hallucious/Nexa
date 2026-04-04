@@ -186,3 +186,13 @@ def test_validate_savefile_rejects_invalid_child_circuit_and_propagates_to_paren
     savefile = load_savefile(payload)
     with pytest.raises(SavefileValidationError, match="references unknown plugin"):
         validate_savefile(savefile)
+
+
+def test_validate_savefile_rejects_invalid_child_output_source():
+    payload = _base_payload()
+    payload["circuit"]["subcircuits"]["review_bundle"]["outputs"] = [
+        {"name": "result", "source": "node.missing.output.result"}
+    ]
+    savefile = load_savefile(payload)
+    with pytest.raises(SavefileValidationError, match="references unknown child node"):
+        validate_savefile(savefile)

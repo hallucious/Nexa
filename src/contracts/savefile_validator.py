@@ -223,6 +223,7 @@ def _validate_child_circuit_structure(savefile: Savefile, parent_node_id: str, c
         )
 
     child_node_id_set = set(child_node_ids)
+    _validate_child_declared_outputs(parent_node_id, child_ref, child, child_node_id_set)
     child_entry = child.get("entry")
     if child_entry is not None and child_entry not in child_node_id_set:
         raise SavefileValidationError(
@@ -325,6 +326,46 @@ def _validate_child_input_path(path: Any, parent_node_id: str, child_ref: str, n
     )
 
 
+
+
+def _validate_child_declared_outputs(parent_node_id: str, child_ref: str, child: Dict[str, Any], child_node_id_set: Set[str]) -> None:
+    outputs = child.get("outputs", [])
+    if not isinstance(outputs, list) or not outputs:
+        raise SavefileValidationError(
+            f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' must declare outputs"
+        )
+    for item in outputs:
+        if not isinstance(item, dict):
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' has invalid output declaration"
+            )
+        name = item.get("name")
+        source = item.get("source")
+        if not isinstance(name, str) or not name:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' has output with invalid name"
+            )
+        if not isinstance(source, str) or not source:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' output '{name}' has invalid source"
+            )
+        if source.startswith(("state.input.", "state.working.", "state.memory.")):
+            continue
+        if source.startswith("node."):
+            parts = source.split(".")
+            if len(parts) < 4:
+                raise SavefileValidationError(
+                    f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' output '{name}' has invalid source '{source}'"
+                )
+            ref_node_id = parts[1]
+            if ref_node_id not in child_node_id_set:
+                raise SavefileValidationError(
+                    f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' output '{name}' references unknown child node '{ref_node_id}'"
+                )
+            continue
+        raise SavefileValidationError(
+            f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' output '{name}' has unsupported source '{source}'"
+        )
 def _validate_subcircuit_nodes(savefile: Savefile) -> None:
     _validate_subcircuit_recursion(savefile)
     node_id_set = {node.id for node in savefile.circuit.nodes}
@@ -337,8 +378,6 @@ def _validate_subcircuit_nodes(savefile: Savefile) -> None:
         _validate_child_circuit_structure(savefile, node.id, child_ref, child)
 
         child_outputs = _child_output_names(child)
-        if not child_outputs:
-            raise SavefileValidationError(f"Subcircuit node '{node.id}' child circuit '{child_ref}' must declare outputs")
 
         output_binding = sub.get("output_binding", {})
         if not output_binding:
