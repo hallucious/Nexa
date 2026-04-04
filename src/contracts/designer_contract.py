@@ -73,6 +73,38 @@ ApprovalFinalOutcome = Literal[
     "aborted",
 ]
 
+ProposalControlStage = Literal[
+    "normalize",
+    "patch",
+    "precheck",
+    "preview",
+    "approval_boundary",
+]
+ProposalControlAction = Literal[
+    "retry_normalization",
+    "request_user_revision",
+    "choose_interpretation",
+    "await_user_confirmation",
+    "fallback_to_read_only",
+    "proceed_to_approval",
+    "abort",
+]
+ProposalControlTerminalStatus = Literal[
+    "in_progress",
+    "awaiting_user_input",
+    "ready_for_approval",
+    "exhausted",
+    "aborted",
+]
+ProposalControlAttemptOutcome = Literal[
+    "retryable_failure",
+    "fallback_selected",
+    "blocked",
+    "confirmation_required",
+    "ready_for_approval",
+    "terminal_failure",
+]
+
 DESIGNER_INTENT_CATEGORIES = {
     "CREATE_CIRCUIT",
     "MODIFY_CIRCUIT",
@@ -182,4 +214,35 @@ APPROVAL_FINAL_OUTCOMES = {
     "rejected",
     "revision_requested",
     "aborted",
+}
+PROPOSAL_CONTROL_STAGES = {
+    "normalize",
+    "patch",
+    "precheck",
+    "preview",
+    "approval_boundary",
+}
+PROPOSAL_CONTROL_ACTIONS = {
+    "retry_normalization",
+    "request_user_revision",
+    "choose_interpretation",
+    "await_user_confirmation",
+    "fallback_to_read_only",
+    "proceed_to_approval",
+    "abort",
+}
+PROPOSAL_CONTROL_TERMINAL_STATUSES = {
+    "in_progress",
+    "awaiting_user_input",
+    "ready_for_approval",
+    "exhausted",
+    "aborted",
+}
+PROPOSAL_CONTROL_ATTEMPT_OUTCOMES = {
+    "retryable_failure",
+    "fallback_selected",
+    "blocked",
+    "confirmation_required",
+    "ready_for_approval",
+    "terminal_failure",
 }

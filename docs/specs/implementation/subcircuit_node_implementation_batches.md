@@ -1,4 +1,4 @@
-# Subcircuit Node Implementation Batches v0.1
+# Subcircuit Node Implementation Batches v0.2
 
 ## Recommended save path
 `docs/specs/implementation/subcircuit_node_implementation_batches.md`
@@ -22,11 +22,13 @@ It organizes implementation work.
 
 ## 2.1 Current Status
 
-Current judgment for the v0.1 implementation line:
+Current judgment for the v0.2 implementation line:
 
 - Batch 1 is considered closed at closure-quality level
 - Batch 1 support is regression-backed across parser, validator, runtime, node execution, review-bundle example, load path, and write path
-- remaining Subcircuit work belongs to Batch 2 or later quality layers unless a concrete Batch 1 regression is discovered
+- Batch 2 core observability / inspectability is now implemented at a practical level
+- Review Bundle example lock is already real and regression-backed in the repository
+- remaining Subcircuit work is optional deepening or later infrastructure quality work unless a concrete regression is discovered
 
 
 The SubcircuitNode specification bundle already defines:
@@ -203,14 +205,22 @@ Those belong to Batch 2.
 
 Batch 2 exists to move SubcircuitNode from minimal support to usable, inspectable, and officially validated support.
 
+Implementation reality update:
+- core Batch 2 observability / inspectability work is implemented in practice
+- the remaining value in this batch is interpretive/documentary closure and any later optional deepening, not reopening Batch 1-like enablement work
+
 ### 6.2 Included Work
 
-Batch 2 includes the following four implementation steps:
+Batch 2 includes the following four implementation steps conceptually:
 
 5. Trace and observability completion
 6. Artifact and failure completion
 7. Fan-in / fan-out inspectability
 8. Review Bundle end-to-end example lock
+
+Implementation reality note:
+- steps 5-7 are materially implemented at core level
+- step 8 is already regression-backed in the repository and should no longer be treated as an open future-only dependency
 
 ### 6.3 Detailed Scope
 
@@ -272,13 +282,17 @@ Expected outputs:
 
 ### 6.4 Batch 2 Completion Criteria
 
-Batch 2 is complete only if all of the following are true:
+Batch 2 is considered core-complete at the current baseline if all of the following are true:
 
 1. parent trace shows subcircuit execution boundary and linkage
 2. child artifact provenance remains intact
 3. child failure visibility is preserved
 4. official review-bundle-shaped child circuit is inspectable
 5. Review Bundle passes parser / validator / runtime validation flow
+
+Current repository judgment:
+- the core criteria above are satisfied at a practical level
+- future work should be framed as deeper quality extensions, not as “Batch 2 has not started”
 
 ### 6.5 Batch 2 Non-Goals
 

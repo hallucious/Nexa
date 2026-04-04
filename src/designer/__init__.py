@@ -7,6 +7,7 @@ from src.designer.proposal_flow import DesignerProposalBundle, DesignerProposalF
 from src.designer.request_normalizer import DesignerRequestNormalizer, RequestNormalizationContext
 from src.designer.text_preview_renderer import TextPreviewRenderer
 
+from src.designer.proposal_control import DesignerProposalControlPlane
 from src.designer.approval_flow import DesignerApprovalCoordinator
 from src.designer.commit_gateway import DesignerCommitGateway, DesignerCommitResult
 

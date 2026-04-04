@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from src.designer.models.circuit_draft_preview import CircuitDraftPreview
+from src.designer.models.designer_proposal_control import (
+    DesignerControlledProposalResult,
+    DesignerProposalControlState,
+    ProposalControlPolicy,
+)
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan
 from src.designer.models.designer_intent import DesignerIntent
 from src.designer.models.designer_session_state_card import DesignerSessionStateCard
@@ -79,4 +84,24 @@ class DesignerProposalFlow:
             precheck=precheck,
             preview=preview,
             rendered_preview=rendered_preview,
+        )
+
+    def propose_with_control(
+        self,
+        request_text: str,
+        *,
+        working_save_ref: str | None = None,
+        session_state_card: DesignerSessionStateCard | None = None,
+        control_state: DesignerProposalControlState | None = None,
+        control_policy: ProposalControlPolicy | None = None,
+    ) -> DesignerControlledProposalResult:
+        from src.designer.proposal_control import DesignerProposalControlPlane
+
+        controller = DesignerProposalControlPlane(proposal_flow=self)
+        return controller.run(
+            request_text,
+            working_save_ref=working_save_ref,
+            session_state_card=session_state_card,
+            control_state=control_state,
+            control_policy=control_policy,
         )

@@ -33,6 +33,12 @@ from src.designer.models.designer_approval_flow import (
     DesignerApprovalFlowState,
     UserDecision,
 )
+from src.designer.models.designer_proposal_control import (
+    DesignerControlledProposalResult,
+    DesignerProposalControlState,
+    ProposalAttemptRecord,
+    ProposalControlPolicy,
+)
 from src.designer.models.designer_intent import (
     ActionSpec,
     AmbiguityFlag,
@@ -72,6 +78,10 @@ __all__ = [
     "DecisionPoint",
     "DependencyEffectReport",
     "DesignerApprovalFlowState",
+    "DesignerControlledProposalResult",
+    "DesignerProposalControlState",
+    "ProposalAttemptRecord",
+    "ProposalControlPolicy",
     "DesignerIntent",
     "EdgeChangeCard",
     "EdgeChangePreview",

@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.11.0
+Version: 1.12.0
 
 ────────────────
 Architecture Constitution
@@ -143,6 +143,25 @@ Engine
 → ExecutionConfig Schema Validation
 → ExecutionConfig Hash
 → NodeExecutionRuntime
+
+---
+## 3.0 Current Project Position Snapshot
+
+Current implementation baseline:
+
+* authoritative implementation baseline commit: `62c081d`
+* authoritative verified baseline: `1338 passed, 3 skipped`
+* Subcircuit Batch 1 is closed across parser -> validator -> runtime -> load/write preservation -> Review Bundle example lock
+* Subcircuit Batch 2 core observability / inspectability is implemented at a practical level
+* Designer Session State Card is now a code-backed foundation rather than a spec-only direction
+* the next rational implementation move is formal Phase 2 entry through Designer proposal-flow retry / fallback control-plane work
+
+Interpretation rule:
+
+* do not reopen Subcircuit Batch 1 unless a concrete regression is found
+* do not treat Designer Session State Card as future-only design work
+* do not skip the explicit proposal boundary:
+  Intent -> Patch -> Precheck -> Preview -> Approval -> Commit
 
 ---
 ## 3.1 Current Runtime Convergence Snapshot

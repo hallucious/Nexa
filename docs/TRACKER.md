@@ -1,6 +1,6 @@
-# Nexa CODING PLAN
+# Nexa TRACKER
 
-Version: 2.9.0
+Version: 3.0.0
 
 ---
 
@@ -246,27 +246,36 @@ CLI
 ### Current Status
 
 ```text
-1335 passed, 3 skipped
+1338 passed, 3 skipped
 ```
 
-* SubcircuitNode Batch 1 is now implemented across the practical lifecycle:
+* authoritative implementation baseline commit: `62c081d`
+* SubcircuitNode Batch 1 is closed across the practical lifecycle:
   parse -> validate -> execute -> preserve -> load/write API -> official example lock
-* the line is no longer exploratory; it is closure-quality and regression-backed
-* Review Bundle is now an executable regression target rather than a docs-only reference
-* current Subcircuit state is best described as Batch 1 closed / Batch 2 not started
+* Subcircuit Batch 2 core observability / inspectability is now implemented at a practical level
+* the line is no longer exploratory; it is closure-quality, regression-backed, and operator-facing enough to stop treating Batch 1 as active unfinished work
+* Review Bundle remains an executable regression target rather than a docs-only reference
+* Designer Session State Card now has a real code foundation:
+  typed model -> session-state-card builder -> request normalizer integration -> proposal-flow integration
+* current project position is best described as:
+  Phase 1 closure complete enough -> formal Phase 2 entry
 * next work should avoid reopening Batch 1 fundamentals unless a real regression is found
 
 ---
 
 ### Next Priority
 
-* formally treat SubcircuitNode Batch 1 as closed unless a new concrete gap is found
-* next Subcircuit work should move to Batch 2 quality layers, not back into Batch 1 core enablement
-* preferred next Subcircuit directions are:
-  - richer trace / artifact semantics
-  - stronger observability around child runs
-  - deeper parent-child execution inspection
-* if attention shifts away from Subcircuit, do so from the current stable closure point rather than from an unfinished Batch 1 baseline
+* formally treat SubcircuitNode Batch 1 as closed unless a new concrete regression is found
+* formally treat Subcircuit Batch 2 core observability as implemented, not as speculative future work
+* sync top-level status docs to the current `62c081d` reality before opening new implementation
+* preferred next implementation target is now Phase 2 entry work:
+  - Designer proposal-flow retry / fallback control-plane foundation
+* the next control-plane line should make explicit how the Designer session handles:
+  - failed normalization
+  - ambiguous-intent retry
+  - blocked-precheck fallback
+  - bounded revision loops
+* if attention returns to Subcircuit later, it should be from the current stable closure point, not by reopening Batch 1 or pretending Batch 2 core observability is still missing
 
 ### Step161: Artifact Preview Event Safety Alignment
 
@@ -301,4 +310,11 @@ CLI
   - runtime propagation and node execution paths are aligned
   - Review Bundle is regression-backed
   - load/write lifecycle preservation is covered
-* further Subcircuit work should now be treated as post-Batch-1 work, not as unfinished Batch 1 fundamentals
+* Subcircuit Batch 2 core observability is now also implemented at a practical level:
+  - parent-visible child trace linkage
+  - child artifact linkage visibility
+  - child node status inspectability
+  - child output provenance visibility
+  - wrapper-level execution summary improvement
+* Designer Session State Card is no longer spec-only; it now exists as a code-backed foundation
+* further work should now be treated as formal Phase 2 control-plane work, not as unfinished Phase 1 closure work
