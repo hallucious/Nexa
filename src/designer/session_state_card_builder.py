@@ -49,7 +49,12 @@ class DesignerSessionStateCardBuilder:
         persisted_approval = load_persisted_approval_flow_state(artifact if isinstance(artifact, WorkingSaveModel) else None)
         persisted_candidate = load_persisted_commit_candidate_state(artifact if isinstance(artifact, WorkingSaveModel) else None)
         current_working_save = self._build_working_save_reality(artifact)
-        persisted_scope = persisted_card.target_scope if persisted_card is not None else None
+        fresh_cycle_from_committed_baseline = self._should_start_fresh_cycle_from_committed_baseline(
+            request_text=request_text,
+            persisted_card=persisted_card,
+            persisted_approval=persisted_approval,
+        )
+        persisted_scope = None if fresh_cycle_from_committed_baseline else (persisted_card.target_scope if persisted_card is not None else None)
         scope_mode = target_scope_mode or (persisted_scope.mode if persisted_scope is not None else self._default_scope_mode(storage_role))
         target_scope = SessionTargetScope(
             mode=scope_mode,
@@ -65,7 +70,9 @@ class DesignerSessionStateCardBuilder:
         findings = self._build_findings(artifact)
         risks = self._build_risks(artifact)
         approval_status = persisted_card.approval_state.approval_status if persisted_card is not None else "not_started"
-        if persisted_approval is not None and persisted_approval.current_stage == "committed":
+        if fresh_cycle_from_committed_baseline:
+            approval_status = "not_started"
+        elif persisted_approval is not None and persisted_approval.current_stage == "committed":
             approval_status = "committed"
         elif persisted_candidate is not None and persisted_candidate.ready_for_commit:
             approval_status = "approved"
@@ -73,16 +80,30 @@ class DesignerSessionStateCardBuilder:
             approval_required=scope_mode not in {"read_only"},
             approval_status=approval_status,
             confirmation_required=bool(findings.confirmation_findings)
-            or (persisted_card.approval_state.confirmation_required if persisted_card is not None else False),
+            or (
+                False
+                if fresh_cycle_from_committed_baseline
+                else (persisted_card.approval_state.confirmation_required if persisted_card is not None else False)
+            ),
             blocking_before_commit=bool(findings.blocking_findings)
-            or (persisted_card.approval_state.blocking_before_commit if persisted_card is not None else False),
+            or (
+                False
+                if fresh_cycle_from_committed_baseline
+                else (persisted_card.approval_state.blocking_before_commit if persisted_card is not None else False)
+            ),
         )
         objective = ObjectiveSpec(primary_goal=request_text.strip())
         constraints = persisted_card.constraints if persisted_card is not None else ConstraintSet()
-        persisted_selection = persisted_card.current_selection if persisted_card is not None else None
-        persisted_revision = persisted_card.revision_state if persisted_card is not None else None
+        persisted_selection = None if fresh_cycle_from_committed_baseline else (persisted_card.current_selection if persisted_card is not None else None)
+        persisted_revision = None if fresh_cycle_from_committed_baseline else (persisted_card.revision_state if persisted_card is not None else None)
         persisted_conversation = persisted_card.conversation_context if persisted_card is not None else None
         notes = dict(persisted_card.notes) if persisted_card is not None else {}
+        if fresh_cycle_from_committed_baseline:
+            notes.update({
+                "fresh_cycle_from_committed_baseline": True,
+                "fresh_cycle_request_text": request_text.strip(),
+                "fresh_cycle_baseline_commit_id": notes.get("last_commit_id"),
+            })
         if persisted_candidate is not None:
             notes.update({
                 "resume_commit_candidate_ready": persisted_candidate.ready_for_commit,
@@ -121,10 +142,14 @@ class DesignerSessionStateCardBuilder:
             conversation_context=ConversationContext(
                 user_request_text=request_text.strip(),
                 clarified_interpretation=(
-                    persisted_conversation.clarified_interpretation if persisted_conversation is not None else None
+                    None
+                    if fresh_cycle_from_committed_baseline
+                    else (persisted_conversation.clarified_interpretation if persisted_conversation is not None else None)
                 ),
                 unresolved_questions=(
-                    persisted_conversation.unresolved_questions if persisted_conversation is not None else ()
+                    ()
+                    if fresh_cycle_from_committed_baseline
+                    else (persisted_conversation.unresolved_questions if persisted_conversation is not None else ())
                 ),
                 explicit_user_preferences=(
                     persisted_conversation.explicit_user_preferences if persisted_conversation is not None else ()
@@ -203,3 +228,20 @@ class DesignerSessionStateCardBuilder:
     def _stable_id(self, prefix: str, text: str) -> str:
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         return f"{prefix}-{digest}"
+
+
+    def _should_start_fresh_cycle_from_committed_baseline(
+        self,
+        *,
+        request_text: str,
+        persisted_card: DesignerSessionStateCard | None,
+        persisted_approval: Any | None,
+    ) -> bool:
+        if persisted_approval is None or persisted_approval.current_stage != "committed":
+            return False
+        if not request_text.strip():
+            return False
+        if persisted_card is None:
+            return False
+        previous_request = persisted_card.conversation_context.user_request_text.strip()
+        return previous_request != request_text.strip()

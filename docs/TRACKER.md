@@ -324,3 +324,7 @@ CLI
   - wrapper-level execution summary improvement
 * Designer Session State Card is no longer spec-only; it now exists as a code-backed foundation
 * further work should now be treated as formal Phase 2 control-plane work, not as unfinished Phase 1 closure work
+
+* successful commit now reduces stale ready-for-commit continuation state into post-commit summary semantics
+* a new Designer request after commit now starts a fresh proposal cycle from the committed baseline instead of inheriting consumed continuation state
+* the next rational implementation move is continued Phase 2 control-plane maturation, especially stronger repeated-cycle safety and richer control governance

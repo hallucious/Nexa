@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from src.designer.models.designer_approval_flow import UserDecision
 from src.designer.models.designer_proposal_control import DesignerProposalControlState, ProposalControlPolicy
 from src.designer.models.designer_session_state_card import (
@@ -384,3 +386,65 @@ def test_cleanup_after_commit_clears_resume_state_and_preserves_revision_history
     restored_approval = load_persisted_approval_flow_state(cleaned)
     assert restored_approval is not None
     assert restored_approval.current_stage == "committed"
+
+
+def test_new_request_after_commit_starts_fresh_cycle_from_committed_baseline() -> None:
+    working_save = make_working_save()
+    base_card = make_card()
+    persisted_card = replace(
+        base_card,
+        revision_state=replace(
+            base_card.revision_state,
+            user_corrections=("Only change provider in node answerer.",),
+        ),
+        conversation_context=replace(
+            base_card.conversation_context,
+            clarified_interpretation="Only change provider in node answerer.",
+            unresolved_questions=("Interpretation still pending.",),
+        ),
+    )
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    state = coordinator.create_state(bundle)
+    approved = coordinator.resolve(
+        state,
+        tuple(UserDecision(decision_point_id=point.decision_id, outcome="approve") for point in state.required_decision_points),
+    )
+    applier = DesignerPatchApplier()
+    application = applier.apply_bundle(working_save, bundle)
+    candidate_state = applier.build_commit_candidate_state(application, approved, source_working_save_ref="ws-001")
+    persisted = persist_designer_session_state(
+        application.candidate_working_save,
+        session_state_card=persisted_card,
+        approval_flow_state=approved,
+        commit_candidate_state=candidate_state,
+    )
+    cleaned = DesignerCommitGateway(coordinator=coordinator).commit_persisted_candidate(
+        persisted,
+        commit_id="commit-fresh-1",
+    ).cleaned_candidate_working_save
+
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Optimize node reviewer to reduce cost",
+        artifact=cleaned,
+    )
+    next_bundle = DesignerProposalFlow().propose(
+        "Optimize node reviewer to reduce cost",
+        working_save_ref="ws-001",
+        session_state_card=rebuilt,
+    )
+
+    assert rebuilt.approval_state.approval_status == "not_started"
+    assert rebuilt.approval_state.approval_required is True
+    assert rebuilt.current_selection.selection_mode == "none"
+    assert rebuilt.target_scope.mode == "existing_circuit"
+    assert rebuilt.revision_state.revision_index == 0
+    assert rebuilt.revision_state.user_corrections == ()
+    assert rebuilt.revision_state.last_control_action is None
+    assert rebuilt.conversation_context.clarified_interpretation is None
+    assert rebuilt.conversation_context.unresolved_questions == ()
+    assert rebuilt.notes["fresh_cycle_from_committed_baseline"] is True
+    assert rebuilt.notes["fresh_cycle_baseline_commit_id"] == "commit-fresh-1"
+    assert next_bundle.intent.target_scope.node_refs == ("node.reviewer",)
+

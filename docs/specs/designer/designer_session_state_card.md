@@ -30,6 +30,7 @@ Official rule:
 - The card defines the current design reality and boundaries.
 It may also surface persisted approval-ready continuation hints through notes when a commit candidate can be resumed explicitly.
 After successful commit, approval-ready continuation must be reduced into a post-commit summary rather than left as a stale resume path.
+A new Designer request after commit must start a fresh proposal cycle from the committed baseline instead of inheriting consumed continuation scope, clarification, or revision state.
 - Designer AI produces proposals from this card.
 - Designer AI must not silently assume hidden structure or hidden authority.
 
@@ -69,6 +70,7 @@ DesignerSessionStateCard
 - revision_state: object
 - approval_state: object
 - notes may include post-commit cleanup summary
+- notes may include a fresh-cycle-from-committed-baseline marker when a new request is opened after commit
 - conversation_context: object
 - output_contract: object
 - forbidden_authority: object
