@@ -10,6 +10,7 @@ This module integrates savefile execution with existing Nexa subsystems:
 from __future__ import annotations
 
 import copy
+import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -39,6 +40,12 @@ class SavefileExecutionTrace:
     node_results: Dict[str, NodeExecutionResult]
     final_state: Dict[str, Any]
     all_artifacts: List[Any] = field(default_factory=list)
+    started_at_ms: int = 0
+    completed_at_ms: int = 0
+
+    @property
+    def duration_ms(self) -> int:
+        return max(0, self.completed_at_ms - self.started_at_ms)
 
 
 def resolve_input_value(
@@ -313,16 +320,34 @@ def _child_output_source_map(child_circuit: Dict[str, Any]) -> Dict[str, str]:
 
 
 
-def _subcircuit_trace_summary(*, child_ref: str, child_trace: SavefileExecutionTrace) -> Dict[str, Any]:
+def _subcircuit_trace_summary(
+    *,
+    child_ref: str,
+    child_trace: SavefileExecutionTrace,
+    source_map: Dict[str, str] | None = None,
+) -> Dict[str, Any]:
     failed_nodes = [nid for nid, res in child_trace.node_results.items() if res.status == "failure"]
+    warning_count = sum(
+        len(res.trace.get("warnings", ()))
+        for res in child_trace.node_results.values()
+        if res.status == "success" and isinstance(res.trace, dict)
+    )
+    error_count = len(failed_nodes)
+    artifact_refs = [f"artifact:{child_trace.run_id}:{idx}" for idx, _ in enumerate(child_trace.all_artifacts)]
     return {
         "child_circuit_ref": child_ref,
         "child_run_id": child_trace.run_id,
+        "child_trace_ref": child_trace.run_id,
         "child_status": child_trace.status,
         "child_failed_nodes": failed_nodes,
         "child_artifact_count": len(child_trace.all_artifacts),
+        "child_artifact_refs": artifact_refs,
+        "child_warning_count": warning_count if child_trace.status == "success" else 0,
+        "child_error_count": error_count,
+        "child_duration_ms": child_trace.duration_ms,
+        "child_node_statuses": {nid: res.status for nid, res in child_trace.node_results.items()},
+        "child_output_provenance": dict(source_map or {}),
     }
-
 
 def _resolve_bound_subcircuit_outputs(
     *,
@@ -420,8 +445,9 @@ def execute_subcircuit_node(
         _depth=_depth + 1,
         _max_child_depth=effective_max_child_depth,
     )
+    source_map = _child_output_source_map(child_circuit)
     trace_mode = str(runtime_policy.get("trace_mode", "summary"))
-    trace_summary = _subcircuit_trace_summary(child_ref=child_ref, child_trace=child_trace)
+    trace_summary = _subcircuit_trace_summary(child_ref=child_ref, child_trace=child_trace, source_map=source_map)
     if trace_mode == "full":
         trace_summary["child_trace"] = child_trace
 
@@ -433,7 +459,6 @@ def execute_subcircuit_node(
             trace=trace_summary,
         )
 
-    source_map = _child_output_source_map(child_circuit)
     child_final_state = child_trace.final_state
     child_node_outputs = {
         nid: res.output for nid, res in child_trace.node_results.items() if res.status == "success"

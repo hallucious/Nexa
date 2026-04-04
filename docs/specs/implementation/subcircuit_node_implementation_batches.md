@@ -20,6 +20,15 @@ It organizes implementation work.
 
 ## 2. Why This Document Exists
 
+## 2.1 Current Status
+
+Current judgment for the v0.1 implementation line:
+
+- Batch 1 is considered closed at closure-quality level
+- Batch 1 support is regression-backed across parser, validator, runtime, node execution, review-bundle example, load path, and write path
+- remaining Subcircuit work belongs to Batch 2 or later quality layers unless a concrete Batch 1 regression is discovered
+
+
 The SubcircuitNode specification bundle already defines:
 
 - architectural position

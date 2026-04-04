@@ -76,6 +76,7 @@ Source-of-Truth: `docs/specs/_active_specs.yaml`
 * `docs/specs/architecture/node_execution_contract.md`
 * `docs/specs/architecture/circuit_contract.md`
 * `docs/specs/architecture/universal_provider_architecture.md`
+* `docs/specs/architecture/subcircuit_node_architecture.md`
 
 ### 2.3 Contracts
 
@@ -88,16 +89,30 @@ Source-of-Truth: `docs/specs/_active_specs.yaml`
 * `docs/specs/contracts/execution_config_canonicalization_contract.md`
 * `docs/specs/contracts/execution_config_schema_contract.md`
 * `docs/specs/contracts/context_key_schema_contract.md`
+* `docs/specs/contracts/subcircuit_node_contract.md`
 
 ### 2.4 Policies
 
 * `docs/specs/policies/validation_rule_catalog.md`
 * `docs/specs/policies/validation_rule_lifecycle.md`
 
+### 2.4.1 Storage / Savefile Extensions
+
+* `docs/specs/storage/savefile_subcircuit_extension.md`
+
 ### 2.5 Indexes
 
 * `docs/specs/indexes/spec_catalog.md`
 * `docs/specs/indexes/spec_dependency_map.md`
+* `docs/specs/subcircuit_node_spec_index.md`
+
+### 2.5.1 Official Examples
+
+* `docs/specs/examples/review_bundle_subcircuit_example.md`
+
+### 2.5.2 Implementation Plans
+
+* `docs/specs/implementation/subcircuit_node_implementation_batches.md`
 
 ### 2.6 ExecutionConfig
 

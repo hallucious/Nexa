@@ -246,38 +246,27 @@ CLI
 ### Current Status
 
 ```text
-1283 passed, 3 skipped
+1335 passed, 3 skipped
 ```
 
-* storage-sector architecture work is no longer in foundation-building mode
-* current storage-sector stage: late-stage hardening / near-closure
-* Working Save -> Commit Snapshot -> Execution Record -> Updated Working Save summary is the intended active lifecycle
-* recent work progressively removed stale replay, stale contract, thin native, thin nested, top-level thin, and write-boundary over-trust paths
-* next storage work should prioritize spec ↔ implementation sync and completion judgment rather than broad storage refactoring
+* SubcircuitNode Batch 1 is now implemented across the practical lifecycle:
+  parse -> validate -> execute -> preserve -> load/write API -> official example lock
+* the line is no longer exploratory; it is closure-quality and regression-backed
+* Review Bundle is now an executable regression target rather than a docs-only reference
+* current Subcircuit state is best described as Batch 1 closed / Batch 2 not started
+* next work should avoid reopening Batch 1 fundamentals unless a real regression is found
 
 ---
 
 ### Next Priority
 
-* runtime-completion work should continue from the converged plugin baseline, not from deleted legacy paths
-* documentation is synchronized to the accepted runtime direction through this tracker update
-* future plugin work should target boundary clarification or deeper unification only when it can be done without reopening removed legacy paths
-
-
-* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling
-
-
-- Legacy engine CLI compatibility is now wrapper-oriented: `src/engine/cli.py` is a bounded shim, `src/cli/savefile_runtime.py` owns execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic.
-
-
-- Execution record foundation implemented in code: contract, model, serialization, and working-save summary integration.
-
-
-* Storage lifecycle linkage started: Working Save → Commit Snapshot creation and Execution Record → Working Save last-run summary update APIs
-
-
-* Storage runtime linkage implemented in code: Commit Snapshot–anchored Execution Record creation and Working Save last-run update can now be driven from one lifecycle path
-
+* formally treat SubcircuitNode Batch 1 as closed unless a new concrete gap is found
+* next Subcircuit work should move to Batch 2 quality layers, not back into Batch 1 core enablement
+* preferred next Subcircuit directions are:
+  - richer trace / artifact semantics
+  - stronger observability around child runs
+  - deeper parent-child execution inspection
+* if attention shifts away from Subcircuit, do so from the current stable closure point rather than from an unfinished Batch 1 baseline
 
 ### Step161: Artifact Preview Event Safety Alignment
 
@@ -299,12 +288,17 @@ CLI
 
 ### Latest Increment
 
-* paused review-gated runs now expose a minimal explicit resume contract
-* resumed runs emit `execution_resumed` with linkage to prior execution when provided
-* resumed execution re-runs validation before continuing from the paused node
+* Subcircuit validator hardening now covers child output source validity
+* Subcircuit Batch 1 closure coverage is now locked by explicit regression tests
+* official Review Bundle example is executable, validated, and preserved across storage lifecycle
+* `.nex` load/write paths now preserve `subcircuits` through typed-model and serializer/factory boundaries
 
 ### Phase 1 Closure Judgment
 
-* paused-run durability line is now evidence-based across commit anchor, structure fingerprint, execution-surface fingerprint, and source-commit evidence
-* replay-triggered runs are now kept semantically distinct from resume-ready paused runs in execution-record and working-save summaries
-* current Phase 1 state is closure-ready: remaining work should focus on final spec ↔ implementation sync and explicit completion judgment rather than new runtime feature expansion
+* SubcircuitNode Batch 1 is now a credible closure point:
+  - parser/model support exists
+  - validator hardening is in place
+  - runtime propagation and node execution paths are aligned
+  - Review Bundle is regression-backed
+  - load/write lifecycle preservation is covered
+* further Subcircuit work should now be treated as post-Batch-1 work, not as unfinished Batch 1 fundamentals

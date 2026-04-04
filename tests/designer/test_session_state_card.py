@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+from src.designer.models import DesignerSessionStateCard
+from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
+from src.designer.models.designer_session_state_card import (
+    AvailableResources,
+    ConversationContext,
+    CurrentSelectionState,
+    SessionTargetScope,
+    WorkingSaveReality,
+)
+from src.designer.proposal_flow import DesignerProposalFlow
+from src.designer.session_state_card_builder import DesignerSessionStateCardBuilder
+from src.storage.models.shared_sections import CircuitModel, MetaBase, ResourcesModel, StateModel
+from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
+
+
+def make_working_save() -> WorkingSaveModel:
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="demo"),
+        circuit=CircuitModel(
+            nodes=[{"id": "node.answerer", "kind": "provider"}, {"id": "node.reviewer", "kind": "provider"}],
+            edges=[{"from": "node.answerer", "to": "node.reviewer"}],
+            outputs=[{"name": "final_answer", "source": "node.reviewer.output.result"}],
+        ),
+        resources=ResourcesModel(
+            prompts={"prompt.review": {}},
+            providers={"provider.gpt": {}, "provider.claude": {}},
+            plugins={"plugin.search": {}},
+        ),
+        state=StateModel(),
+        runtime=RuntimeModel(status="draft"),
+        ui=UIModel(),
+    )
+
+
+def test_session_state_card_builder_builds_from_working_save() -> None:
+    builder = DesignerSessionStateCardBuilder()
+    card = builder.build(request_text="Add a review node before final output", artifact=make_working_save())
+    assert card.storage_role == "working_save"
+    assert card.current_working_save.savefile_ref == "ws-001"
+    assert "node.answerer" in card.current_working_save.node_list
+    assert any(item.id == "provider.claude" for item in card.available_resources.providers)
+    assert card.target_scope.mode == "existing_circuit"
+
+
+def test_proposal_flow_accepts_session_state_card_and_narrows_scope() -> None:
+    flow = DesignerProposalFlow()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-1",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            circuit_summary="2 nodes",
+            node_list=("node.answerer", "node.reviewer"),
+            edge_list=("node.answerer->node.reviewer",),
+            output_list=("final_answer",),
+            provider_refs=("provider.gpt",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="node", selected_refs=("node.answerer",)),
+        target_scope=SessionTargetScope(mode="node_only", touch_budget="minimal", allowed_node_refs=("node.answerer",)),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Add review"),
+        constraints=ConstraintSet(provider_restrictions=("provider.legacy",)),
+        conversation_context=ConversationContext(user_request_text="Change provider in node answerer to Claude"),
+    )
+    bundle = flow.propose(
+        "Change provider in node answerer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+    assert bundle.session_state_card.session_id == "sess-1"
+    assert bundle.intent.target_scope.mode == "node_only"
+    assert bundle.intent.target_scope.node_refs == ("node.answerer",)
+    assert bundle.intent.constraints.provider_restrictions == ("provider.legacy",)

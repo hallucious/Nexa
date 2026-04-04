@@ -16,9 +16,12 @@ from src.designer.models.designer_intent import (
 )
 
 
+from src.designer.models.designer_session_state_card import DesignerSessionStateCard
+
 @dataclass(frozen=True)
 class RequestNormalizationContext:
     working_save_ref: str | None = None
+    session_state_card: DesignerSessionStateCard | None = None
 
 
 class DesignerRequestNormalizer:
@@ -32,6 +35,11 @@ class DesignerRequestNormalizer:
         if not request_text or not request_text.strip():
             raise ValueError("request_text must be non-empty")
         context = context or RequestNormalizationContext()
+        if context.session_state_card is not None and context.working_save_ref is None:
+            context = RequestNormalizationContext(
+                working_save_ref=context.session_state_card.current_working_save.savefile_ref,
+                session_state_card=context.session_state_card,
+            )
         category = self._infer_category(request_text)
         scope = self._build_scope(category, request_text, context)
         actions = self._build_actions(category, request_text)
@@ -39,8 +47,8 @@ class DesignerRequestNormalizer:
         ambiguity_flags = self._build_ambiguity_flags(category, request_text, context)
         risk_flags = self._build_risk_flags(request_text)
         requires_confirmation = bool(ambiguity_flags or [flag for flag in risk_flags if flag.severity == "high"])
-        constraints = self._build_constraints(request_text)
-        objective = ObjectiveSpec(primary_goal=request_text.strip())
+        constraints = self._build_constraints(request_text, context)
+        objective = self._build_objective(request_text, context)
         explanation = self._build_explanation(category, scope, ambiguity_flags)
         return DesignerIntent(
             intent_id=_stable_id("intent", request_text),
@@ -84,14 +92,40 @@ class DesignerRequestNormalizer:
         broad = any(term in text for term in ("all ", "entire", "whole", "across the circuit", "every"))
         node_refs = self._extract_node_refs(request_text)
         max_change_scope = "broad" if broad else "bounded"
+        card_scope = context.session_state_card.target_scope if context.session_state_card is not None else None
         if category == "CREATE_CIRCUIT":
-            return TargetScope(mode="new_circuit", node_refs=node_refs, max_change_scope=max_change_scope)
+            mode = card_scope.mode if card_scope is not None and card_scope.mode == "new_circuit" else "new_circuit"
+            max_scope = card_scope.touch_budget if card_scope is not None else max_change_scope
+            return TargetScope(mode=mode, node_refs=node_refs, max_change_scope=max_scope)
         if category in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"}:
             return TargetScope(
                 mode="read_only",
                 savefile_ref=context.working_save_ref,
                 node_refs=node_refs,
                 max_change_scope="minimal",
+            )
+        if card_scope is not None:
+            if card_scope.mode == "node_only":
+                refs = tuple(card_scope.allowed_node_refs) or tuple(node_refs)
+                return TargetScope(
+                    mode="node_only",
+                    savefile_ref=context.working_save_ref,
+                    node_refs=refs,
+                    max_change_scope=card_scope.touch_budget,
+                )
+            if node_refs:
+                return TargetScope(
+                    mode="node_only",
+                    savefile_ref=context.working_save_ref,
+                    node_refs=node_refs,
+                    max_change_scope=card_scope.touch_budget,
+                )
+            return TargetScope(
+                mode=card_scope.mode if card_scope.mode != "read_only" else "existing_circuit",
+                savefile_ref=context.working_save_ref,
+                node_refs=tuple(card_scope.allowed_node_refs),
+                edge_refs=tuple(card_scope.allowed_edge_refs),
+                max_change_scope=card_scope.touch_budget,
             )
         if node_refs:
             return TargetScope(
@@ -106,14 +140,42 @@ class DesignerRequestNormalizer:
             max_change_scope=max_change_scope,
         )
 
-    def _build_constraints(self, request_text: str) -> ConstraintSet:
+    def _build_constraints(self, request_text: str, context: RequestNormalizationContext) -> ConstraintSet:
         text = request_text.casefold()
-        return ConstraintSet(
+        base = ConstraintSet(
             cost_limit="low" if "low cost" in text or "reduce cost" in text else None,
             speed_priority="high" if "faster" in text or "latency" in text else None,
             quality_priority="high" if "quality" in text or "reliable" in text else None,
             determinism_preference="high" if "determin" in text else None,
             human_review_required="review" in text or "approve" in text,
+        )
+        card = context.session_state_card
+        if card is None:
+            return base
+        return ConstraintSet(
+            cost_limit=base.cost_limit or card.constraints.cost_limit,
+            speed_priority=base.speed_priority or card.constraints.speed_priority,
+            quality_priority=base.quality_priority or card.constraints.quality_priority,
+            determinism_preference=base.determinism_preference or card.constraints.determinism_preference,
+            provider_preferences=card.constraints.provider_preferences,
+            provider_restrictions=card.constraints.provider_restrictions,
+            plugin_preferences=card.constraints.plugin_preferences,
+            plugin_restrictions=card.constraints.plugin_restrictions,
+            human_review_required=base.human_review_required or card.constraints.human_review_required,
+            safety_level=card.constraints.safety_level,
+            output_requirements=card.constraints.output_requirements,
+            forbidden_patterns=card.constraints.forbidden_patterns,
+        )
+
+    def _build_objective(self, request_text: str, context: RequestNormalizationContext) -> ObjectiveSpec:
+        card = context.session_state_card
+        if card is None:
+            return ObjectiveSpec(primary_goal=request_text.strip())
+        return ObjectiveSpec(
+            primary_goal=request_text.strip(),
+            secondary_goals=card.objective.secondary_goals,
+            success_criteria=card.objective.success_criteria,
+            preferred_behavior=card.objective.preferred_behavior,
         )
 
     def _build_actions(self, category: str, request_text: str) -> list[ActionSpec]:
