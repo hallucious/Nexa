@@ -101,19 +101,99 @@ def _obs_ctx(input_payload: Dict[str, Any], node_raw: Dict[str, Any]) -> Optiona
     if isinstance(ctx, dict):
         return ctx
     return None
+
+
+def _resolve_subcircuit_input_path(path: str, input_payload: Dict[str, Any]) -> Any:
+    if path.startswith("input."):
+        key = path[len("input."):]
+        if isinstance(input_payload.get("input"), dict):
+            source = input_payload["input"]
+            current: Any = source
+            for part in key.split("."):
+                if not isinstance(current, dict) or part not in current:
+                    raise KeyError(f"Missing input path: {path}")
+                current = current[part]
+            return current
+        if key in input_payload:
+            return input_payload[key]
+        raise KeyError(f"Missing input path: {path}")
+
+    if path.startswith("node."):
+        parts = path.split(".", 3)
+        if len(parts) < 4 or parts[2] != "output":
+            raise KeyError(f"Invalid node output path: {path}")
+        node_outputs = input_payload.get("__node_outputs__")
+        if not isinstance(node_outputs, dict):
+            raise KeyError(f"Node outputs not available for path: {path}")
+        node_id = parts[1]
+        if node_id not in node_outputs:
+            raise KeyError(f"Node output not available for path: {path}")
+        current: Any = node_outputs[node_id]
+        for part in parts[3].split("."):
+            if not isinstance(current, dict) or part not in current:
+                raise KeyError(f"Missing node output path: {path}")
+            current = current[part]
+        return current
+
+    raise KeyError(f"Unsupported subcircuit input path: {path}")
+
+
 def _run_subcircuit_node(*, node_id: str, node_raw: Dict[str, Any], input_payload: Dict[str, Any]) -> Dict[str, Any]:
-    sub = node_raw.get("execution", {}).get("subcircuit", {})
-    input_mapping = sub.get("input_mapping", {}) if isinstance(sub, dict) else {}
-    output_binding = sub.get("output_binding", {}) if isinstance(sub, dict) else {}
-    child_input = {k: input_payload.get(v.split(".")[-1]) if isinstance(v, str) else None for k, v in input_mapping.items()}
-    # Batch 1 minimal helper only: when full runtime adapter is not provided, preserve
-    # mapping-based wrapper shape instead of silently flattening child state.
+    execution = node_raw.get("execution", {})
+    if not isinstance(execution, dict):
+        raise ValueError("Subcircuit node execution block must be a dict")
+    sub = execution.get("subcircuit", {})
+    if not isinstance(sub, dict):
+        raise ValueError("Subcircuit node requires execution.subcircuit")
+
+    child_ref = sub.get("child_circuit_ref")
+    if not isinstance(child_ref, str) or not child_ref:
+        raise ValueError("Subcircuit node requires child_circuit_ref")
+
+    input_mapping = sub.get("input_mapping", {})
+    output_binding = sub.get("output_binding", {})
+    if not isinstance(input_mapping, dict):
+        raise ValueError("Subcircuit input_mapping must be a dict")
+    if not isinstance(output_binding, dict):
+        raise ValueError("Subcircuit output_binding must be a dict")
+
+    child_input: Dict[str, Any] = {}
+    for child_key, source_path in input_mapping.items():
+        if not isinstance(source_path, str):
+            raise ValueError("Subcircuit input_mapping values must be strings")
+        child_input[child_key] = _resolve_subcircuit_input_path(source_path, input_payload)
+
+    subcircuit_runner = input_payload.get("__subcircuit_runner__")
+    child_output: Dict[str, Any]
+    if callable(subcircuit_runner):
+        child_result = subcircuit_runner(
+            node_id=node_id,
+            child_circuit_ref=child_ref,
+            child_input=child_input,
+            runtime_policy=sub.get("runtime_policy", {}),
+            node_raw=node_raw,
+        )
+        if not isinstance(child_result, dict):
+            raise ValueError("Subcircuit runner must return a dict")
+        child_status = str(child_result.get("status", "success"))
+        if child_status != "success":
+            child_error = child_result.get("error") or "Child subcircuit execution failed"
+            raise RuntimeError(str(child_error))
+        child_output_raw = child_result.get("output", {})
+        if not isinstance(child_output_raw, dict):
+            raise ValueError("Subcircuit runner output must be a dict")
+        child_output = child_output_raw
+    else:
+        child_output = dict(child_input)
+
     result: Dict[str, Any] = {}
     for parent_key, binding in output_binding.items():
-        if isinstance(binding, str) and binding.startswith("child.output."):
-            child_key = binding[len("child.output."):]
-            if child_key in child_input:
-                result[parent_key] = child_input[child_key]
+        if not isinstance(binding, str) or not binding.startswith("child.output."):
+            raise ValueError(f"Invalid subcircuit output binding target: {binding!r}")
+        child_key = binding[len("child.output."):]
+        if child_key not in child_output:
+            raise KeyError(f"Missing child output for binding: {binding}")
+        result[parent_key] = child_output[child_key]
     return result
 
 
