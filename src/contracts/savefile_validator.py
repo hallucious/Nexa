@@ -251,6 +251,8 @@ def _validate_child_circuit_structure(savefile: Savefile, parent_node_id: str, c
 
 def _validate_child_node(savefile: Savefile, parent_node_id: str, child_ref: str, node: Dict[str, Any], child_node_id_set: Set[str]) -> None:
     node_kind = node.get("kind") or node.get("type")
+    if node_kind == "provider":
+        node_kind = "ai"
     node_id = node.get("id", "<unknown>")
     if node_kind == "plugin":
         plugin_ref = node.get("resource_ref", {}).get("plugin")
@@ -260,8 +262,9 @@ def _validate_child_node(savefile: Savefile, parent_node_id: str, child_ref: str
             )
     elif node_kind == "ai":
         resource_ref = node.get("resource_ref", {})
-        prompt_ref = resource_ref.get("prompt")
-        provider_ref = resource_ref.get("provider")
+        provider_exec = node.get("execution", {}).get("provider") if isinstance(node.get("execution", {}).get("provider"), dict) else {}
+        prompt_ref = resource_ref.get("prompt") or provider_exec.get("prompt_ref")
+        provider_ref = resource_ref.get("provider") or provider_exec.get("provider_id")
         if not prompt_ref or prompt_ref not in savefile.resources.prompts:
             raise SavefileValidationError(
                 f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' AI node '{node_id}' references unknown prompt"

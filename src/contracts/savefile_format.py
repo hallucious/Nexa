@@ -55,7 +55,10 @@ class NodeSpec:
 
     @property
     def node_kind(self) -> str:
-        return self.kind or self.type or "unknown"
+        kind = self.kind or self.type or "unknown"
+        if kind == "provider":
+            return "ai"
+        return kind
 
 
 @dataclass
@@ -89,7 +92,7 @@ class PromptResource:
 class ProviderResource:
     """AI provider resource."""
     type: str  # "openai" | "anthropic" | "test" | etc
-    model: str
+    model: str = ""
     config: Dict[str, Any] = field(default_factory=dict)
 
 

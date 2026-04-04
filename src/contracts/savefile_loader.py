@@ -36,20 +36,48 @@ def _load_meta(raw: Dict[str, Any]) -> SavefileMeta:
     )
 
 
+def _canonicalize_node_payload(raw_node: Dict[str, Any]) -> Dict[str, Any]:
+    payload = dict(raw_node)
+    execution = dict(payload.get("execution", {}))
+    provider_exec = execution.get("provider") if isinstance(execution.get("provider"), dict) else None
+
+    resource_ref = dict(payload.get("resource_ref", {}))
+    inputs = dict(payload.get("inputs", {}))
+
+    if provider_exec is not None:
+        provider_id = provider_exec.get("provider_id")
+        prompt_ref = provider_exec.get("prompt_ref")
+        if provider_id and "provider" not in resource_ref:
+            resource_ref["provider"] = provider_id
+        if prompt_ref and "prompt" not in resource_ref:
+            resource_ref["prompt"] = prompt_ref
+        if not inputs and isinstance(provider_exec.get("inputs"), dict):
+            inputs = dict(provider_exec.get("inputs", {}))
+        if payload.get("kind") == "provider" and payload.get("type") is None:
+            payload["type"] = "ai"
+
+    payload["resource_ref"] = resource_ref
+    payload["inputs"] = inputs
+    payload["execution"] = execution
+    return payload
+
+
 def _load_circuit(raw: Dict[str, Any]) -> CircuitSpec:
-    nodes = [
-        NodeSpec(
-            id=n["id"],
-            type=n.get("type"),
-            resource_ref=dict(n.get("resource_ref", {})),
-            inputs=dict(n.get("inputs", {})),
-            outputs=dict(n.get("outputs", {})),
-            kind=n.get("kind"),
-            label=n.get("label"),
-            execution=dict(n.get("execution", {})),
+    nodes = []
+    for raw_node in raw.get("nodes", []):
+        n = _canonicalize_node_payload(raw_node)
+        nodes.append(
+            NodeSpec(
+                id=n["id"],
+                type=n.get("type"),
+                resource_ref=dict(n.get("resource_ref", {})),
+                inputs=dict(n.get("inputs", {})),
+                outputs=dict(n.get("outputs", {})),
+                kind=n.get("kind"),
+                label=n.get("label"),
+                execution=dict(n.get("execution", {})),
+            )
         )
-        for n in raw.get("nodes", [])
-    ]
 
     edges = [
         EdgeSpec(
@@ -62,6 +90,22 @@ def _load_circuit(raw: Dict[str, Any]) -> CircuitSpec:
     subcircuits = raw.get("subcircuits", {})
     if not isinstance(subcircuits, dict):
         subcircuits = {}
+    else:
+        normalized_subcircuits = {}
+        for child_name, child in subcircuits.items():
+            if not isinstance(child, dict):
+                normalized_subcircuits[child_name] = child
+                continue
+            normalized_child = dict(child)
+            normalized_nodes = []
+            for raw_child_node in child.get("nodes", []):
+                if isinstance(raw_child_node, dict):
+                    normalized_nodes.append(_canonicalize_node_payload(raw_child_node))
+                else:
+                    normalized_nodes.append(raw_child_node)
+            normalized_child["nodes"] = normalized_nodes
+            normalized_subcircuits[child_name] = normalized_child
+        subcircuits = normalized_subcircuits
 
     return CircuitSpec(
         entry=raw["entry"],
@@ -80,7 +124,7 @@ def _load_resources(raw: Dict[str, Any]) -> ResourcesSpec:
     providers = {
         key: ProviderResource(
             type=val["type"],
-            model=val["model"],
+            model=val.get("model", ""),
             config=val.get("config", {}),
         )
         for key, val in raw.get("providers", {}).items()
