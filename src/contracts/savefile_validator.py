@@ -14,7 +14,7 @@ Validates:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set
+from typing import Any, Dict, List, Set, Optional
 
 from src.contracts.savefile_format import Savefile, NodeSpec
 
@@ -84,7 +84,6 @@ def _validate_resource_references(savefile: Savefile) -> None:
             if provider_ref not in savefile.resources.providers:
                 raise SavefileValidationError(f"AI node '{node.id}' references unknown provider '{provider_ref}'")
         elif node_kind == "subcircuit":
-            # resolved later
             continue
         else:
             raise SavefileValidationError(f"Unknown node type/kind '{node_kind}' for node '{node.id}'")
@@ -94,21 +93,27 @@ def _validate_input_paths(savefile: Savefile) -> None:
     node_id_set = {node.id for node in savefile.circuit.nodes}
     for node in savefile.circuit.nodes:
         for key, path in node.inputs.items():
-            if not isinstance(path, str) or not path:
-                raise SavefileValidationError(f"Node '{node.id}' input '{key}' path must be non-empty string")
-            if path.startswith("ui."):
-                raise SavefileValidationError(f"Node '{node.id}' input '{key}' references UI section. UI must not affect execution.")
-            if path.startswith(("state.input.", "state.working.", "state.memory.", "input.")):
-                continue
-            if path.startswith("node."):
-                parts = path.split(".")
-                if len(parts) < 3:
-                    raise SavefileValidationError(f"Node '{node.id}' input '{key}' has invalid node path '{path}'")
-                ref_node_id = parts[1]
-                if ref_node_id not in node_id_set:
-                    raise SavefileValidationError(f"Node '{node.id}' input '{key}' references unknown node '{ref_node_id}'")
-                continue
-            raise SavefileValidationError(f"Node '{node.id}' input '{key}' has unsupported path '{path}'")
+            _validate_parent_path(path, node.id, key, node_id_set)
+
+
+def _validate_parent_path(path: Any, node_id: str, key: str, node_id_set: Set[str]) -> None:
+    if not isinstance(path, str) or not path:
+        raise SavefileValidationError(f"Node '{node_id}' input '{key}' path must be non-empty string")
+    if path.startswith("ui."):
+        raise SavefileValidationError(
+            f"Node '{node_id}' input '{key}' references UI section. UI must not affect execution."
+        )
+    if path.startswith(("state.input.", "state.working.", "state.memory.", "input.")):
+        return
+    if path.startswith("node."):
+        parts = path.split(".")
+        if len(parts) < 3:
+            raise SavefileValidationError(f"Node '{node_id}' input '{key}' has invalid node path '{path}'")
+        ref_node_id = parts[1]
+        if ref_node_id not in node_id_set:
+            raise SavefileValidationError(f"Node '{node_id}' input '{key}' references unknown node '{ref_node_id}'")
+        return
+    raise SavefileValidationError(f"Node '{node_id}' input '{key}' has unsupported path '{path}'")
 
 
 def _validate_node_types(savefile: Savefile) -> None:
@@ -189,37 +194,165 @@ def _validate_subcircuit_recursion(savefile: Savefile) -> None:
         dfs(name, 0)
 
 
+def _child_node_id_set(child: Dict[str, Any]) -> Set[str]:
+    ids: Set[str] = set()
+    for node in child.get("nodes", []):
+        if isinstance(node, dict) and isinstance(node.get("id"), str):
+            ids.add(node["id"])
+    return ids
+
+
+def _validate_child_circuit_structure(savefile: Savefile, parent_node_id: str, child_ref: str, child: Dict[str, Any]) -> None:
+    child_nodes = child.get("nodes", [])
+    if not isinstance(child_nodes, list) or not child_nodes:
+        raise SavefileValidationError(
+            f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' must declare at least one node"
+        )
+
+    child_node_ids: List[str] = []
+    for node in child_nodes:
+        if not isinstance(node, dict) or not isinstance(node.get("id"), str) or not node.get("id"):
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' has invalid node declaration"
+            )
+        child_node_ids.append(node["id"])
+
+    if len(child_node_ids) != len(set(child_node_ids)):
+        raise SavefileValidationError(
+            f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' has duplicate node ids"
+        )
+
+    child_node_id_set = set(child_node_ids)
+    child_entry = child.get("entry")
+    if child_entry is not None and child_entry not in child_node_id_set:
+        raise SavefileValidationError(
+            f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' has invalid entry '{child_entry}'"
+        )
+
+    for edge in child.get("edges", []):
+        if not isinstance(edge, dict):
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' has invalid edge declaration"
+            )
+        src = edge.get("from") or edge.get("from_node")
+        dst = edge.get("to") or edge.get("to_node")
+        if src not in child_node_id_set:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' edge source '{src}' not found in child nodes"
+            )
+        if dst not in child_node_id_set:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' edge target '{dst}' not found in child nodes"
+            )
+
+    for node in child_nodes:
+        _validate_child_node(savefile, parent_node_id, child_ref, node, child_node_id_set)
+
+
+def _validate_child_node(savefile: Savefile, parent_node_id: str, child_ref: str, node: Dict[str, Any], child_node_id_set: Set[str]) -> None:
+    node_kind = node.get("kind") or node.get("type")
+    node_id = node.get("id", "<unknown>")
+    if node_kind == "plugin":
+        plugin_ref = node.get("resource_ref", {}).get("plugin")
+        if not plugin_ref or plugin_ref not in savefile.resources.plugins:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' plugin node '{node_id}' references unknown plugin"
+            )
+    elif node_kind == "ai":
+        resource_ref = node.get("resource_ref", {})
+        prompt_ref = resource_ref.get("prompt")
+        provider_ref = resource_ref.get("provider")
+        if not prompt_ref or prompt_ref not in savefile.resources.prompts:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' AI node '{node_id}' references unknown prompt"
+            )
+        if not provider_ref or provider_ref not in savefile.resources.providers:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' AI node '{node_id}' references unknown provider"
+            )
+    elif node_kind == "subcircuit":
+        sub = node.get("execution", {}).get("subcircuit")
+        if not isinstance(sub, dict):
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' nested subcircuit node '{node_id}' missing execution.subcircuit"
+            )
+        nested_ref = sub.get("child_circuit_ref")
+        if not isinstance(nested_ref, str) or not nested_ref:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' nested subcircuit node '{node_id}' missing child_circuit_ref"
+            )
+        if not isinstance(sub.get("input_mapping"), dict):
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' nested subcircuit node '{node_id}' input_mapping must be an object"
+            )
+        if not isinstance(sub.get("output_binding"), dict):
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' nested subcircuit node '{node_id}' output_binding must be an object"
+            )
+    else:
+        raise SavefileValidationError(
+            f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' has unknown child node type/kind '{node_kind}'"
+        )
+
+    for key, path in node.get("inputs", {}).items():
+        _validate_child_input_path(path, parent_node_id, child_ref, node_id, key, child_node_id_set)
+
+
+def _validate_child_input_path(path: Any, parent_node_id: str, child_ref: str, node_id: str, key: str, child_node_id_set: Set[str]) -> None:
+    if not isinstance(path, str) or not path:
+        raise SavefileValidationError(
+            f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' node '{node_id}' input '{key}' path must be non-empty string"
+        )
+    if path.startswith(("state.input.", "state.working.", "state.memory.", "input.")):
+        return
+    if path.startswith("node."):
+        parts = path.split(".")
+        if len(parts) < 3:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' node '{node_id}' input '{key}' has invalid node path '{path}'"
+            )
+        ref_node_id = parts[1]
+        if ref_node_id not in child_node_id_set:
+            raise SavefileValidationError(
+                f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' node '{node_id}' input '{key}' references unknown child node '{ref_node_id}'"
+            )
+        return
+    raise SavefileValidationError(
+        f"Subcircuit node '{parent_node_id}' child circuit '{child_ref}' node '{node_id}' input '{key}' has unsupported path '{path}'"
+    )
+
+
 def _validate_subcircuit_nodes(savefile: Savefile) -> None:
     _validate_subcircuit_recursion(savefile)
+    node_id_set = {node.id for node in savefile.circuit.nodes}
     for node in savefile.circuit.nodes:
         if node.node_kind != "subcircuit":
             continue
         sub = node.execution["subcircuit"]
         child_ref = sub["child_circuit_ref"]
         child = _resolve_child_circuit_ref(savefile, child_ref)
-        child_nodes = child.get("nodes", [])
-        if not isinstance(child_nodes, list) or not child_nodes:
-            raise SavefileValidationError(f"Subcircuit node '{node.id}' child circuit '{child_ref}' must declare at least one node")
+        _validate_child_circuit_structure(savefile, node.id, child_ref, child)
+
         child_outputs = _child_output_names(child)
         if not child_outputs:
             raise SavefileValidationError(f"Subcircuit node '{node.id}' child circuit '{child_ref}' must declare outputs")
+
         output_binding = sub.get("output_binding", {})
+        if not output_binding:
+            raise SavefileValidationError(f"Subcircuit node '{node.id}' output_binding must not be empty")
         for parent_key, target in output_binding.items():
             if not isinstance(target, str) or not target.startswith("child.output."):
                 raise SavefileValidationError(f"Subcircuit node '{node.id}' output_binding '{parent_key}' must target child.output.*")
             child_name = target[len("child.output."):]
+            if child_name in ("", "*"):
+                raise SavefileValidationError(f"Subcircuit node '{node.id}' output_binding '{parent_key}' must not use wildcard child output")
             if child_name not in child_outputs:
                 raise SavefileValidationError(
                     f"Subcircuit node '{node.id}' references missing child output '{child_name}'"
                 )
+
         input_mapping = sub.get("input_mapping", {})
         if not input_mapping:
-            raise SavefileValidationError(f"Subcircuit node '{node.id}' must declare at least one input_mapping entry")
-        for key, path in input_mapping.items():
-            if not isinstance(path, str) or not path:
-                raise SavefileValidationError(f"Subcircuit node '{node.id}' input_mapping '{key}' must be non-empty string")
-            if path.startswith(("state.input.", "state.working.", "state.memory.", "input.")):
-                continue
-            if path.startswith("node."):
-                continue
-            raise SavefileValidationError(f"Subcircuit node '{node.id}' has unsupported input_mapping path '{path}'")
+            raise SavefileValidationError(f"Subcircuit node '{node.id}' input_mapping must not be empty")
+        for input_key, parent_path in input_mapping.items():
+            _validate_parent_path(parent_path, node.id, input_key, node_id_set)
