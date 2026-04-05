@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, Mapping
+
 MIXED_REFERENTIAL_ACTION = "MIXED_REFERENTIAL_ACTION"
 MIXED_REFERENTIAL_PROVIDER_CHANGE = "MIXED_REFERENTIAL_PROVIDER_CHANGE"
 MIXED_REFERENTIAL_PLUGIN_ATTACH = "MIXED_REFERENTIAL_PLUGIN_ATTACH"
@@ -99,3 +101,137 @@ def first_mixed_referential_reason_code_from_decision_ids(decision_ids) -> str |
         if is_mixed_referential_flag_type(decision_id):
             return reason_code_for_flag_type(decision_id)
     return None
+
+
+_ACTIVE_MIXED_REFERENTIAL_NOTE_KEYS = frozenset(
+    {
+        "active_mixed_referential_reason_code",
+        "active_mixed_referential_reason_stage",
+        "active_mixed_referential_reason_status",
+        "active_mixed_referential_reason_source_note_key",
+        "active_mixed_referential_reason_retention_state",
+    }
+)
+_MIXED_REFERENTIAL_REASON_HISTORY_KEY = "mixed_referential_reason_history"
+_MIXED_REFERENTIAL_REASON_HISTORY_RETENTION_LIMIT = 5
+
+
+def activate_mixed_referential_reason_notes(
+    notes: Mapping[str, Any],
+    *,
+    reason_code: str,
+    stage: str,
+    status: str,
+    source_note_key: str,
+) -> dict[str, Any]:
+    next_notes = dict(notes)
+    if not is_designer_mixed_referential_reason_code(reason_code):
+        return clear_active_mixed_referential_reason_notes(next_notes)
+    next_notes.update(
+        {
+            "active_mixed_referential_reason_code": reason_code,
+            "active_mixed_referential_reason_stage": stage,
+            "active_mixed_referential_reason_status": status,
+            "active_mixed_referential_reason_source_note_key": source_note_key,
+            "active_mixed_referential_reason_retention_state": "active",
+        }
+    )
+    return next_notes
+
+
+def clear_active_mixed_referential_reason_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    next_notes = dict(notes)
+    for key in _ACTIVE_MIXED_REFERENTIAL_NOTE_KEYS:
+        next_notes.pop(key, None)
+    return next_notes
+
+
+def clear_transient_mixed_referential_reason_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    next_notes = clear_active_mixed_referential_reason_notes(notes)
+    if is_designer_mixed_referential_reason_code(str(next_notes.get("last_attempt_reason_code", ""))):
+        next_notes.pop("last_attempt_reason_code", None)
+        next_notes.pop("last_attempt_stage", None)
+        next_notes.pop("last_attempt_outcome", None)
+    if is_designer_mixed_referential_reason_code(str(next_notes.get("last_revision_reason_code", ""))):
+        next_notes.pop("last_revision_reason_code", None)
+    return next_notes
+
+
+def archive_latest_mixed_referential_reason_notes(
+    notes: Mapping[str, Any],
+    *,
+    retention_state: str,
+    commit_id: str | None = None,
+    request_text: str | None = None,
+) -> dict[str, Any]:
+    next_notes = dict(notes)
+    latest = _latest_mixed_referential_reason_note_context(next_notes)
+    if latest is None:
+        return clear_transient_mixed_referential_reason_notes(next_notes)
+
+    entry = {
+        "reason_code": latest["reason_code"],
+        "stage": latest["stage"],
+        "status": latest["status"],
+        "retention_state": retention_state,
+    }
+    if commit_id is not None:
+        entry["commit_id"] = commit_id
+    if request_text is not None and request_text.strip():
+        entry["request_text"] = request_text.strip()
+
+    next_notes[_MIXED_REFERENTIAL_REASON_HISTORY_KEY] = _rotate_mixed_referential_reason_history(
+        next_notes.get(_MIXED_REFERENTIAL_REASON_HISTORY_KEY),
+        entry,
+    )
+    next_notes["last_mixed_referential_reason_code"] = latest["reason_code"]
+    next_notes["last_mixed_referential_reason_stage"] = latest["stage"]
+    next_notes["last_mixed_referential_reason_status"] = latest["status"]
+    next_notes["last_mixed_referential_reason_retention_state"] = retention_state
+    return clear_transient_mixed_referential_reason_notes(next_notes)
+
+
+def _latest_mixed_referential_reason_note_context(notes: Mapping[str, Any]) -> dict[str, str] | None:
+    active_reason_code = str(notes.get("active_mixed_referential_reason_code", ""))
+    if is_designer_mixed_referential_reason_code(active_reason_code):
+        return {
+            "reason_code": active_reason_code,
+            "stage": str(notes.get("active_mixed_referential_reason_stage", "unknown")),
+            "status": str(notes.get("active_mixed_referential_reason_status", "unknown")),
+        }
+
+    revision_reason_code = str(notes.get("last_revision_reason_code", ""))
+    if is_designer_mixed_referential_reason_code(revision_reason_code):
+        return {
+            "reason_code": revision_reason_code,
+            "stage": "approval_revision",
+            "status": "revision_requested",
+        }
+
+    attempt_reason_code = str(notes.get("last_attempt_reason_code", ""))
+    if is_designer_mixed_referential_reason_code(attempt_reason_code):
+        return {
+            "reason_code": attempt_reason_code,
+            "stage": str(notes.get("last_attempt_stage", "unknown")),
+            "status": str(notes.get("last_attempt_outcome", "unknown")),
+        }
+    return None
+
+
+def _rotate_mixed_referential_reason_history(existing_history: Any, latest_entry: Mapping[str, Any]) -> list[dict[str, Any]]:
+    history: list[dict[str, Any]] = []
+    if isinstance(existing_history, list):
+        history = [dict(item) for item in existing_history if isinstance(item, Mapping)]
+    deduped = [
+        dict(item)
+        for item in history
+        if not (
+            str(item.get("reason_code", "")) == str(latest_entry.get("reason_code", ""))
+            and str(item.get("stage", "")) == str(latest_entry.get("stage", ""))
+            and str(item.get("status", "")) == str(latest_entry.get("status", ""))
+            and str(item.get("retention_state", "")) == str(latest_entry.get("retention_state", ""))
+            and str(item.get("commit_id", "")) == str(latest_entry.get("commit_id", ""))
+        )
+    ]
+    rotated = [dict(latest_entry), *deduped]
+    return rotated[:_MIXED_REFERENTIAL_REASON_HISTORY_RETENTION_LIMIT]

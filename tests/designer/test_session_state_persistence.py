@@ -356,6 +356,9 @@ def test_approval_revision_requested_propagates_mixed_referential_reason_code_in
 
     assert updated.revision_state.retry_reason == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
     assert updated.notes["last_revision_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert updated.notes["active_mixed_referential_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert updated.notes["active_mixed_referential_reason_stage"] == "approval_revision"
+    assert updated.notes["active_mixed_referential_reason_status"] == "revision_requested"
     assert "reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE" in updated.conversation_context.unresolved_questions[-1]
 
 def test_persisted_commit_candidate_state_round_trips_and_builder_surfaces_resume_hint() -> None:
@@ -440,6 +443,59 @@ def test_cleanup_after_commit_clears_resume_state_and_preserves_revision_history
     assert restored_approval.current_stage == "committed"
 
 
+def test_cleanup_after_commit_archives_mixed_referential_reason_context() -> None:
+    working_save = make_working_save()
+    card = replace(
+        make_card(),
+        notes={
+            **make_card().notes,
+            "last_revision_reason_code": "MIXED_REFERENTIAL_PROVIDER_CHANGE",
+            "active_mixed_referential_reason_code": "MIXED_REFERENTIAL_PROVIDER_CHANGE",
+            "active_mixed_referential_reason_stage": "approval_revision",
+            "active_mixed_referential_reason_status": "revision_requested",
+            "active_mixed_referential_reason_source_note_key": "last_revision_reason_code",
+            "active_mixed_referential_reason_retention_state": "active",
+        },
+        conversation_context=replace(
+            make_card().conversation_context,
+            user_request_text="Undo the last change and switch provider in node reviewer to Claude",
+        ),
+    )
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    state = coordinator.create_state(bundle)
+    approved = coordinator.resolve(
+        state,
+        tuple(UserDecision(decision_point_id=point.decision_id, outcome="approve") for point in state.required_decision_points),
+    )
+    applier = DesignerPatchApplier()
+    application = applier.apply_bundle(working_save, bundle)
+    candidate_state = applier.build_commit_candidate_state(application, approved, source_working_save_ref="ws-001")
+    persisted = persist_designer_session_state(
+        application.candidate_working_save,
+        session_state_card=card,
+        approval_flow_state=approved,
+        commit_candidate_state=candidate_state,
+    )
+
+    cleaned = DesignerCommitGateway(coordinator=coordinator).commit_persisted_candidate(
+        persisted,
+        commit_id="commit-mixed-archive-1",
+    ).cleaned_candidate_working_save
+
+    cleaned_card = load_persisted_session_state_card(cleaned)
+    assert cleaned_card is not None
+    assert cleaned_card.notes["last_mixed_referential_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert cleaned_card.notes["last_mixed_referential_reason_retention_state"] == "committed_history"
+    assert cleaned_card.notes["mixed_referential_reason_history"][0]["commit_id"] == "commit-mixed-archive-1"
+    assert cleaned_card.notes["mixed_referential_reason_history"][0]["retention_state"] == "committed_history"
+    assert cleaned_card.notes["mixed_referential_reason_history"][0]["request_text"] == "Undo the last change and switch provider in node reviewer to Claude"
+    assert "active_mixed_referential_reason_code" not in cleaned_card.notes
+    assert "last_revision_reason_code" not in cleaned_card.notes
+
+
+
 def test_new_request_after_commit_starts_fresh_cycle_from_committed_baseline() -> None:
     working_save = make_working_save()
     base_card = make_card()
@@ -458,6 +514,12 @@ def test_new_request_after_commit_starts_fresh_cycle_from_committed_baseline() -
             "fresh_cycle_from_committed_baseline": True,
             "fresh_cycle_request_text": "Old request that should not survive.",
             "active_baseline_commit_id": "older-commit",
+            "last_revision_reason_code": "MIXED_REFERENTIAL_PROVIDER_CHANGE",
+            "active_mixed_referential_reason_code": "MIXED_REFERENTIAL_PROVIDER_CHANGE",
+            "active_mixed_referential_reason_stage": "approval_revision",
+            "active_mixed_referential_reason_status": "revision_requested",
+            "active_mixed_referential_reason_source_note_key": "last_revision_reason_code",
+            "active_mixed_referential_reason_retention_state": "active",
         },
     )
     flow = DesignerProposalFlow()
@@ -505,6 +567,13 @@ def test_new_request_after_commit_starts_fresh_cycle_from_committed_baseline() -
     assert rebuilt.notes["fresh_cycle_baseline_commit_id"] == "commit-fresh-1"
     assert rebuilt.notes["fresh_cycle_request_text"] == "Optimize node reviewer to reduce cost"
     assert rebuilt.notes["fresh_cycle_housekeeping_applied"] is True
+    assert rebuilt.notes["last_mixed_referential_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert rebuilt.notes["last_mixed_referential_reason_retention_state"] == "committed_history"
+    assert rebuilt.notes["mixed_referential_reason_history"][0]["retention_state"] == "committed_history"
+    assert rebuilt.notes["mixed_referential_reason_history"][0]["reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert rebuilt.notes["mixed_referential_reason_history"][0]["request_text"] == "Change provider in node answerer to Claude"
+    assert "active_mixed_referential_reason_code" not in rebuilt.notes
+    assert "last_revision_reason_code" not in rebuilt.notes
     assert "active_baseline_commit_id" not in rebuilt.notes
     assert next_bundle.intent.target_scope.node_refs == ("node.reviewer",)
 
@@ -706,3 +775,6 @@ def test_control_plane_persists_mixed_referential_attempt_reason_code_into_sessi
     assert updated.notes["last_attempt_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
     assert updated.notes["last_attempt_stage"] == "precheck"
     assert updated.notes["last_attempt_outcome"] == "confirmation_required"
+    assert updated.notes["active_mixed_referential_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert updated.notes["active_mixed_referential_reason_stage"] == "precheck"
+    assert updated.notes["active_mixed_referential_reason_status"] == "confirmation_required"

@@ -32,6 +32,7 @@ from src.designer.models.designer_session_state_card import (
     SessionTargetScope,
     WorkingSaveReality,
 )
+from src.designer.reason_codes import archive_latest_mixed_referential_reason_notes
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import DesignerDraftModel, WorkingSaveModel
 
@@ -530,6 +531,12 @@ def cleanup_designer_session_state_after_commit(
                 or key.startswith("active_baseline_")
             )
         }
+        cleaned_notes = archive_latest_mixed_referential_reason_notes(
+            cleaned_notes,
+            retention_state="committed_history",
+            commit_id=commit_snapshot.meta.commit_id,
+            request_text=persisted_card.conversation_context.user_request_text,
+        )
         committed_summary_entry = _build_committed_summary_entry(
             commit_snapshot=commit_snapshot,
             committed_approval_state=committed_approval_state,

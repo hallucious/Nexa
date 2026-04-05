@@ -200,3 +200,6 @@ def test_control_plane_tracks_mixed_referential_reason_code_in_attempt_history()
     assert result.updated_session_state_card is not None
     assert result.updated_session_state_card.revision_state.attempt_history[-1].reason_code == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
     assert result.updated_session_state_card.notes["last_attempt_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert result.updated_session_state_card.notes["active_mixed_referential_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert result.updated_session_state_card.notes["active_mixed_referential_reason_stage"] == "precheck"
+    assert result.updated_session_state_card.notes["active_mixed_referential_reason_status"] == "confirmation_required"

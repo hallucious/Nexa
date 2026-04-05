@@ -13,7 +13,12 @@ from src.designer.models.designer_session_state_card import (
     RevisionState,
     SessionTargetScope,
 )
-from src.designer.reason_codes import first_mixed_referential_reason_code_from_decision_ids
+from src.designer.reason_codes import (
+    activate_mixed_referential_reason_notes,
+    clear_active_mixed_referential_reason_notes,
+    first_mixed_referential_reason_code_from_decision_ids,
+    is_designer_mixed_referential_reason_code,
+)
 
 
 class DesignerSessionStateCoordinator:
@@ -97,6 +102,26 @@ class DesignerSessionStateCoordinator:
         )
 
         latest_attempt = control_state.history[-1] if control_state.history else None
+        next_notes = {
+            **session_state_card.notes,
+            "last_control_action": control_state.next_action,
+            "last_terminal_status": control_state.terminal_status,
+            **({
+                "last_attempt_reason_code": latest_attempt.reason_code,
+                "last_attempt_stage": latest_attempt.stage,
+                "last_attempt_outcome": latest_attempt.outcome,
+            } if latest_attempt is not None else {}),
+        }
+        if latest_attempt is not None and is_designer_mixed_referential_reason_code(latest_attempt.reason_code):
+            next_notes = activate_mixed_referential_reason_notes(
+                next_notes,
+                reason_code=latest_attempt.reason_code,
+                stage=latest_attempt.stage,
+                status=latest_attempt.outcome,
+                source_note_key="last_attempt_reason_code",
+            )
+        else:
+            next_notes = clear_active_mixed_referential_reason_notes(next_notes)
         return replace(
             session_state_card,
             target_scope=next_scope,
@@ -104,16 +129,7 @@ class DesignerSessionStateCoordinator:
             revision_state=next_revision,
             approval_state=next_approval,
             conversation_context=next_conversation,
-            notes={
-                **session_state_card.notes,
-                "last_control_action": control_state.next_action,
-                "last_terminal_status": control_state.terminal_status,
-                **({
-                    "last_attempt_reason_code": latest_attempt.reason_code,
-                    "last_attempt_stage": latest_attempt.stage,
-                    "last_attempt_outcome": latest_attempt.outcome,
-                } if latest_attempt is not None else {}),
-            },
+            notes=next_notes,
         )
 
     def _next_unresolved_questions(
@@ -234,8 +250,16 @@ class DesignerSessionStateCoordinator:
         next_notes["last_approval_outcome"] = approval_state.final_outcome
         if mixed_revision_reason_code is not None:
             next_notes["last_revision_reason_code"] = mixed_revision_reason_code
+            next_notes = activate_mixed_referential_reason_notes(
+                next_notes,
+                reason_code=mixed_revision_reason_code,
+                stage="approval_revision",
+                status=approval_state.final_outcome,
+                source_note_key="last_revision_reason_code",
+            )
         else:
             next_notes.pop("last_revision_reason_code", None)
+            next_notes = clear_active_mixed_referential_reason_notes(next_notes)
 
         return replace(
             session_state_card,

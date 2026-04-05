@@ -342,3 +342,5 @@ CLI
 * mixed referential reason-style codes are now centralized in `src/designer/reason_codes.py` and remain Designer-bounded instead of being promoted prematurely into the shared global reason-code catalog
 
 * approval-resolution revision flow now preserves Designer-bounded mixed referential reason codes in `revision_state.retry_reason` and `notes.last_revision_reason_code` instead of collapsing back to a generic approval revision marker
+
+* mixed referential reason retention is now lifecycle-bounded: live cycles use active session-note markers, post-commit cleanup demotes them into compact history-only notes, and fresh unrelated cycles clear transient mixed-reason markers so stale rollback/edit ambiguity does not bleed into new requests

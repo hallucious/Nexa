@@ -5,6 +5,7 @@ from typing import Any
 
 from src.contracts.nex_contract import COMMIT_SNAPSHOT_ROLE, WORKING_SAVE_ROLE
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
+from src.designer.reason_codes import archive_latest_mixed_referential_reason_notes
 from src.designer.models.designer_session_state_card import (
     ApprovalState,
     AvailableResources,
@@ -102,7 +103,10 @@ class DesignerSessionStateCardBuilder:
         notes = dict(persisted_card.notes) if persisted_card is not None else {}
         notes = self._apply_committed_summary_exposure_policy(notes)
         if fresh_cycle_from_committed_baseline:
-            notes = self._prepare_notes_for_fresh_cycle_from_committed_baseline(notes)
+            notes = self._prepare_notes_for_fresh_cycle_from_committed_baseline(
+                notes,
+                previous_request_text=(persisted_card.conversation_context.user_request_text if persisted_card is not None else None),
+            )
             notes.update({
                 "fresh_cycle_from_committed_baseline": True,
                 "fresh_cycle_request_text": request_text.strip(),
@@ -276,10 +280,20 @@ class DesignerSessionStateCardBuilder:
         })
         return cleaned
 
-    def _prepare_notes_for_fresh_cycle_from_committed_baseline(self, notes: dict[str, Any]) -> dict[str, Any]:
+    def _prepare_notes_for_fresh_cycle_from_committed_baseline(
+        self,
+        notes: dict[str, Any],
+        *,
+        previous_request_text: str | None,
+    ) -> dict[str, Any]:
+        archived = archive_latest_mixed_referential_reason_notes(
+            notes,
+            retention_state="fresh_cycle_history",
+            request_text=previous_request_text,
+        )
         cleaned = {
             key: value
-            for key, value in notes.items()
+            for key, value in archived.items()
             if not (key.startswith("fresh_cycle_") or key.startswith("resume_commit_candidate_") or key.startswith("active_baseline_"))
         }
         return cleaned
