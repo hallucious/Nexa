@@ -380,7 +380,9 @@ def test_cleanup_after_commit_clears_resume_state_and_preserves_revision_history
     assert cleaned_card.revision_state.attempt_history[0].reason_code == "DESIGNER-PRECHECK-BLOCKED"
     assert cleaned_card.notes["post_commit_cleanup_applied"] is True
     assert cleaned_card.notes["last_commit_id"] == "commit-clean-1"
+    assert cleaned_card.notes["committed_summary_housekeeping_applied"] is True
     assert "resume_commit_candidate_ready" not in cleaned_card.notes
+    assert "fresh_cycle_from_committed_baseline" not in cleaned_card.notes
     assert load_persisted_commit_candidate_state(cleaned) is None
     assert load_persisted_proposal_control_state(cleaned) is None
     restored_approval = load_persisted_approval_flow_state(cleaned)
@@ -402,6 +404,11 @@ def test_new_request_after_commit_starts_fresh_cycle_from_committed_baseline() -
             clarified_interpretation="Only change provider in node answerer.",
             unresolved_questions=("Interpretation still pending.",),
         ),
+        notes={
+            "fresh_cycle_from_committed_baseline": True,
+            "fresh_cycle_request_text": "Old request that should not survive.",
+            "active_baseline_commit_id": "older-commit",
+        },
     )
     flow = DesignerProposalFlow()
     bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
@@ -446,5 +453,48 @@ def test_new_request_after_commit_starts_fresh_cycle_from_committed_baseline() -
     assert rebuilt.conversation_context.unresolved_questions == ()
     assert rebuilt.notes["fresh_cycle_from_committed_baseline"] is True
     assert rebuilt.notes["fresh_cycle_baseline_commit_id"] == "commit-fresh-1"
+    assert rebuilt.notes["fresh_cycle_request_text"] == "Optimize node reviewer to reduce cost"
+    assert rebuilt.notes["fresh_cycle_housekeeping_applied"] is True
+    assert "active_baseline_commit_id" not in rebuilt.notes
     assert next_bundle.intent.target_scope.node_refs == ("node.reviewer",)
 
+
+
+def test_repeat_fresh_cycle_housekeeping_replaces_stale_markers() -> None:
+    working_save = make_working_save()
+    card = replace(
+        make_card(),
+        notes={
+            "last_commit_id": "commit-repeat-2",
+            "post_commit_cleanup_applied": True,
+            "fresh_cycle_from_committed_baseline": True,
+            "fresh_cycle_request_text": "stale request",
+            "fresh_cycle_baseline_commit_id": "commit-repeat-1",
+            "active_baseline_commit_id": "commit-repeat-1",
+        },
+    )
+    committed_approval = DesignerApprovalCoordinator().mark_committed(
+        DesignerApprovalCoordinator().resolve(
+            DesignerApprovalCoordinator().create_state(
+                DesignerProposalFlow().propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+            ),
+            tuple(
+                UserDecision(decision_point_id=point.decision_id, outcome="approve")
+                for point in DesignerApprovalCoordinator().create_state(
+                    DesignerProposalFlow().propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+                ).required_decision_points
+            ),
+        )
+    )
+    persisted = persist_designer_session_state(working_save, session_state_card=card, approval_flow_state=committed_approval)
+
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Create a cheaper review path for node answerer",
+        artifact=persisted,
+    )
+
+    assert rebuilt.notes["fresh_cycle_from_committed_baseline"] is True
+    assert rebuilt.notes["fresh_cycle_request_text"] == "Create a cheaper review path for node answerer"
+    assert rebuilt.notes["fresh_cycle_baseline_commit_id"] == "commit-repeat-2"
+    assert rebuilt.notes["post_commit_cleanup_applied"] is True
+    assert "active_baseline_commit_id" not in rebuilt.notes

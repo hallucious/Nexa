@@ -99,10 +99,12 @@ class DesignerSessionStateCardBuilder:
         persisted_conversation = persisted_card.conversation_context if persisted_card is not None else None
         notes = dict(persisted_card.notes) if persisted_card is not None else {}
         if fresh_cycle_from_committed_baseline:
+            notes = self._prepare_notes_for_fresh_cycle_from_committed_baseline(notes)
             notes.update({
                 "fresh_cycle_from_committed_baseline": True,
                 "fresh_cycle_request_text": request_text.strip(),
                 "fresh_cycle_baseline_commit_id": notes.get("last_commit_id"),
+                "fresh_cycle_housekeeping_applied": True,
             })
         if persisted_candidate is not None:
             notes.update({
@@ -229,6 +231,15 @@ class DesignerSessionStateCardBuilder:
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:12]
         return f"{prefix}-{digest}"
 
+
+
+    def _prepare_notes_for_fresh_cycle_from_committed_baseline(self, notes: dict[str, Any]) -> dict[str, Any]:
+        cleaned = {
+            key: value
+            for key, value in notes.items()
+            if not (key.startswith("fresh_cycle_") or key.startswith("resume_commit_candidate_") or key.startswith("active_baseline_"))
+        }
+        return cleaned
 
     def _should_start_fresh_cycle_from_committed_baseline(
         self,

@@ -520,7 +520,11 @@ def cleanup_designer_session_state_after_commit(
         cleaned_notes = {
             key: value
             for key, value in dict(persisted_card.notes).items()
-            if not key.startswith("resume_commit_candidate_")
+            if not (
+                key.startswith("resume_commit_candidate_")
+                or key.startswith("fresh_cycle_")
+                or key.startswith("active_baseline_")
+            )
         }
         cleaned_notes.update(
             {
@@ -531,6 +535,7 @@ def cleanup_designer_session_state_after_commit(
                 "last_committed_patch_ref": (persisted_candidate.patch_ref if persisted_candidate is not None else committed_approval_state.patch_ref),
                 "last_approval_stage": committed_approval_state.current_stage,
                 "last_approval_outcome": committed_approval_state.final_outcome,
+                "committed_summary_housekeeping_applied": True,
             }
         )
         cleaned_card = replace(

@@ -31,6 +31,8 @@ Official rule:
 It may also surface persisted approval-ready continuation hints through notes when a commit candidate can be resumed explicitly.
 After successful commit, approval-ready continuation must be reduced into a post-commit summary rather than left as a stale resume path.
 A new Designer request after commit must start a fresh proposal cycle from the committed baseline instead of inheriting consumed continuation scope, clarification, or revision state.
+Repeated fresh cycles must rotate fresh-cycle markers so stale baseline/request markers do not survive into later cycles.
+Successful commit must remove stale fresh-cycle markers and reduce them back into compact committed-summary notes.
 - Designer AI produces proposals from this card.
 - Designer AI must not silently assume hidden structure or hidden authority.
 

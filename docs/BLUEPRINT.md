@@ -487,3 +487,6 @@ Representation {
 
 
 * Storage runtime linkage implemented in code: Commit Snapshot–anchored Execution Record creation and Working Save last-run update can now be driven from one lifecycle path
+
+
+- repeat-cycle housekeeping semantics now rotate stale fresh-cycle markers and reduce them back into compact committed-summary notes after successful commit
