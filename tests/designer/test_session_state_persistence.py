@@ -969,3 +969,45 @@ def test_approval_revision_requested_from_governance_decision_persists_anchor_gu
     assert "explicit commit anchor" in updated.notes["control_governance_last_revision_guidance"]
     assert any("explicit commit anchor" in item for item in updated.conversation_context.unresolved_questions)
 
+
+
+
+def test_persisted_session_rebuild_relaxes_strict_governance_one_tier_after_anchored_resolution_attempt() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-governance-cooldown-rebuild",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change on node reviewer"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(
+            revision_index=3,
+            attempt_history=(
+                RevisionAttemptSummary(1, "precheck", "confirmation_required", "DESIGNER-CONFIRMATION-REQUIRED", "confirm"),
+                RevisionAttemptSummary(2, "precheck", "confirmation_required", "DESIGNER-CONFIRMATION-REQUIRED", "confirm"),
+                RevisionAttemptSummary(3, "preview", "ready_for_approval", "DESIGNER-GOVERNANCE-STRICT-ANCHORED-READY", "anchored"),
+            ),
+        ),
+        conversation_context=ConversationContext(user_request_text="Undo the last change on node reviewer"),
+        notes={
+            "control_governance_policy_tier": "strict",
+            "control_governance_requires_explicit_referential_anchor": True,
+        },
+    )
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=card)
+
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Undo the last change on node reviewer",
+        artifact=persisted,
+    )
+
+    assert rebuilt.notes["control_governance_policy_tier"] == "elevated"
+    assert rebuilt.notes["control_governance_transition_rule"] == "anchored_resolution_cooldown"
+    assert rebuilt.notes["control_governance_resolution_state"] == "partial_relief"

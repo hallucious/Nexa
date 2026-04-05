@@ -203,3 +203,66 @@ def test_control_plane_tracks_mixed_referential_reason_code_in_attempt_history()
     assert result.updated_session_state_card.notes["active_mixed_referential_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
     assert result.updated_session_state_card.notes["active_mixed_referential_reason_stage"] == "precheck"
     assert result.updated_session_state_card.notes["active_mixed_referential_reason_status"] == "confirmation_required"
+
+
+def test_control_plane_deescalates_strict_governance_to_elevated_after_anchored_resolution() -> None:
+    controller = DesignerProposalControlPlane()
+    card = make_card()
+    card = DesignerSessionStateCard(
+        **{
+            **card.__dict__,
+            "conversation_context": ConversationContext(user_request_text="Undo the last change on node reviewer"),
+            "notes": {
+                "commit_summary_history": [
+                    {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+                ],
+                "control_governance_policy_tier": "strict",
+                "control_governance_requires_explicit_referential_anchor": True,
+                "control_governance_precheck_message": "Repeated referential ambiguity has triggered strict governance mode. Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before approval can continue safely.",
+                "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+            },
+        }
+    )
+
+    result = controller.run(
+        "Undo the last change on node reviewer",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert result.updated_session_state_card is not None
+    assert result.control_state.history[-1].reason_code == "DESIGNER-GOVERNANCE-STRICT-ANCHORED-CONFIRMATION"
+    assert result.updated_session_state_card.notes["control_governance_policy_tier"] == "elevated"
+    assert result.updated_session_state_card.notes["control_governance_transition_direction"] == "deescalated"
+    assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "anchored_resolution_cooldown"
+    assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "partial_relief"
+
+
+def test_control_plane_holds_strict_governance_until_explicit_anchor_resolution() -> None:
+    controller = DesignerProposalControlPlane()
+    card = make_card()
+    card = DesignerSessionStateCard(
+        **{
+            **card.__dict__,
+            "conversation_context": ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+            "notes": {
+                "control_governance_policy_tier": "strict",
+                "control_governance_requires_explicit_referential_anchor": True,
+                "control_governance_precheck_message": "Repeated referential ambiguity has triggered strict governance mode. Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before approval can continue safely.",
+                "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+            },
+        }
+    )
+
+    result = controller.run(
+        "Change provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert result.updated_session_state_card is not None
+    assert result.control_state.history[-1].reason_code == "DESIGNER-CONFIRMATION-REQUIRED"
+    assert result.updated_session_state_card.notes["control_governance_policy_tier"] == "strict"
+    assert result.updated_session_state_card.notes["control_governance_transition_direction"] == "held"
+    assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "hold_until_explicit_anchor_resolution"
+    assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "awaiting_explicit_anchor_resolution"

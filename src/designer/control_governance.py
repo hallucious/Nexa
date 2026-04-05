@@ -34,7 +34,19 @@ _GOVERNANCE_NOTE_KEYS = frozenset(
         "control_governance_thresholds",
         "control_governance_transition_direction",
         "control_governance_transition_summary",
+        "control_governance_transition_rule",
         "control_governance_previous_tier",
+        "control_governance_resolution_state",
+        "control_governance_resolution_message",
+    }
+)
+
+_ANCHORED_RESOLUTION_REASON_CODES = frozenset(
+    {
+        "DESIGNER-GOVERNANCE-ELEVATED-ANCHORED-READY",
+        "DESIGNER-GOVERNANCE-STRICT-ANCHORED-READY",
+        "DESIGNER-GOVERNANCE-ELEVATED-ANCHORED-CONFIRMATION",
+        "DESIGNER-GOVERNANCE-STRICT-ANCHORED-CONFIRMATION",
     }
 )
 
@@ -97,13 +109,20 @@ def apply_control_governance_notes(
         recent_attempts,
         predicate=lambda item: item.outcome == "confirmation_required",
     )
-    policy = _derive_control_governance_policy(
+    previous_policy = load_control_governance_policy(notes)
+    base_policy = _derive_control_governance_policy(
         repeated_reason_count=repeated_reason_count,
         confirmation_loop_count=confirmation_loop_count,
     )
-    previous_tier = str(notes.get("control_governance_policy_tier", "standard"))
-    transition_direction = _tier_transition_direction(previous_tier, policy.tier)
-    transition_summary = _tier_transition_summary(previous_tier, policy.tier, transition_direction)
+    (
+        policy,
+        transition_direction,
+        transition_summary,
+        transition_rule,
+        resolution_state,
+        resolution_message,
+    ) = _apply_policy_transition(previous_policy=previous_policy, base_policy=base_policy, latest_attempt=latest)
+    previous_tier = previous_policy.tier
 
     next_notes.update(
         {
@@ -147,6 +166,9 @@ def apply_control_governance_notes(
             "control_governance_previous_tier": previous_tier,
             "control_governance_transition_direction": transition_direction,
             "control_governance_transition_summary": transition_summary,
+            "control_governance_transition_rule": transition_rule,
+            "control_governance_resolution_state": resolution_state,
+            "control_governance_resolution_message": resolution_message,
         }
     )
     return next_notes
@@ -294,6 +316,94 @@ def governance_revision_guidance_from_notes(notes: Mapping[str, Any]) -> str:
     return ""
 
 
+def governance_anchored_progress_reason_code_from_issue_codes(
+    issue_codes: Sequence[str],
+    *,
+    outcome: str,
+) -> str | None:
+    suffix = "READY" if outcome == "ready_for_approval" else "CONFIRMATION"
+    for code in issue_codes:
+        if code == "REFERENTIAL_GOVERNANCE_STRICT_ANCHORED":
+            return f"DESIGNER-GOVERNANCE-STRICT-ANCHORED-{suffix}"
+        if code == "REFERENTIAL_GOVERNANCE_ELEVATED_ANCHORED":
+            return f"DESIGNER-GOVERNANCE-ELEVATED-ANCHORED-{suffix}"
+    return None
+
+
+def _apply_policy_transition(
+    *,
+    previous_policy: ControlGovernancePolicy,
+    base_policy: ControlGovernancePolicy,
+    latest_attempt: RevisionAttemptSummary,
+) -> tuple[ControlGovernancePolicy, str, str, str, str, str]:
+    if base_policy.tier != "standard":
+        direction = _tier_transition_direction(previous_policy.tier, base_policy.tier)
+        return (
+            base_policy,
+            direction,
+            _tier_transition_summary(previous_policy.tier, base_policy.tier, direction),
+            "repeat_confirmation_threshold",
+            "active_repeat_pressure",
+            "Recent repeated confirmation pressure still exceeds the escalation threshold.",
+        )
+
+    if previous_policy.requires_explicit_referential_anchor and previous_policy.tier in {"elevated", "strict"}:
+        if latest_attempt.reason_code in _ANCHORED_RESOLUTION_REASON_CODES:
+            if previous_policy.tier == "strict":
+                policy = _anchored_cooldown_policy(previous_tier="strict")
+                direction = _tier_transition_direction(previous_policy.tier, policy.tier)
+                return (
+                    policy,
+                    direction,
+                    "Control governance deescalated from strict to elevated after an anchored referential request resolved the current cycle, but one cooldown tier is retained for the next cycle.",
+                    "anchored_resolution_cooldown",
+                    "partial_relief",
+                    "An explicit anchor resolved the latest strict-cycle request, so governance has relaxed by one tier but remains elevated during cooldown.",
+                )
+            direction = _tier_transition_direction(previous_policy.tier, "standard")
+            return (
+                ControlGovernancePolicy(),
+                direction,
+                "Control governance returned to standard after an anchored referential request resolved the elevated cycle.",
+                "anchored_resolution_cleared",
+                "cleared",
+                "An explicit anchor resolved the elevated referential cycle, so the temporary anchor requirement has been cleared.",
+            )
+
+        return (
+            previous_policy,
+            "held",
+            f"Control governance remains in {previous_policy.tier} mode until a referential request is resolved with an explicit anchor.",
+            "hold_until_explicit_anchor_resolution",
+            "awaiting_explicit_anchor_resolution",
+            "Recent ambiguity pressure has eased, but governance remains active because no explicit anchored referential resolution has been observed yet.",
+        )
+
+    direction = _tier_transition_direction(previous_policy.tier, base_policy.tier)
+    return (
+        base_policy,
+        direction,
+        _tier_transition_summary(previous_policy.tier, base_policy.tier, direction),
+        "baseline",
+        "standard",
+        "No elevated referential governance remains active.",
+    )
+
+
+def _anchored_cooldown_policy(*, previous_tier: str) -> ControlGovernancePolicy:
+    if previous_tier == "strict":
+        return ControlGovernancePolicy(
+            tier="elevated",
+            interpretation_safety_mode="explicit_referential_anchor_required",
+            requires_explicit_referential_anchor=True,
+            reason="A recent anchored referential resolution reduced strict governance into a one-tier cooldown state, so explicit anchors are still preferred for the next cycle.",
+            precheck_message="Strict referential ambiguity was resolved once with an explicit anchor. Governance remains elevated during cooldown, so keep the next referential request explicit as well.",
+            preview_hint="Referential governance has relaxed from strict to elevated after an anchored resolution, but the next cycle should still keep commit/node selectors explicit.",
+            next_actions=("provide_explicit_anchor", "review_explicit_anchor"),
+        )
+    return ControlGovernancePolicy()
+
+
 def _policy_defaults_for_tier(tier: str) -> ControlGovernancePolicy:
     if tier == "strict":
         return ControlGovernancePolicy(
@@ -370,4 +480,6 @@ def _tier_transition_summary(previous_tier: str, current_tier: str, direction: s
         return f"Control governance escalated from {previous_tier} to {current_tier} based on recent repeated confirmation patterns."
     if direction == "deescalated":
         return f"Control governance deescalated from {previous_tier} to {current_tier} after recent repeated confirmation pressure eased."
+    if direction == "held":
+        return f"Control governance remains in {current_tier} mode until an explicit anchored referential resolution is observed."
     return f"Control governance remains in {current_tier} mode."

@@ -12,6 +12,7 @@ from src.designer.models.designer_session_state_card import DesignerSessionState
 from src.designer.proposal_flow import DesignerProposalBundle, DesignerProposalFlow
 from src.designer.reason_codes import first_mixed_referential_reason_from_findings
 from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
+from src.designer.control_governance import governance_anchored_progress_reason_code_from_issue_codes
 
 
 class DesignerProposalControlPlane:
@@ -169,6 +170,13 @@ class DesignerProposalControlPlane:
             confirmation_reason_code, confirmation_message = first_mixed_referential_reason_from_findings(
                 bundle.precheck.confirmation_findings
             )
+            anchored_progress_reason_code = governance_anchored_progress_reason_code_from_issue_codes(
+                tuple(f.issue_code for f in bundle.precheck.warning_findings),
+                outcome="confirmation_required",
+            )
+            if confirmation_reason_code is None and anchored_progress_reason_code is not None:
+                confirmation_reason_code = anchored_progress_reason_code
+                confirmation_message = "The proposal still needs confirmation for non-governance reasons, but the current referential anchor is explicit enough to relax governance by one tier."
             next_state = replace(
                 state,
                 current_stage="approval_boundary",
@@ -194,6 +202,14 @@ class DesignerProposalControlPlane:
                 explanation="The proposal is previewable but cannot advance until ambiguity or confirmation is explicitly resolved.",
             )
 
+        governance_ready_reason_code = governance_anchored_progress_reason_code_from_issue_codes(
+            tuple(f.issue_code for f in bundle.precheck.warning_findings),
+            outcome="ready_for_approval",
+        )
+        governance_ready_message = {
+            "DESIGNER-GOVERNANCE-STRICT-ANCHORED-READY": "Proposal bundle passed into the approval boundary after resolving the strict referential cycle with an explicit anchor.",
+            "DESIGNER-GOVERNANCE-ELEVATED-ANCHORED-READY": "Proposal bundle passed into the approval boundary after resolving the elevated referential cycle with an explicit anchor.",
+        }.get(governance_ready_reason_code, "Proposal bundle passed into the approval boundary.")
         next_state = replace(
             state,
             current_stage="approval_boundary",
@@ -207,8 +223,8 @@ class DesignerProposalControlPlane:
                     attempt_index=next_attempt_index,
                     stage="preview",
                     outcome="ready_for_approval",
-                    reason_code="DESIGNER-READY-FOR-APPROVAL",
-                    message="Proposal bundle passed into the approval boundary.",
+                    reason_code=governance_ready_reason_code or "DESIGNER-READY-FOR-APPROVAL",
+                    message=governance_ready_message,
                 ),
             ),
         )
