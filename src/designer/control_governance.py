@@ -77,6 +77,15 @@ class ControlGovernancePolicy:
 
 
 @dataclass(frozen=True)
+class ControlGovernancePressure:
+    score: int = 0
+    previous_score: int = 0
+    band: str = "standard"
+    transition: str = "baseline"
+    summary: str = ""
+
+
+@dataclass(frozen=True)
 class ControlGovernanceApplicability:
     policy: ControlGovernancePolicy
     is_referential_context: bool = False
@@ -89,6 +98,7 @@ class ControlGovernanceApplicability:
 @dataclass(frozen=True)
 class ControlGovernanceDecision:
     applicability: ControlGovernanceApplicability
+    pressure: ControlGovernancePressure = ControlGovernancePressure()
     applicability_status: str = "not_applicable"
     surface_mode: str = "hidden"
     explanation: str = ""
@@ -243,6 +253,22 @@ def load_control_governance_policy(notes: Mapping[str, Any]) -> ControlGovernanc
     )
 
 
+def load_control_governance_pressure(notes: Mapping[str, Any]) -> ControlGovernancePressure:
+    policy = load_control_governance_policy(notes)
+    previous_score = int(notes.get("control_governance_previous_ambiguity_pressure_score", _pressure_score_floor_for_tier(policy.tier)) or 0)
+    score = int(notes.get("control_governance_ambiguity_pressure_score", _pressure_score_floor_for_tier(policy.tier)) or 0)
+    band = str(notes.get("control_governance_ambiguity_pressure_band", _pressure_band_for_score(score)))
+    transition = str(notes.get("control_governance_pressure_transition", "baseline"))
+    summary = str(notes.get("control_governance_pressure_summary", _default_pressure_summary(score=score, band=band, transition=transition)))
+    return ControlGovernancePressure(
+        score=score,
+        previous_score=previous_score,
+        band=band,
+        transition=transition,
+        summary=summary,
+    )
+
+
 def governance_applicability_for_request(
     *,
     ambiguity_flags: Sequence[Any],
@@ -303,20 +329,25 @@ def governance_decision_for_request(
         notes=notes,
     )
     policy = applicability.policy
+    pressure = load_control_governance_pressure(notes)
     if policy.tier == "standard" or not applicability.is_referential_context:
         return ControlGovernanceDecision(
             applicability=applicability,
+            pressure=pressure,
             applicability_status="not_applicable" if not applicability.is_referential_context else "standard",
             surface_mode="hidden",
             explanation=applicability.status_message or policy.reason,
         )
     if applicability.anchor_requirement_unsatisfied:
-        explanation = applicability.status_message or policy.precheck_message or policy.reason
-        revision_guidance = (
-            "Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before the next revision attempt."
+        base_explanation = applicability.status_message or policy.precheck_message or policy.reason
+        explanation = _join_governance_parts(base_explanation, _pressure_surface_summary(pressure, surface_mode="confirmation_required"))
+        revision_guidance = _join_governance_parts(
+            "Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before the next revision attempt.",
+            _pressure_surface_summary(pressure, surface_mode="revision_required"),
         )
         return ControlGovernanceDecision(
             applicability=applicability,
+            pressure=pressure,
             applicability_status="unsatisfied",
             surface_mode="confirmation_required",
             explanation=explanation,
@@ -325,27 +356,39 @@ def governance_decision_for_request(
             revision_guidance=revision_guidance,
         )
     if applicability.anchor_requirement_satisfied:
-        explanation = applicability.status_message or policy.reason
+        base_explanation = applicability.status_message or policy.reason
+        explanation = _join_governance_parts(base_explanation, _pressure_surface_summary(pressure, surface_mode="warning"))
         return ControlGovernanceDecision(
             applicability=applicability,
+            pressure=pressure,
             applicability_status="satisfied",
             surface_mode="warning",
             explanation=explanation,
             recommended_next_actions=applicability.next_actions or ("review_explicit_anchor", "continue_with_confirmation"),
-            approval_guidance="The current request is anchored strongly enough to continue under the elevated governance tier.",
-            revision_guidance="Keep future referential revisions explicit while governance remains elevated.",
+            approval_guidance=_join_governance_parts(
+                "The current request is anchored strongly enough to continue under the elevated governance tier.",
+                _pressure_surface_summary(pressure, surface_mode="warning"),
+            ),
+            revision_guidance=_join_governance_parts(
+                "Keep future referential revisions explicit while governance remains elevated.",
+                _pressure_surface_summary(pressure, surface_mode="revision_warning"),
+            ),
         )
-    explanation = applicability.status_message or policy.reason
+    base_explanation = applicability.status_message or policy.reason
+    explanation = _join_governance_parts(base_explanation, _pressure_surface_summary(pressure, surface_mode="info"))
     return ControlGovernanceDecision(
         applicability=applicability,
+        pressure=pressure,
         applicability_status="informational",
         surface_mode="info",
         explanation=explanation,
         recommended_next_actions=applicability.next_actions or policy.next_actions,
         approval_guidance=explanation,
-        revision_guidance="If the next revision uses referential language, keep the selector explicit while governance remains elevated.",
+        revision_guidance=_join_governance_parts(
+            "If the next revision uses referential language, keep the selector explicit while governance remains elevated.",
+            _pressure_surface_summary(pressure, surface_mode="revision_info"),
+        ),
     )
-
 
 def is_governance_confirmation_issue_code(issue_code: str) -> bool:
     return issue_code.startswith("REFERENTIAL_GOVERNANCE_")
@@ -357,12 +400,19 @@ def is_governance_decision_id(decision_id: str) -> bool:
 
 def governance_revision_guidance_from_notes(notes: Mapping[str, Any]) -> str:
     policy = load_control_governance_policy(notes)
+    pressure = load_control_governance_pressure(notes)
     if not policy.requires_explicit_referential_anchor:
         return ""
     if policy.tier == "strict":
-        return "Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before the next revision attempt."
+        return _join_governance_parts(
+            "Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before the next revision attempt.",
+            _pressure_surface_summary(pressure, surface_mode="revision_required"),
+        )
     if policy.tier == "elevated":
-        return "Prefer an explicit commit anchor, explicit node target, or explicit non-latest selector in the next revision attempt."
+        return _join_governance_parts(
+            "Prefer an explicit commit anchor, explicit node target, or explicit non-latest selector in the next revision attempt.",
+            _pressure_surface_summary(pressure, surface_mode="revision_warning"),
+        )
     return ""
 
 
@@ -379,6 +429,45 @@ def governance_anchored_progress_reason_code_from_issue_codes(
             return f"DESIGNER-GOVERNANCE-ELEVATED-ANCHORED-{suffix}"
     return None
 
+
+
+def _join_governance_parts(*parts: str) -> str:
+    cleaned = [part.strip() for part in parts if part and part.strip()]
+    return " ".join(cleaned)
+
+
+def _default_pressure_summary(*, score: int, band: str, transition: str) -> str:
+    if score <= 0 or band == "standard":
+        return "Ambiguity pressure is clear."
+    if transition == "escalating_or_sustained_repeat_pressure":
+        return f"Ambiguity pressure is high and still building ({score}/{_PRESSURE_SCORE_MAX}, {band} band)."
+    if transition in {"anchored_relief_step", "safe_cycle_relief_step", "safe_cycle_relief_progress"}:
+        return f"Ambiguity pressure is easing but still active ({score}/{_PRESSURE_SCORE_MAX}, {band} band)."
+    if transition in {"anchored_relief_cleared", "safe_cycle_relief_cleared"}:
+        return "Ambiguity pressure has been cleared."
+    if transition == "held_until_resolution":
+        return f"Ambiguity pressure remains held ({score}/{_PRESSURE_SCORE_MAX}, {band} band)."
+    return f"Ambiguity pressure is {score}/{_PRESSURE_SCORE_MAX} ({band} band)."
+
+
+def _pressure_surface_summary(pressure: ControlGovernancePressure, *, surface_mode: str) -> str:
+    if pressure.score <= 0 or pressure.band == "standard":
+        return ""
+    if surface_mode == "confirmation_required":
+        if pressure.transition == "escalating_or_sustained_repeat_pressure":
+            return f"Current ambiguity pressure remains high ({pressure.score}/{_PRESSURE_SCORE_MAX}, {pressure.band} band), so stronger anchoring is still required."
+        if pressure.transition in {"safe_cycle_relief_progress", "safe_cycle_relief_step", "anchored_relief_step"}:
+            return f"Ambiguity pressure is easing but still active ({pressure.score}/{_PRESSURE_SCORE_MAX}, {pressure.band} band), so stronger anchoring is still required for now."
+        return f"Current ambiguity pressure is {pressure.score}/{_PRESSURE_SCORE_MAX} ({pressure.band} band)."
+    if surface_mode == "warning":
+        return f"Ambiguity pressure remains {pressure.score}/{_PRESSURE_SCORE_MAX} ({pressure.band} band), so future referential edits should stay explicit even though the current request is anchored well enough."
+    if surface_mode == "revision_required":
+        return f"Ambiguity pressure remains {pressure.score}/{_PRESSURE_SCORE_MAX} ({pressure.band} band), so do not fall back to loose 'last change' style selectors in the next revision."
+    if surface_mode == "revision_warning":
+        return f"Ambiguity pressure is still elevated ({pressure.score}/{_PRESSURE_SCORE_MAX}, {pressure.band} band), so keep the next referential revision explicit as well."
+    if surface_mode == "revision_info":
+        return f"Ambiguity pressure is still visible ({pressure.score}/{_PRESSURE_SCORE_MAX}, {pressure.band} band)."
+    return pressure.summary or _default_pressure_summary(score=pressure.score, band=pressure.band, transition=pressure.transition)
 
 def _apply_policy_transition(
     *,

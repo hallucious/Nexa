@@ -263,16 +263,25 @@ class DesignerPreviewBuilder:
             defaults.append("Manual review remains enabled.")
         if governance_decision is not None and governance_decision.policy.tier != "standard" and governance_decision.applicability.is_referential_context:
             defaults.append(f"Governance tier: {governance_decision.policy.tier}")
+            if governance_decision.pressure.score > 0 and governance_decision.pressure.band != "standard":
+                defaults.append(
+                    f"Ambiguity pressure: {governance_decision.pressure.score}/5 ({governance_decision.pressure.band})"
+                )
             if governance_decision.surface_mode == "warning" and governance_decision.explanation:
                 defaults.append(governance_decision.explanation)
             elif governance_decision.policy.preview_hint:
                 defaults.append(governance_decision.policy.preview_hint)
+            if governance_decision.pressure.summary:
+                defaults.append(governance_decision.pressure.summary)
         return tuple(defaults)
 
     def _assumptions(self, intent: DesignerIntent, *, governance_decision=None) -> tuple[str, ...]:
         assumptions = [assumption.text for assumption in intent.assumptions]
-        if governance_decision is not None and governance_decision.policy.tier != "standard" and governance_decision.applicability.is_referential_context and governance_decision.explanation:
-            assumptions.append(governance_decision.explanation)
+        if governance_decision is not None and governance_decision.policy.tier != "standard" and governance_decision.applicability.is_referential_context:
+            if governance_decision.explanation:
+                assumptions.append(governance_decision.explanation)
+            if governance_decision.pressure.summary:
+                assumptions.append(governance_decision.pressure.summary)
         return tuple(assumptions)
 
     def _required_confirmations(self, intent: DesignerIntent, precheck: ValidationPrecheck, *, governance_decision=None) -> tuple[str, ...]:
@@ -281,6 +290,9 @@ class DesignerPreviewBuilder:
             preview_hint = governance_decision.policy.preview_hint
             if preview_hint and all(preview_hint != item for item in items):
                 items.append(preview_hint)
+            pressure_summary = governance_decision.pressure.summary
+            if pressure_summary and all(pressure_summary != item for item in items):
+                items.append(pressure_summary)
         return tuple(items)
 
     def _explanation(self, intent: DesignerIntent, precheck: ValidationPrecheck, *, governance_decision=None) -> str:

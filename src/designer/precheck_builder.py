@@ -195,7 +195,7 @@ class DesignerPrecheckBuilder:
             issue_code=f"REFERENTIAL_GOVERNANCE_{governance_decision.policy.tier.upper()}",
             message=governance_decision.explanation or "Referential governance now requires a stronger anchor before automatic rollback interpretation may continue.",
             severity=severity,
-            fix_hint=governance_decision.policy.preview_hint or governance_decision.policy.reason,
+            fix_hint=governance_decision.approval_guidance or governance_decision.policy.preview_hint or governance_decision.policy.reason,
         )
 
     def _governance_anchor_warning_finding(self, intent: DesignerIntent, *, governance_decision=None) -> PrecheckFinding | None:
@@ -205,7 +205,7 @@ class DesignerPrecheckBuilder:
             issue_code=f"REFERENTIAL_GOVERNANCE_{governance_decision.policy.tier.upper()}_ANCHORED",
             message=governance_decision.explanation,
             severity="low",
-            fix_hint="The current request is anchored strongly enough to continue, but future referential edits should remain explicit while governance is elevated.",
+            fix_hint=governance_decision.approval_guidance or "The current request is anchored strongly enough to continue, but future referential edits should remain explicit while governance is elevated.",
         )
 
     def _overall_status(

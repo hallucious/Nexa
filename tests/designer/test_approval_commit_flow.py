@@ -193,6 +193,10 @@ def test_approval_coordinator_surfaces_governance_next_step_in_decision_reason()
         "control_governance_requires_explicit_referential_anchor": True,
         "control_governance_precheck_message": "Repeated referential ambiguity has triggered strict governance mode. Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before approval can continue safely.",
         "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+        "control_governance_ambiguity_pressure_score": 5,
+        "control_governance_ambiguity_pressure_band": "strict",
+        "control_governance_pressure_transition": "escalating_or_sustained_repeat_pressure",
+        "control_governance_pressure_summary": "Ambiguity pressure is high and still building (5/5, strict band).",
     }})
     bundle = flow.propose("Undo the last change", working_save_ref="ws-001", session_state_card=card)
     coordinator = DesignerApprovalCoordinator()
@@ -201,4 +205,5 @@ def test_approval_coordinator_surfaces_governance_next_step_in_decision_reason()
 
     governance_point = next(point for point in state.required_decision_points if point.decision_id == "referential_governance_strict")
     assert "provide explicit anchor" in (governance_point.reason or "")
+    assert "5/5, strict band" in (governance_point.reason or "")
 

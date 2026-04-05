@@ -662,6 +662,10 @@ def test_repeated_confirmation_governance_surfaces_policy_in_precheck_and_previe
             "control_governance_precheck_message": "Repeated referential ambiguity has triggered strict governance mode. Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before approval can continue safely.",
             "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
             "control_governance_policy_reason": "Three or more closely related confirmation cycles were observed, so referential auto-resolution has moved into strict governance mode.",
+            "control_governance_ambiguity_pressure_score": 5,
+            "control_governance_ambiguity_pressure_band": "strict",
+            "control_governance_pressure_transition": "escalating_or_sustained_repeat_pressure",
+            "control_governance_pressure_summary": "Ambiguity pressure is high and still building (5/5, strict band).",
         },
     )
 
@@ -676,7 +680,9 @@ def test_repeated_confirmation_governance_surfaces_policy_in_precheck_and_previe
     assert any("strict governance mode" in finding.message for finding in bundle.precheck.confirmation_findings)
     assert bundle.preview.summary_card.user_action_hint == "Provide a stronger referential anchor before approving the proposal."
     assert any("Strict referential governance is active." in item for item in bundle.preview.confirmation_preview.required_confirmations)
+    assert any("Ambiguity pressure is high and still building (5/5, strict band)." in item for item in bundle.preview.confirmation_preview.required_confirmations)
     assert "strict governance mode" in bundle.preview.explanation
+    assert "5/5 (strict)" in bundle.rendered_preview
     assert "strict governance mode" in bundle.rendered_preview
 
 
@@ -769,6 +775,10 @@ def test_proposal_flow_surfaces_anchored_governance_as_warning_not_confirmation(
             "control_governance_requires_explicit_referential_anchor": True,
             "control_governance_policy_reason": "Three or more closely related confirmation cycles were observed, so referential auto-resolution has moved into strict governance mode.",
             "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+            "control_governance_ambiguity_pressure_score": 4,
+            "control_governance_ambiguity_pressure_band": "strict",
+            "control_governance_pressure_transition": "held_until_resolution",
+            "control_governance_pressure_summary": "Ambiguity pressure remains held (4/5, strict band).",
         },
     )
 
@@ -782,6 +792,7 @@ def test_proposal_flow_surfaces_anchored_governance_as_warning_not_confirmation(
     assert not any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT" for f in bundle.precheck.confirmation_findings)
     assert any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT_ANCHORED" for f in bundle.precheck.warning_findings)
     assert "strong enough anchor" in bundle.preview.explanation
+    assert "4/5 (strict band)" in bundle.preview.explanation
     assert not any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT" for f in bundle.precheck.confirmation_findings)
     assert any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT_ANCHORED" for f in bundle.precheck.warning_findings)
     assert "strong enough anchor" in bundle.preview.explanation

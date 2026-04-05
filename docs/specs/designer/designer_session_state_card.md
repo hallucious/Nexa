@@ -598,3 +598,4 @@ Action-resolution rule:
 
 - safe non-referential cycles now contribute explicit decay progress; after enough consecutive safe cycles, elevated/strict governance can deescalate one tier even without a new referential anchor event
 - Governance notes now also carry an explicit ambiguity-pressure score/band so long-horizon escalation, anchored relief, and safe-cycle decay can be inspected numerically instead of only via tier labels.
+- Governance pressure is no longer notes-only. When applicable, preview/precheck/approval guidance may reuse pressure summaries so the current request can see whether ambiguity pressure is still building, held, or already easing inside the active tier.

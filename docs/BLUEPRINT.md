@@ -511,3 +511,4 @@ Representation {
 
 - safe non-referential cycles now contribute explicit decay progress; after enough consecutive safe cycles, elevated/strict governance can deescalate one tier even without a new referential anchor event
 - governance now also records an explicit ambiguity-pressure score/band; this gives the control plane a calibration-friendly numeric trace for repeated confirmation pressure, anchored relief, and safe-cycle decay
+- ambiguity-pressure summaries are now expected to remain reusable across precheck/preview/approval surfaces so governance intensity does not disappear into notes-only state
