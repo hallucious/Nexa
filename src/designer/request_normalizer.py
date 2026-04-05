@@ -18,6 +18,10 @@ from src.designer.models.designer_intent import (
 
 
 from src.designer.models.designer_session_state_card import DesignerSessionStateCard
+from src.designer.reason_codes import (
+    flag_type_for_reason_code,
+    reason_code_for_mixed_referential_request,
+)
 
 @dataclass(frozen=True)
 class RequestNormalizationContext:
@@ -376,22 +380,7 @@ class DesignerRequestNormalizer:
         )
 
     def _mixed_referential_action_reason_code(self, request_text: str) -> str:
-        text = request_text.casefold()
-        if "replace provider" in text or "switch provider" in text or "change provider" in text:
-            return "MIXED_REFERENTIAL_PROVIDER_CHANGE"
-        if "attach plugin" in text or "add plugin" in text or "use plugin" in text:
-            return "MIXED_REFERENTIAL_PLUGIN_ATTACH"
-        if "rename" in text:
-            return "MIXED_REFERENTIAL_RENAME"
-        if "insert" in text:
-            return "MIXED_REFERENTIAL_INSERT"
-        if "remove" in text or "delete" in text:
-            return "MIXED_REFERENTIAL_DELETE"
-        if "add review" in text or "remove review" in text:
-            return "MIXED_REFERENTIAL_REVIEW_GATE"
-        if "optimize" in text or "optimise" in text or "repair" in text:
-            return "MIXED_REFERENTIAL_OPTIMIZE_REPAIR"
-        return "MIXED_REFERENTIAL_ACTION"
+        return reason_code_for_mixed_referential_request(request_text)
 
     def _build_assumptions(
         self,
@@ -576,7 +565,7 @@ class DesignerRequestNormalizer:
                 )
                 flags.append(
                     AmbiguityFlag(
-                        type=reason_code.casefold(),
+                        type=flag_type_for_reason_code(reason_code),
                         description=(
                             "This request mixes referential rollback language with another structural action pattern and therefore must remain confirmation-bounded."
                         ),

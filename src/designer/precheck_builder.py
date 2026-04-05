@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan
 from src.designer.models.designer_intent import DesignerIntent
+from src.designer.reason_codes import (
+    confirmation_message_for_reason_code,
+    is_mixed_referential_flag_type,
+    reason_code_for_flag_type,
+)
 from src.designer.models.validation_precheck import (
     AmbiguityAssessmentReport,
     CostAssessmentReport,
@@ -144,12 +149,13 @@ class DesignerPrecheckBuilder:
     def _mixed_referential_confirmation_findings(self, intent: DesignerIntent) -> tuple[PrecheckFinding, ...]:
         findings: list[PrecheckFinding] = []
         for flag in intent.ambiguity_flags:
-            if not flag.type.startswith("mixed_referential_"):
+            if not is_mixed_referential_flag_type(flag.type):
                 continue
+            reason_code = reason_code_for_flag_type(flag.type)
             findings.append(
                 PrecheckFinding(
-                    issue_code=flag.type.upper(),
-                    message=self._mixed_referential_confirmation_message(flag.type),
+                    issue_code=reason_code,
+                    message=self._mixed_referential_confirmation_message(reason_code),
                     severity="medium",
                     fix_hint=(
                         "Confirm the exact intended action or split the request into separate steps before approval."
@@ -158,20 +164,8 @@ class DesignerPrecheckBuilder:
             )
         return tuple(findings)
 
-    def _mixed_referential_confirmation_message(self, flag_type: str) -> str:
-        messages = {
-            "mixed_referential_provider_change": "The request mixes rollback language with a provider change and must be confirmed (reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE).",
-            "mixed_referential_plugin_attach": "The request mixes rollback language with plugin attachment and must be confirmed (reason_code=MIXED_REFERENTIAL_PLUGIN_ATTACH).",
-            "mixed_referential_rename": "The request mixes rollback language with a rename operation and must be confirmed (reason_code=MIXED_REFERENTIAL_RENAME).",
-            "mixed_referential_insert": "The request mixes rollback language with an insert operation and must be confirmed (reason_code=MIXED_REFERENTIAL_INSERT).",
-            "mixed_referential_delete": "The request mixes rollback language with a delete/remove action and must be confirmed (reason_code=MIXED_REFERENTIAL_DELETE).",
-            "mixed_referential_review_gate": "The request mixes rollback language with review-gate changes and must be confirmed (reason_code=MIXED_REFERENTIAL_REVIEW_GATE).",
-            "mixed_referential_optimize_repair": "The request mixes rollback language with optimize/repair intent and must be confirmed (reason_code=MIXED_REFERENTIAL_OPTIMIZE_REPAIR).",
-        }
-        return messages.get(
-            flag_type,
-            "The request mixes rollback language with another structural action and must be confirmed (reason_code=MIXED_REFERENTIAL_ACTION).",
-        )
+    def _mixed_referential_confirmation_message(self, reason_code: str) -> str:
+        return confirmation_message_for_reason_code(reason_code)
 
     def _overall_status(
         self,

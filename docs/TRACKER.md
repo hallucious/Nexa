@@ -338,3 +338,5 @@ CLI
 - Phase 2 update: Designer committed-summary retention history is now bounded and rotated during post-commit cleanup.
 
 - reference_resolution_policy: latest committed summary may auto-resolve generic last/previous references; second-latest and exact commit-id references are allowed when explicit; non-latest older references without a precise anchor must remain explicit ambiguities.
+
+* mixed referential reason-style codes are now centralized in `src/designer/reason_codes.py` and remain Designer-bounded instead of being promoted prematurely into the shared global reason-code catalog

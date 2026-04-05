@@ -575,3 +575,11 @@ Action-resolution rule:
 - this auto-resolution is allowed only when the committed summary reference is safely resolved and the request does not mix revert language with a second structural-edit intent such as provider replacement, plugin attachment, rename, insert, optimize, or repair
 - mixed-action requests must remain explicit confirmation-bounded requests rather than being auto-expanded into multi-step action plans
 - when mixed referential action language is detected, Designer should emit a generic clarification flag plus a reason-like mixed-action code (for example provider-change or plugin-attach), should avoid auto-emitting partial structural actions, and should surface that reason into precheck/preview confirmation messaging
+
+
+## 12. Designer-bounded mixed referential reason codes
+
+- mixed referential confirmation reasons remain Designer-bounded for now and are not promoted into the shared platform-wide reason-code catalog
+- the canonical bounded catalog lives in `src/designer/reason_codes.py`
+- normalizer / patch / precheck / preview must reuse that bounded catalog instead of duplicating string literals
+- promotion into a broader shared reason-code system is deferred until UI and real usage testing justify it

@@ -498,3 +498,5 @@ Representation {
 
 
 - reference_resolution_policy: latest committed summary may auto-resolve generic last/previous references; second-latest and exact commit-id references are allowed when explicit; non-latest older references without a precise anchor must remain explicit ambiguities.
+
+* Designer-bounded mixed referential reason catalog now lives in `src/designer/reason_codes.py`; these codes are reused across normalization / patch / precheck / preview and are intentionally not promoted to the shared global reason-code framework yet

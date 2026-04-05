@@ -12,6 +12,7 @@ from src.designer.models.circuit_patch_plan import (
     ValidationRequirements,
 )
 from src.designer.models.designer_intent import DesignerIntent
+from src.designer.reason_codes import is_mixed_referential_flag_type, reason_code_for_flag_type
 
 PATCH_MODE_BY_CATEGORY = {
     "CREATE_CIRCUIT": "create_draft",
@@ -124,7 +125,9 @@ class CircuitPatchBuilder:
 
     def _confirmation_only_operation(self, intent: DesignerIntent) -> PatchOperation:
         mixed_reason_codes = tuple(
-            flag.type.upper() for flag in intent.ambiguity_flags if flag.type.startswith("mixed_referential_")
+            reason_code_for_flag_type(flag.type)
+            for flag in intent.ambiguity_flags
+            if is_mixed_referential_flag_type(flag.type)
         )
         return PatchOperation(
             op_id="op-confirmation-only",
