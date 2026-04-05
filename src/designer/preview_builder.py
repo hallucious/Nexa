@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.designer.control_governance import governance_applicability_for_request
+from src.designer.control_governance import governance_decision_for_request
 from src.designer.models.circuit_draft_preview import (
     AssumptionPreview,
     BehaviorChangePreview,
@@ -33,6 +33,7 @@ class DesignerPreviewBuilder:
             "OPTIMIZE_CIRCUIT": "optimize_preview",
         }[intent.category]
         structural_preview = self._structural_preview(patch)
+        governance_decision = self._governance_decision(intent, session_state_card=session_state_card)
         node_preview = self._node_change_preview(patch)
         edge_preview = self._edge_change_preview(patch)
         output_preview = self._output_change_preview(patch)
@@ -55,7 +56,7 @@ class DesignerPreviewBuilder:
                 "confirmation_required": "confirmation_required",
                 "blocked": "blocked",
             }[precheck.overall_status],
-            user_action_hint=self._user_action_hint(precheck),
+            user_action_hint=self._user_action_hint(precheck, governance_decision=governance_decision),
         )
         return CircuitDraftPreview(
             preview_id=patch.patch_id.replace("patch-", "preview-"),
@@ -84,11 +85,11 @@ class DesignerPreviewBuilder:
                 complexity_change="higher" if patch.change_scope.scope_level == "broad" else "bounded",
             ),
             assumption_preview=AssumptionPreview(
-                assumptions=self._assumptions(intent, session_state_card=session_state_card),
-                default_choices=self._default_choices(intent, session_state_card=session_state_card),
+                assumptions=self._assumptions(intent, governance_decision=governance_decision),
+                default_choices=self._default_choices(intent, governance_decision=governance_decision),
             ),
             confirmation_preview=ConfirmationPreview(
-                required_confirmations=self._required_confirmations(intent, precheck, session_state_card=session_state_card),
+                required_confirmations=self._required_confirmations(intent, precheck, governance_decision=governance_decision),
                 auto_commit_allowed=False,
             ),
             graph_view_model=GraphViewModel(
@@ -96,7 +97,7 @@ class DesignerPreviewBuilder:
                 edge_count=max(structural_preview.before_edge_count, structural_preview.after_edge_count),
                 annotations={"preview_mode": preview_mode},
             ),
-            explanation=self._explanation(intent, precheck, session_state_card=session_state_card),
+            explanation=self._explanation(intent, precheck, governance_decision=governance_decision),
         )
 
     def _title(self, intent: DesignerIntent) -> str:
@@ -195,15 +196,15 @@ class DesignerPreviewBuilder:
             cards.append(OutputChangeCard(output_ref=name, change_type="modified", before_summary=f"Existing binding for '{name}'.", after_summary=f"Updated binding for '{name}'."))
         return OutputChangePreview(cards=tuple(cards))
 
-    def _user_action_hint(self, precheck: ValidationPrecheck) -> str:
+    def _user_action_hint(self, precheck: ValidationPrecheck, *, governance_decision=None) -> str:
         if precheck.overall_status == "blocked":
             return "Revise the proposal before attempting approval."
         if precheck.overall_status == "confirmation_required":
-            if any(f.issue_code.startswith("REFERENTIAL_GOVERNANCE_") for f in precheck.confirmation_findings):
+            if governance_decision is not None and governance_decision.surface_mode == "confirmation_required":
                 return "Provide a stronger referential anchor before approving the proposal."
             return "Review the confirmation items before approving the proposal."
         if precheck.overall_status == "pass_with_warnings":
-            if any(f.issue_code.endswith("_ANCHORED") for f in precheck.warning_findings):
+            if governance_decision is not None and governance_decision.surface_mode == "warning":
                 return "The current anchor is explicit enough to continue, but keep future referential edits precise while governance remains elevated."
             return "Review the warnings, then approve if acceptable."
         return "Review the preview and continue when ready."
@@ -236,6 +237,15 @@ class DesignerPreviewBuilder:
             "define_output_binding": "Adds a new exposed output.",
         }.get(op_type, "Adjusts the proposed circuit behavior.")
 
+    def _governance_decision(self, intent: DesignerIntent, *, session_state_card=None):
+        if session_state_card is None:
+            return None
+        return governance_decision_for_request(
+            ambiguity_flags=intent.ambiguity_flags,
+            proposed_actions=intent.proposed_actions,
+            notes=session_state_card.notes,
+        )
+
     def _risk_summary(self, precheck: ValidationPrecheck) -> str:
         if precheck.overall_status == "blocked":
             return "Blocking issues must be resolved before approval."
@@ -245,64 +255,39 @@ class DesignerPreviewBuilder:
             return "The proposal is previewable with warnings."
         return "No blocking issues were found for preview."
 
-    def _default_choices(self, intent: DesignerIntent, *, session_state_card=None) -> tuple[str, ...]:
+    def _default_choices(self, intent: DesignerIntent, *, governance_decision=None) -> tuple[str, ...]:
         defaults: list[str] = []
         if intent.constraints.provider_preferences:
             defaults.append(f"Preferred provider: {intent.constraints.provider_preferences[0]}")
         if intent.constraints.human_review_required:
             defaults.append("Manual review remains enabled.")
-        if session_state_card is not None:
-            applicability = governance_applicability_for_request(
-                ambiguity_flags=intent.ambiguity_flags,
-                proposed_actions=intent.proposed_actions,
-                notes=session_state_card.notes,
-            )
-            if applicability.policy.tier != "standard" and applicability.is_referential_context:
-                defaults.append(f"Governance tier: {applicability.policy.tier}")
-                if applicability.anchor_requirement_satisfied and applicability.status_message:
-                    defaults.append(applicability.status_message)
-                elif applicability.policy.preview_hint:
-                    defaults.append(applicability.policy.preview_hint)
+        if governance_decision is not None and governance_decision.policy.tier != "standard" and governance_decision.applicability.is_referential_context:
+            defaults.append(f"Governance tier: {governance_decision.policy.tier}")
+            if governance_decision.surface_mode == "warning" and governance_decision.explanation:
+                defaults.append(governance_decision.explanation)
+            elif governance_decision.policy.preview_hint:
+                defaults.append(governance_decision.policy.preview_hint)
         return tuple(defaults)
 
-    def _assumptions(self, intent: DesignerIntent, *, session_state_card=None) -> tuple[str, ...]:
+    def _assumptions(self, intent: DesignerIntent, *, governance_decision=None) -> tuple[str, ...]:
         assumptions = [assumption.text for assumption in intent.assumptions]
-        if session_state_card is not None:
-            applicability = governance_applicability_for_request(
-                ambiguity_flags=intent.ambiguity_flags,
-                proposed_actions=intent.proposed_actions,
-                notes=session_state_card.notes,
-            )
-            if applicability.policy.tier != "standard" and applicability.is_referential_context:
-                assumptions.append(applicability.status_message or applicability.policy.reason)
+        if governance_decision is not None and governance_decision.policy.tier != "standard" and governance_decision.applicability.is_referential_context and governance_decision.explanation:
+            assumptions.append(governance_decision.explanation)
         return tuple(assumptions)
 
-    def _required_confirmations(self, intent: DesignerIntent, precheck: ValidationPrecheck, *, session_state_card=None) -> tuple[str, ...]:
+    def _required_confirmations(self, intent: DesignerIntent, precheck: ValidationPrecheck, *, governance_decision=None) -> tuple[str, ...]:
         items = [f.message for f in precheck.confirmation_findings]
-        if session_state_card is not None:
-            applicability = governance_applicability_for_request(
-                ambiguity_flags=intent.ambiguity_flags,
-                proposed_actions=intent.proposed_actions,
-                notes=session_state_card.notes,
-            )
-            if applicability.anchor_requirement_unsatisfied:
-                preview_hint = applicability.policy.preview_hint
-                if preview_hint and all(preview_hint != item for item in items):
-                    items.append(preview_hint)
+        if governance_decision is not None and governance_decision.surface_mode == "confirmation_required":
+            preview_hint = governance_decision.policy.preview_hint
+            if preview_hint and all(preview_hint != item for item in items):
+                items.append(preview_hint)
         return tuple(items)
 
-    def _explanation(self, intent: DesignerIntent, precheck: ValidationPrecheck, *, session_state_card=None) -> str:
+    def _explanation(self, intent: DesignerIntent, precheck: ValidationPrecheck, *, governance_decision=None) -> str:
         explanation = precheck.explanation
-        if session_state_card is None:
+        if governance_decision is None or governance_decision.policy.tier == "standard" or not governance_decision.applicability.is_referential_context:
             return explanation
-        applicability = governance_applicability_for_request(
-            ambiguity_flags=intent.ambiguity_flags,
-            proposed_actions=intent.proposed_actions,
-            notes=session_state_card.notes,
-        )
-        if applicability.policy.tier == "standard" or not applicability.is_referential_context:
-            return explanation
-        suffix = applicability.status_message or applicability.policy.reason
+        suffix = governance_decision.explanation or governance_decision.policy.reason
         if not suffix:
             return explanation
         if not explanation:

@@ -60,6 +60,21 @@ class ControlGovernanceApplicability:
     next_actions: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class ControlGovernanceDecision:
+    applicability: ControlGovernanceApplicability
+    applicability_status: str = "not_applicable"
+    surface_mode: str = "hidden"
+    explanation: str = ""
+    recommended_next_actions: tuple[str, ...] = ()
+    approval_guidance: str = ""
+    revision_guidance: str = ""
+
+    @property
+    def policy(self) -> ControlGovernancePolicy:
+        return self.applicability.policy
+
+
 def apply_control_governance_notes(
     notes: Mapping[str, Any],
     attempt_history: Sequence[RevisionAttemptSummary],
@@ -142,14 +157,17 @@ def requires_explicit_referential_anchor(notes: Mapping[str, Any]) -> bool:
 
 
 def load_control_governance_policy(notes: Mapping[str, Any]) -> ControlGovernancePolicy:
+    tier = str(notes.get("control_governance_policy_tier", "standard"))
+    defaults = _policy_defaults_for_tier(tier)
+    raw_next_actions = tuple(str(item) for item in notes.get("control_governance_next_actions", ()) if str(item).strip())
     return ControlGovernancePolicy(
-        tier=str(notes.get("control_governance_policy_tier", "standard")),
-        interpretation_safety_mode=str(notes.get("control_governance_interpretation_safety_mode", "standard")),
-        requires_explicit_referential_anchor=bool(notes.get("control_governance_requires_explicit_referential_anchor", False)),
-        reason=str(notes.get("control_governance_policy_reason", "No repeated confirmation-governance escalation is currently active.")),
-        precheck_message=str(notes.get("control_governance_precheck_message", "")),
-        preview_hint=str(notes.get("control_governance_preview_hint", "")),
-        next_actions=tuple(str(item) for item in notes.get("control_governance_next_actions", ()) if str(item).strip()),
+        tier=tier,
+        interpretation_safety_mode=str(notes.get("control_governance_interpretation_safety_mode", defaults.interpretation_safety_mode)),
+        requires_explicit_referential_anchor=bool(notes.get("control_governance_requires_explicit_referential_anchor", defaults.requires_explicit_referential_anchor)),
+        reason=str(notes.get("control_governance_policy_reason", defaults.reason)),
+        precheck_message=str(notes.get("control_governance_precheck_message", defaults.precheck_message)),
+        preview_hint=str(notes.get("control_governance_preview_hint", defaults.preview_hint)),
+        next_actions=raw_next_actions or defaults.next_actions,
     )
 
 
@@ -199,6 +217,105 @@ def governance_applicability_for_request(
         status_message=policy.reason,
         next_actions=policy.next_actions,
     )
+
+
+def governance_decision_for_request(
+    *,
+    ambiguity_flags: Sequence[Any],
+    proposed_actions: Sequence[Any],
+    notes: Mapping[str, Any],
+) -> ControlGovernanceDecision:
+    applicability = governance_applicability_for_request(
+        ambiguity_flags=ambiguity_flags,
+        proposed_actions=proposed_actions,
+        notes=notes,
+    )
+    policy = applicability.policy
+    if policy.tier == "standard" or not applicability.is_referential_context:
+        return ControlGovernanceDecision(
+            applicability=applicability,
+            applicability_status="not_applicable" if not applicability.is_referential_context else "standard",
+            surface_mode="hidden",
+            explanation=applicability.status_message or policy.reason,
+        )
+    if applicability.anchor_requirement_unsatisfied:
+        explanation = applicability.status_message or policy.precheck_message or policy.reason
+        revision_guidance = (
+            "Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before the next revision attempt."
+        )
+        return ControlGovernanceDecision(
+            applicability=applicability,
+            applicability_status="unsatisfied",
+            surface_mode="confirmation_required",
+            explanation=explanation,
+            recommended_next_actions=applicability.next_actions or policy.next_actions,
+            approval_guidance=explanation,
+            revision_guidance=revision_guidance,
+        )
+    if applicability.anchor_requirement_satisfied:
+        explanation = applicability.status_message or policy.reason
+        return ControlGovernanceDecision(
+            applicability=applicability,
+            applicability_status="satisfied",
+            surface_mode="warning",
+            explanation=explanation,
+            recommended_next_actions=applicability.next_actions or ("review_explicit_anchor", "continue_with_confirmation"),
+            approval_guidance="The current request is anchored strongly enough to continue under the elevated governance tier.",
+            revision_guidance="Keep future referential revisions explicit while governance remains elevated.",
+        )
+    explanation = applicability.status_message or policy.reason
+    return ControlGovernanceDecision(
+        applicability=applicability,
+        applicability_status="informational",
+        surface_mode="info",
+        explanation=explanation,
+        recommended_next_actions=applicability.next_actions or policy.next_actions,
+        approval_guidance=explanation,
+        revision_guidance="If the next revision uses referential language, keep the selector explicit while governance remains elevated.",
+    )
+
+
+def is_governance_confirmation_issue_code(issue_code: str) -> bool:
+    return issue_code.startswith("REFERENTIAL_GOVERNANCE_")
+
+
+def is_governance_decision_id(decision_id: str) -> bool:
+    return decision_id.startswith("referential_governance_")
+
+
+def governance_revision_guidance_from_notes(notes: Mapping[str, Any]) -> str:
+    policy = load_control_governance_policy(notes)
+    if not policy.requires_explicit_referential_anchor:
+        return ""
+    if policy.tier == "strict":
+        return "Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before the next revision attempt."
+    if policy.tier == "elevated":
+        return "Prefer an explicit commit anchor, explicit node target, or explicit non-latest selector in the next revision attempt."
+    return ""
+
+
+def _policy_defaults_for_tier(tier: str) -> ControlGovernancePolicy:
+    if tier == "strict":
+        return ControlGovernancePolicy(
+            tier="strict",
+            interpretation_safety_mode="explicit_referential_anchor_required",
+            requires_explicit_referential_anchor=True,
+            reason="Three or more closely related confirmation cycles were observed, so referential auto-resolution has moved into strict governance mode.",
+            precheck_message="Repeated referential ambiguity has triggered strict governance mode. Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before approval can continue safely.",
+            preview_hint="Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+            next_actions=("provide_explicit_anchor", "restate_request_with_stronger_selector"),
+        )
+    if tier == "elevated":
+        return ControlGovernancePolicy(
+            tier="elevated",
+            interpretation_safety_mode="explicit_referential_anchor_required",
+            requires_explicit_referential_anchor=True,
+            reason="Repeated confirmation-required cycles were detected, so referential auto-resolution is temporarily elevated into anchor-required mode.",
+            precheck_message="Repeated referential ambiguity has triggered elevated governance mode. Add an explicit commit anchor, explicit node target, or explicit non-latest selector before relying on automatic rollback interpretation.",
+            preview_hint="Elevated referential governance is active. The current request is previewable, but the next revision should include a stronger referential anchor.",
+            next_actions=("provide_explicit_anchor",),
+        )
+    return ControlGovernancePolicy()
 
 
 def _derive_control_governance_policy(*, repeated_reason_count: int, confirmation_loop_count: int) -> ControlGovernancePolicy:

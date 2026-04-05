@@ -179,3 +179,26 @@ def test_commit_gateway_can_resume_persisted_approval_ready_candidate() -> None:
 
     with pytest.raises(ValueError):
         gateway.commit_persisted_candidate(result.cleaned_candidate_working_save, commit_id="commit-resume-2")
+
+
+def test_approval_coordinator_surfaces_governance_next_step_in_decision_reason() -> None:
+    flow = DesignerProposalFlow()
+    card = DesignerSessionStateCardBuilder().build(request_text="Undo the last change", artifact=None, session_id="sess-gov-approval", target_scope_mode="existing_circuit")
+    card = card.__class__(**{**card.__dict__, "notes": {
+        **card.notes,
+        "commit_summary_history": [
+            {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+        ],
+        "control_governance_policy_tier": "strict",
+        "control_governance_requires_explicit_referential_anchor": True,
+        "control_governance_precheck_message": "Repeated referential ambiguity has triggered strict governance mode. Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before approval can continue safely.",
+        "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+    }})
+    bundle = flow.propose("Undo the last change", working_save_ref="ws-001", session_state_card=card)
+    coordinator = DesignerApprovalCoordinator()
+
+    state = coordinator.create_state(bundle)
+
+    governance_point = next(point for point in state.required_decision_points if point.decision_id == "referential_governance_strict")
+    assert "provide explicit anchor" in (governance_point.reason or "")
+

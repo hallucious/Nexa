@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.designer.control_governance import governance_applicability_for_request
+from src.designer.control_governance import governance_decision_for_request
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan
 from src.designer.models.designer_intent import DesignerIntent
 from src.designer.reason_codes import (
@@ -22,9 +22,10 @@ from src.designer.models.validation_precheck import (
 
 class DesignerPrecheckBuilder:
     def build(self, intent: DesignerIntent, patch: CircuitPatchPlan, *, session_state_card=None) -> ValidationPrecheck:
+        governance_decision = self._governance_decision(intent, session_state_card=session_state_card)
         blocking_findings = list(self._blocking_findings(intent, patch))
-        warning_findings = list(self._warning_findings(intent, patch, session_state_card=session_state_card))
-        confirmation_findings = list(self._confirmation_findings(intent, patch, blocking_findings, session_state_card=session_state_card))
+        warning_findings = list(self._warning_findings(intent, patch, session_state_card=session_state_card, governance_decision=governance_decision))
+        confirmation_findings = list(self._confirmation_findings(intent, patch, blocking_findings, session_state_card=session_state_card, governance_decision=governance_decision))
         overall_status = self._overall_status(blocking_findings, confirmation_findings, warning_findings)
         evaluated_scope = EvaluatedScope(
             mode=self._evaluated_scope_mode(intent),
@@ -54,8 +55,8 @@ class DesignerPrecheckBuilder:
             blocking_findings=tuple(blocking_findings),
             warning_findings=tuple(warning_findings),
             confirmation_findings=tuple(confirmation_findings),
-            recommended_next_actions=self._recommended_next_actions(overall_status),
-            explanation=self._build_explanation(overall_status),
+            recommended_next_actions=self._recommended_next_actions(overall_status, governance_decision=governance_decision),
+            explanation=self._build_explanation(overall_status, governance_decision=governance_decision),
         )
 
     def _evaluated_scope_mode(self, intent: DesignerIntent) -> str:
@@ -81,7 +82,16 @@ class DesignerPrecheckBuilder:
             )
         return tuple(findings)
 
-    def _warning_findings(self, intent: DesignerIntent, patch: CircuitPatchPlan, *, session_state_card=None) -> tuple[PrecheckFinding, ...]:
+    def _governance_decision(self, intent: DesignerIntent, *, session_state_card=None):
+        if session_state_card is None:
+            return None
+        return governance_decision_for_request(
+            ambiguity_flags=intent.ambiguity_flags,
+            proposed_actions=intent.proposed_actions,
+            notes=session_state_card.notes,
+        )
+
+    def _warning_findings(self, intent: DesignerIntent, patch: CircuitPatchPlan, *, session_state_card=None, governance_decision=None) -> tuple[PrecheckFinding, ...]:
         findings: list[PrecheckFinding] = []
         if patch.dependency_effects.dependency_risks:
             findings.append(
@@ -99,7 +109,7 @@ class DesignerPrecheckBuilder:
                     severity="low",
                 )
             )
-        governance_warning = self._governance_anchor_warning_finding(intent, session_state_card=session_state_card)
+        governance_warning = self._governance_anchor_warning_finding(intent, governance_decision=governance_decision)
         if governance_warning is not None:
             findings.append(governance_warning)
         return tuple(findings)
@@ -111,6 +121,7 @@ class DesignerPrecheckBuilder:
         blocking_findings: list[PrecheckFinding],
         *,
         session_state_card=None,
+        governance_decision=None,
     ) -> tuple[PrecheckFinding, ...]:
         if blocking_findings:
             return ()
@@ -125,7 +136,7 @@ class DesignerPrecheckBuilder:
                 )
             )
         findings.extend(mixed_reason_findings)
-        governance_finding = self._governance_anchor_confirmation_finding(intent, session_state_card=session_state_card)
+        governance_finding = self._governance_anchor_confirmation_finding(intent, governance_decision=governance_decision)
         if governance_finding is not None:
             findings.append(governance_finding)
         if patch.change_scope.touch_mode == "destructive_edit":
@@ -176,37 +187,23 @@ class DesignerPrecheckBuilder:
     def _mixed_referential_confirmation_message(self, reason_code: str) -> str:
         return confirmation_message_for_reason_code(reason_code)
 
-    def _governance_anchor_confirmation_finding(self, intent: DesignerIntent, *, session_state_card=None) -> PrecheckFinding | None:
-        if session_state_card is None:
+    def _governance_anchor_confirmation_finding(self, intent: DesignerIntent, *, governance_decision=None) -> PrecheckFinding | None:
+        if governance_decision is None or governance_decision.surface_mode != "confirmation_required":
             return None
-        applicability = governance_applicability_for_request(
-            ambiguity_flags=intent.ambiguity_flags,
-            proposed_actions=intent.proposed_actions,
-            notes=session_state_card.notes,
-        )
-        if not applicability.anchor_requirement_unsatisfied:
-            return None
-        severity = "high" if applicability.policy.tier == "strict" else "medium"
+        severity = "high" if governance_decision.policy.tier == "strict" else "medium"
         return PrecheckFinding(
-            issue_code=f"REFERENTIAL_GOVERNANCE_{applicability.policy.tier.upper()}",
-            message=applicability.status_message or "Referential governance now requires a stronger anchor before automatic rollback interpretation may continue.",
+            issue_code=f"REFERENTIAL_GOVERNANCE_{governance_decision.policy.tier.upper()}",
+            message=governance_decision.explanation or "Referential governance now requires a stronger anchor before automatic rollback interpretation may continue.",
             severity=severity,
-            fix_hint=applicability.policy.preview_hint or applicability.policy.reason,
+            fix_hint=governance_decision.policy.preview_hint or governance_decision.policy.reason,
         )
 
-    def _governance_anchor_warning_finding(self, intent: DesignerIntent, *, session_state_card=None) -> PrecheckFinding | None:
-        if session_state_card is None:
-            return None
-        applicability = governance_applicability_for_request(
-            ambiguity_flags=intent.ambiguity_flags,
-            proposed_actions=intent.proposed_actions,
-            notes=session_state_card.notes,
-        )
-        if not applicability.anchor_requirement_satisfied:
+    def _governance_anchor_warning_finding(self, intent: DesignerIntent, *, governance_decision=None) -> PrecheckFinding | None:
+        if governance_decision is None or governance_decision.surface_mode != "warning":
             return None
         return PrecheckFinding(
-            issue_code=f"REFERENTIAL_GOVERNANCE_{applicability.policy.tier.upper()}_ANCHORED",
-            message=applicability.status_message,
+            issue_code=f"REFERENTIAL_GOVERNANCE_{governance_decision.policy.tier.upper()}_ANCHORED",
+            message=governance_decision.explanation,
             severity="low",
             fix_hint="The current request is anchored strongly enough to continue, but future referential edits should remain explicit while governance is elevated.",
         )
@@ -225,23 +222,36 @@ class DesignerPrecheckBuilder:
             return "pass_with_warnings"
         return "pass"
 
-    def _recommended_next_actions(self, status: str) -> tuple[str, ...]:
+    def _recommended_next_actions(self, status: str, *, governance_decision=None) -> tuple[str, ...]:
+        base: tuple[str, ...]
         if status == "blocked":
-            return ("revise_patch", "re-run_precheck")
-        if status == "confirmation_required":
-            return ("show_preview", "ask_for_confirmation", "provide_explicit_anchor")
-        if status == "pass_with_warnings":
-            return ("show_preview", "display_warnings")
-        return ("show_preview",)
+            base = ("revise_patch", "re-run_precheck")
+        elif status == "confirmation_required":
+            base = ("show_preview", "ask_for_confirmation")
+        elif status == "pass_with_warnings":
+            base = ("show_preview", "display_warnings")
+        else:
+            base = ("show_preview",)
+        if governance_decision is None or not governance_decision.recommended_next_actions:
+            return base
+        ordered = list(base)
+        for item in governance_decision.recommended_next_actions:
+            if item not in ordered:
+                ordered.append(item)
+        return tuple(ordered)
 
-    def _build_explanation(self, status: str) -> str:
+    def _build_explanation(self, status: str, *, governance_decision=None) -> str:
         if status == "blocked":
-            return "The proposal cannot proceed until blocking issues are resolved."
-        if status == "confirmation_required":
-            return "The proposal may proceed to preview, but explicit approval or clarification is required before commit. Repeated referential ambiguity may also require a stronger anchor before auto-resolution resumes."
-        if status == "pass_with_warnings":
-            return "The proposal can be previewed and reviewed with warnings."
-        return "The proposal is ready for preview."
+            explanation = "The proposal cannot proceed until blocking issues are resolved."
+        elif status == "confirmation_required":
+            explanation = "The proposal may proceed to preview, but explicit approval or clarification is required before commit."
+        elif status == "pass_with_warnings":
+            explanation = "The proposal can be previewed and reviewed with warnings."
+        else:
+            explanation = "The proposal is ready for preview."
+        if governance_decision is None or governance_decision.surface_mode == "hidden" or not governance_decision.explanation:
+            return explanation
+        return f"{explanation} {governance_decision.explanation}"
 
     def _cost_warning(self, intent: DesignerIntent, patch: CircuitPatchPlan) -> bool:
         return any(action.action_type in {"replace_provider", "attach_plugin", "add_review_gate"} for action in intent.proposed_actions)

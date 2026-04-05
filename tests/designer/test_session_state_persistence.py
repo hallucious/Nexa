@@ -932,3 +932,40 @@ def test_control_governance_builder_records_thresholds_and_transition_summary() 
     assert rebuilt.notes["control_governance_previous_tier"] == "elevated"
     assert rebuilt.notes["control_governance_transition_direction"] == "escalated"
     assert "escalated from elevated to strict" in rebuilt.notes["control_governance_transition_summary"]
+
+
+def test_approval_revision_requested_from_governance_decision_persists_anchor_guidance() -> None:
+    flow = DesignerProposalFlow()
+    base_card = DesignerSessionStateCardBuilder().build(
+        request_text="Undo the last change",
+        artifact=None,
+        session_id="sess-governance-revision-guidance",
+        target_scope_mode="existing_circuit",
+    )
+    card = replace(
+        base_card,
+        notes={
+            **base_card.notes,
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+            "control_governance_policy_tier": "strict",
+            "control_governance_requires_explicit_referential_anchor": True,
+            "control_governance_precheck_message": "Repeated referential ambiguity has triggered strict governance mode. Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before approval can continue safely.",
+            "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+        },
+    )
+    bundle = flow.propose("Undo the last change", working_save_ref="ws-001", session_state_card=card)
+    approval = DesignerApprovalCoordinator().create_state(bundle)
+    decision_id = next(point.decision_id for point in approval.required_decision_points if point.decision_id == "referential_governance_strict")
+    resolved = DesignerApprovalCoordinator().resolve(
+        approval,
+        (UserDecision(decision_point_id=decision_id, outcome="request_revision"),),
+    )
+
+    updated = DesignerSessionStateCoordinator().evolve_after_approval_resolution(card, resolved)
+
+    assert updated.notes["control_governance_pending_anchor_requirement"] is True
+    assert "explicit commit anchor" in updated.notes["control_governance_last_revision_guidance"]
+    assert any("explicit commit anchor" in item for item in updated.conversation_context.unresolved_questions)
+

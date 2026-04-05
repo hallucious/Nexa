@@ -9,6 +9,7 @@ from src.designer.models.designer_approval_flow import (
     DesignerApprovalFlowState,
     UserDecision,
 )
+from src.designer.control_governance import is_governance_confirmation_issue_code
 from src.designer.proposal_flow import DesignerProposalBundle
 
 _GENERIC_SCOPE_CONFIRMATION_ID = "confirm_scope_alignment"
@@ -137,7 +138,7 @@ class DesignerApprovalCoordinator:
                 DecisionPoint(
                     decision_id=decision_id,
                     label=finding.message,
-                    reason=finding.fix_hint or finding.location,
+                    reason=self._decision_reason_for_finding(bundle, finding),
                 )
             )
 
@@ -183,6 +184,17 @@ class DesignerApprovalCoordinator:
             *sorted(bundle.patch.change_scope.touched_outputs),
         ]
         return self._stable_id("scope", "|".join(parts))
+
+
+    def _decision_reason_for_finding(self, bundle: DesignerProposalBundle, finding) -> str | None:
+        if not is_governance_confirmation_issue_code(finding.issue_code):
+            return finding.fix_hint or finding.location
+        next_actions = [item for item in bundle.precheck.recommended_next_actions if item in {"provide_explicit_anchor", "restate_request_with_stronger_selector"}]
+        guidance = finding.fix_hint or finding.location or "Provide a stronger referential anchor before approval can continue safely."
+        if not next_actions:
+            return guidance
+        pretty = ", then ".join(action.replace("_", " ") for action in next_actions)
+        return f"{guidance} Next safe step: {pretty}."
 
     def _normalize_decision_id(self, issue_code: str) -> str:
         normalized = "".join(ch.lower() if ch.isalnum() else "_" for ch in issue_code).strip("_")
