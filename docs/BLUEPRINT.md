@@ -494,3 +494,6 @@ Representation {
 
 
 - Current Phase 2 note: Designer post-commit continuity now includes bounded committed-summary retention rather than unbounded note accumulation.
+
+
+- reference_resolution_policy: latest committed summary may auto-resolve generic last/previous references; second-latest and exact commit-id references are allowed when explicit; non-latest older references without a precise anchor must remain explicit ambiguities.

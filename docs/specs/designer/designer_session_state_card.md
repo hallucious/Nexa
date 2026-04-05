@@ -553,3 +553,6 @@ Post-commit cleanup rules:
 - session-card notes may expose committed-summary priority metadata, including latest-summary-primary and history-reference-only semantics
 - referential request normalization must treat the latest committed summary as the primary baseline and older retained summaries as ambiguity context rather than equal-priority truth
 - stale fresh-cycle / active-baseline notes must not remain inside committed summary state
+
+
+- reference_resolution_policy: latest committed summary may auto-resolve generic last/previous references; second-latest and exact commit-id references are allowed when explicit; non-latest older references without a precise anchor must remain explicit ambiguities.

@@ -604,4 +604,7 @@ def test_builder_exposes_committed_summary_priority_notes() -> None:
     assert rebuilt.notes["committed_summary_primary"]["commit_id"] == "commit-latest"
     assert rebuilt.notes["committed_summary_recent_history"][0]["commit_id"] == "commit-older"
     assert rebuilt.notes["committed_summary_interpretation_policy"] == "latest_primary_history_reference_only"
+    assert rebuilt.notes["committed_summary_reference_resolution_policy"] == "latest_auto_second_latest_when_explicit_exact_commit_id_match_otherwise_clarify_nonlatest"
+    assert rebuilt.notes["committed_summary_auto_resolution_modes"] == ["latest_summary", "second_latest_when_explicit", "exact_commit_id_match"]
+    assert rebuilt.notes["committed_summary_clarification_required_modes"] == ["older_change_without_anchor", "nonlatest_reference_without_exact_match"]
 

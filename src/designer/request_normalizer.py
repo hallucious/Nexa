@@ -320,14 +320,48 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
-        latest_summary = self._latest_committed_summary(context)
-        if latest_summary is not None and self._uses_referential_committed_summary_language(request_text):
+        resolved_summary, resolution_mode, unresolved_reason = self._resolve_committed_summary_reference(
+            request_text,
+            context,
+        )
+        if resolved_summary is not None:
+            if resolution_mode == "latest_auto":
+                assumptions.append(
+                    AssumptionSpec(
+                        text=(
+                            "Referential continuation language is auto-resolved against the latest committed summary "
+                            f"(commit {resolved_summary.get('commit_id', 'unknown')})."
+                        ),
+                        severity="medium",
+                        user_visible=True,
+                    )
+                )
+            elif resolution_mode == "second_latest_auto":
+                assumptions.append(
+                    AssumptionSpec(
+                        text=(
+                            "Referential continuation language is interpreted against the committed summary before the latest one "
+                            f"(commit {resolved_summary.get('commit_id', 'unknown')})."
+                        ),
+                        severity="medium",
+                        user_visible=True,
+                    )
+                )
+            elif resolution_mode == "exact_commit_match":
+                assumptions.append(
+                    AssumptionSpec(
+                        text=(
+                            "The request explicitly matches committed summary "
+                            f"{resolved_summary.get('commit_id', 'unknown')} and is resolved directly against that commit."
+                        ),
+                        severity="low",
+                        user_visible=True,
+                    )
+                )
+        elif unresolved_reason == "missing":
             assumptions.append(
                 AssumptionSpec(
-                    text=(
-                        "Referential continuation language is interpreted against the latest committed summary first "
-                        f"(commit {latest_summary.get('commit_id', 'unknown')})."
-                    ),
+                    text="No committed summary is currently available, so referential post-commit language cannot be resolved automatically.",
                     severity="medium",
                     user_visible=True,
                 )
@@ -360,13 +394,41 @@ class DesignerRequestNormalizer:
                     description="The request implies broad-scope changes that should be confirmed before commit.",
                 )
             )
-        if self._uses_referential_committed_summary_language(request_text):
+        _, resolution_mode, unresolved_reason = self._resolve_committed_summary_reference(
+            request_text,
+            context,
+        )
+        if unresolved_reason == "missing":
+            flags.append(
+                AmbiguityFlag(
+                    type="committed_summary_missing",
+                    description="This request refers to prior committed changes, but no committed summary is available to resolve it.",
+                )
+            )
+        elif unresolved_reason == "insufficient_history":
+            flags.append(
+                AmbiguityFlag(
+                    type="committed_summary_insufficient_history",
+                    description="This request refers to an older committed change, but retained committed-summary history is not deep enough to resolve it.",
+                )
+            )
+        elif unresolved_reason == "clarification_required":
+            flags.append(
+                AmbiguityFlag(
+                    type="committed_summary_reference_needs_clarification",
+                    description="This request refers to a non-latest committed change without a precise anchor, so clarification is required before automatic resolution.",
+                )
+            )
+        elif resolution_mode == "latest_auto" and self._uses_referential_committed_summary_language(request_text):
             history = self._committed_summary_history(context)
-            if len(history) > 1:
+            if len(history) > 1 and (
+                self._uses_ambiguous_nonlatest_reference_language(request_text)
+                or self._uses_previous_reference_language(request_text)
+            ):
                 flags.append(
                     AmbiguityFlag(
                         type="committed_summary_reference_history",
-                        description="This request references previous/last change semantics while multiple recent committed summaries exist; latest summary is prioritized unless clarified.",
+                        description="Recent committed history exists, but the request leaves open whether a non-latest summary was intended.",
                     )
                 )
         return flags
@@ -442,6 +504,85 @@ class DesignerRequestNormalizer:
             r"\bundo\b",
             r"\brollback\b",
             r"\broll back\b",
+        )
+        return any(re.search(pattern, text) for pattern in patterns)
+
+
+    def _resolve_committed_summary_reference(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+    ) -> tuple[dict[str, str] | None, str | None, str | None]:
+        if not self._uses_referential_committed_summary_language(request_text):
+            return None, None, None
+        history = self._committed_summary_history(context)
+        latest_summary = self._latest_committed_summary(context)
+        if latest_summary is not None and (not history or history[0].get("commit_id") != latest_summary.get("commit_id")):
+            history = [latest_summary, *history]
+        exact_match = self._match_explicit_commit_reference(request_text, history)
+        if exact_match is not None:
+            return exact_match, "exact_commit_match", None
+        if self._uses_second_latest_reference_language(request_text):
+            if len(history) >= 2:
+                return history[1], "second_latest_auto", None
+            return None, None, "insufficient_history"
+        if self._uses_ambiguous_nonlatest_reference_language(request_text):
+            if len(history) >= 2:
+                return None, None, "clarification_required"
+            if len(history) == 1:
+                return None, None, "insufficient_history"
+            return None, None, "missing"
+        if latest_summary is not None:
+            return latest_summary, "latest_auto", None
+        return None, None, "missing"
+
+    def _match_explicit_commit_reference(
+        self,
+        request_text: str,
+        history: list[dict[str, str]],
+    ) -> dict[str, str] | None:
+        text = request_text.casefold()
+        commit_tokens = set(re.findall(r"\b[a-f0-9]{7,40}\b", text))
+        if not commit_tokens:
+            return None
+        for item in history:
+            commit_id = item.get("commit_id", "").casefold()
+            if any(commit_id.startswith(token) for token in commit_tokens):
+                return item
+        return None
+
+    def _uses_second_latest_reference_language(self, request_text: str) -> bool:
+        text = request_text.casefold()
+        patterns = (
+            r"\b(second last|second-latest|before last|prior to last|the one before that) (change|commit|edit)\b",
+            r"\b(change|commit|edit) before last\b",
+            r"\bcommit before last\b",
+            r"\bchange before last\b",
+            r"\bthe one before that\b",
+        )
+        return any(re.search(pattern, text) for pattern in patterns)
+
+    def _uses_ambiguous_nonlatest_reference_language(self, request_text: str) -> bool:
+        text = request_text.casefold()
+        patterns = (
+            r"\bolder change\b",
+            r"\bearlier change\b",
+            r"\bolder commit\b",
+            r"\bearlier commit\b",
+            r"\bnot the last (change|commit|edit)\b",
+            r"\bother (change|commit|edit)\b",
+            r"\bthat older (change|commit|edit)\b",
+        )
+        return any(re.search(pattern, text) for pattern in patterns)
+
+
+    def _uses_previous_reference_language(self, request_text: str) -> bool:
+        text = request_text.casefold()
+        patterns = (
+            r"\bprevious change\b",
+            r"\bprevious commit\b",
+            r"\bthat previous change\b",
+            r"\bthat previous commit\b",
         )
         return any(re.search(pattern, text) for pattern in patterns)
 
