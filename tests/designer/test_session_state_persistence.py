@@ -564,3 +564,44 @@ def test_committed_summary_retention_history_rotates_and_trims() -> None:
     assert history[0]["patch_ref"] == bundle.patch.patch_id
     assert history[0]["candidate_consumed"] is True
 
+
+
+def test_builder_exposes_committed_summary_priority_notes() -> None:
+    working_save = make_working_save()
+    card = replace(
+        make_card(),
+        notes={
+            "commit_summary_history": [
+                {
+                    "commit_id": "commit-latest",
+                    "parent_commit_id": "parent-latest",
+                    "patch_ref": "patch-latest",
+                    "approval_stage": "committed",
+                    "approval_outcome": "committed",
+                    "candidate_consumed": True,
+                },
+                {
+                    "commit_id": "commit-older",
+                    "parent_commit_id": "parent-older",
+                    "patch_ref": "patch-older",
+                    "approval_stage": "committed",
+                    "approval_outcome": "committed",
+                    "candidate_consumed": True,
+                },
+            ],
+        },
+    )
+    persisted = persist_designer_session_state(working_save, session_state_card=card)
+
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Change provider in node answerer",
+        artifact=persisted,
+    )
+
+    assert rebuilt.notes["committed_summary_exposure_applied"] is True
+    assert rebuilt.notes["committed_summary_primary_priority"] == "high"
+    assert rebuilt.notes["committed_summary_history_priority"] == "low"
+    assert rebuilt.notes["committed_summary_primary"]["commit_id"] == "commit-latest"
+    assert rebuilt.notes["committed_summary_recent_history"][0]["commit_id"] == "commit-older"
+    assert rebuilt.notes["committed_summary_interpretation_policy"] == "latest_primary_history_reference_only"
+

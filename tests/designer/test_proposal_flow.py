@@ -106,3 +106,44 @@ def test_request_normalizer_uses_clarified_interpretation_to_bound_scope() -> No
 
     assert all(flag.type != "broad_scope" for flag in intent.ambiguity_flags)
     assert intent.target_scope.node_refs == ("node.reviewer",)
+
+
+def test_request_normalizer_uses_latest_committed_summary_priority_for_referential_request() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-commit-summary",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Revert the previous change"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(
+            user_request_text="Revert the previous change",
+        ),
+        notes={
+            "committed_summary_primary": {
+                "commit_id": "commit-latest",
+                "patch_ref": "patch-latest",
+            },
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest"},
+                {"commit_id": "commit-older", "patch_ref": "patch-older"},
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Revert the previous change",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert any("commit-latest" in assumption.text for assumption in intent.assumptions)
+    assert any(flag.type == "committed_summary_reference_history" for flag in intent.ambiguity_flags)
+

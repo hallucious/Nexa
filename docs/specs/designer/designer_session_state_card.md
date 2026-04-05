@@ -33,6 +33,8 @@ After successful commit, approval-ready continuation must be reduced into a post
 A new Designer request after commit must start a fresh proposal cycle from the committed baseline instead of inheriting consumed continuation scope, clarification, or revision state.
 Repeated fresh cycles must rotate fresh-cycle markers so stale baseline/request markers do not survive into later cycles.
 Successful commit must remove stale fresh-cycle markers and reduce them back into compact committed-summary notes.
+Committed-summary exposure must remain priority-aware: the latest committed summary is primary, while older retained summaries are exposed only as low-priority history/reference context.
+Referential requests such as "previous change" or "last commit" must bias interpretation toward the latest committed summary first unless the user clarifies otherwise.
 - Designer AI produces proposals from this card.
 - Designer AI must not silently assume hidden structure or hidden authority.
 
@@ -548,4 +550,6 @@ Post-commit cleanup rules:
 - retry_reason should be cleared
 - revision history and user corrections may remain for continuity/audit
 - committed-summary notes should rotate through a bounded history (current latest + up to 2 older summaries in v0.1)
+- session-card notes may expose committed-summary priority metadata, including latest-summary-primary and history-reference-only semantics
+- referential request normalization must treat the latest committed summary as the primary baseline and older retained summaries as ambiguity context rather than equal-priority truth
 - stale fresh-cycle / active-baseline notes must not remain inside committed summary state

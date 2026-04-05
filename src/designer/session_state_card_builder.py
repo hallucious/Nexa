@@ -26,6 +26,8 @@ from src.designer.session_state_persistence import (
     load_persisted_session_state_card,
 )
 
+_COMMITTED_SUMMARY_EXPOSED_HISTORY_LIMIT = 2
+
 
 class DesignerSessionStateCardBuilder:
     def build(
@@ -98,6 +100,7 @@ class DesignerSessionStateCardBuilder:
         persisted_revision = None if fresh_cycle_from_committed_baseline else (persisted_card.revision_state if persisted_card is not None else None)
         persisted_conversation = persisted_card.conversation_context if persisted_card is not None else None
         notes = dict(persisted_card.notes) if persisted_card is not None else {}
+        notes = self._apply_committed_summary_exposure_policy(notes)
         if fresh_cycle_from_committed_baseline:
             notes = self._prepare_notes_for_fresh_cycle_from_committed_baseline(notes)
             notes.update({
@@ -232,6 +235,40 @@ class DesignerSessionStateCardBuilder:
         return f"{prefix}-{digest}"
 
 
+
+
+    def _apply_committed_summary_exposure_policy(self, notes: dict[str, Any]) -> dict[str, Any]:
+        cleaned = {
+            key: value
+            for key, value in notes.items()
+            if key not in {
+                "committed_summary_primary",
+                "committed_summary_recent_history",
+                "committed_summary_primary_priority",
+                "committed_summary_history_priority",
+                "committed_summary_exposed_history_count",
+                "committed_summary_interpretation_policy",
+                "committed_summary_exposure_applied",
+            }
+        }
+        history = cleaned.get("commit_summary_history")
+        if not isinstance(history, list) or not history:
+            return cleaned
+        normalized_history = [dict(item) for item in history if isinstance(item, dict)]
+        if not normalized_history:
+            return cleaned
+        primary = dict(normalized_history[0])
+        recent_history = [dict(item) for item in normalized_history[1:1 + _COMMITTED_SUMMARY_EXPOSED_HISTORY_LIMIT]]
+        cleaned.update({
+            "committed_summary_primary": primary,
+            "committed_summary_recent_history": recent_history,
+            "committed_summary_primary_priority": "high",
+            "committed_summary_history_priority": "low",
+            "committed_summary_exposed_history_count": len(recent_history),
+            "committed_summary_interpretation_policy": "latest_primary_history_reference_only",
+            "committed_summary_exposure_applied": True,
+        })
+        return cleaned
 
     def _prepare_notes_for_fresh_cycle_from_committed_baseline(self, notes: dict[str, Any]) -> dict[str, Any]:
         cleaned = {

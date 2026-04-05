@@ -320,6 +320,18 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
+        latest_summary = self._latest_committed_summary(context)
+        if latest_summary is not None and self._uses_referential_committed_summary_language(request_text):
+            assumptions.append(
+                AssumptionSpec(
+                    text=(
+                        "Referential continuation language is interpreted against the latest committed summary first "
+                        f"(commit {latest_summary.get('commit_id', 'unknown')})."
+                    ),
+                    severity="medium",
+                    user_visible=True,
+                )
+            )
         return assumptions
 
     def _build_ambiguity_flags(
@@ -348,6 +360,15 @@ class DesignerRequestNormalizer:
                     description="The request implies broad-scope changes that should be confirmed before commit.",
                 )
             )
+        if self._uses_referential_committed_summary_language(request_text):
+            history = self._committed_summary_history(context)
+            if len(history) > 1:
+                flags.append(
+                    AmbiguityFlag(
+                        type="committed_summary_reference_history",
+                        description="This request references previous/last change semantics while multiple recent committed summaries exist; latest summary is prioritized unless clarified.",
+                    )
+                )
         return flags
 
     def _build_risk_flags(self, request_text: str) -> list[RiskFlag]:
@@ -379,6 +400,50 @@ class DesignerRequestNormalizer:
 
     def _estimate_confidence(self, ambiguity_flags: list[AmbiguityFlag]) -> float:
         return 0.65 if ambiguity_flags else 0.9
+
+
+    def _latest_committed_summary(self, context: RequestNormalizationContext) -> dict[str, str] | None:
+        card = context.session_state_card
+        if card is None:
+            return None
+        primary = card.notes.get("committed_summary_primary")
+        if isinstance(primary, dict):
+            return {str(key): str(value) for key, value in primary.items()}
+        history = self._committed_summary_history(context)
+        if history:
+            return history[0]
+        return None
+
+    def _committed_summary_history(self, context: RequestNormalizationContext) -> list[dict[str, str]]:
+        card = context.session_state_card
+        if card is None:
+            return []
+        history = card.notes.get("commit_summary_history")
+        if not isinstance(history, list):
+            return []
+        normalized: list[dict[str, str]] = []
+        for item in history:
+            if isinstance(item, dict):
+                normalized.append({str(key): str(value) for key, value in item.items()})
+        return normalized
+
+    def _uses_referential_committed_summary_language(self, request_text: str) -> bool:
+        text = request_text.casefold()
+        patterns = (
+            r"\bprevious change\b",
+            r"\blast change\b",
+            r"\bprevious commit\b",
+            r"\blast commit\b",
+            r"\bsame change\b",
+            r"\bsame edit\b",
+            r"\bthat change\b",
+            r"\bthat edit\b",
+            r"\brevert\b",
+            r"\bundo\b",
+            r"\brollback\b",
+            r"\broll back\b",
+        )
+        return any(re.search(pattern, text) for pattern in patterns)
 
     def _infer_provider_id(self, text: str) -> str:
         if "claude" in text or "anthropic" in text:

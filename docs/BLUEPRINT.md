@@ -159,7 +159,8 @@ Current implementation baseline:
 * approval-ready patch-applied candidates can now be resumed more explicitly through persisted commit-candidate state
 * successful commit now reduces stale ready-for-commit continuation state into post-commit summary semantics
 * a new Designer request after commit now starts a fresh proposal cycle from the committed baseline instead of inheriting consumed continuation context
-* the next rational implementation move is continued Phase 2 control-plane maturation, especially stronger repeated-cycle safety and richer control governance
+* committed-summary history now has explicit exposure/priority semantics: the latest committed summary is primary, older retained summaries are history-only, and referential requests bias toward latest-only interpretation
+* the next rational implementation move is continued Phase 2 control-plane maturation, especially longer-horizon control governance and repeated-cycle interpretation safety
 
 Interpretation rule:
 
