@@ -615,3 +615,44 @@ def test_builder_exposes_committed_summary_priority_notes() -> None:
     assert rebuilt.notes["committed_summary_target_auto_resolution_modes"] == ["single_touched_node_when_no_explicit_target"]
     assert rebuilt.notes["committed_summary_target_clarification_required_modes"] == ["multiple_touched_nodes_without_explicit_target", "explicit_target_conflicts_with_referenced_summary", "referenced_summary_without_touched_nodes"]
 
+
+
+
+def test_control_plane_persists_mixed_referential_attempt_reason_code_into_session_state() -> None:
+    controller = DesignerProposalControlPlane()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-mixed-persist",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change and switch provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(
+            user_request_text="Undo the last change and switch provider in node reviewer to Claude"
+        ),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+
+    result = controller.run(
+        "Undo the last change and switch provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    updated = result.updated_session_state_card
+    assert updated is not None
+    assert updated.revision_state.attempt_history[-1].reason_code == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert updated.notes["last_attempt_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert updated.notes["last_attempt_stage"] == "precheck"
+    assert updated.notes["last_attempt_outcome"] == "confirmation_required"

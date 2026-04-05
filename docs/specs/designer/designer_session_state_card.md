@@ -583,3 +583,6 @@ Action-resolution rule:
 - the canonical bounded catalog lives in `src/designer/reason_codes.py`
 - normalizer / patch / precheck / preview must reuse that bounded catalog instead of duplicating string literals
 - promotion into a broader shared reason-code system is deferred until UI and real usage testing justify it
+
+
+- Proposal-control/session-state integration now preserves Designer-bounded mixed referential reason codes in attempt history and session notes (`last_attempt_reason_code`, `last_attempt_stage`, `last_attempt_outcome`).

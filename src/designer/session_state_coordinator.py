@@ -95,6 +95,7 @@ class DesignerSessionStateCoordinator:
             explicit_user_preferences=session_state_card.conversation_context.explicit_user_preferences,
         )
 
+        latest_attempt = control_state.history[-1] if control_state.history else None
         return replace(
             session_state_card,
             target_scope=next_scope,
@@ -106,6 +107,11 @@ class DesignerSessionStateCoordinator:
                 **session_state_card.notes,
                 "last_control_action": control_state.next_action,
                 "last_terminal_status": control_state.terminal_status,
+                **({
+                    "last_attempt_reason_code": latest_attempt.reason_code,
+                    "last_attempt_stage": latest_attempt.stage,
+                    "last_attempt_outcome": latest_attempt.outcome,
+                } if latest_attempt is not None else {}),
             },
         )
 

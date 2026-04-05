@@ -79,3 +79,16 @@ def is_mixed_referential_flag_type(flag_type: str) -> bool:
 
 def confirmation_message_for_reason_code(reason_code: str) -> str:
     return CONFIRMATION_MESSAGE_BY_REASON_CODE.get(reason_code, CONFIRMATION_MESSAGE_BY_REASON_CODE[MIXED_REFERENTIAL_ACTION])
+
+
+
+def is_designer_mixed_referential_reason_code(reason_code: str) -> bool:
+    return reason_code in DESIGNER_MIXED_REFERENTIAL_REASON_CODES
+
+
+def first_mixed_referential_reason_from_findings(findings) -> tuple[str | None, str | None]:
+    for finding in findings:
+        issue_code = getattr(finding, "issue_code", "")
+        if issue_code in DESIGNER_MIXED_REFERENTIAL_REASON_CODES:
+            return issue_code, getattr(finding, "message", "") or confirmation_message_for_reason_code(issue_code)
+    return None, None

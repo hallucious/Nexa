@@ -153,3 +153,50 @@ def test_control_plane_aborts_when_blocked_precheck_budget_is_exhausted() -> Non
     assert result.bundle is not None
     assert result.control_state.next_action == "abort"
     assert result.control_state.terminal_status == "exhausted"
+
+
+
+def test_control_plane_tracks_mixed_referential_reason_code_in_attempt_history() -> None:
+    controller = DesignerProposalControlPlane()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-mixed-control",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            circuit_summary="2 nodes",
+            node_list=("node.answerer", "node.reviewer"),
+            edge_list=("node.answerer->node.reviewer",),
+            output_list=("final_answer",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change and switch provider"),
+        constraints=ConstraintSet(),
+        approval_state=ApprovalState(),
+        conversation_context=ConversationContext(
+            user_request_text="Undo the last change and switch provider in node reviewer to Claude"
+        ),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+
+    result = controller.run(
+        "Undo the last change and switch provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert result.bundle is not None
+    assert result.control_state.terminal_status == "awaiting_user_input"
+    assert result.control_state.history[-1].reason_code == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert result.control_state.pending_reason is not None
+    assert "reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE" in result.control_state.pending_reason
+    assert result.updated_session_state_card is not None
+    assert result.updated_session_state_card.revision_state.attempt_history[-1].reason_code == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert result.updated_session_state_card.notes["last_attempt_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"

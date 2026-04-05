@@ -10,6 +10,7 @@ from src.designer.models.designer_proposal_control import (
 )
 from src.designer.models.designer_session_state_card import DesignerSessionStateCard
 from src.designer.proposal_flow import DesignerProposalBundle, DesignerProposalFlow
+from src.designer.reason_codes import first_mixed_referential_reason_from_findings
 from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
 
 
@@ -165,6 +166,9 @@ class DesignerProposalControlPlane:
 
         if status == "confirmation_required":
             next_action = "choose_interpretation" if bundle.intent.ambiguity_flags else "await_user_confirmation"
+            confirmation_reason_code, confirmation_message = first_mixed_referential_reason_from_findings(
+                bundle.precheck.confirmation_findings
+            )
             next_state = replace(
                 state,
                 current_stage="approval_boundary",
@@ -172,15 +176,15 @@ class DesignerProposalControlPlane:
                 terminal_status="awaiting_user_input",
                 fallback_count=state.fallback_count + (1 if next_action == "choose_interpretation" else 0),
                 last_precheck_status=status,
-                pending_reason=bundle.precheck.explanation,
+                pending_reason=confirmation_message or bundle.precheck.explanation,
                 history=state.history
                 + (
                     ProposalAttemptRecord(
                         attempt_index=next_attempt_index,
                         stage="precheck",
                         outcome="confirmation_required",
-                        reason_code="DESIGNER-CONFIRMATION-REQUIRED",
-                        message=bundle.precheck.explanation,
+                        reason_code=confirmation_reason_code or "DESIGNER-CONFIRMATION-REQUIRED",
+                        message=confirmation_message or bundle.precheck.explanation,
                     ),
                 ),
             )
