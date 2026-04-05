@@ -145,7 +145,7 @@ def test_request_normalizer_uses_latest_committed_summary_priority_for_referenti
     )
 
     assert any("commit-latest" in assumption.text for assumption in intent.assumptions)
-    assert any(flag.type == "committed_summary_reference_history" for flag in intent.ambiguity_flags)
+    assert any("revert_committed_change" in assumption.text for assumption in intent.assumptions)
 
 
 
@@ -393,3 +393,77 @@ def test_request_normalizer_flags_conflicting_explicit_target_against_referenced
 
     assert intent.target_scope.node_refs == ("node.answerer",)
     assert any(flag.type == "committed_summary_target_conflict" for flag in intent.ambiguity_flags)
+
+
+def test_request_normalizer_auto_resolves_safe_revert_action_for_latest_summary() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-action-auto",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert intent.proposed_actions[0].action_type == "update_node"
+    assert intent.proposed_actions[0].target_ref == "node.reviewer"
+    assert intent.proposed_actions[0].parameters["operation_mode"] == "revert_committed_change"
+    assert intent.proposed_actions[0].parameters["commit_id"] == "commit-latest"
+    assert intent.proposed_actions[0].parameters["patch_ref"] == "patch-latest"
+    assert any("revert_committed_change" in assumption.text for assumption in intent.assumptions)
+
+
+def test_request_normalizer_requires_clarification_for_mixed_revert_and_provider_change() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-action-mixed",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change and switch provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change and switch provider in node reviewer to Claude"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change and switch provider in node reviewer to Claude",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert any(flag.type == "committed_summary_action_needs_clarification" for flag in intent.ambiguity_flags)
+    assert all(
+        action.parameters.get("operation_mode") != "revert_committed_change"
+        for action in intent.proposed_actions
+    )
+    assert any(action.action_type == "replace_provider" for action in intent.proposed_actions)

@@ -561,7 +561,16 @@ Post-commit cleanup rules:
 - `committed_summary_target_resolution_policy`: target-resolution policy string
 - `committed_summary_target_auto_resolution_modes`: list of safe auto-target modes
 - `committed_summary_target_clarification_required_modes`: list of target modes that must remain explicit
+- `committed_summary_action_resolution_policy`: action-resolution policy string
+- `committed_summary_action_auto_resolution_modes`: list of safe auto-action modes
+- `committed_summary_action_clarification_required_modes`: list of mixed or unsafe action modes that must remain explicit
 
 Target-resolution rule:
 - a referenced committed summary may auto-select a patch target only when it exposes exactly one touched node and the request does not specify a conflicting explicit node target
 - if the referenced summary touched multiple nodes, or the explicit request target conflicts with the referenced summary target set, Designer must keep the request confirmation-bounded
+
+Action-resolution rule:
+- safe auto-action resolution is intentionally narrow in Phase 2
+- only revert / undo / rollback language may auto-resolve into a bounded `revert_committed_change` action
+- this auto-resolution is allowed only when the committed summary reference is safely resolved and the request does not mix revert language with a second structural-edit intent such as provider replacement, plugin attachment, rename, insert, optimize, or repair
+- mixed-action requests must remain explicit confirmation-bounded requests rather than being auto-expanded into multi-step action plans

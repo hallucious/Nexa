@@ -44,7 +44,7 @@ class DesignerRequestNormalizer:
         effective_request_text = self._compose_effective_request_text(request_text, context)
         category = self._infer_category(effective_request_text)
         scope = self._build_scope(category, effective_request_text, context)
-        actions = self._build_actions(category, effective_request_text, scope)
+        actions = self._build_actions(category, effective_request_text, scope, context)
         assumptions = self._build_assumptions(category, effective_request_text, context)
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
         risk_flags = self._build_risk_flags(effective_request_text)
@@ -202,7 +202,13 @@ class DesignerRequestNormalizer:
             preferred_behavior=card.objective.preferred_behavior,
         )
 
-    def _build_actions(self, category: str, request_text: str, scope: TargetScope) -> list[ActionSpec]:
+    def _build_actions(
+        self,
+        category: str,
+        request_text: str,
+        scope: TargetScope,
+        context: RequestNormalizationContext,
+    ) -> list[ActionSpec]:
         text = request_text.casefold()
         if category == "CREATE_CIRCUIT":
             return [
@@ -220,6 +226,9 @@ class DesignerRequestNormalizer:
                 ),
             ]
         actions: list[ActionSpec] = []
+        referential_action = self._resolve_referential_action_resolution(request_text, scope, context)
+        if referential_action is not None:
+            actions.append(referential_action)
         if any(term in text for term in ("review", "approve", "human review")):
             actions.append(
                 ActionSpec(
@@ -304,6 +313,59 @@ class DesignerRequestNormalizer:
             )
         return actions
 
+    def _resolve_referential_action_resolution(
+        self,
+        request_text: str,
+        scope: TargetScope,
+        context: RequestNormalizationContext,
+    ) -> ActionSpec | None:
+        if not self._uses_safe_revert_action_language(request_text):
+            return None
+        if self._uses_conflicting_nonrevert_action_language(request_text):
+            return None
+        summary, _, unresolved_reason = self._resolve_committed_summary_reference(request_text, context)
+        if summary is None or unresolved_reason is not None:
+            return None
+        target_ref = scope.node_refs[0] if len(scope.node_refs) == 1 else None
+        touched_node_ids = self._committed_summary_touched_node_ids(summary, context)
+        if target_ref is None and len(touched_node_ids) == 1:
+            target_ref = touched_node_ids[0]
+        if target_ref is None and len(touched_node_ids) != 0:
+            return None
+        parameters = {
+            "operation_mode": "revert_committed_change",
+            "commit_id": summary.get("commit_id"),
+            "patch_ref": summary.get("patch_ref"),
+            "revert_scope": "target_only" if target_ref is not None else "summary_scope",
+        }
+        return ActionSpec(
+            action_type="update_node",
+            target_ref=target_ref,
+            parameters=parameters,
+            rationale="The request explicitly asks to revert or roll back a resolved committed change.",
+        )
+
+    def _uses_safe_revert_action_language(self, request_text: str) -> bool:
+        text = request_text.casefold()
+        return bool(re.search(r"\b(revert|undo|rollback|roll back)\b", text))
+
+    def _uses_conflicting_nonrevert_action_language(self, request_text: str) -> bool:
+        text = request_text.casefold()
+        patterns = (
+            r"\b(replace|switch|change) provider\b",
+            r"\battach plugin\b",
+            r"\badd plugin\b",
+            r"\buse plugin\b",
+            r"\brename\b",
+            r"\binsert\b",
+            r"\badd review\b",
+            r"\bremove review\b",
+            r"\boptimi[sz]e\b",
+            r"\brepair\b",
+            r"\band\b",
+        )
+        return any(re.search(pattern, text) for pattern in patterns)
+
     def _build_assumptions(
         self,
         category: str,
@@ -371,6 +433,17 @@ class DesignerRequestNormalizer:
                 assumptions.append(
                     AssumptionSpec(
                         text=f"The patch target is auto-resolved to {touched_node_ids[0]} because the referenced committed summary touched exactly one node.",
+                        severity="low",
+                        user_visible=True,
+                    )
+                )
+            if self._uses_safe_revert_action_language(request_text) and not self._uses_conflicting_nonrevert_action_language(request_text):
+                assumptions.append(
+                    AssumptionSpec(
+                        text=(
+                            "Safe referential revert language is normalized into a bounded revert_committed_change action "
+                            f"against commit {resolved_summary.get('commit_id', 'unknown')}."
+                        ),
                         severity="low",
                         user_visible=True,
                     )
@@ -451,6 +524,13 @@ class DesignerRequestNormalizer:
 
         resolved_summary, _, _ = self._resolve_committed_summary_reference(request_text, context)
         if resolved_summary is not None and category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
+            if self._uses_safe_revert_action_language(request_text) and self._uses_conflicting_nonrevert_action_language(request_text):
+                flags.append(
+                    AmbiguityFlag(
+                        type="committed_summary_action_needs_clarification",
+                        description="The request combines revert/rollback language with another modification action, so automatic action resolution must be confirmed.",
+                    )
+                )
             touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
             explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
             if explicit_node_refs:
