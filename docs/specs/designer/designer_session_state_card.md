@@ -594,3 +594,6 @@ Action-resolution rule:
 - When repeated confirmation cycles remain unresolved, referential auto-resolution must temporarily tighten: rollback/undo language should require an explicit commit anchor, explicit node target, or explicit non-latest selector before safe automatic resolution resumes.
 - Governance tier handling is now request-applicability-aware. Elevated/strict referential governance should only surface when the current request is actually in the risky referential category; already-anchored requests may downgrade to warning-style surfacing while the elevated tier remains active.
 - Governance policy is now reused across approval/revision safety. Governance-derived approval decisions may carry explicit next-step anchor guidance, and governance-triggered revision requests may persist anchor guidance into session notes/unresolved questions for the next attempt.
+
+
+- safe non-referential cycles now contribute explicit decay progress; after enough consecutive safe cycles, elevated/strict governance can deescalate one tier even without a new referential anchor event

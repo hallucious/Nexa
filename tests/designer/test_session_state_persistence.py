@@ -1011,3 +1011,55 @@ def test_persisted_session_rebuild_relaxes_strict_governance_one_tier_after_anch
     assert rebuilt.notes["control_governance_policy_tier"] == "elevated"
     assert rebuilt.notes["control_governance_transition_rule"] == "anchored_resolution_cooldown"
     assert rebuilt.notes["control_governance_resolution_state"] == "partial_relief"
+
+
+def test_persisted_session_rebuild_tracks_safe_cycle_decay_progress_for_strict_governance() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-governance-safe-decay",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            circuit_summary="2 nodes",
+            node_list=("node.answerer", "node.reviewer"),
+            edge_list=("node.answerer->node.reviewer",),
+            output_list=("final_answer",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        approval_state=ApprovalState(),
+        conversation_context=ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+        notes={
+            "control_governance_policy_tier": "strict",
+            "control_governance_requires_explicit_referential_anchor": True,
+            "control_governance_safe_cycle_decay_count": 1,
+        },
+        revision_state=RevisionState(
+            attempt_history=(
+                RevisionAttemptSummary(
+                    attempt_index=1,
+                    stage="preview",
+                    outcome="ready_for_approval",
+                    reason_code="DESIGNER-READY-FOR-APPROVAL",
+                    message="Proposal bundle passed into the approval boundary.",
+                ),
+            ),
+        ),
+    )
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=card)
+
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Change provider in node reviewer to Claude",
+        artifact=persisted,
+    )
+
+    assert rebuilt.notes["control_governance_policy_tier"] == "elevated"
+    assert rebuilt.notes["control_governance_transition_rule"] == "safe_cycle_decay_threshold"
+    assert rebuilt.notes["control_governance_resolution_state"] == "safe_cycle_partial_relief"
+    assert rebuilt.notes["control_governance_decay_path"] == "safe_nonreferential_cycles"
+    assert rebuilt.notes["control_governance_safe_cycle_decay_count"] == 0
+    assert rebuilt.notes["control_governance_safe_cycle_decay_threshold"] == 2

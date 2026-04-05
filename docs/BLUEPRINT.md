@@ -507,3 +507,6 @@ Representation {
 * mixed referential reason retention now follows an explicit lifecycle boundary: active notes only remain live during the current revision cycle, commit cleanup archives them into history-only notes, and fresh unrelated cycles clear transient mixed-reason markers before new interpretation begins
 * governance-tier surfacing is now applicability-aware: non-referential requests should not inherit irrelevant referential friction, and already-anchored requests should downgrade from confirmation-style governance to warning-style governance while the elevated tier remains active
 * governance policy is now reused across approval/revision safety boundaries: governance confirmation findings generate richer approval decision guidance, and governance-triggered revision requests persist explicit anchor guidance back into session-state continuity
+
+
+- safe non-referential cycles now contribute explicit decay progress; after enough consecutive safe cycles, elevated/strict governance can deescalate one tier even without a new referential anchor event

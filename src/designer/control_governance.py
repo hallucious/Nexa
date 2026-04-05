@@ -9,6 +9,7 @@ from src.designer.models.designer_session_state_card import RevisionAttemptSumma
 _RECENT_ATTEMPT_LIMIT = 3
 _REPEAT_CONFIRMATION_THRESHOLD = 2
 _STRICT_REPEAT_THRESHOLD = 3
+_SAFE_CYCLE_DECAY_THRESHOLD = 2
 
 _TIER_RANK = {"standard": 0, "elevated": 1, "strict": 2}
 
@@ -38,6 +39,10 @@ _GOVERNANCE_NOTE_KEYS = frozenset(
         "control_governance_previous_tier",
         "control_governance_resolution_state",
         "control_governance_resolution_message",
+        "control_governance_safe_cycle_decay_count",
+        "control_governance_safe_cycle_decay_threshold",
+        "control_governance_decay_summary",
+        "control_governance_decay_path",
     }
 )
 
@@ -110,6 +115,7 @@ def apply_control_governance_notes(
         predicate=lambda item: item.outcome == "confirmation_required",
     )
     previous_policy = load_control_governance_policy(notes)
+    previous_safe_cycle_decay_count = int(notes.get("control_governance_safe_cycle_decay_count", 0) or 0)
     base_policy = _derive_control_governance_policy(
         repeated_reason_count=repeated_reason_count,
         confirmation_loop_count=confirmation_loop_count,
@@ -121,7 +127,15 @@ def apply_control_governance_notes(
         transition_rule,
         resolution_state,
         resolution_message,
-    ) = _apply_policy_transition(previous_policy=previous_policy, base_policy=base_policy, latest_attempt=latest)
+        safe_cycle_decay_count,
+        decay_summary,
+        decay_path,
+    ) = _apply_policy_transition(
+        previous_policy=previous_policy,
+        base_policy=base_policy,
+        latest_attempt=latest,
+        previous_safe_cycle_decay_count=previous_safe_cycle_decay_count,
+    )
     previous_tier = previous_policy.tier
 
     next_notes.update(
@@ -169,6 +183,10 @@ def apply_control_governance_notes(
             "control_governance_transition_rule": transition_rule,
             "control_governance_resolution_state": resolution_state,
             "control_governance_resolution_message": resolution_message,
+            "control_governance_safe_cycle_decay_count": safe_cycle_decay_count,
+            "control_governance_safe_cycle_decay_threshold": _SAFE_CYCLE_DECAY_THRESHOLD,
+            "control_governance_decay_summary": decay_summary,
+            "control_governance_decay_path": decay_path,
         }
     )
     return next_notes
@@ -335,16 +353,20 @@ def _apply_policy_transition(
     previous_policy: ControlGovernancePolicy,
     base_policy: ControlGovernancePolicy,
     latest_attempt: RevisionAttemptSummary,
-) -> tuple[ControlGovernancePolicy, str, str, str, str, str]:
+    previous_safe_cycle_decay_count: int,
+) -> tuple[ControlGovernancePolicy, str, str, str, str, str, int, str, str]:
     if base_policy.tier != "standard":
         direction = _tier_transition_direction(previous_policy.tier, base_policy.tier)
         return (
             base_policy,
             direction,
-            _tier_transition_summary(previous_policy.tier, base_policy.tier, direction),
+            _tier_transition_summary(previous_tier=previous_policy.tier, current_tier=base_policy.tier, direction=direction),
             "repeat_confirmation_threshold",
             "active_repeat_pressure",
             "Recent repeated confirmation pressure still exceeds the escalation threshold.",
+            0,
+            "Active repeat pressure reset any safe-cycle decay progress.",
+            "repeat_confirmation_pressure",
         )
 
     if previous_policy.requires_explicit_referential_anchor and previous_policy.tier in {"elevated", "strict"}:
@@ -359,6 +381,9 @@ def _apply_policy_transition(
                     "anchored_resolution_cooldown",
                     "partial_relief",
                     "An explicit anchor resolved the latest strict-cycle request, so governance has relaxed by one tier but remains elevated during cooldown.",
+                    0,
+                    "Explicit anchored resolution immediately relaxed governance by one tier.",
+                    "explicit_anchor_resolution",
                 )
             direction = _tier_transition_direction(previous_policy.tier, "standard")
             return (
@@ -368,25 +393,75 @@ def _apply_policy_transition(
                 "anchored_resolution_cleared",
                 "cleared",
                 "An explicit anchor resolved the elevated referential cycle, so the temporary anchor requirement has been cleared.",
+                0,
+                "Explicit anchored resolution cleared the remaining elevated governance tier.",
+                "explicit_anchor_resolution",
+            )
+
+        if _is_safe_cycle_decay_candidate(latest_attempt):
+            next_safe_cycle_decay_count = previous_safe_cycle_decay_count + 1
+            if next_safe_cycle_decay_count >= _SAFE_CYCLE_DECAY_THRESHOLD:
+                if previous_policy.tier == "strict":
+                    policy = _safe_cycle_decay_policy(previous_tier="strict")
+                    direction = _tier_transition_direction(previous_policy.tier, policy.tier)
+                    return (
+                        policy,
+                        direction,
+                        f"Control governance deescalated from strict to elevated after {next_safe_cycle_decay_count} consecutive safe non-referential cycles reduced recent ambiguity pressure.",
+                        "safe_cycle_decay_threshold",
+                        "safe_cycle_partial_relief",
+                        "Sustained safe non-referential cycles reduced ambiguity pressure enough to relax strict governance by one tier.",
+                        0,
+                        f"{next_safe_cycle_decay_count} consecutive safe non-referential cycles reached the decay threshold and relaxed governance by one tier.",
+                        "safe_nonreferential_cycles",
+                    )
+                direction = _tier_transition_direction(previous_policy.tier, "standard")
+                return (
+                    ControlGovernancePolicy(),
+                    direction,
+                    f"Control governance returned to standard after {next_safe_cycle_decay_count} consecutive safe non-referential cycles reduced the remaining ambiguity pressure.",
+                    "safe_cycle_decay_threshold",
+                    "safe_cycle_cleared",
+                    "Sustained safe non-referential cycles reduced ambiguity pressure enough to clear the remaining elevated governance tier.",
+                    0,
+                    f"{next_safe_cycle_decay_count} consecutive safe non-referential cycles cleared the remaining elevated governance tier.",
+                    "safe_nonreferential_cycles",
+                )
+            return (
+                previous_policy,
+                "held",
+                f"Control governance remains in {previous_policy.tier} mode while safe-cycle decay progresses ({next_safe_cycle_decay_count}/{_SAFE_CYCLE_DECAY_THRESHOLD}).",
+                "safe_cycle_decay_progress",
+                "safe_cycle_decay_progress",
+                "Recent safe non-referential work is reducing ambiguity pressure, but the decay threshold has not been reached yet.",
+                next_safe_cycle_decay_count,
+                f"{next_safe_cycle_decay_count} of {_SAFE_CYCLE_DECAY_THRESHOLD} safe non-referential cycles have been observed toward governance relaxation.",
+                "safe_nonreferential_cycles",
             )
 
         return (
             previous_policy,
             "held",
-            f"Control governance remains in {previous_policy.tier} mode until a referential request is resolved with an explicit anchor.",
+            f"Control governance remains in {previous_policy.tier} mode until a referential request is resolved with an explicit anchor or enough safe non-referential cycles are observed.",
             "hold_until_explicit_anchor_resolution",
             "awaiting_explicit_anchor_resolution",
-            "Recent ambiguity pressure has eased, but governance remains active because no explicit anchored referential resolution has been observed yet.",
+            "Recent ambiguity pressure has eased, but governance remains active because no explicit anchored referential resolution or sufficient safe-cycle decay has been observed yet.",
+            0,
+            "No safe-cycle decay progress was recorded in the latest attempt, so governance remains held.",
+            "none",
         )
 
     direction = _tier_transition_direction(previous_policy.tier, base_policy.tier)
     return (
         base_policy,
         direction,
-        _tier_transition_summary(previous_policy.tier, base_policy.tier, direction),
+        _tier_transition_summary(previous_tier=previous_policy.tier, current_tier=base_policy.tier, direction=direction),
         "baseline",
         "standard",
         "No elevated referential governance remains active.",
+        0,
+        "No elevated governance is active, so no decay tracking is required.",
+        "none",
     )
 
 
@@ -402,6 +477,31 @@ def _anchored_cooldown_policy(*, previous_tier: str) -> ControlGovernancePolicy:
             next_actions=("provide_explicit_anchor", "review_explicit_anchor"),
         )
     return ControlGovernancePolicy()
+
+
+
+
+def _safe_cycle_decay_policy(*, previous_tier: str) -> ControlGovernancePolicy:
+    if previous_tier == "strict":
+        return ControlGovernancePolicy(
+            tier="elevated",
+            interpretation_safety_mode="explicit_referential_anchor_required",
+            requires_explicit_referential_anchor=True,
+            reason="Recent safe non-referential cycles reduced ambiguity pressure, so strict governance has relaxed into elevated cooldown mode.",
+            precheck_message="Recent safe non-referential cycles reduced strict governance into elevated cooldown mode. Prefer explicit anchors for the next referential request while ambiguity pressure finishes decaying.",
+            preview_hint="Referential governance has relaxed from strict to elevated after sustained safe non-referential cycles, but the next referential request should still stay explicit.",
+            next_actions=("provide_explicit_anchor", "continue_nonreferential_changes_if_possible"),
+        )
+    return ControlGovernancePolicy()
+
+
+def _is_safe_cycle_decay_candidate(latest_attempt: RevisionAttemptSummary) -> bool:
+    if latest_attempt.reason_code in _ANCHORED_RESOLUTION_REASON_CODES:
+        return False
+    return (
+        latest_attempt.reason_code in {"DESIGNER-READY-FOR-APPROVAL", "DESIGNER-CONFIRMATION-REQUIRED"}
+        and latest_attempt.outcome in {"ready_for_approval", "confirmation_required"}
+    )
 
 
 def _policy_defaults_for_tier(tier: str) -> ControlGovernancePolicy:
@@ -475,7 +575,7 @@ def _tier_transition_direction(previous_tier: str, current_tier: str) -> str:
     return "unchanged"
 
 
-def _tier_transition_summary(previous_tier: str, current_tier: str, direction: str) -> str:
+def _tier_transition_summary(*, previous_tier: str, current_tier: str, direction: str) -> str:
     if direction == "escalated":
         return f"Control governance escalated from {previous_tier} to {current_tier} based on recent repeated confirmation patterns."
     if direction == "deescalated":

@@ -264,5 +264,64 @@ def test_control_plane_holds_strict_governance_until_explicit_anchor_resolution(
     assert result.control_state.history[-1].reason_code == "DESIGNER-CONFIRMATION-REQUIRED"
     assert result.updated_session_state_card.notes["control_governance_policy_tier"] == "strict"
     assert result.updated_session_state_card.notes["control_governance_transition_direction"] == "held"
-    assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "hold_until_explicit_anchor_resolution"
-    assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "awaiting_explicit_anchor_resolution"
+    assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "safe_cycle_decay_progress"
+    assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "safe_cycle_decay_progress"
+
+
+def test_control_plane_records_safe_cycle_decay_progress_while_strict_governance_remains_held() -> None:
+    controller = DesignerProposalControlPlane()
+    card = make_card()
+    card = DesignerSessionStateCard(
+        **{
+            **card.__dict__,
+            "conversation_context": ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+            "notes": {
+                "control_governance_policy_tier": "strict",
+                "control_governance_requires_explicit_referential_anchor": True,
+                "control_governance_safe_cycle_decay_count": 0,
+            },
+        }
+    )
+
+    result = controller.run(
+        "Change provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert result.updated_session_state_card is not None
+    assert result.control_state.history[-1].reason_code == "DESIGNER-CONFIRMATION-REQUIRED"
+    assert result.updated_session_state_card.notes["control_governance_policy_tier"] == "strict"
+    assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "safe_cycle_decay_progress"
+    assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "safe_cycle_decay_progress"
+    assert result.updated_session_state_card.notes["control_governance_safe_cycle_decay_count"] == 1
+    assert result.updated_session_state_card.notes["control_governance_decay_path"] == "safe_nonreferential_cycles"
+
+
+def test_control_plane_deescalates_elevated_governance_after_two_safe_nonreferential_cycles() -> None:
+    controller = DesignerProposalControlPlane()
+    card = make_card()
+    card = DesignerSessionStateCard(
+        **{
+            **card.__dict__,
+            "conversation_context": ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+            "notes": {
+                "control_governance_policy_tier": "elevated",
+                "control_governance_requires_explicit_referential_anchor": True,
+                "control_governance_safe_cycle_decay_count": 1,
+            },
+        }
+    )
+
+    result = controller.run(
+        "Change provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert result.updated_session_state_card is not None
+    assert result.updated_session_state_card.notes["control_governance_policy_tier"] == "standard"
+    assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "safe_cycle_decay_threshold"
+    assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "safe_cycle_cleared"
+    assert result.updated_session_state_card.notes["control_governance_safe_cycle_decay_count"] == 0
+    assert result.updated_session_state_card.notes["control_governance_decay_path"] == "safe_nonreferential_cycles"
