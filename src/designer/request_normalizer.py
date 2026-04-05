@@ -5,6 +5,7 @@ from typing import Any
 import hashlib
 import re
 
+from src.designer.control_governance import requires_explicit_referential_anchor
 from src.designer.models.designer_intent import (
     ActionSpec,
     AmbiguityFlag,
@@ -332,6 +333,8 @@ class DesignerRequestNormalizer:
         summary, _, unresolved_reason = self._resolve_committed_summary_reference(request_text, context)
         if summary is None or unresolved_reason is not None:
             return None
+        if self._repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=summary):
+            return None
         target_ref = scope.node_refs[0] if len(scope.node_refs) == 1 else None
         touched_node_ids = self._committed_summary_touched_node_ids(summary, context)
         if target_ref is None and len(touched_node_ids) == 1:
@@ -484,6 +487,16 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
+        if self._repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=resolved_summary):
+            assumptions.append(
+                AssumptionSpec(
+                    text=(
+                        "Repeated confirmation cycles are active for referential interpretation, so auto-resolution is paused until the request includes an explicit commit anchor, explicit node target, or explicit non-latest selector."
+                    ),
+                    severity="medium",
+                    user_visible=True,
+                )
+            )
         return assumptions
 
     def _build_ambiguity_flags(
@@ -549,8 +562,15 @@ class DesignerRequestNormalizer:
                         description="Recent committed history exists, but the request leaves open whether a non-latest summary was intended.",
                     )
                 )
-
         resolved_summary, _, _ = self._resolve_committed_summary_reference(request_text, context)
+        if self._repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=resolved_summary):
+            flags.append(
+                AmbiguityFlag(
+                    type="committed_summary_repeat_cycle_anchor_required",
+                    description="Recent confirmation cycles repeated the same referential interpretation pattern, so an explicit commit anchor, explicit node target, or explicit non-latest selector is now required before auto-resolution.",
+                )
+            )
+
         if resolved_summary is not None and category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
             if self._is_confirmation_bounded_mixed_referential_request(request_text):
                 reason_code = self._mixed_referential_action_reason_code(request_text)
@@ -628,6 +648,37 @@ class DesignerRequestNormalizer:
 
     def _estimate_confidence(self, ambiguity_flags: list[AmbiguityFlag]) -> float:
         return 0.65 if ambiguity_flags else 0.9
+
+    def _repeated_cycle_referential_anchor_required(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+        *,
+        resolved_summary: dict[str, Any] | None,
+    ) -> bool:
+        card = context.session_state_card
+        if card is None:
+            return False
+        if resolved_summary is None:
+            return False
+        if not self._uses_referential_committed_summary_language(request_text):
+            return False
+        if not requires_explicit_referential_anchor(card.notes):
+            return False
+        return not self._has_explicit_referential_anchor(request_text, context)
+
+    def _has_explicit_referential_anchor(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+    ) -> bool:
+        history = self._committed_summary_history(context)
+        if self._match_explicit_commit_reference(request_text, history) is not None:
+            return True
+        if self._uses_second_latest_reference_language(request_text):
+            return True
+        explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+        return bool(explicit_node_refs)
 
 
     def _latest_committed_summary(self, context: RequestNormalizationContext) -> dict[str, Any] | None:

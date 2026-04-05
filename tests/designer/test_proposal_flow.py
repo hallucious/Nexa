@@ -7,6 +7,8 @@ from src.designer.models.designer_session_state_card import (
     ConversationContext,
     CurrentSelectionState,
     DesignerSessionStateCard,
+    RevisionAttemptSummary,
+    RevisionState,
     SessionTargetScope,
     WorkingSaveReality,
 )
@@ -549,3 +551,116 @@ def test_proposal_flow_surfaces_mixed_referential_provider_change_in_precheck_an
         for item in bundle.preview.confirmation_preview.required_confirmations
     )
     assert "reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE" in bundle.rendered_preview
+
+
+def test_request_normalizer_requires_explicit_anchor_after_repeated_confirmation_cycles() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-repeat-anchor",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(
+            revision_index=2,
+            attempt_history=(
+                RevisionAttemptSummary(
+                    attempt_index=1,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+                RevisionAttemptSummary(
+                    attempt_index=2,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+            ),
+        ),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+            "control_governance_requires_explicit_referential_anchor": True,
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert any(flag.type == "committed_summary_repeat_cycle_anchor_required" for flag in intent.ambiguity_flags)
+    assert all(
+        action.parameters.get("operation_mode") != "revert_committed_change"
+        for action in intent.proposed_actions
+    )
+    assert any("Repeated confirmation cycles are active for referential interpretation" in assumption.text for assumption in intent.assumptions)
+
+
+def test_request_normalizer_allows_explicit_node_anchor_after_repeated_confirmation_cycles() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-repeat-node-anchor",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change on node reviewer"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(
+            revision_index=2,
+            attempt_history=(
+                RevisionAttemptSummary(
+                    attempt_index=1,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+                RevisionAttemptSummary(
+                    attempt_index=2,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+            ),
+        ),
+        conversation_context=ConversationContext(user_request_text="Undo the last change on node reviewer"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+            "control_governance_requires_explicit_referential_anchor": True,
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change on node reviewer",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert all(flag.type != "committed_summary_repeat_cycle_anchor_required" for flag in intent.ambiguity_flags)
+    assert any(
+        action.parameters.get("operation_mode") == "revert_committed_change"
+        for action in intent.proposed_actions
+    )

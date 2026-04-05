@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
+from src.designer.control_governance import apply_control_governance_notes
 from src.designer.models.designer_proposal_control import DesignerControlledProposalResult
 from src.designer.models.designer_session_state_card import (
     ApprovalState,
@@ -122,6 +123,7 @@ class DesignerSessionStateCoordinator:
             )
         else:
             next_notes = clear_active_mixed_referential_reason_notes(next_notes)
+        next_notes = apply_control_governance_notes(next_notes, next_revision.attempt_history)
         return replace(
             session_state_card,
             target_scope=next_scope,
@@ -260,6 +262,7 @@ class DesignerSessionStateCoordinator:
         else:
             next_notes.pop("last_revision_reason_code", None)
             next_notes = clear_active_mixed_referential_reason_notes(next_notes)
+        next_notes = apply_control_governance_notes(next_notes, next_revision.attempt_history)
 
         return replace(
             session_state_card,

@@ -344,3 +344,5 @@ CLI
 * approval-resolution revision flow now preserves Designer-bounded mixed referential reason codes in `revision_state.retry_reason` and `notes.last_revision_reason_code` instead of collapsing back to a generic approval revision marker
 
 * mixed referential reason retention is now lifecycle-bounded: live cycles use active session-note markers, post-commit cleanup demotes them into compact history-only notes, and fresh unrelated cycles clear transient mixed-reason markers so stale rollback/edit ambiguity does not bleed into new requests
+* repeated confirmation cycles now produce explicit control-governance notes summarizing recent attempt history, repeat counts, and whether referential auto-resolution should be temporarily tightened
+* referential interpretation safety now escalates after repeated confirmation loops: unanchored rollback/undo language stops auto-resolving until the request includes an explicit commit anchor, explicit node target, or explicit non-latest selector

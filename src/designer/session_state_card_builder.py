@@ -5,6 +5,7 @@ from typing import Any
 
 from src.contracts.nex_contract import COMMIT_SNAPSHOT_ROLE, WORKING_SAVE_ROLE
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
+from src.designer.control_governance import apply_control_governance_notes
 from src.designer.reason_codes import archive_latest_mixed_referential_reason_notes
 from src.designer.models.designer_session_state_card import (
     ApprovalState,
@@ -120,6 +121,8 @@ class DesignerSessionStateCardBuilder:
                 "resume_commit_candidate_approval_id": persisted_candidate.approval_id,
                 "resume_commit_candidate_working_save_ref": persisted_candidate.candidate_working_save_ref,
             })
+        governance_attempt_history = () if persisted_revision is None else persisted_revision.attempt_history
+        notes = apply_control_governance_notes(notes, governance_attempt_history)
 
         return DesignerSessionStateCard(
             card_version="0.1",
