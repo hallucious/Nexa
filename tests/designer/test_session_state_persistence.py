@@ -891,3 +891,44 @@ def test_control_plane_persists_mixed_referential_attempt_reason_code_into_sessi
     assert updated.notes["active_mixed_referential_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
     assert updated.notes["active_mixed_referential_reason_stage"] == "precheck"
     assert updated.notes["active_mixed_referential_reason_status"] == "confirmation_required"
+
+
+def test_control_governance_builder_records_thresholds_and_transition_summary() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-governance-transition",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(
+            revision_index=3,
+            last_control_action="choose_interpretation",
+            last_terminal_status="awaiting_user_input",
+            attempt_history=(
+                RevisionAttemptSummary(1, "precheck", "confirmation_required", "DESIGNER-CONFIRMATION-REQUIRED", "confirm"),
+                RevisionAttemptSummary(2, "precheck", "confirmation_required", "DESIGNER-CONFIRMATION-REQUIRED", "confirm"),
+                RevisionAttemptSummary(3, "precheck", "confirmation_required", "DESIGNER-CONFIRMATION-REQUIRED", "confirm"),
+            ),
+        ),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+        notes={"control_governance_policy_tier": "elevated"},
+    )
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=card)
+
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Undo the last change",
+        artifact=persisted,
+    )
+
+    assert rebuilt.notes["control_governance_thresholds"]["strict_repeat_threshold"] == 3
+    assert rebuilt.notes["control_governance_previous_tier"] == "elevated"
+    assert rebuilt.notes["control_governance_transition_direction"] == "escalated"
+    assert "escalated from elevated to strict" in rebuilt.notes["control_governance_transition_summary"]

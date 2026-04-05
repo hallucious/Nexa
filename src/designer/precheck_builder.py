@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.designer.control_governance import load_control_governance_policy
+from src.designer.control_governance import governance_applicability_for_request
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan
 from src.designer.models.designer_intent import DesignerIntent
 from src.designer.reason_codes import (
@@ -23,7 +23,7 @@ from src.designer.models.validation_precheck import (
 class DesignerPrecheckBuilder:
     def build(self, intent: DesignerIntent, patch: CircuitPatchPlan, *, session_state_card=None) -> ValidationPrecheck:
         blocking_findings = list(self._blocking_findings(intent, patch))
-        warning_findings = list(self._warning_findings(intent, patch))
+        warning_findings = list(self._warning_findings(intent, patch, session_state_card=session_state_card))
         confirmation_findings = list(self._confirmation_findings(intent, patch, blocking_findings, session_state_card=session_state_card))
         overall_status = self._overall_status(blocking_findings, confirmation_findings, warning_findings)
         evaluated_scope = EvaluatedScope(
@@ -81,7 +81,7 @@ class DesignerPrecheckBuilder:
             )
         return tuple(findings)
 
-    def _warning_findings(self, intent: DesignerIntent, patch: CircuitPatchPlan) -> tuple[PrecheckFinding, ...]:
+    def _warning_findings(self, intent: DesignerIntent, patch: CircuitPatchPlan, *, session_state_card=None) -> tuple[PrecheckFinding, ...]:
         findings: list[PrecheckFinding] = []
         if patch.dependency_effects.dependency_risks:
             findings.append(
@@ -99,6 +99,9 @@ class DesignerPrecheckBuilder:
                     severity="low",
                 )
             )
+        governance_warning = self._governance_anchor_warning_finding(intent, session_state_card=session_state_card)
+        if governance_warning is not None:
+            findings.append(governance_warning)
         return tuple(findings)
 
     def _confirmation_findings(
@@ -176,17 +179,36 @@ class DesignerPrecheckBuilder:
     def _governance_anchor_confirmation_finding(self, intent: DesignerIntent, *, session_state_card=None) -> PrecheckFinding | None:
         if session_state_card is None:
             return None
-        if not any(flag.type == "committed_summary_repeat_cycle_anchor_required" for flag in intent.ambiguity_flags):
+        applicability = governance_applicability_for_request(
+            ambiguity_flags=intent.ambiguity_flags,
+            proposed_actions=intent.proposed_actions,
+            notes=session_state_card.notes,
+        )
+        if not applicability.anchor_requirement_unsatisfied:
             return None
-        policy = load_control_governance_policy(session_state_card.notes)
-        if not policy.requires_explicit_referential_anchor:
-            return None
-        severity = "high" if policy.tier == "strict" else "medium"
+        severity = "high" if applicability.policy.tier == "strict" else "medium"
         return PrecheckFinding(
-            issue_code=f"REFERENTIAL_GOVERNANCE_{policy.tier.upper()}",
-            message=policy.precheck_message or "Referential governance now requires a stronger anchor before automatic rollback interpretation may continue.",
+            issue_code=f"REFERENTIAL_GOVERNANCE_{applicability.policy.tier.upper()}",
+            message=applicability.status_message or "Referential governance now requires a stronger anchor before automatic rollback interpretation may continue.",
             severity=severity,
-            fix_hint=policy.preview_hint or policy.reason,
+            fix_hint=applicability.policy.preview_hint or applicability.policy.reason,
+        )
+
+    def _governance_anchor_warning_finding(self, intent: DesignerIntent, *, session_state_card=None) -> PrecheckFinding | None:
+        if session_state_card is None:
+            return None
+        applicability = governance_applicability_for_request(
+            ambiguity_flags=intent.ambiguity_flags,
+            proposed_actions=intent.proposed_actions,
+            notes=session_state_card.notes,
+        )
+        if not applicability.anchor_requirement_satisfied:
+            return None
+        return PrecheckFinding(
+            issue_code=f"REFERENTIAL_GOVERNANCE_{applicability.policy.tier.upper()}_ANCHORED",
+            message=applicability.status_message,
+            severity="low",
+            fix_hint="The current request is anchored strongly enough to continue, but future referential edits should remain explicit while governance is elevated.",
         )
 
     def _overall_status(

@@ -676,7 +676,7 @@ def test_repeated_confirmation_governance_surfaces_policy_in_precheck_and_previe
     assert any("strict governance mode" in finding.message for finding in bundle.precheck.confirmation_findings)
     assert bundle.preview.summary_card.user_action_hint == "Provide a stronger referential anchor before approving the proposal."
     assert any("Strict referential governance is active." in item for item in bundle.preview.confirmation_preview.required_confirmations)
-    assert "Three or more closely related confirmation cycles were observed" in bundle.preview.explanation
+    assert "strict governance mode" in bundle.preview.explanation
     assert "strict governance mode" in bundle.rendered_preview
 
 
@@ -734,3 +734,90 @@ def test_request_normalizer_allows_explicit_node_anchor_after_repeated_confirmat
         action.parameters.get("operation_mode") == "revert_committed_change"
         for action in intent.proposed_actions
     )
+
+
+def test_proposal_flow_surfaces_anchored_governance_as_warning_not_confirmation() -> None:
+    flow = DesignerProposalFlow()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-anchored-strict",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change on node reviewer"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(
+            revision_index=3,
+            attempt_history=(
+                RevisionAttemptSummary(1, "precheck", "confirmation_required", "DESIGNER-CONFIRMATION-REQUIRED", "confirm"),
+                RevisionAttemptSummary(2, "precheck", "confirmation_required", "DESIGNER-CONFIRMATION-REQUIRED", "confirm"),
+                RevisionAttemptSummary(3, "precheck", "confirmation_required", "DESIGNER-CONFIRMATION-REQUIRED", "confirm"),
+            ),
+        ),
+        conversation_context=ConversationContext(user_request_text="Undo the last change on node reviewer"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+            "control_governance_policy_tier": "strict",
+            "control_governance_requires_explicit_referential_anchor": True,
+            "control_governance_policy_reason": "Three or more closely related confirmation cycles were observed, so referential auto-resolution has moved into strict governance mode.",
+            "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+        },
+    )
+
+    bundle = flow.propose(
+        "Undo the last change on node reviewer",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert bundle.precheck.overall_status == "confirmation_required"
+    assert not any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT" for f in bundle.precheck.confirmation_findings)
+    assert any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT_ANCHORED" for f in bundle.precheck.warning_findings)
+    assert "strong enough anchor" in bundle.preview.explanation
+    assert not any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT" for f in bundle.precheck.confirmation_findings)
+    assert any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT_ANCHORED" for f in bundle.precheck.warning_findings)
+    assert "strong enough anchor" in bundle.preview.explanation
+
+
+def test_proposal_flow_does_not_surface_governance_for_unrelated_nonreferential_request() -> None:
+    flow = DesignerProposalFlow()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-nonreferential-strict",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Change provider in node reviewer to Claude"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+        notes={
+            "control_governance_policy_tier": "strict",
+            "control_governance_requires_explicit_referential_anchor": True,
+            "control_governance_policy_reason": "Three or more closely related confirmation cycles were observed, so referential auto-resolution has moved into strict governance mode.",
+            "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+        },
+    )
+
+    bundle = flow.propose(
+        "Change provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert not any(f.issue_code.startswith("REFERENTIAL_GOVERNANCE_") for f in bundle.precheck.confirmation_findings)
+    assert not any(f.issue_code.startswith("REFERENTIAL_GOVERNANCE_") for f in bundle.precheck.warning_findings)
+    assert "strict governance mode" not in bundle.preview.explanation
