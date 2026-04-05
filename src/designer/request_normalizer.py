@@ -226,6 +226,8 @@ class DesignerRequestNormalizer:
                 ),
             ]
         actions: list[ActionSpec] = []
+        if self._is_confirmation_bounded_mixed_referential_request(request_text):
+            return actions
         referential_action = self._resolve_referential_action_resolution(request_text, scope, context)
         if referential_action is not None:
             actions.append(referential_action)
@@ -366,6 +368,31 @@ class DesignerRequestNormalizer:
         )
         return any(re.search(pattern, text) for pattern in patterns)
 
+    def _is_confirmation_bounded_mixed_referential_request(self, request_text: str) -> bool:
+        return (
+            self._uses_referential_committed_summary_language(request_text)
+            and self._uses_safe_revert_action_language(request_text)
+            and self._uses_conflicting_nonrevert_action_language(request_text)
+        )
+
+    def _mixed_referential_action_reason_code(self, request_text: str) -> str:
+        text = request_text.casefold()
+        if "replace provider" in text or "switch provider" in text or "change provider" in text:
+            return "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+        if "attach plugin" in text or "add plugin" in text or "use plugin" in text:
+            return "MIXED_REFERENTIAL_PLUGIN_ATTACH"
+        if "rename" in text:
+            return "MIXED_REFERENTIAL_RENAME"
+        if "insert" in text:
+            return "MIXED_REFERENTIAL_INSERT"
+        if "remove" in text or "delete" in text:
+            return "MIXED_REFERENTIAL_DELETE"
+        if "add review" in text or "remove review" in text:
+            return "MIXED_REFERENTIAL_REVIEW_GATE"
+        if "optimize" in text or "optimise" in text or "repair" in text:
+            return "MIXED_REFERENTIAL_OPTIMIZE_REPAIR"
+        return "MIXED_REFERENTIAL_ACTION"
+
     def _build_assumptions(
         self,
         category: str,
@@ -448,6 +475,18 @@ class DesignerRequestNormalizer:
                         user_visible=True,
                     )
                 )
+            elif self._is_confirmation_bounded_mixed_referential_request(request_text):
+                reason_code = self._mixed_referential_action_reason_code(request_text)
+                assumptions.append(
+                    AssumptionSpec(
+                        text=(
+                            "Mixed referential action language is kept confirmation-bounded instead of being auto-expanded "
+                            f"(reason_code={reason_code})."
+                        ),
+                        severity="medium",
+                        user_visible=True,
+                    )
+                )
         elif unresolved_reason == "missing":
             assumptions.append(
                 AssumptionSpec(
@@ -524,11 +563,23 @@ class DesignerRequestNormalizer:
 
         resolved_summary, _, _ = self._resolve_committed_summary_reference(request_text, context)
         if resolved_summary is not None and category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
-            if self._uses_safe_revert_action_language(request_text) and self._uses_conflicting_nonrevert_action_language(request_text):
+            if self._is_confirmation_bounded_mixed_referential_request(request_text):
+                reason_code = self._mixed_referential_action_reason_code(request_text)
                 flags.append(
                     AmbiguityFlag(
                         type="committed_summary_action_needs_clarification",
-                        description="The request combines revert/rollback language with another modification action, so automatic action resolution must be confirmed.",
+                        description=(
+                            "The request combines revert/rollback language with another modification action, so automatic action resolution must be confirmed "
+                            f"(reason_code={reason_code})."
+                        ),
+                    )
+                )
+                flags.append(
+                    AmbiguityFlag(
+                        type=reason_code.casefold(),
+                        description=(
+                            "This request mixes referential rollback language with another structural action pattern and therefore must remain confirmation-bounded."
+                        ),
                     )
                 )
             touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)

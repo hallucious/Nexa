@@ -574,3 +574,4 @@ Action-resolution rule:
 - only revert / undo / rollback language may auto-resolve into a bounded `revert_committed_change` action
 - this auto-resolution is allowed only when the committed summary reference is safely resolved and the request does not mix revert language with a second structural-edit intent such as provider replacement, plugin attachment, rename, insert, optimize, or repair
 - mixed-action requests must remain explicit confirmation-bounded requests rather than being auto-expanded into multi-step action plans
+- when mixed referential action language is detected, Designer should emit a generic clarification flag plus a reason-like mixed-action code (for example provider-change or plugin-attach) and should avoid auto-emitting partial structural actions

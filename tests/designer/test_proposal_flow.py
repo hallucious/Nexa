@@ -462,8 +462,46 @@ def test_request_normalizer_requires_clarification_for_mixed_revert_and_provider
     )
 
     assert any(flag.type == "committed_summary_action_needs_clarification" for flag in intent.ambiguity_flags)
+    assert any(flag.type == "mixed_referential_provider_change" for flag in intent.ambiguity_flags)
     assert all(
         action.parameters.get("operation_mode") != "revert_committed_change"
         for action in intent.proposed_actions
     )
-    assert any(action.action_type == "replace_provider" for action in intent.proposed_actions)
+    assert not intent.proposed_actions
+    assert any("reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE" in assumption.text for assumption in intent.assumptions)
+
+
+
+def test_request_normalizer_requires_clarification_for_mixed_revert_and_plugin_add() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-action-plugin-mixed",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Rollback the last change and add plugin"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Rollback the last change and add plugin search in node reviewer"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Rollback the last change and add plugin search in node reviewer",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert any(flag.type == "committed_summary_action_needs_clarification" for flag in intent.ambiguity_flags)
+    assert any(flag.type == "mixed_referential_plugin_attach" for flag in intent.ambiguity_flags)
+    assert not intent.proposed_actions
+    assert any("reason_code=MIXED_REFERENTIAL_PLUGIN_ATTACH" in assumption.text for assumption in intent.assumptions)
