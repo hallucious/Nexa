@@ -25,6 +25,7 @@ class DesignerPatchApplicationResult:
     patch_ref: str
     applied_operation_ids: tuple[str, ...]
     created_node_ids: tuple[str, ...] = ()
+    touched_node_ids: tuple[str, ...] = ()
     warnings: tuple[str, ...] = ()
 
 
@@ -126,6 +127,7 @@ class DesignerPatchApplier:
             patch_ref=patch.patch_id,
             applied_operation_ids=tuple(operation.op_id for operation in patch.operations),
             created_node_ids=tuple(created_node_ids),
+            touched_node_ids=tuple(dict.fromkeys(patch.change_scope.touched_nodes)),
             warnings=tuple(warnings),
         )
 
@@ -166,6 +168,7 @@ class DesignerPatchApplier:
             approved_scope_ref=approval_state.approved_scope_ref,
             applied_operation_ids=application.applied_operation_ids,
             created_node_ids=application.created_node_ids,
+            touched_node_ids=application.touched_node_ids,
             candidate_origin=str(designer_data.get("candidate_origin") or "designer_patch_application"),
         )
 

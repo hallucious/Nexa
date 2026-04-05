@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 import hashlib
 import re
 
@@ -43,7 +44,7 @@ class DesignerRequestNormalizer:
         effective_request_text = self._compose_effective_request_text(request_text, context)
         category = self._infer_category(effective_request_text)
         scope = self._build_scope(category, effective_request_text, context)
-        actions = self._build_actions(category, effective_request_text)
+        actions = self._build_actions(category, effective_request_text, scope)
         assumptions = self._build_assumptions(category, effective_request_text, context)
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
         risk_flags = self._build_risk_flags(effective_request_text)
@@ -107,7 +108,13 @@ class DesignerRequestNormalizer:
     ) -> TargetScope:
         text = request_text.casefold()
         broad = any(term in text for term in ("all ", "entire", "whole", "across the circuit", "every"))
-        node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+        explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+        node_refs = self._resolve_target_node_refs_from_committed_summary(
+            category,
+            request_text,
+            context,
+            explicit_node_refs,
+        )
         max_change_scope = "broad" if broad else "bounded"
         card_scope = context.session_state_card.target_scope if context.session_state_card is not None else None
         if category == "CREATE_CIRCUIT":
@@ -195,7 +202,7 @@ class DesignerRequestNormalizer:
             preferred_behavior=card.objective.preferred_behavior,
         )
 
-    def _build_actions(self, category: str, request_text: str) -> list[ActionSpec]:
+    def _build_actions(self, category: str, request_text: str, scope: TargetScope) -> list[ActionSpec]:
         text = request_text.casefold()
         if category == "CREATE_CIRCUIT":
             return [
@@ -217,7 +224,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="add_review_gate",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"review_type": "manual"},
                     rationale="The request explicitly asks for a review/approval step.",
                 )
@@ -227,7 +234,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="replace_provider",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"provider_id": provider_id},
                     rationale="The request explicitly changes the node provider.",
                 )
@@ -236,7 +243,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="attach_plugin",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"plugin_id": self._infer_plugin_id(text)},
                     rationale="The request explicitly introduces a plugin-backed tool step.",
                 )
@@ -245,7 +252,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="rename_component",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"new_name": "renamed_component"},
                     rationale="The request explicitly asks for a rename operation.",
                 )
@@ -254,7 +261,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="delete_node",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={},
                     rationale="The request explicitly removes an existing structural element.",
                 )
@@ -263,7 +270,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="insert_node_between",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"position": "between"},
                     rationale="The request explicitly inserts a node into an existing path.",
                 )
@@ -272,7 +279,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="update_node",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"mode": "bounded_update"},
                     rationale="The request asks for a bounded change to existing structure.",
                 )
@@ -281,7 +288,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="update_node",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"repair_mode": "minimal_fix"},
                     rationale="Repair requests need a minimal corrective patch proposal.",
                 )
@@ -290,7 +297,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="set_parameter",
-                    target_ref=self._first_node_ref(request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"optimization_goal": "cost_or_quality"},
                     rationale="Optimization requests are normalized into bounded parameter changes first.",
                 )
@@ -354,6 +361,16 @@ class DesignerRequestNormalizer:
                             "The request explicitly matches committed summary "
                             f"{resolved_summary.get('commit_id', 'unknown')} and is resolved directly against that commit."
                         ),
+                        severity="low",
+                        user_visible=True,
+                    )
+                )
+            touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
+            explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+            if not explicit_node_refs and len(touched_node_ids) == 1:
+                assumptions.append(
+                    AssumptionSpec(
+                        text=f"The patch target is auto-resolved to {touched_node_ids[0]} because the referenced committed summary touched exactly one node.",
                         severity="low",
                         user_visible=True,
                     )
@@ -431,6 +448,35 @@ class DesignerRequestNormalizer:
                         description="Recent committed history exists, but the request leaves open whether a non-latest summary was intended.",
                     )
                 )
+
+        resolved_summary, _, _ = self._resolve_committed_summary_reference(request_text, context)
+        if resolved_summary is not None and category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
+            touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
+            explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+            if explicit_node_refs:
+                conflicting = [ref for ref in explicit_node_refs if ref not in touched_node_ids]
+                if touched_node_ids and conflicting:
+                    flags.append(
+                        AmbiguityFlag(
+                            type="committed_summary_target_conflict",
+                            description="The explicit node target conflicts with the node(s) touched by the referenced committed summary.",
+                        )
+                    )
+            elif self._uses_referential_committed_summary_language(request_text):
+                if len(touched_node_ids) > 1:
+                    flags.append(
+                        AmbiguityFlag(
+                            type="committed_summary_target_needs_clarification",
+                            description="The referenced committed summary touched multiple nodes, so the patch target must be confirmed.",
+                        )
+                    )
+                elif len(touched_node_ids) == 0:
+                    flags.append(
+                        AmbiguityFlag(
+                            type="committed_summary_target_missing",
+                            description="The referenced committed summary does not expose a unique touched node target for automatic patch selection.",
+                        )
+                    )
         return flags
 
     def _build_risk_flags(self, request_text: str) -> list[RiskFlag]:
@@ -464,29 +510,29 @@ class DesignerRequestNormalizer:
         return 0.65 if ambiguity_flags else 0.9
 
 
-    def _latest_committed_summary(self, context: RequestNormalizationContext) -> dict[str, str] | None:
+    def _latest_committed_summary(self, context: RequestNormalizationContext) -> dict[str, Any] | None:
         card = context.session_state_card
         if card is None:
             return None
         primary = card.notes.get("committed_summary_primary")
         if isinstance(primary, dict):
-            return {str(key): str(value) for key, value in primary.items()}
+            return dict(primary)
         history = self._committed_summary_history(context)
         if history:
             return history[0]
         return None
 
-    def _committed_summary_history(self, context: RequestNormalizationContext) -> list[dict[str, str]]:
+    def _committed_summary_history(self, context: RequestNormalizationContext) -> list[dict[str, Any]]:
         card = context.session_state_card
         if card is None:
             return []
         history = card.notes.get("commit_summary_history")
         if not isinstance(history, list):
             return []
-        normalized: list[dict[str, str]] = []
+        normalized: list[dict[str, Any]] = []
         for item in history:
             if isinstance(item, dict):
-                normalized.append({str(key): str(value) for key, value in item.items()})
+                normalized.append(dict(item))
         return normalized
 
     def _uses_referential_committed_summary_language(self, request_text: str) -> bool:
@@ -512,7 +558,7 @@ class DesignerRequestNormalizer:
         self,
         request_text: str,
         context: RequestNormalizationContext,
-    ) -> tuple[dict[str, str] | None, str | None, str | None]:
+    ) -> tuple[dict[str, Any] | None, str | None, str | None]:
         if not self._uses_referential_committed_summary_language(request_text):
             return None, None, None
         history = self._committed_summary_history(context)
@@ -539,8 +585,8 @@ class DesignerRequestNormalizer:
     def _match_explicit_commit_reference(
         self,
         request_text: str,
-        history: list[dict[str, str]],
-    ) -> dict[str, str] | None:
+        history: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
         text = request_text.casefold()
         commit_tokens = set(re.findall(r"\b[a-f0-9]{7,40}\b", text))
         if not commit_tokens:
@@ -585,6 +631,44 @@ class DesignerRequestNormalizer:
             r"\bthat previous commit\b",
         )
         return any(re.search(pattern, text) for pattern in patterns)
+
+
+    def _committed_summary_touched_node_ids(
+        self,
+        summary: dict[str, Any] | None,
+        context: RequestNormalizationContext,
+    ) -> tuple[str, ...]:
+        if summary is None:
+            return ()
+        raw = summary.get("touched_node_ids")
+        if not isinstance(raw, (list, tuple)):
+            return ()
+        refs = tuple(str(item) for item in raw if str(item).strip())
+        return self._resolve_node_refs(refs, context)
+
+    def _resolve_target_node_refs_from_committed_summary(
+        self,
+        category: str,
+        request_text: str,
+        context: RequestNormalizationContext,
+        explicit_node_refs: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        if category not in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
+            return explicit_node_refs
+        summary, _, _ = self._resolve_committed_summary_reference(request_text, context)
+        if summary is None:
+            return explicit_node_refs
+        touched_node_ids = self._committed_summary_touched_node_ids(summary, context)
+        if explicit_node_refs:
+            return explicit_node_refs
+        if len(touched_node_ids) == 1:
+            return touched_node_ids
+        return explicit_node_refs
+
+    def _first_target_ref(self, scope: TargetScope, request_text: str) -> str | None:
+        if scope.node_refs:
+            return scope.node_refs[0]
+        return self._first_node_ref(request_text)
 
     def _infer_provider_id(self, text: str) -> str:
         if "claude" in text or "anthropic" in text:

@@ -556,3 +556,12 @@ Post-commit cleanup rules:
 
 
 - reference_resolution_policy: latest committed summary may auto-resolve generic last/previous references; second-latest and exact commit-id references are allowed when explicit; non-latest older references without a precise anchor must remain explicit ambiguities.
+
+
+- `committed_summary_target_resolution_policy`: target-resolution policy string
+- `committed_summary_target_auto_resolution_modes`: list of safe auto-target modes
+- `committed_summary_target_clarification_required_modes`: list of target modes that must remain explicit
+
+Target-resolution rule:
+- a referenced committed summary may auto-select a patch target only when it exposes exactly one touched node and the request does not specify a conflicting explicit node target
+- if the referenced summary touched multiple nodes, or the explicit request target conflicts with the referenced summary target set, Designer must keep the request confirmation-bounded

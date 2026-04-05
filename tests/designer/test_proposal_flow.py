@@ -133,8 +133,8 @@ def test_request_normalizer_uses_latest_committed_summary_priority_for_referenti
                 "patch_ref": "patch-latest",
             },
             "commit_summary_history": [
-                {"commit_id": "commit-latest", "patch_ref": "patch-latest"},
-                {"commit_id": "commit-older", "patch_ref": "patch-older"},
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+                {"commit_id": "commit-older", "patch_ref": "patch-older", "touched_node_ids": ["node.answerer"]},
             ],
         },
     )
@@ -170,8 +170,8 @@ def test_request_normalizer_resolves_second_latest_commit_when_explicit() -> Non
         ),
         notes={
             "commit_summary_history": [
-                {"commit_id": "commit-latest", "patch_ref": "patch-latest"},
-                {"commit_id": "commit-second", "patch_ref": "patch-second"},
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+                {"commit_id": "commit-second", "patch_ref": "patch-second", "touched_node_ids": ["node.answerer"]},
             ],
         },
     )
@@ -206,8 +206,8 @@ def test_request_normalizer_resolves_exact_commit_reference_without_ambiguity() 
         ),
         notes={
             "commit_summary_history": [
-                {"commit_id": "fff9999", "patch_ref": "patch-latest"},
-                {"commit_id": "abc1234def", "patch_ref": "patch-target"},
+                {"commit_id": "fff9999", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+                {"commit_id": "abc1234def", "patch_ref": "patch-target", "touched_node_ids": ["node.answerer"]},
             ],
         },
     )
@@ -243,8 +243,8 @@ def test_request_normalizer_requires_clarification_for_nonlatest_older_reference
         ),
         notes={
             "commit_summary_history": [
-                {"commit_id": "commit-latest", "patch_ref": "patch-latest"},
-                {"commit_id": "commit-second", "patch_ref": "patch-second"},
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+                {"commit_id": "commit-second", "patch_ref": "patch-second", "touched_node_ids": ["node.answerer"]},
                 {"commit_id": "commit-third", "patch_ref": "patch-third"},
             ],
         },
@@ -279,7 +279,7 @@ def test_request_normalizer_flags_insufficient_history_for_second_latest_referen
         ),
         notes={
             "commit_summary_history": [
-                {"commit_id": "commit-latest", "patch_ref": "patch-latest"},
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
             ],
         },
     )
@@ -290,3 +290,106 @@ def test_request_normalizer_flags_insufficient_history_for_second_latest_referen
     )
 
     assert any(flag.type == "committed_summary_insufficient_history" for flag in intent.ambiguity_flags)
+
+
+
+def test_request_normalizer_auto_targets_single_touched_node_for_latest_reference() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-target-auto",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert intent.target_scope.mode == "node_only"
+    assert intent.target_scope.node_refs == ("node.reviewer",)
+    assert any("auto-resolved to node.reviewer" in assumption.text for assumption in intent.assumptions)
+    assert all(flag.type != "committed_summary_target_needs_clarification" for flag in intent.ambiguity_flags)
+
+
+def test_request_normalizer_requires_clarification_for_multi_target_summary_without_explicit_target() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-target-clarify",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer", "node.answerer"]},
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert intent.target_scope.mode == "existing_circuit"
+    assert intent.target_scope.node_refs == ()
+    assert any(flag.type == "committed_summary_target_needs_clarification" for flag in intent.ambiguity_flags)
+
+
+def test_request_normalizer_flags_conflicting_explicit_target_against_referenced_summary() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-target-conflict",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change on node answerer"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change on node answerer"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change on node answerer",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert intent.target_scope.node_refs == ("node.answerer",)
+    assert any(flag.type == "committed_summary_target_conflict" for flag in intent.ambiguity_flags)

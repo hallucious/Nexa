@@ -269,6 +269,9 @@ class DesignerSessionStateCardBuilder:
             "committed_summary_reference_resolution_policy": "latest_auto_second_latest_when_explicit_exact_commit_id_match_otherwise_clarify_nonlatest",
             "committed_summary_auto_resolution_modes": ["latest_summary", "second_latest_when_explicit", "exact_commit_id_match"],
             "committed_summary_clarification_required_modes": ["older_change_without_anchor", "nonlatest_reference_without_exact_match"],
+            "committed_summary_target_resolution_policy": "single_touched_node_auto_explicit_conflict_clarify_multi_target_clarify",
+            "committed_summary_target_auto_resolution_modes": ["single_touched_node_when_no_explicit_target"],
+            "committed_summary_target_clarification_required_modes": ["multiple_touched_nodes_without_explicit_target", "explicit_target_conflicts_with_referenced_summary", "referenced_summary_without_touched_nodes"],
             "committed_summary_exposure_applied": True,
         })
         return cleaned

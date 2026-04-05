@@ -380,6 +380,7 @@ def serialize_commit_candidate_state(state: DesignerCommitCandidateState) -> dic
         "approved_scope_ref": state.approved_scope_ref,
         "applied_operation_ids": list(state.applied_operation_ids),
         "created_node_ids": list(state.created_node_ids),
+        "touched_node_ids": list(state.touched_node_ids),
         "candidate_origin": state.candidate_origin,
     }
 
@@ -400,6 +401,7 @@ def deserialize_commit_candidate_state(data: Mapping[str, Any]) -> DesignerCommi
         approved_scope_ref=data.get("approved_scope_ref"),
         applied_operation_ids=tuple(data.get("applied_operation_ids", ())),
         created_node_ids=tuple(data.get("created_node_ids", ())),
+        touched_node_ids=tuple(data.get("touched_node_ids", ())),
         candidate_origin=str(data.get("candidate_origin", "designer_patch_application")),
     )
 
@@ -588,6 +590,7 @@ def _build_committed_summary_entry(
         "approval_stage": committed_approval_state.current_stage,
         "approval_outcome": committed_approval_state.final_outcome,
         "candidate_consumed": persisted_candidate is not None,
+        "touched_node_ids": list(persisted_candidate.touched_node_ids) if persisted_candidate is not None else [],
     }
 
 

@@ -21,6 +21,7 @@ class DesignerCommitCandidateState:
     approved_scope_ref: str | None = None
     applied_operation_ids: tuple[str, ...] = ()
     created_node_ids: tuple[str, ...] = ()
+    touched_node_ids: tuple[str, ...] = ()
     candidate_origin: str = "designer_patch_application"
 
     def __post_init__(self) -> None:
