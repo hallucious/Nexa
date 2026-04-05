@@ -11,6 +11,10 @@ _REPEAT_CONFIRMATION_THRESHOLD = 2
 _STRICT_REPEAT_THRESHOLD = 3
 _SAFE_CYCLE_DECAY_THRESHOLD = 2
 
+_ELEVATED_PRESSURE_SCORE = 2
+_STRICT_PRESSURE_SCORE = 4
+_PRESSURE_SCORE_MAX = 5
+
 _TIER_RANK = {"standard": 0, "elevated": 1, "strict": 2}
 
 _GOVERNANCE_NOTE_KEYS = frozenset(
@@ -43,6 +47,11 @@ _GOVERNANCE_NOTE_KEYS = frozenset(
         "control_governance_safe_cycle_decay_threshold",
         "control_governance_decay_summary",
         "control_governance_decay_path",
+        "control_governance_ambiguity_pressure_score",
+        "control_governance_previous_ambiguity_pressure_score",
+        "control_governance_ambiguity_pressure_band",
+        "control_governance_pressure_transition",
+        "control_governance_pressure_summary",
     }
 )
 
@@ -137,6 +146,21 @@ def apply_control_governance_notes(
         previous_safe_cycle_decay_count=previous_safe_cycle_decay_count,
     )
     previous_tier = previous_policy.tier
+    previous_pressure_score = int(
+        notes.get("control_governance_ambiguity_pressure_score", _pressure_score_floor_for_tier(previous_tier)) or 0
+    )
+    (
+        pressure_score,
+        pressure_band,
+        pressure_transition,
+        pressure_summary,
+    ) = _apply_pressure_transition(
+        previous_score=previous_pressure_score,
+        previous_policy=previous_policy,
+        current_policy=policy,
+        transition_rule=transition_rule,
+        resolution_state=resolution_state,
+    )
 
     next_notes.update(
         {
@@ -176,6 +200,9 @@ def apply_control_governance_notes(
                 "recent_attempt_limit": _RECENT_ATTEMPT_LIMIT,
                 "elevated_confirmation_loop_threshold": _REPEAT_CONFIRMATION_THRESHOLD,
                 "strict_repeat_threshold": _STRICT_REPEAT_THRESHOLD,
+                "elevated_pressure_score": _ELEVATED_PRESSURE_SCORE,
+                "strict_pressure_score": _STRICT_PRESSURE_SCORE,
+                "pressure_score_max": _PRESSURE_SCORE_MAX,
             },
             "control_governance_previous_tier": previous_tier,
             "control_governance_transition_direction": transition_direction,
@@ -187,6 +214,11 @@ def apply_control_governance_notes(
             "control_governance_safe_cycle_decay_threshold": _SAFE_CYCLE_DECAY_THRESHOLD,
             "control_governance_decay_summary": decay_summary,
             "control_governance_decay_path": decay_path,
+            "control_governance_previous_ambiguity_pressure_score": previous_pressure_score,
+            "control_governance_ambiguity_pressure_score": pressure_score,
+            "control_governance_ambiguity_pressure_band": pressure_band,
+            "control_governance_pressure_transition": pressure_transition,
+            "control_governance_pressure_summary": pressure_summary,
         }
     )
     return next_notes
@@ -493,6 +525,80 @@ def _safe_cycle_decay_policy(*, previous_tier: str) -> ControlGovernancePolicy:
             next_actions=("provide_explicit_anchor", "continue_nonreferential_changes_if_possible"),
         )
     return ControlGovernancePolicy()
+
+
+def _pressure_score_floor_for_tier(tier: str) -> int:
+    if tier == "strict":
+        return _STRICT_PRESSURE_SCORE
+    if tier == "elevated":
+        return _ELEVATED_PRESSURE_SCORE
+    return 0
+
+
+def _pressure_band_for_score(score: int) -> str:
+    if score >= _STRICT_PRESSURE_SCORE:
+        return "strict"
+    if score >= _ELEVATED_PRESSURE_SCORE:
+        return "elevated"
+    return "standard"
+
+
+def _apply_pressure_transition(
+    *,
+    previous_score: int,
+    previous_policy: ControlGovernancePolicy,
+    current_policy: ControlGovernancePolicy,
+    transition_rule: str,
+    resolution_state: str,
+) -> tuple[int, str, str, str]:
+    next_score = previous_score
+    if transition_rule == "repeat_confirmation_threshold":
+        base_floor = _pressure_score_floor_for_tier(current_policy.tier)
+        if current_policy.tier == previous_policy.tier and current_policy.tier in {"elevated", "strict"}:
+            next_score = min(_PRESSURE_SCORE_MAX, max(previous_score + 1, base_floor))
+        else:
+            next_score = max(previous_score, base_floor)
+        transition = "escalating_or_sustained_repeat_pressure"
+    elif transition_rule == "anchored_resolution_cooldown":
+        next_score = max(_pressure_score_floor_for_tier(current_policy.tier), previous_score - 2)
+        transition = "anchored_relief_step"
+    elif transition_rule == "anchored_resolution_cleared":
+        next_score = 0
+        transition = "anchored_relief_cleared"
+    elif transition_rule == "safe_cycle_decay_threshold":
+        if current_policy.tier == "standard":
+            next_score = 0
+        else:
+            next_score = max(_pressure_score_floor_for_tier(current_policy.tier), previous_score - 2)
+        transition = "safe_cycle_relief_step" if current_policy.tier != "standard" else "safe_cycle_relief_cleared"
+    elif transition_rule == "safe_cycle_decay_progress":
+        next_score = max(_pressure_score_floor_for_tier(previous_policy.tier), previous_score - 1)
+        transition = "safe_cycle_relief_progress"
+    elif transition_rule == "hold_until_explicit_anchor_resolution":
+        next_score = max(previous_score, _pressure_score_floor_for_tier(previous_policy.tier))
+        transition = "held_until_resolution"
+    else:
+        next_score = _pressure_score_floor_for_tier(current_policy.tier)
+        transition = "baseline"
+
+    band = _pressure_band_for_score(next_score)
+    if transition == "escalating_or_sustained_repeat_pressure":
+        summary = f"Ambiguity pressure is now {next_score} ({band}) after repeated confirmation pressure in the current cycle."
+    elif transition == "anchored_relief_step":
+        summary = f"Ambiguity pressure dropped from {previous_score} to {next_score} after an explicit anchored referential resolution."
+    elif transition == "anchored_relief_cleared":
+        summary = "Ambiguity pressure cleared fully after an explicit anchored referential resolution."
+    elif transition == "safe_cycle_relief_step":
+        summary = f"Ambiguity pressure dropped from {previous_score} to {next_score} after enough safe non-referential cycles to relax one governance tier."
+    elif transition == "safe_cycle_relief_cleared":
+        summary = "Ambiguity pressure cleared fully after enough safe non-referential cycles."
+    elif transition == "safe_cycle_relief_progress":
+        summary = f"Ambiguity pressure is easing within the current tier ({previous_score} -> {next_score}) while safe-cycle decay progresses."
+    elif transition == "held_until_resolution":
+        summary = f"Ambiguity pressure remains at {next_score} ({band}) until an explicit anchor resolution or enough safe-cycle decay is observed."
+    else:
+        summary = f"Ambiguity pressure is {next_score} ({band})."
+    return next_score, band, transition, summary
 
 
 def _is_safe_cycle_decay_candidate(latest_attempt: RevisionAttemptSummary) -> bool:

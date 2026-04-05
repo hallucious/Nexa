@@ -279,6 +279,7 @@ def test_control_plane_records_safe_cycle_decay_progress_while_strict_governance
                 "control_governance_policy_tier": "strict",
                 "control_governance_requires_explicit_referential_anchor": True,
                 "control_governance_safe_cycle_decay_count": 0,
+                "control_governance_ambiguity_pressure_score": 5,
             },
         }
     )
@@ -296,6 +297,8 @@ def test_control_plane_records_safe_cycle_decay_progress_while_strict_governance
     assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "safe_cycle_decay_progress"
     assert result.updated_session_state_card.notes["control_governance_safe_cycle_decay_count"] == 1
     assert result.updated_session_state_card.notes["control_governance_decay_path"] == "safe_nonreferential_cycles"
+    assert result.updated_session_state_card.notes["control_governance_ambiguity_pressure_score"] == 4
+    assert result.updated_session_state_card.notes["control_governance_pressure_transition"] == "safe_cycle_relief_progress"
 
 
 def test_control_plane_deescalates_elevated_governance_after_two_safe_nonreferential_cycles() -> None:
@@ -309,6 +312,7 @@ def test_control_plane_deescalates_elevated_governance_after_two_safe_nonreferen
                 "control_governance_policy_tier": "elevated",
                 "control_governance_requires_explicit_referential_anchor": True,
                 "control_governance_safe_cycle_decay_count": 1,
+                "control_governance_ambiguity_pressure_score": 3,
             },
         }
     )
@@ -325,3 +329,5 @@ def test_control_plane_deescalates_elevated_governance_after_two_safe_nonreferen
     assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "safe_cycle_cleared"
     assert result.updated_session_state_card.notes["control_governance_safe_cycle_decay_count"] == 0
     assert result.updated_session_state_card.notes["control_governance_decay_path"] == "safe_nonreferential_cycles"
+    assert result.updated_session_state_card.notes["control_governance_ambiguity_pressure_score"] == 0
+    assert result.updated_session_state_card.notes["control_governance_pressure_transition"] == "safe_cycle_relief_cleared"

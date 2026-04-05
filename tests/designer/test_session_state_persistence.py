@@ -848,6 +848,9 @@ def test_builder_exposes_strict_control_governance_tier_after_three_confirmation
     assert rebuilt.notes["control_governance_requires_explicit_referential_anchor"] is True
     assert rebuilt.notes["control_governance_next_actions"] == ["provide_explicit_anchor", "restate_request_with_stronger_selector"]
     assert "strict governance mode" in rebuilt.notes["control_governance_precheck_message"]
+    assert rebuilt.notes["control_governance_ambiguity_pressure_score"] == 4
+    assert rebuilt.notes["control_governance_ambiguity_pressure_band"] == "strict"
+    assert rebuilt.notes["control_governance_pressure_transition"] == "escalating_or_sustained_repeat_pressure"
 
 
 def test_control_plane_persists_mixed_referential_attempt_reason_code_into_session_state() -> None:
@@ -1037,6 +1040,7 @@ def test_persisted_session_rebuild_tracks_safe_cycle_decay_progress_for_strict_g
             "control_governance_policy_tier": "strict",
             "control_governance_requires_explicit_referential_anchor": True,
             "control_governance_safe_cycle_decay_count": 1,
+            "control_governance_ambiguity_pressure_score": 5,
         },
         revision_state=RevisionState(
             attempt_history=(
@@ -1063,3 +1067,6 @@ def test_persisted_session_rebuild_tracks_safe_cycle_decay_progress_for_strict_g
     assert rebuilt.notes["control_governance_decay_path"] == "safe_nonreferential_cycles"
     assert rebuilt.notes["control_governance_safe_cycle_decay_count"] == 0
     assert rebuilt.notes["control_governance_safe_cycle_decay_threshold"] == 2
+    assert rebuilt.notes["control_governance_ambiguity_pressure_score"] == 3
+    assert rebuilt.notes["control_governance_ambiguity_pressure_band"] == "elevated"
+    assert rebuilt.notes["control_governance_pressure_transition"] == "safe_cycle_relief_step"
