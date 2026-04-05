@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.designer.control_governance import load_control_governance_policy
 from src.designer.models.circuit_draft_preview import (
     AssumptionPreview,
     BehaviorChangePreview,
@@ -24,7 +25,7 @@ from src.designer.models.validation_precheck import ValidationPrecheck
 
 
 class DesignerPreviewBuilder:
-    def build(self, intent: DesignerIntent, patch: CircuitPatchPlan, precheck: ValidationPrecheck) -> CircuitDraftPreview:
+    def build(self, intent: DesignerIntent, patch: CircuitPatchPlan, precheck: ValidationPrecheck, *, session_state_card=None) -> CircuitDraftPreview:
         preview_mode = {
             "CREATE_CIRCUIT": "draft_create",
             "MODIFY_CIRCUIT": "patch_modify",
@@ -83,11 +84,11 @@ class DesignerPreviewBuilder:
                 complexity_change="higher" if patch.change_scope.scope_level == "broad" else "bounded",
             ),
             assumption_preview=AssumptionPreview(
-                assumptions=tuple(assumption.text for assumption in intent.assumptions),
-                default_choices=self._default_choices(intent),
+                assumptions=self._assumptions(intent, session_state_card=session_state_card),
+                default_choices=self._default_choices(intent, session_state_card=session_state_card),
             ),
             confirmation_preview=ConfirmationPreview(
-                required_confirmations=tuple(f.message for f in precheck.confirmation_findings),
+                required_confirmations=self._required_confirmations(precheck, session_state_card=session_state_card),
                 auto_commit_allowed=False,
             ),
             graph_view_model=GraphViewModel(
@@ -95,7 +96,7 @@ class DesignerPreviewBuilder:
                 edge_count=max(structural_preview.before_edge_count, structural_preview.after_edge_count),
                 annotations={"preview_mode": preview_mode},
             ),
-            explanation=precheck.explanation,
+            explanation=self._explanation(precheck, session_state_card=session_state_card),
         )
 
     def _title(self, intent: DesignerIntent) -> str:
@@ -198,6 +199,8 @@ class DesignerPreviewBuilder:
         if precheck.overall_status == "blocked":
             return "Revise the proposal before attempting approval."
         if precheck.overall_status == "confirmation_required":
+            if any(f.issue_code.startswith("REFERENTIAL_GOVERNANCE_") for f in precheck.confirmation_findings):
+                return "Provide a stronger referential anchor before approving the proposal."
             return "Review the confirmation items before approving the proposal."
         if precheck.overall_status == "pass_with_warnings":
             return "Review the warnings, then approve if acceptable."
@@ -240,13 +243,46 @@ class DesignerPreviewBuilder:
             return "The proposal is previewable with warnings."
         return "No blocking issues were found for preview."
 
-    def _default_choices(self, intent: DesignerIntent) -> tuple[str, ...]:
+    def _default_choices(self, intent: DesignerIntent, *, session_state_card=None) -> tuple[str, ...]:
         defaults: list[str] = []
         if intent.constraints.provider_preferences:
             defaults.append(f"Preferred provider: {intent.constraints.provider_preferences[0]}")
         if intent.constraints.human_review_required:
             defaults.append("Manual review remains enabled.")
+        if session_state_card is not None:
+            policy = load_control_governance_policy(session_state_card.notes)
+            if policy.tier != "standard":
+                defaults.append(f"Governance tier: {policy.tier}")
+                if policy.preview_hint:
+                    defaults.append(policy.preview_hint)
         return tuple(defaults)
+
+    def _assumptions(self, intent: DesignerIntent, *, session_state_card=None) -> tuple[str, ...]:
+        assumptions = [assumption.text for assumption in intent.assumptions]
+        if session_state_card is not None:
+            policy = load_control_governance_policy(session_state_card.notes)
+            if policy.tier != "standard" and policy.reason:
+                assumptions.append(policy.reason)
+        return tuple(assumptions)
+
+    def _required_confirmations(self, precheck: ValidationPrecheck, *, session_state_card=None) -> tuple[str, ...]:
+        items = [f.message for f in precheck.confirmation_findings]
+        if session_state_card is not None:
+            policy = load_control_governance_policy(session_state_card.notes)
+            if policy.tier != "standard" and policy.preview_hint and all(policy.preview_hint != item for item in items):
+                items.append(policy.preview_hint)
+        return tuple(items)
+
+    def _explanation(self, precheck: ValidationPrecheck, *, session_state_card=None) -> str:
+        explanation = precheck.explanation
+        if session_state_card is None:
+            return explanation
+        policy = load_control_governance_policy(session_state_card.notes)
+        if policy.tier == "standard" or not policy.reason:
+            return explanation
+        if not explanation:
+            return policy.reason
+        return f"{explanation} {policy.reason}"
 
     def _structural_summary(
         self,

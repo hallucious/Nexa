@@ -23,6 +23,7 @@ System invariants that MUST NOT be changed:
 9. The working context schema follows a fixed key structure.
 10. Contract-driven architecture must be maintained.
 11. Spec-version synchronization must be maintained.
+12. Designer control-plane governance may tighten referential interpretation after repeated confirmation loops, and that policy escalation must remain explicit in session-state / precheck / preview surfaces.
 
 Any implementation that violates these rules is considered a violation of the Nexa architecture.
 

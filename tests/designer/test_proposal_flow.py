@@ -610,6 +610,76 @@ def test_request_normalizer_requires_explicit_anchor_after_repeated_confirmation
     assert any("Repeated confirmation cycles are active for referential interpretation" in assumption.text for assumption in intent.assumptions)
 
 
+def test_repeated_confirmation_governance_surfaces_policy_in_precheck_and_preview() -> None:
+    flow = DesignerProposalFlow()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-governance-precheck",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(
+            revision_index=3,
+            attempt_history=(
+                RevisionAttemptSummary(
+                    attempt_index=1,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+                RevisionAttemptSummary(
+                    attempt_index=2,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+                RevisionAttemptSummary(
+                    attempt_index=3,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+            ),
+        ),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+            "control_governance_policy_tier": "strict",
+            "control_governance_requires_explicit_referential_anchor": True,
+            "control_governance_precheck_message": "Repeated referential ambiguity has triggered strict governance mode. Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before approval can continue safely.",
+            "control_governance_preview_hint": "Strict referential governance is active. The next safe step is to restate the request with a stronger anchor instead of relying on 'last change' style language.",
+            "control_governance_policy_reason": "Three or more closely related confirmation cycles were observed, so referential auto-resolution has moved into strict governance mode.",
+        },
+    )
+
+    bundle = flow.propose(
+        "Undo the last change",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert bundle.precheck.overall_status == "confirmation_required"
+    assert any(finding.issue_code == "REFERENTIAL_GOVERNANCE_STRICT" for finding in bundle.precheck.confirmation_findings)
+    assert any("strict governance mode" in finding.message for finding in bundle.precheck.confirmation_findings)
+    assert bundle.preview.summary_card.user_action_hint == "Provide a stronger referential anchor before approving the proposal."
+    assert any("Strict referential governance is active." in item for item in bundle.preview.confirmation_preview.required_confirmations)
+    assert "Three or more closely related confirmation cycles were observed" in bundle.preview.explanation
+    assert "strict governance mode" in bundle.rendered_preview
+
+
 def test_request_normalizer_allows_explicit_node_anchor_after_repeated_confirmation_cycles() -> None:
     normalizer = DesignerRequestNormalizer()
     card = DesignerSessionStateCard(

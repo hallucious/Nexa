@@ -72,8 +72,8 @@ class DesignerProposalFlow:
         if intent.category in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"}:
             raise ValueError("Step 2 proposal flow only supports mutation-oriented designer requests")
         patch = self._patch_builder.build(intent)
-        precheck = self._precheck_builder.build(intent, patch)
-        preview = self._preview_builder.build(intent, patch, precheck)
+        precheck = self._build_precheck(intent, patch, session_state_card=session_state_card)
+        preview = self._build_preview(intent, patch, precheck, session_state_card=session_state_card)
         rendered_preview = self._renderer.render(preview)
         return DesignerProposalBundle(
             request_text=request_text.strip(),
@@ -85,6 +85,35 @@ class DesignerProposalFlow:
             preview=preview,
             rendered_preview=rendered_preview,
         )
+
+    def _build_precheck(
+        self,
+        intent: DesignerIntent,
+        patch: CircuitPatchPlan,
+        *,
+        session_state_card: DesignerSessionStateCard,
+    ) -> ValidationPrecheck:
+        try:
+            return self._precheck_builder.build(intent, patch, session_state_card=session_state_card)
+        except TypeError as exc:
+            if "session_state_card" not in str(exc):
+                raise
+            return self._precheck_builder.build(intent, patch)
+
+    def _build_preview(
+        self,
+        intent: DesignerIntent,
+        patch: CircuitPatchPlan,
+        precheck: ValidationPrecheck,
+        *,
+        session_state_card: DesignerSessionStateCard,
+    ) -> CircuitDraftPreview:
+        try:
+            return self._preview_builder.build(intent, patch, precheck, session_state_card=session_state_card)
+        except TypeError as exc:
+            if "session_state_card" not in str(exc):
+                raise
+            return self._preview_builder.build(intent, patch, precheck)
 
     def propose_with_control(
         self,

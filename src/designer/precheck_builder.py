@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.designer.control_governance import load_control_governance_policy
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan
 from src.designer.models.designer_intent import DesignerIntent
 from src.designer.reason_codes import (
@@ -20,10 +21,10 @@ from src.designer.models.validation_precheck import (
 
 
 class DesignerPrecheckBuilder:
-    def build(self, intent: DesignerIntent, patch: CircuitPatchPlan) -> ValidationPrecheck:
+    def build(self, intent: DesignerIntent, patch: CircuitPatchPlan, *, session_state_card=None) -> ValidationPrecheck:
         blocking_findings = list(self._blocking_findings(intent, patch))
         warning_findings = list(self._warning_findings(intent, patch))
-        confirmation_findings = list(self._confirmation_findings(intent, patch, blocking_findings))
+        confirmation_findings = list(self._confirmation_findings(intent, patch, blocking_findings, session_state_card=session_state_card))
         overall_status = self._overall_status(blocking_findings, confirmation_findings, warning_findings)
         evaluated_scope = EvaluatedScope(
             mode=self._evaluated_scope_mode(intent),
@@ -105,6 +106,8 @@ class DesignerPrecheckBuilder:
         intent: DesignerIntent,
         patch: CircuitPatchPlan,
         blocking_findings: list[PrecheckFinding],
+        *,
+        session_state_card=None,
     ) -> tuple[PrecheckFinding, ...]:
         if blocking_findings:
             return ()
@@ -119,6 +122,9 @@ class DesignerPrecheckBuilder:
                 )
             )
         findings.extend(mixed_reason_findings)
+        governance_finding = self._governance_anchor_confirmation_finding(intent, session_state_card=session_state_card)
+        if governance_finding is not None:
+            findings.append(governance_finding)
         if patch.change_scope.touch_mode == "destructive_edit":
             findings.append(
                 PrecheckFinding(
@@ -167,6 +173,22 @@ class DesignerPrecheckBuilder:
     def _mixed_referential_confirmation_message(self, reason_code: str) -> str:
         return confirmation_message_for_reason_code(reason_code)
 
+    def _governance_anchor_confirmation_finding(self, intent: DesignerIntent, *, session_state_card=None) -> PrecheckFinding | None:
+        if session_state_card is None:
+            return None
+        if not any(flag.type == "committed_summary_repeat_cycle_anchor_required" for flag in intent.ambiguity_flags):
+            return None
+        policy = load_control_governance_policy(session_state_card.notes)
+        if not policy.requires_explicit_referential_anchor:
+            return None
+        severity = "high" if policy.tier == "strict" else "medium"
+        return PrecheckFinding(
+            issue_code=f"REFERENTIAL_GOVERNANCE_{policy.tier.upper()}",
+            message=policy.precheck_message or "Referential governance now requires a stronger anchor before automatic rollback interpretation may continue.",
+            severity=severity,
+            fix_hint=policy.preview_hint or policy.reason,
+        )
+
     def _overall_status(
         self,
         blocking_findings: list[PrecheckFinding],
@@ -185,7 +207,7 @@ class DesignerPrecheckBuilder:
         if status == "blocked":
             return ("revise_patch", "re-run_precheck")
         if status == "confirmation_required":
-            return ("show_preview", "ask_for_confirmation")
+            return ("show_preview", "ask_for_confirmation", "provide_explicit_anchor")
         if status == "pass_with_warnings":
             return ("show_preview", "display_warnings")
         return ("show_preview",)
@@ -194,7 +216,7 @@ class DesignerPrecheckBuilder:
         if status == "blocked":
             return "The proposal cannot proceed until blocking issues are resolved."
         if status == "confirmation_required":
-            return "The proposal may proceed to preview, but explicit approval or clarification is required before commit."
+            return "The proposal may proceed to preview, but explicit approval or clarification is required before commit. Repeated referential ambiguity may also require a stronger anchor before auto-resolution resumes."
         if status == "pass_with_warnings":
             return "The proposal can be previewed and reviewed with warnings."
         return "The proposal is ready for preview."

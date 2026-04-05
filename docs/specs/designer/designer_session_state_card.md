@@ -35,6 +35,7 @@ Repeated fresh cycles must rotate fresh-cycle markers so stale baseline/request 
 Successful commit must remove stale fresh-cycle markers and reduce them back into compact committed-summary notes.
 Committed-summary exposure must remain priority-aware: the latest committed summary is primary, while older retained summaries are exposed only as low-priority history/reference context.
 Referential requests such as "previous change" or "last commit" must bias interpretation toward the latest committed summary first unless the user clarifies otherwise.
+Repeated referential confirmation loops may raise a control-governance tier that requires a stronger anchor before auto-resolution resumes.
 - Designer AI produces proposals from this card.
 - Designer AI must not silently assume hidden structure or hidden authority.
 
@@ -75,6 +76,7 @@ DesignerSessionStateCard
 - approval_state: object
 - notes may include post-commit cleanup summary
 - notes may include a fresh-cycle-from-committed-baseline marker when a new request is opened after commit
+- notes may include control-governance policy tier, repeat-loop summaries, and referential-anchor requirements when repeated confirmation cycles tighten interpretation safety
 - conversation_context: object
 - output_contract: object
 - forbidden_authority: object

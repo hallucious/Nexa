@@ -788,7 +788,66 @@ def test_builder_exposes_control_governance_notes_for_repeated_confirmation_cycl
     assert rebuilt.notes["control_governance_interpretation_safety_mode"] == "explicit_referential_anchor_required"
     assert rebuilt.notes["control_governance_requires_explicit_referential_anchor"] is True
     assert rebuilt.notes["control_governance_recent_attempts"][-1]["reason_code"] == "DESIGNER-CONFIRMATION-REQUIRED"
+    assert rebuilt.notes["control_governance_policy_tier"] == "elevated"
+    assert rebuilt.notes["control_governance_next_actions"] == ["provide_explicit_anchor"]
 
+
+def test_builder_exposes_strict_control_governance_tier_after_three_confirmation_cycles() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-governance-strict",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(
+            revision_index=3,
+            last_control_action="choose_interpretation",
+            last_terminal_status="awaiting_user_input",
+            attempt_history=(
+                RevisionAttemptSummary(
+                    attempt_index=1,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+                RevisionAttemptSummary(
+                    attempt_index=2,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+                RevisionAttemptSummary(
+                    attempt_index=3,
+                    stage="precheck",
+                    outcome="confirmation_required",
+                    reason_code="DESIGNER-CONFIRMATION-REQUIRED",
+                    message="The proposal may proceed to preview, but explicit approval or clarification is required before commit.",
+                ),
+            ),
+        ),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+    )
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=card)
+
+    rebuilt = DesignerSessionStateCardBuilder().build(
+        request_text="Undo the last change",
+        artifact=persisted,
+    )
+
+    assert rebuilt.notes["control_governance_policy_tier"] == "strict"
+    assert rebuilt.notes["control_governance_requires_explicit_referential_anchor"] is True
+    assert rebuilt.notes["control_governance_next_actions"] == ["provide_explicit_anchor", "restate_request_with_stronger_selector"]
+    assert "strict governance mode" in rebuilt.notes["control_governance_precheck_message"]
 
 
 def test_control_plane_persists_mixed_referential_attempt_reason_code_into_session_state() -> None:
