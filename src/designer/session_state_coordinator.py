@@ -13,6 +13,7 @@ from src.designer.models.designer_session_state_card import (
     RevisionState,
     SessionTargetScope,
 )
+from src.designer.reason_codes import first_mixed_referential_reason_code_from_decision_ids
 
 
 class DesignerSessionStateCoordinator:
@@ -160,15 +161,18 @@ class DesignerSessionStateCoordinator:
         user_corrections = session_state_card.revision_state.user_corrections + correction_notes
         user_corrections = tuple(dict.fromkeys(user_corrections))
 
+        mixed_revision_reason_code = self._mixed_revision_reason_code_from_approval_state(approval_state)
+
         unresolved_questions = list(session_state_card.conversation_context.unresolved_questions)
         if clarified_interpretation is not None:
             unresolved_questions = [
                 item for item in unresolved_questions if "interpret" not in item.casefold()
             ]
         if approval_state.final_outcome == "revision_requested" and not correction_notes and not choose_decisions:
-            unresolved_questions.append(
-                "A revised designer request is required before another approval attempt."
-            )
+            message = "A revised designer request is required before another approval attempt."
+            if mixed_revision_reason_code is not None:
+                message = f"{message} (reason_code={mixed_revision_reason_code})"
+            unresolved_questions.append(message)
         if approval_state.final_outcome == "approved_for_commit":
             unresolved_questions = []
         next_conversation = ConversationContext(
@@ -190,7 +194,7 @@ class DesignerSessionStateCoordinator:
             revision_index += 1
             next_action = "choose_interpretation" if choose_decisions else "request_user_revision"
             next_terminal = "awaiting_user_input"
-            next_retry_reason = "approval_revision_requested"
+            next_retry_reason = mixed_revision_reason_code or "approval_revision_requested"
         elif approval_state.final_outcome == "approved_for_commit":
             next_action = "proceed_to_approval"
             next_terminal = "ready_for_approval"
@@ -225,14 +229,34 @@ class DesignerSessionStateCoordinator:
             blocking_before_commit=(approval_state.precheck_status == "blocked" or approval_state.blocking_finding_count > 0),
         )
 
+        next_notes = dict(session_state_card.notes)
+        next_notes["last_approval_stage"] = approval_state.current_stage
+        next_notes["last_approval_outcome"] = approval_state.final_outcome
+        if mixed_revision_reason_code is not None:
+            next_notes["last_revision_reason_code"] = mixed_revision_reason_code
+        else:
+            next_notes.pop("last_revision_reason_code", None)
+
         return replace(
             session_state_card,
             revision_state=next_revision,
             approval_state=next_approval,
             conversation_context=next_conversation,
-            notes={
-                **session_state_card.notes,
-                "last_approval_stage": approval_state.current_stage,
-                "last_approval_outcome": approval_state.final_outcome,
-            },
+            notes=next_notes,
+        )
+
+    def _mixed_revision_reason_code_from_approval_state(
+        self,
+        approval_state: DesignerApprovalFlowState,
+    ) -> str | None:
+        prioritized_decision_ids = [
+            decision.decision_point_id
+            for decision in approval_state.user_decisions
+            if decision.outcome in {"request_revision", "narrow_scope", "choose_interpretation"}
+        ]
+        reason_code = first_mixed_referential_reason_code_from_decision_ids(prioritized_decision_ids)
+        if reason_code is not None:
+            return reason_code
+        return first_mixed_referential_reason_code_from_decision_ids(
+            point.decision_id for point in approval_state.required_decision_points
         )

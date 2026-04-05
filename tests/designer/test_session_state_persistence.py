@@ -308,6 +308,56 @@ def test_approval_resolution_appends_revision_note_and_normalizer_uses_persisted
     assert intent.target_scope.node_refs == ("node.reviewer",)
 
 
+
+
+def test_approval_revision_requested_propagates_mixed_referential_reason_code_into_revision_state() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-mixed-approval",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change and switch provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(
+            user_request_text="Undo the last change and switch provider in node reviewer to Claude"
+        ),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+    controller = DesignerProposalControlPlane()
+    control_result = controller.run(
+        "Undo the last change and switch provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+    assert control_result.bundle is not None
+
+    approval = DesignerApprovalCoordinator().create_state(control_result.bundle)
+    decision_id = approval.required_decision_points[0].decision_id
+    resolved = DesignerApprovalCoordinator().resolve(
+        approval,
+        (UserDecision(decision_point_id=decision_id, outcome="request_revision"),),
+    )
+
+    updated = DesignerSessionStateCoordinator().evolve_after_approval_resolution(
+        control_result.updated_session_state_card or card,
+        resolved,
+    )
+
+    assert updated.revision_state.retry_reason == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert updated.notes["last_revision_reason_code"] == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+    assert "reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE" in updated.conversation_context.unresolved_questions[-1]
+
 def test_persisted_commit_candidate_state_round_trips_and_builder_surfaces_resume_hint() -> None:
     working_save = make_working_save()
     flow = DesignerProposalFlow()

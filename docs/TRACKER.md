@@ -340,3 +340,5 @@ CLI
 - reference_resolution_policy: latest committed summary may auto-resolve generic last/previous references; second-latest and exact commit-id references are allowed when explicit; non-latest older references without a precise anchor must remain explicit ambiguities.
 
 * mixed referential reason-style codes are now centralized in `src/designer/reason_codes.py` and remain Designer-bounded instead of being promoted prematurely into the shared global reason-code catalog
+
+* approval-resolution revision flow now preserves Designer-bounded mixed referential reason codes in `revision_state.retry_reason` and `notes.last_revision_reason_code` instead of collapsing back to a generic approval revision marker

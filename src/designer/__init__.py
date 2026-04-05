@@ -31,6 +31,6 @@ from src.designer.session_state_persistence import (
     serialize_session_state_card,
 )
 
-from src.designer.reason_codes import DESIGNER_MIXED_REFERENTIAL_REASON_CODES
+from src.designer.reason_codes import DESIGNER_MIXED_REFERENTIAL_REASON_CODES, first_mixed_referential_reason_code_from_decision_ids
 
 __all__ = [name for name in globals() if not name.startswith("_")]

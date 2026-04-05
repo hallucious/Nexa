@@ -586,3 +586,4 @@ Action-resolution rule:
 
 
 - Proposal-control/session-state integration now preserves Designer-bounded mixed referential reason codes in attempt history and session notes (`last_attempt_reason_code`, `last_attempt_stage`, `last_attempt_outcome`).
+- Approval-resolution revision flow now reuses the same Designer-bounded mixed referential reason code when a revision is requested after confirmation, and persists it into `revision_state.retry_reason` plus `notes.last_revision_reason_code`.
