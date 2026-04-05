@@ -331,3 +331,6 @@ CLI
 
 
 - repeat-cycle housekeeping semantics now rotate stale fresh-cycle markers and reduce them back into compact committed-summary notes after successful commit
+
+
+- Phase 2 update: Designer committed-summary retention history is now bounded and rotated during post-commit cleanup.

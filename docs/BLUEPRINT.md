@@ -490,3 +490,6 @@ Representation {
 
 
 - repeat-cycle housekeeping semantics now rotate stale fresh-cycle markers and reduce them back into compact committed-summary notes after successful commit
+
+
+- Current Phase 2 note: Designer post-commit continuity now includes bounded committed-summary retention rather than unbounded note accumulation.

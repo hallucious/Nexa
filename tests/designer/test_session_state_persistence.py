@@ -498,3 +498,69 @@ def test_repeat_fresh_cycle_housekeeping_replaces_stale_markers() -> None:
     assert rebuilt.notes["fresh_cycle_baseline_commit_id"] == "commit-repeat-2"
     assert rebuilt.notes["post_commit_cleanup_applied"] is True
     assert "active_baseline_commit_id" not in rebuilt.notes
+
+
+def test_committed_summary_retention_history_rotates_and_trims() -> None:
+    working_save = make_working_save()
+    base_card = replace(
+        make_card(),
+        notes={
+            "commit_summary_history": [
+                {
+                    "commit_id": "commit-old-3",
+                    "parent_commit_id": "parent-old-3",
+                    "patch_ref": "patch-old-3",
+                    "approval_stage": "committed",
+                    "approval_outcome": "committed",
+                    "candidate_consumed": True,
+                },
+                {
+                    "commit_id": "commit-old-2",
+                    "parent_commit_id": "parent-old-2",
+                    "patch_ref": "patch-old-2",
+                    "approval_stage": "committed",
+                    "approval_outcome": "committed",
+                    "candidate_consumed": True,
+                },
+                {
+                    "commit_id": "commit-old-1",
+                    "parent_commit_id": "parent-old-1",
+                    "patch_ref": "patch-old-1",
+                    "approval_stage": "committed",
+                    "approval_outcome": "committed",
+                    "candidate_consumed": False,
+                },
+            ],
+        },
+    )
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    state = coordinator.create_state(bundle)
+    approved = coordinator.resolve(
+        state,
+        tuple(UserDecision(decision_point_id=point.decision_id, outcome="approve") for point in state.required_decision_points),
+    )
+    applier = DesignerPatchApplier()
+    application = applier.apply_bundle(working_save, bundle)
+    candidate_state = applier.build_commit_candidate_state(application, approved, source_working_save_ref="ws-001")
+    persisted = persist_designer_session_state(
+        application.candidate_working_save,
+        session_state_card=base_card,
+        approval_flow_state=approved,
+        commit_candidate_state=candidate_state,
+    )
+
+    cleaned = DesignerCommitGateway(coordinator=coordinator).commit_persisted_candidate(
+        persisted,
+        commit_id="commit-new-1",
+    ).cleaned_candidate_working_save
+
+    cleaned_card = load_persisted_session_state_card(cleaned)
+    assert cleaned_card is not None
+    history = cleaned_card.notes["commit_summary_history"]
+    assert [entry["commit_id"] for entry in history] == ["commit-new-1", "commit-old-3", "commit-old-2"]
+    assert cleaned_card.notes["committed_summary_retention_limit"] == 3
+    assert history[0]["patch_ref"] == bundle.patch.patch_id
+    assert history[0]["candidate_consumed"] is True
+

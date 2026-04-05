@@ -39,6 +39,8 @@ _SESSION_CARD_KEY = "designer_session_state_card"
 _CONTROL_STATE_KEY = "designer_proposal_control_state"
 _APPROVAL_FLOW_STATE_KEY = "designer_approval_flow_state"
 _COMMIT_CANDIDATE_STATE_KEY = "designer_commit_candidate_state"
+_COMMIT_SUMMARY_HISTORY_KEY = "commit_summary_history"
+_COMMIT_SUMMARY_RETENTION_LIMIT = 3
 
 
 def serialize_session_state_card(card: DesignerSessionStateCard) -> dict[str, Any]:
@@ -526,6 +528,11 @@ def cleanup_designer_session_state_after_commit(
                 or key.startswith("active_baseline_")
             )
         }
+        committed_summary_entry = _build_committed_summary_entry(
+            commit_snapshot=commit_snapshot,
+            committed_approval_state=committed_approval_state,
+            persisted_candidate=persisted_candidate,
+        )
         cleaned_notes.update(
             {
                 "post_commit_cleanup_applied": True,
@@ -536,6 +543,11 @@ def cleanup_designer_session_state_after_commit(
                 "last_approval_stage": committed_approval_state.current_stage,
                 "last_approval_outcome": committed_approval_state.final_outcome,
                 "committed_summary_housekeeping_applied": True,
+                _COMMIT_SUMMARY_HISTORY_KEY: _rotate_commit_summary_history(
+                    cleaned_notes.get(_COMMIT_SUMMARY_HISTORY_KEY),
+                    committed_summary_entry,
+                ),
+                "committed_summary_retention_limit": _COMMIT_SUMMARY_RETENTION_LIMIT,
             }
         )
         cleaned_card = replace(
@@ -561,6 +573,35 @@ def cleanup_designer_session_state_after_commit(
 
     return replace(working_save, designer=DesignerDraftModel(data=designer_data))
 
+
+
+def _build_committed_summary_entry(
+    *,
+    commit_snapshot: CommitSnapshotModel,
+    committed_approval_state: DesignerApprovalFlowState,
+    persisted_candidate: DesignerCommitCandidateState | None,
+) -> dict[str, Any]:
+    return {
+        "commit_id": commit_snapshot.meta.commit_id,
+        "parent_commit_id": commit_snapshot.lineage.parent_commit_id,
+        "patch_ref": (persisted_candidate.patch_ref if persisted_candidate is not None else committed_approval_state.patch_ref),
+        "approval_stage": committed_approval_state.current_stage,
+        "approval_outcome": committed_approval_state.final_outcome,
+        "candidate_consumed": persisted_candidate is not None,
+    }
+
+
+def _rotate_commit_summary_history(
+    existing_history: Any,
+    latest_entry: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    history: list[dict[str, Any]] = []
+    if isinstance(existing_history, list):
+        history = [dict(item) for item in existing_history if isinstance(item, Mapping)]
+    latest_commit_id = str(latest_entry.get("commit_id", ""))
+    deduped = [dict(item) for item in history if str(item.get("commit_id", "")) != latest_commit_id]
+    rotated = [dict(latest_entry), *deduped]
+    return rotated[:_COMMIT_SUMMARY_RETENTION_LIMIT]
 
 def _serialize_resource(item: ResourceAvailability) -> dict[str, Any]:
     return {

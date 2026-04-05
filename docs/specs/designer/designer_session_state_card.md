@@ -547,3 +547,5 @@ Post-commit cleanup rules:
 - unresolved approval questions should be cleared
 - retry_reason should be cleared
 - revision history and user corrections may remain for continuity/audit
+- committed-summary notes should rotate through a bounded history (current latest + up to 2 older summaries in v0.1)
+- stale fresh-cycle / active-baseline notes must not remain inside committed summary state
