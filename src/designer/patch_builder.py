@@ -47,7 +47,7 @@ class CircuitPatchBuilder:
         if intent.category not in PATCH_MODE_BY_CATEGORY:
             raise ValueError(f"Step 2 proposal flow does not support non-mutating category: {intent.category}")
         operations = tuple(self._build_operations(intent))
-        if not operations:
+        if not operations and not self._allows_confirmation_only_patch(intent):
             raise ValueError("CircuitPatchBuilder requires at least one explicit operation")
         change_scope = self._build_change_scope(intent, operations)
         dependency_effects = self._build_dependency_effects(operations)
@@ -95,6 +95,9 @@ class CircuitPatchBuilder:
             validation_requirements=validation_requirements,
         )
 
+    def _allows_confirmation_only_patch(self, intent: DesignerIntent) -> bool:
+        return bool(intent.requires_user_confirmation and intent.ambiguity_flags)
+
     def _build_operations(self, intent: DesignerIntent) -> list[PatchOperation]:
         operations: list[PatchOperation] = []
         for index, action in enumerate(intent.proposed_actions, start=1):
@@ -115,7 +118,25 @@ class CircuitPatchBuilder:
                     depends_on_ops=(),
                 )
             )
+        if not operations and self._allows_confirmation_only_patch(intent):
+            operations.append(self._confirmation_only_operation(intent))
         return operations
+
+    def _confirmation_only_operation(self, intent: DesignerIntent) -> PatchOperation:
+        mixed_reason_codes = tuple(
+            flag.type.upper() for flag in intent.ambiguity_flags if flag.type.startswith("mixed_referential_")
+        )
+        return PatchOperation(
+            op_id="op-confirmation-only",
+            op_type="update_node_metadata",
+            target_ref=None,
+            payload={
+                "confirmation_only": True,
+                "reason_codes": mixed_reason_codes,
+            },
+            rationale="Confirmation-bounded proposal placeholder; structural operations will be generated after clarification.",
+            depends_on_ops=(),
+        )
 
     def _build_change_scope(self, intent: DesignerIntent, operations: tuple[PatchOperation, ...]) -> ChangeScope:
         destructive = any(op.op_type in DESTRUCTIVE_OPS for op in operations)
@@ -189,4 +210,6 @@ class CircuitPatchBuilder:
         )
 
     def _build_summary(self, intent: DesignerIntent, change_scope: ChangeScope) -> str:
+        if not intent.proposed_actions and intent.requires_user_confirmation:
+            return f"{intent.category} proposal is confirmation-bounded and requires clarification before structural operations can be generated."
         return f"{intent.category} proposal with {change_scope.scope_level} scope and {change_scope.touch_mode} touch mode."

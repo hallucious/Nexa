@@ -63,7 +63,7 @@ class DesignerPrecheckBuilder:
 
     def _blocking_findings(self, intent: DesignerIntent, patch: CircuitPatchPlan) -> tuple[PrecheckFinding, ...]:
         findings: list[PrecheckFinding] = []
-        if not patch.operations:
+        if not patch.operations and not self._allows_confirmation_only_preview(intent):
             findings.append(PrecheckFinding(issue_code="PATCH_EMPTY", message="No patch operations were generated.", severity="high"))
         if patch.change_scope.touch_mode == "read_only":
             findings.append(
@@ -104,7 +104,8 @@ class DesignerPrecheckBuilder:
         if blocking_findings:
             return ()
         findings: list[PrecheckFinding] = []
-        if intent.ambiguity_flags:
+        mixed_reason_findings = self._mixed_referential_confirmation_findings(intent)
+        if intent.ambiguity_flags and not mixed_reason_findings:
             findings.append(
                 PrecheckFinding(
                     issue_code="AMBIGUOUS_TARGET",
@@ -112,6 +113,7 @@ class DesignerPrecheckBuilder:
                     severity="medium",
                 )
             )
+        findings.extend(mixed_reason_findings)
         if patch.change_scope.touch_mode == "destructive_edit":
             findings.append(
                 PrecheckFinding(
@@ -137,6 +139,39 @@ class DesignerPrecheckBuilder:
                 )
             )
         return tuple(findings)
+
+
+    def _mixed_referential_confirmation_findings(self, intent: DesignerIntent) -> tuple[PrecheckFinding, ...]:
+        findings: list[PrecheckFinding] = []
+        for flag in intent.ambiguity_flags:
+            if not flag.type.startswith("mixed_referential_"):
+                continue
+            findings.append(
+                PrecheckFinding(
+                    issue_code=flag.type.upper(),
+                    message=self._mixed_referential_confirmation_message(flag.type),
+                    severity="medium",
+                    fix_hint=(
+                        "Confirm the exact intended action or split the request into separate steps before approval."
+                    ),
+                )
+            )
+        return tuple(findings)
+
+    def _mixed_referential_confirmation_message(self, flag_type: str) -> str:
+        messages = {
+            "mixed_referential_provider_change": "The request mixes rollback language with a provider change and must be confirmed (reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE).",
+            "mixed_referential_plugin_attach": "The request mixes rollback language with plugin attachment and must be confirmed (reason_code=MIXED_REFERENTIAL_PLUGIN_ATTACH).",
+            "mixed_referential_rename": "The request mixes rollback language with a rename operation and must be confirmed (reason_code=MIXED_REFERENTIAL_RENAME).",
+            "mixed_referential_insert": "The request mixes rollback language with an insert operation and must be confirmed (reason_code=MIXED_REFERENTIAL_INSERT).",
+            "mixed_referential_delete": "The request mixes rollback language with a delete/remove action and must be confirmed (reason_code=MIXED_REFERENTIAL_DELETE).",
+            "mixed_referential_review_gate": "The request mixes rollback language with review-gate changes and must be confirmed (reason_code=MIXED_REFERENTIAL_REVIEW_GATE).",
+            "mixed_referential_optimize_repair": "The request mixes rollback language with optimize/repair intent and must be confirmed (reason_code=MIXED_REFERENTIAL_OPTIMIZE_REPAIR).",
+        }
+        return messages.get(
+            flag_type,
+            "The request mixes rollback language with another structural action and must be confirmed (reason_code=MIXED_REFERENTIAL_ACTION).",
+        )
 
     def _overall_status(
         self,
@@ -165,7 +200,7 @@ class DesignerPrecheckBuilder:
         if status == "blocked":
             return "The proposal cannot proceed until blocking issues are resolved."
         if status == "confirmation_required":
-            return "The proposal may proceed to preview, but explicit approval is required before commit."
+            return "The proposal may proceed to preview, but explicit approval or clarification is required before commit."
         if status == "pass_with_warnings":
             return "The proposal can be previewed and reviewed with warnings."
         return "The proposal is ready for preview."

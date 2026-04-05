@@ -160,7 +160,7 @@ Current implementation baseline:
 * successful commit now reduces stale ready-for-commit continuation state into post-commit summary semantics
 * a new Designer request after commit now starts a fresh proposal cycle from the committed baseline instead of inheriting consumed continuation context
 * committed-summary history now has explicit exposure/priority semantics: the latest committed summary is primary, older retained summaries are history-only, and referential requests bias toward latest-only interpretation
-* referential post-commit requests now have a minimal action-resolution policy: safe revert / undo / rollback patterns may auto-resolve into bounded revert actions, while mixed-action requests remain confirmation-bounded and now stop without auto-emitting partial structural actions; mixed cases also carry reason-like mixed-action flags for clarification
+* referential post-commit requests now have a minimal action-resolution policy: safe revert / undo / rollback patterns may auto-resolve into bounded revert actions, while mixed-action requests remain confirmation-bounded and now stop without auto-emitting partial structural actions; mixed cases also carry reason-like mixed-action flags for clarification and are now surfaced into precheck/preview confirmation messaging rather than remaining normalization-only
 * the next rational implementation move is continued Phase 2 control-plane maturation, especially longer-horizon control governance and repeated-cycle interpretation safety
 
 Interpretation rule:

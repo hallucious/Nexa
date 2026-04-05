@@ -505,3 +505,47 @@ def test_request_normalizer_requires_clarification_for_mixed_revert_and_plugin_a
     assert any(flag.type == "mixed_referential_plugin_attach" for flag in intent.ambiguity_flags)
     assert not intent.proposed_actions
     assert any("reason_code=MIXED_REFERENTIAL_PLUGIN_ATTACH" in assumption.text for assumption in intent.assumptions)
+
+
+def test_proposal_flow_surfaces_mixed_referential_provider_change_in_precheck_and_preview() -> None:
+    flow = DesignerProposalFlow()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-mixed-precheck-preview",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo the last change and switch provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(
+            user_request_text="Undo the last change and switch provider in node reviewer to Claude"
+        ),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+        },
+    )
+
+    bundle = flow.propose(
+        "Undo the last change and switch provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+
+    assert bundle.precheck.overall_status == "confirmation_required"
+    assert any(
+        finding.issue_code == "MIXED_REFERENTIAL_PROVIDER_CHANGE"
+        for finding in bundle.precheck.confirmation_findings
+    )
+    assert any(
+        "reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE" in item
+        for item in bundle.preview.confirmation_preview.required_confirmations
+    )
+    assert "reason_code=MIXED_REFERENTIAL_PROVIDER_CHANGE" in bundle.rendered_preview

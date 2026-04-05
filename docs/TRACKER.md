@@ -73,6 +73,7 @@ The current repository state includes the following implemented surface:
 * role-aware `.nex` storage is now part of the active storage architecture, with `working_save` and `commit_snapshot` treated as official `.nex` roles and Execution Record treated as the run-history layer
 * storage semantics are owned by storage/lifecycle APIs rather than CLI/export/replay path-local interpretation
 * current storage-sector state is final hardening + spec ↔ implementation sync, not future-only foundation work
+* mixed referential rollback+edit requests now surface explicit confirmation reasons through Designer precheck/preview instead of living only inside request normalization
 
 ---
 
