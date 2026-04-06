@@ -272,6 +272,43 @@ def test_approval_resolution_updates_session_state_for_interpretation_choice_and
     assert rebuilt.approval_state.approval_status == "not_started"
 
 
+def test_approval_resolution_tracks_recent_multi_step_revision_history() -> None:
+    card = make_card()
+    flow = DesignerProposalFlow()
+    bundle = flow.propose("Add a review node before final output in node reviewer", working_save_ref="ws-001")
+    coordinator = DesignerApprovalCoordinator()
+    approval = coordinator.create_state(bundle)
+
+    first_resolved = coordinator.resolve(
+        approval,
+        (
+            UserDecision(
+                decision_point_id=approval.required_decision_points[0].decision_id,
+                outcome="choose_interpretation",
+                selected_option="Only modify node.reviewer.",
+            ),
+        ),
+    )
+    session_coordinator = DesignerSessionStateCoordinator()
+    first_updated = session_coordinator.evolve_after_approval_resolution(card, first_resolved)
+
+    second_resolved = coordinator.resolve(
+        approval,
+        (
+            UserDecision(
+                decision_point_id=approval.required_decision_points[0].decision_id,
+                outcome="request_revision",
+                note="Keep the provider change scoped to node.reviewer.",
+            ),
+        ),
+    )
+    second_updated = session_coordinator.evolve_after_approval_resolution(first_updated, second_resolved)
+
+    assert second_updated.notes["approval_revision_recent_history_count"] == 2
+    assert "Latest continuation mode" in second_updated.notes["approval_revision_recent_history_summary"]
+    assert second_updated.notes["approval_revision_recent_history"][-1]["continuation_modes"] == ["request_revision"]
+
+
 def test_approval_resolution_appends_revision_note_and_normalizer_uses_persisted_context() -> None:
     working_save = make_working_save()
     card = make_card()

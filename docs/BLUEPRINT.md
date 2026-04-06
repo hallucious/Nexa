@@ -517,3 +517,5 @@ Representation {
 
 * revision-request continuity now persists structured governance guidance, including anchor requirement mode, pressure summary/score/band, and next-safe-action hints so the next cycle inherits pressure-aware anchor guidance instead of only a generic note
 * persisted governance carryover is now request-applicability-aware at rebuilt session-card time: non-referential follow-up requests should not keep surfacing stale pending-anchor risk, and already-anchored referential retries should surface carryover as warning-level context rather than unresolved-governance pressure
+
+* approval-boundary continuation now keeps a compact recent revision history (bounded) so rebuilt session cards and the normalizer can recognize longer multi-step revision threads and preserve the latest clarified direction unless the user explicitly redirects scope

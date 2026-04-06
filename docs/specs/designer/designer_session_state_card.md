@@ -603,3 +603,5 @@ Action-resolution rule:
 
 * revision-request continuity now persists structured governance guidance, including anchor requirement mode, pressure summary/score/band, and next-safe-action hints so the next cycle inherits pressure-aware anchor guidance instead of only a generic note
 * cleared governance carryover may survive for one nearby follow-up cycle as low-priority recent-resolution context, but it should expire after that short window rather than lingering indefinitely in session continuity
+
+* approval-boundary continuation now keeps a compact recent revision history (bounded) so rebuilt session cards and the normalizer can recognize longer multi-step revision threads and preserve the latest clarified direction unless the user explicitly redirects scope

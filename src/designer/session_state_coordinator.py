@@ -25,6 +25,8 @@ from src.designer.models.designer_session_state_card import (
     RevisionState,
     SessionTargetScope,
 )
+_RECENT_APPROVAL_REVISION_HISTORY_LIMIT = 3
+
 from src.designer.reason_codes import (
     activate_mixed_referential_reason_notes,
     clear_active_mixed_referential_reason_notes,
@@ -306,6 +308,14 @@ class DesignerSessionStateCoordinator:
         next_notes = dict(session_state_card.notes)
         next_notes["last_approval_stage"] = approval_state.current_stage
         next_notes["last_approval_outcome"] = approval_state.final_outcome
+        next_notes = self._update_recent_approval_revision_history(
+            next_notes,
+            approval_state=approval_state,
+            clarified_interpretation=clarified_interpretation,
+            correction_notes=correction_notes,
+            governance_snapshot=governance_snapshot,
+            next_revision_index=revision_index,
+        )
         if governance_guidance and approval_state.final_outcome == "revision_requested":
             next_notes["control_governance_pending_anchor_requirement"] = True
             next_notes["control_governance_last_revision_guidance"] = governance_guidance
@@ -344,6 +354,59 @@ class DesignerSessionStateCoordinator:
             conversation_context=next_conversation,
             notes=next_notes,
         )
+
+    def _update_recent_approval_revision_history(
+        self,
+        notes: dict[str, object],
+        *,
+        approval_state: DesignerApprovalFlowState,
+        clarified_interpretation: str | None,
+        correction_notes: tuple[str, ...],
+        governance_snapshot: dict[str, object],
+        next_revision_index: int,
+    ) -> dict[str, object]:
+        cleaned = {
+            key: value
+            for key, value in notes.items()
+            if key not in {
+                "approval_revision_recent_history_count",
+                "approval_revision_recent_history_summary",
+            }
+        }
+        raw_history = cleaned.get("approval_revision_recent_history", ())
+        history = [dict(item) for item in raw_history if isinstance(item, dict)] if isinstance(raw_history, (list, tuple)) else []
+
+        if approval_state.final_outcome == "revision_requested":
+            modes: list[str] = []
+            for decision in approval_state.user_decisions:
+                if decision.outcome in {"choose_interpretation", "request_revision", "narrow_scope"} and decision.outcome not in modes:
+                    modes.append(decision.outcome)
+            entry = {
+                "revision_index": next_revision_index,
+                "approval_outcome": approval_state.final_outcome,
+                "continuation_modes": modes,
+                "selected_interpretation": clarified_interpretation or "",
+                "correction_notes": list(correction_notes),
+                "governance_pressure_band": str(governance_snapshot.get("pressure_band", "")).strip(),
+                "governance_pressure_score": int(governance_snapshot.get("pressure_score", 0) or 0),
+                "governance_guidance_active": bool(governance_snapshot.get("message")),
+                "summary": approval_state.explanation.strip() or "Revision was requested before commit.",
+            }
+            history.append(entry)
+            history = history[-_RECENT_APPROVAL_REVISION_HISTORY_LIMIT:]
+
+        cleaned["approval_revision_recent_history"] = history
+        cleaned["approval_revision_recent_history_count"] = len(history)
+        if history:
+            latest = history[-1]
+            modes = ", ".join(str(item).replace("_", " ") for item in latest.get("continuation_modes", []) if str(item).strip())
+            summary = f"Recent approval/revision continuity includes {len(history)} step(s). Latest continuation mode: {modes or 'revision requested'}."
+            if latest.get("selected_interpretation"):
+                summary = f"{summary} Latest clarified interpretation remains: {latest.get('selected_interpretation')}."
+            cleaned["approval_revision_recent_history_summary"] = summary
+        else:
+            cleaned.pop("approval_revision_recent_history_summary", None)
+        return cleaned
 
     def _mixed_revision_reason_code_from_approval_state(
         self,

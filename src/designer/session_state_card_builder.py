@@ -149,6 +149,8 @@ class DesignerSessionStateCardBuilder:
         )
         findings = self._apply_pending_anchor_guidance_to_findings(findings, governance_carryover)
         findings = self._apply_recent_anchor_resolution_to_findings(findings, governance_carryover, recent_governance_resolution)
+        recent_revision_history = None if fresh_cycle_from_committed_baseline else self._recent_approval_revision_history_for_request(notes, request_text)
+        findings = self._apply_recent_revision_history_to_findings(findings, recent_revision_history)
         risks = self._apply_pending_anchor_guidance_to_risks(risks, governance_carryover)
         if governance_carryover is not None:
             notes["control_governance_revision_guidance_carryover_status"] = governance_carryover.status
@@ -158,6 +160,10 @@ class DesignerSessionStateCardBuilder:
             notes["control_governance_recent_resolution_status"] = recent_governance_resolution.status
             notes["control_governance_recent_resolution_summary"] = recent_governance_resolution.explanation
             notes["control_governance_recent_resolution_applied"] = recent_governance_resolution.status == "visible_referential"
+        if recent_revision_history is not None:
+            notes["approval_revision_recent_history_status"] = recent_revision_history["status"]
+            notes["approval_revision_recent_history_summary"] = recent_revision_history["summary"]
+            notes["approval_revision_recent_history_applied"] = recent_revision_history["status"] == "visible_mutation"
 
         return DesignerSessionStateCard(
             card_version="0.1",
@@ -342,6 +348,50 @@ class DesignerSessionStateCardBuilder:
             confirmation_findings=findings.confirmation_findings,
             finding_summary=summary,
         )
+
+    def _recent_approval_revision_history_for_request(self, notes: dict[str, Any], request_text: str) -> dict[str, Any] | None:
+        raw_history = notes.get("approval_revision_recent_history", ())
+        history = [dict(item) for item in raw_history if isinstance(item, dict)] if isinstance(raw_history, (list, tuple)) else []
+        if len(history) < 2:
+            return None
+        summary = str(notes.get("approval_revision_recent_history_summary", "")).strip()
+        status = "visible_mutation" if self._request_is_mutation_oriented(request_text) else "hidden_read_only"
+        latest = history[-1]
+        selected = str(latest.get("selected_interpretation", "")).strip()
+        if selected:
+            summary = f"{summary} Keep the next mutation aligned with the latest clarified interpretation unless you intentionally redirect scope.".strip()
+        return {
+            "status": status,
+            "count": len(history),
+            "summary": summary or f"Recent approval/revision continuity includes {len(history)} steps.",
+            "history": history,
+        }
+
+    def _apply_recent_revision_history_to_findings(
+        self,
+        findings: CurrentFindingsState,
+        recent_revision_history: dict[str, Any] | None,
+    ) -> CurrentFindingsState:
+        if recent_revision_history is None or recent_revision_history.get("status") != "visible_mutation":
+            return findings
+        guidance = str(recent_revision_history.get("summary", "")).strip()
+        if not guidance:
+            return findings
+        warning_items = tuple(dict.fromkeys((*findings.warning_findings, guidance)))
+        summary = findings.finding_summary or "No blocking findings recorded."
+        summary = f"{summary} This request continues after multiple approval/revision turns, so continuity with the latest clarified direction should be preserved unless explicitly changed."
+        return CurrentFindingsState(
+            blocking_findings=findings.blocking_findings,
+            warning_findings=warning_items,
+            confirmation_findings=findings.confirmation_findings,
+            finding_summary=summary,
+        )
+
+    def _request_is_mutation_oriented(self, request_text: str) -> bool:
+        text = request_text.casefold()
+        if any(term in text for term in ("explain", "what does", "why is this", "analyze", "analyse", "risk", "cost", "gap", "why might")):
+            return False
+        return True
 
     def _default_scope_mode(self, storage_role: str) -> str:
         if storage_role == WORKING_SAVE_ROLE:

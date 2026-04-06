@@ -531,6 +531,18 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
+        recent_revision_history = self._recent_revision_history_snapshot_for_request(request_text, category, context)
+        if recent_revision_history:
+            assumptions.append(
+                AssumptionSpec(
+                    text=(
+                        f"This request continues a recent multi-step revision thread ({recent_revision_history.get('count', 0)} step(s)); preserve the latest clarified interpretation and accumulated user corrections unless you intend to redirect scope. "
+                        f"{str(recent_revision_history.get('summary', '')).strip()}".strip()
+                    ),
+                    severity="low",
+                    user_visible=True,
+                )
+            )
         return assumptions
 
     def _build_ambiguity_flags(
@@ -736,6 +748,26 @@ class DesignerRequestNormalizer:
         explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
         return bool(explicit_node_refs)
 
+
+    def _recent_revision_history_snapshot_for_request(
+        self,
+        request_text: str,
+        category: str,
+        context: RequestNormalizationContext,
+    ) -> dict[str, Any]:
+        card = context.session_state_card
+        if card is None:
+            return {}
+        if category in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"}:
+            return {}
+        raw_history = card.notes.get("approval_revision_recent_history", ())
+        history = [dict(item) for item in raw_history if isinstance(item, dict)] if isinstance(raw_history, (list, tuple)) else []
+        if len(history) < 2:
+            return {}
+        return {
+            "count": len(history),
+            "summary": str(card.notes.get("approval_revision_recent_history_summary", "")).strip(),
+        }
 
     def _pending_anchor_snapshot_for_request(
         self,

@@ -358,3 +358,5 @@ CLI
 
 * revision-request continuity now persists structured governance guidance, including anchor requirement mode, pressure summary/score/band, and next-safe-action hints so the next cycle inherits pressure-aware anchor guidance instead of only a generic note
 * persisted governance revision-guidance carryover is now request-applicability-aware in rebuilt session cards: non-referential follow-up requests stay visually cleaner, while anchored referential retries downgrade carryover from unresolved-risk surfacing to warning-level context instead of repeating full pending-anchor pressure
+
+* approval-boundary continuation now keeps a compact recent revision history (bounded) so rebuilt session cards and the normalizer can recognize longer multi-step revision threads and preserve the latest clarified direction unless the user explicitly redirects scope
