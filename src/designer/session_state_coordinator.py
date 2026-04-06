@@ -4,7 +4,9 @@ from dataclasses import replace
 
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.control_governance import (
+    advance_recent_anchor_resolution_notes,
     apply_control_governance_notes,
+    clear_recent_anchor_resolution_notes,
     governance_pending_anchor_applicability_for_request,
     governance_pending_anchor_is_fully_satisfied,
     governance_pending_anchor_resolution_summary,
@@ -161,6 +163,9 @@ class DesignerSessionStateCoordinator:
             next_notes["control_governance_last_pending_anchor_resolution_request_text"] = (
                 session_state_card.conversation_context.user_request_text
             )
+            next_notes["control_governance_last_pending_anchor_resolution_age"] = 0
+        else:
+            next_notes = advance_recent_anchor_resolution_notes(next_notes)
         next_notes = apply_control_governance_notes(next_notes, next_revision.attempt_history)
         return replace(
             session_state_card,
@@ -309,9 +314,7 @@ class DesignerSessionStateCoordinator:
             next_notes["control_governance_last_revision_pressure_score"] = governance_snapshot.get("pressure_score", 0)
             next_notes["control_governance_last_revision_pressure_band"] = governance_snapshot.get("pressure_band", "standard")
             next_notes["control_governance_last_revision_next_actions"] = governance_snapshot.get("next_actions", [])
-            next_notes.pop("control_governance_last_pending_anchor_resolution_status", None)
-            next_notes.pop("control_governance_last_pending_anchor_resolution_summary", None)
-            next_notes.pop("control_governance_last_pending_anchor_resolution_request_text", None)
+            next_notes = clear_recent_anchor_resolution_notes(next_notes)
         else:
             next_notes.pop("control_governance_pending_anchor_requirement", None)
             next_notes.pop("control_governance_last_revision_guidance", None)

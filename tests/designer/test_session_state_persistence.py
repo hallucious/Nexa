@@ -1118,6 +1118,33 @@ def test_control_result_clears_pending_anchor_requirement_after_anchored_retry()
     assert "stronger referential anchor" in updated.notes["control_governance_last_pending_anchor_resolution_summary"]
 
 
+def test_control_result_expires_recent_anchor_resolution_after_one_followup_cycle() -> None:
+    flow = DesignerProposalFlow()
+    card = replace(
+        make_card(),
+        conversation_context=ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+        notes={
+            **make_card().notes,
+            "control_governance_last_pending_anchor_resolution_status": "cleared_by_anchored_retry",
+            "control_governance_last_pending_anchor_resolution_summary": "Pending governance carryover was cleared because the stronger referential anchor was satisfied in the last cycle.",
+            "control_governance_last_pending_anchor_resolution_request_text": "Undo the last change on node reviewer",
+            "control_governance_last_pending_anchor_resolution_age": 0,
+        },
+    )
+
+    controlled = flow.propose_with_control(
+        "Change provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+    updated = DesignerSessionStateCoordinator().evolve_after_control_result(card, controlled)
+
+    assert "control_governance_last_pending_anchor_resolution_status" not in updated.notes
+    assert "control_governance_last_pending_anchor_resolution_summary" not in updated.notes
+    assert "control_governance_last_pending_anchor_resolution_request_text" not in updated.notes
+    assert "control_governance_last_pending_anchor_resolution_age" not in updated.notes
+
+
 def test_control_result_keeps_pending_anchor_requirement_for_nonreferential_followup() -> None:
     flow = DesignerProposalFlow()
     card = replace(

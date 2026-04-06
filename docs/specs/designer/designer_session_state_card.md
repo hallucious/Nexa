@@ -602,3 +602,4 @@ Action-resolution rule:
 - Governance pressure is no longer notes-only. When applicable, preview/precheck/approval guidance may reuse pressure summaries so the current request can see whether ambiguity pressure is still building, held, or already easing inside the active tier.
 
 * revision-request continuity now persists structured governance guidance, including anchor requirement mode, pressure summary/score/band, and next-safe-action hints so the next cycle inherits pressure-aware anchor guidance instead of only a generic note
+* cleared governance carryover may survive for one nearby follow-up cycle as low-priority recent-resolution context, but it should expire after that short window rather than lingering indefinitely in session continuity

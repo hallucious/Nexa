@@ -11,6 +11,7 @@ _RECENT_ATTEMPT_LIMIT = 3
 _REPEAT_CONFIRMATION_THRESHOLD = 2
 _STRICT_REPEAT_THRESHOLD = 3
 _SAFE_CYCLE_DECAY_THRESHOLD = 2
+_RECENT_ANCHOR_RESOLUTION_RETENTION_CYCLES = 1
 
 _ELEVATED_PRESSURE_SCORE = 2
 _STRICT_PRESSURE_SCORE = 4
@@ -119,6 +120,10 @@ class RecentAnchorResolutionApplicability:
     @property
     def is_hidden_nonreferential(self) -> bool:
         return self.status == "hidden_nonreferential"
+
+    @property
+    def is_expired(self) -> bool:
+        return self.status == "expired_recent_followup"
 
 
 def governance_pending_anchor_is_fully_satisfied(
@@ -707,8 +712,29 @@ def governance_recent_anchor_resolution_snapshot_from_notes(notes: Mapping[str, 
         "status": status,
         "summary": str(notes.get("control_governance_last_pending_anchor_resolution_summary", "")).strip(),
         "request_text": str(notes.get("control_governance_last_pending_anchor_resolution_request_text", "")).strip(),
+        "age": int(notes.get("control_governance_last_pending_anchor_resolution_age", 0) or 0),
     }
 
+
+def clear_recent_anchor_resolution_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    next_notes = dict(notes)
+    next_notes.pop("control_governance_last_pending_anchor_resolution_status", None)
+    next_notes.pop("control_governance_last_pending_anchor_resolution_summary", None)
+    next_notes.pop("control_governance_last_pending_anchor_resolution_request_text", None)
+    next_notes.pop("control_governance_last_pending_anchor_resolution_age", None)
+    return next_notes
+
+
+def advance_recent_anchor_resolution_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    snapshot = governance_recent_anchor_resolution_snapshot_from_notes(notes)
+    if not snapshot:
+        return dict(notes)
+    next_age = int(snapshot.get("age", 0) or 0) + 1
+    if next_age >= _RECENT_ANCHOR_RESOLUTION_RETENTION_CYCLES:
+        return clear_recent_anchor_resolution_notes(notes)
+    next_notes = dict(notes)
+    next_notes["control_governance_last_pending_anchor_resolution_age"] = next_age
+    return next_notes
 
 
 def governance_recent_anchor_resolution_applicability_for_request(
@@ -721,6 +747,12 @@ def governance_recent_anchor_resolution_applicability_for_request(
     snapshot = governance_recent_anchor_resolution_snapshot_from_notes(notes)
     if not snapshot:
         return RecentAnchorResolutionApplicability(status="none", snapshot={})
+    if int(snapshot.get("age", 0) or 0) >= _RECENT_ANCHOR_RESOLUTION_RETENTION_CYCLES:
+        return RecentAnchorResolutionApplicability(
+            status="expired_recent_followup",
+            snapshot=snapshot,
+            explanation="A previously cleared governance carryover is now outside the recent-resolution retention window.",
+        )
     if bool(notes.get("control_governance_pending_anchor_requirement")):
         return RecentAnchorResolutionApplicability(status="superseded_by_pending", snapshot=snapshot)
     if not _uses_referential_request_language(request_text):
