@@ -1941,3 +1941,145 @@ def test_request_normalizer_surfaces_llm_clarification_requirement() -> None:
     assert any("Two reviewer-like nodes" in assumption.text for assumption in intent.assumptions)
     assert "Clarification needed" in intent.explanation
     assert intent.confidence == 0.38
+
+
+
+def test_request_normalizer_preserves_multi_target_semantic_action_order() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-multi-target-order",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-5",
+            node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+            provider_refs=("openai:gpt-4o-mini", "anthropic:claude-sonnet"),
+            plugin_refs=("web.search",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(
+                ResourceAvailability(id="openai:gpt-4o-mini"),
+                ResourceAvailability(id="anthropic:claude-sonnet"),
+            ),
+            plugins=(ResourceAvailability(id="web.search"),),
+        ),
+        objective=ObjectiveSpec(primary_goal="Upgrade two different nodes"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Give the answerer search, then move the reviewer to Claude."),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "action_candidates": [
+                {
+                    "action_type": "attach_plugin",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "answerer"},
+                    "plugin_descriptor": {"resource_type": "plugin", "capability_hint": "search", "raw_reference_text": "search"},
+                },
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer", "role_hint": "review"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                },
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Give the answerer search, then move the reviewer to Claude.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-5", session_state_card=card),
+    )
+
+    assert [action.action_type for action in intent.proposed_actions] == ["attach_plugin", "replace_provider"]
+    assert [action.target_ref for action in intent.proposed_actions] == ["node.answerer", "node.reviewer"]
+    assert intent.proposed_actions[0].parameters["plugin_id"] == "web.search"
+    assert intent.proposed_actions[1].parameters["provider_id"] == "anthropic:claude-sonnet"
+
+
+
+def test_request_normalizer_surfaces_ambiguous_grounding_without_legacy_fallback() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-grounding-ambiguous",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-6",
+            node_list=("node.reviewer", "node.reviewer_shadow"),
+            provider_refs=("anthropic:claude-sonnet",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(ResourceAvailability(id="anthropic:claude-sonnet"),)
+        ),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Have the reviewer use Claude instead."),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "role_hint": "review"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                }
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude instead.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-6", session_state_card=card),
+    )
+
+    assert intent.proposed_actions == ()
+    assert any(flag.type == "semantic_grounding_target_ambiguous" for flag in intent.ambiguity_flags)
+    assert intent.requires_user_confirmation is True
+
+
+
+def test_request_normalizer_surfaces_unresolved_insert_topology_without_legacy_fallback() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-grounding-topology",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-7",
+            node_list=("node.answerer", "node.final_judge"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Insert a review step"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Insert a review step."),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "action_candidates": [
+                {
+                    "action_type": "insert_node",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "review step"},
+                }
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Insert a review step.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-7", session_state_card=card),
+    )
+
+    assert intent.proposed_actions == ()
+    assert any(flag.type == "semantic_grounding_topology_unresolved" for flag in intent.ambiguity_flags)
+    assert intent.requires_user_confirmation is True

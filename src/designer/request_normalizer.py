@@ -99,6 +99,7 @@ class DesignerRequestNormalizer:
         assumptions.extend(self._build_semantic_assumptions(semantic_intent))
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
         ambiguity_flags.extend(self._build_semantic_ambiguity_flags(semantic_intent))
+        ambiguity_flags.extend(self._build_grounding_ambiguity_flags(grounded_intent))
         risk_flags = self._build_risk_flags(effective_request_text, context)
         requires_confirmation = bool(
             semantic_intent.clarification_required or ambiguity_flags or [flag for flag in risk_flags if flag.severity == "high"]
@@ -270,7 +271,7 @@ class DesignerRequestNormalizer:
                     rationale="A new circuit proposal should expose an explicit output binding.",
                 ),
             ]
-        if grounded_intent is not None and grounded_intent.grounded_action_candidates:
+        if grounded_intent is not None and grounded_intent.semantic_intent.action_candidates:
             return [
                 ActionSpec(
                     action_type=candidate.action_type,
@@ -663,6 +664,43 @@ class DesignerRequestNormalizer:
                     description=description,
                 )
             )
+        return flags
+
+    def _build_grounding_ambiguity_flags(self, grounded_intent) -> list[AmbiguityFlag]:
+        if grounded_intent is None:
+            return []
+        flags: list[AmbiguityFlag] = []
+        for note in grounded_intent.grounding_notes:
+            if note.startswith("grounding_ambiguous_target:"):
+                refs = note.split(":", 1)[1]
+                flags.append(
+                    AmbiguityFlag(
+                        type="semantic_grounding_target_ambiguous",
+                        description=f"The semantic target descriptor matched multiple possible nodes: {refs.replace('|', ', ')}.",
+                    )
+                )
+            elif note == "grounding_unresolved_target:missing":
+                flags.append(
+                    AmbiguityFlag(
+                        type="semantic_grounding_target_unresolved",
+                        description="The semantic action could not be grounded to a unique node target.",
+                    )
+                )
+            elif note.startswith("grounding_unresolved_resource:"):
+                _, action_type, resource_kind = note.split(":", 2)
+                flags.append(
+                    AmbiguityFlag(
+                        type="semantic_grounding_resource_unresolved",
+                        description=f"The semantic action '{action_type}' could not be grounded to an available {resource_kind} resource.",
+                    )
+                )
+            elif note == "grounding_unresolved_topology:insert_node_between":
+                flags.append(
+                    AmbiguityFlag(
+                        type="semantic_grounding_topology_unresolved",
+                        description="The semantic insert action could not be grounded to a unique topology placement.",
+                    )
+                )
         return flags
 
     def _build_ambiguity_flags(

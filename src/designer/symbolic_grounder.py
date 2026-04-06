@@ -25,7 +25,7 @@ class DesignerSymbolicGrounder:
 class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
     def ground(self, semantic_intent: SemanticIntent, *, context: RequestNormalizationContext, precomputed_scope: TargetScope | None = None) -> GroundedIntent:
         scope = precomputed_scope or self.build_scope(semantic_intent.category, semantic_intent.effective_request_text, context)
-        grounded_action_candidates = self.ground_action_candidates(semantic_intent, scope, context)
+        grounded_action_candidates, grounding_notes = self.ground_action_candidates(semantic_intent, scope, context)
         scope = self.maybe_refine_scope_from_grounded_actions(scope, grounded_action_candidates, context)
         return GroundedIntent(
             grounded_intent_id=_stable_id("grounded", semantic_intent.user_request_text),
@@ -41,6 +41,7 @@ class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
                 context,
             ),
             grounded_action_candidates=grounded_action_candidates,
+            grounding_notes=grounding_notes,
         )
 
     def maybe_refine_scope_from_grounded_actions(
@@ -69,12 +70,17 @@ class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
         semantic_intent: SemanticIntent,
         scope: TargetScope,
         context: RequestNormalizationContext,
-    ) -> tuple[GroundedActionCandidate, ...]:
+    ) -> tuple[tuple[GroundedActionCandidate, ...], tuple[str, ...]]:
         grounded: list[GroundedActionCandidate] = []
+        grounding_notes: list[str] = []
         for candidate in semantic_intent.action_candidates:
-            target_ref = self.resolve_target_ref_from_descriptor(candidate.target_node_descriptor, scope, context)
             action_type = self.normalize_action_type(candidate.action_type)
-            parameters = self.parameters_for_action(action_type, candidate, semantic_intent, scope, context)
+            target_ref, target_note = self.resolve_target_ref_from_descriptor(candidate.target_node_descriptor, scope, context)
+            parameters, parameter_notes = self.parameters_for_action(action_type, candidate, semantic_intent, scope, context)
+            unresolved_notes = [note for note in (target_note, *parameter_notes) if note]
+            if unresolved_notes:
+                grounding_notes.extend(unresolved_notes)
+                continue
             grounded.append(
                 GroundedActionCandidate(
                     action_type=action_type,
@@ -83,7 +89,7 @@ class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
                     rationale=" ".join(candidate.notes) if candidate.notes else None,
                 )
             )
-        return tuple(grounded)
+        return tuple(grounded), tuple(dict.fromkeys(grounding_notes))
 
     def normalize_action_type(self, action_type: str) -> str:
         normalized = action_type.strip()
@@ -102,40 +108,60 @@ class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
         semantic_intent: SemanticIntent,
         scope: TargetScope,
         context: RequestNormalizationContext,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], tuple[str, ...]]:
+        notes: list[str] = []
         if action_type == "replace_provider":
-            return {"provider_id": self.resolve_resource_from_descriptor(candidate.provider_descriptor, context, resource_type="providers")}
+            provider_id = self.resolve_resource_from_descriptor(candidate.provider_descriptor, context, resource_type="providers")
+            if provider_id is None:
+                notes.append("grounding_unresolved_resource:replace_provider:providers")
+            return {"provider_id": provider_id}, tuple(notes)
         if action_type == "attach_plugin":
-            return {"plugin_id": self.resolve_resource_from_descriptor(candidate.plugin_descriptor, context, resource_type="plugins")}
+            plugin_id = self.resolve_resource_from_descriptor(candidate.plugin_descriptor, context, resource_type="plugins")
+            if plugin_id is None:
+                notes.append("grounding_unresolved_resource:attach_plugin:plugins")
+            return {"plugin_id": plugin_id}, tuple(notes)
         if action_type == "set_prompt":
-            return {"prompt_id": self.resolve_resource_from_descriptor(candidate.prompt_descriptor, context, resource_type="prompts")}
+            prompt_id = self.resolve_resource_from_descriptor(candidate.prompt_descriptor, context, resource_type="prompts")
+            if prompt_id is None:
+                notes.append("grounding_unresolved_resource:set_prompt:prompts")
+            return {"prompt_id": prompt_id}, tuple(notes)
         if action_type == "insert_node_between":
             placement_text = self.compose_descriptor_text(candidate.target_node_descriptor)
             request_like = " ".join(part for part in (placement_text, semantic_intent.effective_request_text) if part).strip()
-            return self.infer_insert_between_parameters(request_like or semantic_intent.user_request_text, scope, context)
+            parameters = self.infer_insert_between_parameters(request_like or semantic_intent.user_request_text, scope, context)
+            if not {"before_node", "after_node", "from_node", "to_node"}.intersection(parameters):
+                notes.append("grounding_unresolved_topology:insert_node_between")
+            return parameters, tuple(notes)
         if action_type == "set_parameter":
-            return {"mode": "bounded_update"}
-        return {}
+            return {"mode": "bounded_update"}, ()
+        return {}, ()
 
     def resolve_target_ref_from_descriptor(
         self,
         descriptor: SemanticTargetDescriptor | None,
         scope: TargetScope,
         context: RequestNormalizationContext,
-    ) -> str | None:
+    ) -> tuple[str | None, str | None]:
         if descriptor is None:
-            return self.first_target_ref(scope, "")
+            target = self.first_target_ref(scope, "")
+            return target, None if target is not None else "grounding_unresolved_target:missing"
         descriptor_text = self.compose_descriptor_text(descriptor)
         if descriptor_text:
             explicit = self.explicit_node_refs(descriptor_text, context)
-            if explicit:
-                return explicit[0]
-        if scope.node_refs:
-            return scope.node_refs[0]
+            if len(explicit) == 1:
+                return explicit[0], None
+            if len(explicit) > 1:
+                return None, "grounding_ambiguous_target:" + "|".join(explicit)
+        if len(scope.node_refs) == 1:
+            return scope.node_refs[0], None
+        if len(scope.node_refs) > 1:
+            return None, "grounding_ambiguous_target:" + "|".join(scope.node_refs)
         selected = self.selected_node_refs(context)
-        if selected:
-            return selected[0]
-        return None
+        if len(selected) == 1:
+            return selected[0], None
+        if len(selected) > 1:
+            return None, "grounding_ambiguous_target:" + "|".join(selected)
+        return None, "grounding_unresolved_target:missing"
 
     def resolve_resource_from_descriptor(
         self,
