@@ -5,7 +5,7 @@ from typing import Any
 
 from src.contracts.nex_contract import COMMIT_SNAPSHOT_ROLE, WORKING_SAVE_ROLE
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
-from src.designer.control_governance import apply_control_governance_notes
+from src.designer.control_governance import apply_control_governance_notes, governance_pending_anchor_snapshot_from_notes
 from src.designer.reason_codes import archive_latest_mixed_referential_reason_notes
 from src.designer.models.designer_session_state_card import (
     ApprovalState,
@@ -123,6 +123,16 @@ class DesignerSessionStateCardBuilder:
             })
         governance_attempt_history = () if persisted_revision is None else persisted_revision.attempt_history
         notes = apply_control_governance_notes(notes, governance_attempt_history)
+        pending_anchor_snapshot = (
+            {}
+            if fresh_cycle_from_committed_baseline
+            else governance_pending_anchor_snapshot_from_notes(notes)
+        )
+        findings = self._apply_pending_anchor_guidance_to_findings(findings, pending_anchor_snapshot)
+        risks = self._apply_pending_anchor_guidance_to_risks(risks, pending_anchor_snapshot)
+        if pending_anchor_snapshot:
+            notes["control_governance_revision_guidance_carryover_applied"] = True
+            notes["control_governance_revision_guidance_carryover_summary"] = pending_anchor_snapshot.get("message", "")
 
         return DesignerSessionStateCard(
             card_version="0.1",
@@ -228,6 +238,57 @@ class DesignerSessionStateCardBuilder:
             risk_flags=unresolved,
             severity_summary="No high risks currently surfaced.",
             unresolved_high_risks=unresolved,
+        )
+
+    def _apply_pending_anchor_guidance_to_findings(
+        self,
+        findings: CurrentFindingsState,
+        pending_anchor_snapshot: dict[str, Any],
+    ) -> CurrentFindingsState:
+        if not pending_anchor_snapshot:
+            return findings
+        guidance = str(pending_anchor_snapshot.get("message", "")).strip()
+        pressure_summary = str(pending_anchor_snapshot.get("pressure_summary", "")).strip()
+        next_actions = tuple(
+            f"Next safe step: {', then '.join(str(item).replace('_', ' ') for item in pending_anchor_snapshot['next_actions'])}."
+            for _ in [0]
+            if pending_anchor_snapshot.get("next_actions")
+        )
+        warning_items = tuple(dict.fromkeys((*findings.warning_findings, *(item for item in (guidance, pressure_summary, *next_actions) if item))))
+        summary = findings.finding_summary or "No blocking findings recorded."
+        if guidance:
+            summary = f"{summary} Pending governance carryover: a stronger referential anchor is still expected for the next risky referential attempt."
+        return CurrentFindingsState(
+            blocking_findings=findings.blocking_findings,
+            warning_findings=warning_items,
+            confirmation_findings=findings.confirmation_findings,
+            finding_summary=summary,
+        )
+
+    def _apply_pending_anchor_guidance_to_risks(
+        self,
+        risks: CurrentRisksState,
+        pending_anchor_snapshot: dict[str, Any],
+    ) -> CurrentRisksState:
+        if not pending_anchor_snapshot:
+            return risks
+        band = str(pending_anchor_snapshot.get("pressure_band", "standard")).strip() or "standard"
+        pressure_summary = str(pending_anchor_snapshot.get("pressure_summary", "")).strip()
+        risk_items = list(risks.risk_flags)
+        carryover = f"Pending referential-anchor requirement remains from the last governance-triggered revision ({band} pressure)."
+        if carryover not in risk_items:
+            risk_items.append(carryover)
+        summary = risks.severity_summary or "No high risks currently surfaced."
+        summary = f"{summary} Governance carryover remains active until a future risky referential request uses a stronger anchor."
+        unresolved = list(risks.unresolved_high_risks)
+        if band == "strict":
+            item = pressure_summary or "Strict referential governance pressure remains visible from the previous revision cycle."
+            if item not in unresolved:
+                unresolved.append(item)
+        return CurrentRisksState(
+            risk_flags=tuple(risk_items),
+            severity_summary=summary,
+            unresolved_high_risks=tuple(unresolved),
         )
 
     def _default_scope_mode(self, storage_role: str) -> str:

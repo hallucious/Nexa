@@ -435,6 +435,59 @@ def governance_revision_snapshot_from_notes(notes: Mapping[str, Any]) -> dict[st
     }
 
 
+def governance_pending_anchor_snapshot_from_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    if not bool(notes.get("control_governance_pending_anchor_requirement")):
+        return {}
+
+    mode = str(notes.get("control_governance_pending_anchor_requirement_mode", "required"))
+    pressure_score = int(notes.get("control_governance_last_revision_pressure_score", 0) or 0)
+    pressure_band = str(notes.get("control_governance_last_revision_pressure_band", _pressure_band_for_score(pressure_score)))
+    pressure_transition = str(notes.get("control_governance_pressure_transition", "baseline"))
+    pressure_summary = str(
+        notes.get(
+            "control_governance_last_revision_pressure_summary",
+            _default_pressure_summary(score=pressure_score, band=pressure_band, transition=pressure_transition),
+        )
+    )
+    next_actions = [
+        str(item)
+        for item in notes.get("control_governance_last_revision_next_actions", ())
+        if str(item).strip()
+    ]
+    guidance = str(notes.get("control_governance_last_revision_guidance", "")).strip()
+
+    if not guidance or not next_actions:
+        derived = governance_revision_snapshot_from_notes(notes)
+        if derived:
+            mode = str(notes.get("control_governance_pending_anchor_requirement_mode", derived.get("mode", mode)))
+            pressure_summary = pressure_summary or str(derived.get("pressure_summary", "")).strip()
+            pressure_score = int(notes.get("control_governance_last_revision_pressure_score", derived.get("pressure_score", pressure_score)) or 0)
+            pressure_band = str(notes.get("control_governance_last_revision_pressure_band", derived.get("pressure_band", pressure_band)))
+            guidance = guidance or str(derived.get("message", "")).strip()
+            if not next_actions:
+                next_actions = [str(item) for item in derived.get("next_actions", ()) if str(item).strip()]
+
+    return {
+        "mode": mode,
+        "message": guidance,
+        "pressure_summary": pressure_summary,
+        "pressure_score": pressure_score,
+        "pressure_band": pressure_band,
+        "next_actions": next_actions,
+    }
+
+
+def governance_pending_anchor_summary_from_notes(notes: Mapping[str, Any]) -> str:
+    snapshot = governance_pending_anchor_snapshot_from_notes(notes)
+    if not snapshot:
+        return ""
+    parts = [str(snapshot.get("message", "")).strip(), str(snapshot.get("pressure_summary", "")).strip()]
+    if snapshot.get("next_actions"):
+        pretty = ", then ".join(str(item).replace("_", " ") for item in snapshot["next_actions"])
+        parts.append(f"Next safe step: {pretty}.")
+    return _join_governance_parts(*parts)
+
+
 def governance_anchored_progress_reason_code_from_issue_codes(
     issue_codes: Sequence[str],
     *,

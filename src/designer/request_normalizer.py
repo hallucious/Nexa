@@ -5,7 +5,7 @@ from typing import Any
 import hashlib
 import re
 
-from src.designer.control_governance import requires_explicit_referential_anchor
+from src.designer.control_governance import governance_pending_anchor_snapshot_from_notes, requires_explicit_referential_anchor
 from src.designer.models.designer_intent import (
     ActionSpec,
     AmbiguityFlag,
@@ -52,7 +52,7 @@ class DesignerRequestNormalizer:
         actions = self._build_actions(category, effective_request_text, scope, context)
         assumptions = self._build_assumptions(category, effective_request_text, context)
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
-        risk_flags = self._build_risk_flags(effective_request_text)
+        risk_flags = self._build_risk_flags(effective_request_text, context)
         requires_confirmation = bool(ambiguity_flags or [flag for flag in risk_flags if flag.severity == "high"])
         constraints = self._build_constraints(request_text, context)
         objective = self._build_objective(request_text, context)
@@ -497,6 +497,24 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
+            pending_anchor = self._pending_anchor_snapshot_for_request(request_text, context)
+            if pending_anchor:
+                summary = str(pending_anchor.get("pressure_summary", "")).strip()
+                next_actions = pending_anchor.get("next_actions", [])
+                detail = summary
+                if next_actions:
+                    pretty = ", then ".join(str(item).replace("_", " ") for item in next_actions)
+                    detail = f"{detail} Next safe step: {pretty}.".strip()
+                assumptions.append(
+                    AssumptionSpec(
+                        text=(
+                            "The previous revision cycle already ended under governance anchor pressure, so the next risky referential request should follow the persisted revision guidance. "
+                            f"{detail}".strip()
+                        ),
+                        severity="medium",
+                        user_visible=True,
+                    )
+                )
         return assumptions
 
     def _build_ambiguity_flags(
@@ -564,10 +582,19 @@ class DesignerRequestNormalizer:
                 )
         resolved_summary, _, _ = self._resolve_committed_summary_reference(request_text, context)
         if self._repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=resolved_summary):
+            pending_anchor = self._pending_anchor_snapshot_for_request(request_text, context)
+            suffix = ""
+            if pending_anchor:
+                pressure_summary = str(pending_anchor.get("pressure_summary", "")).strip()
+                if pressure_summary:
+                    suffix = f" {pressure_summary}"
             flags.append(
                 AmbiguityFlag(
                     type="committed_summary_repeat_cycle_anchor_required",
-                    description="Recent confirmation cycles repeated the same referential interpretation pattern, so an explicit commit anchor, explicit node target, or explicit non-latest selector is now required before auto-resolution.",
+                    description=(
+                        "Recent confirmation cycles repeated the same referential interpretation pattern, so an explicit commit anchor, explicit node target, or explicit non-latest selector is now required before auto-resolution."
+                        f"{suffix}"
+                    ),
                 )
             )
 
@@ -619,7 +646,7 @@ class DesignerRequestNormalizer:
                     )
         return flags
 
-    def _build_risk_flags(self, request_text: str) -> list[RiskFlag]:
+    def _build_risk_flags(self, request_text: str, context: RequestNormalizationContext) -> list[RiskFlag]:
         flags: list[RiskFlag] = []
         text = request_text.casefold()
         if any(term in text for term in ("delete", "remove", "destructive")):
@@ -636,6 +663,19 @@ class DesignerRequestNormalizer:
                     type="provider_change",
                     severity="medium",
                     description="Provider changes may alter output semantics and cost.",
+                )
+            )
+        pending_anchor = self._pending_anchor_snapshot_for_request(request_text, context)
+        if pending_anchor:
+            summary = str(pending_anchor.get("pressure_summary", "")).strip()
+            flags.append(
+                RiskFlag(
+                    type="governance_pressure_carryover",
+                    severity="medium",
+                    description=(
+                        "This request re-enters a referential interpretation path while prior governance pressure remains unresolved."
+                        + (f" {summary}" if summary else "")
+                    ),
                 )
             )
         return flags
@@ -680,6 +720,23 @@ class DesignerRequestNormalizer:
         explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
         return bool(explicit_node_refs)
 
+
+    def _pending_anchor_snapshot_for_request(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+    ) -> dict[str, Any]:
+        card = context.session_state_card
+        if card is None:
+            return {}
+        if not self._uses_referential_committed_summary_language(request_text):
+            return {}
+        snapshot = governance_pending_anchor_snapshot_from_notes(card.notes)
+        if not snapshot:
+            return {}
+        if self._has_explicit_referential_anchor(request_text, context):
+            return {}
+        return snapshot
 
     def _latest_committed_summary(self, context: RequestNormalizationContext) -> dict[str, Any] | None:
         card = context.session_state_card

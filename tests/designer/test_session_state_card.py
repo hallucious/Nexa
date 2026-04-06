@@ -75,3 +75,36 @@ def test_proposal_flow_accepts_session_state_card_and_narrows_scope() -> None:
     assert bundle.intent.target_scope.mode == "node_only"
     assert bundle.intent.target_scope.node_refs == ("node.answerer",)
     assert bundle.intent.constraints.provider_restrictions == ("provider.legacy",)
+
+
+
+def test_session_state_card_builder_surfaces_pending_governance_anchor_carryover() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    base = builder.build(request_text="Undo the last change", artifact=make_working_save())
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "control_governance_pending_anchor_requirement": True,
+            "control_governance_pending_anchor_requirement_mode": "required",
+            "control_governance_last_revision_guidance": "Provide an explicit commit anchor before the next revision attempt.",
+            "control_governance_last_revision_pressure_summary": "Ambiguity pressure remains 5/5 (strict band), so do not fall back to loose selectors.",
+            "control_governance_last_revision_pressure_score": 5,
+            "control_governance_last_revision_pressure_band": "strict",
+            "control_governance_last_revision_next_actions": [
+                "provide_explicit_anchor",
+                "restate_request_with_stronger_selector",
+            ],
+        },
+    })
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Undo the last change", artifact=persisted)
+
+    assert rebuilt.notes["control_governance_revision_guidance_carryover_applied"] is True
+    assert any("Provide an explicit commit anchor" in item for item in rebuilt.current_findings.warning_findings)
+    assert any("Next safe step:" in item for item in rebuilt.current_findings.warning_findings)
+    assert any("Pending referential-anchor requirement remains" in item for item in rebuilt.current_risks.risk_flags)
+    assert any("5/5 (strict band)" in item for item in rebuilt.current_risks.unresolved_high_risks)
