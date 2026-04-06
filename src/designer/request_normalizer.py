@@ -24,6 +24,7 @@ from src.designer.models.designer_intent import (
 )
 
 
+from src.designer.legacy_mutation_heuristics import DesignerLegacyMutationHeuristics
 from src.designer.normalization_context import RequestNormalizationContext
 from src.designer.semantic_grounding_outcome import SemanticGroundingOutcomeProjector
 from src.designer.reason_codes import (
@@ -73,6 +74,7 @@ class DesignerRequestNormalizer:
             llm_backend_required=llm_backend_required,
         )
         self._symbolic_grounder = symbolic_grounder or DeterministicSymbolicGrounder()
+        self._legacy_heuristics = DesignerLegacyMutationHeuristics(self._symbolic_grounder)
         self._outcome_projector = SemanticGroundingOutcomeProjector()
 
     def normalize(self, request_text: str, *, context: RequestNormalizationContext | None = None) -> DesignerIntent:
@@ -149,9 +151,9 @@ class DesignerRequestNormalizer:
     ) -> TargetScope:
         text = request_text.casefold()
         broad = any(term in text for term in ("all ", "entire", "whole", "across the circuit", "every"))
-        explicit_node_refs = self._explicit_node_refs(request_text, context)
+        explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
         if not explicit_node_refs and not broad:
-            selected_node_refs = self._selected_node_refs(context)
+            selected_node_refs = self._legacy_heuristics.selected_node_refs(context)
             if len(selected_node_refs) == 1 and category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
                 explicit_node_refs = selected_node_refs
         node_refs = self._resolve_target_node_refs_from_committed_summary(
@@ -216,7 +218,7 @@ class DesignerRequestNormalizer:
             speed_priority="high" if "faster" in text or "latency" in text else None,
             quality_priority="high" if "quality" in text or "reliable" in text else None,
             determinism_preference="high" if "determin" in text else None,
-            human_review_required=self._requests_review_gate(text) or bool(re.search(r"\bapprove\b", text, flags=re.IGNORECASE)),
+            human_review_required=self._legacy_heuristics.requests_review_gate(text) or bool(re.search(r"\bapprove\b", text, flags=re.IGNORECASE)),
         )
         card = context.session_state_card
         if card is None:
@@ -288,40 +290,40 @@ class DesignerRequestNormalizer:
         referential_action = self._resolve_referential_action_resolution(request_text, scope, context)
         if referential_action is not None:
             actions.append(referential_action)
-        if self._requests_review_gate(text):
+        if self._legacy_heuristics.requests_review_gate(text):
             actions.append(
                 ActionSpec(
                     action_type="add_review_gate",
-                    target_ref=self._first_target_ref(scope, request_text),
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
                     parameters={"review_type": "manual"},
                     rationale="The request explicitly asks for a review/approval step.",
                 )
             )
-        if self._requests_provider_change(text, context):
-            provider_id = grounded_intent.matched_provider_id if grounded_intent is not None else self._infer_provider_id(text, context)
+        if self._legacy_heuristics.requests_provider_change(text, context):
+            provider_id = grounded_intent.matched_provider_id if grounded_intent is not None else self._legacy_heuristics.infer_provider_id(text, context)
             actions.append(
                 ActionSpec(
                     action_type="replace_provider",
-                    target_ref=self._first_target_ref(scope, request_text),
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
                     parameters={"provider_id": provider_id},
                     rationale="The request explicitly changes the node provider.",
                 )
             )
-        if self._requests_plugin_attach(text, context):
+        if self._legacy_heuristics.requests_plugin_attach(text, context):
             actions.append(
                 ActionSpec(
                     action_type="attach_plugin",
-                    target_ref=self._first_target_ref(scope, request_text),
-                    parameters={"plugin_id": grounded_intent.matched_plugin_id if grounded_intent is not None else self._infer_plugin_id(text, context)},
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    parameters={"plugin_id": grounded_intent.matched_plugin_id if grounded_intent is not None else self._legacy_heuristics.infer_plugin_id(text, context)},
                     rationale="The request explicitly introduces a plugin-backed tool step.",
                 )
             )
-        if self._requests_prompt_change(text, context):
+        if self._legacy_heuristics.requests_prompt_change(text, context):
             actions.append(
                 ActionSpec(
                     action_type="set_prompt",
-                    target_ref=self._first_target_ref(scope, request_text),
-                    parameters={"prompt_id": grounded_intent.matched_prompt_id if grounded_intent is not None else self._infer_prompt_id(text, context)},
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    parameters={"prompt_id": grounded_intent.matched_prompt_id if grounded_intent is not None else self._legacy_heuristics.infer_prompt_id(text, context)},
                     rationale="The request explicitly changes the prompt/instruction assignment.",
                 )
             )
@@ -329,7 +331,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="rename_component",
-                    target_ref=self._first_target_ref(scope, request_text),
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
                     parameters={"new_name": "renamed_component"},
                     rationale="The request explicitly asks for a rename operation.",
                 )
@@ -338,17 +340,17 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="delete_node",
-                    target_ref=self._first_target_ref(scope, request_text),
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
                     parameters={},
                     rationale="The request explicitly removes an existing structural element.",
                 )
             )
-        if self._requests_insert_between(text):
+        if self._legacy_heuristics.requests_insert_between(text):
             actions.append(
                 ActionSpec(
                     action_type="insert_node_between",
-                    target_ref=self._first_target_ref(scope, request_text),
-                    parameters=grounded_intent.insert_between_parameters if grounded_intent is not None else self._infer_insert_between_parameters(request_text, scope, context),
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    parameters=grounded_intent.insert_between_parameters if grounded_intent is not None else self._legacy_heuristics.infer_insert_between_parameters(request_text, scope, context),
                     rationale="The request explicitly inserts a node into an existing path.",
                 )
             )
@@ -356,7 +358,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="update_node",
-                    target_ref=self._first_target_ref(scope, request_text),
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
                     parameters={"mode": "bounded_update"},
                     rationale="The request asks for a bounded change to existing structure.",
                 )
@@ -365,7 +367,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="update_node",
-                    target_ref=self._first_target_ref(scope, request_text),
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
                     parameters={"repair_mode": "minimal_fix"},
                     rationale="Repair requests need a minimal corrective patch proposal.",
                 )
@@ -374,7 +376,7 @@ class DesignerRequestNormalizer:
             actions.append(
                 ActionSpec(
                     action_type="set_parameter",
-                    target_ref=self._first_target_ref(scope, request_text),
+                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
                     parameters={"optimization_goal": "cost_or_quality"},
                     rationale="Optimization requests are normalized into bounded parameter changes first.",
                 )
@@ -510,7 +512,7 @@ class DesignerRequestNormalizer:
                     )
                 )
             touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
-            explicit_node_refs = self._explicit_node_refs(request_text, context)
+            explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
             if not explicit_node_refs and len(touched_node_ids) == 1:
                 assumptions.append(
                     AssumptionSpec(
@@ -639,149 +641,6 @@ class DesignerRequestNormalizer:
             )
         return assumptions
 
-    def _build_semantic_assumptions(self, semantic_intent, *, context: RequestNormalizationContext) -> list[AssumptionSpec]:
-        assumptions: list[AssumptionSpec] = []
-        for note in semantic_intent.semantic_ambiguity_notes:
-            assumptions.append(
-                AssumptionSpec(
-                    text=f"Semantic ambiguity noted by interpreter: {note}",
-                    severity="medium",
-                    user_visible=True,
-                )
-            )
-        if self._semantic_clarification_loop_persisting(semantic_intent, context):
-            assumptions.append(
-                AssumptionSpec(
-                    text=(
-                        "A prior clarification attempt is already present in the session context, "
-                        "but the semantic interpreter still requires clarification. Treat this as a persistent clarification loop until the target or action is made more explicit."
-                    ),
-                    severity="medium",
-                    user_visible=True,
-                )
-            )
-        return assumptions
-
-    def _build_semantic_ambiguity_flags(self, semantic_intent, *, context: RequestNormalizationContext) -> list[AmbiguityFlag]:
-        flags: list[AmbiguityFlag] = []
-        if semantic_intent.clarification_required:
-            description = (
-                "; ".join(semantic_intent.clarification_questions)
-                if semantic_intent.clarification_questions
-                else "The semantic interpreter requires clarification before deterministic grounding can be trusted."
-            )
-            flags.append(
-                AmbiguityFlag(
-                    type="semantic_interpretation_requires_clarification",
-                    description=description,
-                )
-            )
-            if self._semantic_clarification_loop_persisting(semantic_intent, context):
-                flags.append(
-                    AmbiguityFlag(
-                        type="semantic_clarification_loop_persisting",
-                        description="The user already provided a clarification context, but the semantic interpreter still cannot resolve the request without another clarification pass.",
-                    )
-                )
-        return flags
-
-    def _build_grounding_assumptions(self, grounded_intent, *, context: RequestNormalizationContext) -> list[AssumptionSpec]:
-        if grounded_intent is None:
-            return []
-        assumptions: list[AssumptionSpec] = []
-        semantic_count = len(grounded_intent.semantic_intent.action_candidates)
-        grounded_count = len(grounded_intent.grounded_action_candidates)
-        prior_clarification_present = self._semantic_clarification_present(context)
-        if semantic_count > grounded_count and grounded_count > 0:
-            assumptions.append(
-                AssumptionSpec(
-                    text=(
-                        "Only part of the semantic request could be grounded deterministically. "
-                        f"{grounded_count} of {semantic_count} requested action(s) were preserved as concrete mutations; the remaining actions require clarification or better structural anchors."
-                    ),
-                    severity="medium",
-                    user_visible=True,
-                )
-            )
-            if prior_clarification_present:
-                assumptions.append(
-                    AssumptionSpec(
-                        text=(
-                            "A prior clarification improved the current semantic request, but only part of it could be grounded deterministically. "
-                            f"{grounded_count} of {semantic_count} requested action(s) are now concrete; the remaining actions still require clarification or better structural anchors."
-                        ),
-                        severity="medium",
-                        user_visible=True,
-                    )
-                )
-        elif (
-            prior_clarification_present
-            and semantic_count > 0
-            and grounded_count == semantic_count
-            and not grounded_intent.semantic_intent.clarification_required
-            and not grounded_intent.grounding_notes
-        ):
-            assumptions.append(
-                AssumptionSpec(
-                    text=(
-                        "A prior clarification resolved the current semantic request into fully grounded concrete actions. "
-                        f"All {grounded_count} requested action(s) are now grounded deterministically."
-                    ),
-                    severity="low",
-                    user_visible=True,
-                )
-            )
-        return assumptions
-
-    def _build_grounding_ambiguity_flags(self, grounded_intent) -> list[AmbiguityFlag]:
-        if grounded_intent is None:
-            return []
-        flags: list[AmbiguityFlag] = []
-        semantic_count = len(grounded_intent.semantic_intent.action_candidates)
-        grounded_count = len(grounded_intent.grounded_action_candidates)
-        if semantic_count > grounded_count and grounded_count > 0:
-            flags.append(
-                AmbiguityFlag(
-                    type="semantic_grounding_partial_resolution",
-                    description=(
-                        "Some semantic actions were grounded successfully, but at least one action remained unresolved. "
-                        f"Grounded {grounded_count} of {semantic_count} requested actions."
-                    ),
-                )
-            )
-        for note in grounded_intent.grounding_notes:
-            if note.startswith("grounding_ambiguous_target:"):
-                refs = note.split(":", 1)[1]
-                flags.append(
-                    AmbiguityFlag(
-                        type="semantic_grounding_target_ambiguous",
-                        description=f"The semantic target descriptor matched multiple possible nodes: {refs.replace('|', ', ')}.",
-                    )
-                )
-            elif note == "grounding_unresolved_target:missing":
-                flags.append(
-                    AmbiguityFlag(
-                        type="semantic_grounding_target_unresolved",
-                        description="The semantic action could not be grounded to a unique node target.",
-                    )
-                )
-            elif note.startswith("grounding_unresolved_resource:"):
-                _, action_type, resource_kind = note.split(":", 2)
-                flags.append(
-                    AmbiguityFlag(
-                        type="semantic_grounding_resource_unresolved",
-                        description=f"The semantic action '{action_type}' could not be grounded to an available {resource_kind} resource.",
-                    )
-                )
-            elif note == "grounding_unresolved_topology:insert_node_between":
-                flags.append(
-                    AmbiguityFlag(
-                        type="semantic_grounding_topology_unresolved",
-                        description="The semantic insert action could not be grounded to a unique topology placement.",
-                    )
-                )
-        return flags
-
     def _build_ambiguity_flags(
         self,
         category: str,
@@ -884,7 +743,7 @@ class DesignerRequestNormalizer:
                     )
                 )
             touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
-            explicit_node_refs = self._explicit_node_refs(request_text, context)
+            explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
             if explicit_node_refs:
                 conflicting = [ref for ref in explicit_node_refs if ref not in touched_node_ids]
                 if touched_node_ids and conflicting:
@@ -1036,9 +895,9 @@ class DesignerRequestNormalizer:
             return True
         if self._uses_second_latest_reference_language(request_text):
             return True
-        explicit_node_refs = self._explicit_node_refs(request_text, context)
+        explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
         if not explicit_node_refs:
-            selected_node_refs = self._selected_node_refs(context)
+            selected_node_refs = self._legacy_heuristics.selected_node_refs(context)
             if len(selected_node_refs) == 1:
                 explicit_node_refs = selected_node_refs
         return bool(explicit_node_refs)
@@ -1299,7 +1158,7 @@ class DesignerRequestNormalizer:
         if not isinstance(raw, (list, tuple)):
             return ()
         refs = tuple(str(item) for item in raw if str(item).strip())
-        return self._resolve_node_refs(refs, context)
+        return self._legacy_heuristics.resolve_node_refs(refs, context)
 
     def _resolve_target_node_refs_from_committed_summary(
         self,
@@ -1323,218 +1182,7 @@ class DesignerRequestNormalizer:
     def _first_target_ref(self, scope: TargetScope, request_text: str) -> str | None:
         if scope.node_refs:
             return scope.node_refs[0]
-        return self._first_node_ref(request_text)
-
-    def _requests_create_circuit(self, text: str) -> bool:
-        explicit_create_terms = (
-            "create",
-            "build",
-            "new circuit",
-            "new workflow",
-            "from scratch",
-        )
-        if any(term in text for term in explicit_create_terms):
-            return True
-        if "make" in text and any(term in text for term in ("circuit", "workflow", "pipeline")):
-            return True
-        return False
-
-    def _requests_review_gate(self, text: str) -> bool:
-        patterns = (
-            r"\bhuman review\b",
-            r"\bmanual review\b",
-            r"\breview gate\b",
-            r"\bapproval gate\b",
-            r"\brequire approval\b",
-            r"\bneeds approval\b",
-            r"\b(add|insert|require)\s+(a\s+)?review\b",
-            r"\b(add|insert|require)\s+(a\s+)?approval\b",
-        )
-        return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
-
-    def _requests_provider_change(self, text: str, context: RequestNormalizationContext) -> bool:
-        explicit_patterns = (
-            r"\b(replace|switch|change) provider\b",
-            r"\b(switch|change|move)\s+.*\s+to\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
-            r"\bswap\s+.*\s+(?:to|over\s+to)\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
-            r"\buse\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
-            r"\brun\s+.*\s+on\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
-            r"\b(have|make|let)\s+.*\s+use\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
-        )
-        if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
-            return True
-        available_provider_ids = self._available_resource_ids(context, resource_type="providers")
-        if self._match_resource_id_from_text(text, available_provider_ids) is None:
-            return False
-        provider_verbs = ("use", "switch", "change", "replace", "move", "run", "instead", "have", "make", "let", "swap")
-        return any(verb in text for verb in provider_verbs)
-
-    def _requests_plugin_attach(self, text: str, context: RequestNormalizationContext) -> bool:
-        explicit_patterns = (
-            r"\b(attach|add|use|enable)\s+plugin\b",
-            r"\b(add|give|enable|use|equip|have|make|let)\s+.*\b(search|normalize|validate|lookup)\b",
-            r"\b(search tool|search plugin|lookup tool|web search)\b",
-        )
-        if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
-            return True
-        available_plugin_ids = self._available_resource_ids(context, resource_type="plugins")
-        if self._match_resource_id_from_text(text, available_plugin_ids) is None:
-            return False
-        plugin_verbs = ("attach", "add", "use", "enable", "give", "equip", "have", "make", "let")
-        return any(verb in text for verb in plugin_verbs)
-
-    def _requests_prompt_change(self, text: str, context: RequestNormalizationContext) -> bool:
-        explicit_patterns = (
-            r"\b(change|replace|update|set)\s+(the\s+)?prompt\b",
-            r"\b(change|replace|update|set)\s+(the\s+)?instruction\b",
-            r"\b(change|replace|update|set)\s+(the\s+)?template\b",
-            r"\buse\s+.*\bprompt\b",
-            r"\buse\s+.*\binstruction\b",
-            r"\buse\s+.*\btemplate\b",
-            r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\bprompt\b",
-            r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\binstruction\b",
-            r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\btemplate\b",
-        )
-        if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
-            return True
-        available_prompt_ids = self._available_resource_ids(context, resource_type="prompts")
-        if self._match_resource_id_from_text(text, available_prompt_ids) is None:
-            return False
-        prompt_verbs = ("use", "change", "replace", "update", "set", "swap")
-        prompt_nouns = ("prompt", "instruction", "template")
-        return any(verb in text for verb in prompt_verbs) and any(noun in text for noun in prompt_nouns)
-
-    def _requests_insert_between(self, text: str) -> bool:
-        positional_terms = ("insert", "between", "before", "after", "in front of", "ahead of", "behind")
-        if any(term in text for term in positional_terms):
-            return True
-        natural_insert_patterns = (
-            r"\b(put|place|drop|slip)\s+.*\s+in front of\b",
-            r"\b(put|place|drop|slip)\s+.*\s+(before|after|behind)\b",
-        )
-        return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in natural_insert_patterns)
-
-    def _infer_provider_id(self, text: str, context: RequestNormalizationContext) -> str:
-        return self._symbolic_grounder.infer_provider_id(text, context)
-
-    def _infer_plugin_id(self, text: str, context: RequestNormalizationContext) -> str:
-        return self._symbolic_grounder.infer_plugin_id(text, context)
-
-    def _infer_prompt_id(self, text: str, context: RequestNormalizationContext) -> str | None:
-        return self._symbolic_grounder.infer_prompt_id(text, context)
-
-    def _explicit_node_refs(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-    ) -> tuple[str, ...]:
-        direct_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
-        if direct_refs:
-            return direct_refs
-        return self._infer_node_refs_from_context_mentions(request_text, context)
-
-    def _selected_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
-        return self._symbolic_grounder.selected_node_refs(context)
-
-    def _infer_node_refs_from_context_mentions(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-    ) -> tuple[str, ...]:
-        return self._symbolic_grounder.infer_node_refs_from_context_mentions(request_text, context)
-
-    def _available_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
-        return self._symbolic_grounder.available_node_refs(context)
-
-    def _available_resource_ids(
-        self,
-        context: RequestNormalizationContext,
-        *,
-        resource_type: str,
-    ) -> tuple[str, ...]:
-        return self._symbolic_grounder.available_resource_ids(context, resource_type=resource_type)
-
-    def _match_resource_id_from_text(
-        self,
-        text: str,
-        resource_ids: tuple[str, ...],
-    ) -> str | None:
-        return self._symbolic_grounder.match_resource_id_from_text(text, resource_ids)
-
-    def _resource_aliases(self, resource_id: str) -> tuple[str, ...]:
-        return self._symbolic_grounder.resource_aliases(resource_id)
-
-    def _contains_alias(self, text: str, alias: str) -> bool:
-        return self._symbolic_grounder.contains_alias(text, alias)
-
-    def _available_edge_pairs(self, context: RequestNormalizationContext) -> tuple[tuple[str, str], ...]:
-        return self._symbolic_grounder.available_edge_pairs(context)
-
-    def _predecessors_for_node(self, node_ref: str, context: RequestNormalizationContext) -> tuple[str, ...]:
-        return self._symbolic_grounder.predecessors_for_node(node_ref, context)
-
-    def _successors_for_node(self, node_ref: str, context: RequestNormalizationContext) -> tuple[str, ...]:
-        return self._symbolic_grounder.successors_for_node(node_ref, context)
-
-    def _extract_between_node_refs(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-    ) -> tuple[str, str] | None:
-        patterns = (
-            r"\bbetween\s+(?:the\s+)?node\s+([A-Za-z0-9_\-\.]+)\s+and\s+(?:the\s+)?node\s+([A-Za-z0-9_\-\.]+)",
-            r"\bbetween\s+(?:the\s+)?([A-Za-z0-9_\-\.]+)\s+and\s+(?:the\s+)?([A-Za-z0-9_\-\.]+)",
-        )
-        for pattern in patterns:
-            match = re.search(pattern, request_text, flags=re.IGNORECASE)
-            if not match:
-                continue
-            refs = self._resolve_node_refs((match.group(1), match.group(2)), context)
-            if len(refs) == 2:
-                return refs[0], refs[1]
-        return None
-
-    def _infer_insert_between_parameters(
-        self,
-        request_text: str,
-        scope: TargetScope,
-        context: RequestNormalizationContext,
-    ) -> dict[str, Any]:
-        return self._symbolic_grounder.infer_insert_between_parameters(request_text, scope, context)
-
-
-    def _resolve_node_refs(
-        self,
-        node_refs: tuple[str, ...],
-        context: RequestNormalizationContext,
-    ) -> tuple[str, ...]:
-        return self._symbolic_grounder.resolve_node_refs(node_refs, context)
-
-    def _extract_node_refs(self, request_text: str) -> tuple[str, ...]:
-        prioritized_patterns = (
-            r"\bin\s+node\s+([A-Za-z0-9_\-\.]+)",
-            r"\bon\s+node\s+([A-Za-z0-9_\-\.]+)",
-            r"\bfor\s+node\s+([A-Za-z0-9_\-\.]+)",
-            r"\bat\s+node\s+([A-Za-z0-9_\-\.]+)",
-            r"\bnode\s+([A-Za-z0-9_\-\.]+)",
-        )
-        stopwords = {"before", "after", "between", "final", "a", "an", "the"}
-        ordered_refs: list[str] = []
-        seen: set[str] = set()
-        for pattern in prioritized_patterns:
-            for match in re.finditer(pattern, request_text, flags=re.IGNORECASE):
-                ref = match.group(1).rstrip('.,;:')
-                if ref.casefold() in stopwords:
-                    continue
-                if ref not in seen:
-                    ordered_refs.append(ref)
-                    seen.add(ref)
-        return tuple(ordered_refs)
-
-    def _first_node_ref(self, request_text: str) -> str | None:
-        return self._symbolic_grounder.first_node_ref(request_text)
-
-
+        return self._legacy_heuristics.first_node_ref(request_text)
 def _stable_id(prefix: str, raw: str) -> str:
     digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:10]
     return f"{prefix}-{digest}"
