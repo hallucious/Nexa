@@ -969,8 +969,17 @@ def test_approval_revision_requested_from_governance_decision_persists_anchor_gu
     updated = DesignerSessionStateCoordinator().evolve_after_approval_resolution(card, resolved)
 
     assert updated.notes["control_governance_pending_anchor_requirement"] is True
+    assert updated.notes["control_governance_pending_anchor_requirement_mode"] == "required"
     assert "explicit commit anchor" in updated.notes["control_governance_last_revision_guidance"]
+    assert updated.notes["control_governance_last_revision_pressure_score"] == 4
+    assert updated.notes["control_governance_last_revision_pressure_band"] == "strict"
+    assert "4/5 (strict band)" in updated.notes["control_governance_last_revision_pressure_summary"]
+    assert updated.notes["control_governance_last_revision_next_actions"] == [
+        "provide_explicit_anchor",
+        "restate_request_with_stronger_selector",
+    ]
     assert any("explicit commit anchor" in item for item in updated.conversation_context.unresolved_questions)
+    assert any("Next safe step:" in item for item in updated.conversation_context.unresolved_questions)
 
 
 

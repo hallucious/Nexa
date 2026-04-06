@@ -207,3 +207,52 @@ def test_approval_coordinator_surfaces_governance_next_step_in_decision_reason()
     assert "provide explicit anchor" in (governance_point.reason or "")
     assert "5/5, strict band" in (governance_point.reason or "")
 
+
+
+def test_revision_requested_governance_persists_pressure_aware_session_notes() -> None:
+    from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
+    from src.designer.session_state_card_builder import DesignerSessionStateCardBuilder
+
+    flow = DesignerProposalFlow()
+    card = DesignerSessionStateCardBuilder().build(
+        request_text="Undo the last change",
+        artifact=None,
+        session_id="sess-gov-revision-structured",
+        target_scope_mode="existing_circuit",
+    )
+    card = card.__class__(**{**card.__dict__, "notes": {
+        **card.notes,
+        "commit_summary_history": [
+            {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+        ],
+        "control_governance_policy_tier": "strict",
+        "control_governance_requires_explicit_referential_anchor": True,
+        "control_governance_ambiguity_pressure_score": 5,
+        "control_governance_ambiguity_pressure_band": "strict",
+        "control_governance_pressure_transition": "escalating_or_sustained_repeat_pressure",
+        "control_governance_pressure_summary": "Ambiguity pressure is high and still building (5/5, strict band).",
+    }})
+    bundle = flow.propose("Undo the last change", working_save_ref="ws-001", session_state_card=card)
+    coordinator = DesignerApprovalCoordinator()
+    approval_state = coordinator.create_state(bundle)
+    governance_point = next(point for point in approval_state.required_decision_points if point.decision_id == "referential_governance_strict")
+    resolved = coordinator.resolve(
+        approval_state,
+        [UserDecision(decision_point_id=governance_point.decision_id, outcome="request_revision")],
+    )
+
+    updated = DesignerSessionStateCoordinator().evolve_after_approval_resolution(
+        session_state_card=card,
+        approval_state=resolved,
+    )
+
+    assert updated.notes["control_governance_pending_anchor_requirement"] is True
+    assert updated.notes["control_governance_pending_anchor_requirement_mode"] == "required"
+    assert updated.notes["control_governance_last_revision_pressure_score"] == 5
+    assert updated.notes["control_governance_last_revision_pressure_band"] == "strict"
+    assert updated.notes["control_governance_last_revision_next_actions"] == [
+        "provide_explicit_anchor",
+        "restate_request_with_stronger_selector",
+    ]
+    assert any("5/5 (strict band)" in item for item in updated.conversation_context.unresolved_questions)
+    assert any("Next safe step:" in item for item in updated.conversation_context.unresolved_questions)

@@ -6,6 +6,7 @@ from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.control_governance import (
     apply_control_governance_notes,
     governance_revision_guidance_from_notes,
+    governance_revision_snapshot_from_notes,
     is_governance_decision_id,
 )
 from src.designer.models.designer_proposal_control import DesignerControlledProposalResult
@@ -195,7 +196,8 @@ class DesignerSessionStateCoordinator:
             for decision in approval_state.user_decisions
             if decision.outcome in {"request_revision", "narrow_scope", "choose_interpretation"}
         )
-        governance_guidance = governance_revision_guidance_from_notes(session_state_card.notes) if governance_revision_requested else ""
+        governance_snapshot = governance_revision_snapshot_from_notes(session_state_card.notes) if governance_revision_requested else {}
+        governance_guidance = governance_snapshot.get("message", "")
         if approval_state.final_outcome == "revision_requested" and not correction_notes and not choose_decisions:
             message = "A revised designer request is required before another approval attempt."
             if mixed_revision_reason_code is not None:
@@ -203,6 +205,10 @@ class DesignerSessionStateCoordinator:
             unresolved_questions.append(message)
         if governance_guidance and approval_state.final_outcome == "revision_requested":
             unresolved_questions.append(governance_guidance)
+            next_actions = governance_snapshot.get("next_actions", [])
+            if next_actions:
+                pretty = ", then ".join(str(item).replace("_", " ") for item in next_actions)
+                unresolved_questions.append(f"Next safe step: {pretty}.")
         if approval_state.final_outcome == "approved_for_commit":
             unresolved_questions = []
         next_conversation = ConversationContext(
@@ -265,9 +271,19 @@ class DesignerSessionStateCoordinator:
         if governance_guidance and approval_state.final_outcome == "revision_requested":
             next_notes["control_governance_pending_anchor_requirement"] = True
             next_notes["control_governance_last_revision_guidance"] = governance_guidance
+            next_notes["control_governance_pending_anchor_requirement_mode"] = governance_snapshot.get("mode", "required")
+            next_notes["control_governance_last_revision_pressure_summary"] = governance_snapshot.get("pressure_summary", "")
+            next_notes["control_governance_last_revision_pressure_score"] = governance_snapshot.get("pressure_score", 0)
+            next_notes["control_governance_last_revision_pressure_band"] = governance_snapshot.get("pressure_band", "standard")
+            next_notes["control_governance_last_revision_next_actions"] = governance_snapshot.get("next_actions", [])
         else:
             next_notes.pop("control_governance_pending_anchor_requirement", None)
             next_notes.pop("control_governance_last_revision_guidance", None)
+            next_notes.pop("control_governance_pending_anchor_requirement_mode", None)
+            next_notes.pop("control_governance_last_revision_pressure_summary", None)
+            next_notes.pop("control_governance_last_revision_pressure_score", None)
+            next_notes.pop("control_governance_last_revision_pressure_band", None)
+            next_notes.pop("control_governance_last_revision_next_actions", None)
         if mixed_revision_reason_code is not None:
             next_notes["last_revision_reason_code"] = mixed_revision_reason_code
             next_notes = activate_mixed_referential_reason_notes(

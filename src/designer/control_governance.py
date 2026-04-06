@@ -399,21 +399,40 @@ def is_governance_decision_id(decision_id: str) -> bool:
 
 
 def governance_revision_guidance_from_notes(notes: Mapping[str, Any]) -> str:
+    snapshot = governance_revision_snapshot_from_notes(notes)
+    return snapshot.get("message", "") if snapshot else ""
+
+
+def governance_revision_snapshot_from_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
     policy = load_control_governance_policy(notes)
     pressure = load_control_governance_pressure(notes)
     if not policy.requires_explicit_referential_anchor:
-        return ""
+        return {}
     if policy.tier == "strict":
-        return _join_governance_parts(
+        mode = "required"
+        next_actions = ("provide_explicit_anchor", "restate_request_with_stronger_selector")
+        message = _join_governance_parts(
             "Provide an explicit commit anchor, explicit node target, or explicit non-latest selector before the next revision attempt.",
             _pressure_surface_summary(pressure, surface_mode="revision_required"),
         )
-    if policy.tier == "elevated":
-        return _join_governance_parts(
+    elif policy.tier == "elevated":
+        mode = "preferred"
+        next_actions = ("provide_explicit_anchor",)
+        message = _join_governance_parts(
             "Prefer an explicit commit anchor, explicit node target, or explicit non-latest selector in the next revision attempt.",
             _pressure_surface_summary(pressure, surface_mode="revision_warning"),
         )
-    return ""
+    else:
+        return {}
+    return {
+        "mode": mode,
+        "message": message,
+        "pressure_summary": pressure.summary,
+        "pressure_score": pressure.score,
+        "pressure_band": pressure.band,
+        "pressure_transition": pressure.transition,
+        "next_actions": list(next_actions),
+    }
 
 
 def governance_anchored_progress_reason_code_from_issue_codes(
