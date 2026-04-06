@@ -13,6 +13,7 @@ from src.designer.models.designer_session_state_card import (
     SessionTargetScope,
     WorkingSaveReality,
 )
+from src.designer.normalization_context import RequestNormalizationContext
 from src.designer.proposal_flow import DesignerProposalFlow
 from src.designer.request_normalizer import DesignerRequestNormalizer
 from src.designer.semantic_backend_presets import (
@@ -51,15 +52,25 @@ def _semantic_card() -> DesignerSessionStateCard:
             mode="existing_draft",
             savefile_ref="ws-semantic-preset-1",
             node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+            edge_list=("node.answerer -> node.reviewer", "node.reviewer -> node.final_judge"),
+            prompt_refs=("prompt.default_review", "prompt.strict_review"),
             provider_refs=("openai:gpt-4o-mini", "anthropic:claude-sonnet"),
+            plugin_refs=("web.search",),
         ),
         current_selection=CurrentSelectionState(selection_mode="none"),
         target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
         available_resources=AvailableResources(
+            prompts=(
+                ResourceAvailability(id="prompt.default_review"),
+                ResourceAvailability(id="prompt.strict_review"),
+            ),
             providers=(
                 ResourceAvailability(id="openai:gpt-4o-mini"),
                 ResourceAvailability(id="anthropic:claude-sonnet"),
-            )
+            ),
+            plugins=(
+                ResourceAvailability(id="web.search"),
+            ),
         ),
         objective=ObjectiveSpec(primary_goal="Change reviewer provider"),
         constraints=ConstraintSet(),
@@ -116,7 +127,7 @@ def test_request_normalizer_accepts_semantic_backend_preset() -> None:
 
     intent = normalizer.normalize(
         "Have the reviewer use Claude instead.",
-        context=__import__('src.designer.normalization_context', fromlist=['RequestNormalizationContext']).RequestNormalizationContext(
+        context=RequestNormalizationContext(
             working_save_ref="ws-semantic-preset-1",
             session_state_card=_semantic_card(),
         ),
@@ -160,3 +171,179 @@ def test_semantic_backend_preset_proposal_flow_e2e() -> None:
     assert bundle.intent.proposed_actions[0].action_type == "replace_provider"
     assert bundle.patch.operations[0].op_type == "set_node_provider"
     assert bundle.patch.operations[0].target_ref == "node.reviewer"
+
+
+
+def test_semantic_backend_preset_supports_mixed_semantic_outputs_e2e() -> None:
+    provider = _GenerateTextProvider(
+        text=json.dumps(
+            {
+                "category": "MODIFY_CIRCUIT",
+                "confidence_hint": 0.79,
+                "action_candidates": [
+                    {
+                        "action_type": "replace_provider",
+                        "target_node_descriptor": {"kind": "node", "label_hint": "reviewer", "role_hint": "review"},
+                        "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                    },
+                    {
+                        "action_type": "attach_plugin",
+                        "target_node_descriptor": {"kind": "node", "label_hint": "reviewer"},
+                        "plugin_descriptor": {"resource_type": "plugin", "family": "search", "capability_hint": "web search"},
+                    },
+                    {
+                        "action_type": "set_prompt",
+                        "target_node_descriptor": {"kind": "node", "label_hint": "reviewer"},
+                        "prompt_descriptor": {"resource_type": "prompt", "label_hint": "strict review", "raw_reference_text": "strict review prompt"},
+                    },
+                ],
+            }
+        )
+    )
+    normalizer = DesignerRequestNormalizer(
+        semantic_backend_preset="anthropic",
+        semantic_backend_preset_providers={"claude": provider},
+        use_llm_semantic_interpreter=True,
+        llm_backend_required=True,
+    )
+    flow = DesignerProposalFlow(normalizer=normalizer)
+
+    bundle = flow.propose(
+        "Have the reviewer use Claude, add web search, and use the strict review prompt.",
+        working_save_ref="ws-semantic-preset-1",
+        session_state_card=_semantic_card(),
+    )
+
+    assert [action.action_type for action in bundle.intent.proposed_actions] == [
+        "replace_provider",
+        "attach_plugin",
+        "set_prompt",
+    ]
+    assert [op.op_type for op in bundle.patch.operations] == [
+        "set_node_provider",
+        "attach_node_plugin",
+        "set_node_prompt",
+    ]
+    assert bundle.patch.operations[0].target_ref == "node.reviewer"
+    assert bundle.patch.operations[1].payload["plugin_id"] == "web.search"
+    assert bundle.patch.operations[2].payload["prompt_id"] == "prompt.strict_review"
+
+
+
+def test_semantic_backend_preset_surfaces_clarification_loop_state() -> None:
+    provider = _GenerateTextProvider(
+        text=json.dumps(
+            {
+                "category": "MODIFY_CIRCUIT",
+                "confidence_hint": 0.31,
+                "clarification_required": True,
+                "clarification_questions": ["Do you mean the reviewer or the final judge?"],
+                "semantic_ambiguity_notes": ["Multiple review-related nodes remain plausible."],
+                "action_candidates": [],
+            }
+        )
+    )
+    card = _semantic_card()
+    card = DesignerSessionStateCard(
+        card_version=card.card_version,
+        session_id="sess-semantic-preset-loop",
+        storage_role=card.storage_role,
+        current_working_save=card.current_working_save,
+        current_selection=card.current_selection,
+        target_scope=card.target_scope,
+        available_resources=card.available_resources,
+        objective=card.objective,
+        constraints=card.constraints,
+        current_findings=card.current_findings,
+        current_risks=card.current_risks,
+        revision_state=card.revision_state.__class__(
+            revision_index=1,
+            user_corrections=("I mean the middle review step.",),
+        ),
+        approval_state=card.approval_state,
+        conversation_context=ConversationContext(
+            user_request_text="Use Claude on the reviewer.",
+            clarified_interpretation="Use Claude on the middle reviewer step.",
+        ),
+        output_contract=card.output_contract,
+        forbidden_authority=card.forbidden_authority,
+        notes=card.notes,
+    )
+    normalizer = DesignerRequestNormalizer(
+        semantic_backend_preset="claude",
+        semantic_backend_preset_providers={"claude": provider},
+        use_llm_semantic_interpreter=True,
+        llm_backend_required=True,
+    )
+
+    intent = normalizer.normalize(
+        "Use Claude on the reviewer.",
+        context=RequestNormalizationContext(
+            working_save_ref="ws-semantic-preset-1",
+            session_state_card=card,
+        ),
+    )
+
+    assert any(flag.type == "semantic_interpretation_requires_clarification" for flag in intent.ambiguity_flags)
+    assert any(flag.type == "semantic_clarification_loop_persisting" for flag in intent.ambiguity_flags)
+    assert intent.requires_user_confirmation is True
+
+
+
+def test_semantic_backend_preset_surfaces_full_recovery_after_prior_clarification() -> None:
+    provider = _GenerateTextProvider(
+        text=json.dumps(
+            {
+                "category": "MODIFY_CIRCUIT",
+                "confidence_hint": 0.87,
+                "action_candidates": [
+                    {
+                        "action_type": "replace_provider",
+                        "target_node_descriptor": {"kind": "node", "label_hint": "reviewer", "role_hint": "review"},
+                        "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                    }
+                ],
+            }
+        )
+    )
+    card = _semantic_card()
+    card = DesignerSessionStateCard(
+        card_version=card.card_version,
+        session_id="sess-semantic-preset-recovery",
+        storage_role=card.storage_role,
+        current_working_save=card.current_working_save,
+        current_selection=card.current_selection,
+        target_scope=card.target_scope,
+        available_resources=card.available_resources,
+        objective=card.objective,
+        constraints=card.constraints,
+        current_findings=card.current_findings,
+        current_risks=card.current_risks,
+        revision_state=card.revision_state,
+        approval_state=card.approval_state,
+        conversation_context=ConversationContext(
+            user_request_text="Use Claude on the reviewer.",
+            clarified_interpretation="The reviewer means node.reviewer, not the final judge.",
+        ),
+        output_contract=card.output_contract,
+        forbidden_authority=card.forbidden_authority,
+        notes=card.notes,
+    )
+    normalizer = DesignerRequestNormalizer(
+        semantic_backend_preset="anthropic",
+        semantic_backend_preset_providers={"anthropic": provider},
+        use_llm_semantic_interpreter=True,
+        llm_backend_required=True,
+    )
+
+    intent = normalizer.normalize(
+        "Use Claude on the reviewer.",
+        context=RequestNormalizationContext(
+            working_save_ref="ws-semantic-preset-1",
+            session_state_card=card,
+        ),
+    )
+
+    assert [action.action_type for action in intent.proposed_actions] == ["replace_provider"]
+    assert not any(flag.type == "semantic_interpretation_requires_clarification" for flag in intent.ambiguity_flags)
+    assert "A prior clarification resolved the request into concrete grounded actions." in intent.explanation

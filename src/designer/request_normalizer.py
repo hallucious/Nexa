@@ -31,11 +31,9 @@ from src.designer.reason_codes import (
 )
 from src.designer.semantic_interpreter import (
     DesignerSemanticInterpreter,
-    LLMBackedStructuredSemanticInterpreter,
-    LegacyRuleBasedSemanticInterpreter,
     SemanticIntentStructuredBackend,
 )
-from src.designer.semantic_backend_presets import build_semantic_backend_from_preset
+from src.designer.semantic_interpreter_factory import build_designer_semantic_interpreter
 from src.designer.symbolic_grounder import (
     DesignerSymbolicGrounder,
     DeterministicSymbolicGrounder,
@@ -62,27 +60,15 @@ class DesignerRequestNormalizer:
         use_llm_semantic_interpreter: bool = False,
         llm_backend_required: bool = False,
     ) -> None:
-        if semantic_backend is None and semantic_backend_preset is not None:
-            semantic_backend = build_semantic_backend_from_preset(
-                semantic_backend_preset,
-                providers=semantic_backend_preset_providers,
-                provider_factories=semantic_backend_preset_factories,
-            )
-        if semantic_interpreter is not None:
-            self._semantic_interpreter = semantic_interpreter
-        elif semantic_backend is not None or use_llm_semantic_interpreter:
-            if semantic_backend is None and llm_backend_required:
-                raise ValueError("semantic_backend is required when llm_backend_required=True")
-            if semantic_backend is None:
-                self._semantic_interpreter = LegacyRuleBasedSemanticInterpreter()
-            else:
-                self._semantic_interpreter = LLMBackedStructuredSemanticInterpreter(
-                    backend=semantic_backend,
-                    fallback_interpreter=LegacyRuleBasedSemanticInterpreter(),
-                    allow_fallback=not llm_backend_required,
-                )
-        else:
-            self._semantic_interpreter = LegacyRuleBasedSemanticInterpreter()
+        self._semantic_interpreter = build_designer_semantic_interpreter(
+            semantic_interpreter=semantic_interpreter,
+            semantic_backend=semantic_backend,
+            semantic_backend_preset=semantic_backend_preset,
+            semantic_backend_preset_providers=semantic_backend_preset_providers,
+            semantic_backend_preset_factories=semantic_backend_preset_factories,
+            use_llm_semantic_interpreter=use_llm_semantic_interpreter,
+            llm_backend_required=llm_backend_required,
+        )
         self._symbolic_grounder = symbolic_grounder or DeterministicSymbolicGrounder()
 
     def normalize(self, request_text: str, *, context: RequestNormalizationContext | None = None) -> DesignerIntent:
