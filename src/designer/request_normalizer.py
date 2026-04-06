@@ -302,7 +302,7 @@ class DesignerRequestNormalizer:
                     rationale="The request explicitly removes an existing structural element.",
                 )
             )
-        if any(term in text for term in ("insert", "between", "before", "after")):
+        if self._requests_insert_between(text):
             actions.append(
                 ActionSpec(
                     action_type="insert_node_between",
@@ -1118,28 +1118,31 @@ class DesignerRequestNormalizer:
         explicit_patterns = (
             r"\b(replace|switch|change) provider\b",
             r"\b(switch|change|move)\s+.*\s+to\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+            r"\bswap\s+.*\s+(?:to|over\s+to)\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
             r"\buse\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
             r"\brun\s+.*\s+on\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+            r"\b(have|make|let)\s+.*\s+use\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
         )
         if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
             return True
         available_provider_ids = self._available_resource_ids(context, resource_type="providers")
         if self._match_resource_id_from_text(text, available_provider_ids) is None:
             return False
-        provider_verbs = ("use", "switch", "change", "replace", "move", "run", "instead")
+        provider_verbs = ("use", "switch", "change", "replace", "move", "run", "instead", "have", "make", "let", "swap")
         return any(verb in text for verb in provider_verbs)
 
     def _requests_plugin_attach(self, text: str, context: RequestNormalizationContext) -> bool:
         explicit_patterns = (
             r"\b(attach|add|use|enable)\s+plugin\b",
-            r"\b(add|give|enable|use)\s+.*\b(search|normalize|validate|lookup)\b",
+            r"\b(add|give|enable|use|equip|have|make|let)\s+.*\b(search|normalize|validate|lookup)\b",
+            r"\b(search tool|search plugin|lookup tool|web search)\b",
         )
         if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
             return True
         available_plugin_ids = self._available_resource_ids(context, resource_type="plugins")
         if self._match_resource_id_from_text(text, available_plugin_ids) is None:
             return False
-        plugin_verbs = ("attach", "add", "use", "enable", "give")
+        plugin_verbs = ("attach", "add", "use", "enable", "give", "equip", "have", "make", "let")
         return any(verb in text for verb in plugin_verbs)
 
     def _requests_prompt_change(self, text: str, context: RequestNormalizationContext) -> bool:
@@ -1150,6 +1153,9 @@ class DesignerRequestNormalizer:
             r"\buse\s+.*\bprompt\b",
             r"\buse\s+.*\binstruction\b",
             r"\buse\s+.*\btemplate\b",
+            r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\bprompt\b",
+            r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\binstruction\b",
+            r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\btemplate\b",
         )
         if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
             return True
@@ -1159,6 +1165,16 @@ class DesignerRequestNormalizer:
         prompt_verbs = ("use", "change", "replace", "update", "set", "swap")
         prompt_nouns = ("prompt", "instruction", "template")
         return any(verb in text for verb in prompt_verbs) and any(noun in text for noun in prompt_nouns)
+
+    def _requests_insert_between(self, text: str) -> bool:
+        positional_terms = ("insert", "between", "before", "after", "in front of", "ahead of", "behind")
+        if any(term in text for term in positional_terms):
+            return True
+        natural_insert_patterns = (
+            r"\b(put|place|drop|slip)\s+.*\s+in front of\b",
+            r"\b(put|place|drop|slip)\s+.*\s+(before|after|behind)\b",
+        )
+        return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in natural_insert_patterns)
 
     def _infer_provider_id(self, text: str, context: RequestNormalizationContext) -> str:
         matched = self._match_resource_id_from_text(text, self._available_resource_ids(context, resource_type="providers"))
@@ -1313,8 +1329,8 @@ class DesignerRequestNormalizer:
         context: RequestNormalizationContext,
     ) -> tuple[str, str] | None:
         patterns = (
-            r"\bbetween\s+node\s+([A-Za-z0-9_\-\.]+)\s+and\s+node\s+([A-Za-z0-9_\-\.]+)",
-            r"\bbetween\s+([A-Za-z0-9_\-\.]+)\s+and\s+([A-Za-z0-9_\-\.]+)",
+            r"\bbetween\s+(?:the\s+)?node\s+([A-Za-z0-9_\-\.]+)\s+and\s+(?:the\s+)?node\s+([A-Za-z0-9_\-\.]+)",
+            r"\bbetween\s+(?:the\s+)?([A-Za-z0-9_\-\.]+)\s+and\s+(?:the\s+)?([A-Za-z0-9_\-\.]+)",
         )
         for pattern in patterns:
             match = re.search(pattern, request_text, flags=re.IGNORECASE)
@@ -1346,13 +1362,13 @@ class DesignerRequestNormalizer:
         if target_ref is None:
             return parameters
         text = request_text.casefold()
-        if "before" in text:
+        if any(phrase in text for phrase in ("before", "in front of", "ahead of")):
             parameters.update({"after_node": target_ref, "to_node": target_ref, "position": "before"})
             predecessors = self._predecessors_for_node(target_ref, context)
             if len(predecessors) == 1:
                 parameters.update({"before_node": predecessors[0], "from_node": predecessors[0]})
             return parameters
-        if "after" in text:
+        if any(phrase in text for phrase in ("after", "behind")):
             parameters.update({"before_node": target_ref, "from_node": target_ref, "position": "after"})
             successors = self._successors_for_node(target_ref, context)
             if len(successors) == 1:

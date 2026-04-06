@@ -1571,3 +1571,62 @@ def test_proposal_flow_handles_natural_language_prompt_reassignment_without_crea
     assert prompt_op.target_ref == "node.reviewer"
     assert prompt_op.payload["prompt_id"] == "review.prompt.strict"
     assert all(op.op_type != "define_output_binding" for op in bundle.patch.operations)
+
+
+def test_proposal_flow_handles_provider_reassignment_swap_wording() -> None:
+    flow = DesignerProposalFlow()
+    bundle = flow.propose(
+        "Swap the reviewer over to Claude.",
+        working_save_ref="ws-001",
+        session_state_card=_realistic_existing_card("Swap the reviewer over to Claude."),
+    )
+
+    assert bundle.intent.category == "MODIFY_CIRCUIT"
+    provider_op = next(op for op in bundle.patch.operations if op.op_type == "set_node_provider")
+    assert provider_op.target_ref == "node.reviewer"
+    assert provider_op.payload["provider_id"] == "anthropic:claude-sonnet"
+
+
+def test_proposal_flow_handles_plugin_attachment_search_tool_wording() -> None:
+    flow = DesignerProposalFlow()
+    bundle = flow.propose(
+        "Equip the reviewer with a search tool before it answers.",
+        working_save_ref="ws-001",
+        session_state_card=_realistic_existing_card("Equip the reviewer with a search tool before it answers."),
+    )
+
+    plugin_op = next(op for op in bundle.patch.operations if op.op_type == "attach_node_plugin")
+    assert plugin_op.target_ref == "node.reviewer"
+    assert plugin_op.payload["plugin_id"] == "web.search.v2"
+    assert all(op.payload.get("kind") != "review_gate" for op in bundle.patch.operations)
+
+
+def test_proposal_flow_handles_prompt_reassignment_follow_wording() -> None:
+    flow = DesignerProposalFlow()
+    bundle = flow.propose(
+        "Have the reviewer follow the strict review prompt.",
+        working_save_ref="ws-001",
+        session_state_card=_realistic_existing_card("Have the reviewer follow the strict review prompt."),
+    )
+
+    assert bundle.intent.category == "MODIFY_CIRCUIT"
+    prompt_op = next(op for op in bundle.patch.operations if op.op_type == "set_node_prompt")
+    assert prompt_op.target_ref == "node.reviewer"
+    assert prompt_op.payload["prompt_id"] == "review.prompt.strict"
+
+
+def test_proposal_flow_handles_topology_insert_in_front_of_wording() -> None:
+    flow = DesignerProposalFlow()
+    bundle = flow.propose(
+        "Put a review step in front of the final judge.",
+        working_save_ref="ws-001",
+        session_state_card=_realistic_existing_card("Put a review step in front of the final judge."),
+    )
+
+    assert bundle.intent.category == "MODIFY_CIRCUIT"
+    insert_op = next(op for op in bundle.patch.operations if op.op_type == "insert_node_between")
+    assert insert_op.target_ref == "node.final_judge"
+    assert insert_op.payload["before_node"] == "node.reviewer"
+    assert insert_op.payload["after_node"] == "node.final_judge"
+    assert insert_op.payload["from_node"] == "node.reviewer"
+    assert insert_op.payload["to_node"] == "node.final_judge"
