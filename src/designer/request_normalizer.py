@@ -120,7 +120,11 @@ class DesignerRequestNormalizer:
     ) -> TargetScope:
         text = request_text.casefold()
         broad = any(term in text for term in ("all ", "entire", "whole", "across the circuit", "every"))
-        explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+        explicit_node_refs = self._explicit_node_refs(request_text, context)
+        if not explicit_node_refs and not broad:
+            selected_node_refs = self._selected_node_refs(context)
+            if len(selected_node_refs) == 1 and category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
+                explicit_node_refs = selected_node_refs
         node_refs = self._resolve_target_node_refs_from_committed_summary(
             category,
             request_text,
@@ -253,7 +257,7 @@ class DesignerRequestNormalizer:
                 )
             )
         if any(term in text for term in ("replace provider", "switch provider", "change provider")):
-            provider_id = self._infer_provider_id(text)
+            provider_id = self._infer_provider_id(text, context)
             actions.append(
                 ActionSpec(
                     action_type="replace_provider",
@@ -262,13 +266,25 @@ class DesignerRequestNormalizer:
                     rationale="The request explicitly changes the node provider.",
                 )
             )
-        if any(term in text for term in ("attach plugin", "add plugin", "use plugin")):
+        if (
+            any(term in text for term in ("attach plugin", "add plugin", "use plugin"))
+            or ("plugin" in text and any(term in text for term in ("attach", "add", "use")))
+        ):
             actions.append(
                 ActionSpec(
                     action_type="attach_plugin",
                     target_ref=self._first_target_ref(scope, request_text),
-                    parameters={"plugin_id": self._infer_plugin_id(text)},
+                    parameters={"plugin_id": self._infer_plugin_id(text, context)},
                     rationale="The request explicitly introduces a plugin-backed tool step.",
+                )
+            )
+        if any(term in text for term in ("change prompt", "replace prompt", "update prompt", "set prompt", "change instruction", "replace instruction", "update instruction", "change template", "replace template", "update template")):
+            actions.append(
+                ActionSpec(
+                    action_type="set_prompt",
+                    target_ref=self._first_target_ref(scope, request_text),
+                    parameters={"prompt_id": self._infer_prompt_id(text, context)},
+                    rationale="The request explicitly changes the prompt/instruction assignment.",
                 )
             )
         if any(term in text for term in ("rename",)):
@@ -289,12 +305,12 @@ class DesignerRequestNormalizer:
                     rationale="The request explicitly removes an existing structural element.",
                 )
             )
-        if any(term in text for term in ("insert", "between")):
+        if any(term in text for term in ("insert", "between", "before", "after")):
             actions.append(
                 ActionSpec(
                     action_type="insert_node_between",
                     target_ref=self._first_target_ref(scope, request_text),
-                    parameters={"position": "between"},
+                    parameters=self._infer_insert_between_parameters(request_text, scope, context),
                     rationale="The request explicitly inserts a node into an existing path.",
                 )
             )
@@ -456,7 +472,7 @@ class DesignerRequestNormalizer:
                     )
                 )
             touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
-            explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+            explicit_node_refs = self._explicit_node_refs(request_text, context)
             if not explicit_node_refs and len(touched_node_ids) == 1:
                 assumptions.append(
                     AssumptionSpec(
@@ -687,7 +703,7 @@ class DesignerRequestNormalizer:
                     )
                 )
             touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
-            explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+            explicit_node_refs = self._explicit_node_refs(request_text, context)
             if explicit_node_refs:
                 conflicting = [ref for ref in explicit_node_refs if ref not in touched_node_ids]
                 if touched_node_ids and conflicting:
@@ -785,7 +801,11 @@ class DesignerRequestNormalizer:
             return True
         if self._uses_second_latest_reference_language(request_text):
             return True
-        explicit_node_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+        explicit_node_refs = self._explicit_node_refs(request_text, context)
+        if not explicit_node_refs:
+            selected_node_refs = self._selected_node_refs(context)
+            if len(selected_node_refs) == 1:
+                explicit_node_refs = selected_node_refs
         return bool(explicit_node_refs)
 
 
@@ -1070,7 +1090,10 @@ class DesignerRequestNormalizer:
             return scope.node_refs[0]
         return self._first_node_ref(request_text)
 
-    def _infer_provider_id(self, text: str) -> str:
+    def _infer_provider_id(self, text: str, context: RequestNormalizationContext) -> str:
+        matched = self._match_resource_id_from_text(text, self._available_resource_ids(context, resource_type="providers"))
+        if matched is not None:
+            return matched
         if "claude" in text or "anthropic" in text:
             return "anthropic:claude"
         if "gemini" in text or "google" in text:
@@ -1079,7 +1102,10 @@ class DesignerRequestNormalizer:
             return "perplexity:sonar"
         return "openai:gpt"
 
-    def _infer_plugin_id(self, text: str) -> str:
+    def _infer_plugin_id(self, text: str, context: RequestNormalizationContext) -> str:
+        matched = self._match_resource_id_from_text(text, self._available_resource_ids(context, resource_type="plugins"))
+        if matched is not None:
+            return matched
         if "search" in text:
             return "web.search"
         if "normalize" in text:
@@ -1087,6 +1113,182 @@ class DesignerRequestNormalizer:
         if "validate" in text:
             return "schema.validate"
         return "tool.generic"
+
+    def _infer_prompt_id(self, text: str, context: RequestNormalizationContext) -> str | None:
+        matched = self._match_resource_id_from_text(text, self._available_resource_ids(context, resource_type="prompts"))
+        if matched is not None:
+            return matched
+        prompt_refs = self._available_resource_ids(context, resource_type="prompts")
+        return prompt_refs[0] if len(prompt_refs) == 1 else None
+
+    def _explicit_node_refs(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+    ) -> tuple[str, ...]:
+        direct_refs = self._resolve_node_refs(self._extract_node_refs(request_text), context)
+        if direct_refs:
+            return direct_refs
+        return self._infer_node_refs_from_context_mentions(request_text, context)
+
+    def _selected_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
+        card = context.session_state_card
+        if card is None or card.current_selection.selection_mode != "node":
+            return ()
+        return self._resolve_node_refs(tuple(card.current_selection.selected_refs), context)
+
+    def _infer_node_refs_from_context_mentions(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+    ) -> tuple[str, ...]:
+        candidates = self._available_node_refs(context)
+        if not candidates:
+            return ()
+        text = request_text.casefold()
+        matches: list[str] = []
+        for candidate in candidates:
+            aliases = self._resource_aliases(candidate)
+            if any(self._contains_alias(text, alias) for alias in aliases):
+                matches.append(candidate)
+        return tuple(dict.fromkeys(matches))
+
+    def _available_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
+        if context.session_state_card is None:
+            return ()
+        refs = tuple(context.session_state_card.current_working_save.node_list)
+        if refs:
+            return refs
+        return tuple(context.session_state_card.target_scope.allowed_node_refs)
+
+    def _available_resource_ids(
+        self,
+        context: RequestNormalizationContext,
+        *,
+        resource_type: str,
+    ) -> tuple[str, ...]:
+        card = context.session_state_card
+        if card is None:
+            return ()
+        available_resources = getattr(card.available_resources, resource_type, ())
+        resource_ids = [item.id for item in available_resources if getattr(item, "id", None)]
+        if resource_ids:
+            return tuple(dict.fromkeys(resource_ids))
+        fallback_attr = {
+            "prompts": "prompt_refs",
+            "providers": "provider_refs",
+            "plugins": "plugin_refs",
+        }[resource_type]
+        return tuple(dict.fromkeys(getattr(card.current_working_save, fallback_attr, ())))
+
+    def _match_resource_id_from_text(
+        self,
+        text: str,
+        resource_ids: tuple[str, ...],
+    ) -> str | None:
+        lowered = text.casefold()
+        matches: list[tuple[int, int, str]] = []
+        for resource_id in resource_ids:
+            resource_lower = resource_id.casefold()
+            score = 0
+            if resource_lower and resource_lower in lowered:
+                score = max(score, 100)
+            for alias in self._resource_aliases(resource_id):
+                if self._contains_alias(lowered, alias):
+                    score = max(score, max(10, len(alias)))
+            if score:
+                matches.append((score, len(resource_id), resource_id))
+        if not matches:
+            return None
+        matches.sort(reverse=True)
+        return matches[0][2]
+
+    def _resource_aliases(self, resource_id: str) -> tuple[str, ...]:
+        lowered = resource_id.casefold()
+        parts = tuple(part for part in re.split(r"[^a-z0-9]+", lowered) if part)
+        aliases = {lowered, resource_id.split(":")[-1].casefold()}
+        aliases.update(parts)
+        if len(parts) >= 2:
+            aliases.add(" ".join(parts[-2:]))
+            aliases.add(" ".join(parts))
+        return tuple(sorted(alias for alias in aliases if alias))
+
+    def _contains_alias(self, text: str, alias: str) -> bool:
+        return bool(re.search(rf"(?<![A-Za-z0-9]){re.escape(alias)}(?![A-Za-z0-9])", text))
+
+    def _available_edge_pairs(self, context: RequestNormalizationContext) -> tuple[tuple[str, str], ...]:
+        card = context.session_state_card
+        if card is None:
+            return ()
+        pairs: list[tuple[str, str]] = []
+        for edge in card.current_working_save.edge_list or card.target_scope.allowed_edge_refs:
+            if "->" not in edge:
+                continue
+            left, right = edge.split("->", 1)
+            left = left.strip()
+            right = right.strip()
+            if left and right:
+                pairs.append((left, right))
+        return tuple(dict.fromkeys(pairs))
+
+    def _predecessors_for_node(self, node_ref: str, context: RequestNormalizationContext) -> tuple[str, ...]:
+        return tuple(source for source, target in self._available_edge_pairs(context) if target == node_ref)
+
+    def _successors_for_node(self, node_ref: str, context: RequestNormalizationContext) -> tuple[str, ...]:
+        return tuple(target for source, target in self._available_edge_pairs(context) if source == node_ref)
+
+    def _extract_between_node_refs(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+    ) -> tuple[str, str] | None:
+        patterns = (
+            r"\bbetween\s+node\s+([A-Za-z0-9_\-\.]+)\s+and\s+node\s+([A-Za-z0-9_\-\.]+)",
+            r"\bbetween\s+([A-Za-z0-9_\-\.]+)\s+and\s+([A-Za-z0-9_\-\.]+)",
+        )
+        for pattern in patterns:
+            match = re.search(pattern, request_text, flags=re.IGNORECASE)
+            if not match:
+                continue
+            refs = self._resolve_node_refs((match.group(1), match.group(2)), context)
+            if len(refs) == 2:
+                return refs[0], refs[1]
+        return None
+
+    def _infer_insert_between_parameters(
+        self,
+        request_text: str,
+        scope: TargetScope,
+        context: RequestNormalizationContext,
+    ) -> dict[str, Any]:
+        parameters: dict[str, Any] = {"position": "between"}
+        between_refs = self._extract_between_node_refs(request_text, context)
+        if between_refs is not None:
+            before_node, after_node = between_refs
+            parameters.update({
+                "before_node": before_node,
+                "after_node": after_node,
+                "from_node": before_node,
+                "to_node": after_node,
+            })
+            return parameters
+        target_ref = self._first_target_ref(scope, request_text)
+        if target_ref is None:
+            return parameters
+        text = request_text.casefold()
+        if "before" in text:
+            parameters.update({"after_node": target_ref, "to_node": target_ref, "position": "before"})
+            predecessors = self._predecessors_for_node(target_ref, context)
+            if len(predecessors) == 1:
+                parameters.update({"before_node": predecessors[0], "from_node": predecessors[0]})
+            return parameters
+        if "after" in text:
+            parameters.update({"before_node": target_ref, "from_node": target_ref, "position": "after"})
+            successors = self._successors_for_node(target_ref, context)
+            if len(successors) == 1:
+                parameters.update({"after_node": successors[0], "to_node": successors[0]})
+            return parameters
+        return parameters
 
 
     def _resolve_node_refs(

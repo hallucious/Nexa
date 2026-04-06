@@ -4,6 +4,7 @@ from src.designer.proposal_flow import DesignerProposalFlow
 from src.designer.request_normalizer import DesignerRequestNormalizer, RequestNormalizationContext
 from src.designer.models.designer_session_state_card import (
     AvailableResources,
+    ResourceAvailability,
     ConversationContext,
     CurrentSelectionState,
     DesignerSessionStateCard,
@@ -1361,3 +1362,134 @@ def test_request_normalizer_prefers_newer_thread_after_reopened_thread_replaceme
 
     assert any("reopened older revision thread has already been replaced by a newer active revision thread" in assumption.text for assumption in intent.assumptions)
     assert not any("explicitly reopens a previously redirected multi-step revision thread" in assumption.text for assumption in intent.assumptions)
+
+
+def test_request_normalizer_uses_selected_node_as_implicit_target_for_provider_change() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-selected-target",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+            edge_list=("node.answerer->node.reviewer",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="node", selected_refs=("node.reviewer",)),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(ResourceAvailability(id="anthropic:claude-sonnet"),),
+        ),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Change provider to Claude"),
+    )
+
+    intent = normalizer.normalize(
+        "Change provider to Claude",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert intent.target_scope.node_refs == ("node.reviewer",)
+    action = next(action for action in intent.proposed_actions if action.action_type == "replace_provider")
+    assert action.target_ref == "node.reviewer"
+    assert action.parameters["provider_id"] == "anthropic:claude-sonnet"
+
+
+def test_request_normalizer_matches_available_plugin_id_alias() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-plugin-alias",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            plugins=(ResourceAvailability(id="web.search.v2"),),
+        ),
+        objective=ObjectiveSpec(primary_goal="Add search plugin"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Add search plugin to node reviewer"),
+    )
+
+    intent = normalizer.normalize(
+        "Add search plugin to node reviewer",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    action = next(action for action in intent.proposed_actions if action.action_type == "attach_plugin")
+    assert action.target_ref == "node.reviewer"
+    assert action.parameters["plugin_id"] == "web.search.v2"
+
+
+def test_request_normalizer_matches_available_prompt_id_alias() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-prompt-alias",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+            prompt_refs=("review.prompt.v2",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            prompts=(ResourceAvailability(id="review.prompt.v2"),),
+        ),
+        objective=ObjectiveSpec(primary_goal="Replace prompt"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Replace prompt in node reviewer with review prompt"),
+    )
+
+    intent = normalizer.normalize(
+        "Replace prompt in node reviewer with review prompt",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    action = next(action for action in intent.proposed_actions if action.action_type == "set_prompt")
+    assert action.target_ref == "node.reviewer"
+    assert action.parameters["prompt_id"] == "review.prompt.v2"
+
+
+def test_request_normalizer_infers_insert_between_topology_for_before_request() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-insert-topology",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+            edge_list=(
+                "node.answerer->node.reviewer",
+                "node.reviewer->node.final_judge",
+            ),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Insert review step"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Insert a review step before reviewer"),
+    )
+
+    intent = normalizer.normalize(
+        "Insert a review step before reviewer",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    action = next(action for action in intent.proposed_actions if action.action_type == "insert_node_between")
+    assert action.parameters["before_node"] == "node.answerer"
+    assert action.parameters["after_node"] == "node.reviewer"
+    assert action.parameters["from_node"] == "node.answerer"
+    assert action.parameters["to_node"] == "node.reviewer"
