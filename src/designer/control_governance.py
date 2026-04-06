@@ -13,6 +13,7 @@ _STRICT_REPEAT_THRESHOLD = 3
 _SAFE_CYCLE_DECAY_THRESHOLD = 2
 _RECENT_ANCHOR_RESOLUTION_RETENTION_CYCLES = 1
 _RECENT_REVISION_REDIRECT_ARCHIVE_RETENTION_CYCLES = 2
+_RECENT_APPROVAL_REVISION_HISTORY_RETENTION_CYCLES = 2
 
 _ELEVATED_PRESSURE_SCORE = 2
 _STRICT_PRESSURE_SCORE = 4
@@ -144,6 +145,10 @@ class RecentRevisionHistoryApplicability:
     @property
     def is_redirect_scope(self) -> bool:
         return self.status == "redirect_scope"
+
+    @property
+    def is_expired(self) -> bool:
+        return self.status == "expired_recent_followup"
 
 
 @dataclass(frozen=True)
@@ -927,6 +932,45 @@ def governance_recent_revision_redirect_archive_applicability_for_request(
     )
 
 
+def governance_recent_revision_history_snapshot_from_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    raw_history = notes.get("approval_revision_recent_history", ())
+    history = [dict(item) for item in raw_history if isinstance(item, Mapping)] if isinstance(raw_history, (list, tuple)) else []
+    if len(history) < 2:
+        return {}
+    latest = history[-1]
+    return {
+        "count": len(history),
+        "summary": str(notes.get("approval_revision_recent_history_summary", "")).strip(),
+        "history": history,
+        "latest_selected_interpretation": str(latest.get("selected_interpretation", "")).strip(),
+        "age": int(notes.get("approval_revision_recent_history_age", 0) or 0),
+    }
+
+
+def clear_recent_revision_history_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    next_notes = dict(notes)
+    for key in (
+        "approval_revision_recent_history",
+        "approval_revision_recent_history_count",
+        "approval_revision_recent_history_summary",
+        "approval_revision_recent_history_age",
+    ):
+        next_notes.pop(key, None)
+    return next_notes
+
+
+def advance_recent_revision_history_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    snapshot = governance_recent_revision_history_snapshot_from_notes(notes)
+    if not snapshot:
+        return dict(notes)
+    next_age = int(snapshot.get("age", 0) or 0) + 1
+    if next_age >= _RECENT_APPROVAL_REVISION_HISTORY_RETENTION_CYCLES:
+        return clear_recent_revision_history_notes(notes)
+    next_notes = dict(notes)
+    next_notes["approval_revision_recent_history_age"] = next_age
+    return next_notes
+
+
 def governance_recent_revision_history_applicability_for_request(
     notes: Mapping[str, Any],
     request_text: str,
@@ -934,19 +978,16 @@ def governance_recent_revision_history_applicability_for_request(
     mutation_oriented: bool,
     available_node_refs: Sequence[str] = (),
 ) -> RecentRevisionHistoryApplicability:
-    raw_history = notes.get("approval_revision_recent_history", ())
-    history = [dict(item) for item in raw_history if isinstance(item, Mapping)] if isinstance(raw_history, (list, tuple)) else []
-    if len(history) < 2:
+    snapshot = governance_recent_revision_history_snapshot_from_notes(notes)
+    if not snapshot:
         return RecentRevisionHistoryApplicability(status="none", snapshot={})
-    summary = str(notes.get("approval_revision_recent_history_summary", "")).strip()
-    latest = history[-1]
-    selected = str(latest.get("selected_interpretation", "")).strip()
-    snapshot = {
-        "count": len(history),
-        "summary": summary,
-        "history": history,
-        "latest_selected_interpretation": selected,
-    }
+    if int(snapshot.get("age", 0) or 0) >= _RECENT_APPROVAL_REVISION_HISTORY_RETENTION_CYCLES:
+        return RecentRevisionHistoryApplicability(
+            status="expired_recent_followup",
+            snapshot=snapshot,
+            explanation="A previous multi-step approval/revision continuity thread is now outside the short-lived active-retention window.",
+        )
+    selected = str(snapshot.get("latest_selected_interpretation", "")).strip()
     if not mutation_oriented:
         return RecentRevisionHistoryApplicability(
             status="hidden_read_only",

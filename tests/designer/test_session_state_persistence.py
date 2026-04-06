@@ -1217,6 +1217,37 @@ def test_control_result_keeps_pending_anchor_requirement_for_nonreferential_foll
     assert "control_governance_last_pending_anchor_resolution_status" not in updated.notes
 
 
+
+
+def test_control_result_expires_recent_approval_revision_history_after_second_followup() -> None:
+    flow = DesignerProposalFlow()
+    card = replace(
+        make_card(),
+        conversation_context=ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+        notes={
+            **make_card().notes,
+            "approval_revision_recent_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.reviewer."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.reviewer."},
+            ],
+            "approval_revision_recent_history_count": 2,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 step(s). Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.reviewer.",
+            "approval_revision_recent_history_age": 1,
+        },
+    )
+
+    controlled = flow.propose_with_control(
+        "Change provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+    updated = DesignerSessionStateCoordinator().evolve_after_control_result(card, controlled)
+
+    assert "approval_revision_recent_history" not in updated.notes
+    assert "approval_revision_recent_history_count" not in updated.notes
+    assert "approval_revision_recent_history_summary" not in updated.notes
+    assert "approval_revision_recent_history_age" not in updated.notes
+
 def test_new_revision_history_clears_redirect_archive_background() -> None:
     coordinator = DesignerSessionStateCoordinator()
     current = replace(

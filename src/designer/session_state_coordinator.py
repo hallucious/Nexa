@@ -5,6 +5,7 @@ from dataclasses import replace
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.control_governance import (
     advance_recent_anchor_resolution_notes,
+    advance_recent_revision_history_notes,
     advance_recent_revision_redirect_archive_notes,
     apply_control_governance_notes,
     clear_recent_anchor_resolution_notes,
@@ -170,6 +171,7 @@ class DesignerSessionStateCoordinator:
             next_notes["control_governance_last_pending_anchor_resolution_age"] = 0
         else:
             next_notes = advance_recent_anchor_resolution_notes(next_notes)
+        next_notes = advance_recent_revision_history_notes(next_notes)
         next_notes = advance_recent_revision_redirect_archive_notes(next_notes)
         next_notes = apply_control_governance_notes(next_notes, next_revision.attempt_history)
         return replace(
@@ -402,6 +404,7 @@ class DesignerSessionStateCoordinator:
         cleaned["approval_revision_recent_history"] = history
         cleaned["approval_revision_recent_history_count"] = len(history)
         if history:
+            cleaned["approval_revision_recent_history_age"] = 0
             latest = history[-1]
             modes = ", ".join(str(item).replace("_", " ") for item in latest.get("continuation_modes", []) if str(item).strip())
             summary = f"Recent approval/revision continuity includes {len(history)} step(s). Latest continuation mode: {modes or 'revision requested'}."
@@ -410,6 +413,7 @@ class DesignerSessionStateCoordinator:
             cleaned["approval_revision_recent_history_summary"] = summary
         else:
             cleaned.pop("approval_revision_recent_history_summary", None)
+            cleaned.pop("approval_revision_recent_history_age", None)
         return cleaned
 
     def _mixed_revision_reason_code_from_approval_state(

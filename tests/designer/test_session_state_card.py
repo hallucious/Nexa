@@ -295,6 +295,35 @@ def test_session_state_card_builder_hides_recent_multi_step_revision_history_for
     assert not any("Recent approval/revision continuity" in item for item in rebuilt.current_findings.warning_findings)
 
 
+
+
+def test_session_state_card_builder_hides_expired_recent_revision_history() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    artifact = make_working_save()
+    base = builder.build(request_text="Change provider", artifact=artifact)
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "approval_revision_recent_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.reviewer."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.reviewer."},
+            ],
+            "approval_revision_recent_history_count": 2,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 step(s). Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.reviewer.",
+            "approval_revision_recent_history_age": 2,
+        },
+    })
+    persisted = persist_designer_session_state(artifact, session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Change provider in node reviewer to Claude", artifact=persisted)
+
+    assert rebuilt.notes["approval_revision_recent_history_status"] == "expired_recent_followup"
+    assert rebuilt.notes["approval_revision_recent_history_applied"] is False
+    assert all("multi-step revision thread" not in item for item in rebuilt.current_findings.warning_findings)
+
 def test_builder_hides_recent_revision_history_when_scope_redirects() -> None:
     from src.designer.session_state_persistence import persist_designer_session_state
 
