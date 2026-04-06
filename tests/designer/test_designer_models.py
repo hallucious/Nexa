@@ -685,3 +685,48 @@ def test_designer_models_do_not_import_storage_runtime_engine_or_cli(relative_pa
 def test_designer_models_use_frozen_dataclasses() -> None:
     source = (BASE / "src/designer/models/designer_intent.py").read_text(encoding="utf-8")
     assert "@dataclass(frozen=True)" in source
+
+from src.designer.models import (
+    GroundedIntent,
+    SemanticActionCandidate,
+    SemanticIntent,
+    SemanticResourceDescriptor,
+    SemanticTargetDescriptor,
+)
+
+
+def test_semantic_intent_constructs_with_descriptor_candidates() -> None:
+    intent = SemanticIntent(
+        semantic_intent_id="semantic-1",
+        user_request_text="Have the reviewer use Claude instead.",
+        effective_request_text="Have the reviewer use Claude instead.",
+        category="MODIFY_CIRCUIT",
+        action_candidates=(
+            SemanticActionCandidate(
+                action_type="replace_provider",
+                target_node_descriptor=SemanticTargetDescriptor(label_hint="reviewer", role_hint="review"),
+                provider_descriptor=SemanticResourceDescriptor(resource_type="provider", family="claude"),
+            ),
+        ),
+    )
+    assert intent.category == "MODIFY_CIRCUIT"
+    assert intent.action_candidates[0].provider_descriptor is not None
+    assert intent.action_candidates[0].provider_descriptor.family == "claude"
+
+
+def test_grounded_intent_constructs_from_semantic_intent() -> None:
+    semantic = SemanticIntent(
+        semantic_intent_id="semantic-2",
+        user_request_text="Have the reviewer use Claude instead.",
+        effective_request_text="Have the reviewer use Claude instead.",
+        category="MODIFY_CIRCUIT",
+    )
+    grounded = GroundedIntent(
+        grounded_intent_id="grounded-1",
+        semantic_intent=semantic,
+        target_scope=TargetScope(mode="node_only", savefile_ref="ws-1", node_refs=("node.reviewer",)),
+        resolved_node_refs=("node.reviewer",),
+        matched_provider_id="anthropic:claude-sonnet",
+    )
+    assert grounded.target_scope.node_refs == ("node.reviewer",)
+    assert grounded.matched_provider_id == "anthropic:claude-sonnet"

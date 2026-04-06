@@ -50,6 +50,16 @@ from src.designer.models.designer_intent import (
     RiskFlag,
     TargetScope,
 )
+from src.designer.models.grounded_intent import (
+    GroundedActionCandidate,
+    GroundedIntent,
+)
+from src.designer.models.semantic_intent import (
+    SemanticActionCandidate,
+    SemanticIntent,
+    SemanticResourceDescriptor,
+    SemanticTargetDescriptor,
+)
 from src.designer.models.validation_precheck import (
     AmbiguityAssessmentReport,
     CostAssessmentReport,
@@ -85,6 +95,8 @@ __all__ = [
     "ProposalAttemptRecord",
     "ProposalControlPolicy",
     "DesignerIntent",
+    "GroundedActionCandidate",
+    "GroundedIntent",
     "EdgeChangeCard",
     "EdgeChangePreview",
     "EdgeSummary",
@@ -107,6 +119,10 @@ __all__ = [
     "RiskPreview",
     "StructuralPreview",
     "SummaryCard",
+    "SemanticActionCandidate",
+    "SemanticIntent",
+    "SemanticResourceDescriptor",
+    "SemanticTargetDescriptor",
     "TargetScope",
     "UserDecision",
     "ValidationPrecheck",

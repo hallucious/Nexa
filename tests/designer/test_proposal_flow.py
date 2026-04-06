@@ -1630,3 +1630,93 @@ def test_proposal_flow_handles_topology_insert_in_front_of_wording() -> None:
     assert insert_op.payload["after_node"] == "node.final_judge"
     assert insert_op.payload["from_node"] == "node.reviewer"
     assert insert_op.payload["to_node"] == "node.final_judge"
+
+from src.designer.models.semantic_intent import SemanticIntent
+from src.designer.models.grounded_intent import GroundedIntent
+from src.designer.models.designer_intent import TargetScope
+
+
+class _FakeSemanticInterpreter:
+    def interpret(self, request_text: str, *, context: RequestNormalizationContext) -> SemanticIntent:
+        return SemanticIntent(
+            semantic_intent_id="semantic-fake",
+            user_request_text=request_text,
+            effective_request_text="Change provider in node reviewer to Claude",
+            category="MODIFY_CIRCUIT",
+        )
+
+
+class _FakeSymbolicGrounder:
+    def ground(self, semantic_intent: SemanticIntent, *, context: RequestNormalizationContext, precomputed_scope: TargetScope | None = None) -> GroundedIntent:
+        return GroundedIntent(
+            grounded_intent_id="grounded-fake",
+            semantic_intent=semantic_intent,
+            target_scope=precomputed_scope or TargetScope(mode="node_only", savefile_ref="ws-1", node_refs=("node.reviewer",)),
+            resolved_node_refs=("node.reviewer",),
+            matched_provider_id="anthropic:claude-sonnet",
+        )
+
+    def infer_provider_id(self, text: str, context: RequestNormalizationContext) -> str:
+        return "anthropic:claude-sonnet"
+
+    def infer_plugin_id(self, text: str, context: RequestNormalizationContext) -> str:
+        return "web.search"
+
+    def infer_prompt_id(self, text: str, context: RequestNormalizationContext) -> str | None:
+        return None
+
+    def selected_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
+        return ()
+
+    def infer_node_refs_from_context_mentions(self, request_text: str, context: RequestNormalizationContext) -> tuple[str, ...]:
+        return ("node.reviewer",)
+
+    def available_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
+        return ("node.reviewer",)
+
+    def available_resource_ids(self, context: RequestNormalizationContext, *, resource_type: str) -> tuple[str, ...]:
+        return ()
+
+    def match_resource_id_from_text(self, text: str, resource_ids: tuple[str, ...]) -> str | None:
+        return None
+
+    def resource_aliases(self, resource_id: str) -> tuple[str, ...]:
+        return ()
+
+    def contains_alias(self, text: str, alias: str) -> bool:
+        return False
+
+    def available_edge_pairs(self, context: RequestNormalizationContext) -> tuple[tuple[str, str], ...]:
+        return ()
+
+    def predecessors_for_node(self, node_ref: str, context: RequestNormalizationContext) -> tuple[str, ...]:
+        return ()
+
+    def successors_for_node(self, node_ref: str, context: RequestNormalizationContext) -> tuple[str, ...]:
+        return ()
+
+    def extract_between_node_refs(self, request_text: str, context: RequestNormalizationContext) -> tuple[str, str] | None:
+        return None
+
+    def infer_insert_between_parameters(self, request_text: str, scope: TargetScope, context: RequestNormalizationContext) -> dict[str, object]:
+        return {"position": "between"}
+
+    def resolve_node_refs(self, node_refs: tuple[str, ...], context: RequestNormalizationContext) -> tuple[str, ...]:
+        return tuple("node.reviewer" if ref == "reviewer" else ref for ref in node_refs)
+
+    def extract_node_refs(self, request_text: str) -> tuple[str, ...]:
+        return ()
+
+    def first_node_ref(self, request_text: str) -> str | None:
+        return None
+
+
+def test_request_normalizer_supports_injected_semantic_and_grounding_layers() -> None:
+    normalizer = DesignerRequestNormalizer(
+        semantic_interpreter=_FakeSemanticInterpreter(),
+        symbolic_grounder=_FakeSymbolicGrounder(),
+    )
+    intent = normalizer.normalize("irrelevant raw request", context=RequestNormalizationContext(working_save_ref="ws-1"))
+    assert intent.category == "MODIFY_CIRCUIT"
+    assert intent.target_scope.node_refs == ("node.reviewer",)
+    assert intent.proposed_actions[0].parameters["provider_id"] == "anthropic:claude-sonnet"

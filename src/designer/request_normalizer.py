@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 import hashlib
 import re
@@ -25,24 +24,37 @@ from src.designer.models.designer_intent import (
 )
 
 
-from src.designer.models.designer_session_state_card import DesignerSessionStateCard
+from src.designer.normalization_context import RequestNormalizationContext
 from src.designer.reason_codes import (
     flag_type_for_reason_code,
     reason_code_for_mixed_referential_request,
 )
-
-@dataclass(frozen=True)
-class RequestNormalizationContext:
-    working_save_ref: str | None = None
-    session_state_card: DesignerSessionStateCard | None = None
+from src.designer.semantic_interpreter import (
+    DesignerSemanticInterpreter,
+    LegacyRuleBasedSemanticInterpreter,
+)
+from src.designer.symbolic_grounder import (
+    DesignerSymbolicGrounder,
+    DeterministicSymbolicGrounder,
+)
 
 
 class DesignerRequestNormalizer:
-    """Rule-based Step 2 request normalizer.
+    """Compatibility facade for Designer request normalization.
 
-    This intentionally avoids LLM calls and produces bounded, reviewable intent
-    objects for mutation-oriented designer requests.
+    Stage 1 semantic interpretation and Stage 2 symbolic grounding are now
+    modeled as separate subsystems. This facade preserves the existing public
+    API while the implementation migrates away from a monolithic normalizer.
     """
+
+    def __init__(
+        self,
+        *,
+        semantic_interpreter: DesignerSemanticInterpreter | None = None,
+        symbolic_grounder: DesignerSymbolicGrounder | None = None,
+    ) -> None:
+        self._semantic_interpreter = semantic_interpreter or LegacyRuleBasedSemanticInterpreter()
+        self._symbolic_grounder = symbolic_grounder or DeterministicSymbolicGrounder()
 
     def normalize(self, request_text: str, *, context: RequestNormalizationContext | None = None) -> DesignerIntent:
         if not request_text or not request_text.strip():
@@ -53,10 +65,16 @@ class DesignerRequestNormalizer:
                 working_save_ref=context.session_state_card.current_working_save.savefile_ref,
                 session_state_card=context.session_state_card,
             )
-        effective_request_text = self._compose_effective_request_text(request_text, context)
-        category = self._infer_category(effective_request_text)
+        semantic_intent = self._semantic_interpreter.interpret(request_text, context=context)
+        effective_request_text = semantic_intent.effective_request_text
+        category = semantic_intent.category
         scope = self._build_scope(category, effective_request_text, context)
-        actions = self._build_actions(category, effective_request_text, scope, context)
+        grounded_intent = self._symbolic_grounder.ground(
+            semantic_intent,
+            context=context,
+            precomputed_scope=scope,
+        )
+        actions = self._build_actions(category, effective_request_text, scope, context, grounded_intent=grounded_intent)
         assumptions = self._build_assumptions(category, effective_request_text, context, raw_request_text=request_text)
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
         risk_flags = self._build_risk_flags(effective_request_text, context)
@@ -86,31 +104,16 @@ class DesignerRequestNormalizer:
         request_text: str,
         context: RequestNormalizationContext,
     ) -> str:
-        card = context.session_state_card
-        if card is None:
+        compose = getattr(self._semantic_interpreter, "compose_effective_request_text", None)
+        if compose is None:
             return request_text
-        parts = [request_text.strip()]
-        if card.conversation_context.clarified_interpretation:
-            parts.append(card.conversation_context.clarified_interpretation.strip())
-        if card.revision_state.user_corrections:
-            parts.extend(item.strip() for item in card.revision_state.user_corrections if item.strip())
-        return " ".join(part for part in parts if part)
+        return compose(request_text, context)
 
     def _infer_category(self, request_text: str) -> str:
-        text = request_text.casefold()
-        if any(term in text for term in ("explain", "what does", "why is this")):
-            return "EXPLAIN_CIRCUIT"
-        if any(term in text for term in ("repair", "fix", "broken", "restore")):
-            return "REPAIR_CIRCUIT"
-        if any(term in text for term in ("optimize", "optimise", "improve", "reduce cost", "more reliable")):
-            return "OPTIMIZE_CIRCUIT"
-        if any(term in text for term in ("analyze", "analyse", "risk", "cost", "gap", "why might")):
-            return "ANALYZE_CIRCUIT"
-        if self._requests_create_circuit(text):
-            return "CREATE_CIRCUIT"
-        if any(term in text for term in ("add", "change", "replace", "remove", "rename", "insert", "update")):
+        infer = getattr(self._semantic_interpreter, "infer_category", None)
+        if infer is None:
             return "MODIFY_CIRCUIT"
-        return "MODIFY_CIRCUIT"
+        return infer(request_text)
 
     def _build_scope(
         self,
@@ -224,6 +227,8 @@ class DesignerRequestNormalizer:
         request_text: str,
         scope: TargetScope,
         context: RequestNormalizationContext,
+        *,
+        grounded_intent=None,
     ) -> list[ActionSpec]:
         text = request_text.casefold()
         if category == "CREATE_CIRCUIT":
@@ -257,7 +262,7 @@ class DesignerRequestNormalizer:
                 )
             )
         if self._requests_provider_change(text, context):
-            provider_id = self._infer_provider_id(text, context)
+            provider_id = grounded_intent.matched_provider_id if grounded_intent is not None else self._infer_provider_id(text, context)
             actions.append(
                 ActionSpec(
                     action_type="replace_provider",
@@ -271,7 +276,7 @@ class DesignerRequestNormalizer:
                 ActionSpec(
                     action_type="attach_plugin",
                     target_ref=self._first_target_ref(scope, request_text),
-                    parameters={"plugin_id": self._infer_plugin_id(text, context)},
+                    parameters={"plugin_id": grounded_intent.matched_plugin_id if grounded_intent is not None else self._infer_plugin_id(text, context)},
                     rationale="The request explicitly introduces a plugin-backed tool step.",
                 )
             )
@@ -280,7 +285,7 @@ class DesignerRequestNormalizer:
                 ActionSpec(
                     action_type="set_prompt",
                     target_ref=self._first_target_ref(scope, request_text),
-                    parameters={"prompt_id": self._infer_prompt_id(text, context)},
+                    parameters={"prompt_id": grounded_intent.matched_prompt_id if grounded_intent is not None else self._infer_prompt_id(text, context)},
                     rationale="The request explicitly changes the prompt/instruction assignment.",
                 )
             )
@@ -307,7 +312,7 @@ class DesignerRequestNormalizer:
                 ActionSpec(
                     action_type="insert_node_between",
                     target_ref=self._first_target_ref(scope, request_text),
-                    parameters=self._infer_insert_between_parameters(request_text, scope, context),
+                    parameters=grounded_intent.insert_between_parameters if grounded_intent is not None else self._infer_insert_between_parameters(request_text, scope, context),
                     rationale="The request explicitly inserts a node into an existing path.",
                 )
             )
@@ -1177,35 +1182,13 @@ class DesignerRequestNormalizer:
         return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in natural_insert_patterns)
 
     def _infer_provider_id(self, text: str, context: RequestNormalizationContext) -> str:
-        matched = self._match_resource_id_from_text(text, self._available_resource_ids(context, resource_type="providers"))
-        if matched is not None:
-            return matched
-        if "claude" in text or "anthropic" in text:
-            return "anthropic:claude"
-        if "gemini" in text or "google" in text:
-            return "google:gemini"
-        if "perplexity" in text:
-            return "perplexity:sonar"
-        return "openai:gpt"
+        return self._symbolic_grounder.infer_provider_id(text, context)
 
     def _infer_plugin_id(self, text: str, context: RequestNormalizationContext) -> str:
-        matched = self._match_resource_id_from_text(text, self._available_resource_ids(context, resource_type="plugins"))
-        if matched is not None:
-            return matched
-        if "search" in text:
-            return "web.search"
-        if "normalize" in text:
-            return "text.normalize"
-        if "validate" in text:
-            return "schema.validate"
-        return "tool.generic"
+        return self._symbolic_grounder.infer_plugin_id(text, context)
 
     def _infer_prompt_id(self, text: str, context: RequestNormalizationContext) -> str | None:
-        matched = self._match_resource_id_from_text(text, self._available_resource_ids(context, resource_type="prompts"))
-        if matched is not None:
-            return matched
-        prompt_refs = self._available_resource_ids(context, resource_type="prompts")
-        return prompt_refs[0] if len(prompt_refs) == 1 else None
+        return self._symbolic_grounder.infer_prompt_id(text, context)
 
     def _explicit_node_refs(
         self,
@@ -1218,34 +1201,17 @@ class DesignerRequestNormalizer:
         return self._infer_node_refs_from_context_mentions(request_text, context)
 
     def _selected_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
-        card = context.session_state_card
-        if card is None or card.current_selection.selection_mode != "node":
-            return ()
-        return self._resolve_node_refs(tuple(card.current_selection.selected_refs), context)
+        return self._symbolic_grounder.selected_node_refs(context)
 
     def _infer_node_refs_from_context_mentions(
         self,
         request_text: str,
         context: RequestNormalizationContext,
     ) -> tuple[str, ...]:
-        candidates = self._available_node_refs(context)
-        if not candidates:
-            return ()
-        text = request_text.casefold()
-        matches: list[str] = []
-        for candidate in candidates:
-            aliases = self._resource_aliases(candidate)
-            if any(self._contains_alias(text, alias) for alias in aliases):
-                matches.append(candidate)
-        return tuple(dict.fromkeys(matches))
+        return self._symbolic_grounder.infer_node_refs_from_context_mentions(request_text, context)
 
     def _available_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
-        if context.session_state_card is None:
-            return ()
-        refs = tuple(context.session_state_card.current_working_save.node_list)
-        if refs:
-            return refs
-        return tuple(context.session_state_card.target_scope.allowed_node_refs)
+        return self._symbolic_grounder.available_node_refs(context)
 
     def _available_resource_ids(
         self,
@@ -1253,75 +1219,29 @@ class DesignerRequestNormalizer:
         *,
         resource_type: str,
     ) -> tuple[str, ...]:
-        card = context.session_state_card
-        if card is None:
-            return ()
-        available_resources = getattr(card.available_resources, resource_type, ())
-        resource_ids = [item.id for item in available_resources if getattr(item, "id", None)]
-        if resource_ids:
-            return tuple(dict.fromkeys(resource_ids))
-        fallback_attr = {
-            "prompts": "prompt_refs",
-            "providers": "provider_refs",
-            "plugins": "plugin_refs",
-        }[resource_type]
-        return tuple(dict.fromkeys(getattr(card.current_working_save, fallback_attr, ())))
+        return self._symbolic_grounder.available_resource_ids(context, resource_type=resource_type)
 
     def _match_resource_id_from_text(
         self,
         text: str,
         resource_ids: tuple[str, ...],
     ) -> str | None:
-        lowered = text.casefold()
-        matches: list[tuple[int, int, str]] = []
-        for resource_id in resource_ids:
-            resource_lower = resource_id.casefold()
-            score = 0
-            if resource_lower and resource_lower in lowered:
-                score = max(score, 100)
-            for alias in self._resource_aliases(resource_id):
-                if self._contains_alias(lowered, alias):
-                    score = max(score, max(10, len(alias)))
-            if score:
-                matches.append((score, len(resource_id), resource_id))
-        if not matches:
-            return None
-        matches.sort(reverse=True)
-        return matches[0][2]
+        return self._symbolic_grounder.match_resource_id_from_text(text, resource_ids)
 
     def _resource_aliases(self, resource_id: str) -> tuple[str, ...]:
-        lowered = resource_id.casefold()
-        parts = tuple(part for part in re.split(r"[^a-z0-9]+", lowered) if part)
-        aliases = {lowered, resource_id.split(":")[-1].casefold()}
-        aliases.update(parts)
-        if len(parts) >= 2:
-            aliases.add(" ".join(parts[-2:]))
-            aliases.add(" ".join(parts))
-        return tuple(sorted(alias for alias in aliases if alias))
+        return self._symbolic_grounder.resource_aliases(resource_id)
 
     def _contains_alias(self, text: str, alias: str) -> bool:
-        return bool(re.search(rf"(?<![A-Za-z0-9]){re.escape(alias)}(?![A-Za-z0-9])", text))
+        return self._symbolic_grounder.contains_alias(text, alias)
 
     def _available_edge_pairs(self, context: RequestNormalizationContext) -> tuple[tuple[str, str], ...]:
-        card = context.session_state_card
-        if card is None:
-            return ()
-        pairs: list[tuple[str, str]] = []
-        for edge in card.current_working_save.edge_list or card.target_scope.allowed_edge_refs:
-            if "->" not in edge:
-                continue
-            left, right = edge.split("->", 1)
-            left = left.strip()
-            right = right.strip()
-            if left and right:
-                pairs.append((left, right))
-        return tuple(dict.fromkeys(pairs))
+        return self._symbolic_grounder.available_edge_pairs(context)
 
     def _predecessors_for_node(self, node_ref: str, context: RequestNormalizationContext) -> tuple[str, ...]:
-        return tuple(source for source, target in self._available_edge_pairs(context) if target == node_ref)
+        return self._symbolic_grounder.predecessors_for_node(node_ref, context)
 
     def _successors_for_node(self, node_ref: str, context: RequestNormalizationContext) -> tuple[str, ...]:
-        return tuple(target for source, target in self._available_edge_pairs(context) if source == node_ref)
+        return self._symbolic_grounder.successors_for_node(node_ref, context)
 
     def _extract_between_node_refs(
         self,
@@ -1347,34 +1267,7 @@ class DesignerRequestNormalizer:
         scope: TargetScope,
         context: RequestNormalizationContext,
     ) -> dict[str, Any]:
-        parameters: dict[str, Any] = {"position": "between"}
-        between_refs = self._extract_between_node_refs(request_text, context)
-        if between_refs is not None:
-            before_node, after_node = between_refs
-            parameters.update({
-                "before_node": before_node,
-                "after_node": after_node,
-                "from_node": before_node,
-                "to_node": after_node,
-            })
-            return parameters
-        target_ref = self._first_target_ref(scope, request_text)
-        if target_ref is None:
-            return parameters
-        text = request_text.casefold()
-        if any(phrase in text for phrase in ("before", "in front of", "ahead of")):
-            parameters.update({"after_node": target_ref, "to_node": target_ref, "position": "before"})
-            predecessors = self._predecessors_for_node(target_ref, context)
-            if len(predecessors) == 1:
-                parameters.update({"before_node": predecessors[0], "from_node": predecessors[0]})
-            return parameters
-        if any(phrase in text for phrase in ("after", "behind")):
-            parameters.update({"before_node": target_ref, "from_node": target_ref, "position": "after"})
-            successors = self._successors_for_node(target_ref, context)
-            if len(successors) == 1:
-                parameters.update({"after_node": successors[0], "to_node": successors[0]})
-            return parameters
-        return parameters
+        return self._symbolic_grounder.infer_insert_between_parameters(request_text, scope, context)
 
 
     def _resolve_node_refs(
@@ -1382,26 +1275,7 @@ class DesignerRequestNormalizer:
         node_refs: tuple[str, ...],
         context: RequestNormalizationContext,
     ) -> tuple[str, ...]:
-        if not node_refs:
-            return node_refs
-        candidates: tuple[str, ...] = ()
-        if context.session_state_card is not None:
-            candidates = tuple(context.session_state_card.current_working_save.node_list)
-            if not candidates:
-                candidates = tuple(context.session_state_card.target_scope.allowed_node_refs)
-        if not candidates:
-            return node_refs
-        resolved: list[str] = []
-        for ref in node_refs:
-            if ref in candidates:
-                resolved.append(ref)
-                continue
-            suffix_matches = [item for item in candidates if item.endswith(f".{ref}")]
-            if len(suffix_matches) == 1:
-                resolved.append(suffix_matches[0])
-            else:
-                resolved.append(ref)
-        return tuple(dict.fromkeys(resolved))
+        return self._symbolic_grounder.resolve_node_refs(node_refs, context)
 
     def _extract_node_refs(self, request_text: str) -> tuple[str, ...]:
         prioritized_patterns = (
@@ -1425,8 +1299,7 @@ class DesignerRequestNormalizer:
         return tuple(ordered_refs)
 
     def _first_node_ref(self, request_text: str) -> str | None:
-        refs = self._extract_node_refs(request_text)
-        return refs[0] if refs else None
+        return self._symbolic_grounder.first_node_ref(request_text)
 
 
 def _stable_id(prefix: str, raw: str) -> str:
