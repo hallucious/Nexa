@@ -254,3 +254,37 @@ def test_ui_adapter_routes_builder_shell_coordination_and_action_schema_through_
     assert action_vm.source_role == "working_save"
     assert coordination_vm.storage_role == "working_save"
     assert shell_vm.storage_role == "working_save"
+
+
+def test_ui_adapter_routes_phase5_workspace_integrations_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    preview = GraphPreviewOverlay(overlay_id="preview-001", summary="test preview")
+
+    visual_vm = adapter.read_visual_editor_workspace_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        preview_overlay=preview,
+    )
+    config_vm = adapter.read_node_configuration_workspace_view_model(
+        _working_save(),
+        selected_ref="node:n1",
+        validation_report=_validation_report(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+    monitoring_vm = adapter.read_runtime_monitoring_workspace_view_model(
+        _commit(),
+        execution_record=_run(),
+    )
+
+    assert visual_vm.storage_role == "working_save"
+    assert config_vm.storage_role == "working_save"
+    assert monitoring_vm.execution is not None
