@@ -1,5 +1,13 @@
 from __future__ import annotations
 
+
+from src.contracts.nex_contract import ValidationFinding, ValidationReport
+from src.designer.models.circuit_draft_preview import CircuitDraftPreview, ConfirmationPreview, GraphViewModel, SummaryCard, StructuralPreview
+from src.designer.models.circuit_patch_plan import ChangeScope, CircuitPatchPlan, PatchOperation
+from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
+from src.designer.models.designer_intent import ConstraintSet, DesignerIntent, ObjectiveSpec, TargetScope
+from src.designer.models.designer_session_state_card import AvailableResources, ConversationContext, CurrentSelectionState, DesignerSessionStateCard, SessionTargetScope, WorkingSaveReality
+from src.designer.models.validation_precheck import AmbiguityAssessmentReport, CostAssessmentReport, EvaluatedScope, ResolutionReport, ValidationPrecheck, ValidityReport
 from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
@@ -82,3 +90,126 @@ def test_ui_adapter_routes_execution_trace_and_artifact_read_models_through_stab
     assert execution_vm.source_mode == "live_execution"
     assert trace_vm.source_mode == "live_event_stream"
     assert artifact_vm.viewer_status in {"ready", "partial"}
+
+
+
+def _validation_report() -> ValidationReport:
+    return ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="MISSING_INPUT", category="structural", severity="high", blocking=True, location="node:n1", message="missing input")],
+        blocking_count=1,
+        warning_count=0,
+        result="failed",
+    )
+
+
+def _session_card() -> DesignerSessionStateCard:
+    return DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-001",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(mode="existing_draft", savefile_ref="working_save:ws-001", circuit_summary="single node"),
+        current_selection=CurrentSelectionState(selection_mode="node", selected_refs=("node:n1",)),
+        target_scope=SessionTargetScope(mode="existing_circuit"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Improve it"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Improve node"),
+    )
+
+
+def _intent() -> DesignerIntent:
+    return DesignerIntent(
+        intent_id="intent-001",
+        category="MODIFY_CIRCUIT",
+        user_request_text="Improve node",
+        target_scope=TargetScope(mode="existing_circuit", savefile_ref="working_save:ws-001"),
+        objective=ObjectiveSpec(primary_goal="Improve it"),
+        constraints=ConstraintSet(),
+        proposed_actions=(),
+        assumptions=(),
+        ambiguity_flags=(),
+        risk_flags=(),
+        requires_user_confirmation=False,
+        confidence=0.8,
+        explanation="improve node",
+    )
+
+
+def _patch() -> CircuitPatchPlan:
+    return CircuitPatchPlan(
+        patch_id="patch-001",
+        patch_mode="modify_existing",
+        summary="modify node",
+        intent_ref="intent-001",
+        change_scope=ChangeScope(scope_level="bounded", touch_mode="structural_edit", touched_nodes=("n1",)),
+        operations=(PatchOperation(op_id="op-1", op_type="update_node_metadata", target_ref="node:n1"),),
+        target_savefile_ref="working_save:ws-001",
+    )
+
+
+def _precheck() -> ValidationPrecheck:
+    return ValidationPrecheck(
+        precheck_id="pre-001",
+        patch_ref="patch-001",
+        intent_ref="intent-001",
+        evaluated_scope=EvaluatedScope(mode="existing_circuit_patch", touched_nodes=("n1",)),
+        overall_status="pass",
+        structural_validity=ValidityReport(status="valid"),
+        dependency_validity=ValidityReport(status="valid"),
+        input_output_validity=ValidityReport(status="valid"),
+        provider_resolution=ResolutionReport(status="resolved"),
+        plugin_resolution=ResolutionReport(status="resolved"),
+        safety_review=ValidityReport(status="valid"),
+        cost_assessment=CostAssessmentReport(status="acceptable"),
+        ambiguity_assessment=AmbiguityAssessmentReport(status="clear"),
+    )
+
+
+def _preview() -> CircuitDraftPreview:
+    return CircuitDraftPreview(
+        preview_id="preview-001",
+        intent_ref="intent-001",
+        patch_ref="patch-001",
+        precheck_ref="pre-001",
+        preview_mode="patch_modify",
+        summary_card=SummaryCard(title="modify", one_sentence_summary="modify node", proposal_type="modify", change_scope="bounded", touched_node_count=1, touched_edge_count=0, touched_output_count=0),
+        structural_preview=StructuralPreview(before_exists=True, before_node_count=1, after_node_count=1, before_edge_count=0, after_edge_count=0, modified_nodes=("n1",)),
+        confirmation_preview=ConfirmationPreview(required_confirmations=(), auto_commit_allowed=False),
+        graph_view_model=GraphViewModel(node_count=1, edge_count=0),
+    )
+
+
+def _approval() -> DesignerApprovalFlowState:
+    return DesignerApprovalFlowState(
+        approval_id="approval-001",
+        intent_ref="intent-001",
+        patch_ref="patch-001",
+        precheck_ref="pre-001",
+        preview_ref="preview-001",
+        current_stage="awaiting_decision",
+        final_outcome="pending",
+        precheck_status="pass",
+    )
+
+
+def test_ui_adapter_routes_inspector_validation_and_designer_read_models_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    inspector_vm = adapter.read_inspector_panel_view_model(_working_save(), selected_ref="node:n1", validation_report=_validation_report())
+    validation_vm = adapter.read_validation_panel_view_model(_working_save(), validation_report=_validation_report())
+    designer_vm = adapter.read_designer_panel_view_model(
+        _working_save(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+    assert inspector_vm.object_type == "node"
+    assert validation_vm.overall_status == "blocked"
+    assert designer_vm.intent_state.intent_id == "intent-001"
