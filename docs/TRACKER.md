@@ -62,6 +62,7 @@ The current repository state includes the following implemented surface:
 ### 6. Designer Control Plane
 
 * explicit reopened-from-redirect continuity origin is now preserved across active recent-history reuse rather than flattened into ordinary recent continuity
+* if a reopened older thread is later replaced by a newer active revision thread, reopened-origin continuity is now cleared and reduced into low-priority replacement context instead of continuing to control nearby continuity as if the older reopened thread were still active
 * obsolete demo-coupled tests were removed to keep the suite aligned with the retained demo set
 
 ### 6. Current Verified Baseline

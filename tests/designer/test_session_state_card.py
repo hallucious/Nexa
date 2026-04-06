@@ -419,3 +419,33 @@ def test_builder_preserves_reopened_recent_history_marker_on_followup_cycle() ->
     assert rebuilt.notes["approval_revision_recent_history_reopened_status"] == "reopened_from_redirect_archive"
     assert rebuilt.notes["approval_revision_recent_history_reopened_applied"] is True
     assert "previously redirected revision thread remains active continuity" in rebuilt.notes["approval_revision_recent_history_reopened_summary"]
+
+
+def test_builder_surfaces_recent_reopened_thread_replacement_as_low_priority_context() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    artifact = make_working_save()
+    base = builder.build(request_text="Change provider", artifact=artifact)
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "approval_revision_recent_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.final_judge."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.final_judge."},
+            ],
+            "approval_revision_recent_history_count": 2,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 steps. Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.final_judge.",
+            "approval_revision_recent_history_replacement_status": "replaced_after_reopen",
+            "approval_revision_recent_history_replacement_summary": "A previously reopened older revision thread has now been replaced by a newer active revision thread and should no longer control nearby continuity.",
+            "approval_revision_recent_history_replacement_applied": True,
+        },
+    })
+    persisted = persist_designer_session_state(artifact, session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Change provider in node.final_judge to Claude.", artifact=persisted)
+
+    assert rebuilt.notes["approval_revision_recent_history_replacement_status"] == "visible_mutation"
+    assert rebuilt.notes["approval_revision_recent_history_replacement_applied"] is True
+    assert any("reopened older revision thread has now been replaced" in item for item in rebuilt.current_findings.warning_findings)

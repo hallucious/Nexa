@@ -12,6 +12,7 @@ from src.designer.control_governance import (
     governance_recent_anchor_resolution_applicability_for_request,
     governance_recent_revision_history_applicability_for_request,
     governance_recent_revision_redirect_archive_applicability_for_request,
+    governance_recent_revision_replacement_applicability_for_request,
 )
 from src.designer.reason_codes import archive_latest_mixed_referential_reason_notes
 from src.designer.models.designer_session_state_card import (
@@ -166,8 +167,10 @@ class DesignerSessionStateCardBuilder:
             notes = self._restore_recent_revision_history_from_redirect_archive(notes, recent_redirect_archive)
             recent_redirect_archive = None
             recent_revision_history = self._recent_approval_revision_history_for_request(notes, request_text)
+        recent_revision_replacement = None if fresh_cycle_from_committed_baseline else self._recent_revision_replacement_for_request(notes, request_text)
         findings = self._apply_recent_revision_history_to_findings(findings, recent_revision_history)
         findings = self._apply_recent_redirect_archive_to_findings(findings, recent_redirect_archive)
+        findings = self._apply_recent_revision_replacement_to_findings(findings, recent_revision_replacement)
         risks = self._apply_pending_anchor_guidance_to_risks(risks, governance_carryover)
         if governance_carryover is not None:
             notes["control_governance_revision_guidance_carryover_status"] = governance_carryover.status
@@ -205,6 +208,14 @@ class DesignerSessionStateCardBuilder:
             notes["approval_revision_redirect_archived_status"] = recent_redirect_archive["status"]
             notes["approval_revision_redirect_archived_summary"] = recent_redirect_archive["summary"]
             notes["approval_revision_redirect_archived_applied"] = recent_redirect_archive["status"] == "visible_mutation"
+        if recent_revision_replacement is not None:
+            notes["approval_revision_recent_history_replacement_status"] = recent_revision_replacement["status"]
+            notes["approval_revision_recent_history_replacement_summary"] = recent_revision_replacement["summary"]
+            notes["approval_revision_recent_history_replacement_applied"] = recent_revision_replacement["status"] == "visible_mutation"
+        else:
+            notes.pop("approval_revision_recent_history_replacement_status", None)
+            notes.pop("approval_revision_recent_history_replacement_summary", None)
+            notes.pop("approval_revision_recent_history_replacement_applied", None)
 
         return DesignerSessionStateCard(
             card_version="0.1",
@@ -415,6 +426,40 @@ class DesignerSessionStateCardBuilder:
             "origin_status": str(snapshot.get("origin_status", "")).strip(),
             "origin_summary": str(snapshot.get("origin_summary", "")).strip(),
         }
+
+    def _recent_revision_replacement_for_request(self, notes: dict[str, Any], request_text: str) -> dict[str, Any] | None:
+        applicability = governance_recent_revision_replacement_applicability_for_request(
+            notes,
+            request_text,
+            mutation_oriented=self._request_is_mutation_oriented(request_text),
+        )
+        snapshot = applicability.snapshot or {}
+        if not snapshot:
+            return None
+        return {
+            "status": applicability.status,
+            "summary": str(snapshot.get("summary", "")).strip() or str(applicability.explanation or "").strip(),
+        }
+
+    def _apply_recent_revision_replacement_to_findings(
+        self,
+        findings: CurrentFindingsState,
+        recent_revision_replacement: dict[str, Any] | None,
+    ) -> CurrentFindingsState:
+        if recent_revision_replacement is None or recent_revision_replacement.get("status") != "visible_mutation":
+            return findings
+        guidance = str(recent_revision_replacement.get("summary", "")).strip()
+        if not guidance:
+            return findings
+        warning_items = tuple(dict.fromkeys((*findings.warning_findings, guidance)))
+        summary = findings.finding_summary or "No blocking findings recorded."
+        summary = f"{summary} A previously reopened older revision thread has now been replaced by a newer active thread and should no longer control nearby continuity."
+        return CurrentFindingsState(
+            blocking_findings=findings.blocking_findings,
+            warning_findings=warning_items,
+            confirmation_findings=findings.confirmation_findings,
+            finding_summary=summary,
+        )
 
     def _archive_recent_revision_history_background(
         self,

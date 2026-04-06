@@ -39,6 +39,7 @@ Repeated referential confirmation loops may raise a control-governance tier that
 If a later referential retry already provides the stronger anchor, stale pending-anchor carryover should be cleared and reduced into a low-priority resolution summary rather than staying active.
 If the user explicitly redirects scope away from the latest clarified revision thread, that older approval/revision continuity must be archived out of active continuity and retained only as low-priority background context.
 If the user later explicitly reopens that archived scope, the restored active continuity must remain marked as reopened-from-archive during its active recent-history window instead of being silently flattened into ordinary recent continuity.
+If that reopened older thread is later replaced by a newer active revision thread, the reopened-from-archive marker must stop driving active continuity and may remain only as short-lived replacement history.
 - Designer AI produces proposals from this card.
 - Designer AI must not silently assume hidden structure or hidden authority.
 

@@ -10,6 +10,7 @@ from src.designer.control_governance import (
     governance_recent_anchor_resolution_applicability_for_request,
     governance_recent_revision_history_applicability_for_request,
     governance_recent_revision_redirect_archive_applicability_for_request,
+    governance_recent_revision_replacement_applicability_for_request,
     requires_explicit_referential_anchor,
 )
 from src.designer.models.designer_intent import (
@@ -570,6 +571,18 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
+        recent_revision_replacement = self._recent_revision_replacement_snapshot_for_request(raw_request_text or request_text, category, context)
+        if recent_revision_replacement:
+            assumptions.append(
+                AssumptionSpec(
+                    text=(
+                        "A previously reopened older revision thread has already been replaced by a newer active revision thread; preserve the newer clarified direction rather than reviving the old reopened scope. "
+                        f"{str(recent_revision_replacement.get('summary', '')).strip()}".strip()
+                    ),
+                    severity="low",
+                    user_visible=True,
+                )
+            )
         return assumptions
 
     def _build_ambiguity_flags(
@@ -823,6 +836,24 @@ class DesignerRequestNormalizer:
             ),
             "reopened_from_redirect_archive": True,
         }
+
+    def _recent_revision_replacement_snapshot_for_request(
+        self,
+        request_text: str,
+        category: str,
+        context: RequestNormalizationContext,
+    ) -> dict[str, Any]:
+        card = context.session_state_card
+        if card is None:
+            return {}
+        applicability = governance_recent_revision_replacement_applicability_for_request(
+            card.notes,
+            request_text,
+            mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
+        )
+        if not applicability.is_visible_mutation:
+            return {}
+        return applicability.snapshot or {}
 
     def _recent_revision_redirect_archive_snapshot_for_request(
         self,

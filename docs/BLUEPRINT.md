@@ -28,6 +28,7 @@ System invariants that MUST NOT be changed:
 14. Once governance carryover has been cleared, its resolution may remain only as low-priority recent-resolution context for later referential follow-up, and any newly unresolved governance revision must supersede and remove that older resolution history.
 15. Explicit scope redirect must archive older approval/revision thread continuity out of the active continuity store; redirected thread history may remain only as low-priority background context and must not continue constraining later mutations as if it were still the active thread.
 16. If the user explicitly reopens an archived redirected scope, the restored active continuity must remain marked as reopened-from-archive during its active recent-history window rather than being silently flattened into ordinary recent continuity.
+17. If a previously reopened older thread is later replaced by a newer active revision thread, the reopened-origin marker must stop governing active continuity and may remain only as short-lived low-priority replacement context.
 
 Any implementation that violates these rules is considered a violation of the Nexa architecture.
 
@@ -528,3 +529,4 @@ Representation {
 
 - Redirected recent revision threads are archived out of active continuity using `approval_revision_redirect_archived_*` notes and are cleared when a new active revision thread forms.
 - Explicit reopen of the archived older scope restores that redirected thread into active continuity and should surface as reopened-thread continuity rather than ordinary recent-history reuse.
+- If that reopened older thread is later replaced by a newer active revision thread, rebuilt session cards and normalization should preserve the newer thread as active continuity and treat the older reopened origin only as short-lived replacement history.

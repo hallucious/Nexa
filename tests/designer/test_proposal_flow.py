@@ -1323,3 +1323,42 @@ def test_request_normalizer_reuses_persisted_reopened_recent_history_on_followup
     )
 
     assert any("explicitly reopens a previously redirected multi-step revision thread" in assumption.text for assumption in intent.assumptions)
+
+
+def test_request_normalizer_prefers_newer_thread_after_reopened_thread_replacement() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-replaced-reopened-thread",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Change provider", clarified_interpretation="Only modify node.final_judge."),
+        notes={
+            "approval_revision_recent_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.final_judge."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.final_judge."},
+            ],
+            "approval_revision_recent_history_count": 2,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 step(s). Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.final_judge.",
+            "approval_revision_recent_history_replacement_status": "replaced_after_reopen",
+            "approval_revision_recent_history_replacement_summary": "A previously reopened older revision thread has now been replaced by a newer active revision thread and should no longer control nearby continuity.",
+            "approval_revision_recent_history_replacement_applied": True,
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Change provider in node.final_judge to Claude.",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert any("reopened older revision thread has already been replaced by a newer active revision thread" in assumption.text for assumption in intent.assumptions)
+    assert not any("explicitly reopens a previously redirected multi-step revision thread" in assumption.text for assumption in intent.assumptions)

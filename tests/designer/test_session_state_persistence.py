@@ -1331,3 +1331,56 @@ def test_new_revision_history_preserves_reopened_origin_marker() -> None:
     updated = coordinator.evolve_after_approval_resolution(current, approval_state=approval)
     assert updated.notes["approval_revision_recent_history_origin_status"] == "reopened_from_redirect_archive"
     assert updated.notes["approval_revision_recent_history_origin_applied"] is True
+
+
+def test_new_revision_history_replaces_reopened_origin_with_newer_active_thread() -> None:
+    coordinator = DesignerSessionStateCoordinator()
+    current = replace(
+        make_card(),
+        notes={
+            **make_card().notes,
+            "approval_revision_recent_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.reviewer."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.reviewer."},
+            ],
+            "approval_revision_recent_history_count": 2,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 step(s). Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.reviewer.",
+            "approval_revision_recent_history_origin_status": "reopened_from_redirect_archive",
+            "approval_revision_recent_history_origin_summary": "A previously redirected revision thread remains active continuity because the user explicitly reopened it.",
+            "approval_revision_recent_history_origin_applied": True,
+        },
+        conversation_context=replace(
+            make_card().conversation_context,
+            clarified_interpretation="Only modify node.final_judge.",
+        ),
+    )
+    approval = DesignerApprovalFlowState(
+        approval_id="approval-replaced-reopened-history",
+        intent_ref="intent-replaced-reopened-history",
+        patch_ref="patch-replaced-reopened-history",
+        precheck_ref="precheck-replaced-reopened-history",
+        preview_ref="preview-replaced-reopened-history",
+        current_stage="awaiting_decision",
+        approval_policy=ApprovalPolicy(),
+        required_decision_points=(DecisionPoint(decision_id="confirm.scope", label="Clarify scope"),),
+        user_decisions=(
+            UserDecision(
+                decision_point_id="confirm.scope",
+                outcome="request_revision",
+                note="Continue with node.final_judge instead.",
+            ),
+        ),
+        final_outcome="revision_requested",
+        explanation="Revision requested before commit.",
+        precheck_status="pass",
+        blocking_finding_count=0,
+        confirmation_finding_count=0,
+        confirmation_resolved=True,
+    )
+
+    updated = coordinator.evolve_after_approval_resolution(current, approval_state=approval)
+
+    assert "approval_revision_recent_history_origin_status" not in updated.notes
+    assert updated.notes["approval_revision_recent_history_replacement_status"] == "replaced_after_reopen"
+    assert updated.notes["approval_revision_recent_history_replacement_applied"] is True
+    assert "replaced by a newer active revision thread" in updated.notes["approval_revision_recent_history_replacement_summary"]

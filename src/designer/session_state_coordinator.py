@@ -7,11 +7,14 @@ from src.designer.control_governance import (
     advance_recent_anchor_resolution_notes,
     advance_recent_revision_history_notes,
     advance_recent_revision_redirect_archive_notes,
+    advance_recent_revision_replacement_notes,
     apply_control_governance_notes,
     clear_recent_anchor_resolution_notes,
     clear_recent_revision_redirect_archive_notes,
+    clear_recent_revision_replacement_notes,
     governance_pending_anchor_applicability_for_request,
     governance_pending_anchor_is_fully_satisfied,
+    _request_explicitly_redirects_recent_revision_scope,
     governance_pending_anchor_resolution_summary,
     governance_revision_guidance_from_notes,
     governance_revision_snapshot_from_notes,
@@ -173,6 +176,7 @@ class DesignerSessionStateCoordinator:
             next_notes = advance_recent_anchor_resolution_notes(next_notes)
         next_notes = advance_recent_revision_history_notes(next_notes)
         next_notes = advance_recent_revision_redirect_archive_notes(next_notes)
+        next_notes = advance_recent_revision_replacement_notes(next_notes)
         next_notes = apply_control_governance_notes(next_notes, next_revision.attempt_history)
         return replace(
             session_state_card,
@@ -386,6 +390,7 @@ class DesignerSessionStateCoordinator:
         history_origin_status = str(cleaned.get("approval_revision_recent_history_origin_status", "")).strip()
         history_origin_summary = str(cleaned.get("approval_revision_recent_history_origin_summary", "")).strip()
         history_origin_applied = bool(cleaned.get("approval_revision_recent_history_origin_applied"))
+        prior_selected_interpretation = str(history[-1].get("selected_interpretation", "")).strip() if history else ""
 
         if approval_state.final_outcome == "revision_requested":
             cleaned = clear_recent_revision_redirect_archive_notes(cleaned)
@@ -406,6 +411,22 @@ class DesignerSessionStateCoordinator:
             }
             history.append(entry)
             history = history[-_RECENT_APPROVAL_REVISION_HISTORY_LIMIT:]
+            if history_origin_status == "reopened_from_redirect_archive" and _request_explicitly_redirects_recent_revision_scope(
+                clarified_interpretation or "",
+                latest_selected_interpretation=prior_selected_interpretation,
+                available_node_refs=(),
+            ):
+                cleaned["approval_revision_recent_history_replacement_status"] = "replaced_after_reopen"
+                cleaned["approval_revision_recent_history_replacement_summary"] = (
+                    "A previously reopened older revision thread has now been replaced by a newer active revision thread and should no longer control nearby continuity."
+                )
+                cleaned["approval_revision_recent_history_replacement_applied"] = True
+                cleaned["approval_revision_recent_history_replacement_age"] = 0
+                history_origin_status = ""
+                history_origin_summary = ""
+                history_origin_applied = False
+            else:
+                cleaned = clear_recent_revision_replacement_notes(cleaned)
 
         cleaned["approval_revision_recent_history"] = history
         cleaned["approval_revision_recent_history_count"] = len(history)
