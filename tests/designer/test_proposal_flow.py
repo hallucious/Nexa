@@ -2083,3 +2083,115 @@ def test_request_normalizer_surfaces_unresolved_insert_topology_without_legacy_f
     assert intent.proposed_actions == ()
     assert any(flag.type == "semantic_grounding_topology_unresolved" for flag in intent.ambiguity_flags)
     assert intent.requires_user_confirmation is True
+
+
+
+def test_request_normalizer_surfaces_partial_grounding_for_multi_action_request() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-partial-grounding",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-8",
+            node_list=("node.reviewer",),
+            provider_refs=("anthropic:claude-sonnet",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(ResourceAvailability(id="anthropic:claude-sonnet"),)
+        ),
+        objective=ObjectiveSpec(primary_goal="Partially upgrade reviewer"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(
+            user_request_text="Have the reviewer use Claude and follow the strict review prompt."
+        ),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                },
+                {
+                    "action_type": "set_prompt",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer"},
+                    "prompt_descriptor": {"resource_type": "prompt", "label_hint": "strict review prompt", "raw_reference_text": "strict review prompt"},
+                },
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude and follow the strict review prompt.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-8", session_state_card=card),
+    )
+
+    assert [action.action_type for action in intent.proposed_actions] == ["replace_provider"]
+    assert intent.proposed_actions[0].parameters["provider_id"] == "anthropic:claude-sonnet"
+    assert any(flag.type == "semantic_grounding_partial_resolution" for flag in intent.ambiguity_flags)
+    assert any(flag.type == "semantic_grounding_resource_unresolved" for flag in intent.ambiguity_flags)
+    assert any("Only part of the semantic request could be grounded deterministically." in assumption.text for assumption in intent.assumptions)
+    assert "Some requested actions were grounded successfully" in intent.explanation
+    assert intent.requires_user_confirmation is True
+
+
+
+def test_request_normalizer_surfaces_persistent_semantic_clarification_loop_after_user_correction() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-clarification-loop",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-9",
+            node_list=("node.reviewer", "node.reviewer_shadow"),
+            provider_refs=("anthropic:claude-sonnet",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(ResourceAvailability(id="anthropic:claude-sonnet"),)
+        ),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(user_corrections=("I mean the shadow reviewer node.",)),
+        conversation_context=ConversationContext(
+            user_request_text="Have the reviewer use Claude instead.",
+            clarified_interpretation="Use the shadow reviewer node, not the main reviewer.",
+        ),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "confidence_hint": 0.34,
+            "clarification_required": True,
+            "clarification_questions": ["Do you mean node.reviewer or node.reviewer_shadow?"],
+            "semantic_ambiguity_notes": ["The semantic layer still cannot determine which reviewer-like node should change."],
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "role_hint": "review"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                }
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude instead.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-9", session_state_card=card),
+    )
+
+    assert intent.requires_user_confirmation is True
+    assert any(flag.type == "semantic_interpretation_requires_clarification" for flag in intent.ambiguity_flags)
+    assert any(flag.type == "semantic_clarification_loop_persisting" for flag in intent.ambiguity_flags)
+    assert any("persistent clarification loop" in assumption.text for assumption in intent.assumptions)
+    assert "A prior clarification is already present" in intent.explanation
+    assert intent.confidence == 0.34

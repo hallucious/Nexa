@@ -96,9 +96,10 @@ class DesignerRequestNormalizer:
         scope = grounded_intent.target_scope
         actions = self._build_actions(category, effective_request_text, scope, context, grounded_intent=grounded_intent)
         assumptions = self._build_assumptions(category, effective_request_text, context, raw_request_text=request_text)
-        assumptions.extend(self._build_semantic_assumptions(semantic_intent))
+        assumptions.extend(self._build_semantic_assumptions(semantic_intent, context=context))
+        assumptions.extend(self._build_grounding_assumptions(grounded_intent))
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
-        ambiguity_flags.extend(self._build_semantic_ambiguity_flags(semantic_intent))
+        ambiguity_flags.extend(self._build_semantic_ambiguity_flags(semantic_intent, context=context))
         ambiguity_flags.extend(self._build_grounding_ambiguity_flags(grounded_intent))
         risk_flags = self._build_risk_flags(effective_request_text, context)
         requires_confirmation = bool(
@@ -638,7 +639,7 @@ class DesignerRequestNormalizer:
             )
         return assumptions
 
-    def _build_semantic_assumptions(self, semantic_intent) -> list[AssumptionSpec]:
+    def _build_semantic_assumptions(self, semantic_intent, *, context: RequestNormalizationContext) -> list[AssumptionSpec]:
         assumptions: list[AssumptionSpec] = []
         for note in semantic_intent.semantic_ambiguity_notes:
             assumptions.append(
@@ -648,9 +649,20 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
+        if self._semantic_clarification_loop_persisting(semantic_intent, context):
+            assumptions.append(
+                AssumptionSpec(
+                    text=(
+                        "A prior clarification attempt is already present in the session context, "
+                        "but the semantic interpreter still requires clarification. Treat this as a persistent clarification loop until the target or action is made more explicit."
+                    ),
+                    severity="medium",
+                    user_visible=True,
+                )
+            )
         return assumptions
 
-    def _build_semantic_ambiguity_flags(self, semantic_intent) -> list[AmbiguityFlag]:
+    def _build_semantic_ambiguity_flags(self, semantic_intent, *, context: RequestNormalizationContext) -> list[AmbiguityFlag]:
         flags: list[AmbiguityFlag] = []
         if semantic_intent.clarification_required:
             description = (
@@ -664,12 +676,50 @@ class DesignerRequestNormalizer:
                     description=description,
                 )
             )
+            if self._semantic_clarification_loop_persisting(semantic_intent, context):
+                flags.append(
+                    AmbiguityFlag(
+                        type="semantic_clarification_loop_persisting",
+                        description="The user already provided a clarification context, but the semantic interpreter still cannot resolve the request without another clarification pass.",
+                    )
+                )
         return flags
+
+    def _build_grounding_assumptions(self, grounded_intent) -> list[AssumptionSpec]:
+        if grounded_intent is None:
+            return []
+        assumptions: list[AssumptionSpec] = []
+        semantic_count = len(grounded_intent.semantic_intent.action_candidates)
+        grounded_count = len(grounded_intent.grounded_action_candidates)
+        if semantic_count > grounded_count and grounded_count > 0:
+            assumptions.append(
+                AssumptionSpec(
+                    text=(
+                        "Only part of the semantic request could be grounded deterministically. "
+                        f"{grounded_count} of {semantic_count} requested action(s) were preserved as concrete mutations; the remaining actions require clarification or better structural anchors."
+                    ),
+                    severity="medium",
+                    user_visible=True,
+                )
+            )
+        return assumptions
 
     def _build_grounding_ambiguity_flags(self, grounded_intent) -> list[AmbiguityFlag]:
         if grounded_intent is None:
             return []
         flags: list[AmbiguityFlag] = []
+        semantic_count = len(grounded_intent.semantic_intent.action_candidates)
+        grounded_count = len(grounded_intent.grounded_action_candidates)
+        if semantic_count > grounded_count and grounded_count > 0:
+            flags.append(
+                AmbiguityFlag(
+                    type="semantic_grounding_partial_resolution",
+                    description=(
+                        "Some semantic actions were grounded successfully, but at least one action remained unresolved. "
+                        f"Grounded {grounded_count} of {semantic_count} requested actions."
+                    ),
+                )
+            )
         for note in grounded_intent.grounding_notes:
             if note.startswith("grounding_ambiguous_target:"):
                 refs = note.split(":", 1)[1]
@@ -875,10 +925,15 @@ class DesignerRequestNormalizer:
         semantic_intent,
     ) -> str:
         message = f"Normalized request into {category} with target scope mode '{scope.mode}'."
+        flag_types = {flag.type for flag in ambiguity_flags}
         if semantic_intent.clarification_required and semantic_intent.clarification_questions:
             message += " Clarification needed: " + "; ".join(semantic_intent.clarification_questions)
+            if "semantic_clarification_loop_persisting" in flag_types:
+                message += " A prior clarification is already present, so this request remains in a clarification loop until the target or action is made more explicit."
         elif ambiguity_flags:
             message += " User confirmation is required before any commit boundary is crossed."
+        if "semantic_grounding_partial_resolution" in flag_types:
+            message += " Some requested actions were grounded successfully, but at least one action remains unresolved."
         return message
 
     def _estimate_confidence(self, ambiguity_flags: list[AmbiguityFlag], *, semantic_intent) -> float:
@@ -886,6 +941,20 @@ class DesignerRequestNormalizer:
         if semantic_intent.clarification_required:
             base = min(base, 0.45)
         return min(base, semantic_intent.confidence_hint)
+
+    def _semantic_clarification_loop_persisting(
+        self,
+        semantic_intent,
+        context: RequestNormalizationContext,
+    ) -> bool:
+        if not semantic_intent.clarification_required:
+            return False
+        card = context.session_state_card
+        if card is None:
+            return False
+        if card.conversation_context.clarified_interpretation:
+            return True
+        return bool(card.revision_state.user_corrections)
 
     def _repeated_cycle_referential_anchor_required(
         self,
