@@ -1384,3 +1384,6 @@ def test_new_revision_history_replaces_reopened_origin_with_newer_active_thread(
     assert updated.notes["approval_revision_recent_history_replacement_status"] == "replaced_after_reopen"
     assert updated.notes["approval_revision_recent_history_replacement_applied"] is True
     assert "replaced by a newer active revision thread" in updated.notes["approval_revision_recent_history_replacement_summary"]
+    assert updated.notes["approval_revision_recent_history_count"] == 1
+    assert len(updated.notes["approval_revision_recent_history"]) == 1
+    assert updated.notes["approval_revision_recent_history"][0]["selected_interpretation"] == "Only modify node.final_judge."

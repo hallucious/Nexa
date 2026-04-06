@@ -1344,11 +1344,10 @@ def test_request_normalizer_prefers_newer_thread_after_reopened_thread_replaceme
         conversation_context=ConversationContext(user_request_text="Change provider", clarified_interpretation="Only modify node.final_judge."),
         notes={
             "approval_revision_recent_history": [
-                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.final_judge."},
                 {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.final_judge."},
             ],
-            "approval_revision_recent_history_count": 2,
-            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 step(s). Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.final_judge.",
+            "approval_revision_recent_history_count": 1,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 1 step(s). Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.final_judge.",
             "approval_revision_recent_history_replacement_status": "replaced_after_reopen",
             "approval_revision_recent_history_replacement_summary": "A previously reopened older revision thread has now been replaced by a newer active revision thread and should no longer control nearby continuity.",
             "approval_revision_recent_history_replacement_applied": True,

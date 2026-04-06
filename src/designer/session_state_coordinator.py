@@ -422,6 +422,7 @@ class DesignerSessionStateCoordinator:
                 )
                 cleaned["approval_revision_recent_history_replacement_applied"] = True
                 cleaned["approval_revision_recent_history_replacement_age"] = 0
+                history = [entry]
                 history_origin_status = ""
                 history_origin_summary = ""
                 history_origin_applied = False
