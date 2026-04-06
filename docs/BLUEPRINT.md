@@ -519,3 +519,5 @@ Representation {
 * persisted governance carryover is now request-applicability-aware at rebuilt session-card time: non-referential follow-up requests should not keep surfacing stale pending-anchor risk, and already-anchored referential retries should surface carryover as warning-level context rather than unresolved-governance pressure
 
 * approval-boundary continuation now keeps a compact recent revision history (bounded) so rebuilt session cards and the normalizer can recognize longer multi-step revision threads and preserve the latest clarified direction unless the user explicitly redirects scope
+
+* compact recent approval/revision continuity is now redirect-aware: if a new mutation request explicitly redirects scope away from the latest clarified interpretation, rebuilt session cards and normalization retain the old thread only as background history instead of surfacing it as active continuity pressure

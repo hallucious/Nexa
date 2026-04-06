@@ -126,6 +126,25 @@ class RecentAnchorResolutionApplicability:
         return self.status == "expired_recent_followup"
 
 
+@dataclass(frozen=True)
+class RecentRevisionHistoryApplicability:
+    status: str = "none"
+    snapshot: dict[str, Any] | None = None
+    explanation: str = ""
+
+    @property
+    def is_visible_mutation(self) -> bool:
+        return self.status == "visible_mutation"
+
+    @property
+    def is_hidden_read_only(self) -> bool:
+        return self.status == "hidden_read_only"
+
+    @property
+    def is_redirect_scope(self) -> bool:
+        return self.status == "redirect_scope"
+
+
 def governance_pending_anchor_is_fully_satisfied(
     applicability: PendingAnchorCarryoverApplicability,
     *,
@@ -539,6 +558,7 @@ def _extract_node_refs_for_governance(request_text: str) -> tuple[str, ...]:
         r"\bon\s+node\s+([A-Za-z0-9_\-\.]+)",
         r"\bfor\s+node\s+([A-Za-z0-9_\-\.]+)",
         r"\bat\s+node\s+([A-Za-z0-9_\-\.]+)",
+        r"\bnode\.([A-Za-z0-9_\-\.]+)",
         r"\bnode\s+([A-Za-z0-9_\-\.]+)",
     )
     stopwords = {"before", "after", "between", "final", "a", "an", "the"}
@@ -612,6 +632,40 @@ def _request_has_explicit_anchor(
         available_node_refs=available_node_refs,
     )
     return bool(explicit_node_refs)
+
+
+def _request_explicitly_redirects_recent_revision_scope(
+    request_text: str,
+    *,
+    latest_selected_interpretation: str,
+    available_node_refs: Sequence[str] = (),
+) -> bool:
+    if not request_text.strip() or not latest_selected_interpretation.strip():
+        return False
+    request_refs = set(
+        _resolve_node_refs_for_governance(
+            _extract_node_refs_for_governance(request_text),
+            available_node_refs=available_node_refs,
+        )
+    )
+    latest_refs = set(
+        _resolve_node_refs_for_governance(
+            _extract_node_refs_for_governance(latest_selected_interpretation),
+            available_node_refs=available_node_refs,
+        )
+    )
+    if request_refs and latest_refs and request_refs.isdisjoint(latest_refs):
+        return True
+    text = request_text.casefold()
+    redirect_patterns = (
+        r"instead",
+        r"rather than",
+        r"switch to",
+        r"focus on",
+        r"redirect scope",
+        r"different node",
+    )
+    return bool(request_refs) and any(re.search(pattern, text) for pattern in redirect_patterns)
 
 
 def governance_revision_guidance_from_notes(notes: Mapping[str, Any]) -> str:
@@ -779,6 +833,53 @@ def governance_recent_anchor_resolution_applicability_for_request(
         status="visible_referential",
         snapshot=snapshot,
         explanation=explanation,
+    )
+
+
+def governance_recent_revision_history_applicability_for_request(
+    notes: Mapping[str, Any],
+    request_text: str,
+    *,
+    mutation_oriented: bool,
+    available_node_refs: Sequence[str] = (),
+) -> RecentRevisionHistoryApplicability:
+    raw_history = notes.get("approval_revision_recent_history", ())
+    history = [dict(item) for item in raw_history if isinstance(item, Mapping)] if isinstance(raw_history, (list, tuple)) else []
+    if len(history) < 2:
+        return RecentRevisionHistoryApplicability(status="none", snapshot={})
+    summary = str(notes.get("approval_revision_recent_history_summary", "")).strip()
+    latest = history[-1]
+    selected = str(latest.get("selected_interpretation", "")).strip()
+    snapshot = {
+        "count": len(history),
+        "summary": summary,
+        "history": history,
+        "latest_selected_interpretation": selected,
+    }
+    if not mutation_oriented:
+        return RecentRevisionHistoryApplicability(
+            status="hidden_read_only",
+            snapshot=snapshot,
+            explanation="The current request is read-only, so recent approval/revision continuity remains hidden background context.",
+        )
+    if _request_explicitly_redirects_recent_revision_scope(
+        request_text,
+        latest_selected_interpretation=selected,
+        available_node_refs=available_node_refs,
+    ):
+        return RecentRevisionHistoryApplicability(
+            status="redirect_scope",
+            snapshot=snapshot,
+            explanation=(
+                "The current mutation request appears to intentionally redirect scope away from the latest clarified interpretation, so recent approval/revision continuity should remain background history instead of constraining the next mutation."
+            ),
+        )
+    return RecentRevisionHistoryApplicability(
+        status="visible_mutation",
+        snapshot=snapshot,
+        explanation=(
+            "The current mutation request continues a recent multi-step approval/revision thread and should preserve the latest clarified interpretation unless the user explicitly redirects scope."
+        ),
     )
 
 

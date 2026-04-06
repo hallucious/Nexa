@@ -360,3 +360,5 @@ CLI
 * persisted governance revision-guidance carryover is now request-applicability-aware in rebuilt session cards: non-referential follow-up requests stay visually cleaner, while anchored referential retries downgrade carryover from unresolved-risk surfacing to warning-level context instead of repeating full pending-anchor pressure
 
 * approval-boundary continuation now keeps a compact recent revision history (bounded) so rebuilt session cards and the normalizer can recognize longer multi-step revision threads and preserve the latest clarified direction unless the user explicitly redirects scope
+
+* compact recent approval/revision continuity is now redirect-aware: if a new mutation request explicitly redirects scope away from the latest clarified interpretation, rebuilt session cards and normalization retain the old thread only as background history instead of surfacing it as active continuity pressure

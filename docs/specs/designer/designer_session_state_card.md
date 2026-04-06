@@ -605,3 +605,5 @@ Action-resolution rule:
 * cleared governance carryover may survive for one nearby follow-up cycle as low-priority recent-resolution context, but it should expire after that short window rather than lingering indefinitely in session continuity
 
 * approval-boundary continuation now keeps a compact recent revision history (bounded) so rebuilt session cards and the normalizer can recognize longer multi-step revision threads and preserve the latest clarified direction unless the user explicitly redirects scope
+
+* compact recent approval/revision continuity is now redirect-aware: if a new mutation request explicitly redirects scope away from the latest clarified interpretation, rebuilt session cards and normalization retain the old thread only as background history instead of surfacing it as active continuity pressure

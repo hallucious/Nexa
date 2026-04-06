@@ -1176,3 +1176,38 @@ def test_request_normalizer_hides_recent_multi_step_revision_history_for_read_on
     )
 
     assert all("multi-step revision thread" not in assumption.text for assumption in intent.assumptions)
+
+
+def test_normalizer_ignores_recent_revision_history_when_scope_redirects() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-recent-revision-history-redirect",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Change provider in node reviewer to Claude", clarified_interpretation="Only modify node.reviewer."),
+        notes={
+            "approval_revision_recent_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.reviewer."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.reviewer."},
+            ],
+            "approval_revision_recent_history_count": 2,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 step(s). Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.reviewer.",
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Instead, change node.final_judge provider.",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert all("multi-step revision thread" not in assumption.text for assumption in intent.assumptions)

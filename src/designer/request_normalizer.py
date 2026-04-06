@@ -8,6 +8,7 @@ import re
 from src.designer.control_governance import (
     governance_pending_anchor_applicability_for_request,
     governance_recent_anchor_resolution_applicability_for_request,
+    governance_recent_revision_history_applicability_for_request,
     requires_explicit_referential_anchor,
 )
 from src.designer.models.designer_intent import (
@@ -54,7 +55,7 @@ class DesignerRequestNormalizer:
         category = self._infer_category(effective_request_text)
         scope = self._build_scope(category, effective_request_text, context)
         actions = self._build_actions(category, effective_request_text, scope, context)
-        assumptions = self._build_assumptions(category, effective_request_text, context)
+        assumptions = self._build_assumptions(category, effective_request_text, context, raw_request_text=request_text)
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
         risk_flags = self._build_risk_flags(effective_request_text, context)
         requires_confirmation = bool(ambiguity_flags or [flag for flag in risk_flags if flag.severity == "high"])
@@ -394,6 +395,8 @@ class DesignerRequestNormalizer:
         category: str,
         request_text: str,
         context: RequestNormalizationContext,
+        *,
+        raw_request_text: str | None = None,
     ) -> list[AssumptionSpec]:
         assumptions: list[AssumptionSpec] = []
         if category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"} and context.working_save_ref is None:
@@ -531,7 +534,7 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
-        recent_revision_history = self._recent_revision_history_snapshot_for_request(request_text, category, context)
+        recent_revision_history = self._recent_revision_history_snapshot_for_request(raw_request_text or request_text, category, context)
         if recent_revision_history:
             assumptions.append(
                 AssumptionSpec(
@@ -758,16 +761,15 @@ class DesignerRequestNormalizer:
         card = context.session_state_card
         if card is None:
             return {}
-        if category in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"}:
+        applicability = governance_recent_revision_history_applicability_for_request(
+            card.notes,
+            request_text,
+            mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
+            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
+        )
+        if not applicability.is_visible_mutation:
             return {}
-        raw_history = card.notes.get("approval_revision_recent_history", ())
-        history = [dict(item) for item in raw_history if isinstance(item, dict)] if isinstance(raw_history, (list, tuple)) else []
-        if len(history) < 2:
-            return {}
-        return {
-            "count": len(history),
-            "summary": str(card.notes.get("approval_revision_recent_history_summary", "")).strip(),
-        }
+        return applicability.snapshot or {}
 
     def _pending_anchor_snapshot_for_request(
         self,

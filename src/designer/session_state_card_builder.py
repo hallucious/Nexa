@@ -9,6 +9,7 @@ from src.designer.control_governance import (
     apply_control_governance_notes,
     governance_pending_anchor_applicability_for_request,
     governance_recent_anchor_resolution_applicability_for_request,
+    governance_recent_revision_history_applicability_for_request,
 )
 from src.designer.reason_codes import archive_latest_mixed_referential_reason_notes
 from src.designer.models.designer_session_state_card import (
@@ -350,21 +351,26 @@ class DesignerSessionStateCardBuilder:
         )
 
     def _recent_approval_revision_history_for_request(self, notes: dict[str, Any], request_text: str) -> dict[str, Any] | None:
-        raw_history = notes.get("approval_revision_recent_history", ())
-        history = [dict(item) for item in raw_history if isinstance(item, dict)] if isinstance(raw_history, (list, tuple)) else []
-        if len(history) < 2:
+        applicability = governance_recent_revision_history_applicability_for_request(
+            notes,
+            request_text,
+            mutation_oriented=self._request_is_mutation_oriented(request_text),
+            available_node_refs=(),
+        )
+        snapshot = applicability.snapshot or {}
+        if not snapshot:
             return None
-        summary = str(notes.get("approval_revision_recent_history_summary", "")).strip()
-        status = "visible_mutation" if self._request_is_mutation_oriented(request_text) else "hidden_read_only"
-        latest = history[-1]
-        selected = str(latest.get("selected_interpretation", "")).strip()
-        if selected:
+        summary = str(snapshot.get("summary", "")).strip()
+        selected = str(snapshot.get("latest_selected_interpretation", "")).strip()
+        if applicability.is_visible_mutation and selected:
             summary = f"{summary} Keep the next mutation aligned with the latest clarified interpretation unless you intentionally redirect scope.".strip()
+        elif applicability.is_redirect_scope:
+            summary = f"{summary} The current mutation appears to intentionally redirect scope, so older revision-thread continuity is retained only as background history.".strip()
         return {
-            "status": status,
-            "count": len(history),
-            "summary": summary or f"Recent approval/revision continuity includes {len(history)} steps.",
-            "history": history,
+            "status": applicability.status,
+            "count": int(snapshot.get("count", 0) or 0),
+            "summary": summary or f"Recent approval/revision continuity includes {int(snapshot.get('count', 0) or 0)} steps.",
+            "history": list(snapshot.get("history", [])),
         }
 
     def _apply_recent_revision_history_to_findings(
