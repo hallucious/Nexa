@@ -75,6 +75,7 @@ The current repository state includes the following implemented surface:
 * current storage-sector state is final hardening + spec ↔ implementation sync, not future-only foundation work
 * mixed referential rollback+edit requests now surface explicit confirmation reasons through Designer precheck/preview instead of living only inside request normalization
 * repeated referential confirmation loops now raise a persisted control-governance policy tier, and that tier is surfaced back through Designer precheck/preview as explicit anchor-required guidance rather than remaining notes-only state
+* pending governance anchor-carryover is now cleared once a later referential retry satisfies the stronger-anchor requirement, instead of lingering indefinitely as stale continuity pressure
 
 ---
 

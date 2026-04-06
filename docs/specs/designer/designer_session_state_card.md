@@ -36,6 +36,7 @@ Successful commit must remove stale fresh-cycle markers and reduce them back int
 Committed-summary exposure must remain priority-aware: the latest committed summary is primary, while older retained summaries are exposed only as low-priority history/reference context.
 Referential requests such as "previous change" or "last commit" must bias interpretation toward the latest committed summary first unless the user clarifies otherwise.
 Repeated referential confirmation loops may raise a control-governance tier that requires a stronger anchor before auto-resolution resumes.
+If a later referential retry already provides the stronger anchor, stale pending-anchor carryover should be cleared and reduced into a low-priority resolution summary rather than staying active.
 - Designer AI produces proposals from this card.
 - Designer AI must not silently assume hidden structure or hidden authority.
 

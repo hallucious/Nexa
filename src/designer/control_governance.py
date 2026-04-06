@@ -106,6 +106,30 @@ class PendingAnchorCarryoverApplicability:
         return self.status == "hidden_nonreferential"
 
 
+def governance_pending_anchor_is_fully_satisfied(
+    applicability: PendingAnchorCarryoverApplicability,
+    *,
+    governance_issue_codes: Sequence[str] = (),
+) -> bool:
+    if not applicability.is_anchored:
+        return False
+    return not any(
+        is_governance_confirmation_issue_code(code) and not str(code).endswith("_ANCHORED")
+        for code in governance_issue_codes
+    )
+
+
+def governance_pending_anchor_resolution_summary(
+    applicability: PendingAnchorCarryoverApplicability,
+) -> str:
+    summary = applicability.explanation.strip()
+    if applicability.next_actions:
+        pretty = ", then ".join(str(item).replace("_", " ") for item in applicability.next_actions)
+        suffix = f"Next safe step: {pretty}."
+        return _join_governance_parts(summary, suffix)
+    return summary
+
+
 @dataclass(frozen=True)
 class ControlGovernanceApplicability:
     policy: ControlGovernancePolicy

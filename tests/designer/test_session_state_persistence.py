@@ -1079,3 +1079,75 @@ def test_persisted_session_rebuild_tracks_safe_cycle_decay_progress_for_strict_g
     assert rebuilt.notes["control_governance_ambiguity_pressure_score"] == 3
     assert rebuilt.notes["control_governance_ambiguity_pressure_band"] == "elevated"
     assert rebuilt.notes["control_governance_pressure_transition"] == "safe_cycle_relief_step"
+
+
+def test_control_result_clears_pending_anchor_requirement_after_anchored_retry() -> None:
+    flow = DesignerProposalFlow()
+    card = replace(
+        make_card(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change on node reviewer"),
+        notes={
+            **make_card().notes,
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+            "control_governance_pending_anchor_requirement": True,
+            "control_governance_pending_anchor_requirement_mode": "required",
+            "control_governance_last_revision_guidance": "Provide an explicit commit anchor before the next revision attempt.",
+            "control_governance_last_revision_pressure_summary": "Ambiguity pressure remains 5/5 (strict band), so do not fall back to loose selectors.",
+            "control_governance_last_revision_pressure_score": 5,
+            "control_governance_last_revision_pressure_band": "strict",
+            "control_governance_last_revision_next_actions": [
+                "provide_explicit_anchor",
+                "restate_request_with_stronger_selector",
+            ],
+        },
+    )
+
+    controlled = flow.propose_with_control(
+        "Undo the last change on node reviewer",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+    updated = DesignerSessionStateCoordinator().evolve_after_control_result(card, controlled)
+
+    assert "control_governance_pending_anchor_requirement" not in updated.notes
+    assert "control_governance_pending_anchor_requirement_mode" not in updated.notes
+    assert updated.notes["control_governance_last_pending_anchor_resolution_status"] == "cleared_by_anchored_retry"
+    assert updated.notes["control_governance_last_pending_anchor_resolution_request_text"] == "Undo the last change on node reviewer"
+    assert "stronger referential anchor" in updated.notes["control_governance_last_pending_anchor_resolution_summary"]
+
+
+def test_control_result_keeps_pending_anchor_requirement_for_nonreferential_followup() -> None:
+    flow = DesignerProposalFlow()
+    card = replace(
+        make_card(),
+        conversation_context=ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+        notes={
+            **make_card().notes,
+            "commit_summary_history": [
+                {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+            "control_governance_pending_anchor_requirement": True,
+            "control_governance_pending_anchor_requirement_mode": "required",
+            "control_governance_last_revision_guidance": "Provide an explicit commit anchor before the next revision attempt.",
+            "control_governance_last_revision_pressure_summary": "Ambiguity pressure remains 5/5 (strict band), so do not fall back to loose selectors.",
+            "control_governance_last_revision_pressure_score": 5,
+            "control_governance_last_revision_pressure_band": "strict",
+            "control_governance_last_revision_next_actions": [
+                "provide_explicit_anchor",
+                "restate_request_with_stronger_selector",
+            ],
+        },
+    )
+
+    controlled = flow.propose_with_control(
+        "Change provider in node reviewer to Claude",
+        working_save_ref="ws-001",
+        session_state_card=card,
+    )
+    updated = DesignerSessionStateCoordinator().evolve_after_control_result(card, controlled)
+
+    assert updated.notes["control_governance_pending_anchor_requirement"] is True
+    assert updated.notes["control_governance_pending_anchor_requirement_mode"] == "required"
+    assert "control_governance_last_pending_anchor_resolution_status" not in updated.notes

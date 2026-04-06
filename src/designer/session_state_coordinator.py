@@ -5,8 +5,12 @@ from dataclasses import replace
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.control_governance import (
     apply_control_governance_notes,
+    governance_pending_anchor_applicability_for_request,
+    governance_pending_anchor_is_fully_satisfied,
+    governance_pending_anchor_resolution_summary,
     governance_revision_guidance_from_notes,
     governance_revision_snapshot_from_notes,
+    is_governance_confirmation_issue_code,
     is_governance_decision_id,
 )
 from src.designer.models.designer_proposal_control import DesignerControlledProposalResult
@@ -108,6 +112,17 @@ class DesignerSessionStateCoordinator:
         )
 
         latest_attempt = control_state.history[-1] if control_state.history else None
+        pending_anchor_applicability = governance_pending_anchor_applicability_for_request(
+            session_state_card.notes,
+            session_state_card.conversation_context.user_request_text,
+            available_node_refs=session_state_card.current_working_save.node_list,
+            commit_history=tuple(item for item in session_state_card.notes.get("commit_summary_history", ()) if isinstance(item, dict)),
+        )
+        governance_issue_codes = tuple(
+            finding.issue_code
+            for finding in (bundle.precheck.confirmation_findings if bundle is not None else ())
+            if is_governance_confirmation_issue_code(finding.issue_code)
+        )
         next_notes = {
             **session_state_card.notes,
             "last_control_action": control_state.next_action,
@@ -128,6 +143,24 @@ class DesignerSessionStateCoordinator:
             )
         else:
             next_notes = clear_active_mixed_referential_reason_notes(next_notes)
+        if governance_pending_anchor_is_fully_satisfied(
+            pending_anchor_applicability,
+            governance_issue_codes=governance_issue_codes,
+        ):
+            next_notes.pop("control_governance_pending_anchor_requirement", None)
+            next_notes.pop("control_governance_pending_anchor_requirement_mode", None)
+            next_notes.pop("control_governance_last_revision_guidance", None)
+            next_notes.pop("control_governance_last_revision_pressure_summary", None)
+            next_notes.pop("control_governance_last_revision_pressure_score", None)
+            next_notes.pop("control_governance_last_revision_pressure_band", None)
+            next_notes.pop("control_governance_last_revision_next_actions", None)
+            next_notes["control_governance_last_pending_anchor_resolution_status"] = "cleared_by_anchored_retry"
+            next_notes["control_governance_last_pending_anchor_resolution_summary"] = governance_pending_anchor_resolution_summary(
+                pending_anchor_applicability
+            )
+            next_notes["control_governance_last_pending_anchor_resolution_request_text"] = (
+                session_state_card.conversation_context.user_request_text
+            )
         next_notes = apply_control_governance_notes(next_notes, next_revision.attempt_history)
         return replace(
             session_state_card,
