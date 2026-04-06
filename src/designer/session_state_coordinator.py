@@ -5,8 +5,10 @@ from dataclasses import replace
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.control_governance import (
     advance_recent_anchor_resolution_notes,
+    advance_recent_revision_redirect_archive_notes,
     apply_control_governance_notes,
     clear_recent_anchor_resolution_notes,
+    clear_recent_revision_redirect_archive_notes,
     governance_pending_anchor_applicability_for_request,
     governance_pending_anchor_is_fully_satisfied,
     governance_pending_anchor_resolution_summary,
@@ -168,6 +170,7 @@ class DesignerSessionStateCoordinator:
             next_notes["control_governance_last_pending_anchor_resolution_age"] = 0
         else:
             next_notes = advance_recent_anchor_resolution_notes(next_notes)
+        next_notes = advance_recent_revision_redirect_archive_notes(next_notes)
         next_notes = apply_control_governance_notes(next_notes, next_revision.attempt_history)
         return replace(
             session_state_card,
@@ -377,12 +380,7 @@ class DesignerSessionStateCoordinator:
         history = [dict(item) for item in raw_history if isinstance(item, dict)] if isinstance(raw_history, (list, tuple)) else []
 
         if approval_state.final_outcome == "revision_requested":
-            for archive_key in (
-                "approval_revision_redirect_archived_status",
-                "approval_revision_redirect_archived_summary",
-                "approval_revision_redirect_archived_applied",
-            ):
-                cleaned.pop(archive_key, None)
+            cleaned = clear_recent_revision_redirect_archive_notes(cleaned)
             modes: list[str] = []
             for decision in approval_state.user_decisions:
                 if decision.outcome in {"choose_interpretation", "request_revision", "narrow_scope"} and decision.outcome not in modes:

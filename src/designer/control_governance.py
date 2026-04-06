@@ -12,6 +12,7 @@ _REPEAT_CONFIRMATION_THRESHOLD = 2
 _STRICT_REPEAT_THRESHOLD = 3
 _SAFE_CYCLE_DECAY_THRESHOLD = 2
 _RECENT_ANCHOR_RESOLUTION_RETENTION_CYCLES = 1
+_RECENT_REVISION_REDIRECT_ARCHIVE_RETENTION_CYCLES = 2
 
 _ELEVATED_PRESSURE_SCORE = 2
 _STRICT_PRESSURE_SCORE = 4
@@ -143,6 +144,25 @@ class RecentRevisionHistoryApplicability:
     @property
     def is_redirect_scope(self) -> bool:
         return self.status == "redirect_scope"
+
+
+@dataclass(frozen=True)
+class RecentRevisionRedirectArchiveApplicability:
+    status: str = "none"
+    snapshot: dict[str, Any] | None = None
+    explanation: str = ""
+
+    @property
+    def is_visible_mutation(self) -> bool:
+        return self.status == "visible_mutation"
+
+    @property
+    def is_hidden_read_only(self) -> bool:
+        return self.status == "hidden_read_only"
+
+    @property
+    def is_expired(self) -> bool:
+        return self.status == "expired_recent_followup"
 
 
 def governance_pending_anchor_is_fully_satisfied(
@@ -833,6 +853,77 @@ def governance_recent_anchor_resolution_applicability_for_request(
         status="visible_referential",
         snapshot=snapshot,
         explanation=explanation,
+    )
+
+
+def governance_recent_revision_redirect_archive_snapshot_from_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    status = str(notes.get("approval_revision_redirect_archived_status", "")).strip()
+    if not status:
+        return {}
+    raw_history = notes.get("approval_revision_redirect_archived_history", ())
+    history = [dict(item) for item in raw_history if isinstance(item, Mapping)] if isinstance(raw_history, (list, tuple)) else []
+    return {
+        "status": status,
+        "summary": str(notes.get("approval_revision_redirect_archived_summary", "")).strip(),
+        "history": history,
+        "count": int(notes.get("approval_revision_redirect_archived_count", len(history)) or 0),
+        "age": int(notes.get("approval_revision_redirect_archived_age", 0) or 0),
+    }
+
+
+def clear_recent_revision_redirect_archive_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    next_notes = dict(notes)
+    for key in (
+        "approval_revision_redirect_archived_status",
+        "approval_revision_redirect_archived_summary",
+        "approval_revision_redirect_archived_applied",
+        "approval_revision_redirect_archived_history",
+        "approval_revision_redirect_archived_count",
+        "approval_revision_redirect_archived_age",
+    ):
+        next_notes.pop(key, None)
+    return next_notes
+
+
+def advance_recent_revision_redirect_archive_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    snapshot = governance_recent_revision_redirect_archive_snapshot_from_notes(notes)
+    if not snapshot:
+        return dict(notes)
+    next_age = int(snapshot.get("age", 0) or 0) + 1
+    if next_age >= _RECENT_REVISION_REDIRECT_ARCHIVE_RETENTION_CYCLES:
+        return clear_recent_revision_redirect_archive_notes(notes)
+    next_notes = dict(notes)
+    next_notes["approval_revision_redirect_archived_age"] = next_age
+    return next_notes
+
+
+def governance_recent_revision_redirect_archive_applicability_for_request(
+    notes: Mapping[str, Any],
+    request_text: str,
+    *,
+    mutation_oriented: bool,
+) -> RecentRevisionRedirectArchiveApplicability:
+    snapshot = governance_recent_revision_redirect_archive_snapshot_from_notes(notes)
+    if not snapshot:
+        return RecentRevisionRedirectArchiveApplicability(status="none", snapshot={})
+    if int(snapshot.get("age", 0) or 0) >= _RECENT_REVISION_REDIRECT_ARCHIVE_RETENTION_CYCLES:
+        return RecentRevisionRedirectArchiveApplicability(
+            status="expired_recent_followup",
+            snapshot=snapshot,
+            explanation="A previous revision-thread redirect archive is now outside the short-lived background-retention window.",
+        )
+    if not mutation_oriented:
+        return RecentRevisionRedirectArchiveApplicability(
+            status="hidden_read_only",
+            snapshot=snapshot,
+            explanation="A previous revision-thread redirect remains hidden background context for read-only follow-up requests.",
+        )
+    return RecentRevisionRedirectArchiveApplicability(
+        status="visible_mutation",
+        snapshot=snapshot,
+        explanation=(
+            "A previous revision thread was explicitly redirected away from its older scope and now remains only as short-lived background history; do not revive that older thread unless the user explicitly reopens it."
+        ),
     )
 
 

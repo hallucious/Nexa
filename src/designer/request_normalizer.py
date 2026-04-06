@@ -9,6 +9,7 @@ from src.designer.control_governance import (
     governance_pending_anchor_applicability_for_request,
     governance_recent_anchor_resolution_applicability_for_request,
     governance_recent_revision_history_applicability_for_request,
+    governance_recent_revision_redirect_archive_applicability_for_request,
     requires_explicit_referential_anchor,
 )
 from src.designer.models.designer_intent import (
@@ -546,6 +547,18 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
+        recent_redirect_archive = self._recent_revision_redirect_archive_snapshot_for_request(raw_request_text or request_text, category, context)
+        if recent_redirect_archive:
+            assumptions.append(
+                AssumptionSpec(
+                    text=(
+                        "A previous revision thread was explicitly redirected away from its older scope and now remains only as background history; do not revive that older correction path unless the user explicitly reopens it. "
+                        f"{str(recent_redirect_archive.get('summary', '')).strip()}".strip()
+                    ),
+                    severity="low",
+                    user_visible=True,
+                )
+            )
         return assumptions
 
     def _build_ambiguity_flags(
@@ -766,6 +779,24 @@ class DesignerRequestNormalizer:
             request_text,
             mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
             available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
+        )
+        if not applicability.is_visible_mutation:
+            return {}
+        return applicability.snapshot or {}
+
+    def _recent_revision_redirect_archive_snapshot_for_request(
+        self,
+        request_text: str,
+        category: str,
+        context: RequestNormalizationContext,
+    ) -> dict[str, Any]:
+        card = context.session_state_card
+        if card is None:
+            return {}
+        applicability = governance_recent_revision_redirect_archive_applicability_for_request(
+            card.notes,
+            request_text,
+            mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
         )
         if not applicability.is_visible_mutation:
             return {}

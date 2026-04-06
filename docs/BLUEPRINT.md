@@ -26,6 +26,7 @@ System invariants that MUST NOT be changed:
 12. Designer control-plane governance may tighten referential interpretation after repeated confirmation loops, and that policy escalation must remain explicit in session-state / precheck / preview surfaces.
 13. Persisted governance carryover must clear once a later referential retry actually satisfies the stronger-anchor requirement; stale pending anchor requirements must not linger indefinitely across later cycles.
 14. Once governance carryover has been cleared, its resolution may remain only as low-priority recent-resolution context for later referential follow-up, and any newly unresolved governance revision must supersede and remove that older resolution history.
+15. Explicit scope redirect must archive older approval/revision thread continuity out of the active continuity store; redirected thread history may remain only as low-priority background context and must not continue constraining later mutations as if it were still the active thread.
 
 Any implementation that violates these rules is considered a violation of the Nexa architecture.
 

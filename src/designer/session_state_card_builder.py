@@ -7,9 +7,11 @@ from src.contracts.nex_contract import COMMIT_SNAPSHOT_ROLE, WORKING_SAVE_ROLE
 from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
 from src.designer.control_governance import (
     apply_control_governance_notes,
+    clear_recent_revision_redirect_archive_notes,
     governance_pending_anchor_applicability_for_request,
     governance_recent_anchor_resolution_applicability_for_request,
     governance_recent_revision_history_applicability_for_request,
+    governance_recent_revision_redirect_archive_applicability_for_request,
 )
 from src.designer.reason_codes import archive_latest_mixed_referential_reason_notes
 from src.designer.models.designer_session_state_card import (
@@ -151,7 +153,11 @@ class DesignerSessionStateCardBuilder:
         findings = self._apply_pending_anchor_guidance_to_findings(findings, governance_carryover)
         findings = self._apply_recent_anchor_resolution_to_findings(findings, governance_carryover, recent_governance_resolution)
         recent_revision_history = None if fresh_cycle_from_committed_baseline else self._recent_approval_revision_history_for_request(notes, request_text)
+        if recent_revision_history is not None and recent_revision_history.get("status") == "redirect_scope":
+            notes = self._archive_recent_revision_history_background(notes, recent_revision_history)
+        recent_redirect_archive = None if fresh_cycle_from_committed_baseline else self._recent_revision_redirect_archive_for_request(notes, request_text)
         findings = self._apply_recent_revision_history_to_findings(findings, recent_revision_history)
+        findings = self._apply_recent_redirect_archive_to_findings(findings, recent_redirect_archive)
         risks = self._apply_pending_anchor_guidance_to_risks(risks, governance_carryover)
         if governance_carryover is not None:
             notes["control_governance_revision_guidance_carryover_status"] = governance_carryover.status
@@ -165,10 +171,10 @@ class DesignerSessionStateCardBuilder:
             notes["approval_revision_recent_history_status"] = recent_revision_history["status"]
             notes["approval_revision_recent_history_summary"] = recent_revision_history["summary"]
             notes["approval_revision_recent_history_applied"] = recent_revision_history["status"] == "visible_mutation"
-            if recent_revision_history["status"] == "redirect_scope":
-                notes["approval_revision_redirect_archived_status"] = "archived_background"
-                notes["approval_revision_redirect_archived_summary"] = recent_revision_history["summary"]
-                notes["approval_revision_redirect_archived_applied"] = True
+        if recent_redirect_archive is not None:
+            notes["approval_revision_redirect_archived_status"] = recent_redirect_archive["status"]
+            notes["approval_revision_redirect_archived_summary"] = recent_redirect_archive["summary"]
+            notes["approval_revision_redirect_archived_applied"] = recent_redirect_archive["status"] == "visible_mutation"
 
         return DesignerSessionStateCard(
             card_version="0.1",
@@ -376,6 +382,68 @@ class DesignerSessionStateCardBuilder:
             "summary": summary or f"Recent approval/revision continuity includes {int(snapshot.get('count', 0) or 0)} steps.",
             "history": list(snapshot.get("history", [])),
         }
+
+    def _archive_recent_revision_history_background(
+        self,
+        notes: dict[str, Any],
+        recent_revision_history: dict[str, Any],
+    ) -> dict[str, Any]:
+        next_notes = clear_recent_revision_redirect_archive_notes(notes)
+        history = list(recent_revision_history.get("history", []))
+        summary = str(recent_revision_history.get("summary", "")).strip()
+        for key in (
+            "approval_revision_recent_history",
+            "approval_revision_recent_history_count",
+            "approval_revision_recent_history_summary",
+        ):
+            next_notes.pop(key, None)
+        next_notes["approval_revision_redirect_archived_status"] = "archived_background"
+        next_notes["approval_revision_redirect_archived_summary"] = summary
+        next_notes["approval_revision_redirect_archived_history"] = history
+        next_notes["approval_revision_redirect_archived_count"] = len(history)
+        next_notes["approval_revision_redirect_archived_age"] = 0
+        return next_notes
+
+    def _recent_revision_redirect_archive_for_request(
+        self,
+        notes: dict[str, Any],
+        request_text: str,
+    ) -> dict[str, Any] | None:
+        applicability = governance_recent_revision_redirect_archive_applicability_for_request(
+            notes,
+            request_text,
+            mutation_oriented=self._request_is_mutation_oriented(request_text),
+        )
+        snapshot = applicability.snapshot or {}
+        if not snapshot:
+            return None
+        summary = str(snapshot.get("summary", "")).strip()
+        return {
+            "status": applicability.status,
+            "summary": summary or "A previous revision thread was explicitly redirected and now remains only as background history.",
+            "count": int(snapshot.get("count", 0) or 0),
+            "history": list(snapshot.get("history", [])),
+        }
+
+    def _apply_recent_redirect_archive_to_findings(
+        self,
+        findings: CurrentFindingsState,
+        recent_redirect_archive: dict[str, Any] | None,
+    ) -> CurrentFindingsState:
+        if recent_redirect_archive is None or recent_redirect_archive.get("status") != "visible_mutation":
+            return findings
+        guidance = str(recent_redirect_archive.get("summary", "")).strip()
+        if not guidance:
+            return findings
+        warning_items = tuple(dict.fromkeys((*findings.warning_findings, guidance)))
+        summary = findings.finding_summary or "No blocking findings recorded."
+        summary = f"{summary} A previous revision thread was explicitly redirected, so that older continuity remains only as background history and should not constrain the next mutation unless the user explicitly reopens it."
+        return CurrentFindingsState(
+            blocking_findings=findings.blocking_findings,
+            warning_findings=warning_items,
+            confirmation_findings=findings.confirmation_findings,
+            finding_summary=summary,
+        )
 
     def _apply_recent_revision_history_to_findings(
         self,
