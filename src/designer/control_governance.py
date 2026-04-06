@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -83,6 +84,26 @@ class ControlGovernancePressure:
     band: str = "standard"
     transition: str = "baseline"
     summary: str = ""
+
+
+@dataclass(frozen=True)
+class PendingAnchorCarryoverApplicability:
+    status: str = "none"
+    snapshot: dict[str, Any] | None = None
+    explanation: str = ""
+    next_actions: tuple[str, ...] = ()
+
+    @property
+    def is_unsatisfied(self) -> bool:
+        return self.status == "unsatisfied"
+
+    @property
+    def is_anchored(self) -> bool:
+        return self.status == "anchored_satisfied"
+
+    @property
+    def is_hidden_nonreferential(self) -> bool:
+        return self.status == "hidden_nonreferential"
 
 
 @dataclass(frozen=True)
@@ -396,6 +417,157 @@ def is_governance_confirmation_issue_code(issue_code: str) -> bool:
 
 def is_governance_decision_id(decision_id: str) -> bool:
     return decision_id.startswith("referential_governance_")
+
+
+def governance_pending_anchor_applicability_for_request(
+    notes: Mapping[str, Any],
+    request_text: str,
+    *,
+    available_node_refs: Sequence[str] = (),
+    commit_history: Sequence[Mapping[str, Any]] = (),
+) -> PendingAnchorCarryoverApplicability:
+    snapshot = governance_pending_anchor_snapshot_from_notes(notes)
+    if not snapshot:
+        return PendingAnchorCarryoverApplicability(status="none", snapshot={})
+    if not _uses_referential_request_language(request_text):
+        return PendingAnchorCarryoverApplicability(
+            status="hidden_nonreferential",
+            snapshot=snapshot,
+            explanation="Pending governance carryover remains stored, but the current request is not in the risky referential category.",
+        )
+    if _request_has_explicit_anchor(
+        request_text,
+        available_node_refs=available_node_refs,
+        commit_history=commit_history,
+    ):
+        pressure_summary = str(snapshot.get("pressure_summary", "")).strip()
+        explanation = "Pending governance carryover remains visible, but the current request already provides a stronger referential anchor."
+        if pressure_summary:
+            explanation = f"{explanation} {pressure_summary}"
+        return PendingAnchorCarryoverApplicability(
+            status="anchored_satisfied",
+            snapshot=snapshot,
+            explanation=explanation,
+            next_actions=tuple(str(item) for item in snapshot.get("next_actions", ()) if str(item).strip()),
+        )
+    return PendingAnchorCarryoverApplicability(
+        status="unsatisfied",
+        snapshot=snapshot,
+        explanation=str(snapshot.get("message", "")).strip(),
+        next_actions=tuple(str(item) for item in snapshot.get("next_actions", ()) if str(item).strip()),
+    )
+
+
+def _uses_referential_request_language(request_text: str) -> bool:
+    text = request_text.casefold()
+    patterns = (
+        r"\bprevious change\b",
+        r"\blast change\b",
+        r"\bprevious commit\b",
+        r"\blast commit\b",
+        r"\bsame change\b",
+        r"\bsame edit\b",
+        r"\bthat change\b",
+        r"\bthat edit\b",
+        r"\brevert\b",
+        r"\bundo\b",
+        r"\brollback\b",
+        r"\broll back\b",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _uses_second_latest_reference_language(request_text: str) -> bool:
+    text = request_text.casefold()
+    patterns = (
+        r"\b(second last|second-latest|before last|prior to last|the one before that) (change|commit|edit)\b",
+        r"\b(change|commit|edit) before last\b",
+        r"\bcommit before last\b",
+        r"\bchange before last\b",
+        r"\bthe one before that\b",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def _extract_node_refs_for_governance(request_text: str) -> tuple[str, ...]:
+    prioritized_patterns = (
+        r"\bin\s+node\s+([A-Za-z0-9_\-\.]+)",
+        r"\bon\s+node\s+([A-Za-z0-9_\-\.]+)",
+        r"\bfor\s+node\s+([A-Za-z0-9_\-\.]+)",
+        r"\bat\s+node\s+([A-Za-z0-9_\-\.]+)",
+        r"\bnode\s+([A-Za-z0-9_\-\.]+)",
+    )
+    stopwords = {"before", "after", "between", "final", "a", "an", "the"}
+    ordered_refs: list[str] = []
+    seen: set[str] = set()
+    for pattern in prioritized_patterns:
+        for match in re.finditer(pattern, request_text, flags=re.IGNORECASE):
+            ref = match.group(1).rstrip(".,;:")
+            if ref.casefold() in stopwords:
+                continue
+            if ref not in seen:
+                ordered_refs.append(ref)
+                seen.add(ref)
+    return tuple(ordered_refs)
+
+
+def _resolve_node_refs_for_governance(
+    node_refs: Sequence[str],
+    *,
+    available_node_refs: Sequence[str],
+) -> tuple[str, ...]:
+    if not node_refs:
+        return ()
+    candidates = tuple(str(item) for item in available_node_refs if str(item).strip())
+    if not candidates:
+        return tuple(str(item) for item in node_refs if str(item).strip())
+    resolved: list[str] = []
+    for ref in node_refs:
+        if ref in candidates:
+            resolved.append(ref)
+            continue
+        suffix_matches = [item for item in candidates if item.endswith(f".{ref}")]
+        if len(suffix_matches) == 1:
+            resolved.append(suffix_matches[0])
+        else:
+            resolved.append(str(ref))
+    return tuple(dict.fromkeys(item for item in resolved if item))
+
+
+def _match_explicit_commit_reference_for_governance(
+    request_text: str,
+    *,
+    commit_history: Sequence[Mapping[str, Any]],
+) -> bool:
+    text = request_text.casefold()
+    commit_tokens = set(re.findall(r"\b[a-f0-9]{7,40}\b", text))
+    if not commit_tokens:
+        return False
+    history = [dict(item) for item in commit_history if isinstance(item, Mapping)]
+    if not history:
+        return True
+    for item in history:
+        commit_id = str(item.get("commit_id", "")).casefold()
+        if any(commit_id.startswith(token) for token in commit_tokens):
+            return True
+    return False
+
+
+def _request_has_explicit_anchor(
+    request_text: str,
+    *,
+    available_node_refs: Sequence[str] = (),
+    commit_history: Sequence[Mapping[str, Any]] = (),
+) -> bool:
+    if _match_explicit_commit_reference_for_governance(request_text, commit_history=commit_history):
+        return True
+    if _uses_second_latest_reference_language(request_text):
+        return True
+    explicit_node_refs = _resolve_node_refs_for_governance(
+        _extract_node_refs_for_governance(request_text),
+        available_node_refs=available_node_refs,
+    )
+    return bool(explicit_node_refs)
 
 
 def governance_revision_guidance_from_notes(notes: Mapping[str, Any]) -> str:

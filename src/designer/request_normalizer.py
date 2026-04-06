@@ -5,7 +5,10 @@ from typing import Any
 import hashlib
 import re
 
-from src.designer.control_governance import governance_pending_anchor_snapshot_from_notes, requires_explicit_referential_anchor
+from src.designer.control_governance import (
+    governance_pending_anchor_applicability_for_request,
+    requires_explicit_referential_anchor,
+)
 from src.designer.models.designer_intent import (
     ActionSpec,
     AmbiguityFlag,
@@ -729,14 +732,15 @@ class DesignerRequestNormalizer:
         card = context.session_state_card
         if card is None:
             return {}
-        if not self._uses_referential_committed_summary_language(request_text):
+        applicability = governance_pending_anchor_applicability_for_request(
+            card.notes,
+            request_text,
+            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
+            commit_history=tuple(item for item in card.notes.get("commit_summary_history", ()) if isinstance(item, dict)),
+        )
+        if not applicability.is_unsatisfied:
             return {}
-        snapshot = governance_pending_anchor_snapshot_from_notes(card.notes)
-        if not snapshot:
-            return {}
-        if self._has_explicit_referential_anchor(request_text, context):
-            return {}
-        return snapshot
+        return applicability.snapshot or {}
 
     def _latest_committed_summary(self, context: RequestNormalizationContext) -> dict[str, Any] | None:
         card = context.session_state_card

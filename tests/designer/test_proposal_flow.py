@@ -917,3 +917,87 @@ def test_request_normalizer_does_not_apply_pending_governance_revision_guidance_
 
     assert all(flag.type != "governance_pressure_carryover" for flag in intent.risk_flags)
     assert all("persisted revision guidance" not in assumption.text for assumption in intent.assumptions)
+
+
+def test_request_normalizer_does_not_carry_governance_pressure_for_nonreferential_followup() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-nonreferential-followup",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+        notes={
+            "control_governance_pending_anchor_requirement": True,
+            "control_governance_pending_anchor_requirement_mode": "required",
+            "control_governance_last_revision_guidance": "Provide an explicit commit anchor before the next revision attempt.",
+            "control_governance_last_revision_pressure_summary": "Ambiguity pressure remains 5/5 (strict band), so do not fall back to loose selectors.",
+            "control_governance_last_revision_pressure_score": 5,
+            "control_governance_last_revision_pressure_band": "strict",
+            "control_governance_last_revision_next_actions": [
+                "provide_explicit_anchor",
+                "restate_request_with_stronger_selector",
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Change provider in node reviewer to Claude",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert all(flag.type != "governance_pressure_carryover" for flag in intent.risk_flags)
+    assert all("explicit commit anchor" not in assumption.text for assumption in intent.assumptions)
+
+
+def test_request_normalizer_does_not_carry_unsatisfied_governance_pressure_for_anchored_referential_retry() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-anchored-followup",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo anchored change"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "fff9999", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+                {"commit_id": "abc1234def", "patch_ref": "patch-target", "touched_node_ids": ["node.answerer"]},
+            ],
+            "control_governance_pending_anchor_requirement": True,
+            "control_governance_pending_anchor_requirement_mode": "required",
+            "control_governance_last_revision_guidance": "Provide an explicit commit anchor before the next revision attempt.",
+            "control_governance_last_revision_pressure_summary": "Ambiguity pressure remains 5/5 (strict band), so do not fall back to loose selectors.",
+            "control_governance_last_revision_pressure_score": 5,
+            "control_governance_last_revision_pressure_band": "strict",
+            "control_governance_last_revision_next_actions": [
+                "provide_explicit_anchor",
+                "restate_request_with_stronger_selector",
+            ],
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change on node reviewer",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert all(flag.type != "governance_pressure_carryover" for flag in intent.risk_flags)
+    assert all(flag.type != "committed_summary_repeat_cycle_anchor_required" for flag in intent.ambiguity_flags)

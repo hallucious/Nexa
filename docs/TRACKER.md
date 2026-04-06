@@ -354,3 +354,4 @@ CLI
 * ambiguity-pressure scoring is now surfaced back through precheck/preview/approval guidance instead of remaining notes-only: strict/elevated governance can explain whether pressure is still building, merely held, or already easing while the tier remains active
 
 * revision-request continuity now persists structured governance guidance, including anchor requirement mode, pressure summary/score/band, and next-safe-action hints so the next cycle inherits pressure-aware anchor guidance instead of only a generic note
+* persisted governance revision-guidance carryover is now request-applicability-aware in rebuilt session cards: non-referential follow-up requests stay visually cleaner, while anchored referential retries downgrade carryover from unresolved-risk surfacing to warning-level context instead of repeating full pending-anchor pressure

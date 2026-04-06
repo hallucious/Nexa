@@ -108,3 +108,66 @@ def test_session_state_card_builder_surfaces_pending_governance_anchor_carryover
     assert any("Next safe step:" in item for item in rebuilt.current_findings.warning_findings)
     assert any("Pending referential-anchor requirement remains" in item for item in rebuilt.current_risks.risk_flags)
     assert any("5/5 (strict band)" in item for item in rebuilt.current_risks.unresolved_high_risks)
+
+
+def test_session_state_card_builder_hides_pending_governance_carryover_for_nonreferential_request() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    base = builder.build(request_text="Undo the last change", artifact=make_working_save())
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "control_governance_pending_anchor_requirement": True,
+            "control_governance_pending_anchor_requirement_mode": "required",
+            "control_governance_last_revision_guidance": "Provide an explicit commit anchor before the next revision attempt.",
+            "control_governance_last_revision_pressure_summary": "Ambiguity pressure remains 5/5 (strict band), so do not fall back to loose selectors.",
+            "control_governance_last_revision_pressure_score": 5,
+            "control_governance_last_revision_pressure_band": "strict",
+            "control_governance_last_revision_next_actions": [
+                "provide_explicit_anchor",
+                "restate_request_with_stronger_selector",
+            ],
+        },
+    })
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Change provider in node reviewer to Claude", artifact=persisted)
+
+    assert rebuilt.notes["control_governance_revision_guidance_carryover_status"] == "hidden_nonreferential"
+    assert rebuilt.notes["control_governance_revision_guidance_carryover_applied"] is False
+    assert all("Provide an explicit commit anchor" not in item for item in rebuilt.current_findings.warning_findings)
+    assert all("Pending referential-anchor requirement remains" not in item for item in rebuilt.current_risks.risk_flags)
+
+
+def test_session_state_card_builder_downgrades_pending_governance_carryover_for_anchored_request() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    base = builder.build(request_text="Undo the last change", artifact=make_working_save())
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "control_governance_pending_anchor_requirement": True,
+            "control_governance_pending_anchor_requirement_mode": "required",
+            "control_governance_last_revision_guidance": "Provide an explicit commit anchor before the next revision attempt.",
+            "control_governance_last_revision_pressure_summary": "Ambiguity pressure remains 5/5 (strict band), so do not fall back to loose selectors.",
+            "control_governance_last_revision_pressure_score": 5,
+            "control_governance_last_revision_pressure_band": "strict",
+            "control_governance_last_revision_next_actions": [
+                "provide_explicit_anchor",
+                "restate_request_with_stronger_selector",
+            ],
+        },
+    })
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Undo the last change on node reviewer", artifact=persisted)
+
+    assert rebuilt.notes["control_governance_revision_guidance_carryover_status"] == "anchored_satisfied"
+    assert rebuilt.notes["control_governance_revision_guidance_carryover_applied"] is True
+    assert any("already provides a stronger referential anchor" in item for item in rebuilt.current_findings.warning_findings)
+    assert all("Pending referential-anchor requirement remains" not in item for item in rebuilt.current_risks.risk_flags)
+    assert rebuilt.current_risks.unresolved_high_risks == ()

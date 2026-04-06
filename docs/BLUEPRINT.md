@@ -514,3 +514,4 @@ Representation {
 - ambiguity-pressure summaries are now expected to remain reusable across precheck/preview/approval surfaces so governance intensity does not disappear into notes-only state
 
 * revision-request continuity now persists structured governance guidance, including anchor requirement mode, pressure summary/score/band, and next-safe-action hints so the next cycle inherits pressure-aware anchor guidance instead of only a generic note
+* persisted governance carryover is now request-applicability-aware at rebuilt session-card time: non-referential follow-up requests should not keep surfacing stale pending-anchor risk, and already-anchored referential retries should surface carryover as warning-level context rather than unresolved-governance pressure
