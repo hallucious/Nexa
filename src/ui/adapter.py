@@ -10,6 +10,9 @@ from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
+from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
+from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
+from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer_view_model
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,52 @@ class NexaUIViewAdapter:
             latest_working_save=self.latest_working_save,
             latest_commit_snapshot=self.latest_commit_snapshot,
             latest_execution_record=self.latest_execution_record,
+            explanation=explanation,
+        )
+
+
+    def read_execution_panel_view_model(
+        self,
+        source,
+        *,
+        execution_record: ExecutionRecordModel | None = None,
+        live_events=None,
+        explanation: str | None = None,
+    ) -> ExecutionPanelViewModel:
+        return read_execution_panel_view_model(
+            source,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            live_events=live_events,
+            explanation=explanation,
+        )
+
+    def read_trace_timeline_view_model(
+        self,
+        source,
+        *,
+        execution_record: ExecutionRecordModel | None = None,
+        live_events=None,
+        explanation: str | None = None,
+    ) -> TraceTimelineViewerViewModel:
+        return read_trace_timeline_view_model(
+            source,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            live_events=live_events,
+            explanation=explanation,
+        )
+
+    def read_artifact_viewer_view_model(
+        self,
+        source,
+        *,
+        execution_record: ExecutionRecordModel | None = None,
+        selected_artifact_id: str | None = None,
+        explanation: str | None = None,
+    ) -> ArtifactViewerViewModel:
+        return read_artifact_viewer_view_model(
+            source,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            selected_artifact_id=selected_artifact_id,
             explanation=explanation,
         )
 

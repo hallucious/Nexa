@@ -6,6 +6,7 @@ from src.storage.models.shared_sections import CircuitModel, ResourcesModel, Sta
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.adapter import NexaUIViewAdapter
 from src.ui.graph_workspace import GraphPreviewOverlay
+from src.engine.execution_event import ExecutionEvent
 
 
 def _working_save() -> WorkingSaveModel:
@@ -60,3 +61,24 @@ def test_ui_adapter_routes_read_models_through_stable_boundary() -> None:
     assert graph_vm.storage_role == "execution_record"
     assert storage_vm.active_storage_role == "working_save"
     assert diff_vm.viewer_status == "ready"
+
+
+
+def test_ui_adapter_routes_execution_trace_and_artifact_read_models_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    live_events = [
+        ExecutionEvent("execution_started", "run-001", None, 0, {}),
+        ExecutionEvent("node_started", "run-001", "n1", 5, {"stage": "provider"}),
+    ]
+
+    execution_vm = adapter.read_execution_panel_view_model(_working_save(), live_events=live_events)
+    trace_vm = adapter.read_trace_timeline_view_model(_run(), live_events=live_events)
+    artifact_vm = adapter.read_artifact_viewer_view_model(_run())
+
+    assert execution_vm.source_mode == "live_execution"
+    assert trace_vm.source_mode == "live_event_stream"
+    assert artifact_vm.viewer_status in {"ready", "partial"}
