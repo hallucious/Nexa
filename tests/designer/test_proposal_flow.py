@@ -1720,3 +1720,105 @@ def test_request_normalizer_supports_injected_semantic_and_grounding_layers() ->
     assert intent.category == "MODIFY_CIRCUIT"
     assert intent.target_scope.node_refs == ("node.reviewer",)
     assert intent.proposed_actions[0].parameters["provider_id"] == "anthropic:claude-sonnet"
+
+
+class _StructuredSemanticBackend:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def generate_semantic_payload(self, **kwargs):
+        return self.payload
+
+
+def test_request_normalizer_uses_llm_semantic_backend_for_provider_change() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-provider",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-1",
+            node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+            provider_refs=("openai:gpt-4o-mini", "anthropic:claude-sonnet"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(
+                ResourceAvailability(id="openai:gpt-4o-mini"),
+                ResourceAvailability(id="anthropic:claude-sonnet"),
+            )
+        ),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Have the reviewer use Claude instead."),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "confidence_hint": 0.82,
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer", "role_hint": "review"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                }
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude instead.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-1", session_state_card=card),
+    )
+
+    assert intent.category == "MODIFY_CIRCUIT"
+    assert intent.target_scope.node_refs == ("node.reviewer",)
+    assert any(action.action_type == "replace_provider" for action in intent.proposed_actions)
+    action = next(action for action in intent.proposed_actions if action.action_type == "replace_provider")
+    assert action.target_ref == "node.reviewer"
+    assert action.parameters["provider_id"] == "anthropic:claude-sonnet"
+
+
+def test_request_normalizer_falls_back_when_llm_payload_uses_canonical_ids() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-fallback",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-2",
+            node_list=("node.reviewer",),
+            provider_refs=("anthropic:claude-sonnet",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(ResourceAvailability(id="anthropic:claude-sonnet"),)
+        ),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Have the reviewer use Claude instead."),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "provider_id": "anthropic:claude-sonnet"},
+                }
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude instead.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-2", session_state_card=card),
+    )
+
+    action = next(action for action in intent.proposed_actions if action.action_type == "replace_provider")
+    assert action.parameters["provider_id"] == "anthropic:claude-sonnet"

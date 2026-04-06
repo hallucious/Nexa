@@ -12,6 +12,7 @@ class GroundedActionCandidate:
     action_type: str
     target_ref: str | None = None
     parameters: dict[str, Any] = field(default_factory=dict)
+    rationale: str | None = None
 
     def __post_init__(self) -> None:
         if not self.action_type.strip():

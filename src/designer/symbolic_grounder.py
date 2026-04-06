@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 import hashlib
 import re
 
 from src.designer.models.designer_intent import TargetScope
-from src.designer.models.grounded_intent import GroundedIntent
-from src.designer.models.semantic_intent import SemanticIntent
+from src.designer.models.grounded_intent import GroundedActionCandidate, GroundedIntent
+from src.designer.models.semantic_intent import (
+    SemanticActionCandidate,
+    SemanticIntent,
+    SemanticResourceDescriptor,
+    SemanticTargetDescriptor,
+)
 from src.designer.normalization_context import RequestNormalizationContext
 
 
@@ -20,6 +25,8 @@ class DesignerSymbolicGrounder:
 class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
     def ground(self, semantic_intent: SemanticIntent, *, context: RequestNormalizationContext, precomputed_scope: TargetScope | None = None) -> GroundedIntent:
         scope = precomputed_scope or self.build_scope(semantic_intent.category, semantic_intent.effective_request_text, context)
+        grounded_action_candidates = self.ground_action_candidates(semantic_intent, scope, context)
+        scope = self.maybe_refine_scope_from_grounded_actions(scope, grounded_action_candidates, context)
         return GroundedIntent(
             grounded_intent_id=_stable_id("grounded", semantic_intent.user_request_text),
             semantic_intent=semantic_intent,
@@ -33,7 +40,130 @@ class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
                 scope,
                 context,
             ),
+            grounded_action_candidates=grounded_action_candidates,
         )
+
+    def maybe_refine_scope_from_grounded_actions(
+        self,
+        scope: TargetScope,
+        grounded_action_candidates: tuple[GroundedActionCandidate, ...],
+        context: RequestNormalizationContext,
+    ) -> TargetScope:
+        if scope.node_refs:
+            return scope
+        node_refs = tuple(
+            dict.fromkeys(
+                candidate.target_ref
+                for candidate in grounded_action_candidates
+                if candidate.target_ref and candidate.target_ref.startswith("node.")
+            )
+        )
+        if not node_refs:
+            return scope
+        if scope.mode in {"existing_circuit", "node_only"}:
+            return replace(scope, mode="node_only", node_refs=node_refs)
+        return scope
+
+    def ground_action_candidates(
+        self,
+        semantic_intent: SemanticIntent,
+        scope: TargetScope,
+        context: RequestNormalizationContext,
+    ) -> tuple[GroundedActionCandidate, ...]:
+        grounded: list[GroundedActionCandidate] = []
+        for candidate in semantic_intent.action_candidates:
+            target_ref = self.resolve_target_ref_from_descriptor(candidate.target_node_descriptor, scope, context)
+            action_type = self.normalize_action_type(candidate.action_type)
+            parameters = self.parameters_for_action(action_type, candidate, semantic_intent, scope, context)
+            grounded.append(
+                GroundedActionCandidate(
+                    action_type=action_type,
+                    target_ref=target_ref,
+                    parameters=parameters,
+                    rationale=" ".join(candidate.notes) if candidate.notes else None,
+                )
+            )
+        return tuple(grounded)
+
+    def normalize_action_type(self, action_type: str) -> str:
+        normalized = action_type.strip()
+        mapping = {
+            "replace_prompt": "set_prompt",
+            "insert_node": "insert_node_between",
+            "repair_structure": "update_node",
+            "optimize_structure": "set_parameter",
+        }
+        return mapping.get(normalized, normalized)
+
+    def parameters_for_action(
+        self,
+        action_type: str,
+        candidate: SemanticActionCandidate,
+        semantic_intent: SemanticIntent,
+        scope: TargetScope,
+        context: RequestNormalizationContext,
+    ) -> dict[str, Any]:
+        if action_type == "replace_provider":
+            return {"provider_id": self.resolve_resource_from_descriptor(candidate.provider_descriptor, context, resource_type="providers")}
+        if action_type == "attach_plugin":
+            return {"plugin_id": self.resolve_resource_from_descriptor(candidate.plugin_descriptor, context, resource_type="plugins")}
+        if action_type == "set_prompt":
+            return {"prompt_id": self.resolve_resource_from_descriptor(candidate.prompt_descriptor, context, resource_type="prompts")}
+        if action_type == "insert_node_between":
+            placement_text = self.compose_descriptor_text(candidate.target_node_descriptor)
+            request_like = " ".join(part for part in (placement_text, semantic_intent.effective_request_text) if part).strip()
+            return self.infer_insert_between_parameters(request_like or semantic_intent.user_request_text, scope, context)
+        if action_type == "set_parameter":
+            return {"mode": "bounded_update"}
+        return {}
+
+    def resolve_target_ref_from_descriptor(
+        self,
+        descriptor: SemanticTargetDescriptor | None,
+        scope: TargetScope,
+        context: RequestNormalizationContext,
+    ) -> str | None:
+        if descriptor is None:
+            return self.first_target_ref(scope, "")
+        descriptor_text = self.compose_descriptor_text(descriptor)
+        if descriptor_text:
+            explicit = self.explicit_node_refs(descriptor_text, context)
+            if explicit:
+                return explicit[0]
+        if scope.node_refs:
+            return scope.node_refs[0]
+        selected = self.selected_node_refs(context)
+        if selected:
+            return selected[0]
+        return None
+
+    def resolve_resource_from_descriptor(
+        self,
+        descriptor: SemanticResourceDescriptor | None,
+        context: RequestNormalizationContext,
+        *,
+        resource_type: str,
+    ) -> str | None:
+        if descriptor is None:
+            return None
+        descriptor_text = self.compose_descriptor_text(descriptor)
+        if resource_type == "providers":
+            return self.infer_provider_id(descriptor_text, context)
+        if resource_type == "plugins":
+            return self.infer_plugin_id(descriptor_text, context)
+        if resource_type == "prompts":
+            return self.infer_prompt_id(descriptor_text, context)
+        return None
+
+    def compose_descriptor_text(self, descriptor: SemanticTargetDescriptor | SemanticResourceDescriptor | None) -> str:
+        if descriptor is None:
+            return ""
+        parts: list[str] = []
+        for attr in ("label_hint", "role_hint", "position_hint", "family", "capability_hint", "raw_reference_text"):
+            value = getattr(descriptor, attr, None)
+            if isinstance(value, str) and value.strip():
+                parts.append(value.strip())
+        return " ".join(dict.fromkeys(parts))
 
     def build_scope(
         self,
@@ -339,9 +469,9 @@ class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
         ordered_refs: list[str] = []
         seen: set[str] = set()
         for pattern in prioritized_patterns:
-            for match in re.finditer(pattern, request_text, flags=re.IGNORECASE):
-                ref = match.group(1).rstrip('.,;:')
-                if ref.casefold() in stopwords:
+            for ref in re.findall(pattern, request_text, flags=re.IGNORECASE):
+                lowered = ref.casefold()
+                if lowered in stopwords:
                     continue
                 if ref not in seen:
                     ordered_refs.append(ref)
@@ -352,11 +482,6 @@ class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
         refs = self.extract_node_refs(request_text)
         return refs[0] if refs else None
 
-    def first_target_ref(self, scope: TargetScope, request_text: str) -> str | None:
-        if scope.node_refs:
-            return scope.node_refs[0]
-        return self.first_node_ref(request_text)
-
     def resolve_target_node_refs_from_committed_summary(
         self,
         category: str,
@@ -364,9 +489,54 @@ class DeterministicSymbolicGrounder(DesignerSymbolicGrounder):
         context: RequestNormalizationContext,
         explicit_node_refs: tuple[str, ...],
     ) -> tuple[str, ...]:
-        # Commit-summary resolution currently remains owned by the compatibility facade.
+        notes = context.session_state_card.notes if context.session_state_card is not None else None
+        if not notes:
+            return explicit_node_refs
+        if explicit_node_refs and not self.is_committed_summary_referential_request(request_text):
+            return explicit_node_refs
+        commit_ref = self.resolve_committed_summary_reference(request_text, notes)
+        if commit_ref is None:
+            return explicit_node_refs
+        touched = tuple(commit_ref.get("touched_node_ids") or ())
+        if touched:
+            return tuple(dict.fromkeys(touched + explicit_node_refs))
         return explicit_node_refs
 
+    def resolve_committed_summary_reference(
+        self,
+        request_text: str,
+        notes: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if not self.is_committed_summary_referential_request(request_text):
+            return None
+        history = tuple(notes.get("commit_summary_history") or ())
+        if not history:
+            primary = notes.get("committed_summary_primary")
+            return primary if isinstance(primary, dict) else None
+        text = request_text.casefold()
+        exact = re.search(r"\bcommit\s+([0-9a-f]{4,40})\b", text)
+        if exact:
+            needle = exact.group(1)
+            for entry in history:
+                commit_id = str(entry.get("commit_id") or "")
+                if commit_id.casefold().startswith(needle):
+                    return entry
+            return None
+        if "before last" in text or "second latest" in text or "previous previous" in text:
+            return history[1] if len(history) >= 2 else None
+        return history[0]
+
+    def is_committed_summary_referential_request(self, request_text: str) -> bool:
+        text = request_text.casefold()
+        return any(term in text for term in ("previous change", "change before last", "rollback commit", "revert commit", "latest commit", "second latest"))
+
+    def first_target_ref(self, scope: TargetScope, request_text: str) -> str | None:
+        if scope.node_refs:
+            return scope.node_refs[0]
+        inline_refs = self.extract_node_refs(request_text)
+        if inline_refs:
+            return inline_refs[0]
+        return None
 
 
 def _stable_id(prefix: str, raw: str) -> str:

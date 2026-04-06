@@ -31,7 +31,9 @@ from src.designer.reason_codes import (
 )
 from src.designer.semantic_interpreter import (
     DesignerSemanticInterpreter,
+    LLMBackedStructuredSemanticInterpreter,
     LegacyRuleBasedSemanticInterpreter,
+    SemanticIntentStructuredBackend,
 )
 from src.designer.symbolic_grounder import (
     DesignerSymbolicGrounder,
@@ -52,8 +54,25 @@ class DesignerRequestNormalizer:
         *,
         semantic_interpreter: DesignerSemanticInterpreter | None = None,
         symbolic_grounder: DesignerSymbolicGrounder | None = None,
+        semantic_backend: SemanticIntentStructuredBackend | None = None,
+        use_llm_semantic_interpreter: bool = False,
+        llm_backend_required: bool = False,
     ) -> None:
-        self._semantic_interpreter = semantic_interpreter or LegacyRuleBasedSemanticInterpreter()
+        if semantic_interpreter is not None:
+            self._semantic_interpreter = semantic_interpreter
+        elif semantic_backend is not None or use_llm_semantic_interpreter:
+            if semantic_backend is None and llm_backend_required:
+                raise ValueError("semantic_backend is required when llm_backend_required=True")
+            if semantic_backend is None:
+                self._semantic_interpreter = LegacyRuleBasedSemanticInterpreter()
+            else:
+                self._semantic_interpreter = LLMBackedStructuredSemanticInterpreter(
+                    backend=semantic_backend,
+                    fallback_interpreter=LegacyRuleBasedSemanticInterpreter(),
+                    allow_fallback=not llm_backend_required,
+                )
+        else:
+            self._semantic_interpreter = LegacyRuleBasedSemanticInterpreter()
         self._symbolic_grounder = symbolic_grounder or DeterministicSymbolicGrounder()
 
     def normalize(self, request_text: str, *, context: RequestNormalizationContext | None = None) -> DesignerIntent:
@@ -74,6 +93,7 @@ class DesignerRequestNormalizer:
             context=context,
             precomputed_scope=scope,
         )
+        scope = grounded_intent.target_scope
         actions = self._build_actions(category, effective_request_text, scope, context, grounded_intent=grounded_intent)
         assumptions = self._build_assumptions(category, effective_request_text, context, raw_request_text=request_text)
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
@@ -245,6 +265,16 @@ class DesignerRequestNormalizer:
                     parameters={"source": "node.start.output"},
                     rationale="A new circuit proposal should expose an explicit output binding.",
                 ),
+            ]
+        if grounded_intent is not None and grounded_intent.grounded_action_candidates:
+            return [
+                ActionSpec(
+                    action_type=candidate.action_type,
+                    target_ref=candidate.target_ref,
+                    parameters=dict(candidate.parameters),
+                    rationale=candidate.rationale or "Grounded from semantic action candidate.",
+                )
+                for candidate in grounded_intent.grounded_action_candidates
             ]
         actions: list[ActionSpec] = []
         if self._is_confirmation_bounded_mixed_referential_request(request_text):
