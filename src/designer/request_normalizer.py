@@ -7,6 +7,7 @@ import re
 
 from src.designer.control_governance import (
     governance_pending_anchor_applicability_for_request,
+    governance_recent_anchor_resolution_applicability_for_request,
     requires_explicit_referential_anchor,
 )
 from src.designer.models.designer_intent import (
@@ -518,6 +519,18 @@ class DesignerRequestNormalizer:
                         user_visible=True,
                     )
                 )
+        recent_resolution = self._recent_resolution_snapshot_for_request(request_text, context)
+        if recent_resolution:
+            assumptions.append(
+                AssumptionSpec(
+                    text=(
+                        "A previous governance anchor requirement was already satisfied by an anchored retry, so the current referential cycle should not inherit unresolved pending-anchor pressure unless new ambiguity appears. "
+                        f"{str(recent_resolution.get('summary', '')).strip()}".strip()
+                    ),
+                    severity="low",
+                    user_visible=True,
+                )
+            )
         return assumptions
 
     def _build_ambiguity_flags(
@@ -739,6 +752,24 @@ class DesignerRequestNormalizer:
             commit_history=tuple(item for item in card.notes.get("commit_summary_history", ()) if isinstance(item, dict)),
         )
         if not applicability.is_unsatisfied:
+            return {}
+        return applicability.snapshot or {}
+
+    def _recent_resolution_snapshot_for_request(
+        self,
+        request_text: str,
+        context: RequestNormalizationContext,
+    ) -> dict[str, Any]:
+        card = context.session_state_card
+        if card is None:
+            return {}
+        applicability = governance_recent_anchor_resolution_applicability_for_request(
+            card.notes,
+            request_text,
+            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
+            commit_history=tuple(item for item in card.notes.get("commit_summary_history", ()) if isinstance(item, dict)),
+        )
+        if not applicability.is_visible_referential:
             return {}
         return applicability.snapshot or {}
 

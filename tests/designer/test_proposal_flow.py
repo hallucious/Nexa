@@ -1001,3 +1001,72 @@ def test_request_normalizer_does_not_carry_unsatisfied_governance_pressure_for_a
 
     assert all(flag.type != "governance_pressure_carryover" for flag in intent.risk_flags)
     assert all(flag.type != "committed_summary_repeat_cycle_anchor_required" for flag in intent.ambiguity_flags)
+
+
+
+def test_request_normalizer_reuses_recent_cleared_governance_resolution_for_referential_followup() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-cleared-resolution-followup",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Undo anchored change"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Undo the last change on node reviewer"),
+        notes={
+            "commit_summary_history": [
+                {"commit_id": "fff9999", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+            ],
+            "control_governance_last_pending_anchor_resolution_status": "cleared_by_anchored_retry",
+            "control_governance_last_pending_anchor_resolution_summary": "Pending governance carryover was cleared because the stronger referential anchor was satisfied in the last cycle.",
+            "control_governance_last_pending_anchor_resolution_request_text": "Undo the last change on node reviewer",
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Undo the last change on node reviewer",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert all(flag.type != "governance_pressure_carryover" for flag in intent.risk_flags)
+    assert any("already satisfied by an anchored retry" in assumption.text for assumption in intent.assumptions)
+
+
+def test_request_normalizer_hides_recent_cleared_governance_resolution_for_nonreferential_followup() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-cleared-resolution-ignore",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Change provider in node reviewer to Claude"),
+        notes={
+            "control_governance_last_pending_anchor_resolution_status": "cleared_by_anchored_retry",
+            "control_governance_last_pending_anchor_resolution_summary": "Pending governance carryover was cleared because the stronger referential anchor was satisfied in the last cycle.",
+            "control_governance_last_pending_anchor_resolution_request_text": "Undo the last change on node reviewer",
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Change provider in node reviewer to Claude",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert all("already satisfied by an anchored retry" not in assumption.text for assumption in intent.assumptions)

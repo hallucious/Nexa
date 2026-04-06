@@ -76,6 +76,7 @@ The current repository state includes the following implemented surface:
 * mixed referential rollback+edit requests now surface explicit confirmation reasons through Designer precheck/preview instead of living only inside request normalization
 * repeated referential confirmation loops now raise a persisted control-governance policy tier, and that tier is surfaced back through Designer precheck/preview as explicit anchor-required guidance rather than remaining notes-only state
 * pending governance anchor-carryover is now cleared once a later referential retry satisfies the stronger-anchor requirement, instead of lingering indefinitely as stale continuity pressure
+* cleared governance carryover is now reusable as low-priority recent-resolution context for later referential follow-up requests, while non-referential follow-up hides it and any new unresolved governance revision clears the old resolution history
 
 ---
 

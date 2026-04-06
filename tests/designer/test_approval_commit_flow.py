@@ -256,3 +256,47 @@ def test_revision_requested_governance_persists_pressure_aware_session_notes() -
     ]
     assert any("5/5 (strict band)" in item for item in updated.conversation_context.unresolved_questions)
     assert any("Next safe step:" in item for item in updated.conversation_context.unresolved_questions)
+
+
+
+def test_session_state_coordinator_clears_recent_resolution_history_when_new_governance_pending_is_created() -> None:
+    from src.designer.session_state_coordinator import DesignerSessionStateCoordinator
+    from src.designer.session_state_card_builder import DesignerSessionStateCardBuilder
+
+    flow = DesignerProposalFlow()
+    card = DesignerSessionStateCardBuilder().build(
+        request_text="Undo the last change",
+        artifact=None,
+        session_id="sess-gov-revision-clears-resolution",
+        target_scope_mode="existing_circuit",
+    )
+    card = card.__class__(**{**card.__dict__, "notes": {
+        **card.notes,
+        "commit_summary_history": [
+            {"commit_id": "commit-latest", "patch_ref": "patch-latest", "touched_node_ids": ["node.reviewer"]},
+        ],
+        "control_governance_policy_tier": "strict",
+        "control_governance_requires_explicit_referential_anchor": True,
+        "control_governance_ambiguity_pressure_score": 5,
+        "control_governance_ambiguity_pressure_band": "strict",
+        "control_governance_pressure_transition": "escalating_or_sustained_repeat_pressure",
+        "control_governance_pressure_summary": "Ambiguity pressure is high and still building (5/5, strict band).",
+        "control_governance_last_pending_anchor_resolution_status": "cleared_by_anchored_retry",
+        "control_governance_last_pending_anchor_resolution_summary": "Pending governance carryover was cleared because the stronger referential anchor was satisfied in the last cycle.",
+        "control_governance_last_pending_anchor_resolution_request_text": "Undo the last change on node reviewer",
+    }})
+    bundle = flow.propose("Undo the last change", working_save_ref="ws-001", session_state_card=card)
+    coordinator = DesignerApprovalCoordinator()
+    approval_state = coordinator.create_state(bundle)
+    governance_point = next(point for point in approval_state.required_decision_points if point.decision_id == "referential_governance_strict")
+    resolved = coordinator.resolve(
+        approval_state,
+        [UserDecision(decision_point_id=governance_point.decision_id, outcome="request_revision")],
+    )
+
+    updated = DesignerSessionStateCoordinator().evolve_after_approval_resolution(card, resolved)
+
+    assert updated.notes["control_governance_pending_anchor_requirement"] is True
+    assert "control_governance_last_pending_anchor_resolution_status" not in updated.notes
+    assert "control_governance_last_pending_anchor_resolution_summary" not in updated.notes
+    assert "control_governance_last_pending_anchor_resolution_request_text" not in updated.notes

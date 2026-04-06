@@ -106,6 +106,21 @@ class PendingAnchorCarryoverApplicability:
         return self.status == "hidden_nonreferential"
 
 
+@dataclass(frozen=True)
+class RecentAnchorResolutionApplicability:
+    status: str = "none"
+    snapshot: dict[str, Any] | None = None
+    explanation: str = ""
+
+    @property
+    def is_visible_referential(self) -> bool:
+        return self.status == "visible_referential"
+
+    @property
+    def is_hidden_nonreferential(self) -> bool:
+        return self.status == "hidden_nonreferential"
+
+
 def governance_pending_anchor_is_fully_satisfied(
     applicability: PendingAnchorCarryoverApplicability,
     *,
@@ -682,6 +697,57 @@ def governance_pending_anchor_summary_from_notes(notes: Mapping[str, Any]) -> st
         pretty = ", then ".join(str(item).replace("_", " ") for item in snapshot["next_actions"])
         parts.append(f"Next safe step: {pretty}.")
     return _join_governance_parts(*parts)
+
+
+def governance_recent_anchor_resolution_snapshot_from_notes(notes: Mapping[str, Any]) -> dict[str, Any]:
+    status = str(notes.get("control_governance_last_pending_anchor_resolution_status", "")).strip()
+    if not status:
+        return {}
+    return {
+        "status": status,
+        "summary": str(notes.get("control_governance_last_pending_anchor_resolution_summary", "")).strip(),
+        "request_text": str(notes.get("control_governance_last_pending_anchor_resolution_request_text", "")).strip(),
+    }
+
+
+
+def governance_recent_anchor_resolution_applicability_for_request(
+    notes: Mapping[str, Any],
+    request_text: str,
+    *,
+    available_node_refs: Sequence[str] = (),
+    commit_history: Sequence[Mapping[str, Any]] = (),
+) -> RecentAnchorResolutionApplicability:
+    snapshot = governance_recent_anchor_resolution_snapshot_from_notes(notes)
+    if not snapshot:
+        return RecentAnchorResolutionApplicability(status="none", snapshot={})
+    if bool(notes.get("control_governance_pending_anchor_requirement")):
+        return RecentAnchorResolutionApplicability(status="superseded_by_pending", snapshot=snapshot)
+    if not _uses_referential_request_language(request_text):
+        return RecentAnchorResolutionApplicability(
+            status="hidden_nonreferential",
+            snapshot=snapshot,
+            explanation="A previous governance anchor requirement was resolved recently, but the current request is not in the referential category.",
+        )
+    base_summary = str(snapshot.get("summary", "")).strip()
+    resolution = "A previous governance anchor requirement was recently cleared by an explicit anchored retry."
+    if _request_has_explicit_anchor(
+        request_text,
+        available_node_refs=available_node_refs,
+        commit_history=commit_history,
+    ):
+        explanation = _join_governance_parts(resolution, base_summary)
+    else:
+        explanation = _join_governance_parts(
+            resolution,
+            "The current referential request is not currently blocked by the old pending carryover, but future ambiguity may still re-escalate governance if selectors become loose again.",
+            base_summary,
+        )
+    return RecentAnchorResolutionApplicability(
+        status="visible_referential",
+        snapshot=snapshot,
+        explanation=explanation,
+    )
 
 
 def governance_anchored_progress_reason_code_from_issue_codes(

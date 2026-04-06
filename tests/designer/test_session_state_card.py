@@ -171,3 +171,51 @@ def test_session_state_card_builder_downgrades_pending_governance_carryover_for_
     assert any("already provides a stronger referential anchor" in item for item in rebuilt.current_findings.warning_findings)
     assert all("Pending referential-anchor requirement remains" not in item for item in rebuilt.current_risks.risk_flags)
     assert rebuilt.current_risks.unresolved_high_risks == ()
+
+
+
+def test_session_state_card_builder_surfaces_recent_cleared_governance_resolution_for_referential_followup() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    base = builder.build(request_text="Undo the last change on node reviewer", artifact=make_working_save())
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "control_governance_last_pending_anchor_resolution_status": "cleared_by_anchored_retry",
+            "control_governance_last_pending_anchor_resolution_summary": "Pending governance carryover was cleared because the stronger referential anchor was satisfied in the last cycle.",
+            "control_governance_last_pending_anchor_resolution_request_text": "Undo the last change on node reviewer",
+        },
+    })
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Undo the last change on node reviewer", artifact=persisted)
+
+    assert rebuilt.notes["control_governance_recent_resolution_status"] == "visible_referential"
+    assert rebuilt.notes["control_governance_recent_resolution_applied"] is True
+    assert any("recently cleared by an explicit anchored retry" in item for item in rebuilt.current_findings.warning_findings)
+    assert all("Pending referential-anchor requirement remains" not in item for item in rebuilt.current_risks.risk_flags)
+
+
+def test_session_state_card_builder_hides_recent_cleared_governance_resolution_for_nonreferential_followup() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    base = builder.build(request_text="Undo the last change on node reviewer", artifact=make_working_save())
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "control_governance_last_pending_anchor_resolution_status": "cleared_by_anchored_retry",
+            "control_governance_last_pending_anchor_resolution_summary": "Pending governance carryover was cleared because the stronger referential anchor was satisfied in the last cycle.",
+            "control_governance_last_pending_anchor_resolution_request_text": "Undo the last change on node reviewer",
+        },
+    })
+    persisted = persist_designer_session_state(make_working_save(), session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Change provider in node reviewer to Claude", artifact=persisted)
+
+    assert rebuilt.notes["control_governance_recent_resolution_status"] == "hidden_nonreferential"
+    assert rebuilt.notes["control_governance_recent_resolution_applied"] is False
+    assert all("recently cleared by an explicit anchored retry" not in item for item in rebuilt.current_findings.warning_findings)

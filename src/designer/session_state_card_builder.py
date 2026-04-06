@@ -8,6 +8,7 @@ from src.designer.models.designer_intent import ConstraintSet, ObjectiveSpec
 from src.designer.control_governance import (
     apply_control_governance_notes,
     governance_pending_anchor_applicability_for_request,
+    governance_recent_anchor_resolution_applicability_for_request,
 )
 from src.designer.reason_codes import archive_latest_mixed_referential_reason_notes
 from src.designer.models.designer_session_state_card import (
@@ -136,12 +137,27 @@ class DesignerSessionStateCardBuilder:
             if not fresh_cycle_from_committed_baseline
             else None
         )
+        recent_governance_resolution = (
+            governance_recent_anchor_resolution_applicability_for_request(
+                notes,
+                request_text,
+                available_node_refs=current_working_save.node_list,
+                commit_history=tuple(item for item in notes.get("commit_summary_history", ()) if isinstance(item, dict)),
+            )
+            if not fresh_cycle_from_committed_baseline
+            else None
+        )
         findings = self._apply_pending_anchor_guidance_to_findings(findings, governance_carryover)
+        findings = self._apply_recent_anchor_resolution_to_findings(findings, governance_carryover, recent_governance_resolution)
         risks = self._apply_pending_anchor_guidance_to_risks(risks, governance_carryover)
         if governance_carryover is not None:
             notes["control_governance_revision_guidance_carryover_status"] = governance_carryover.status
             notes["control_governance_revision_guidance_carryover_summary"] = governance_carryover.explanation
             notes["control_governance_revision_guidance_carryover_applied"] = governance_carryover.status in {"unsatisfied", "anchored_satisfied"}
+        if recent_governance_resolution is not None:
+            notes["control_governance_recent_resolution_status"] = recent_governance_resolution.status
+            notes["control_governance_recent_resolution_summary"] = recent_governance_resolution.explanation
+            notes["control_governance_recent_resolution_applied"] = recent_governance_resolution.status == "visible_referential"
 
         return DesignerSessionStateCard(
             card_version="0.1",
@@ -302,6 +318,29 @@ class DesignerSessionStateCardBuilder:
             risk_flags=tuple(risk_items),
             severity_summary=summary,
             unresolved_high_risks=tuple(unresolved),
+        )
+
+    def _apply_recent_anchor_resolution_to_findings(
+        self,
+        findings: CurrentFindingsState,
+        governance_carryover,
+        recent_resolution,
+    ) -> CurrentFindingsState:
+        if governance_carryover is not None and governance_carryover.status in {"unsatisfied", "anchored_satisfied"}:
+            return findings
+        if recent_resolution is None or recent_resolution.status != "visible_referential":
+            return findings
+        guidance = recent_resolution.explanation.strip()
+        if not guidance:
+            return findings
+        warning_items = tuple(dict.fromkeys((*findings.warning_findings, guidance)))
+        summary = findings.finding_summary or "No blocking findings recorded."
+        summary = f"{summary} Recent governance carryover was already resolved by an anchored retry and is now shown only as low-priority history."
+        return CurrentFindingsState(
+            blocking_findings=findings.blocking_findings,
+            warning_findings=warning_items,
+            confirmation_findings=findings.confirmation_findings,
+            finding_summary=summary,
         )
 
     def _default_scope_mode(self, storage_role: str) -> str:
