@@ -74,6 +74,23 @@ from .artifact_viewer import (
     read_artifact_viewer_view_model,
 )
 from .adapter import NexaUIViewAdapter
+from .action_schema import (
+    BuilderActionSchemaView,
+    BuilderActionView,
+    read_builder_action_schema,
+)
+from .panel_coordination import (
+    BuilderPanelCoordinationStateView,
+    PanelBadgeView,
+    SelectionSummaryView,
+    read_panel_coordination_state,
+)
+from .builder_shell import (
+    BuilderShellDiagnosticsView,
+    BuilderShellLayoutView,
+    BuilderShellViewModel,
+    read_builder_shell_view_model,
+)
 from .diff_viewer import (
     DiffChangeDetailView,
     DiffChangeItemView,
@@ -117,6 +134,17 @@ from .storage_panel import (
 
 __all__ = [
     "NexaUIViewAdapter",
+    "BuilderActionSchemaView",
+    "BuilderActionView",
+    "read_builder_action_schema",
+    "BuilderPanelCoordinationStateView",
+    "PanelBadgeView",
+    "SelectionSummaryView",
+    "read_panel_coordination_state",
+    "BuilderShellDiagnosticsView",
+    "BuilderShellLayoutView",
+    "BuilderShellViewModel",
+    "read_builder_shell_view_model",
     "DesignerPanelViewModel",
     "DesignerRequestStateView",
     "DesignerIntentStateView",

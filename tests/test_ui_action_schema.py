@@ -1,0 +1,90 @@
+from __future__ import annotations
+
+from src.contracts.nex_contract import ValidationFinding, ValidationReport
+from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
+from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
+from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
+from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
+from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
+from src.ui.action_schema import read_builder_action_schema
+from src.ui.execution_panel import read_execution_panel_view_model
+from src.ui.storage_panel import read_storage_view_model
+from src.ui.validation_panel import read_validation_panel_view_model
+from src.ui.designer_panel import read_designer_panel_view_model
+
+
+def _working_save() -> WorkingSaveModel:
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+
+def _commit() -> CommitSnapshotModel:
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
+
+
+def _run(status: str = "completed") -> ExecutionRecordModel:
+    return ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-06T00:00:00Z", started_at="2026-04-06T00:00:00Z", finished_at="2026-04-06T00:00:05Z", status=status),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(),
+        node_results=NodeResultsModel(),
+        outputs=ExecutionOutputModel(output_summary="done"),
+        artifacts=ExecutionArtifactsModel(),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+
+def _validation(result: str = "passed") -> ValidationReport:
+    findings = []
+    blocking = 0
+    if result == "failed":
+        findings = [ValidationFinding(code="BLOCKED", category="structural", severity="high", blocking=True, location="node:n1", message="blocked")]
+        blocking = 1
+    return ValidationReport(role="working_save", findings=findings, blocking_count=blocking, warning_count=0, result=result)
+
+
+def test_action_schema_enables_commit_when_review_and_approval_are_ready() -> None:
+    storage = read_storage_view_model(_working_save(), latest_commit_snapshot=_commit(), latest_execution_record=_run())
+    validation = read_validation_panel_view_model(_working_save(), validation_report=_validation("passed"))
+    execution = read_execution_panel_view_model(_working_save(), execution_record=_run())
+    designer = read_designer_panel_view_model(_working_save(), approval_flow=DesignerApprovalFlowState(approval_id="approval-1", intent_ref="intent-1", patch_ref="patch-1", precheck_ref="pre-1", preview_ref="preview-1", current_stage="awaiting_decision", final_outcome="approved_for_commit"))
+
+    vm = read_builder_action_schema(_working_save(), storage_view=storage, validation_view=validation, execution_view=execution, designer_view=designer)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["commit_snapshot"].enabled is True
+    assert actions["run_current"].enabled is True
+    assert actions["approve_for_commit"].enabled is True
+
+
+def test_action_schema_disables_run_and_commit_when_validation_is_blocked() -> None:
+    storage = read_storage_view_model(_working_save())
+    validation = read_validation_panel_view_model(_working_save(), validation_report=_validation("failed"))
+    execution = read_execution_panel_view_model(_working_save(), execution_record=_run())
+
+    vm = read_builder_action_schema(_working_save(), storage_view=storage, validation_view=validation, execution_view=execution)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["commit_snapshot"].enabled is False
+    assert actions["run_current"].enabled is False
+
+
+def test_action_schema_enables_cancel_only_for_running_execution() -> None:
+    execution = read_execution_panel_view_model(_working_save(), execution_record=_run(status="running"))
+    vm = read_builder_action_schema(_working_save(), execution_view=execution)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["cancel_run"].enabled is True

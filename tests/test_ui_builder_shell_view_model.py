@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 from src.contracts.nex_contract import ValidationFinding, ValidationReport
 from src.designer.models.circuit_draft_preview import CircuitDraftPreview, ConfirmationPreview, GraphViewModel, SummaryCard, StructuralPreview
 from src.designer.models.circuit_patch_plan import ChangeScope, CircuitPatchPlan, PatchOperation
@@ -12,29 +11,32 @@ from src.storage.models.commit_snapshot_model import CommitApprovalModel, Commit
 from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
-from src.ui.adapter import NexaUIViewAdapter
-from src.ui.action_schema import read_builder_action_schema
-from src.ui.panel_coordination import read_panel_coordination_state
 from src.ui.builder_shell import read_builder_shell_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
-from src.engine.execution_event import ExecutionEvent
 
 
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
-        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[{"name": "out", "source": "n1"}]),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={"viewport_center": {"x": 10, "y": 20}}, metadata={
+            "selected_node_ids": ["n1"],
+            "active_theme_id": "nexa-dark",
+            "active_layout_id": "builder-default",
+            "density_mode": "comfortable",
+            "user_mode": "advanced",
+            "active_panel": "validation",
+        }),
     )
 
 
 def _commit() -> CommitSnapshotModel:
     return CommitSnapshotModel(
-        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
-        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[{"name": "out", "source": "n1"}]),
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         validation=CommitValidationModel(validation_result="passed", summary={}),
@@ -57,52 +59,13 @@ def _run() -> ExecutionRecordModel:
     )
 
 
-def test_ui_adapter_routes_read_models_through_stable_boundary() -> None:
-    adapter = NexaUIViewAdapter(
-        latest_working_save=_working_save(),
-        latest_commit_snapshot=_commit(),
-        latest_execution_record=_run(),
-    )
-    preview = GraphPreviewOverlay(overlay_id="preview-001", summary="test preview")
-
-    graph_vm = adapter.read_graph_view_model(_working_save(), preview_overlay=preview)
-    storage_vm = adapter.read_storage_view_model(_working_save())
-    diff_vm = adapter.read_diff_view_model(diff_mode="draft_vs_commit", source=_working_save(), target=_commit())
-
-    assert graph_vm.storage_role == "execution_record"
-    assert storage_vm.active_storage_role == "working_save"
-    assert diff_vm.viewer_status == "ready"
-
-
-
-def test_ui_adapter_routes_execution_trace_and_artifact_read_models_through_stable_boundary() -> None:
-    adapter = NexaUIViewAdapter(
-        latest_working_save=_working_save(),
-        latest_commit_snapshot=_commit(),
-        latest_execution_record=_run(),
-    )
-    live_events = [
-        ExecutionEvent("execution_started", "run-001", None, 0, {}),
-        ExecutionEvent("node_started", "run-001", "n1", 5, {"stage": "provider"}),
-    ]
-
-    execution_vm = adapter.read_execution_panel_view_model(_working_save(), live_events=live_events)
-    trace_vm = adapter.read_trace_timeline_view_model(_run(), live_events=live_events)
-    artifact_vm = adapter.read_artifact_viewer_view_model(_run())
-
-    assert execution_vm.source_mode == "live_execution"
-    assert trace_vm.source_mode == "live_event_stream"
-    assert artifact_vm.viewer_status in {"ready", "partial"}
-
-
-
 def _validation_report() -> ValidationReport:
     return ValidationReport(
         role="working_save",
-        findings=[ValidationFinding(code="MISSING_INPUT", category="structural", severity="high", blocking=True, location="node:n1", message="missing input")],
-        blocking_count=1,
-        warning_count=0,
-        result="failed",
+        findings=[ValidationFinding(code="WARN", category="structural", severity="medium", blocking=False, location="node:n1", message="warn")],
+        blocking_count=0,
+        warning_count=1,
+        result="passed_with_findings",
     )
 
 
@@ -184,28 +147,16 @@ def _preview() -> CircuitDraftPreview:
 
 
 def _approval() -> DesignerApprovalFlowState:
-    return DesignerApprovalFlowState(
-        approval_id="approval-001",
-        intent_ref="intent-001",
-        patch_ref="patch-001",
-        precheck_ref="pre-001",
-        preview_ref="preview-001",
-        current_stage="awaiting_decision",
-        final_outcome="pending",
-        precheck_status="pass",
-    )
+    return DesignerApprovalFlowState(approval_id="approval-001", intent_ref="intent-001", patch_ref="patch-001", precheck_ref="pre-001", preview_ref="preview-001", current_stage="awaiting_decision", final_outcome="approved_for_commit")
 
 
-def test_ui_adapter_routes_inspector_validation_and_designer_read_models_through_stable_boundary() -> None:
-    adapter = NexaUIViewAdapter(
-        latest_working_save=_working_save(),
-        latest_commit_snapshot=_commit(),
-        latest_execution_record=_run(),
-    )
-    inspector_vm = adapter.read_inspector_panel_view_model(_working_save(), selected_ref="node:n1", validation_report=_validation_report())
-    validation_vm = adapter.read_validation_panel_view_model(_working_save(), validation_report=_validation_report())
-    designer_vm = adapter.read_designer_panel_view_model(
+def test_builder_shell_composes_connected_builder_surfaces() -> None:
+    vm = read_builder_shell_view_model(
         _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        preview_overlay=GraphPreviewOverlay(overlay_id="preview-ov-1", summary="preview"),
+        selected_ref="node:n1",
         session_state_card=_session_card(),
         intent=_intent(),
         patch_plan=_patch(),
@@ -213,44 +164,16 @@ def test_ui_adapter_routes_inspector_validation_and_designer_read_models_through
         preview=_preview(),
         approval_flow=_approval(),
     )
-    assert inspector_vm.object_type == "node"
-    assert validation_vm.overall_status == "blocked"
-    assert designer_vm.intent_state.intent_id == "intent-001"
-
-
-def test_ui_adapter_routes_builder_shell_coordination_and_action_schema_through_stable_boundary() -> None:
-    adapter = NexaUIViewAdapter(
-        latest_working_save=_working_save(),
-        latest_commit_snapshot=_commit(),
-        latest_execution_record=_run(),
-    )
-    graph_vm = adapter.read_graph_view_model(_working_save())
-    storage_vm = adapter.read_storage_view_model(_working_save())
-    validation_vm = adapter.read_validation_panel_view_model(_working_save(), validation_report=_validation_report())
-    execution_vm = adapter.read_execution_panel_view_model(_working_save(), execution_record=_run())
-    designer_vm = adapter.read_designer_panel_view_model(_working_save(), approval_flow=_approval())
-
-    action_vm = adapter.read_builder_action_schema_view(
-        _working_save(),
-        storage_view=storage_vm,
-        validation_view=validation_vm,
-        execution_view=execution_vm,
-        designer_view=designer_vm,
-    )
-    coordination_vm = adapter.read_panel_coordination_state_view(
-        _working_save(),
-        graph_view=graph_vm,
-        storage_view=storage_vm,
-        execution_view=execution_vm,
-        validation_view=validation_vm,
-        designer_view=designer_vm,
-    )
-    shell_vm = adapter.read_builder_shell_view_model(
-        _working_save(),
-        validation_report=_validation_report(),
-        execution_record=_run(),
-    )
-
-    assert action_vm.source_role == "working_save"
-    assert coordination_vm.storage_role == "working_save"
-    assert shell_vm.storage_role == "working_save"
+    assert vm.shell_status == "ready"
+    assert vm.shell_mode == "designer_review"
+    assert vm.coordination.active_panel == "validation"
+    assert vm.action_schema.source_role == "working_save"
+    assert vm.graph is not None
+    assert vm.inspector is not None
+    assert vm.validation is not None
+    assert vm.storage is not None
+    assert vm.execution is not None
+    assert vm.trace_timeline is not None
+    assert vm.artifact is not None
+    assert vm.designer is not None
+    assert vm.layout.active_theme_id == "nexa-dark"

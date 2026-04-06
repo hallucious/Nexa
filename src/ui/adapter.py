@@ -16,6 +16,9 @@ from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
 from src.ui.designer_panel import DesignerPanelViewModel, read_designer_panel_view_model
+from src.ui.builder_shell import BuilderShellViewModel, read_builder_shell_view_model
+from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
+from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 
 
 @dataclass(frozen=True)
@@ -168,6 +171,89 @@ class NexaUIViewAdapter:
         explanation: str | None = None,
     ) -> DiffViewerViewModel:
         return read_diff_view_model(diff_mode=diff_mode, source=source, target=target, explanation=explanation)
+
+    def read_builder_action_schema_view(
+        self,
+        source,
+        *,
+        storage_view: StoragePanelViewModel | None = None,
+        validation_view: ValidationPanelViewModel | None = None,
+        execution_view: ExecutionPanelViewModel | None = None,
+        designer_view: DesignerPanelViewModel | None = None,
+        explanation: str | None = None,
+    ) -> BuilderActionSchemaView:
+        return read_builder_action_schema(
+            source,
+            storage_view=storage_view,
+            validation_view=validation_view,
+            execution_view=execution_view,
+            designer_view=designer_view,
+            explanation=explanation,
+        )
+
+    def read_panel_coordination_state_view(
+        self,
+        source,
+        *,
+        graph_view: GraphWorkspaceViewModel | None = None,
+        storage_view: StoragePanelViewModel | None = None,
+        diff_view: DiffViewerViewModel | None = None,
+        execution_view: ExecutionPanelViewModel | None = None,
+        validation_view: ValidationPanelViewModel | None = None,
+        designer_view: DesignerPanelViewModel | None = None,
+        explanation: str | None = None,
+    ) -> BuilderPanelCoordinationStateView:
+        return read_panel_coordination_state(
+            source,
+            graph_view=graph_view,
+            storage_view=storage_view,
+            diff_view=diff_view,
+            execution_view=execution_view,
+            validation_view=validation_view,
+            designer_view=designer_view,
+            explanation=explanation,
+        )
+
+    def read_builder_shell_view_model(
+        self,
+        source,
+        *,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        preview_overlay: GraphPreviewOverlay | None = None,
+        selected_ref: str | None = None,
+        live_events=None,
+        diff_mode: str | None = None,
+        diff_source=None,
+        diff_target=None,
+        selected_artifact_id: str | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        explanation: str | None = None,
+    ) -> BuilderShellViewModel:
+        return read_builder_shell_view_model(
+            source,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            preview_overlay=preview_overlay,
+            selected_ref=selected_ref,
+            live_events=live_events,
+            diff_mode=diff_mode,
+            diff_source=diff_source,
+            diff_target=diff_target,
+            selected_artifact_id=selected_artifact_id,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+            explanation=explanation,
+        )
 
 
 __all__ = ["NexaUIViewAdapter"]

@@ -205,7 +205,7 @@ def read_designer_panel_view_model(
         touched_edge_count=len(patch_plan.change_scope.touched_edges) if patch_plan is not None else 0,
         touched_output_count=len(patch_plan.change_scope.touched_outputs) if patch_plan is not None else 0,
         destructive_change_present=(patch_plan.reversibility.destructive_ops_present if patch_plan is not None else False),
-        reversibility_summary=(patch_plan.reversibility.rollback_strategy or ("reversible" if patch_plan and patch_plan.reversibility.reversible else None)),
+        reversibility_summary=((patch_plan.reversibility.rollback_strategy or ("reversible" if patch_plan.reversibility.reversible else None)) if patch_plan is not None else None),
     )
     precheck_state = DesignerPrecheckStateView(
         precheck_id=precheck.precheck_id if precheck is not None else None,
