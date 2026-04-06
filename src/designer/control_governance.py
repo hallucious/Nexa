@@ -983,6 +983,9 @@ def clear_recent_revision_history_notes(notes: Mapping[str, Any]) -> dict[str, A
         "approval_revision_recent_history_count",
         "approval_revision_recent_history_summary",
         "approval_revision_recent_history_age",
+        "approval_revision_recent_history_reopened_status",
+        "approval_revision_recent_history_reopened_summary",
+        "approval_revision_recent_history_reopened_applied",
     ):
         next_notes.pop(key, None)
     return next_notes

@@ -612,3 +612,4 @@ Action-resolution rule:
 
 
 - Redirected recent revision threads are archived out of active continuity using `approval_revision_redirect_archived_*` notes and are cleared when a new active revision thread forms.
+- When the user explicitly reopens that older scope, rebuilt session cards may persist `approval_revision_recent_history_reopened_*` notes so the restored thread is treated as reopened continuity rather than ordinary recent-history reuse.

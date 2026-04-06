@@ -1283,5 +1283,5 @@ def test_request_normalizer_reopens_redirect_archive_as_active_continuity() -> N
         context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
     )
 
-    assert any("multi-step revision thread" in assumption.text for assumption in intent.assumptions)
+    assert any("explicitly reopens a previously redirected multi-step revision thread" in assumption.text for assumption in intent.assumptions)
     assert all("background history" not in assumption.text for assumption in intent.assumptions)

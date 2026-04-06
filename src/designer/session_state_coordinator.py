@@ -376,6 +376,9 @@ class DesignerSessionStateCoordinator:
             if key not in {
                 "approval_revision_recent_history_count",
                 "approval_revision_recent_history_summary",
+                "approval_revision_recent_history_reopened_status",
+                "approval_revision_recent_history_reopened_summary",
+                "approval_revision_recent_history_reopened_applied",
             }
         }
         raw_history = cleaned.get("approval_revision_recent_history", ())

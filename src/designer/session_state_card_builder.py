@@ -160,7 +160,9 @@ class DesignerSessionStateCardBuilder:
             request_text,
             available_node_refs=current_working_save.node_list,
         )
+        restored_redirect_archive = None
         if recent_redirect_archive is not None and recent_redirect_archive.get("status") == "reopen_mutation":
+            restored_redirect_archive = recent_redirect_archive
             notes = self._restore_recent_revision_history_from_redirect_archive(notes, recent_redirect_archive)
             recent_redirect_archive = None
             recent_revision_history = self._recent_approval_revision_history_for_request(notes, request_text)
@@ -175,6 +177,16 @@ class DesignerSessionStateCardBuilder:
             notes["control_governance_recent_resolution_status"] = recent_governance_resolution.status
             notes["control_governance_recent_resolution_summary"] = recent_governance_resolution.explanation
             notes["control_governance_recent_resolution_applied"] = recent_governance_resolution.status == "visible_referential"
+        if restored_redirect_archive is not None:
+            notes["approval_revision_recent_history_reopened_status"] = "restored_from_redirect_archive"
+            notes["approval_revision_recent_history_reopened_summary"] = str(restored_redirect_archive.get("explanation", "")).strip() or (
+                "A previously redirected revision thread has been explicitly reopened and restored as active continuity."
+            )
+            notes["approval_revision_recent_history_reopened_applied"] = True
+        else:
+            notes.pop("approval_revision_recent_history_reopened_status", None)
+            notes.pop("approval_revision_recent_history_reopened_summary", None)
+            notes.pop("approval_revision_recent_history_reopened_applied", None)
         if recent_revision_history is not None:
             notes["approval_revision_recent_history_status"] = recent_revision_history["status"]
             notes["approval_revision_recent_history_summary"] = recent_revision_history["summary"]

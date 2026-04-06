@@ -382,6 +382,8 @@ def test_builder_reopens_redirect_archive_into_active_recent_history() -> None:
     assert rebuilt.notes["approval_revision_recent_history_status"] == "visible_mutation"
     assert rebuilt.notes["approval_revision_recent_history_applied"] is True
     assert rebuilt.notes["approval_revision_recent_history_count"] == 2
+    assert rebuilt.notes["approval_revision_recent_history_reopened_status"] == "restored_from_redirect_archive"
+    assert rebuilt.notes["approval_revision_recent_history_reopened_applied"] is True
     assert "reopens that older redirected scope" in rebuilt.notes["approval_revision_recent_history_summary"]
     assert "approval_revision_redirect_archived_status" not in rebuilt.notes
     assert any("restored as active continuity again" in item for item in rebuilt.current_findings.warning_findings)

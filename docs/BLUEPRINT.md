@@ -526,3 +526,4 @@ Representation {
 
 
 - Redirected recent revision threads are archived out of active continuity using `approval_revision_redirect_archived_*` notes and are cleared when a new active revision thread forms.
+- Explicit reopen of the archived older scope restores that redirected thread into active continuity and should surface as reopened-thread continuity rather than ordinary recent-history reuse.

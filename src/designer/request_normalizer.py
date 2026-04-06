@@ -537,11 +537,22 @@ class DesignerRequestNormalizer:
             )
         recent_revision_history = self._recent_revision_history_snapshot_for_request(raw_request_text or request_text, category, context)
         if recent_revision_history:
+            reopened_from_redirect_archive = bool(
+                recent_revision_history.get("reopened_from_redirect_archive")
+            ) or bool(
+                context.session_state_card is not None
+                and str(context.session_state_card.notes.get("approval_revision_recent_history_reopened_status", "")).strip()
+                == "restored_from_redirect_archive"
+            )
+            assumption_prefix = (
+                f"This request explicitly reopens a previously redirected multi-step revision thread ({recent_revision_history.get('count', 0)} step(s)); restore the latest clarified interpretation and accumulated user corrections for that older scope. "
+                if reopened_from_redirect_archive
+                else f"This request continues a recent multi-step revision thread ({recent_revision_history.get('count', 0)} step(s)); preserve the latest clarified interpretation and accumulated user corrections unless you intend to redirect scope. "
+            )
             assumptions.append(
                 AssumptionSpec(
                     text=(
-                        f"This request continues a recent multi-step revision thread ({recent_revision_history.get('count', 0)} step(s)); preserve the latest clarified interpretation and accumulated user corrections unless you intend to redirect scope. "
-                        f"{str(recent_revision_history.get('summary', '')).strip()}".strip()
+                        f"{assumption_prefix}{str(recent_revision_history.get('summary', '')).strip()}".strip()
                     ),
                     severity="low",
                     user_visible=True,
@@ -803,6 +814,7 @@ class DesignerRequestNormalizer:
                 if isinstance(snapshot.get("history", []), list) and snapshot.get("history", [])
                 else ""
             ),
+            "reopened_from_redirect_archive": True,
         }
 
     def _recent_revision_redirect_archive_snapshot_for_request(
