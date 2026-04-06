@@ -319,4 +319,7 @@ def test_builder_hides_recent_revision_history_when_scope_redirects() -> None:
 
     assert rebuilt.notes["approval_revision_recent_history_status"] == "redirect_scope"
     assert rebuilt.notes["approval_revision_recent_history_applied"] is False
+    assert rebuilt.notes["approval_revision_redirect_archived_status"] == "archived_background"
+    assert "background history" in rebuilt.notes["approval_revision_redirect_archived_summary"]
+    assert rebuilt.notes["approval_revision_redirect_archived_applied"] is True
     assert all("multi-step revision thread" not in item for item in rebuilt.current_findings.warning_findings)

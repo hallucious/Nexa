@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from src.designer.models.designer_approval_flow import UserDecision
+from src.designer.models.designer_approval_flow import ApprovalPolicy, DecisionPoint, DesignerApprovalFlowState, UserDecision
 from src.designer.models.designer_proposal_control import DesignerProposalControlState, ProposalControlPolicy
 from src.designer.models.designer_session_state_card import (
     ApprovalState,
@@ -1215,3 +1215,43 @@ def test_control_result_keeps_pending_anchor_requirement_for_nonreferential_foll
     assert updated.notes["control_governance_pending_anchor_requirement"] is True
     assert updated.notes["control_governance_pending_anchor_requirement_mode"] == "required"
     assert "control_governance_last_pending_anchor_resolution_status" not in updated.notes
+
+
+def test_new_revision_history_clears_redirect_archive_background() -> None:
+    coordinator = DesignerSessionStateCoordinator()
+    current = replace(
+        make_card(),
+        notes={
+            **make_card().notes,
+            "approval_revision_redirect_archived_status": "archived_background",
+            "approval_revision_redirect_archived_summary": "Older revision-thread continuity is retained only as background history.",
+            "approval_revision_redirect_archived_applied": True,
+        },
+    )
+    approval = DesignerApprovalFlowState(
+        approval_id="approval-redirect",
+        intent_ref="intent-redirect",
+        patch_ref="patch-redirect",
+        precheck_ref="precheck-redirect",
+        preview_ref="preview-redirect",
+        current_stage="awaiting_decision",
+        approval_policy=ApprovalPolicy(),
+        required_decision_points=(DecisionPoint(decision_id="confirm.scope", label="Clarify scope"),),
+        user_decisions=(
+            UserDecision(
+                decision_point_id="confirm.scope",
+                outcome="request_revision",
+                note="Please revise.",
+            ),
+        ),
+        final_outcome="revision_requested",
+        explanation="Revision requested before commit.",
+        precheck_status="pass",
+        blocking_finding_count=0,
+        confirmation_finding_count=0,
+        confirmation_resolved=True,
+    )
+    updated = coordinator.evolve_after_approval_resolution(current, approval_state=approval)
+    assert "approval_revision_redirect_archived_status" not in updated.notes
+    assert "approval_revision_redirect_archived_summary" not in updated.notes
+    assert "approval_revision_redirect_archived_applied" not in updated.notes

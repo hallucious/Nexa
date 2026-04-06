@@ -165,6 +165,10 @@ class DesignerSessionStateCardBuilder:
             notes["approval_revision_recent_history_status"] = recent_revision_history["status"]
             notes["approval_revision_recent_history_summary"] = recent_revision_history["summary"]
             notes["approval_revision_recent_history_applied"] = recent_revision_history["status"] == "visible_mutation"
+            if recent_revision_history["status"] == "redirect_scope":
+                notes["approval_revision_redirect_archived_status"] = "archived_background"
+                notes["approval_revision_redirect_archived_summary"] = recent_revision_history["summary"]
+                notes["approval_revision_redirect_archived_applied"] = True
 
         return DesignerSessionStateCard(
             card_version="0.1",
