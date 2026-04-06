@@ -155,7 +155,15 @@ class DesignerSessionStateCardBuilder:
         recent_revision_history = None if fresh_cycle_from_committed_baseline else self._recent_approval_revision_history_for_request(notes, request_text)
         if recent_revision_history is not None and recent_revision_history.get("status") == "redirect_scope":
             notes = self._archive_recent_revision_history_background(notes, recent_revision_history)
-        recent_redirect_archive = None if fresh_cycle_from_committed_baseline else self._recent_revision_redirect_archive_for_request(notes, request_text)
+        recent_redirect_archive = None if fresh_cycle_from_committed_baseline else self._recent_revision_redirect_archive_for_request(
+            notes,
+            request_text,
+            available_node_refs=current_working_save.node_list,
+        )
+        if recent_redirect_archive is not None and recent_redirect_archive.get("status") == "reopen_mutation":
+            notes = self._restore_recent_revision_history_from_redirect_archive(notes, recent_redirect_archive)
+            recent_redirect_archive = None
+            recent_revision_history = self._recent_approval_revision_history_for_request(notes, request_text)
         findings = self._apply_recent_revision_history_to_findings(findings, recent_revision_history)
         findings = self._apply_recent_redirect_archive_to_findings(findings, recent_redirect_archive)
         risks = self._apply_pending_anchor_guidance_to_risks(risks, governance_carryover)
@@ -404,15 +412,55 @@ class DesignerSessionStateCardBuilder:
         next_notes["approval_revision_redirect_archived_age"] = 0
         return next_notes
 
+    def _restore_recent_revision_history_from_redirect_archive(
+        self,
+        notes: dict[str, Any],
+        recent_redirect_archive: dict[str, Any],
+    ) -> dict[str, Any]:
+        next_notes = clear_recent_revision_redirect_archive_notes(notes)
+        history = list(recent_redirect_archive.get("history", []))
+        next_notes["approval_revision_recent_history"] = history
+        next_notes["approval_revision_recent_history_count"] = len(history)
+        next_notes["approval_revision_recent_history_age"] = 0
+        if history:
+            latest = history[-1]
+            modes = ", ".join(
+                str(item).replace("_", " ")
+                for item in latest.get("continuation_modes", [])
+                if str(item).strip()
+            )
+            summary = (
+                f"Recent approval/revision continuity includes {len(history)} step(s). "
+                f"Latest continuation mode: {modes or 'revision requested'}."
+            )
+            if latest.get("selected_interpretation"):
+                summary = (
+                    f"{summary} Latest clarified interpretation remains: "
+                    f"{latest.get('selected_interpretation')}."
+                )
+            summary = (
+                f"{summary} The current mutation explicitly reopens that older redirected scope, "
+                "so the archived revision thread is restored as active continuity again."
+            )
+            next_notes["approval_revision_recent_history_summary"] = summary
+        else:
+            next_notes["approval_revision_recent_history_summary"] = (
+                "A previously redirected revision thread has been reopened as active continuity."
+            )
+        return next_notes
+
     def _recent_revision_redirect_archive_for_request(
         self,
         notes: dict[str, Any],
         request_text: str,
+        *,
+        available_node_refs: tuple[str, ...] = (),
     ) -> dict[str, Any] | None:
         applicability = governance_recent_revision_redirect_archive_applicability_for_request(
             notes,
             request_text,
             mutation_oriented=self._request_is_mutation_oriented(request_text),
+            available_node_refs=available_node_refs,
         )
         snapshot = applicability.snapshot or {}
         if not snapshot:

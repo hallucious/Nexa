@@ -354,3 +354,35 @@ def test_builder_hides_recent_revision_history_when_scope_redirects() -> None:
     assert rebuilt.notes["approval_revision_redirect_archived_applied"] is True
     assert any("background history" in item for item in rebuilt.current_findings.warning_findings)
     assert all("multi-step revision thread" not in item for item in rebuilt.current_findings.warning_findings)
+
+
+def test_builder_reopens_redirect_archive_into_active_recent_history() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    artifact = make_working_save()
+    base = builder.build(request_text="Change provider", artifact=artifact)
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "approval_revision_redirect_archived_status": "archived_background",
+            "approval_revision_redirect_archived_summary": "A previous revision thread was explicitly redirected away from its older scope and now remains only as short-lived background history.",
+            "approval_revision_redirect_archived_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.reviewer."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.reviewer."},
+            ],
+            "approval_revision_redirect_archived_count": 2,
+        },
+    })
+    persisted = persist_designer_session_state(artifact, session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Change provider in node.reviewer to Claude.", artifact=persisted)
+
+    assert rebuilt.notes["approval_revision_recent_history_status"] == "visible_mutation"
+    assert rebuilt.notes["approval_revision_recent_history_applied"] is True
+    assert rebuilt.notes["approval_revision_recent_history_count"] == 2
+    assert "reopens that older redirected scope" in rebuilt.notes["approval_revision_recent_history_summary"]
+    assert "approval_revision_redirect_archived_status" not in rebuilt.notes
+    assert any("restored as active continuity again" in item for item in rebuilt.current_findings.warning_findings)
+    assert all("background history" not in item for item in rebuilt.current_findings.warning_findings)

@@ -162,6 +162,10 @@ class RecentRevisionRedirectArchiveApplicability:
         return self.status == "visible_mutation"
 
     @property
+    def is_reopen_mutation(self) -> bool:
+        return self.status == "reopen_mutation"
+
+    @property
     def is_hidden_read_only(self) -> bool:
         return self.status == "hidden_read_only"
 
@@ -907,6 +911,7 @@ def governance_recent_revision_redirect_archive_applicability_for_request(
     request_text: str,
     *,
     mutation_oriented: bool,
+    available_node_refs: Sequence[str] = (),
 ) -> RecentRevisionRedirectArchiveApplicability:
     snapshot = governance_recent_revision_redirect_archive_snapshot_from_notes(notes)
     if not snapshot:
@@ -922,6 +927,30 @@ def governance_recent_revision_redirect_archive_applicability_for_request(
             status="hidden_read_only",
             snapshot=snapshot,
             explanation="A previous revision-thread redirect remains hidden background context for read-only follow-up requests.",
+        )
+    latest_selected_interpretation = ""
+    history = snapshot.get("history", [])
+    if isinstance(history, list) and history:
+        latest_selected_interpretation = str(history[-1].get("selected_interpretation", "")).strip()
+    request_refs = set(
+        _resolve_node_refs_for_governance(
+            _extract_node_refs_for_governance(request_text),
+            available_node_refs=available_node_refs,
+        )
+    )
+    latest_refs = set(
+        _resolve_node_refs_for_governance(
+            _extract_node_refs_for_governance(latest_selected_interpretation),
+            available_node_refs=available_node_refs,
+        )
+    )
+    if request_refs and latest_refs and not request_refs.isdisjoint(latest_refs):
+        return RecentRevisionRedirectArchiveApplicability(
+            status="reopen_mutation",
+            snapshot=snapshot,
+            explanation=(
+                "The current mutation request explicitly returns to the older redirected scope, so the archived revision thread should be restored as active continuity again."
+            ),
         )
     return RecentRevisionRedirectArchiveApplicability(
         status="visible_mutation",

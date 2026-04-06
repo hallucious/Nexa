@@ -76,7 +76,7 @@ The current repository state includes the following implemented surface:
 * mixed referential rollback+edit requests now surface explicit confirmation reasons through Designer precheck/preview instead of living only inside request normalization
 * repeated referential confirmation loops now raise a persisted control-governance policy tier, and that tier is surfaced back through Designer precheck/preview as explicit anchor-required guidance rather than remaining notes-only state
 * pending governance anchor-carryover is now cleared once a later referential retry satisfies the stronger-anchor requirement, instead of lingering indefinitely as stale continuity pressure
-* explicit scope redirects now archive older approval/revision thread continuity out of the active continuity store; redirected history remains only as low-priority background context for nearby mutation follow-up and is cleared once a new revision thread is formed
+* explicit scope redirects now archive older approval/revision thread continuity out of the active continuity store; redirected history remains only as low-priority background context for nearby mutation follow-up, can be restored into active continuity if the user explicitly reopens that older scope, and is cleared once a new revision thread is formed
 * cleared governance carryover is now reusable as low-priority recent-resolution context for later referential follow-up requests, while non-referential follow-up hides it and any new unresolved governance revision clears the old resolution history
 * low-priority recent-resolution governance context now expires after one nearby follow-up cycle; once consumed, it should be dropped rather than lingering indefinitely as stale low-priority history
 
@@ -362,7 +362,7 @@ CLI
 
 * approval-boundary continuation now keeps a compact recent revision history (bounded) so rebuilt session cards and the normalizer can recognize longer multi-step revision threads and preserve the latest clarified direction unless the user explicitly redirects scope
 
-* compact recent approval/revision continuity is now redirect-aware: if a new mutation request explicitly redirects scope away from the latest clarified interpretation, rebuilt session cards and normalization retain the old thread only as background history instead of surfacing it as active continuity pressure
+* compact recent approval/revision continuity is now redirect-aware: if a new mutation request explicitly redirects scope away from the latest clarified interpretation, rebuilt session cards and normalization retain the old thread only as background history instead of surfacing it as active continuity pressure; if the user later explicitly returns to that older scope, the archived thread is restored as active continuity again
 * active compact approval/revision continuity history now also has a short-lived retention window: if no new revision thread reinforces it, it expires after a nearby follow-up cycle instead of lingering indefinitely as stale active continuity
 
 

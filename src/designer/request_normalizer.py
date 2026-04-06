@@ -780,9 +780,30 @@ class DesignerRequestNormalizer:
             mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
             available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
         )
-        if not applicability.is_visible_mutation:
+        if applicability.is_visible_mutation:
+            return applicability.snapshot or {}
+        redirect_archive_applicability = governance_recent_revision_redirect_archive_applicability_for_request(
+            card.notes,
+            request_text,
+            mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
+            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
+        )
+        if not redirect_archive_applicability.is_reopen_mutation:
             return {}
-        return applicability.snapshot or {}
+        snapshot = redirect_archive_applicability.snapshot or {}
+        return {
+            "count": int(snapshot.get("count", 0) or 0),
+            "summary": (
+                "A previously redirected revision thread is explicitly reopened by the current mutation request, "
+                "so its older multi-step continuity should be restored."
+            ),
+            "history": list(snapshot.get("history", [])),
+            "latest_selected_interpretation": (
+                str(snapshot.get("history", [{}])[-1].get("selected_interpretation", "")).strip()
+                if isinstance(snapshot.get("history", []), list) and snapshot.get("history", [])
+                else ""
+            ),
+        }
 
     def _recent_revision_redirect_archive_snapshot_for_request(
         self,
@@ -797,6 +818,7 @@ class DesignerRequestNormalizer:
             card.notes,
             request_text,
             mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
+            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
         )
         if not applicability.is_visible_mutation:
             return {}
