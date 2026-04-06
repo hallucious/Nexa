@@ -388,3 +388,34 @@ def test_builder_reopens_redirect_archive_into_active_recent_history() -> None:
     assert "approval_revision_redirect_archived_status" not in rebuilt.notes
     assert any("restored as active continuity again" in item for item in rebuilt.current_findings.warning_findings)
     assert all("background history" not in item for item in rebuilt.current_findings.warning_findings)
+
+
+def test_builder_preserves_reopened_recent_history_marker_on_followup_cycle() -> None:
+    from src.designer.session_state_persistence import persist_designer_session_state
+
+    builder = DesignerSessionStateCardBuilder()
+    artifact = make_working_save()
+    base = builder.build(request_text="Change provider", artifact=artifact)
+    carried = base.__class__(**{
+        **base.__dict__,
+        "notes": {
+            **base.notes,
+            "approval_revision_recent_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.reviewer."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.reviewer."},
+            ],
+            "approval_revision_recent_history_count": 2,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 steps. Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.reviewer.",
+            "approval_revision_recent_history_origin_status": "reopened_from_redirect_archive",
+            "approval_revision_recent_history_origin_summary": "A previously redirected revision thread remains active continuity because the user explicitly reopened it.",
+            "approval_revision_recent_history_origin_applied": True,
+        },
+    })
+    persisted = persist_designer_session_state(artifact, session_state_card=carried)
+
+    rebuilt = builder.build(request_text="Change provider in node.reviewer to Claude.", artifact=persisted)
+
+    assert rebuilt.notes["approval_revision_recent_history_status"] == "visible_mutation"
+    assert rebuilt.notes["approval_revision_recent_history_reopened_status"] == "reopened_from_redirect_archive"
+    assert rebuilt.notes["approval_revision_recent_history_reopened_applied"] is True
+    assert "previously redirected revision thread remains active continuity" in rebuilt.notes["approval_revision_recent_history_reopened_summary"]

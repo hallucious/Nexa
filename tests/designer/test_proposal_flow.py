@@ -1285,3 +1285,41 @@ def test_request_normalizer_reopens_redirect_archive_as_active_continuity() -> N
 
     assert any("explicitly reopens a previously redirected multi-step revision thread" in assumption.text for assumption in intent.assumptions)
     assert all("background history" not in assumption.text for assumption in intent.assumptions)
+
+
+def test_request_normalizer_reuses_persisted_reopened_recent_history_on_followup_cycle() -> None:
+    normalizer = DesignerRequestNormalizer()
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-reopened-followup",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Change provider", clarified_interpretation="Only modify node.reviewer."),
+        notes={
+            "approval_revision_recent_history": [
+                {"continuation_modes": ["choose_interpretation"], "selected_interpretation": "Only modify node.reviewer."},
+                {"continuation_modes": ["request_revision"], "selected_interpretation": "Only modify node.reviewer."},
+            ],
+            "approval_revision_recent_history_count": 2,
+            "approval_revision_recent_history_summary": "Recent approval/revision continuity includes 2 step(s). Latest continuation mode: request revision. Latest clarified interpretation remains: Only modify node.reviewer.",
+            "approval_revision_recent_history_origin_status": "reopened_from_redirect_archive",
+            "approval_revision_recent_history_origin_summary": "A previously redirected revision thread remains active continuity because the user explicitly reopened it.",
+            "approval_revision_recent_history_origin_applied": True,
+        },
+    )
+
+    intent = normalizer.normalize(
+        "Change provider in node.reviewer to Claude.",
+        context=RequestNormalizationContext(working_save_ref="ws-001", session_state_card=card),
+    )
+
+    assert any("explicitly reopens a previously redirected multi-step revision thread" in assumption.text for assumption in intent.assumptions)

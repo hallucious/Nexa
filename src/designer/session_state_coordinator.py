@@ -383,6 +383,9 @@ class DesignerSessionStateCoordinator:
         }
         raw_history = cleaned.get("approval_revision_recent_history", ())
         history = [dict(item) for item in raw_history if isinstance(item, dict)] if isinstance(raw_history, (list, tuple)) else []
+        history_origin_status = str(cleaned.get("approval_revision_recent_history_origin_status", "")).strip()
+        history_origin_summary = str(cleaned.get("approval_revision_recent_history_origin_summary", "")).strip()
+        history_origin_applied = bool(cleaned.get("approval_revision_recent_history_origin_applied"))
 
         if approval_state.final_outcome == "revision_requested":
             cleaned = clear_recent_revision_redirect_archive_notes(cleaned)
@@ -414,9 +417,22 @@ class DesignerSessionStateCoordinator:
             if latest.get("selected_interpretation"):
                 summary = f"{summary} Latest clarified interpretation remains: {latest.get('selected_interpretation')}."
             cleaned["approval_revision_recent_history_summary"] = summary
+            if history_origin_status == "reopened_from_redirect_archive":
+                cleaned["approval_revision_recent_history_origin_status"] = history_origin_status
+                cleaned["approval_revision_recent_history_origin_summary"] = history_origin_summary or (
+                    "A previously redirected revision thread remains active continuity because the user explicitly reopened it."
+                )
+                cleaned["approval_revision_recent_history_origin_applied"] = history_origin_applied or True
+            else:
+                cleaned.pop("approval_revision_recent_history_origin_status", None)
+                cleaned.pop("approval_revision_recent_history_origin_summary", None)
+                cleaned.pop("approval_revision_recent_history_origin_applied", None)
         else:
             cleaned.pop("approval_revision_recent_history_summary", None)
             cleaned.pop("approval_revision_recent_history_age", None)
+            cleaned.pop("approval_revision_recent_history_origin_status", None)
+            cleaned.pop("approval_revision_recent_history_origin_summary", None)
+            cleaned.pop("approval_revision_recent_history_origin_applied", None)
         return cleaned
 
     def _mixed_revision_reason_code_from_approval_state(

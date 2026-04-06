@@ -58,6 +58,10 @@ The current repository state includes the following implemented surface:
 ### 5. Public Demo Baseline
 
 * only `examples/real_ai_bug_autopsy_multinode/` remains as the official demo
+
+### 6. Designer Control Plane
+
+* explicit reopened-from-redirect continuity origin is now preserved across active recent-history reuse rather than flattened into ordinary recent continuity
 * obsolete demo-coupled tests were removed to keep the suite aligned with the retained demo set
 
 ### 6. Current Verified Baseline

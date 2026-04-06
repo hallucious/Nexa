@@ -27,6 +27,7 @@ System invariants that MUST NOT be changed:
 13. Persisted governance carryover must clear once a later referential retry actually satisfies the stronger-anchor requirement; stale pending anchor requirements must not linger indefinitely across later cycles.
 14. Once governance carryover has been cleared, its resolution may remain only as low-priority recent-resolution context for later referential follow-up, and any newly unresolved governance revision must supersede and remove that older resolution history.
 15. Explicit scope redirect must archive older approval/revision thread continuity out of the active continuity store; redirected thread history may remain only as low-priority background context and must not continue constraining later mutations as if it were still the active thread.
+16. If the user explicitly reopens an archived redirected scope, the restored active continuity must remain marked as reopened-from-archive during its active recent-history window rather than being silently flattened into ordinary recent continuity.
 
 Any implementation that violates these rules is considered a violation of the Nexa architecture.
 

@@ -792,7 +792,14 @@ class DesignerRequestNormalizer:
             available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
         )
         if applicability.is_visible_mutation:
-            return applicability.snapshot or {}
+            snapshot = dict(applicability.snapshot or {})
+            origin_status = str(card.notes.get("approval_revision_recent_history_origin_status", "")).strip()
+            origin_summary = str(card.notes.get("approval_revision_recent_history_origin_summary", "")).strip()
+            if not snapshot.get("reopened_from_redirect_archive") and origin_status == "reopened_from_redirect_archive":
+                snapshot["reopened_from_redirect_archive"] = True
+                snapshot["origin_status"] = origin_status
+                snapshot["origin_summary"] = origin_summary
+            return snapshot
         redirect_archive_applicability = governance_recent_revision_redirect_archive_applicability_for_request(
             card.notes,
             request_text,

@@ -967,12 +967,17 @@ def governance_recent_revision_history_snapshot_from_notes(notes: Mapping[str, A
     if len(history) < 2:
         return {}
     latest = history[-1]
+    origin_status = str(notes.get("approval_revision_recent_history_origin_status", "")).strip()
+    origin_summary = str(notes.get("approval_revision_recent_history_origin_summary", "")).strip()
     return {
         "count": len(history),
         "summary": str(notes.get("approval_revision_recent_history_summary", "")).strip(),
         "history": history,
         "latest_selected_interpretation": str(latest.get("selected_interpretation", "")).strip(),
         "age": int(notes.get("approval_revision_recent_history_age", 0) or 0),
+        "origin_status": origin_status,
+        "origin_summary": origin_summary,
+        "reopened_from_redirect_archive": origin_status == "reopened_from_redirect_archive",
     }
 
 
@@ -983,6 +988,9 @@ def clear_recent_revision_history_notes(notes: Mapping[str, Any]) -> dict[str, A
         "approval_revision_recent_history_count",
         "approval_revision_recent_history_summary",
         "approval_revision_recent_history_age",
+        "approval_revision_recent_history_origin_status",
+        "approval_revision_recent_history_origin_summary",
+        "approval_revision_recent_history_origin_applied",
         "approval_revision_recent_history_reopened_status",
         "approval_revision_recent_history_reopened_summary",
         "approval_revision_recent_history_reopened_applied",
