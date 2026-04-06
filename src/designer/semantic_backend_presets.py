@@ -83,6 +83,7 @@ def build_semantic_backend_from_preset(
     *,
     providers: Mapping[str, Any] | None = None,
     provider_factories: Mapping[str, Callable[[], Any]] | None = None,
+    use_env_provider: bool = False,
     temperature: float = 0.0,
     max_output_tokens: int = 1200,
     instructions: str | None = None,
@@ -90,7 +91,12 @@ def build_semantic_backend_from_preset(
 ) -> GenerateTextSemanticBackend:
     canonical = normalize_semantic_backend_preset(preset)
     spec = _PRESET_TO_SPEC[canonical]
-    provider = _resolve_provider(canonical, providers=providers, provider_factories=provider_factories)
+    provider = _resolve_provider(
+        canonical,
+        providers=providers,
+        provider_factories=provider_factories,
+        use_env_provider=use_env_provider,
+    )
     return GenerateTextSemanticBackend(
         provider=provider,
         provider_name=spec.provider_name,
@@ -106,6 +112,7 @@ def _resolve_provider(
     *,
     providers: Mapping[str, Any] | None,
     provider_factories: Mapping[str, Callable[[], Any]] | None,
+    use_env_provider: bool,
 ) -> Any:
     normalized_providers = _normalize_provider_mapping(providers or {})
     if canonical_preset in normalized_providers:
@@ -114,6 +121,8 @@ def _resolve_provider(
     factory = normalized_factories.get(canonical_preset)
     if factory is not None:
         return factory()
+    if use_env_provider:
+        return build_live_semantic_provider_from_preset(canonical_preset)
     raise ValueError(
         "No provider configured for semantic backend preset "
         f"{canonical_preset!r}. Supply semantic_backend_preset_providers or semantic_backend_preset_factories."
@@ -132,3 +141,42 @@ def _normalize_factory_mapping(mapping: Mapping[str, Callable[[], Any]]) -> dict
     for key, value in mapping.items():
         normalized[normalize_semantic_backend_preset(key)] = value
     return normalized
+
+
+def build_live_semantic_provider_from_preset(preset: str) -> Any:
+    """Build a real provider instance from environment-configured credentials.
+
+    Network calls are still deferred until ``generate_text(...)`` is invoked.
+    This keeps semantic backend wiring live-provider-ready without requiring
+    callers to manually assemble provider objects.
+    """
+
+    canonical = normalize_semantic_backend_preset(preset)
+    factory = _default_provider_factory_for_preset(canonical)
+    return factory()
+
+
+def semantic_backend_preset_factory_from_env(preset: str) -> Callable[[], Any]:
+    canonical = normalize_semantic_backend_preset(preset)
+    return _default_provider_factory_for_preset(canonical)
+
+
+def _default_provider_factory_for_preset(canonical_preset: str) -> Callable[[], Any]:
+    if canonical_preset == "gpt":
+        from src.providers.gpt_provider import GPTProvider
+
+        return GPTProvider.from_env
+    if canonical_preset == "claude":
+        from src.providers.claude_provider import ClaudeProvider
+
+        return ClaudeProvider.from_env
+    if canonical_preset == "gemini":
+        from src.providers.gemini_provider import GeminiProvider
+
+        return GeminiProvider.from_env
+    if canonical_preset == "perplexity":
+        from src.providers.perplexity_provider import PerplexityProvider
+
+        return PerplexityProvider.from_env
+    supported = ", ".join(supported_semantic_backend_presets())
+    raise ValueError(f"unknown semantic backend preset: {canonical_preset!r}. Supported presets: {supported}")

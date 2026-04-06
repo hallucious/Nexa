@@ -25,6 +25,7 @@ from src.designer.models.designer_intent import (
 
 
 from src.designer.normalization_context import RequestNormalizationContext
+from src.designer.semantic_grounding_outcome import SemanticGroundingOutcomeProjector
 from src.designer.reason_codes import (
     flag_type_for_reason_code,
     reason_code_for_mixed_referential_request,
@@ -57,6 +58,7 @@ class DesignerRequestNormalizer:
         semantic_backend_preset: str | None = None,
         semantic_backend_preset_providers: Mapping[str, Any] | None = None,
         semantic_backend_preset_factories: Mapping[str, Callable[[], Any]] | None = None,
+        semantic_backend_preset_use_env: bool = False,
         use_llm_semantic_interpreter: bool = False,
         llm_backend_required: bool = False,
     ) -> None:
@@ -66,10 +68,12 @@ class DesignerRequestNormalizer:
             semantic_backend_preset=semantic_backend_preset,
             semantic_backend_preset_providers=semantic_backend_preset_providers,
             semantic_backend_preset_factories=semantic_backend_preset_factories,
+            semantic_backend_preset_use_env=semantic_backend_preset_use_env,
             use_llm_semantic_interpreter=use_llm_semantic_interpreter,
             llm_backend_required=llm_backend_required,
         )
         self._symbolic_grounder = symbolic_grounder or DeterministicSymbolicGrounder()
+        self._outcome_projector = SemanticGroundingOutcomeProjector()
 
     def normalize(self, request_text: str, *, context: RequestNormalizationContext | None = None) -> DesignerIntent:
         if not request_text or not request_text.strip():
@@ -92,18 +96,18 @@ class DesignerRequestNormalizer:
         scope = grounded_intent.target_scope
         actions = self._build_actions(category, effective_request_text, scope, context, grounded_intent=grounded_intent)
         assumptions = self._build_assumptions(category, effective_request_text, context, raw_request_text=request_text)
-        assumptions.extend(self._build_semantic_assumptions(semantic_intent, context=context))
-        assumptions.extend(self._build_grounding_assumptions(grounded_intent, context=context))
+        assumptions.extend(self._outcome_projector.build_semantic_assumptions(semantic_intent, context=context))
+        assumptions.extend(self._outcome_projector.build_grounding_assumptions(grounded_intent, context=context))
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
-        ambiguity_flags.extend(self._build_semantic_ambiguity_flags(semantic_intent, context=context))
-        ambiguity_flags.extend(self._build_grounding_ambiguity_flags(grounded_intent))
+        ambiguity_flags.extend(self._outcome_projector.build_semantic_ambiguity_flags(semantic_intent, context=context))
+        ambiguity_flags.extend(self._outcome_projector.build_grounding_ambiguity_flags(grounded_intent))
         risk_flags = self._build_risk_flags(effective_request_text, context)
         requires_confirmation = bool(
             semantic_intent.clarification_required or ambiguity_flags or [flag for flag in risk_flags if flag.severity == "high"]
         )
         constraints = self._build_constraints(request_text, context)
         objective = self._build_objective(request_text, context)
-        explanation = self._build_explanation(category, scope, ambiguity_flags, semantic_intent=semantic_intent, grounded_intent=grounded_intent, context=context)
+        explanation = self._outcome_projector.build_explanation(category, scope.mode, ambiguity_flags, semantic_intent=semantic_intent, grounded_intent=grounded_intent, context=context)
         return DesignerIntent(
             intent_id=_stable_id("intent", request_text),
             category=category,
@@ -116,7 +120,7 @@ class DesignerRequestNormalizer:
             ambiguity_flags=tuple(ambiguity_flags),
             risk_flags=tuple(risk_flags),
             requires_user_confirmation=requires_confirmation,
-            confidence=self._estimate_confidence(ambiguity_flags, semantic_intent=semantic_intent),
+            confidence=self._outcome_projector.estimate_confidence(ambiguity_flags, semantic_intent=semantic_intent),
             explanation=explanation,
         )
 

@@ -18,6 +18,7 @@ def build_designer_semantic_interpreter(
     semantic_backend_preset: str | None = None,
     semantic_backend_preset_providers: Mapping[str, Any] | None = None,
     semantic_backend_preset_factories: Mapping[str, Callable[[], Any]] | None = None,
+    semantic_backend_preset_use_env: bool = False,
     use_llm_semantic_interpreter: bool = False,
     llm_backend_required: bool = False,
 ) -> DesignerSemanticInterpreter:
@@ -36,6 +37,7 @@ def build_designer_semantic_interpreter(
             semantic_backend_preset,
             providers=semantic_backend_preset_providers,
             provider_factories=semantic_backend_preset_factories,
+            use_env_provider=semantic_backend_preset_use_env,
         )
 
     if resolved_backend is not None or use_llm_semantic_interpreter:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
+import src.providers.claude_provider as claude_provider_module
 
 from src.designer.semantic_interpreter import LLMBackedStructuredSemanticInterpreter, LegacyRuleBasedSemanticInterpreter
 from src.designer.semantic_interpreter_factory import build_designer_semantic_interpreter
@@ -49,3 +50,20 @@ def test_build_designer_semantic_interpreter_requires_backend_when_requested() -
             use_llm_semantic_interpreter=True,
             llm_backend_required=True,
         )
+
+
+def test_build_designer_semantic_interpreter_builds_llm_path_from_env_preset(monkeypatch) -> None:
+    provider = _GenerateTextProvider()
+
+    def _fake_from_env(cls):
+        return provider
+
+    monkeypatch.setattr(claude_provider_module.ClaudeProvider, "from_env", classmethod(_fake_from_env))
+    interpreter = build_designer_semantic_interpreter(
+        semantic_backend_preset="claude",
+        semantic_backend_preset_use_env=True,
+        use_llm_semantic_interpreter=True,
+        llm_backend_required=True,
+    )
+    assert isinstance(interpreter, LLMBackedStructuredSemanticInterpreter)
+    assert interpreter.backend.provider is provider

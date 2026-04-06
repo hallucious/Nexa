@@ -18,10 +18,12 @@ from src.designer.proposal_flow import DesignerProposalFlow
 from src.designer.request_normalizer import DesignerRequestNormalizer
 from src.designer.semantic_backend_presets import (
     available_semantic_backend_presets,
+    build_live_semantic_provider_from_preset,
     build_semantic_backend_from_preset,
     normalize_semantic_backend_preset,
 )
 from src.providers.provider_contract import ProviderMetrics, ProviderResult
+import src.providers.claude_provider as claude_provider_module
 
 
 class _GenerateTextProvider:
@@ -347,3 +349,65 @@ def test_semantic_backend_preset_surfaces_full_recovery_after_prior_clarificatio
     assert [action.action_type for action in intent.proposed_actions] == ["replace_provider"]
     assert not any(flag.type == "semantic_interpretation_requires_clarification" for flag in intent.ambiguity_flags)
     assert "A prior clarification resolved the request into concrete grounded actions." in intent.explanation
+
+
+def test_build_live_semantic_provider_from_preset_uses_provider_from_env(monkeypatch) -> None:
+    provider = _GenerateTextProvider()
+
+    def _fake_from_env(cls):
+        return provider
+
+    monkeypatch.setattr(claude_provider_module.ClaudeProvider, "from_env", classmethod(_fake_from_env))
+    assert build_live_semantic_provider_from_preset("anthropic") is provider
+
+
+def test_build_semantic_backend_from_preset_supports_env_provider(monkeypatch) -> None:
+    provider = _GenerateTextProvider()
+
+    def _fake_from_env(cls):
+        return provider
+
+    monkeypatch.setattr(claude_provider_module.ClaudeProvider, "from_env", classmethod(_fake_from_env))
+    backend = build_semantic_backend_from_preset("claude", use_env_provider=True)
+    assert backend.provider is provider
+    assert backend.provider_name == "designer.semantic.claude"
+
+
+def test_request_normalizer_accepts_env_backed_semantic_backend_preset(monkeypatch) -> None:
+    provider = _GenerateTextProvider(
+        text=json.dumps(
+            {
+                "category": "MODIFY_CIRCUIT",
+                "confidence_hint": 0.8,
+                "action_candidates": [
+                    {
+                        "action_type": "replace_provider",
+                        "target_node_descriptor": {"kind": "node", "label_hint": "reviewer", "role_hint": "review"},
+                        "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                    }
+                ],
+            }
+        )
+    )
+
+    def _fake_from_env(cls):
+        return provider
+
+    monkeypatch.setattr(claude_provider_module.ClaudeProvider, "from_env", classmethod(_fake_from_env))
+    normalizer = DesignerRequestNormalizer(
+        semantic_backend_preset="claude",
+        semantic_backend_preset_use_env=True,
+        use_llm_semantic_interpreter=True,
+        llm_backend_required=True,
+    )
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude instead.",
+        context=RequestNormalizationContext(
+            working_save_ref="ws-semantic-preset-1",
+            session_state_card=_semantic_card(),
+        ),
+    )
+
+    assert [action.action_type for action in intent.proposed_actions] == ["replace_provider"]
+    assert intent.proposed_actions[0].parameters["provider_id"] == "anthropic:claude-sonnet"
