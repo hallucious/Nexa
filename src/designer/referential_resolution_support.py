@@ -21,8 +21,26 @@ class DesignerReferentialResolutionSupport:
     referential snapshot lookup from the compatibility facade.
     """
 
-    def __init__(self, legacy_heuristics: Any) -> None:
-        self._legacy_heuristics = legacy_heuristics
+    def __init__(self, symbolic_grounder: Any) -> None:
+        self._symbolic_grounder = symbolic_grounder
+
+    def _explicit_node_refs(self, request_text: str, context: RequestNormalizationContext) -> tuple[str, ...]:
+        if hasattr(self._symbolic_grounder, "explicit_node_refs"):
+            return self._symbolic_grounder.explicit_node_refs(request_text, context)
+        direct_refs = ()
+        if hasattr(self._symbolic_grounder, "extract_node_refs") and hasattr(self._symbolic_grounder, "resolve_node_refs"):
+            direct_refs = self._symbolic_grounder.resolve_node_refs(self._symbolic_grounder.extract_node_refs(request_text), context)
+        if direct_refs:
+            return direct_refs
+        if hasattr(self._symbolic_grounder, "infer_node_refs_from_context_mentions"):
+            return self._symbolic_grounder.infer_node_refs_from_context_mentions(request_text, context)
+        return ()
+
+    def _selected_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
+        if hasattr(self._symbolic_grounder, "selected_node_refs"):
+            return self._symbolic_grounder.selected_node_refs(context)
+        return ()
+
 
     def repeated_cycle_referential_anchor_required(
         self,
@@ -50,9 +68,9 @@ class DesignerReferentialResolutionSupport:
             return True
         if self.uses_second_latest_reference_language(request_text):
             return True
-        explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
+        explicit_node_refs = self._explicit_node_refs(request_text, context)
         if not explicit_node_refs:
-            selected_node_refs = self._legacy_heuristics.selected_node_refs(context)
+            selected_node_refs = self._selected_node_refs(context)
             if len(selected_node_refs) == 1:
                 explicit_node_refs = selected_node_refs
         return bool(explicit_node_refs)
@@ -309,7 +327,7 @@ class DesignerReferentialResolutionSupport:
         if not isinstance(raw, (list, tuple)):
             return ()
         refs = tuple(str(item) for item in raw if str(item).strip())
-        return self._legacy_heuristics.resolve_node_refs(refs, context)
+        return self._symbolic_grounder.resolve_node_refs(refs, context)
 
     def resolve_target_node_refs_from_committed_summary(
         self,

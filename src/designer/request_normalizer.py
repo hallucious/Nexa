@@ -5,7 +5,6 @@ import hashlib
 
 from src.designer.models.designer_intent import DesignerIntent
 
-from src.designer.legacy_mutation_heuristics import DesignerLegacyMutationHeuristics
 from src.designer.referential_resolution_support import DesignerReferentialResolutionSupport
 from src.designer.intent_assembly_support import DesignerIntentAssemblySupport
 from src.designer.normalization_context import RequestNormalizationContext
@@ -53,11 +52,11 @@ class DesignerRequestNormalizer:
             llm_backend_required=llm_backend_required,
         )
         self._symbolic_grounder = symbolic_grounder or DeterministicSymbolicGrounder()
-        self._legacy_heuristics = DesignerLegacyMutationHeuristics(self._symbolic_grounder)
-        self._referential_support = DesignerReferentialResolutionSupport(self._legacy_heuristics)
+        self._referential_support = DesignerReferentialResolutionSupport(self._symbolic_grounder)
         self._outcome_projector = SemanticGroundingOutcomeProjector()
         self._intent_support = DesignerIntentAssemblySupport(
-            self._legacy_heuristics,
+            self._semantic_interpreter,
+            self._symbolic_grounder,
             self._referential_support,
         )
 

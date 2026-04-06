@@ -13,6 +13,105 @@ from src.designer.models.semantic_intent import (
 from src.designer.normalization_context import RequestNormalizationContext
 
 
+def requests_create_circuit(text: str) -> bool:
+    explicit_create_terms = (
+        "create",
+        "build",
+        "new circuit",
+        "new workflow",
+        "from scratch",
+    )
+    if any(term in text for term in explicit_create_terms):
+        return True
+    if "make" in text and any(term in text for term in ("circuit", "workflow", "pipeline")):
+        return True
+    return False
+
+
+def requests_review_gate(text: str) -> bool:
+    patterns = (
+        r"\bhuman review\b",
+        r"\bmanual review\b",
+        r"\breview gate\b",
+        r"\bapproval gate\b",
+        r"\brequire approval\b",
+        r"\bneeds approval\b",
+        r"\b(add|insert|require)\s+(a\s+)?review\b",
+        r"\b(add|insert|require)\s+(a\s+)?approval\b",
+    )
+    return any(__import__("re").search(pattern, text, flags=__import__("re").IGNORECASE) for pattern in patterns)
+
+
+def requests_provider_change(text: str, context: RequestNormalizationContext, symbolic_grounder: Any) -> bool:
+    import re
+    explicit_patterns = (
+        r"\b(replace|switch|change) provider\b",
+        r"\b(switch|change|move)\s+.*\s+to\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+        r"\bswap\s+.*\s+(?:to|over\s+to)\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+        r"\buse\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+        r"\brun\s+.*\s+on\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+        r"\b(have|make|let)\s+.*\s+use\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+    )
+    if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
+        return True
+    available_provider_ids = symbolic_grounder.available_resource_ids(context, resource_type="providers")
+    if symbolic_grounder.match_resource_id_from_text(text, available_provider_ids) is None:
+        return False
+    provider_verbs = ("use", "switch", "change", "replace", "move", "run", "instead", "have", "make", "let", "swap")
+    return any(verb in text for verb in provider_verbs)
+
+
+def requests_plugin_attach(text: str, context: RequestNormalizationContext, symbolic_grounder: Any) -> bool:
+    import re
+    explicit_patterns = (
+        r"\b(attach|add|use|enable)\s+plugin\b",
+        r"\b(add|give|enable|use|equip|have|make|let)\s+.*\b(search|normalize|validate|lookup)\b",
+        r"\b(search tool|search plugin|lookup tool|web search)\b",
+    )
+    if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
+        return True
+    available_plugin_ids = symbolic_grounder.available_resource_ids(context, resource_type="plugins")
+    if symbolic_grounder.match_resource_id_from_text(text, available_plugin_ids) is None:
+        return False
+    plugin_verbs = ("attach", "add", "use", "enable", "give", "equip", "have", "make", "let")
+    return any(verb in text for verb in plugin_verbs)
+
+
+def requests_prompt_change(text: str, context: RequestNormalizationContext, symbolic_grounder: Any) -> bool:
+    import re
+    explicit_patterns = (
+        r"\b(change|replace|update|set)\s+(the\s+)?prompt\b",
+        r"\b(change|replace|update|set)\s+(the\s+)?instruction\b",
+        r"\b(change|replace|update|set)\s+(the\s+)?template\b",
+        r"\buse\s+.*\bprompt\b",
+        r"\buse\s+.*\binstruction\b",
+        r"\buse\s+.*\btemplate\b",
+        r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\bprompt\b",
+        r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\binstruction\b",
+        r"\b(have|make|let)\s+.*\s+(use|follow)\s+.*\btemplate\b",
+    )
+    if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
+        return True
+    available_prompt_ids = symbolic_grounder.available_resource_ids(context, resource_type="prompts")
+    if symbolic_grounder.match_resource_id_from_text(text, available_prompt_ids) is None:
+        return False
+    prompt_verbs = ("use", "change", "replace", "update", "set", "swap")
+    prompt_nouns = ("prompt", "instruction", "template")
+    return any(verb in text for verb in prompt_verbs) and any(noun in text for noun in prompt_nouns)
+
+
+def requests_insert_between(text: str) -> bool:
+    import re
+    positional_terms = ("insert", "between", "before", "after", "in front of", "ahead of", "behind")
+    if any(term in text for term in positional_terms):
+        return True
+    natural_insert_patterns = (
+        r"\b(put|place|drop|slip)\s+.*\s+in front of\b",
+        r"\b(put|place|drop|slip)\s+.*\s+(before|after|behind)\b",
+    )
+    return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in natural_insert_patterns)
+
+
 class DesignerSemanticInterpreter:
     def interpret(self, request_text: str, *, context: RequestNormalizationContext) -> SemanticIntent:  # pragma: no cover - interface
         raise NotImplementedError
@@ -74,43 +173,15 @@ class LegacyRuleBasedSemanticInterpreter(DesignerSemanticInterpreter):
             return "OPTIMIZE_CIRCUIT"
         if any(term in text for term in ("analyze", "analyse", "risk", "cost", "gap", "why might")):
             return "ANALYZE_CIRCUIT"
-        if self.requests_create_circuit(text):
+        if requests_create_circuit(text):
             return "CREATE_CIRCUIT"
         if any(term in text for term in ("add", "change", "replace", "remove", "rename", "insert", "update")):
             return "MODIFY_CIRCUIT"
         return "MODIFY_CIRCUIT"
 
-    def requests_create_circuit(self, text: str) -> bool:
-        explicit_create_terms = (
-            "create",
-            "build",
-            "new circuit",
-            "new workflow",
-            "from scratch",
-        )
-        if any(term in text for term in explicit_create_terms):
-            return True
-        if "make" in text and any(term in text for term in ("circuit", "workflow", "pipeline")):
-            return True
-        return False
 
-    def requests_provider_change(self, text: str) -> bool:
-        provider_terms = ("claude", "anthropic", "gemini", "google", "perplexity", "gpt", "openai")
-        return any(term in text for term in provider_terms) and any(
-            term in text for term in ("provider", "use", "switch", "change", "replace", "move", "run", "swap")
-        )
 
-    def requests_plugin_attach(self, text: str) -> bool:
-        plugin_terms = ("plugin", "tool", "search", "lookup", "web search", "normalize", "validate")
-        return any(term in text for term in plugin_terms) and any(
-            term in text for term in ("attach", "add", "use", "enable", "give", "equip")
-        )
 
-    def requests_prompt_change(self, text: str) -> bool:
-        prompt_terms = ("prompt", "instruction", "template")
-        return any(term in text for term in prompt_terms) and any(
-            term in text for term in ("change", "replace", "update", "set", "use", "follow")
-        )
 
 
 @dataclass(frozen=True)

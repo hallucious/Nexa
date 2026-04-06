@@ -17,7 +17,13 @@ from src.designer.reason_codes import (
     flag_type_for_reason_code,
     reason_code_for_mixed_referential_request,
 )
-from src.designer.legacy_mutation_heuristics import DesignerLegacyMutationHeuristics
+from src.designer.semantic_interpreter import (
+    requests_insert_between,
+    requests_plugin_attach,
+    requests_prompt_change,
+    requests_provider_change,
+    requests_review_gate,
+)
 from src.designer.referential_resolution_support import DesignerReferentialResolutionSupport
 
 
@@ -31,11 +37,40 @@ class DesignerIntentAssemblySupport:
 
     def __init__(
         self,
-        legacy_heuristics: DesignerLegacyMutationHeuristics,
+        semantic_interpreter: Any,
+        symbolic_grounder: Any,
         referential_support: DesignerReferentialResolutionSupport,
     ) -> None:
-        self._legacy_heuristics = legacy_heuristics
+        self._semantic_interpreter = semantic_interpreter
+        self._symbolic_grounder = symbolic_grounder
         self._referential_support = referential_support
+
+
+    def _explicit_node_refs(self, request_text: str, context: RequestNormalizationContext) -> tuple[str, ...]:
+        if hasattr(self._symbolic_grounder, "explicit_node_refs"):
+            return self._symbolic_grounder.explicit_node_refs(request_text, context)
+        direct_refs = ()
+        if hasattr(self._symbolic_grounder, "extract_node_refs") and hasattr(self._symbolic_grounder, "resolve_node_refs"):
+            direct_refs = self._symbolic_grounder.resolve_node_refs(self._symbolic_grounder.extract_node_refs(request_text), context)
+        if direct_refs:
+            return direct_refs
+        if hasattr(self._symbolic_grounder, "infer_node_refs_from_context_mentions"):
+            return self._symbolic_grounder.infer_node_refs_from_context_mentions(request_text, context)
+        return ()
+
+    def _selected_node_refs(self, context: RequestNormalizationContext) -> tuple[str, ...]:
+        if hasattr(self._symbolic_grounder, "selected_node_refs"):
+            return self._symbolic_grounder.selected_node_refs(context)
+        return ()
+
+    def _first_target_ref(self, scope: TargetScope, request_text: str) -> str | None:
+        if hasattr(self._symbolic_grounder, "first_target_ref"):
+            return self._symbolic_grounder.first_target_ref(scope, request_text)
+        if scope.node_refs:
+            return scope.node_refs[0]
+        if hasattr(self._symbolic_grounder, "first_node_ref"):
+            return self._symbolic_grounder.first_node_ref(request_text)
+        return None
 
 
     def build_scope(
@@ -46,9 +81,9 @@ class DesignerIntentAssemblySupport:
     ) -> TargetScope:
         text = request_text.casefold()
         broad = any(term in text for term in ("all ", "entire", "whole", "across the circuit", "every"))
-        explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
+        explicit_node_refs = self._explicit_node_refs(request_text, context)
         if not explicit_node_refs and not broad:
-            selected_node_refs = self._legacy_heuristics.selected_node_refs(context)
+            selected_node_refs = self._selected_node_refs(context)
             if len(selected_node_refs) == 1 and category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
                 explicit_node_refs = selected_node_refs
         node_refs = self._referential_support.resolve_target_node_refs_from_committed_summary(
@@ -113,7 +148,7 @@ class DesignerIntentAssemblySupport:
             speed_priority="high" if "faster" in text or "latency" in text else None,
             quality_priority="high" if "quality" in text or "reliable" in text else None,
             determinism_preference="high" if "determin" in text else None,
-            human_review_required=self._legacy_heuristics.requests_review_gate(text) or bool(re.search(r"\bapprove\b", text, flags=re.IGNORECASE)),
+            human_review_required=requests_review_gate(text) or bool(re.search(r"\bapprove\b", text, flags=re.IGNORECASE)),
         )
         card = context.session_state_card
         if card is None:
@@ -185,40 +220,40 @@ class DesignerIntentAssemblySupport:
         referential_action = self._resolve_referential_action_resolution(request_text, scope, context)
         if referential_action is not None:
             actions.append(referential_action)
-        if self._legacy_heuristics.requests_review_gate(text):
+        if requests_review_gate(text):
             actions.append(
                 ActionSpec(
                     action_type="add_review_gate",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"review_type": "manual"},
                     rationale="The request explicitly asks for a review/approval step.",
                 )
             )
-        if self._legacy_heuristics.requests_provider_change(text, context):
-            provider_id = grounded_intent.matched_provider_id if grounded_intent is not None else self._legacy_heuristics.infer_provider_id(text, context)
+        if requests_provider_change(text, context, self._symbolic_grounder):
+            provider_id = grounded_intent.matched_provider_id if grounded_intent is not None else self._symbolic_grounder.infer_provider_id(text, context)
             actions.append(
                 ActionSpec(
                     action_type="replace_provider",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"provider_id": provider_id},
                     rationale="The request explicitly changes the node provider.",
                 )
             )
-        if self._legacy_heuristics.requests_plugin_attach(text, context):
+        if requests_plugin_attach(text, context, self._symbolic_grounder):
             actions.append(
                 ActionSpec(
                     action_type="attach_plugin",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
-                    parameters={"plugin_id": grounded_intent.matched_plugin_id if grounded_intent is not None else self._legacy_heuristics.infer_plugin_id(text, context)},
+                    target_ref=self._first_target_ref(scope, request_text),
+                    parameters={"plugin_id": grounded_intent.matched_plugin_id if grounded_intent is not None else self._symbolic_grounder.infer_plugin_id(text, context)},
                     rationale="The request explicitly introduces a plugin-backed tool step.",
                 )
             )
-        if self._legacy_heuristics.requests_prompt_change(text, context):
+        if requests_prompt_change(text, context, self._symbolic_grounder):
             actions.append(
                 ActionSpec(
                     action_type="set_prompt",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
-                    parameters={"prompt_id": grounded_intent.matched_prompt_id if grounded_intent is not None else self._legacy_heuristics.infer_prompt_id(text, context)},
+                    target_ref=self._first_target_ref(scope, request_text),
+                    parameters={"prompt_id": grounded_intent.matched_prompt_id if grounded_intent is not None else self._symbolic_grounder.infer_prompt_id(text, context)},
                     rationale="The request explicitly changes the prompt/instruction assignment.",
                 )
             )
@@ -226,7 +261,7 @@ class DesignerIntentAssemblySupport:
             actions.append(
                 ActionSpec(
                     action_type="rename_component",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"new_name": "renamed_component"},
                     rationale="The request explicitly asks for a rename operation.",
                 )
@@ -235,17 +270,17 @@ class DesignerIntentAssemblySupport:
             actions.append(
                 ActionSpec(
                     action_type="delete_node",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={},
                     rationale="The request explicitly removes an existing structural element.",
                 )
             )
-        if self._legacy_heuristics.requests_insert_between(text):
+        if requests_insert_between(text):
             actions.append(
                 ActionSpec(
                     action_type="insert_node_between",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
-                    parameters=grounded_intent.insert_between_parameters if grounded_intent is not None else self._legacy_heuristics.infer_insert_between_parameters(request_text, scope, context),
+                    target_ref=self._first_target_ref(scope, request_text),
+                    parameters=grounded_intent.insert_between_parameters if grounded_intent is not None else self._symbolic_grounder.infer_insert_between_parameters(request_text, scope, context),
                     rationale="The request explicitly inserts a node into an existing path.",
                 )
             )
@@ -253,7 +288,7 @@ class DesignerIntentAssemblySupport:
             actions.append(
                 ActionSpec(
                     action_type="update_node",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"mode": "bounded_update"},
                     rationale="The request asks for a bounded change to existing structure.",
                 )
@@ -262,7 +297,7 @@ class DesignerIntentAssemblySupport:
             actions.append(
                 ActionSpec(
                     action_type="update_node",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"repair_mode": "minimal_fix"},
                     rationale="Repair requests need a minimal corrective patch proposal.",
                 )
@@ -271,7 +306,7 @@ class DesignerIntentAssemblySupport:
             actions.append(
                 ActionSpec(
                     action_type="set_parameter",
-                    target_ref=self._legacy_heuristics.first_target_ref(scope, request_text),
+                    target_ref=self._first_target_ref(scope, request_text),
                     parameters={"optimization_goal": "cost_or_quality"},
                     rationale="Optimization requests are normalized into bounded parameter changes first.",
                 )
@@ -407,7 +442,7 @@ class DesignerIntentAssemblySupport:
                     )
                 )
             touched_node_ids = self._referential_support.committed_summary_touched_node_ids(resolved_summary, context)
-            explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
+            explicit_node_refs = self._explicit_node_refs(request_text, context)
             if not explicit_node_refs and len(touched_node_ids) == 1:
                 assumptions.append(
                     AssumptionSpec(
@@ -638,7 +673,7 @@ class DesignerIntentAssemblySupport:
                     )
                 )
             touched_node_ids = self._referential_support.committed_summary_touched_node_ids(resolved_summary, context)
-            explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
+            explicit_node_refs = self._explicit_node_refs(request_text, context)
             if explicit_node_refs:
                 conflicting = [ref for ref in explicit_node_refs if ref not in touched_node_ids]
                 if touched_node_ids and conflicting:
