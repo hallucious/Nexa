@@ -789,7 +789,7 @@ def test_proposal_flow_surfaces_anchored_governance_as_warning_not_confirmation(
         session_state_card=card,
     )
 
-    assert bundle.precheck.overall_status == "confirmation_required"
+    assert bundle.precheck.overall_status == "pass_with_warnings"
     assert not any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT" for f in bundle.precheck.confirmation_findings)
     assert any(f.issue_code == "REFERENTIAL_GOVERNANCE_STRICT_ANCHORED" for f in bundle.precheck.warning_findings)
     assert "strong enough anchor" in bundle.preview.explanation
@@ -1493,3 +1493,81 @@ def test_request_normalizer_infers_insert_between_topology_for_before_request() 
     assert action.parameters["after_node"] == "node.reviewer"
     assert action.parameters["from_node"] == "node.answerer"
     assert action.parameters["to_node"] == "node.reviewer"
+
+
+def _realistic_existing_card(user_request_text: str) -> DesignerSessionStateCard:
+    return DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-realistic-existing",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-001",
+            node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+            edge_list=(
+                "node.answerer->node.reviewer",
+                "node.reviewer->node.final_judge",
+            ),
+            prompt_refs=("review.prompt.strict",),
+            provider_refs=("openai:gpt-4o-mini", "anthropic:claude-sonnet"),
+            plugin_refs=("web.search.v2",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            prompts=(ResourceAvailability(id="review.prompt.strict"),),
+            providers=(
+                ResourceAvailability(id="openai:gpt-4o-mini"),
+                ResourceAvailability(id="anthropic:claude-sonnet"),
+            ),
+            plugins=(ResourceAvailability(id="web.search.v2"),),
+        ),
+        objective=ObjectiveSpec(primary_goal="Refine the existing review path"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text=user_request_text),
+    )
+
+
+def test_proposal_flow_handles_natural_language_provider_reassignment() -> None:
+    flow = DesignerProposalFlow()
+    bundle = flow.propose(
+        "Have the reviewer use Claude instead.",
+        working_save_ref="ws-001",
+        session_state_card=_realistic_existing_card("Have the reviewer use Claude instead."),
+    )
+
+    assert bundle.intent.category == "MODIFY_CIRCUIT"
+    assert bundle.intent.target_scope.node_refs == ("node.reviewer",)
+    provider_op = next(op for op in bundle.patch.operations if op.op_type == "set_node_provider")
+    assert provider_op.target_ref == "node.reviewer"
+    assert provider_op.payload["provider_id"] == "anthropic:claude-sonnet"
+    assert all(op.op_type != "create_node" for op in bundle.patch.operations)
+
+
+def test_proposal_flow_handles_natural_language_plugin_attachment_without_review_gate_false_positive() -> None:
+    flow = DesignerProposalFlow()
+    bundle = flow.propose(
+        "Give the reviewer web search so it can look things up first.",
+        working_save_ref="ws-001",
+        session_state_card=_realistic_existing_card("Give the reviewer web search so it can look things up first."),
+    )
+
+    plugin_op = next(op for op in bundle.patch.operations if op.op_type == "attach_node_plugin")
+    assert plugin_op.target_ref == "node.reviewer"
+    assert plugin_op.payload["plugin_id"] == "web.search.v2"
+    assert all(op.payload.get("kind") != "review_gate" for op in bundle.patch.operations)
+
+
+def test_proposal_flow_handles_natural_language_prompt_reassignment_without_create_misclassification() -> None:
+    flow = DesignerProposalFlow()
+    bundle = flow.propose(
+        "Make the reviewer use the strict review prompt.",
+        working_save_ref="ws-001",
+        session_state_card=_realistic_existing_card("Make the reviewer use the strict review prompt."),
+    )
+
+    assert bundle.intent.category == "MODIFY_CIRCUIT"
+    prompt_op = next(op for op in bundle.patch.operations if op.op_type == "set_node_prompt")
+    assert prompt_op.target_ref == "node.reviewer"
+    assert prompt_op.payload["prompt_id"] == "review.prompt.strict"
+    assert all(op.op_type != "define_output_binding" for op in bundle.patch.operations)

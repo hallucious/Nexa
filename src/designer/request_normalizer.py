@@ -106,7 +106,7 @@ class DesignerRequestNormalizer:
             return "OPTIMIZE_CIRCUIT"
         if any(term in text for term in ("analyze", "analyse", "risk", "cost", "gap", "why might")):
             return "ANALYZE_CIRCUIT"
-        if any(term in text for term in ("create", "make", "build", "new circuit")):
+        if self._requests_create_circuit(text):
             return "CREATE_CIRCUIT"
         if any(term in text for term in ("add", "change", "replace", "remove", "rename", "insert", "update")):
             return "MODIFY_CIRCUIT"
@@ -187,7 +187,7 @@ class DesignerRequestNormalizer:
             speed_priority="high" if "faster" in text or "latency" in text else None,
             quality_priority="high" if "quality" in text or "reliable" in text else None,
             determinism_preference="high" if "determin" in text else None,
-            human_review_required="review" in text or "approve" in text,
+            human_review_required=self._requests_review_gate(text) or bool(re.search(r"\bapprove\b", text, flags=re.IGNORECASE)),
         )
         card = context.session_state_card
         if card is None:
@@ -247,7 +247,7 @@ class DesignerRequestNormalizer:
         referential_action = self._resolve_referential_action_resolution(request_text, scope, context)
         if referential_action is not None:
             actions.append(referential_action)
-        if any(term in text for term in ("review", "approve", "human review")):
+        if self._requests_review_gate(text):
             actions.append(
                 ActionSpec(
                     action_type="add_review_gate",
@@ -256,7 +256,7 @@ class DesignerRequestNormalizer:
                     rationale="The request explicitly asks for a review/approval step.",
                 )
             )
-        if any(term in text for term in ("replace provider", "switch provider", "change provider")):
+        if self._requests_provider_change(text, context):
             provider_id = self._infer_provider_id(text, context)
             actions.append(
                 ActionSpec(
@@ -266,10 +266,7 @@ class DesignerRequestNormalizer:
                     rationale="The request explicitly changes the node provider.",
                 )
             )
-        if (
-            any(term in text for term in ("attach plugin", "add plugin", "use plugin"))
-            or ("plugin" in text and any(term in text for term in ("attach", "add", "use")))
-        ):
+        if self._requests_plugin_attach(text, context):
             actions.append(
                 ActionSpec(
                     action_type="attach_plugin",
@@ -278,7 +275,7 @@ class DesignerRequestNormalizer:
                     rationale="The request explicitly introduces a plugin-backed tool step.",
                 )
             )
-        if any(term in text for term in ("change prompt", "replace prompt", "update prompt", "set prompt", "change instruction", "replace instruction", "update instruction", "change template", "replace template", "update template")):
+        if self._requests_prompt_change(text, context):
             actions.append(
                 ActionSpec(
                     action_type="set_prompt",
@@ -1089,6 +1086,79 @@ class DesignerRequestNormalizer:
         if scope.node_refs:
             return scope.node_refs[0]
         return self._first_node_ref(request_text)
+
+    def _requests_create_circuit(self, text: str) -> bool:
+        explicit_create_terms = (
+            "create",
+            "build",
+            "new circuit",
+            "new workflow",
+            "from scratch",
+        )
+        if any(term in text for term in explicit_create_terms):
+            return True
+        if "make" in text and any(term in text for term in ("circuit", "workflow", "pipeline")):
+            return True
+        return False
+
+    def _requests_review_gate(self, text: str) -> bool:
+        patterns = (
+            r"\bhuman review\b",
+            r"\bmanual review\b",
+            r"\breview gate\b",
+            r"\bapproval gate\b",
+            r"\brequire approval\b",
+            r"\bneeds approval\b",
+            r"\b(add|insert|require)\s+(a\s+)?review\b",
+            r"\b(add|insert|require)\s+(a\s+)?approval\b",
+        )
+        return any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in patterns)
+
+    def _requests_provider_change(self, text: str, context: RequestNormalizationContext) -> bool:
+        explicit_patterns = (
+            r"\b(replace|switch|change) provider\b",
+            r"\b(switch|change|move)\s+.*\s+to\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+            r"\buse\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+            r"\brun\s+.*\s+on\s+(claude|anthropic|gemini|google|perplexity|gpt|openai)\b",
+        )
+        if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
+            return True
+        available_provider_ids = self._available_resource_ids(context, resource_type="providers")
+        if self._match_resource_id_from_text(text, available_provider_ids) is None:
+            return False
+        provider_verbs = ("use", "switch", "change", "replace", "move", "run", "instead")
+        return any(verb in text for verb in provider_verbs)
+
+    def _requests_plugin_attach(self, text: str, context: RequestNormalizationContext) -> bool:
+        explicit_patterns = (
+            r"\b(attach|add|use|enable)\s+plugin\b",
+            r"\b(add|give|enable|use)\s+.*\b(search|normalize|validate|lookup)\b",
+        )
+        if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
+            return True
+        available_plugin_ids = self._available_resource_ids(context, resource_type="plugins")
+        if self._match_resource_id_from_text(text, available_plugin_ids) is None:
+            return False
+        plugin_verbs = ("attach", "add", "use", "enable", "give")
+        return any(verb in text for verb in plugin_verbs)
+
+    def _requests_prompt_change(self, text: str, context: RequestNormalizationContext) -> bool:
+        explicit_patterns = (
+            r"\b(change|replace|update|set)\s+(the\s+)?prompt\b",
+            r"\b(change|replace|update|set)\s+(the\s+)?instruction\b",
+            r"\b(change|replace|update|set)\s+(the\s+)?template\b",
+            r"\buse\s+.*\bprompt\b",
+            r"\buse\s+.*\binstruction\b",
+            r"\buse\s+.*\btemplate\b",
+        )
+        if any(re.search(pattern, text, flags=re.IGNORECASE) for pattern in explicit_patterns):
+            return True
+        available_prompt_ids = self._available_resource_ids(context, resource_type="prompts")
+        if self._match_resource_id_from_text(text, available_prompt_ids) is None:
+            return False
+        prompt_verbs = ("use", "change", "replace", "update", "set", "swap")
+        prompt_nouns = ("prompt", "instruction", "template")
+        return any(verb in text for verb in prompt_verbs) and any(noun in text for noun in prompt_nouns)
 
     def _infer_provider_id(self, text: str, context: RequestNormalizationContext) -> str:
         matched = self._match_resource_id_from_text(text, self._available_resource_ids(context, resource_type="providers"))

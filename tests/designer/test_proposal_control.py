@@ -231,7 +231,7 @@ def test_control_plane_deescalates_strict_governance_to_elevated_after_anchored_
     )
 
     assert result.updated_session_state_card is not None
-    assert result.control_state.history[-1].reason_code == "DESIGNER-GOVERNANCE-STRICT-ANCHORED-CONFIRMATION"
+    assert result.control_state.history[-1].reason_code == "DESIGNER-GOVERNANCE-STRICT-ANCHORED-READY"
     assert result.updated_session_state_card.notes["control_governance_policy_tier"] == "elevated"
     assert result.updated_session_state_card.notes["control_governance_transition_direction"] == "deescalated"
     assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "anchored_resolution_cooldown"
@@ -261,7 +261,7 @@ def test_control_plane_holds_strict_governance_until_explicit_anchor_resolution(
     )
 
     assert result.updated_session_state_card is not None
-    assert result.control_state.history[-1].reason_code == "DESIGNER-CONFIRMATION-REQUIRED"
+    assert result.control_state.history[-1].reason_code == "DESIGNER-READY-FOR-APPROVAL"
     assert result.updated_session_state_card.notes["control_governance_policy_tier"] == "strict"
     assert result.updated_session_state_card.notes["control_governance_transition_direction"] == "held"
     assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "safe_cycle_decay_progress"
@@ -291,7 +291,7 @@ def test_control_plane_records_safe_cycle_decay_progress_while_strict_governance
     )
 
     assert result.updated_session_state_card is not None
-    assert result.control_state.history[-1].reason_code == "DESIGNER-CONFIRMATION-REQUIRED"
+    assert result.control_state.history[-1].reason_code == "DESIGNER-READY-FOR-APPROVAL"
     assert result.updated_session_state_card.notes["control_governance_policy_tier"] == "strict"
     assert result.updated_session_state_card.notes["control_governance_transition_rule"] == "safe_cycle_decay_progress"
     assert result.updated_session_state_card.notes["control_governance_resolution_state"] == "safe_cycle_decay_progress"
