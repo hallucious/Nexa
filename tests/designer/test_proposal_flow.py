@@ -2195,3 +2195,119 @@ def test_request_normalizer_surfaces_persistent_semantic_clarification_loop_afte
     assert any("persistent clarification loop" in assumption.text for assumption in intent.assumptions)
     assert "A prior clarification is already present" in intent.explanation
     assert intent.confidence == 0.34
+
+
+
+def test_request_normalizer_surfaces_full_recovery_after_prior_clarification() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-clarification-recovered",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-10",
+            node_list=("node.reviewer_shadow",),
+            provider_refs=("anthropic:claude-sonnet",),
+            prompt_refs=("prompt.strict_review",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(ResourceAvailability(id="anthropic:claude-sonnet"),),
+            prompts=(ResourceAvailability(id="prompt.strict_review"),),
+        ),
+        objective=ObjectiveSpec(primary_goal="Recover clarified reviewer changes"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(user_corrections=("I mean the shadow reviewer node.",)),
+        conversation_context=ConversationContext(
+            user_request_text="Have the reviewer use Claude and follow the strict review prompt.",
+            clarified_interpretation="Use the shadow reviewer node, not the main reviewer.",
+        ),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "confidence_hint": 0.74,
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer shadow", "role_hint": "review"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                },
+                {
+                    "action_type": "set_prompt",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer shadow", "role_hint": "review"},
+                    "prompt_descriptor": {"resource_type": "prompt", "label_hint": "strict review", "raw_reference_text": "strict review prompt"},
+                },
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude and follow the strict review prompt.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-10", session_state_card=card),
+    )
+
+    assert [action.action_type for action in intent.proposed_actions] == ["replace_provider", "set_prompt"]
+    assert all(action.target_ref == "node.reviewer_shadow" for action in intent.proposed_actions)
+    assert not any(flag.type == "semantic_interpretation_requires_clarification" for flag in intent.ambiguity_flags)
+    assert not any(flag.type == "semantic_grounding_partial_resolution" for flag in intent.ambiguity_flags)
+    assert any("fully grounded concrete actions" in assumption.text for assumption in intent.assumptions)
+    assert "A prior clarification resolved the request into concrete grounded actions." in intent.explanation
+    assert intent.requires_user_confirmation is False
+
+
+def test_request_normalizer_surfaces_partial_recovery_after_prior_clarification() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-clarification-partial-recovery",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-11",
+            node_list=("node.reviewer_shadow",),
+            provider_refs=("anthropic:claude-sonnet",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(ResourceAvailability(id="anthropic:claude-sonnet"),),
+        ),
+        objective=ObjectiveSpec(primary_goal="Partially recover clarified reviewer changes"),
+        constraints=ConstraintSet(),
+        revision_state=RevisionState(user_corrections=("I mean the shadow reviewer node.",)),
+        conversation_context=ConversationContext(
+            user_request_text="Have the reviewer use Claude and follow the strict review prompt.",
+            clarified_interpretation="Use the shadow reviewer node, not the main reviewer.",
+        ),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer shadow", "role_hint": "review"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                },
+                {
+                    "action_type": "set_prompt",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer shadow", "role_hint": "review"},
+                    "prompt_descriptor": {"resource_type": "prompt", "label_hint": "strict review", "raw_reference_text": "strict review prompt"},
+                },
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude and follow the strict review prompt.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-11", session_state_card=card),
+    )
+
+    assert [action.action_type for action in intent.proposed_actions] == ["replace_provider"]
+    assert any(flag.type == "semantic_grounding_partial_resolution" for flag in intent.ambiguity_flags)
+    assert any("prior clarification improved the current semantic request" in assumption.text for assumption in intent.assumptions)
+    assert "A prior clarification resolved part of the request, but some actions remain unresolved." in intent.explanation
+    assert intent.requires_user_confirmation is True
