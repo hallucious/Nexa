@@ -16,7 +16,7 @@ class ClaudeProvider:
 
     API_URL = "https://api.anthropic.com/v1/messages"
     ANTHROPIC_VERSION = "2023-06-01"
-    DEFAULT_MODEL = "claude-sonnet-4-20250514"
+    DEFAULT_MODEL = "claude-sonnet-4-6"
 
     def __init__(self, api_key: str, *, model: str = DEFAULT_MODEL, timeout_sec: int = 60) -> None:
         self.api_key = (api_key or "").strip()

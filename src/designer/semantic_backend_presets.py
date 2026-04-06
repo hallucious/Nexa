@@ -70,12 +70,43 @@ def semantic_backend_preset_specs() -> Mapping[str, SemanticBackendPresetSpec]:
 
 
 def available_semantic_backend_presets(*, env: Mapping[str, str] | None = None) -> tuple[str, ...]:
-    env = env or os.environ
+    env = os.environ if env is None else env
     available: list[str] = []
     for spec in _PRESET_SPECS:
         if any((env.get(name) or "").strip() for name in spec.env_var_names):
             available.append(spec.preset)
     return tuple(available)
+
+
+def missing_semantic_backend_preset_env_vars(
+    preset: str,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
+    canonical = normalize_semantic_backend_preset(preset)
+    env = os.environ if env is None else env
+    spec = _PRESET_TO_SPEC[canonical]
+    if any((env.get(name) or "").strip() for name in spec.env_var_names):
+        return ()
+    return tuple(spec.env_var_names)
+
+
+def semantic_backend_preset_is_available(
+    preset: str,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> bool:
+    return not missing_semantic_backend_preset_env_vars(preset, env=env)
+
+
+def first_available_semantic_backend_preset(
+    *,
+    env: Mapping[str, str] | None = None,
+) -> str | None:
+    available = available_semantic_backend_presets(env=env)
+    if not available:
+        return None
+    return available[0]
 
 
 def build_semantic_backend_from_preset(

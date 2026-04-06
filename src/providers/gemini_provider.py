@@ -55,7 +55,11 @@ class GeminiProvider:
 
     @staticmethod
     def from_env() -> "GeminiProvider":
-        api_key = resolve_api_key_or_raise("GEMINI_API_KEY")
+        api_key = (os.environ.get("GEMINI_API_KEY") or "").strip()
+        if not api_key:
+            api_key = (os.environ.get("GOOGLE_API_KEY") or "").strip()
+        if not api_key:
+            api_key = resolve_api_key_or_raise("GEMINI_API_KEY")
         model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
         return GeminiProvider(api_key, model=model)
 

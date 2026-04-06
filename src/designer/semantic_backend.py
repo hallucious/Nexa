@@ -82,9 +82,9 @@ class GenerateTextSemanticBackend(SemanticIntentStructuredBackend):
         return (
             "You are Nexa Designer Stage 1 Semantic Interpreter. "
             "Interpret the request into structured semantic intent JSON only. "
-            "Do not emit canonical ids such as node refs, provider ids, plugin ids, or prompt ids. "
-            "Use semantic descriptors only. Return valid JSON with category, confidence_hint, "
-            "optional clarification fields, and action_candidates."
+            "Return exactly one JSON object and no prose, markdown, or code fences. "
+            "Do not emit canonical ids such as node refs, provider ids, plugin ids, prompt ids, target_ref, canonical_ref, or canonical_id. "
+            "Use semantic descriptors only. Return valid JSON with category, confidence_hint, optional clarification fields, and action_candidates."
         )
 
     @staticmethod
@@ -96,7 +96,7 @@ class GenerateTextSemanticBackend(SemanticIntentStructuredBackend):
     ) -> str:
         context_json = json.dumps(context_payload, ensure_ascii=False, sort_keys=True)
         return (
-            "Interpret the following Designer request into structured semantic intent JSON.\n\n"
+            "Interpret the following Designer request into structured semantic intent JSON. Return JSON only.\n\n"
             "User request:\n"
             f"{request_text.strip()}\n\n"
             "Effective request text:\n"

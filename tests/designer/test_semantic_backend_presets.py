@@ -20,7 +20,10 @@ from src.designer.semantic_backend_presets import (
     available_semantic_backend_presets,
     build_live_semantic_provider_from_preset,
     build_semantic_backend_from_preset,
+    first_available_semantic_backend_preset,
+    missing_semantic_backend_preset_env_vars,
     normalize_semantic_backend_preset,
+    semantic_backend_preset_is_available,
 )
 from src.providers.provider_contract import ProviderMetrics, ProviderResult
 import src.providers.claude_provider as claude_provider_module
@@ -411,3 +414,23 @@ def test_request_normalizer_accepts_env_backed_semantic_backend_preset(monkeypat
 
     assert [action.action_type for action in intent.proposed_actions] == ["replace_provider"]
     assert intent.proposed_actions[0].parameters["provider_id"] == "anthropic:claude-sonnet"
+
+
+def test_missing_semantic_backend_preset_env_vars_reports_missing_alias_group() -> None:
+    assert missing_semantic_backend_preset_env_vars(
+        "gemini",
+        env={},
+    ) == ("GEMINI_API_KEY", "GOOGLE_API_KEY")
+
+
+def test_semantic_backend_preset_is_available_accepts_alias_env_group() -> None:
+    assert semantic_backend_preset_is_available(
+        "gemini",
+        env={"GOOGLE_API_KEY": "x"},
+    ) is True
+
+
+def test_first_available_semantic_backend_preset_returns_first_available() -> None:
+    assert first_available_semantic_backend_preset(
+        env={"PERPLEXITY_API_KEY": "pplx-key"},
+    ) == "perplexity"
