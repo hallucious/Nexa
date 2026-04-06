@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable, Mapping
 import hashlib
 import re
 
@@ -35,6 +35,7 @@ from src.designer.semantic_interpreter import (
     LegacyRuleBasedSemanticInterpreter,
     SemanticIntentStructuredBackend,
 )
+from src.designer.semantic_backend_presets import build_semantic_backend_from_preset
 from src.designer.symbolic_grounder import (
     DesignerSymbolicGrounder,
     DeterministicSymbolicGrounder,
@@ -55,9 +56,18 @@ class DesignerRequestNormalizer:
         semantic_interpreter: DesignerSemanticInterpreter | None = None,
         symbolic_grounder: DesignerSymbolicGrounder | None = None,
         semantic_backend: SemanticIntentStructuredBackend | None = None,
+        semantic_backend_preset: str | None = None,
+        semantic_backend_preset_providers: Mapping[str, Any] | None = None,
+        semantic_backend_preset_factories: Mapping[str, Callable[[], Any]] | None = None,
         use_llm_semantic_interpreter: bool = False,
         llm_backend_required: bool = False,
     ) -> None:
+        if semantic_backend is None and semantic_backend_preset is not None:
+            semantic_backend = build_semantic_backend_from_preset(
+                semantic_backend_preset,
+                providers=semantic_backend_preset_providers,
+                provider_factories=semantic_backend_preset_factories,
+            )
         if semantic_interpreter is not None:
             self._semantic_interpreter = semantic_interpreter
         elif semantic_backend is not None or use_llm_semantic_interpreter:
