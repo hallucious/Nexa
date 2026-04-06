@@ -46,6 +46,9 @@ class SemanticIntent:
     action_candidates: tuple[SemanticActionCandidate, ...] = ()
     confidence_hint: float = 1.0
     notes: tuple[str, ...] = field(default_factory=tuple)
+    clarification_required: bool = False
+    clarification_questions: tuple[str, ...] = field(default_factory=tuple)
+    semantic_ambiguity_notes: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if not self.semantic_intent_id.strip():
@@ -58,3 +61,5 @@ class SemanticIntent:
             raise ValueError(f"Unsupported semantic intent category: {self.category}")
         if not 0.0 <= self.confidence_hint <= 1.0:
             raise ValueError("SemanticIntent.confidence_hint must be between 0.0 and 1.0")
+        if self.clarification_questions and not self.clarification_required:
+            raise ValueError("SemanticIntent.clarification_required must be true when clarification_questions are present")

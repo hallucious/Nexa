@@ -207,6 +207,9 @@ class LLMBackedStructuredSemanticInterpreter(DesignerSemanticInterpreter):
         confidence_hint = self._coerce_confidence(payload.get("confidence_hint"))
         notes = self._coerce_notes(payload.get("notes") or payload.get("interpretation_notes"))
         action_candidates = tuple(self._coerce_action_candidate(item) for item in self._coerce_action_payloads(payload.get("action_candidates") or payload.get("semantic_actions")))
+        clarification_required = self._coerce_bool(payload.get("clarification_required") or payload.get("requires_clarification"))
+        clarification_questions = self._coerce_text_list(payload.get("clarification_questions") or payload.get("clarification_requests"))
+        semantic_ambiguity_notes = self._coerce_text_list(payload.get("semantic_ambiguity_notes") or payload.get("ambiguity_notes"))
         return SemanticIntent(
             semantic_intent_id=_stable_id("semantic", request_text),
             user_request_text=request_text.strip(),
@@ -215,6 +218,9 @@ class LLMBackedStructuredSemanticInterpreter(DesignerSemanticInterpreter):
             action_candidates=action_candidates,
             confidence_hint=confidence_hint,
             notes=notes,
+            clarification_required=clarification_required,
+            clarification_questions=clarification_questions,
+            semantic_ambiguity_notes=semantic_ambiguity_notes,
         )
 
     def _ensure_no_forbidden_canonical_ids(self, payload: Mapping[str, Any]) -> None:
@@ -302,6 +308,33 @@ class LLMBackedStructuredSemanticInterpreter(DesignerSemanticInterpreter):
             capability_hint=self._optional_text(payload.get("capability_hint") or payload.get("style_hint")),
             raw_reference_text=self._optional_text(payload.get("raw_reference_text") or payload.get("user_reference_text")),
         )
+
+    def _coerce_bool(self, payload: Any) -> bool:
+        if payload is None:
+            return False
+        if isinstance(payload, bool):
+            return payload
+        if isinstance(payload, str):
+            return payload.strip().casefold() in {"true", "1", "yes", "required"}
+        return bool(payload)
+
+    def _coerce_text_list(self, payload: Any) -> tuple[str, ...]:
+        if payload is None:
+            return ()
+        if isinstance(payload, str):
+            text = payload.strip()
+            return (text,) if text else ()
+        if isinstance(payload, list):
+            return tuple(str(item).strip() for item in payload if str(item).strip())
+        if isinstance(payload, Mapping):
+            values = []
+            for value in payload.values():
+                text = str(value).strip()
+                if text:
+                    values.append(text)
+            return tuple(values)
+        text = str(payload).strip()
+        return (text,) if text else ()
 
     def _coerce_notes(self, payload: Any) -> tuple[str, ...]:
         if payload is None:

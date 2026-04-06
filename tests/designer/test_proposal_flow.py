@@ -1822,3 +1822,122 @@ def test_request_normalizer_falls_back_when_llm_payload_uses_canonical_ids() -> 
 
     action = next(action for action in intent.proposed_actions if action.action_type == "replace_provider")
     assert action.parameters["provider_id"] == "anthropic:claude-sonnet"
+
+
+def test_request_normalizer_uses_llm_semantic_backend_for_multi_action_request() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-multi-action",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-3",
+            node_list=("node.answerer", "node.reviewer", "node.final_judge"),
+            edge_list=("node.reviewer -> node.final_judge",),
+            prompt_refs=("prompt.strict_review",),
+            provider_refs=("openai:gpt-4o-mini", "anthropic:claude-sonnet"),
+            plugin_refs=("web.search",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(
+                ResourceAvailability(id="openai:gpt-4o-mini"),
+                ResourceAvailability(id="anthropic:claude-sonnet"),
+            ),
+            plugins=(ResourceAvailability(id="web.search"),),
+            prompts=(ResourceAvailability(id="prompt.strict_review"),),
+        ),
+        objective=ObjectiveSpec(primary_goal="Upgrade reviewer node"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Have the reviewer use Claude, add search, and follow the strict review prompt."),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "confidence_hint": 0.79,
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer", "role_hint": "review"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                },
+                {
+                    "action_type": "attach_plugin",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer"},
+                    "plugin_descriptor": {"resource_type": "plugin", "capability_hint": "search tool", "raw_reference_text": "search"},
+                },
+                {
+                    "action_type": "set_prompt",
+                    "target_node_descriptor": {"kind": "node", "label_hint": "reviewer"},
+                    "prompt_descriptor": {"resource_type": "prompt", "label_hint": "strict review prompt", "raw_reference_text": "strict review prompt"},
+                },
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude, add search, and follow the strict review prompt.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-3", session_state_card=card),
+    )
+
+    action_types = {action.action_type for action in intent.proposed_actions}
+    assert action_types == {"replace_provider", "attach_plugin", "set_prompt"}
+    assert all(action.target_ref == "node.reviewer" for action in intent.proposed_actions)
+    provider_action = next(action for action in intent.proposed_actions if action.action_type == "replace_provider")
+    plugin_action = next(action for action in intent.proposed_actions if action.action_type == "attach_plugin")
+    prompt_action = next(action for action in intent.proposed_actions if action.action_type == "set_prompt")
+    assert provider_action.parameters["provider_id"] == "anthropic:claude-sonnet"
+    assert plugin_action.parameters["plugin_id"] == "web.search"
+    assert prompt_action.parameters["prompt_id"] == "prompt.strict_review"
+
+
+def test_request_normalizer_surfaces_llm_clarification_requirement() -> None:
+    card = DesignerSessionStateCard(
+        card_version="0.1",
+        session_id="sess-llm-clarification",
+        storage_role="working_save",
+        current_working_save=WorkingSaveReality(
+            mode="existing_draft",
+            savefile_ref="ws-llm-4",
+            node_list=("node.reviewer", "node.reviewer_shadow"),
+            provider_refs=("anthropic:claude-sonnet",),
+        ),
+        current_selection=CurrentSelectionState(selection_mode="none"),
+        target_scope=SessionTargetScope(mode="existing_circuit", touch_budget="bounded"),
+        available_resources=AvailableResources(
+            providers=(ResourceAvailability(id="anthropic:claude-sonnet"),)
+        ),
+        objective=ObjectiveSpec(primary_goal="Change provider"),
+        constraints=ConstraintSet(),
+        conversation_context=ConversationContext(user_request_text="Have the reviewer use Claude instead."),
+    )
+    backend = _StructuredSemanticBackend(
+        {
+            "category": "MODIFY_CIRCUIT",
+            "confidence_hint": 0.38,
+            "clarification_required": True,
+            "clarification_questions": ["Do you mean node.reviewer or node.reviewer_shadow?"],
+            "semantic_ambiguity_notes": ["Two reviewer-like nodes are present in the current draft."],
+            "action_candidates": [
+                {
+                    "action_type": "replace_provider",
+                    "target_node_descriptor": {"kind": "node", "role_hint": "review"},
+                    "provider_descriptor": {"resource_type": "provider", "family": "claude", "raw_reference_text": "Claude"},
+                }
+            ],
+        }
+    )
+    normalizer = DesignerRequestNormalizer(semantic_backend=backend, use_llm_semantic_interpreter=True)
+
+    intent = normalizer.normalize(
+        "Have the reviewer use Claude instead.",
+        context=RequestNormalizationContext(working_save_ref="ws-llm-4", session_state_card=card),
+    )
+
+    assert intent.requires_user_confirmation is True
+    assert any(flag.type == "semantic_interpretation_requires_clarification" for flag in intent.ambiguity_flags)
+    assert any("Two reviewer-like nodes" in assumption.text for assumption in intent.assumptions)
+    assert "Clarification needed" in intent.explanation
+    assert intent.confidence == 0.38

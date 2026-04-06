@@ -96,12 +96,16 @@ class DesignerRequestNormalizer:
         scope = grounded_intent.target_scope
         actions = self._build_actions(category, effective_request_text, scope, context, grounded_intent=grounded_intent)
         assumptions = self._build_assumptions(category, effective_request_text, context, raw_request_text=request_text)
+        assumptions.extend(self._build_semantic_assumptions(semantic_intent))
         ambiguity_flags = self._build_ambiguity_flags(category, effective_request_text, context)
+        ambiguity_flags.extend(self._build_semantic_ambiguity_flags(semantic_intent))
         risk_flags = self._build_risk_flags(effective_request_text, context)
-        requires_confirmation = bool(ambiguity_flags or [flag for flag in risk_flags if flag.severity == "high"])
+        requires_confirmation = bool(
+            semantic_intent.clarification_required or ambiguity_flags or [flag for flag in risk_flags if flag.severity == "high"]
+        )
         constraints = self._build_constraints(request_text, context)
         objective = self._build_objective(request_text, context)
-        explanation = self._build_explanation(category, scope, ambiguity_flags)
+        explanation = self._build_explanation(category, scope, ambiguity_flags, semantic_intent=semantic_intent)
         return DesignerIntent(
             intent_id=_stable_id("intent", request_text),
             category=category,
@@ -114,7 +118,7 @@ class DesignerRequestNormalizer:
             ambiguity_flags=tuple(ambiguity_flags),
             risk_flags=tuple(risk_flags),
             requires_user_confirmation=requires_confirmation,
-            confidence=self._estimate_confidence(ambiguity_flags),
+            confidence=self._estimate_confidence(ambiguity_flags, semantic_intent=semantic_intent),
             explanation=explanation,
         )
 
@@ -633,6 +637,34 @@ class DesignerRequestNormalizer:
             )
         return assumptions
 
+    def _build_semantic_assumptions(self, semantic_intent) -> list[AssumptionSpec]:
+        assumptions: list[AssumptionSpec] = []
+        for note in semantic_intent.semantic_ambiguity_notes:
+            assumptions.append(
+                AssumptionSpec(
+                    text=f"Semantic ambiguity noted by interpreter: {note}",
+                    severity="medium",
+                    user_visible=True,
+                )
+            )
+        return assumptions
+
+    def _build_semantic_ambiguity_flags(self, semantic_intent) -> list[AmbiguityFlag]:
+        flags: list[AmbiguityFlag] = []
+        if semantic_intent.clarification_required:
+            description = (
+                "; ".join(semantic_intent.clarification_questions)
+                if semantic_intent.clarification_questions
+                else "The semantic interpreter requires clarification before deterministic grounding can be trusted."
+            )
+            flags.append(
+                AmbiguityFlag(
+                    type="semantic_interpretation_requires_clarification",
+                    description=description,
+                )
+            )
+        return flags
+
     def _build_ambiguity_flags(
         self,
         category: str,
@@ -796,14 +828,26 @@ class DesignerRequestNormalizer:
             )
         return flags
 
-    def _build_explanation(self, category: str, scope: TargetScope, ambiguity_flags: list[AmbiguityFlag]) -> str:
+    def _build_explanation(
+        self,
+        category: str,
+        scope: TargetScope,
+        ambiguity_flags: list[AmbiguityFlag],
+        *,
+        semantic_intent,
+    ) -> str:
         message = f"Normalized request into {category} with target scope mode '{scope.mode}'."
-        if ambiguity_flags:
+        if semantic_intent.clarification_required and semantic_intent.clarification_questions:
+            message += " Clarification needed: " + "; ".join(semantic_intent.clarification_questions)
+        elif ambiguity_flags:
             message += " User confirmation is required before any commit boundary is crossed."
         return message
 
-    def _estimate_confidence(self, ambiguity_flags: list[AmbiguityFlag]) -> float:
-        return 0.65 if ambiguity_flags else 0.9
+    def _estimate_confidence(self, ambiguity_flags: list[AmbiguityFlag], *, semantic_intent) -> float:
+        base = 0.65 if ambiguity_flags else 0.9
+        if semantic_intent.clarification_required:
+            base = min(base, 0.45)
+        return min(base, semantic_intent.confidence_hint)
 
     def _repeated_cycle_referential_anchor_required(
         self,
