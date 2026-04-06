@@ -4,14 +4,6 @@ from typing import Any, Callable, Mapping
 import hashlib
 import re
 
-from src.designer.control_governance import (
-    governance_pending_anchor_applicability_for_request,
-    governance_recent_anchor_resolution_applicability_for_request,
-    governance_recent_revision_history_applicability_for_request,
-    governance_recent_revision_redirect_archive_applicability_for_request,
-    governance_recent_revision_replacement_applicability_for_request,
-    requires_explicit_referential_anchor,
-)
 from src.designer.models.designer_intent import (
     ActionSpec,
     AmbiguityFlag,
@@ -25,6 +17,7 @@ from src.designer.models.designer_intent import (
 
 
 from src.designer.legacy_mutation_heuristics import DesignerLegacyMutationHeuristics
+from src.designer.referential_resolution_support import DesignerReferentialResolutionSupport
 from src.designer.normalization_context import RequestNormalizationContext
 from src.designer.semantic_grounding_outcome import SemanticGroundingOutcomeProjector
 from src.designer.reason_codes import (
@@ -75,6 +68,7 @@ class DesignerRequestNormalizer:
         )
         self._symbolic_grounder = symbolic_grounder or DeterministicSymbolicGrounder()
         self._legacy_heuristics = DesignerLegacyMutationHeuristics(self._symbolic_grounder)
+        self._referential_support = DesignerReferentialResolutionSupport(self._legacy_heuristics)
         self._outcome_projector = SemanticGroundingOutcomeProjector()
 
     def normalize(self, request_text: str, *, context: RequestNormalizationContext | None = None) -> DesignerIntent:
@@ -127,22 +121,6 @@ class DesignerRequestNormalizer:
         )
 
 
-    def _compose_effective_request_text(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-    ) -> str:
-        compose = getattr(self._semantic_interpreter, "compose_effective_request_text", None)
-        if compose is None:
-            return request_text
-        return compose(request_text, context)
-
-    def _infer_category(self, request_text: str) -> str:
-        infer = getattr(self._semantic_interpreter, "infer_category", None)
-        if infer is None:
-            return "MODIFY_CIRCUIT"
-        return infer(request_text)
-
     def _build_scope(
         self,
         category: str,
@@ -156,7 +134,7 @@ class DesignerRequestNormalizer:
             selected_node_refs = self._legacy_heuristics.selected_node_refs(context)
             if len(selected_node_refs) == 1 and category in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
                 explicit_node_refs = selected_node_refs
-        node_refs = self._resolve_target_node_refs_from_committed_summary(
+        node_refs = self._referential_support.resolve_target_node_refs_from_committed_summary(
             category,
             request_text,
             context,
@@ -393,13 +371,13 @@ class DesignerRequestNormalizer:
             return None
         if self._uses_conflicting_nonrevert_action_language(request_text):
             return None
-        summary, _, unresolved_reason = self._resolve_committed_summary_reference(request_text, context)
+        summary, _, unresolved_reason = self._referential_support.resolve_committed_summary_reference(request_text, context)
         if summary is None or unresolved_reason is not None:
             return None
-        if self._repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=summary):
+        if self._referential_support.repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=summary):
             return None
         target_ref = scope.node_refs[0] if len(scope.node_refs) == 1 else None
-        touched_node_ids = self._committed_summary_touched_node_ids(summary, context)
+        touched_node_ids = self._referential_support.committed_summary_touched_node_ids(summary, context)
         if target_ref is None and len(touched_node_ids) == 1:
             target_ref = touched_node_ids[0]
         if target_ref is None and len(touched_node_ids) != 0:
@@ -440,7 +418,7 @@ class DesignerRequestNormalizer:
 
     def _is_confirmation_bounded_mixed_referential_request(self, request_text: str) -> bool:
         return (
-            self._uses_referential_committed_summary_language(request_text)
+            self._referential_support.uses_referential_committed_summary_language(request_text)
             and self._uses_safe_revert_action_language(request_text)
             and self._uses_conflicting_nonrevert_action_language(request_text)
         )
@@ -473,7 +451,7 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
-        resolved_summary, resolution_mode, unresolved_reason = self._resolve_committed_summary_reference(
+        resolved_summary, resolution_mode, unresolved_reason = self._referential_support.resolve_committed_summary_reference(
             request_text,
             context,
         )
@@ -511,7 +489,7 @@ class DesignerRequestNormalizer:
                         user_visible=True,
                     )
                 )
-            touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
+            touched_node_ids = self._referential_support.committed_summary_touched_node_ids(resolved_summary, context)
             explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
             if not explicit_node_refs and len(touched_node_ids) == 1:
                 assumptions.append(
@@ -552,7 +530,7 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
-        if self._repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=resolved_summary):
+        if self._referential_support.repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=resolved_summary):
             assumptions.append(
                 AssumptionSpec(
                     text=(
@@ -562,7 +540,7 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
-            pending_anchor = self._pending_anchor_snapshot_for_request(request_text, context)
+            pending_anchor = self._referential_support.pending_anchor_snapshot_for_request(request_text, context)
             if pending_anchor:
                 summary = str(pending_anchor.get("pressure_summary", "")).strip()
                 next_actions = pending_anchor.get("next_actions", [])
@@ -580,7 +558,7 @@ class DesignerRequestNormalizer:
                         user_visible=True,
                     )
                 )
-        recent_resolution = self._recent_resolution_snapshot_for_request(request_text, context)
+        recent_resolution = self._referential_support.recent_resolution_snapshot_for_request(request_text, context)
         if recent_resolution:
             assumptions.append(
                 AssumptionSpec(
@@ -592,7 +570,7 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
-        recent_revision_history = self._recent_revision_history_snapshot_for_request(raw_request_text or request_text, category, context)
+        recent_revision_history = self._referential_support.recent_revision_history_snapshot_for_request(raw_request_text or request_text, category, context)
         if recent_revision_history:
             reopened_from_redirect_archive = bool(
                 recent_revision_history.get("reopened_from_redirect_archive")
@@ -615,7 +593,7 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
-        recent_redirect_archive = self._recent_revision_redirect_archive_snapshot_for_request(raw_request_text or request_text, category, context)
+        recent_redirect_archive = self._referential_support.recent_revision_redirect_archive_snapshot_for_request(raw_request_text or request_text, category, context)
         if recent_redirect_archive:
             assumptions.append(
                 AssumptionSpec(
@@ -627,7 +605,7 @@ class DesignerRequestNormalizer:
                     user_visible=True,
                 )
             )
-        recent_revision_replacement = self._recent_revision_replacement_snapshot_for_request(raw_request_text or request_text, category, context)
+        recent_revision_replacement = self._referential_support.recent_revision_replacement_snapshot_for_request(raw_request_text or request_text, category, context)
         if recent_revision_replacement:
             assumptions.append(
                 AssumptionSpec(
@@ -667,7 +645,7 @@ class DesignerRequestNormalizer:
                     description="The request implies broad-scope changes that should be confirmed before commit.",
                 )
             )
-        _, resolution_mode, unresolved_reason = self._resolve_committed_summary_reference(
+        _, resolution_mode, unresolved_reason = self._referential_support.resolve_committed_summary_reference(
             request_text,
             context,
         )
@@ -692,11 +670,11 @@ class DesignerRequestNormalizer:
                     description="This request refers to a non-latest committed change without a precise anchor, so clarification is required before automatic resolution.",
                 )
             )
-        elif resolution_mode == "latest_auto" and self._uses_referential_committed_summary_language(request_text):
-            history = self._committed_summary_history(context)
+        elif resolution_mode == "latest_auto" and self._referential_support.uses_referential_committed_summary_language(request_text):
+            history = self._referential_support.committed_summary_history(context)
             if len(history) > 1 and (
-                self._uses_ambiguous_nonlatest_reference_language(request_text)
-                or self._uses_previous_reference_language(request_text)
+                self._referential_support.uses_ambiguous_nonlatest_reference_language(request_text)
+                or self._referential_support.uses_previous_reference_language(request_text)
             ):
                 flags.append(
                     AmbiguityFlag(
@@ -704,9 +682,9 @@ class DesignerRequestNormalizer:
                         description="Recent committed history exists, but the request leaves open whether a non-latest summary was intended.",
                     )
                 )
-        resolved_summary, _, _ = self._resolve_committed_summary_reference(request_text, context)
-        if self._repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=resolved_summary):
-            pending_anchor = self._pending_anchor_snapshot_for_request(request_text, context)
+        resolved_summary, _, _ = self._referential_support.resolve_committed_summary_reference(request_text, context)
+        if self._referential_support.repeated_cycle_referential_anchor_required(request_text, context, resolved_summary=resolved_summary):
+            pending_anchor = self._referential_support.pending_anchor_snapshot_for_request(request_text, context)
             suffix = ""
             if pending_anchor:
                 pressure_summary = str(pending_anchor.get("pressure_summary", "")).strip()
@@ -742,7 +720,7 @@ class DesignerRequestNormalizer:
                         ),
                     )
                 )
-            touched_node_ids = self._committed_summary_touched_node_ids(resolved_summary, context)
+            touched_node_ids = self._referential_support.committed_summary_touched_node_ids(resolved_summary, context)
             explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
             if explicit_node_refs:
                 conflicting = [ref for ref in explicit_node_refs if ref not in touched_node_ids]
@@ -753,7 +731,7 @@ class DesignerRequestNormalizer:
                             description="The explicit node target conflicts with the node(s) touched by the referenced committed summary.",
                         )
                     )
-            elif self._uses_referential_committed_summary_language(request_text):
+            elif self._referential_support.uses_referential_committed_summary_language(request_text):
                 if len(touched_node_ids) > 1:
                     flags.append(
                         AmbiguityFlag(
@@ -789,7 +767,7 @@ class DesignerRequestNormalizer:
                     description="Provider changes may alter output semantics and cost.",
                 )
             )
-        pending_anchor = self._pending_anchor_snapshot_for_request(request_text, context)
+        pending_anchor = self._referential_support.pending_anchor_snapshot_for_request(request_text, context)
         if pending_anchor:
             summary = str(pending_anchor.get("pressure_summary", "")).strip()
             flags.append(
@@ -803,381 +781,6 @@ class DesignerRequestNormalizer:
                 )
             )
         return flags
-
-    def _build_explanation(
-        self,
-        category: str,
-        scope: TargetScope,
-        ambiguity_flags: list[AmbiguityFlag],
-        *,
-        semantic_intent,
-        grounded_intent,
-        context: RequestNormalizationContext,
-    ) -> str:
-        message = f"Normalized request into {category} with target scope mode '{scope.mode}'."
-        flag_types = {flag.type for flag in ambiguity_flags}
-        if semantic_intent.clarification_required and semantic_intent.clarification_questions:
-            message += " Clarification needed: " + "; ".join(semantic_intent.clarification_questions)
-            if "semantic_clarification_loop_persisting" in flag_types:
-                message += " A prior clarification is already present, so this request remains in a clarification loop until the target or action is made more explicit."
-        elif ambiguity_flags:
-            message += " User confirmation is required before any commit boundary is crossed."
-        recovery_state = self._grounding_recovery_state(grounded_intent, context)
-        if recovery_state == "fully_resolved_after_clarification":
-            message += " A prior clarification resolved the request into concrete grounded actions."
-        elif recovery_state == "partially_resolved_after_clarification":
-            message += " A prior clarification resolved part of the request, but some actions remain unresolved."
-        if "semantic_grounding_partial_resolution" in flag_types:
-            message += " Some requested actions were grounded successfully, but at least one action remains unresolved."
-        return message
-
-    def _estimate_confidence(self, ambiguity_flags: list[AmbiguityFlag], *, semantic_intent) -> float:
-        base = 0.65 if ambiguity_flags else 0.9
-        if semantic_intent.clarification_required:
-            base = min(base, 0.45)
-        return min(base, semantic_intent.confidence_hint)
-
-    def _semantic_clarification_present(self, context: RequestNormalizationContext) -> bool:
-        card = context.session_state_card
-        if card is None:
-            return False
-        if card.conversation_context.clarified_interpretation:
-            return True
-        return bool(card.revision_state.user_corrections)
-
-    def _grounding_recovery_state(self, grounded_intent, context: RequestNormalizationContext) -> str | None:
-        if grounded_intent is None or not self._semantic_clarification_present(context):
-            return None
-        semantic_count = len(grounded_intent.semantic_intent.action_candidates)
-        grounded_count = len(grounded_intent.grounded_action_candidates)
-        if semantic_count == 0:
-            return None
-        if grounded_count == semantic_count and not grounded_intent.semantic_intent.clarification_required and not grounded_intent.grounding_notes:
-            return "fully_resolved_after_clarification"
-        if grounded_count > 0 and grounded_count < semantic_count:
-            return "partially_resolved_after_clarification"
-        return None
-
-    def _semantic_clarification_loop_persisting(
-        self,
-        semantic_intent,
-        context: RequestNormalizationContext,
-    ) -> bool:
-        if not semantic_intent.clarification_required:
-            return False
-        return self._semantic_clarification_present(context)
-
-    def _repeated_cycle_referential_anchor_required(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-        *,
-        resolved_summary: dict[str, Any] | None,
-    ) -> bool:
-        card = context.session_state_card
-        if card is None:
-            return False
-        if resolved_summary is None:
-            return False
-        if not self._uses_referential_committed_summary_language(request_text):
-            return False
-        if not requires_explicit_referential_anchor(card.notes):
-            return False
-        return not self._has_explicit_referential_anchor(request_text, context)
-
-    def _has_explicit_referential_anchor(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-    ) -> bool:
-        history = self._committed_summary_history(context)
-        if self._match_explicit_commit_reference(request_text, history) is not None:
-            return True
-        if self._uses_second_latest_reference_language(request_text):
-            return True
-        explicit_node_refs = self._legacy_heuristics.explicit_node_refs(request_text, context)
-        if not explicit_node_refs:
-            selected_node_refs = self._legacy_heuristics.selected_node_refs(context)
-            if len(selected_node_refs) == 1:
-                explicit_node_refs = selected_node_refs
-        return bool(explicit_node_refs)
-
-
-    def _recent_revision_history_snapshot_for_request(
-        self,
-        request_text: str,
-        category: str,
-        context: RequestNormalizationContext,
-    ) -> dict[str, Any]:
-        card = context.session_state_card
-        if card is None:
-            return {}
-        applicability = governance_recent_revision_history_applicability_for_request(
-            card.notes,
-            request_text,
-            mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
-            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
-        )
-        if applicability.is_visible_mutation:
-            snapshot = dict(applicability.snapshot or {})
-            origin_status = str(card.notes.get("approval_revision_recent_history_origin_status", "")).strip()
-            origin_summary = str(card.notes.get("approval_revision_recent_history_origin_summary", "")).strip()
-            if not snapshot.get("reopened_from_redirect_archive") and origin_status == "reopened_from_redirect_archive":
-                snapshot["reopened_from_redirect_archive"] = True
-                snapshot["origin_status"] = origin_status
-                snapshot["origin_summary"] = origin_summary
-            return snapshot
-        redirect_archive_applicability = governance_recent_revision_redirect_archive_applicability_for_request(
-            card.notes,
-            request_text,
-            mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
-            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
-        )
-        if not redirect_archive_applicability.is_reopen_mutation:
-            return {}
-        snapshot = redirect_archive_applicability.snapshot or {}
-        return {
-            "count": int(snapshot.get("count", 0) or 0),
-            "summary": (
-                "A previously redirected revision thread is explicitly reopened by the current mutation request, "
-                "so its older multi-step continuity should be restored."
-            ),
-            "history": list(snapshot.get("history", [])),
-            "latest_selected_interpretation": (
-                str(snapshot.get("history", [{}])[-1].get("selected_interpretation", "")).strip()
-                if isinstance(snapshot.get("history", []), list) and snapshot.get("history", [])
-                else ""
-            ),
-            "reopened_from_redirect_archive": True,
-        }
-
-    def _recent_revision_replacement_snapshot_for_request(
-        self,
-        request_text: str,
-        category: str,
-        context: RequestNormalizationContext,
-    ) -> dict[str, Any]:
-        card = context.session_state_card
-        if card is None:
-            return {}
-        applicability = governance_recent_revision_replacement_applicability_for_request(
-            card.notes,
-            request_text,
-            mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
-        )
-        if not applicability.is_visible_mutation:
-            return {}
-        return applicability.snapshot or {}
-
-    def _recent_revision_redirect_archive_snapshot_for_request(
-        self,
-        request_text: str,
-        category: str,
-        context: RequestNormalizationContext,
-    ) -> dict[str, Any]:
-        card = context.session_state_card
-        if card is None:
-            return {}
-        applicability = governance_recent_revision_redirect_archive_applicability_for_request(
-            card.notes,
-            request_text,
-            mutation_oriented=category not in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"},
-            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
-        )
-        if not applicability.is_visible_mutation:
-            return {}
-        return applicability.snapshot or {}
-
-    def _pending_anchor_snapshot_for_request(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-    ) -> dict[str, Any]:
-        card = context.session_state_card
-        if card is None:
-            return {}
-        applicability = governance_pending_anchor_applicability_for_request(
-            card.notes,
-            request_text,
-            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
-            commit_history=tuple(item for item in card.notes.get("commit_summary_history", ()) if isinstance(item, dict)),
-        )
-        if not applicability.is_unsatisfied:
-            return {}
-        return applicability.snapshot or {}
-
-    def _recent_resolution_snapshot_for_request(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-    ) -> dict[str, Any]:
-        card = context.session_state_card
-        if card is None:
-            return {}
-        applicability = governance_recent_anchor_resolution_applicability_for_request(
-            card.notes,
-            request_text,
-            available_node_refs=card.current_working_save.node_list or card.target_scope.allowed_node_refs,
-            commit_history=tuple(item for item in card.notes.get("commit_summary_history", ()) if isinstance(item, dict)),
-        )
-        if not applicability.is_visible_referential:
-            return {}
-        return applicability.snapshot or {}
-
-    def _latest_committed_summary(self, context: RequestNormalizationContext) -> dict[str, Any] | None:
-        card = context.session_state_card
-        if card is None:
-            return None
-        primary = card.notes.get("committed_summary_primary")
-        if isinstance(primary, dict):
-            return dict(primary)
-        history = self._committed_summary_history(context)
-        if history:
-            return history[0]
-        return None
-
-    def _committed_summary_history(self, context: RequestNormalizationContext) -> list[dict[str, Any]]:
-        card = context.session_state_card
-        if card is None:
-            return []
-        history = card.notes.get("commit_summary_history")
-        if not isinstance(history, list):
-            return []
-        normalized: list[dict[str, Any]] = []
-        for item in history:
-            if isinstance(item, dict):
-                normalized.append(dict(item))
-        return normalized
-
-    def _uses_referential_committed_summary_language(self, request_text: str) -> bool:
-        text = request_text.casefold()
-        patterns = (
-            r"\bprevious change\b",
-            r"\blast change\b",
-            r"\bprevious commit\b",
-            r"\blast commit\b",
-            r"\bsame change\b",
-            r"\bsame edit\b",
-            r"\bthat change\b",
-            r"\bthat edit\b",
-            r"\brevert\b",
-            r"\bundo\b",
-            r"\brollback\b",
-            r"\broll back\b",
-        )
-        return any(re.search(pattern, text) for pattern in patterns)
-
-
-    def _resolve_committed_summary_reference(
-        self,
-        request_text: str,
-        context: RequestNormalizationContext,
-    ) -> tuple[dict[str, Any] | None, str | None, str | None]:
-        if not self._uses_referential_committed_summary_language(request_text):
-            return None, None, None
-        history = self._committed_summary_history(context)
-        latest_summary = self._latest_committed_summary(context)
-        if latest_summary is not None and (not history or history[0].get("commit_id") != latest_summary.get("commit_id")):
-            history = [latest_summary, *history]
-        exact_match = self._match_explicit_commit_reference(request_text, history)
-        if exact_match is not None:
-            return exact_match, "exact_commit_match", None
-        if self._uses_second_latest_reference_language(request_text):
-            if len(history) >= 2:
-                return history[1], "second_latest_auto", None
-            return None, None, "insufficient_history"
-        if self._uses_ambiguous_nonlatest_reference_language(request_text):
-            if len(history) >= 2:
-                return None, None, "clarification_required"
-            if len(history) == 1:
-                return None, None, "insufficient_history"
-            return None, None, "missing"
-        if latest_summary is not None:
-            return latest_summary, "latest_auto", None
-        return None, None, "missing"
-
-    def _match_explicit_commit_reference(
-        self,
-        request_text: str,
-        history: list[dict[str, Any]],
-    ) -> dict[str, Any] | None:
-        text = request_text.casefold()
-        commit_tokens = set(re.findall(r"\b[a-f0-9]{7,40}\b", text))
-        if not commit_tokens:
-            return None
-        for item in history:
-            commit_id = item.get("commit_id", "").casefold()
-            if any(commit_id.startswith(token) for token in commit_tokens):
-                return item
-        return None
-
-    def _uses_second_latest_reference_language(self, request_text: str) -> bool:
-        text = request_text.casefold()
-        patterns = (
-            r"\b(second last|second-latest|before last|prior to last|the one before that) (change|commit|edit)\b",
-            r"\b(change|commit|edit) before last\b",
-            r"\bcommit before last\b",
-            r"\bchange before last\b",
-            r"\bthe one before that\b",
-        )
-        return any(re.search(pattern, text) for pattern in patterns)
-
-    def _uses_ambiguous_nonlatest_reference_language(self, request_text: str) -> bool:
-        text = request_text.casefold()
-        patterns = (
-            r"\bolder change\b",
-            r"\bearlier change\b",
-            r"\bolder commit\b",
-            r"\bearlier commit\b",
-            r"\bnot the last (change|commit|edit)\b",
-            r"\bother (change|commit|edit)\b",
-            r"\bthat older (change|commit|edit)\b",
-        )
-        return any(re.search(pattern, text) for pattern in patterns)
-
-
-    def _uses_previous_reference_language(self, request_text: str) -> bool:
-        text = request_text.casefold()
-        patterns = (
-            r"\bprevious change\b",
-            r"\bprevious commit\b",
-            r"\bthat previous change\b",
-            r"\bthat previous commit\b",
-        )
-        return any(re.search(pattern, text) for pattern in patterns)
-
-
-    def _committed_summary_touched_node_ids(
-        self,
-        summary: dict[str, Any] | None,
-        context: RequestNormalizationContext,
-    ) -> tuple[str, ...]:
-        if summary is None:
-            return ()
-        raw = summary.get("touched_node_ids")
-        if not isinstance(raw, (list, tuple)):
-            return ()
-        refs = tuple(str(item) for item in raw if str(item).strip())
-        return self._legacy_heuristics.resolve_node_refs(refs, context)
-
-    def _resolve_target_node_refs_from_committed_summary(
-        self,
-        category: str,
-        request_text: str,
-        context: RequestNormalizationContext,
-        explicit_node_refs: tuple[str, ...],
-    ) -> tuple[str, ...]:
-        if category not in {"MODIFY_CIRCUIT", "REPAIR_CIRCUIT", "OPTIMIZE_CIRCUIT"}:
-            return explicit_node_refs
-        summary, _, _ = self._resolve_committed_summary_reference(request_text, context)
-        if summary is None:
-            return explicit_node_refs
-        touched_node_ids = self._committed_summary_touched_node_ids(summary, context)
-        if explicit_node_refs:
-            return explicit_node_refs
-        if len(touched_node_ids) == 1:
-            return touched_node_ids
-        return explicit_node_refs
 
     def _first_target_ref(self, scope: TargetScope, request_text: str) -> str | None:
         if scope.node_refs:
