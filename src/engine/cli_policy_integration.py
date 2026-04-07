@@ -100,6 +100,27 @@ def build_regression_result_from_summaries(
                 )
             )
 
+    baseline_artifacts = baseline_payload.get("artifacts") or {}
+    current_artifacts = current_payload.get("artifacts") or {}
+    for artifact_id in sorted(set(baseline_artifacts) | set(current_artifacts)):
+        left = baseline_artifacts.get(artifact_id)
+        right = current_artifacts.get(artifact_id)
+        left_validation_status = (left or {}).get("validation_status")
+        right_validation_status = (right or {}).get("validation_status")
+        verifier_reason = verifier_mapping.get((left_validation_status, right_validation_status))
+        if verifier_reason is not None:
+            verification_regressions.append(
+                VerificationRegression(
+                    target_type="artifact",
+                    target_id=artifact_id,
+                    reason_code=verifier_reason,
+                    left_status=left_validation_status,
+                    right_status=right_validation_status,
+                    left_reason_codes=list((left or {}).get("validation_reason_codes") or []),
+                    right_reason_codes=list((right or {}).get("validation_reason_codes") or []),
+                )
+            )
+
     if regressions or verification_regressions:
         return RegressionResult(status="regression", nodes=regressions, verification=verification_regressions)
     return RegressionResult(status="clean")

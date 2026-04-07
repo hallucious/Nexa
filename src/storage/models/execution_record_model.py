@@ -144,6 +144,7 @@ class ArtifactRecordCard:
     artifact_schema_version: Optional[str] = None
     producer_ref: Optional[str] = None
     validation_status: Optional[str] = None
+    validation_reason_codes: list[str] = field(default_factory=list)
     recorded_at: Optional[str] = None
     lineage_refs: list[str] = field(default_factory=list)
     trace_refs: list[str] = field(default_factory=list)

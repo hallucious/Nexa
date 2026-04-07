@@ -837,6 +837,7 @@ def _snapshot_from_execution_record_payload(execution_record: dict) -> dict | No
             "hash": item.get("hash"),
             "kind": item.get("artifact_type"),
             "validation_status": item.get("validation_status"),
+            "validation_reason_codes": item.get("validation_reason_codes") if isinstance(item.get("validation_reason_codes"), list) else [],
             "artifact_schema_version": item.get("artifact_schema_version"),
         }
 

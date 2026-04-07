@@ -327,6 +327,8 @@ def _detect_verification_regressions(diff: RunDiff) -> List[VerificationRegressi
                     reason_code=reason_code,
                     left_status=artifact_diff.left_validation_status,
                     right_status=artifact_diff.right_validation_status,
+                    left_reason_codes=list(artifact_diff.left_validation_reason_codes),
+                    right_reason_codes=list(artifact_diff.right_validation_reason_codes),
                 )
             )
     return regressions

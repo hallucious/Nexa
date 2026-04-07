@@ -298,17 +298,19 @@ def _compare_runs(source: ExecutionRecordModel, target: ExecutionRecordModel) ->
         t_artifact = target_artifact_map[artifact_id]
         if (
             s_artifact.validation_status,
+            sorted(set(s_artifact.validation_reason_codes)),
             s_artifact.artifact_schema_version,
             s_artifact.recorded_at,
             sorted(set(s_artifact.trace_refs)),
         ) != (
             t_artifact.validation_status,
+            sorted(set(t_artifact.validation_reason_codes)),
             t_artifact.artifact_schema_version,
             t_artifact.recorded_at,
             sorted(set(t_artifact.trace_refs)),
         ):
             category = "verification" if s_artifact.artifact_type == "validation_report" or t_artifact.artifact_type == "validation_report" else "artifact"
-            changes.append(_make_change(change_id=f"artifact:update:{artifact_id}", change_type="updated", category=category, target_type="artifact", target_id=artifact_id, short_label=f"Artifact {artifact_id} metadata changed", before={"validation_status": s_artifact.validation_status, "schema_version": s_artifact.artifact_schema_version, "recorded_at": s_artifact.recorded_at, "trace_refs": sorted(set(s_artifact.trace_refs))}, after={"validation_status": t_artifact.validation_status, "schema_version": t_artifact.artifact_schema_version, "recorded_at": t_artifact.recorded_at, "trace_refs": sorted(set(t_artifact.trace_refs))}, severity="info", signal_type="MODIFY", related_run_ids=related_runs, related_artifact_ids=[artifact_id]))
+            changes.append(_make_change(change_id=f"artifact:update:{artifact_id}", change_type="updated", category=category, target_type="artifact", target_id=artifact_id, short_label=f"Artifact {artifact_id} metadata changed", before={"validation_status": s_artifact.validation_status, "validation_reason_codes": sorted(set(s_artifact.validation_reason_codes)), "schema_version": s_artifact.artifact_schema_version, "recorded_at": s_artifact.recorded_at, "trace_refs": sorted(set(s_artifact.trace_refs))}, after={"validation_status": t_artifact.validation_status, "validation_reason_codes": sorted(set(t_artifact.validation_reason_codes)), "schema_version": t_artifact.artifact_schema_version, "recorded_at": t_artifact.recorded_at, "trace_refs": sorted(set(t_artifact.trace_refs))}, severity="info", signal_type="MODIFY", related_run_ids=related_runs, related_artifact_ids=[artifact_id]))
 
     if source.outputs.output_summary != target.outputs.output_summary:
         changes.append(_make_change(change_id="run:outputs:update", change_type="updated", category="execution_result", target_type="run", target_id="outputs", short_label="Run output summary changed", before=source.outputs.output_summary, after=target.outputs.output_summary, severity="info", signal_type="MODIFY", related_run_ids=related_runs))

@@ -263,6 +263,7 @@ def _artifact_record_card_from_raw_artifact(artifact: Any, execution_id: str, in
             artifact_schema_version=str(envelope.get('artifact_schema_version') or '') or None,
             producer_ref=producer_ref,
             validation_status=str(envelope.get('validation_status') or '') or None,
+            validation_reason_codes=_collect_verifier_reason_codes(payload),
             recorded_at=_artifact_recorded_at(artifact, envelope),
             lineage_refs=[str(item) for item in envelope.get('lineage_refs', []) if item is not None] if isinstance(envelope.get('lineage_refs'), list) else [],
             trace_refs=trace_refs,

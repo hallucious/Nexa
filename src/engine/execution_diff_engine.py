@@ -124,9 +124,11 @@ def _diff_artifact_maps(
             rk = ra.get("kind")
             lvs = la.get("validation_status")
             rvs = ra.get("validation_status")
+            lrc = sorted(str(code) for code in (la.get("validation_reason_codes") or []) if code is not None)
+            rrc = sorted(str(code) for code in (ra.get("validation_reason_codes") or []) if code is not None)
             lsv = la.get("artifact_schema_version")
             rsv = ra.get("artifact_schema_version")
-            if lh != rh or lk != rk or lvs != rvs or lsv != rsv:
+            if lh != rh or lk != rk or lvs != rvs or lrc != rrc or lsv != rsv:
                 diffs.append(ArtifactDiff(
                     artifact_id=art_id,
                     change_type=CHANGE_TYPE_MODIFIED,
@@ -136,6 +138,8 @@ def _diff_artifact_maps(
                     right_kind=rk,
                     left_validation_status=lvs,
                     right_validation_status=rvs,
+                    left_validation_reason_codes=lrc,
+                    right_validation_reason_codes=rrc,
                     left_artifact_schema_version=lsv,
                     right_artifact_schema_version=rsv,
                 ))
@@ -301,13 +305,15 @@ def _diff_verification(
     for ad in artifact_diffs:
         left_payload = {
             "validation_status": ad.left_validation_status,
+            "validation_reason_codes": list(ad.left_validation_reason_codes),
             "artifact_schema_version": ad.left_artifact_schema_version,
         }
         right_payload = {
             "validation_status": ad.right_validation_status,
+            "validation_reason_codes": list(ad.right_validation_reason_codes),
             "artifact_schema_version": ad.right_artifact_schema_version,
         }
-        if left_payload != right_payload and any([left_payload["validation_status"], right_payload["validation_status"], left_payload["artifact_schema_version"], right_payload["artifact_schema_version"]]):
+        if left_payload != right_payload and any([left_payload["validation_status"], right_payload["validation_status"], left_payload["validation_reason_codes"], right_payload["validation_reason_codes"], left_payload["artifact_schema_version"], right_payload["artifact_schema_version"]]):
             diffs.append(VerificationDiff(
                 target_type="artifact",
                 target_id=ad.artifact_id,

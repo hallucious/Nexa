@@ -301,6 +301,8 @@ def format_diff_details(diff: RunDiff) -> str:
                 lines.append(f"    kind: {ad.left_kind} -> {ad.right_kind}")
             if ad.left_validation_status or ad.right_validation_status:
                 lines.append(f"    validation_status: {ad.left_validation_status} -> {ad.right_validation_status}")
+            if ad.left_validation_reason_codes or ad.right_validation_reason_codes:
+                lines.append(f"    validation_reason_codes: {ad.left_validation_reason_codes} -> {ad.right_validation_reason_codes}")
             if ad.left_artifact_schema_version or ad.right_artifact_schema_version:
                 lines.append(f"    artifact_schema_version: {ad.left_artifact_schema_version} -> {ad.right_artifact_schema_version}")
         sections.append("\n".join(lines))
@@ -376,6 +378,8 @@ def format_diff_json(diff: RunDiff) -> dict:
                 "right_kind":   ad.right_kind,
                 "left_validation_status": ad.left_validation_status,
                 "right_validation_status": ad.right_validation_status,
+                "left_validation_reason_codes": list(ad.left_validation_reason_codes),
+                "right_validation_reason_codes": list(ad.right_validation_reason_codes),
                 "left_artifact_schema_version": ad.left_artifact_schema_version,
                 "right_artifact_schema_version": ad.right_artifact_schema_version,
             }

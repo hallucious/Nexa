@@ -143,6 +143,8 @@ class ArtifactDiff:
     right_kind: Optional[str] = None
     left_validation_status: Optional[str] = None
     right_validation_status: Optional[str] = None
+    left_validation_reason_codes: List[str] = field(default_factory=list)
+    right_validation_reason_codes: List[str] = field(default_factory=list)
     left_artifact_schema_version: Optional[str] = None
     right_artifact_schema_version: Optional[str] = None
 
