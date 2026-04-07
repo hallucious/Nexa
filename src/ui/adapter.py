@@ -35,6 +35,9 @@ from src.ui.builder_dispatch_hub import BuilderDispatchHubViewModel, read_builde
 from src.ui.command_execution_adapter import CommandExecutionAdapterViewModel, read_command_execution_adapter_view_model
 from src.ui.interaction_state_changes import InteractionStateChangeViewModel, read_interaction_state_change_view_model
 from src.ui.builder_execution_adapter_hub import BuilderExecutionAdapterHubViewModel, read_builder_execution_adapter_hub_view_model
+from src.ui.end_user_command_flows import EndUserCommandFlowViewModel, read_end_user_command_flow_view_model
+from src.ui.interaction_lifecycle_closure import InteractionLifecycleClosureViewModel, read_interaction_lifecycle_closure_view_model
+from src.ui.builder_end_user_flow_hub import BuilderEndUserFlowHubViewModel, read_builder_end_user_flow_hub_view_model
 
 
 @dataclass(frozen=True)
@@ -601,6 +604,47 @@ class NexaUIViewAdapter:
         return read_builder_execution_adapter_hub_view_model(
             source,
             dispatch_hub=dispatch_hub,
+            explanation=explanation,
+        )
+
+    def read_end_user_command_flow_view_model(
+        self,
+        source,
+        *,
+        execution_adapter_hub: BuilderExecutionAdapterHubViewModel | None = None,
+        explanation: str | None = None,
+    ) -> EndUserCommandFlowViewModel:
+        return read_end_user_command_flow_view_model(
+            source,
+            execution_adapter_hub=execution_adapter_hub,
+            explanation=explanation,
+        )
+
+    def read_interaction_lifecycle_closure_view_model(
+        self,
+        source,
+        *,
+        execution_adapter_hub: BuilderExecutionAdapterHubViewModel | None = None,
+        end_user_flows: EndUserCommandFlowViewModel | None = None,
+        explanation: str | None = None,
+    ) -> InteractionLifecycleClosureViewModel:
+        return read_interaction_lifecycle_closure_view_model(
+            source,
+            execution_adapter_hub=execution_adapter_hub,
+            end_user_flows=end_user_flows,
+            explanation=explanation,
+        )
+
+    def read_builder_end_user_flow_hub_view_model(
+        self,
+        source,
+        *,
+        execution_adapter_hub: BuilderExecutionAdapterHubViewModel | None = None,
+        explanation: str | None = None,
+    ) -> BuilderEndUserFlowHubViewModel:
+        return read_builder_end_user_flow_hub_view_model(
+            source,
+            execution_adapter_hub=execution_adapter_hub,
             explanation=explanation,
         )
 

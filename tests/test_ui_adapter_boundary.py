@@ -439,3 +439,27 @@ def test_ui_adapter_routes_execution_adapter_and_state_change_layers_through_sta
     assert execution_adapter_vm.source_role == "working_save"
     assert state_change_vm.source_role == "working_save"
     assert execution_hub_vm.source_role == "working_save"
+
+
+def test_ui_adapter_routes_end_user_flow_and_lifecycle_closure_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+
+    execution_adapter_hub = adapter.read_builder_execution_adapter_hub_view_model(_working_save())
+    end_user_flow_vm = adapter.read_end_user_command_flow_view_model(_working_save(), execution_adapter_hub=execution_adapter_hub)
+    lifecycle_closure_vm = adapter.read_interaction_lifecycle_closure_view_model(
+        _working_save(),
+        execution_adapter_hub=execution_adapter_hub,
+        end_user_flows=end_user_flow_vm,
+    )
+    user_hub_vm = adapter.read_builder_end_user_flow_hub_view_model(
+        _working_save(),
+        execution_adapter_hub=execution_adapter_hub,
+    )
+
+    assert end_user_flow_vm.source_role == "working_save"
+    assert lifecycle_closure_vm.source_role == "working_save"
+    assert user_hub_vm.source_role == "working_save"

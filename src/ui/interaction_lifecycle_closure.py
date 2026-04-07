@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from src.storage.models.commit_snapshot_model import CommitSnapshotModel
+from src.storage.models.execution_record_model import ExecutionRecordModel
+from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
+from src.storage.models.working_save_model import WorkingSaveModel
+from src.ui.builder_execution_adapter_hub import BuilderExecutionAdapterHubViewModel, read_builder_execution_adapter_hub_view_model
+from src.ui.end_user_command_flows import EndUserCommandFlowViewModel, read_end_user_command_flow_view_model
+
+
+@dataclass(frozen=True)
+class LifecycleClosureStageView:
+    stage_id: str
+    stage_status: str
+    closed: bool
+    closeable: bool
+    recommended_flow_id: str | None = None
+    open_requirement: str | None = None
+
+
+@dataclass(frozen=True)
+class InteractionLifecycleClosureViewModel:
+    closure_status: str = "ready"
+    source_role: str = "none"
+    current_stage_id: str = "drafting"
+    current_stage_closed: bool = False
+    next_stage_ready: bool = False
+    terminal_completion_ready: bool = False
+    open_requirement_count: int = 0
+    stages: list[LifecycleClosureStageView] = field(default_factory=list)
+    explanation: str | None = None
+
+
+SourceLike = WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None
+
+
+def _unwrap(source: SourceLike):
+    if isinstance(source, LoadedNexArtifact):
+        return source.parsed_model
+    return source
+
+
+def _storage_role(source) -> str:
+    if isinstance(source, WorkingSaveModel):
+        return "working_save"
+    if isinstance(source, CommitSnapshotModel):
+        return "commit_snapshot"
+    if isinstance(source, ExecutionRecordModel):
+        return "execution_record"
+    return "none"
+
+
+def _find_flow(flows: EndUserCommandFlowViewModel, action_id: str):
+    return next((item for item in flows.flows if item.action_id == action_id), None)
+
+
+def read_interaction_lifecycle_closure_view_model(
+    source: SourceLike,
+    *,
+    execution_adapter_hub: BuilderExecutionAdapterHubViewModel | None = None,
+    end_user_flows: EndUserCommandFlowViewModel | None = None,
+    explanation: str | None = None,
+) -> InteractionLifecycleClosureViewModel:
+    source_unwrapped = _unwrap(source)
+    source_role = _storage_role(source_unwrapped)
+    execution_adapter_hub = execution_adapter_hub or read_builder_execution_adapter_hub_view_model(source_unwrapped)
+    end_user_flows = end_user_flows or read_end_user_command_flow_view_model(source_unwrapped, execution_adapter_hub=execution_adapter_hub)
+
+    lifecycle = execution_adapter_hub.dispatch_hub.lifecycle if execution_adapter_hub.dispatch_hub is not None else None
+    current_stage_id = lifecycle.current_stage_id if lifecycle is not None else "drafting"
+
+    stage_requirements = {
+        "drafting": "review_draft",
+        "review": "approve_for_commit",
+        "commit": "commit_snapshot",
+        "execution": "run_current",
+        "history": "replay_latest",
+    }
+
+    stages: list[LifecycleClosureStageView] = []
+    for stage in lifecycle.stages if lifecycle is not None else []:
+        required_action_id = stage_requirements.get(stage.stage_id)
+        flow = _find_flow(end_user_flows, required_action_id) if required_action_id is not None else None
+        closed = stage.status == "completed" or (flow is not None and flow.closure_ready and stage.stage_id != current_stage_id)
+        closeable = flow is not None and flow.execute_allowed
+        open_requirement = None if closed or closeable else (required_action_id or "no_requirement")
+        stages.append(
+            LifecycleClosureStageView(
+                stage_id=stage.stage_id,
+                stage_status=stage.status,
+                closed=closed,
+                closeable=closeable,
+                recommended_flow_id=flow.flow_id if flow is not None else None,
+                open_requirement=open_requirement,
+            )
+        )
+
+    current_stage = next((item for item in stages if item.stage_id == current_stage_id), None)
+    current_stage_closed = current_stage.closed if current_stage is not None else False
+    next_stage_ready = any(item.stage_id != current_stage_id and item.closeable for item in stages)
+    terminal_completion_ready = bool(lifecycle is not None and lifecycle.terminal) or source_role == "execution_record"
+    open_requirement_count = sum(1 for item in stages if item.open_requirement is not None)
+
+    if not stages:
+        closure_status = "empty"
+    elif open_requirement_count and not next_stage_ready:
+        closure_status = "blocked"
+    elif open_requirement_count:
+        closure_status = "attention"
+    else:
+        closure_status = "ready"
+
+    return InteractionLifecycleClosureViewModel(
+        closure_status=closure_status,
+        source_role=source_role,
+        current_stage_id=current_stage_id,
+        current_stage_closed=current_stage_closed,
+        next_stage_ready=next_stage_ready,
+        terminal_completion_ready=terminal_completion_ready,
+        open_requirement_count=open_requirement_count,
+        stages=stages,
+        explanation=explanation,
+    )
+
+
+__all__ = [
+    "LifecycleClosureStageView",
+    "InteractionLifecycleClosureViewModel",
+    "read_interaction_lifecycle_closure_view_model",
+]
