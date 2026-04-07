@@ -57,8 +57,11 @@ def _select_tier(ctx: RoutingContext) -> Tuple[str, List[str]]:
         reason_codes.append("RISK_RESTRICTED_REQUIRES_HIGH_SAFETY")
         return RouteTier.HIGH_SAFETY, reason_codes
 
-    # 2. Safety requirements present → at least BALANCED
+    # 2. Soft preference from prior successful outcomes
     base_tier = RouteTier.BALANCED
+    if ctx.preferred_route_tier in RouteTier._ALL:
+        base_tier = ctx.preferred_route_tier
+        reason_codes.append("OUTCOME_MEMORY_ROUTE_TIER_PREFERENCE")
     if ctx.difficulty_estimate >= 0.75:
         base_tier = RouteTier.HIGH_QUALITY
         reason_codes.append("HIGH_DIFFICULTY_REQUIRES_QUALITY")

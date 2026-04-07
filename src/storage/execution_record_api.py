@@ -8,6 +8,7 @@ from src.engine.execution_artifact_hashing import ExecutionHashReport, NodeOutpu
 from src.engine.execution_snapshot import ExecutionSnapshot, ExecutionSnapshotBuilder
 from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
 from src.engine.paused_run_state import PausedRunState, PausedRunStateError
+from src.engine.trace_intelligence import analyze_trace
 from src.storage.models.execution_record_model import (
     ArtifactRecordCard,
     ExecutionArtifactsModel,
@@ -399,6 +400,58 @@ def _normalize_precision_summary(payload: Any) -> dict[str, Any] | None:
     return None
 
 
+def _extract_trace_intelligence_summary(
+    trace: dict[str, Any] | None,
+    *,
+    run_ref: str,
+    trace_refs: list[str] | None = None,
+) -> dict[str, Any] | None:
+    if not isinstance(trace, dict):
+        return None
+    node_results = trace.get('node_results') if isinstance(trace.get('node_results'), dict) else {}
+    node_events: list[dict[str, Any]] = []
+    for node_id, node_result in node_results.items():
+        if not isinstance(node_id, str) or not isinstance(node_result, dict):
+            continue
+        nested_trace = node_result.get('trace') if isinstance(node_result.get('trace'), dict) else {}
+        timings = nested_trace.get('timings_ms') if isinstance(nested_trace.get('timings_ms'), dict) else {}
+        total_duration = 0.0
+        for value in timings.values():
+            if isinstance(value, (int, float)):
+                total_duration += float(value)
+        duration_ms = total_duration if total_duration > 0 else None
+        precision = nested_trace.get('precision') if isinstance(nested_trace.get('precision'), dict) else {}
+        routing_entries = precision.get('routing') if isinstance(precision.get('routing'), list) else []
+        latest_route = routing_entries[-1] if routing_entries else {}
+        route_decision = latest_route.get('route_decision') if isinstance(latest_route, dict) else {}
+        raw_status = str(node_result.get('status') or ('error' if node_result.get('error') is not None else 'success')).lower()
+        normalized_status = 'error' if raw_status in {'failed', 'error'} else raw_status
+        reason_code = None
+        error_payload = node_result.get('error')
+        if isinstance(error_payload, dict):
+            reason_code = error_payload.get('type') or error_payload.get('reason_code') or error_payload.get('message')
+        elif error_payload is not None:
+            reason_code = str(error_payload)
+        verifier_trace = nested_trace.get('verifier_trace') if isinstance(nested_trace.get('verifier_trace'), list) else []
+        if reason_code is None and verifier_trace:
+            latest_verifier = verifier_trace[-1] if isinstance(verifier_trace[-1], dict) else {}
+            blocking_codes = latest_verifier.get('blocking_reason_codes') if isinstance(latest_verifier.get('blocking_reason_codes'), list) else []
+            if blocking_codes:
+                reason_code = blocking_codes[0]
+        node_events.append({
+            'node_id': node_id,
+            'status': normalized_status,
+            'reason_code': reason_code,
+            'failure_category': 'runtime_error' if normalized_status == 'error' else None,
+            'duration_ms': duration_ms,
+            'cost_estimate': route_decision.get('estimated_cost') if isinstance(route_decision, dict) else None,
+        })
+    if not node_events:
+        return None
+    report = analyze_trace(run_ref=run_ref, node_events=node_events, trace_refs=trace_refs)
+    return report.to_dict()
+
+
 def _extract_precision_from_trace(trace: dict[str, Any] | None) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, dict[str, dict[str, Any]]]:
     if not isinstance(trace, dict):
         return None, None, None, {}
@@ -610,6 +663,7 @@ def create_execution_record_from_snapshot(
     safety_summary: dict[str, Any] | None = None,
     confidence_summary: dict[str, Any] | None = None,
     node_precision: dict[str, dict[str, Any]] | None = None,
+    trace_intelligence_summary: dict[str, Any] | None = None,
 ) -> ExecutionRecordModel:
     created = created_at or _iso_now()
     started = started_at or _ms_to_iso(snapshot.timeline.start_ms) or created
@@ -634,6 +688,8 @@ def create_execution_record_from_snapshot(
         node_precision=node_precision,
     )
     trace_summary_value = trace_summary or f'Execution {snapshot.execution_id} observed {len(snapshot.timeline.node_spans)} node span(s).'
+    if isinstance(trace_intelligence_summary, dict) and trace_intelligence_summary.get('explanation'):
+        trace_summary_value = f"{trace_summary_value} {trace_intelligence_summary['explanation']}"
     resolved_observability_refs = _merge_observability_refs(
         observability_refs,
         trace_ref=trace_ref,
@@ -705,6 +761,7 @@ def create_execution_record_from_snapshot(
             routing_summary=_normalize_precision_summary(routing_summary),
             safety_summary=_normalize_precision_summary(safety_summary),
             confidence_summary=_normalize_precision_summary(confidence_summary),
+            trace_intelligence_summary=_to_json_safe(trace_intelligence_summary) if trace_intelligence_summary is not None else None,
         ),
     )
 
@@ -909,6 +966,8 @@ def create_serialized_execution_record_from_circuit_run(
     event_stream_ref = f'events://{resolved_execution_id}' if isinstance(trace, dict) and trace.get('events') else None
     explicit_artifact_refs = _artifact_record_cards_from_raw_artifacts(artifacts, resolved_execution_id)
     routing_summary, safety_summary, confidence_summary, node_precision = _extract_precision_from_trace(trace)
+    trace_refs = [item for item in [trace_ref, event_stream_ref] if item]
+    trace_intelligence_summary = _extract_trace_intelligence_summary(trace, run_ref=resolved_execution_id, trace_refs=trace_refs)
 
     resolved_paused_run_state = paused_run_state
     if resolved_paused_run_state is None:
@@ -940,11 +999,12 @@ def create_serialized_execution_record_from_circuit_run(
         termination_reason=_termination_reason_from_trace(trace, status=record_status),
         pause_boundary=_pause_boundary_from_trace(trace, status=record_status),
         paused_run_state=resolved_paused_run_state,
-        observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
+        observability_refs=trace_refs,
         routing_summary=routing_summary,
         safety_summary=safety_summary,
         confidence_summary=confidence_summary,
         node_precision=node_precision,
+        trace_intelligence_summary=trace_intelligence_summary,
     )
     return serialize_execution_record(record)
 def create_serialized_execution_record_from_savefile_trace(

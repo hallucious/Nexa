@@ -47,6 +47,7 @@ class RoutingContext:
     difficulty_estimate: float     # 0.0–1.0
     risk_level: str                # RiskLevel
     allowed_providers: List[str]
+    preferred_route_tier: Optional[str] = None
     latency_target: Optional[float] = None   # seconds
     quality_target: Optional[float] = None   # 0.0–1.0
     retry_count: int = 0
@@ -66,6 +67,8 @@ class RoutingContext:
             raise BudgetRoutingError("difficulty_estimate must be in [0.0, 1.0]")
         if self.risk_level not in RiskLevel._ALL:
             raise BudgetRoutingError(f"unsupported risk_level: {self.risk_level!r}")
+        if self.preferred_route_tier is not None and self.preferred_route_tier not in RouteTier._ALL:
+            raise BudgetRoutingError(f"unsupported preferred_route_tier: {self.preferred_route_tier!r}")
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -74,6 +77,7 @@ class RoutingContext:
             "current_budget": self.current_budget,
             "difficulty_estimate": self.difficulty_estimate,
             "risk_level": self.risk_level,
+            "preferred_route_tier": self.preferred_route_tier,
             "latency_target": self.latency_target,
             "quality_target": self.quality_target,
             "retry_count": self.retry_count,

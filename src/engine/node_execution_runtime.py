@@ -18,6 +18,7 @@ from src.contracts.confidence_contract import BasisType, ConfidenceBasis, build_
 from src.contracts.safety_gate_contract import PermissionSet
 from src.engine.budget_router import decide_route, log_route
 from src.engine.confidence_aggregator import propagate_confidence
+from src.engine.outcome_memory import OutcomeMemoryStore, record_failure_pattern, record_success_pattern
 from src.engine.safety_gate import evaluate_gate
 from src.engine.compiled_resource_graph import (
     CompiledResourceGraph,
@@ -58,6 +59,7 @@ class NodeTrace:
             "safety_gates": [],
             "confidence_assessments": [],
             "node_confidence": None,
+            "outcome_memory": {},
         }
     )
 
@@ -116,6 +118,7 @@ class NodeExecutionRuntime:
         plugin_registry: Optional[Dict[str, Any]] = None,
         event_emitter: Optional[ExecutionEventEmitter] = None,
         prompt_registry: Optional[Any] = None,
+        outcome_memory_store: OutcomeMemoryStore | None = None,
     ):
         self.provider_executor = provider_executor
         self.observability_file = Path(observability_file)
@@ -124,6 +127,7 @@ class NodeExecutionRuntime:
         self.metrics = RuntimeMetrics()
         self.event_emitter = event_emitter or ExecutionEventEmitter()
         self.execution_id: str = "runtime-default"
+        self.outcome_memory_store = outcome_memory_store
 
     # ------------------------------------------------------------------
     # Step152 runtime metrics helpers
@@ -381,6 +385,115 @@ class NodeExecutionRuntime:
             merged.update(provider_value)
         return merged
 
+    def _memory_suggested_route_tier(
+        self,
+        *,
+        task_type: str,
+    ) -> str | None:
+        if self.outcome_memory_store is None:
+            return None
+        try:
+            suggested = self.outcome_memory_store.suggest_route_tier(task_type)
+        except Exception:
+            return None
+        return suggested if isinstance(suggested, str) and suggested else None
+
+    def _record_outcome_memory_hint(
+        self,
+        *,
+        trace: NodeTrace,
+        task_type: str,
+        suggested_route_tier: str | None,
+    ) -> None:
+        if not isinstance(trace.precision, dict):
+            return
+        payload = trace.precision.setdefault("outcome_memory", {})
+        if not isinstance(payload, dict):
+            payload = {}
+            trace.precision["outcome_memory"] = payload
+        payload["task_type"] = task_type
+        if suggested_route_tier is not None:
+            payload["suggested_route_tier"] = suggested_route_tier
+
+    def _record_outcome_memory_success(
+        self,
+        *,
+        node_id: str,
+        config: Dict[str, Any],
+        trace: NodeTrace,
+    ) -> None:
+        if self.outcome_memory_store is None or not isinstance(trace.precision, dict):
+            return
+        routing_entries = trace.precision.get("routing") if isinstance(trace.precision.get("routing"), list) else []
+        latest_route = routing_entries[-1] if routing_entries else {}
+        route_decision = latest_route.get("route_decision") if isinstance(latest_route, dict) else {}
+        routing_context = latest_route.get("routing_context") if isinstance(latest_route, dict) else {}
+        route_tier = route_decision.get("selected_route_tier") if isinstance(route_decision, dict) else None
+        provider_id = route_decision.get("selected_provider_id") if isinstance(route_decision, dict) else None
+        task_type = routing_context.get("task_type") if isinstance(routing_context, dict) else None
+        if not isinstance(task_type, str) or not task_type:
+            provider_cfg = dict(config.get("provider") or {})
+            task_type = str(provider_cfg.get("task_type") or "general_generation")
+        if not isinstance(route_tier, str) or not route_tier or not isinstance(provider_id, str) or not provider_id:
+            return
+        node_confidence = trace.precision.get("node_confidence") if isinstance(trace.precision.get("node_confidence"), dict) else {}
+        confidence_score = node_confidence.get("confidence_score") if isinstance(node_confidence, dict) else None
+        try:
+            confidence_score = float(confidence_score) if confidence_score is not None else 0.6
+        except (TypeError, ValueError):
+            confidence_score = 0.6
+        verifier_ids = []
+        verifier_cfg = config.get("verifier")
+        if isinstance(verifier_cfg, dict):
+            verifier_id = verifier_cfg.get("verifier_id")
+            if isinstance(verifier_id, str) and verifier_id:
+                verifier_ids.append(verifier_id)
+        pattern = record_success_pattern(
+            self.outcome_memory_store,
+            route_tier=route_tier,
+            provider_id=provider_id,
+            task_types=[task_type],
+            confidence_score=max(0.0, min(confidence_score, 1.0)),
+            verifier_ids=verifier_ids,
+            trace_refs=[f"trace://{self.execution_id}/{node_id}"],
+            notes=f"runtime node success for {node_id}",
+        )
+        payload = trace.precision.setdefault("outcome_memory", {})
+        if isinstance(payload, dict):
+            payload["recorded_success_pattern_id"] = pattern.pattern_id
+
+    def _record_outcome_memory_failure(
+        self,
+        *,
+        node_id: str,
+        config: Dict[str, Any],
+        trace: NodeTrace,
+        exc: Exception,
+    ) -> None:
+        if self.outcome_memory_store is None or not isinstance(trace.precision, dict):
+            return
+        routing_entries = trace.precision.get("routing") if isinstance(trace.precision.get("routing"), list) else []
+        latest_route = routing_entries[-1] if routing_entries else {}
+        route_decision = latest_route.get("route_decision") if isinstance(latest_route, dict) else {}
+        routing_context = latest_route.get("routing_context") if isinstance(latest_route, dict) else {}
+        provider_id = route_decision.get("selected_provider_id") if isinstance(route_decision, dict) else None
+        task_type = routing_context.get("task_type") if isinstance(routing_context, dict) else None
+        if not isinstance(task_type, str) or not task_type:
+            provider_cfg = dict(config.get("provider") or {})
+            task_type = str(provider_cfg.get("task_type") or "general_generation")
+        pattern = record_failure_pattern(
+            self.outcome_memory_store,
+            reason_codes=[type(exc).__name__],
+            task_types=[task_type],
+            occurrence_count=1,
+            provider_ids=[provider_id] if isinstance(provider_id, str) and provider_id else [],
+            trace_refs=[f"trace://{self.execution_id}/{node_id}"],
+            notes=str(exc),
+        )
+        payload = trace.precision.setdefault("outcome_memory", {})
+        if isinstance(payload, dict):
+            payload["recorded_failure_pattern_id"] = pattern.pattern_id
+
     def _build_permission_set(
         self,
         *,
@@ -421,6 +534,9 @@ class NodeExecutionRuntime:
         if isinstance(configured_model, str) and configured_model and configured_model not in allowed_models:
             allowed_models.insert(0, configured_model)
         task_type = str(runtime_routing.get("task_type") or provider_cfg.get("task_type") or "general_generation")
+        preferred_route_tier = runtime_routing.get("preferred_route_tier") or provider_cfg.get("preferred_route_tier")
+        if preferred_route_tier is None:
+            preferred_route_tier = self._memory_suggested_route_tier(task_type=task_type)
         difficulty_estimate = self._derive_difficulty_estimate(
             prompt=prompt,
             runtime_routing=runtime_routing,
@@ -446,6 +562,7 @@ class NodeExecutionRuntime:
             difficulty_estimate=difficulty_estimate,
             risk_level=risk_level,
             allowed_providers=allowed_providers,
+            preferred_route_tier=str(preferred_route_tier) if isinstance(preferred_route_tier, str) and preferred_route_tier else None,
             latency_target=runtime_routing.get("latency_target"),
             quality_target=runtime_routing.get("quality_target"),
             retry_count=retry_count,
@@ -602,6 +719,12 @@ class NodeExecutionRuntime:
             runtime_config=runtime_config,
             provider_cfg=provider_cfg,
         )
+        if isinstance(context.get("__node_trace__"), NodeTrace):
+            self._record_outcome_memory_hint(
+                trace=context["__node_trace__"],
+                task_type=routing_context.task_type,
+                suggested_route_tier=routing_context.preferred_route_tier,
+            )
         route_decision = decide_route(routing_context)
         route_log = log_route(route_decision, routing_context)
 
@@ -1013,6 +1136,7 @@ class NodeExecutionRuntime:
             def provider_stage():
                 trace.events.append("provider_execute")
                 compat_context = self._build_compat_context(flat_context)
+                compat_context["__node_trace__"] = trace
                 prompt = self._resolve_provider_prompt(provider_cfg, config, flat_context)
                 return self._provider_call(
                     provider_id,
@@ -1381,6 +1505,11 @@ class NodeExecutionRuntime:
                 trace=trace,
             )
 
+            self._record_outcome_memory_success(
+                node_id=node_id,
+                config=config,
+                trace=trace,
+            )
             self._emit_artifact_preview_events(node_id, artifacts)
 
             duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
@@ -1414,6 +1543,12 @@ class NodeExecutionRuntime:
             )
             raise
         except Exception as exc:
+            self._record_outcome_memory_failure(
+                node_id=node_id,
+                config=config,
+                trace=trace,
+                exc=exc,
+            )
             duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
             self._emit_event(
                 "node_completed",
@@ -1618,6 +1753,11 @@ class NodeExecutionRuntime:
                 trace=trace,
             )
 
+            self._record_outcome_memory_success(
+                node_id=node_id,
+                config=config,
+                trace=trace,
+            )
             self._emit_artifact_preview_events(node_id, artifacts)
 
             duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
@@ -1651,6 +1791,12 @@ class NodeExecutionRuntime:
             )
             raise
         except Exception as exc:
+            self._record_outcome_memory_failure(
+                node_id=node_id,
+                config=config,
+                trace=trace,
+                exc=exc,
+            )
             duration_ms = round((time.time() - node_started_at) * 1000.0, 3)
             self._emit_event(
                 "node_completed",

@@ -381,4 +381,7 @@ CLI
 - confidence + budget-aware routing + safety gate are now connected to the real provider execution boundary
 - execution record can now project routing / safety / confidence summaries from runtime trace
 - standalone `docs/specs/precision/` documents were transitional and have been merged into existing docs
-- next cleanup focus: outcome-memory / trace-intelligence / designer-constraint downstream call-site hardening
+- outcome memory now provides bounded runtime route-tier hints and post-run success/failure pattern recording at the node boundary
+- execution record now projects a trace-intelligence summary when trace carries enough node-level evidence
+- designer proposal precheck now surfaces designer-constraint lint / critique findings in the actual proposal flow
+- next cleanup focus: residual duplication cleanup and any remaining under-consumed precision helpers

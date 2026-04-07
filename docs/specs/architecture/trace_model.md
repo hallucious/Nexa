@@ -380,6 +380,6 @@ At minimum, precision-enriched trace MAY carry:
 - retry / pause / review boundaries
 - branch / merge markers when present
 
-Trace intelligence consumes this evidence to produce failure taxonomy, bottleneck summaries, replay mutation summaries, and run-to-run diff explanations.
+Trace intelligence consumes this evidence to produce failure taxonomy, bottleneck summaries, replay mutation summaries, and run-to-run diff explanations. Execution Record may project a trace-intelligence summary when runtime trace includes enough node-level evidence.
 The original run truth remains immutable; enrichment must not rewrite history.
 

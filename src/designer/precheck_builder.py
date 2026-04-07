@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.designer.control_governance import governance_decision_for_request
+from src.designer.designer_constraint_system import critique_proposal, lint_circuit_proposal
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan
 from src.designer.models.designer_intent import DesignerIntent
 from src.designer.reason_codes import (
@@ -23,9 +24,18 @@ from src.designer.models.validation_precheck import (
 class DesignerPrecheckBuilder:
     def build(self, intent: DesignerIntent, patch: CircuitPatchPlan, *, session_state_card=None) -> ValidationPrecheck:
         governance_decision = self._governance_decision(intent, session_state_card=session_state_card)
+        projected_nodes = self._project_nodes_for_constraint_review(intent, patch, session_state_card=session_state_card)
+        lint_result = lint_circuit_proposal(nodes=projected_nodes) if projected_nodes else None
+        critique_result = critique_proposal(nodes=projected_nodes, user_request_summary=intent.objective.primary_goal) if projected_nodes else None
         blocking_findings = list(self._blocking_findings(intent, patch))
+        if lint_result is not None:
+            blocking_findings.extend(self._constraint_blocking_findings(lint_result, critique_result=critique_result))
         warning_findings = list(self._warning_findings(intent, patch, session_state_card=session_state_card, governance_decision=governance_decision))
+        if lint_result is not None:
+            warning_findings.extend(self._constraint_warning_findings(lint_result, critique_result=critique_result))
         confirmation_findings = list(self._confirmation_findings(intent, patch, blocking_findings, session_state_card=session_state_card, governance_decision=governance_decision))
+        if critique_result is not None:
+            confirmation_findings.extend(self._constraint_confirmation_findings(critique_result))
         overall_status = self._overall_status(blocking_findings, confirmation_findings, warning_findings)
         evaluated_scope = EvaluatedScope(
             mode=self._evaluated_scope_mode(intent),
@@ -207,6 +217,117 @@ class DesignerPrecheckBuilder:
             severity="low",
             fix_hint=governance_decision.approval_guidance or "The current request is anchored strongly enough to continue, but future referential edits should remain explicit while governance is elevated.",
         )
+
+    def _project_nodes_for_constraint_review(self, intent: DesignerIntent, patch: CircuitPatchPlan, *, session_state_card=None) -> list[dict]:
+        nodes: dict[str, dict] = {}
+        existing_refs = ()
+        if session_state_card is not None:
+            existing_refs = tuple(getattr(getattr(session_state_card, "current_working_save", None), "node_list", ()) or ())
+        for node_ref in existing_refs:
+            if isinstance(node_ref, str) and node_ref:
+                nodes[node_ref] = {"id": node_ref, "kind": "execution", "resources": ["provider"], "outputs": ["existing"]}
+        for op in patch.operations:
+            target_ref = op.target_ref or op.payload.get("node_id") or op.payload.get("inserted_node_ref")
+            if not isinstance(target_ref, str) or not target_ref:
+                continue
+            node = nodes.setdefault(target_ref, {"id": target_ref, "kind": "execution", "resources": [], "outputs": ["proposed"]})
+            if op.op_type == "create_node":
+                kind = op.payload.get("kind") or op.payload.get("node_kind") or node.get("kind") or "execution"
+                node["kind"] = kind
+            if op.op_type == "add_review_gate":
+                node["kind"] = "review_gate"
+            if op.op_type == "replace_node_component" and isinstance(op.payload.get("component_kind"), str):
+                node["kind"] = op.payload.get("component_kind")
+            if op.op_type in {"set_node_provider", "replace_provider", "swap_provider"}:
+                node.setdefault("resources", []).append("provider")
+            if op.op_type in {"attach_node_plugin", "attach_plugin"}:
+                plugin_id = op.payload.get("plugin_id") or op.payload.get("plugin_ref") or "plugin.unknown"
+                node.setdefault("resources", []).append(str(plugin_id))
+            if op.op_type in {"set_node_prompt", "set_prompt"}:
+                node.setdefault("resources", []).append("prompt")
+            if op.op_type in {"add_review_gate"}:
+                node.setdefault("resources", []).append("verifier")
+            risk_level = op.payload.get("risk_level") or op.payload.get("risk_tier")
+            if isinstance(risk_level, str) and risk_level:
+                node["risk_level"] = risk_level
+            resources = node.get("resources") or []
+            deduped = []
+            for item in resources:
+                if item not in deduped:
+                    deduped.append(item)
+            node["resources"] = deduped
+            if not node.get("outputs"):
+                node["outputs"] = ["proposed"]
+        return list(nodes.values())
+
+    def _constraint_blocking_findings(self, lint_result, *, critique_result=None) -> tuple[PrecheckFinding, ...]:
+        findings = [
+            PrecheckFinding(
+                issue_code=violation.code,
+                message=violation.message,
+                severity="high" if violation.severity == "error" else "medium",
+                location=violation.node_ref,
+                fix_hint="Revise the proposed circuit to satisfy the designer constraint policy.",
+            )
+            for violation in lint_result.violations
+        ]
+        if critique_result is not None and critique_result.overall_verdict == "unsafe":
+            findings.append(
+                PrecheckFinding(
+                    issue_code="DESIGNER_CONSTRAINT_UNSAFE",
+                    message=critique_result.explanation,
+                    severity="high",
+                    fix_hint="Revise the proposal so it no longer violates the designer constraint critique rules.",
+                )
+            )
+        return tuple(findings)
+
+    def _constraint_warning_findings(self, lint_result, *, critique_result=None) -> tuple[PrecheckFinding, ...]:
+        findings = [
+            PrecheckFinding(
+                issue_code=warning.code,
+                message=warning.message,
+                severity="low" if warning.severity == "warning" else "medium",
+                location=warning.node_ref,
+                fix_hint="Review the designer constraint warning before approval.",
+            )
+            for warning in lint_result.warnings
+        ]
+        if critique_result is not None and critique_result.overall_verdict == "overbuilt":
+            findings.append(
+                PrecheckFinding(
+                    issue_code="DESIGNER_CONSTRAINT_OVERBUILT",
+                    message=critique_result.explanation,
+                    severity="low",
+                    fix_hint="Consider a simpler circuit shape if the extra nodes are not essential.",
+                )
+            )
+        return tuple(findings)
+
+    def _constraint_confirmation_findings(self, critique_result) -> tuple[PrecheckFinding, ...]:
+        findings: list[PrecheckFinding] = []
+        if critique_result is None:
+            return ()
+        if critique_result.overall_verdict == "ambiguous":
+            findings.append(
+                PrecheckFinding(
+                    issue_code="DESIGNER_CONSTRAINT_AMBIGUOUS",
+                    message=critique_result.explanation,
+                    severity="medium",
+                    fix_hint="Clarify the intended circuit shape before approval.",
+                )
+            )
+        for note in critique_result.notes:
+            if note.code == "NO_OUTPUT_BINDINGS":
+                findings.append(
+                    PrecheckFinding(
+                        issue_code=note.code,
+                        message=note.message,
+                        severity="medium",
+                        fix_hint="Confirm how the proposal will produce a usable output before commit.",
+                    )
+                )
+        return tuple(findings)
 
     def _overall_status(
         self,

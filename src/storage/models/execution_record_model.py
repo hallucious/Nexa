@@ -216,6 +216,7 @@ class ExecutionObservabilityModel:
     routing_summary: Optional[dict[str, Any]] = None
     safety_summary: Optional[dict[str, Any]] = None
     confidence_summary: Optional[dict[str, Any]] = None
+    trace_intelligence_summary: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)

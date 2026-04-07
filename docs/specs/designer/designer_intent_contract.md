@@ -176,4 +176,5 @@ At minimum the constraint system may define:
 - pre-review auto-critique findings
 
 Designer remains proposal-producing. The constraint system tightens proposal quality; it does not grant hidden authority.
+In the real proposal flow, the constraint system is consumed during precheck so lint / critique findings become explicit preview / approval findings rather than isolated background helpers.
 

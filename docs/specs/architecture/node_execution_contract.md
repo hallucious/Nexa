@@ -101,12 +101,13 @@ Node must map failures to the platform taxonomy (ReasonCode catalog). At minimum
 The node runtime now owns the first integration boundary for the precision foundations.
 This means:
 
-- provider execution MAY be preceded by budget-aware routing
+- provider execution MAY be preceded by budget-aware routing, including bounded soft route-tier hints derived from prior outcome-memory success patterns
 - provider/plugin use MAY be pre-checked by an engine-owned safety gate
 - node/runtime trace MAY carry route logs, gate results, and confidence assessments
 - human review pause / resume semantics remain node-bounded and explicit
 - typed artifacts, verifier reports, and confidence artifacts remain append-only outputs
-- branch / merge / outcome-memory concepts remain bounded representation layers rather than free-form execution semantics
+- branch / merge remain bounded representation layers rather than free-form execution semantics
+- outcome memory MAY influence routing only as a deterministic soft hint and MAY record post-run success/failure summaries after node completion
 
 These additions MUST NOT collapse Nexa into a fixed prompt → provider → plugin pipeline.
 Execution remains dependency-based.

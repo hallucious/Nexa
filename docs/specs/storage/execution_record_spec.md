@@ -84,6 +84,7 @@ When precision data exists in runtime trace, execution record MAY project:
 - safety summaries
 - confidence summaries
 - node-level precision summaries
+- trace-intelligence summaries derived from node-level trace evidence
 
 These are observability and audit surfaces.
 They MUST NOT redefine structural truth, approval truth, or baseline gating semantics.
