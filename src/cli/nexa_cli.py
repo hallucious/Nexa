@@ -94,18 +94,20 @@ def _load_env_for_args(args) -> "str | None":
     if cwd_root is not None:
         candidates.append(cwd_root / ".env")
 
-    circuit = getattr(args, "circuit", None)
-    if circuit:
+    for path_arg in (getattr(args, "circuit", None), getattr(args, "artifact", None)):
+        if not path_arg:
+            continue
         try:
-            circuit_path = Path(circuit).expanduser().resolve()
+            resolved_path = Path(path_arg).expanduser().resolve()
         except Exception:
-            circuit_path = None
+            resolved_path = None
 
-        if circuit_path is not None:
-            circuit_root = _find_repo_root_from_path(circuit_path.parent)
-            if circuit_root is not None:
-                candidates.append(circuit_root / ".env")
-            candidates.append(circuit_path.parent / ".env")
+        if resolved_path is not None:
+            resolved_parent = resolved_path.parent if resolved_path.suffix else resolved_path
+            resolved_root = _find_repo_root_from_path(resolved_parent)
+            if resolved_root is not None:
+                candidates.append(resolved_root / ".env")
+            candidates.append(resolved_parent / ".env")
 
     seen: set = set()
     for path in candidates:
@@ -297,6 +299,33 @@ def build_parser():
     replay_parser = sub.add_parser("replay")
     replay_parser.add_argument("input", help="Path to audit pack zip file")
     replay_parser.add_argument("--strict", action="store_true", help="Return non-zero on any non-determinism")
+
+    design_parser = sub.add_parser("design")
+    design_parser.add_argument("request_text", help="Natural-language Designer AI request")
+    design_parser.add_argument(
+        "--save",
+        "--working-save-ref",
+        dest="working_save_ref",
+        help="Working save reference for an existing draft context",
+    )
+    design_parser.add_argument(
+        "--artifact",
+        help="Optional .nex artifact path used to build Designer session state context",
+    )
+    design_parser.add_argument(
+        "--backend",
+        help="Optional semantic backend preset (for example: claude, gpt, gemini, perplexity)",
+    )
+    design_parser.add_argument(
+        "--json",
+        action="store_true",
+        dest="output_json",
+        help="Emit structured JSON instead of only the rendered preview",
+    )
+    design_parser.add_argument(
+        "--out",
+        help="Optional path to save the structured Designer proposal payload as JSON",
+    )
 
     return parser
 
@@ -1222,6 +1251,70 @@ def task_command(args) -> int:
     return 1
 
 
+def _load_designer_cli_artifact(artifact_path: str | None):
+    if not artifact_path:
+        return None
+    from src.storage.validators.shared_validator import load_nex
+
+    loaded = load_nex(artifact_path)
+    if loaded.parsed_model is None:
+        blocking_messages = [finding.message for finding in loaded.findings if getattr(finding, "blocking", False)]
+        detail = "; ".join(blocking_messages) if blocking_messages else f"load_status={loaded.load_status}"
+        raise ValueError(f"Unable to load Designer artifact context from {artifact_path}: {detail}")
+    return loaded.parsed_model
+
+
+
+def design_command(args) -> int:
+    from src.designer.proposal_flow import DesignerProposalFlow
+    from src.designer.request_normalizer import DesignerRequestNormalizer
+    from src.designer.session_state_card_builder import DesignerSessionStateCardBuilder
+
+    artifact = _load_designer_cli_artifact(getattr(args, "artifact", None))
+    has_existing_target = bool(getattr(args, "working_save_ref", None) or artifact is not None)
+    session_state_card = DesignerSessionStateCardBuilder().build(
+        request_text=args.request_text,
+        artifact=artifact,
+        session_id=None,
+        target_scope_mode="existing_circuit" if has_existing_target else "new_circuit",
+    )
+
+    normalizer = DesignerRequestNormalizer(
+        semantic_backend_preset=getattr(args, "backend", None),
+        semantic_backend_preset_use_env=bool(getattr(args, "backend", None)),
+        use_llm_semantic_interpreter=bool(getattr(args, "backend", None)),
+        llm_backend_required=bool(getattr(args, "backend", None)),
+    )
+    flow = DesignerProposalFlow(normalizer=normalizer)
+    bundle = flow.propose(
+        args.request_text,
+        working_save_ref=getattr(args, "working_save_ref", None),
+        session_state_card=session_state_card,
+    )
+
+    payload = {
+        "status": "ok",
+        "command": "design",
+        "request_text": bundle.request_text,
+        "target_working_save_ref": bundle.target_working_save_ref,
+        "rendered_preview": bundle.rendered_preview,
+        "bundle": _to_json_safe(bundle),
+    }
+
+    if getattr(args, "out", None):
+        out_path = Path(args.out)
+        if out_path.parent != Path('.'):
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+        save_output(payload, out_path)
+
+    if getattr(args, "output_json", False):
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        print(bundle.rendered_preview)
+    return 0
+
+
+
 def main():
     parser = build_parser()
     args = parser.parse_args()
@@ -1295,6 +1388,23 @@ def main():
 
     if args.command == "replay":
         return replay_command(args)
+
+    if args.command == "design":
+        try:
+            return design_command(args)
+        except Exception as exc:
+            payload = {
+                "status": "error",
+                "error_type": type(exc).__name__,
+                "message": str(exc),
+                "command": "design",
+                "request_text": getattr(args, "request_text", None),
+                "working_save_ref": getattr(args, "working_save_ref", None),
+                "artifact": getattr(args, "artifact", None),
+                "backend": getattr(args, "backend", None),
+            }
+            print_error_payload(payload)
+            return 1
 
     parser.print_help()
     return 0
