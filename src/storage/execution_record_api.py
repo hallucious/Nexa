@@ -203,6 +203,22 @@ def _producer_node_from_producer_ref(producer_ref: Any) -> str | None:
     return None
 
 
+def _artifact_recorded_at(artifact: Any, envelope: dict[str, Any] | None = None) -> str | None:
+    if isinstance(envelope, dict):
+        created_at = envelope.get('created_at')
+        if isinstance(created_at, str) and created_at:
+            return created_at
+    artifact = _normalize_raw_artifact(artifact)
+    if isinstance(artifact, dict):
+        created_at = artifact.get('created_at')
+        if isinstance(created_at, str) and created_at:
+            return created_at
+        timestamp_ms = artifact.get('timestamp_ms')
+        if isinstance(timestamp_ms, (int, float)):
+            return _ms_to_iso(int(timestamp_ms))
+    return None
+
+
 def _typed_artifact_summary(payload: Any, artifact_type: str, metadata: dict[str, Any]) -> str:
     if artifact_type == 'validation_report' and isinstance(payload, dict):
         status = payload.get('aggregate_status') or metadata.get('aggregate_status')
@@ -247,6 +263,7 @@ def _artifact_record_card_from_raw_artifact(artifact: Any, execution_id: str, in
             artifact_schema_version=str(envelope.get('artifact_schema_version') or '') or None,
             producer_ref=producer_ref,
             validation_status=str(envelope.get('validation_status') or '') or None,
+            recorded_at=_artifact_recorded_at(artifact, envelope),
             lineage_refs=[str(item) for item in envelope.get('lineage_refs', []) if item is not None] if isinstance(envelope.get('lineage_refs'), list) else [],
             trace_refs=trace_refs,
             metadata=_to_json_safe(merged_metadata) if merged_metadata else None,
@@ -268,6 +285,7 @@ def _artifact_record_card_from_raw_artifact(artifact: Any, execution_id: str, in
         producer_node=producer_node,
         ref=artifact_ref or f'artifact://{execution_id}/raw/{index}',
         summary=_summarize_value(summary_source),
+        recorded_at=_artifact_recorded_at(artifact),
         metadata=_to_json_safe(artifact) if isinstance(artifact, dict) else None,
         payload_preview=_to_json_safe(artifact) if isinstance(artifact, (dict, list)) else None,
     )

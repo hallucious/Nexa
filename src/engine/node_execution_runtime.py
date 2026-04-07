@@ -819,7 +819,7 @@ class NodeExecutionRuntime:
         artifact_name: str,
         metadata: Optional[Dict[str, Any]] = None,
         trace_refs: Optional[List[str]] = None,
-    ) -> None:
+    ) -> str:
         envelope = make_typed_artifact(
             artifact_type=artifact_type,
             producer_ref=producer_ref,
@@ -844,6 +844,7 @@ class NodeExecutionRuntime:
                 timestamp_ms=time.time() * 1000.0,
             )
         )
+        return envelope.artifact_id
 
     def _run_output_verifier_if_configured(
         self,
@@ -866,7 +867,8 @@ class NodeExecutionRuntime:
         trace.events.append(f"verifier:{composite.aggregate_status}")
 
         verifier_id = str(verifier_config.get("verifier_id") or "output_verifier")
-        self._append_typed_artifact(
+        verifier_trace_ref = f"trace://{self.execution_id}/{node_id}/verifier"
+        verifier_artifact_id = self._append_typed_artifact(
             artifacts=artifacts,
             trace=trace,
             artifact_type="validation_report",
@@ -879,14 +881,18 @@ class NodeExecutionRuntime:
                 "target_ref": target_ref,
                 "aggregate_status": composite.aggregate_status,
             },
-            trace_refs=[f"trace://{self.execution_id}/{node_id}/verifier"],
+            trace_refs=[verifier_trace_ref],
         )
+
+        emitted_artifact_refs = [verifier_artifact_id]
+        emitted_trace_refs = [verifier_trace_ref]
 
         if bool(verifier_config.get("emit_output_artifact", False)):
             declared_output_type = verifier_config.get("expected_artifact_type")
             if not isinstance(declared_output_type, str) or not declared_output_type:
                 declared_output_type = infer_artifact_type(final_output)
-            self._append_typed_artifact(
+            output_trace_ref = f"trace://{self.execution_id}/{node_id}/output"
+            typed_output_artifact_id = self._append_typed_artifact(
                 artifacts=artifacts,
                 trace=trace,
                 artifact_type=declared_output_type,
@@ -898,8 +904,10 @@ class NodeExecutionRuntime:
                     "report_kind": "typed_output",
                     "target_ref": target_ref,
                 },
-                trace_refs=[f"trace://{self.execution_id}/{node_id}/output"],
+                trace_refs=[output_trace_ref],
             )
+            emitted_artifact_refs.append(typed_output_artifact_id)
+            emitted_trace_refs.append(output_trace_ref)
 
         self._emit_event(
             "verification_completed",
@@ -911,6 +919,8 @@ class NodeExecutionRuntime:
                 "confidence": composite.aggregate_confidence,
                 "blocking_reason_codes": composite.blocking_reason_codes,
                 "recommended_next_step": composite.recommended_next_step,
+                "artifact_refs": emitted_artifact_refs,
+                "trace_refs": emitted_trace_refs,
             },
             node_id=node_id,
         )
