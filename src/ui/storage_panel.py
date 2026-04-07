@@ -7,6 +7,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 StorageRole = str
 PanelMode = str
@@ -268,7 +269,7 @@ def _build_commit_snapshot_card(commit_snapshot: CommitSnapshotModel | None) -> 
 
 
 
-def _build_execution_record_card(execution_record: ExecutionRecordModel | None, *, compare_runs_enabled: bool) -> ExecutionRecordCardView | None:
+def _build_execution_record_card(execution_record: ExecutionRecordModel | None, *, compare_runs_enabled: bool, app_language: str) -> ExecutionRecordCardView | None:
     if execution_record is None:
         return None
     trace_available = bool(execution_record.timeline.trace_ref or execution_record.timeline.event_stream_ref)
@@ -291,7 +292,7 @@ def _build_execution_record_card(execution_record: ExecutionRecordModel | None, 
             value = status_counts.get(key)
             if isinstance(value, int) and value > 0:
                 parts.append(f"{key}={value}")
-        verifier_summary_label = ", ".join(parts) if parts else "verifier data available"
+        verifier_summary_label = ", ".join(parts) if parts else ui_text("storage.verifier.data_available", app_language=app_language)
     return ExecutionRecordCardView(
         run_id=execution_record.meta.run_id,
         commit_id=execution_record.source.commit_id,
@@ -382,16 +383,16 @@ def _current_stage(
 
 
 
-def _summary_label(stage: str) -> str:
+def _summary_label(stage: str, *, app_language: str) -> str:
     return {
-        "editing": "Draft currently being edited",
-        "review_ready": "Draft is ready for review",
-        "approved": "Approved commit snapshot available",
-        "executing": "Execution is currently running",
-        "executed": "Latest run completed",
-        "failed_execution": "Latest run did not complete successfully",
-        "unknown": "Storage lifecycle state is incomplete",
-    }.get(stage, "Storage lifecycle state is incomplete")
+        "editing": ui_text("storage.lifecycle.editing", app_language=app_language),
+        "review_ready": ui_text("storage.lifecycle.review_ready", app_language=app_language),
+        "approved": ui_text("storage.lifecycle.approved", app_language=app_language),
+        "executing": ui_text("storage.lifecycle.executing", app_language=app_language),
+        "executed": ui_text("storage.lifecycle.executed", app_language=app_language),
+        "failed_execution": ui_text("storage.lifecycle.failed_execution", app_language=app_language),
+        "unknown": ui_text("storage.lifecycle.unknown", app_language=app_language),
+    }.get(stage, ui_text("storage.lifecycle.unknown", app_language=app_language))
 
 
 
@@ -401,6 +402,7 @@ def _lifecycle_summary(
     working_save: WorkingSaveModel | None,
     commit_snapshot: CommitSnapshotModel | None,
     execution_record: ExecutionRecordModel | None,
+    app_language: str,
 ) -> StorageLifecycleSummaryView:
     relationship = _relationship_view(working_save, commit_snapshot, execution_record)
     stage = _current_stage(
@@ -417,7 +419,7 @@ def _lifecycle_summary(
         uncommitted_changes_present=relationship.draft_vs_commit_status == "has_uncommitted_changes",
         latest_commit_id=commit_snapshot.meta.commit_id if commit_snapshot is not None else None,
         latest_run_id=execution_record.meta.run_id if execution_record is not None else None,
-        summary_label=_summary_label(stage),
+        summary_label=_summary_label(stage, app_language=app_language),
     )
 
 
@@ -470,6 +472,7 @@ def _diagnostics(
     working_save: WorkingSaveModel | None,
     commit_snapshot: CommitSnapshotModel | None,
     execution_record: ExecutionRecordModel | None,
+    app_language: str,
 ) -> StorageDiagnosticsView:
     missing_commit_ref_count = 0
     missing_run_ref_count = 0
@@ -487,18 +490,18 @@ def _diagnostics(
             missing_commit_ref_count += 1
         if last_run.get("resume_ready") is False:
             lifecycle_warning_count += 1
-            last_error_label = "resume anchor requires revalidation"
+            last_error_label = ui_text("storage.diagnostics.resume_anchor_requires_revalidation", app_language=app_language)
         if commit_snapshot is not None:
             source_commit_id = (working_save.runtime.validation_summary or {}).get("source_commit_id")
             if source_commit_id and source_commit_id != commit_snapshot.meta.commit_id:
                 stale_reference_count += 1
                 lifecycle_warning_count += 1
-                last_error_label = f"working save references stale commit {source_commit_id}"
+                last_error_label = ui_text("storage.diagnostics.stale_commit_reference", app_language=app_language, commit_id=source_commit_id)
     if commit_snapshot is not None and execution_record is not None:
         if execution_record.source.commit_id != commit_snapshot.meta.commit_id:
             stale_reference_count += 1
             lifecycle_warning_count += 1
-            last_error_label = "latest execution record is anchored to a different commit snapshot"
+            last_error_label = ui_text("storage.diagnostics.mismatched_commit_anchor", app_language=app_language)
 
     return StorageDiagnosticsView(
         stale_reference_count=stale_reference_count,
@@ -519,48 +522,49 @@ def _available_actions(
     commit_snapshot: CommitSnapshotModel | None,
     execution_record: ExecutionRecordModel | None,
     recent_entries: StorageRecentEntriesView,
+    app_language: str,
 ) -> list[StorageActionHint]:
     actions: list[StorageActionHint] = []
     if working_save is not None:
-        actions.append(StorageActionHint("save_working_save", "Save draft", True, target_ref=_working_save_ref(working_save)))
+        actions.append(StorageActionHint("save_working_save", ui_text("storage.action.save_working_save", app_language=app_language), True, target_ref=_working_save_ref(working_save)))
         can_review = _working_status(working_save) != "validation_failed"
         actions.append(
             StorageActionHint(
                 "submit_for_review",
-                "Submit for review",
+                ui_text("storage.action.submit_for_review", app_language=app_language),
                 can_review,
-                None if can_review else "Draft still has blocking validation findings",
+                None if can_review else ui_text("storage.reason.blocking_findings", app_language=app_language),
                 _working_save_ref(working_save),
             )
         )
         actions.append(
             StorageActionHint(
                 "compare_draft_to_commit",
-                "Compare draft to latest commit",
+                ui_text("storage.action.compare_draft_to_commit", app_language=app_language),
                 commit_snapshot is not None,
-                None if commit_snapshot is not None else "No approved commit snapshot available yet",
+                None if commit_snapshot is not None else ui_text("storage.reason.no_commit_snapshot", app_language=app_language),
                 _commit_ref(commit_snapshot),
             )
         )
     if commit_snapshot is not None:
-        actions.append(StorageActionHint("open_latest_commit", "Open latest commit", True, target_ref=_commit_ref(commit_snapshot)))
+        actions.append(StorageActionHint("open_latest_commit", ui_text("storage.action.open_latest_commit", app_language=app_language), True, target_ref=_commit_ref(commit_snapshot)))
         actions.append(
             StorageActionHint(
                 "run_from_commit",
-                "Run from commit",
+                ui_text("storage.action.run_from_commit", app_language=app_language),
                 commit_snapshot.approval.approval_completed,
-                None if commit_snapshot.approval.approval_completed else "Commit snapshot is not approved",
+                None if commit_snapshot.approval.approval_completed else ui_text("storage.reason.commit_not_approved", app_language=app_language),
                 _commit_ref(commit_snapshot),
             )
         )
-        actions.append(StorageActionHint("select_rollback_target", "Select rollback target", True, target_ref=_commit_ref(commit_snapshot)))
+        actions.append(StorageActionHint("select_rollback_target", ui_text("storage.action.select_rollback_target", app_language=app_language), True, target_ref=_commit_ref(commit_snapshot)))
     if execution_record is not None:
         trace_enabled = bool(execution_record.timeline.trace_ref or execution_record.timeline.event_stream_ref)
         artifact_enabled = (execution_record.artifacts.artifact_count or len(execution_record.artifacts.artifact_refs)) > 0
         actions.append(
             StorageActionHint(
                 "open_latest_run",
-                "Open latest run",
+                ui_text("storage.action.open_latest_run", app_language=app_language),
                 True,
                 target_ref=_run_ref(execution_record),
             )
@@ -568,26 +572,26 @@ def _available_actions(
         actions.append(
             StorageActionHint(
                 "open_trace",
-                "Open trace",
+                ui_text("storage.action.open_trace", app_language=app_language),
                 trace_enabled,
-                None if trace_enabled else "No trace/event stream reference available",
+                None if trace_enabled else ui_text("storage.reason.no_trace", app_language=app_language),
                 target_ref=_run_ref(execution_record),
             )
         )
         actions.append(
             StorageActionHint(
                 "open_artifacts",
-                "Open artifacts",
+                ui_text("storage.action.open_artifacts", app_language=app_language),
                 artifact_enabled,
-                None if artifact_enabled else "No execution artifacts recorded",
+                None if artifact_enabled else ui_text("storage.reason.no_artifacts", app_language=app_language),
                 target_ref=_run_ref(execution_record),
             )
         )
     if active_role == "none" and not actions:
-        actions.append(StorageActionHint("none", "No lifecycle action available", False, reason_disabled="No storage artifact loaded"))
+        actions.append(StorageActionHint("none", ui_text("storage.action.none", app_language=app_language), False, reason_disabled=ui_text("storage.reason.no_storage_artifact", app_language=app_language)))
     if lifecycle_summary.has_latest_execution_record and execution_record is not None:
         can_compare_runs = len(recent_entries.recent_run_refs) >= 2
-        actions.append(StorageActionHint("compare_runs", "Compare runs", can_compare_runs, None if can_compare_runs else "A second execution record is required", target_ref=_run_ref(execution_record)))
+        actions.append(StorageActionHint("compare_runs", ui_text("storage.action.compare_runs", app_language=app_language), can_compare_runs, None if can_compare_runs else ui_text("storage.reason.second_execution_required", app_language=app_language), target_ref=_run_ref(execution_record)))
     return actions
 
 
@@ -606,6 +610,7 @@ def read_storage_view_model(
     """Build a UI-facing storage lifecycle projection from engine-owned truth."""
 
     active_source = _unwrap_loaded_source(active_source)
+    app_language = ui_language_from_sources(active_source, latest_working_save)
 
     if isinstance(active_source, WorkingSaveModel):
         working_save = active_source
@@ -633,6 +638,7 @@ def read_storage_view_model(
         working_save=working_save,
         commit_snapshot=commit_snapshot,
         execution_record=execution_record,
+        app_language=app_language,
     )
     recent_entries = _recent_entries(
         working_save=working_save,
@@ -646,6 +652,7 @@ def read_storage_view_model(
         working_save=working_save,
         commit_snapshot=commit_snapshot,
         execution_record=execution_record,
+        app_language=app_language,
     )
 
     return StoragePanelViewModel(
@@ -654,7 +661,7 @@ def read_storage_view_model(
         lifecycle_summary=lifecycle_summary,
         working_save_card=_build_working_save_card(working_save, commit_snapshot=commit_snapshot),
         commit_snapshot_card=_build_commit_snapshot_card(commit_snapshot),
-        execution_record_card=_build_execution_record_card(execution_record, compare_runs_enabled=len(recent_entries.recent_run_refs) >= 2),
+        execution_record_card=_build_execution_record_card(execution_record, compare_runs_enabled=len(recent_entries.recent_run_refs) >= 2, app_language=app_language),
         relationship_graph=_relationship_view(working_save, commit_snapshot, execution_record),
         recent_entries=recent_entries,
         available_actions=_available_actions(
@@ -664,6 +671,7 @@ def read_storage_view_model(
             commit_snapshot=commit_snapshot,
             execution_record=execution_record,
             recent_entries=recent_entries,
+            app_language=app_language,
         ),
         diagnostics=diagnostics,
         explanation=explanation,

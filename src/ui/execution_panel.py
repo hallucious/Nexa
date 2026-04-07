@@ -8,6 +8,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel, Node
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.engine.execution_event import ExecutionEvent
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -152,19 +153,21 @@ def _severity_for_event(event_type: str, payload: Mapping[str, Any] | None) -> s
     return "info"
 
 
-def _message_for_event(event_type: str, node_id: str | None, payload: Mapping[str, Any] | None) -> str:
+def _message_for_event(event_type: str, node_id: str | None, payload: Mapping[str, Any] | None, *, app_language: str) -> str:
     payload = payload or {}
-    base = event_type.replace("_", " ")
+    human_event_type = event_type.replace("_", " ")
     if node_id:
-        base = f"{base} ({node_id})"
+        base = ui_text("execution.event.base_node", app_language=app_language, fallback_text="{event_type} ({node_id})", event_type=human_event_type, node_id=node_id)
+    else:
+        base = ui_text("execution.event.base", app_language=app_language, fallback_text="{event_type}", event_type=human_event_type)
     if payload.get("status"):
-        return f"{base}: {payload['status']}"
+        return ui_text("execution.event.status_suffix", app_language=app_language, fallback_text="{base}: {status}", base=base, status=payload["status"])
     if payload.get("error"):
-        return f"{base}: {payload['error']}"
+        return ui_text("execution.event.error_suffix", app_language=app_language, fallback_text="{base}: {error}", base=base, error=payload["error"])
     return base
 
 
-def _event_views_from_live_events(events: Sequence[ExecutionEvent]) -> list[ExecutionEventView]:
+def _event_views_from_live_events(events: Sequence[ExecutionEvent], *, app_language: str) -> list[ExecutionEventView]:
     views: list[ExecutionEventView] = []
     for index, event in enumerate(events, start=1):
         details = None
@@ -177,14 +180,14 @@ def _event_views_from_live_events(events: Sequence[ExecutionEvent]) -> list[Exec
                 timestamp=_iso_from_ms(event.timestamp_ms),
                 node_id=event.node_id,
                 severity=_severity_for_event(event.type, event.payload),
-                short_message=_message_for_event(event.type, event.node_id, event.payload),
+                short_message=_message_for_event(event.type, event.node_id, event.payload, app_language=app_language),
                 details_preview=details,
             )
         )
     return views
 
 
-def _event_views_from_record(record: ExecutionRecordModel) -> list[ExecutionEventView]:
+def _event_views_from_record(record: ExecutionRecordModel, *, app_language: str) -> list[ExecutionEventView]:
     views: list[ExecutionEventView] = []
     sequence = 1
     views.append(
@@ -193,7 +196,7 @@ def _event_views_from_record(record: ExecutionRecordModel) -> list[ExecutionEven
             event_type="execution_started",
             timestamp=record.meta.started_at,
             severity="info",
-            short_message="execution started",
+            short_message=ui_text("execution.event.execution_started", app_language=app_language),
         )
     )
     sequence += 1
@@ -205,7 +208,7 @@ def _event_views_from_record(record: ExecutionRecordModel) -> list[ExecutionEven
                 timestamp=card.started_at or record.meta.started_at,
                 node_id=card.node_id,
                 severity="info",
-                short_message=f"node started ({card.node_id})",
+                short_message=ui_text("execution.event.node_started", app_language=app_language, node_id=card.node_id),
             )
         )
         sequence += 1
@@ -218,7 +221,7 @@ def _event_views_from_record(record: ExecutionRecordModel) -> list[ExecutionEven
                 timestamp=card.finished_at or record.meta.finished_at or record.meta.started_at,
                 node_id=card.node_id,
                 severity=severity,
-                short_message=f"node completed ({card.node_id}): {card.outcome}",
+                short_message=ui_text("execution.event.node_completed", app_language=app_language, node_id=card.node_id, outcome=card.outcome),
                 details_preview=getattr(card, "error", None),
             )
         )
@@ -237,13 +240,13 @@ def _event_views_from_record(record: ExecutionRecordModel) -> list[ExecutionEven
             event_type=terminal_type,
             timestamp=record.meta.finished_at or record.meta.started_at,
             severity="error" if record.meta.status == "failed" else "info",
-            short_message=f"execution {record.meta.status}",
+            short_message=ui_text("execution.event.execution_terminal", app_language=app_language, status=record.meta.status),
         )
     )
     return views
 
 
-def _progress_from_record(record: ExecutionRecordModel, active_context: ActiveExecutionContextView) -> ExecutionProgressView:
+def _progress_from_record(record: ExecutionRecordModel, active_context: ActiveExecutionContextView, *, app_language: str) -> ExecutionProgressView:
     total_units = len(record.timeline.node_order) or len(record.node_results.results) or None
     completed_units = len(record.timeline.completed_nodes) or None
     percent = None
@@ -256,7 +259,7 @@ def _progress_from_record(record: ExecutionRecordModel, active_context: ActiveEx
         completed_units=completed_units,
         total_units=total_units,
         current_stage_label=active_context.active_stage,
-        indeterminate_message=None if total_units else "No node-count progress available",
+        indeterminate_message=None if total_units else ui_text("execution.progress.no_node_count", app_language=app_language),
     )
 
 
@@ -309,18 +312,18 @@ def _diagnostics_from_record(record: ExecutionRecordModel) -> ExecutionDiagnosti
     )
 
 
-def _control_state_for_record(record: ExecutionRecordModel) -> ExecutionControlStateView:
+def _control_state_for_record(record: ExecutionRecordModel, *, app_language: str) -> ExecutionControlStateView:
     status = record.meta.status
     can_cancel = status == "running"
     can_pause = status == "running"
     can_resume = status == "paused"
     can_replay = status in {"completed", "failed", "partial", "cancelled", "paused"}
     actions = [
-        ExecutionControlActionView("run", "Run", False, reason_disabled="Execution record is historical"),
-        ExecutionControlActionView("cancel", "Cancel", can_cancel, None if can_cancel else "Run is not active"),
-        ExecutionControlActionView("pause", "Pause", can_pause, None if can_pause else "Run is not active"),
-        ExecutionControlActionView("resume", "Resume", can_resume, None if can_resume else "Run is not paused"),
-        ExecutionControlActionView("replay", "Replay", can_replay, None if can_replay else "Replay unavailable"),
+        ExecutionControlActionView("run", ui_text("execution.control.run", app_language=app_language), False, reason_disabled=ui_text("execution.control.historical_disabled", app_language=app_language)),
+        ExecutionControlActionView("cancel", ui_text("execution.control.cancel", app_language=app_language), can_cancel, None if can_cancel else ui_text("execution.control.run_not_active", app_language=app_language)),
+        ExecutionControlActionView("pause", ui_text("execution.control.pause", app_language=app_language), can_pause, None if can_pause else ui_text("execution.control.run_not_active", app_language=app_language)),
+        ExecutionControlActionView("resume", ui_text("execution.control.resume", app_language=app_language), can_resume, None if can_resume else ui_text("execution.control.run_not_paused", app_language=app_language)),
+        ExecutionControlActionView("replay", ui_text("execution.control.replay", app_language=app_language), can_replay, None if can_replay else ui_text("execution.control.replay_unavailable", app_language=app_language)),
     ]
     return ExecutionControlStateView(
         can_run=False,
@@ -332,7 +335,7 @@ def _control_state_for_record(record: ExecutionRecordModel) -> ExecutionControlS
     )
 
 
-def _active_context_from_live_events(events: Sequence[ExecutionEvent]) -> ActiveExecutionContextView:
+def _active_context_from_live_events(events: Sequence[ExecutionEvent], *, app_language: str) -> ActiveExecutionContextView:
     active_node: str | None = None
     active_stage: str | None = None
     for event in events:
@@ -343,17 +346,17 @@ def _active_context_from_live_events(events: Sequence[ExecutionEvent]) -> Active
             active_node = None
             active_stage = None
     if active_node is None:
-        return ActiveExecutionContextView(status_message="No active node")
+        return ActiveExecutionContextView(status_message=ui_text("execution.context.no_active_node", app_language=app_language))
     return ActiveExecutionContextView(
         active_node_id=active_node,
         active_node_label=active_node,
         active_resource_type="runtime",
         active_stage=active_stage,
-        status_message=f"Executing {active_node}",
+        status_message=ui_text("execution.context.executing_node", app_language=app_language, node_id=active_node),
     )
 
 
-def _active_context_from_record(record: ExecutionRecordModel) -> ActiveExecutionContextView:
+def _active_context_from_record(record: ExecutionRecordModel, *, app_language: str) -> ActiveExecutionContextView:
     if record.meta.status == "running":
         completed_ids = {card.node_id for card in record.timeline.completed_nodes}
         for node_id in record.timeline.node_order:
@@ -363,9 +366,9 @@ def _active_context_from_record(record: ExecutionRecordModel) -> ActiveExecution
                     active_node_label=node_id,
                     active_resource_type="runtime",
                     active_stage="running",
-                    status_message=f"Executing {node_id}",
+                    status_message=ui_text("execution.context.executing_node", app_language=app_language, node_id=node_id),
                 )
-    return ActiveExecutionContextView(status_message="No active node")
+    return ActiveExecutionContextView(status_message=ui_text("execution.context.no_active_node", app_language=app_language))
 
 
 def _status_from_source(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None, execution_record: ExecutionRecordModel | None) -> tuple[str, str, str]:
@@ -404,16 +407,16 @@ def _run_identity_for_idle_source(source: WorkingSaveModel | CommitSnapshotModel
     return RunIdentityView()
 
 
-def _control_state_for_idle_source(source: WorkingSaveModel | CommitSnapshotModel | None) -> ExecutionControlStateView:
+def _control_state_for_idle_source(source: WorkingSaveModel | CommitSnapshotModel | None, *, app_language: str) -> ExecutionControlStateView:
     can_run = isinstance(source, (WorkingSaveModel, CommitSnapshotModel))
     if isinstance(source, CommitSnapshotModel):
         can_run = bool(source.approval.approval_completed)
     actions = [
-        ExecutionControlActionView("run", "Run", can_run, None if can_run else "Execution target is not runnable"),
-        ExecutionControlActionView("cancel", "Cancel", False, "No active run"),
-        ExecutionControlActionView("pause", "Pause", False, "No active run"),
-        ExecutionControlActionView("resume", "Resume", False, "No paused run"),
-        ExecutionControlActionView("replay", "Replay", False, "No execution record available"),
+        ExecutionControlActionView("run", ui_text("execution.control.run", app_language=app_language), can_run, None if can_run else ui_text("execution.control.target_not_runnable", app_language=app_language)),
+        ExecutionControlActionView("cancel", ui_text("execution.control.cancel", app_language=app_language), False, ui_text("execution.control.no_active_run", app_language=app_language)),
+        ExecutionControlActionView("pause", ui_text("execution.control.pause", app_language=app_language), False, ui_text("execution.control.no_active_run", app_language=app_language)),
+        ExecutionControlActionView("resume", ui_text("execution.control.resume", app_language=app_language), False, ui_text("execution.control.no_paused_run", app_language=app_language)),
+        ExecutionControlActionView("replay", ui_text("execution.control.replay", app_language=app_language), False, ui_text("execution.control.no_execution_record", app_language=app_language)),
     ]
     return ExecutionControlStateView(can_run=can_run, available_actions=actions)
 
@@ -428,6 +431,7 @@ def read_execution_panel_view_model(
     """Build a UI-facing execution projection from engine-owned truth."""
 
     source = _unwrap(source)
+    app_language = ui_language_from_sources(source, execution_record)
     if isinstance(source, ExecutionRecordModel):
         execution_record = source
 
@@ -438,9 +442,9 @@ def read_execution_panel_view_model(
             execution_status = "running"
 
     if execution_record is not None:
-        recent_events = _event_views_from_live_events(live_events) if live_events else _event_views_from_record(execution_record)
-        active_context = _active_context_from_live_events(live_events) if live_events else _active_context_from_record(execution_record)
-        progress = _progress_from_record(execution_record, active_context)
+        recent_events = _event_views_from_live_events(live_events, app_language=app_language) if live_events else _event_views_from_record(execution_record, app_language=app_language)
+        active_context = _active_context_from_live_events(live_events, app_language=app_language) if live_events else _active_context_from_record(execution_record, app_language=app_language)
+        progress = _progress_from_record(execution_record, active_context, app_language=app_language)
         return ExecutionPanelViewModel(
             source_mode=source_mode,
             storage_role=storage_role,
@@ -458,7 +462,7 @@ def read_execution_panel_view_model(
                 event_count=execution_record.timeline.event_count or len(recent_events),
             ),
             metrics=_metrics_from_record(execution_record),
-            control_state=_control_state_for_record(execution_record),
+            control_state=_control_state_for_record(execution_record, app_language=app_language),
             related_findings=[],
             explanation=explanation,
         )
@@ -468,10 +472,10 @@ def read_execution_panel_view_model(
         storage_role=storage_role,
         execution_status=execution_status,
         run_identity=_run_identity_for_idle_source(source),
-        progress=ExecutionProgressView(progress_mode="indeterminate", indeterminate_message="No execution record loaded"),
-        active_context=ActiveExecutionContextView(status_message="No active execution"),
+        progress=ExecutionProgressView(progress_mode="indeterminate", indeterminate_message=ui_text("execution.panel.no_execution_record", app_language=app_language)),
+        active_context=ActiveExecutionContextView(status_message=ui_text("execution.panel.no_active_execution", app_language=app_language)),
         diagnostics=ExecutionDiagnosticsSummary(),
-        control_state=_control_state_for_idle_source(source),
+        control_state=_control_state_for_idle_source(source, app_language=app_language),
         explanation=explanation,
     )
 

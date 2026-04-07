@@ -10,6 +10,7 @@ from src.ui.designer_panel import DesignerPanelViewModel
 from src.ui.execution_panel import ExecutionPanelViewModel
 from src.ui.storage_panel import StoragePanelViewModel
 from src.ui.validation_panel import ValidationPanelViewModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -73,6 +74,7 @@ def read_builder_action_schema(
     explanation: str | None = None,
 ) -> BuilderActionSchemaView:
     source = _unwrap(source)
+    app_language = ui_language_from_sources(source)
     source_role = _storage_role(source)
 
     execution_status = execution_view.execution_status if execution_view is not None else "unknown"
@@ -89,47 +91,47 @@ def read_builder_action_schema(
     primary_actions = [
         _action(
             "save_working_save",
-            "Save Draft",
+            ui_text("builder.action.save_working_save", app_language=app_language),
             "storage",
             source_role == "working_save",
-            reason_disabled=None if source_role == "working_save" else "Only working saves can be saved as drafts.",
+            reason_disabled=None if source_role == "working_save" else ui_text("builder.reason.only_working_save", app_language=app_language),
         ),
         _action(
             "review_draft",
-            "Review Draft",
+            ui_text("builder.action.review_draft", app_language=app_language),
             "review",
             source_role == "working_save" and review_ready and execution_status not in {"running", "queued"},
             reason_disabled=(
                 None
                 if source_role == "working_save" and review_ready and execution_status not in {"running", "queued"}
-                else "Draft review requires a working save with non-blocking validation and no active run."
+                else ui_text("builder.reason.review_requires_ready_working_save", app_language=app_language)
             ),
         ),
         _action(
             "commit_snapshot",
-            "Commit Snapshot",
+            ui_text("builder.action.commit_snapshot", app_language=app_language),
             "approval",
             source_role == "working_save" and review_ready and execution_status not in {"running", "queued"} and (designer_view is None or commit_eligible),
             reason_disabled=(
                 None
                 if source_role == "working_save" and review_ready and execution_status not in {"running", "queued"} and (designer_view is None or commit_eligible)
-                else "Commit requires a working save, non-blocking review state, no active run, and approval eligibility when designer flow is present."
+                else ui_text("builder.reason.commit_requires_ready_state", app_language=app_language)
             ),
             requires_confirmation=True,
         ),
         _action(
             "run_current",
-            "Run Current",
+            ui_text("builder.action.run_current", app_language=app_language),
             "execution",
             can_run,
-            reason_disabled=None if can_run else "Running requires a draft or commit target with no blocking validation and no active run.",
+            reason_disabled=None if can_run else ui_text("builder.reason.run_requires_runnable_target", app_language=app_language),
         ),
         _action(
             "cancel_run",
-            "Cancel Run",
+            ui_text("builder.action.cancel_run", app_language=app_language),
             "execution",
             execution_status in {"running", "queued"},
-            reason_disabled=None if execution_status in {"running", "queued"} else "No active run is available to cancel.",
+            reason_disabled=None if execution_status in {"running", "queued"} else ui_text("builder.reason.no_active_run_to_cancel", app_language=app_language),
             destructive=True,
             requires_confirmation=True,
         ),
@@ -138,14 +140,14 @@ def read_builder_action_schema(
     secondary_actions = [
         _action(
             "replay_latest",
-            "Replay Latest",
+            ui_text("builder.action.replay_latest", app_language=app_language),
             "execution",
             has_execution_record,
-            reason_disabled=None if has_execution_record else "Replay requires an execution record.",
+            reason_disabled=None if has_execution_record else ui_text("builder.reason.replay_requires_execution_record", app_language=app_language),
         ),
         _action(
             "open_diff",
-            "Open Diff",
+            ui_text("builder.action.open_diff", app_language=app_language),
             "comparison",
             storage_view is not None and (
                 (storage_view.commit_snapshot_card is not None and storage_view.commit_snapshot_card.commit_id is not None)
@@ -157,7 +159,7 @@ def read_builder_action_schema(
                     (storage_view.commit_snapshot_card is not None and storage_view.commit_snapshot_card.commit_id is not None)
                     or (storage_view.execution_record_card is not None and storage_view.execution_record_card.run_id is not None)
                 )
-                else "Diff requires a comparison target such as a commit snapshot or execution record."
+                else ui_text("builder.reason.diff_requires_comparison_target", app_language=app_language)
             ),
         ),
     ]
@@ -168,18 +170,18 @@ def read_builder_action_schema(
             [
                 _action(
                     "approve_for_commit",
-                    "Approve Proposal",
+                    ui_text("builder.action.approve_for_commit", app_language=app_language),
                     "designer",
                     designer_view.approval_state.commit_eligible,
-                    reason_disabled=None if designer_view.approval_state.commit_eligible else "Designer proposal is not yet eligible for commit.",
+                    reason_disabled=None if designer_view.approval_state.commit_eligible else ui_text("builder.reason.designer_not_commit_eligible", app_language=app_language),
                     requires_confirmation=True,
                 ),
                 _action(
                     "request_revision",
-                    "Request Revision",
+                    ui_text("builder.action.request_revision", app_language=app_language),
                     "designer",
                     designer_view.request_state.request_status in {"submitted", "editing"} or designer_view.intent_state.intent_id is not None,
-                    reason_disabled=None if (designer_view.request_state.request_status in {"submitted", "editing"} or designer_view.intent_state.intent_id is not None) else "No active designer proposal is available for revision.",
+                    reason_disabled=None if (designer_view.request_state.request_status in {"submitted", "editing"} or designer_view.intent_state.intent_id is not None) else ui_text("builder.reason.no_active_designer_proposal", app_language=app_language),
                 ),
             ]
         )

@@ -12,6 +12,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -175,12 +176,14 @@ def read_designer_panel_view_model(
     storage_role = _storage_role(source)
     session_mode = _session_mode_from_card(session_state_card)
 
+    app_language = ui_language_from_sources(source)
+
     request_state = DesignerRequestStateView(
         current_request_text=session_state_card.conversation_context.user_request_text if session_state_card is not None else None,
         request_status=("submitted" if session_state_card is not None else "empty"),
-        input_placeholder="Describe the circuit change you want to make.",
+        input_placeholder=ui_text("designer.request.input_placeholder", app_language=app_language),
         can_submit=storage_role in {"working_save", "none"},
-        submit_reason_disabled=None if storage_role in {"working_save", "none"} else "Designer editing is read-only outside Working Save.",
+        submit_reason_disabled=None if storage_role in {"working_save", "none"} else ui_text("designer.request.read_only_disabled", app_language=app_language),
     )
     intent_state = DesignerIntentStateView(
         intent_id=intent.intent_id if intent is not None else None,
@@ -250,18 +253,18 @@ def read_designer_panel_view_model(
         attempt_count=(len(session_state_card.revision_state.attempt_history) if session_state_card is not None else 0),
     )
     suggested_actions = [
-        DesignerActionHint("submit_request", "Submit request", request_state.can_submit, request_state.submit_reason_disabled),
+        DesignerActionHint("submit_request", ui_text("designer.action.submit_request", app_language=app_language), request_state.can_submit, request_state.submit_reason_disabled),
         DesignerActionHint(
             "preview_patch",
-            "Preview patch",
+            ui_text("designer.action.preview_patch", app_language=app_language),
             precheck_state.can_proceed_to_preview and patch_state.patch_id is not None,
-            None if precheck_state.can_proceed_to_preview and patch_state.patch_id is not None else "Preview requires a patch and passing precheck",
+            None if precheck_state.can_proceed_to_preview and patch_state.patch_id is not None else ui_text("designer.action.preview_patch_disabled", app_language=app_language),
         ),
         DesignerActionHint(
             "approve_for_commit",
-            "Approve for commit",
+            ui_text("designer.action.approve_for_commit", app_language=app_language),
             preview_state.preview_status == "ready" and precheck_state.overall_status in {"pass", "pass_with_warnings", "confirmation_required"},
-            None if preview_state.preview_status == "ready" and precheck_state.overall_status in {"pass", "pass_with_warnings", "confirmation_required"} else "Preview or precheck not ready",
+            None if preview_state.preview_status == "ready" and precheck_state.overall_status in {"pass", "pass_with_warnings", "confirmation_required"} else ui_text("designer.action.approve_for_commit_disabled", app_language=app_language),
         ),
     ]
     related_targets: list[DesignerTargetRefView] = []

@@ -9,6 +9,7 @@ from src.storage.models.execution_record_model import ExecutionIssue, ExecutionR
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -181,7 +182,7 @@ def _severity_from_verifier_status(status: str | None) -> str:
     return "info"
 
 
-def _from_verifier_artifact(artifact, *, idx: int) -> list[ValidationFindingView]:
+def _from_verifier_artifact(artifact, *, idx: int, app_language: str) -> list[ValidationFindingView]:
     payload = artifact.payload_preview if isinstance(getattr(artifact, 'payload_preview', None), dict) else {}
     findings: list[ValidationFindingView] = []
     verifier_status = payload.get('aggregate_status') if isinstance(payload.get('aggregate_status'), str) else None
@@ -220,10 +221,10 @@ def _from_verifier_artifact(artifact, *, idx: int) -> list[ValidationFindingView
                 ValidationFindingView(
                     finding_id=f"verifier:{idx}:{result_index}:aggregate",
                     severity=local_severity,
-                    category='verification',
+                    category=ui_text("validation.category.verification", app_language=app_language),
                     code=str(result.get('reason_code') or 'VERIFIER_RESULT'),
-                    title=str(result.get('verifier_type') or 'Verifier result').replace('_', ' ').title(),
-                    message=str(result.get('explanation') or 'Verifier result recorded'),
+                    title=str(result.get('verifier_type') or ui_text('validation.title.verifier_report', app_language=app_language)).replace('_', ' ').title(),
+                    message=str(result.get('explanation') or ui_text('validation.message.verifier_report_recorded', app_language=app_language)),
                     short_label=str(local_status or artifact.validation_status or 'verification'),
                     location_ref=str(result.get('target_ref') or artifact.producer_ref or '') or None,
                     target_type='node',
@@ -241,10 +242,10 @@ def _from_verifier_artifact(artifact, *, idx: int) -> list[ValidationFindingView
     return [ValidationFindingView(
         finding_id=f"verifier:{idx}:summary",
         severity=_severity_from_verifier_status(verifier_status),
-        category='verification',
+        category=ui_text("validation.category.verification", app_language=app_language),
         code='VERIFIER_REPORT',
-        title='Verifier Report',
-        message=str(summary_message),
+        title=ui_text("validation.title.verifier_report", app_language=app_language),
+        message=str(summary_message or ui_text("validation.message.verifier_report_recorded", app_language=app_language)),
         short_label=str(verifier_status or artifact.validation_status or 'verification'),
         location_ref=(artifact.producer_ref or None),
         target_type='node',
@@ -277,7 +278,7 @@ def _from_execution_issue(issue: ExecutionIssue, severity: str, *, idx: int) -> 
     )
 
 
-def _group_by_severity(all_findings: list[ValidationFindingView]) -> list[ValidationGroupView]:
+def _group_by_severity(all_findings: list[ValidationFindingView], *, app_language: str) -> list[ValidationGroupView]:
     groups: list[ValidationGroupView] = []
     for severity in ("blocking", "warning", "confirmation_required", "info"):
         findings = [finding for finding in all_findings if finding.severity == severity]
@@ -285,7 +286,7 @@ def _group_by_severity(all_findings: list[ValidationFindingView]) -> list[Valida
             groups.append(
                 ValidationGroupView(
                     group_id=f"severity:{severity}",
-                    group_label=severity.replace("_", " ").title(),
+                    group_label=ui_text(f"validation.group.{severity}", app_language=app_language, fallback_text=severity.replace("_", " ").title()),
                     group_type="severity",
                     findings=findings,
                     count=len(findings),
@@ -295,7 +296,7 @@ def _group_by_severity(all_findings: list[ValidationFindingView]) -> list[Valida
     return groups
 
 
-def _target_summaries(all_findings: list[ValidationFindingView]) -> list[ValidationTargetSummary]:
+def _target_summaries(all_findings: list[ValidationFindingView], *, app_language: str) -> list[ValidationTargetSummary]:
     by_target: dict[tuple[str, str | None], list[ValidationFindingView]] = {}
     for finding in all_findings:
         key = (finding.target_type or "graph", finding.target_id)
@@ -310,7 +311,7 @@ def _target_summaries(all_findings: list[ValidationFindingView]) -> list[Validat
                 blocking_count=sum(1 for finding in findings if finding.severity == "blocking"),
                 warning_count=sum(1 for finding in findings if finding.severity == "warning"),
                 confirmation_count=sum(1 for finding in findings if finding.severity == "confirmation_required"),
-                label=target_id or target_type,
+                label=target_id or (ui_text("validation.target.graph", app_language=app_language) if target_type == "graph" else target_type),
             )
         )
     return sorted(summaries, key=lambda item: (-item.blocking_count, -item.finding_count, item.label or ""))
@@ -325,6 +326,7 @@ def read_validation_panel_view_model(
     explanation: str | None = None,
 ) -> ValidationPanelViewModel:
     source = _unwrap(source)
+    app_language = ui_language_from_sources(source, execution_record)
     storage_role = _storage_role(source)
     blocking_findings: list[ValidationFindingView] = []
     warning_findings: list[ValidationFindingView] = []
@@ -363,14 +365,14 @@ def read_validation_panel_view_model(
         verifier_findings: list[ValidationFindingView] = []
         for i, artifact in enumerate(execution_record.artifacts.artifact_refs, start=1):
             if artifact.artifact_type == 'validation_report':
-                verifier_findings.extend(_from_verifier_artifact(artifact, idx=i))
+                verifier_findings.extend(_from_verifier_artifact(artifact, idx=i, app_language=app_language))
         blocking_findings.extend([finding for finding in verifier_findings if finding.severity == 'blocking'])
         warning_findings.extend([finding for finding in verifier_findings if finding.severity == 'warning'])
         informational_findings.extend([finding for finding in verifier_findings if finding.severity == 'info'])
         overall_status = "blocked" if blocking_findings else ("pass_with_warnings" if warning_findings else "pass")
 
     all_findings = [*blocking_findings, *warning_findings, *confirmation_findings, *informational_findings]
-    related_targets = _target_summaries(all_findings)
+    related_targets = _target_summaries(all_findings, app_language=app_language)
     summary = ValidationSummaryView(
         blocking_count=len(blocking_findings),
         warning_count=len(warning_findings),
@@ -386,18 +388,18 @@ def read_validation_panel_view_model(
         requires_user_confirmation=bool(confirmation_findings),
     )
     suggested_actions = [
-        ValidationActionHint("focus_top_issue", "Focus top issue", bool(all_findings), None if all_findings else "No findings available"),
+        ValidationActionHint("focus_top_issue", ui_text("validation.action.focus_top_issue", app_language=app_language), bool(all_findings), None if all_findings else ui_text("validation.reason.no_findings", app_language=app_language)),
         ValidationActionHint(
             "request_revision",
-            "Request revision",
+            ui_text("validation.action.request_revision", app_language=app_language),
             overall_status in {"blocked", "confirmation_required", "pass_with_warnings"},
-            None if overall_status in {"blocked", "confirmation_required", "pass_with_warnings"} else "No revision required",
+            None if overall_status in {"blocked", "confirmation_required", "pass_with_warnings"} else ui_text("validation.reason.no_revision_required", app_language=app_language),
         ),
         ValidationActionHint(
             "proceed_to_approval",
-            "Proceed to approval",
+            ui_text("validation.action.proceed_to_approval", app_language=app_language),
             overall_status in {"pass", "pass_with_warnings"} and not blocking_findings,
-            None if overall_status in {"pass", "pass_with_warnings"} and not blocking_findings else "Blocking issues remain",
+            None if overall_status in {"pass", "pass_with_warnings"} and not blocking_findings else ui_text("validation.reason.blocking_issues_remain", app_language=app_language),
         ),
     ]
     return ValidationPanelViewModel(
@@ -409,7 +411,7 @@ def read_validation_panel_view_model(
         warning_findings=warning_findings,
         confirmation_findings=confirmation_findings,
         informational_findings=informational_findings,
-        grouped_sections=_group_by_severity(all_findings),
+        grouped_sections=_group_by_severity(all_findings, app_language=app_language),
         related_targets=related_targets,
         suggested_actions=suggested_actions,
         explanation=explanation,
