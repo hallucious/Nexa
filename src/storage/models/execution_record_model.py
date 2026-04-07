@@ -92,6 +92,9 @@ class NodeResultCard:
     output_type: Optional[str] = None
     output_preview: Any = None
     artifact_refs: list[str] = field(default_factory=list)
+    typed_artifact_refs: list[str] = field(default_factory=list)
+    verifier_status: Optional[str] = None
+    verifier_reason_codes: list[str] = field(default_factory=list)
     warning_count: int = 0
     error_count: int = 0
     trace_ref: Optional[str] = None
@@ -138,6 +141,13 @@ class ArtifactRecordCard:
     hash: Optional[str] = None
     ref: Optional[str] = None
     summary: Optional[str] = None
+    artifact_schema_version: Optional[str] = None
+    producer_ref: Optional[str] = None
+    validation_status: Optional[str] = None
+    lineage_refs: list[str] = field(default_factory=list)
+    trace_refs: list[str] = field(default_factory=list)
+    metadata: Optional[dict[str, Any]] = None
+    payload_preview: Any = None
 
     def __post_init__(self) -> None:
         if not self.artifact_id:
@@ -195,6 +205,7 @@ class ExecutionObservabilityModel:
     metrics: dict[str, Any] = field(default_factory=dict)
     provider_usage_summary: Optional[dict[str, Any]] = None
     plugin_usage_summary: Optional[dict[str, Any]] = None
+    verifier_summary: Optional[dict[str, Any]] = None
     trace_summary: Optional[str] = None
     observability_refs: Optional[list[str]] = None
 

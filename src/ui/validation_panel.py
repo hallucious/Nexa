@@ -171,6 +171,91 @@ def _from_precheck_finding(finding: PrecheckFinding, severity: str, *, idx: int)
     )
 
 
+
+
+def _severity_from_verifier_status(status: str | None) -> str:
+    if status == "fail":
+        return "blocking"
+    if status == "warning":
+        return "warning"
+    return "info"
+
+
+def _from_verifier_artifact(artifact, *, idx: int) -> list[ValidationFindingView]:
+    payload = artifact.payload_preview if isinstance(getattr(artifact, 'payload_preview', None), dict) else {}
+    findings: list[ValidationFindingView] = []
+    verifier_status = payload.get('aggregate_status') if isinstance(payload.get('aggregate_status'), str) else None
+    constituent_results = payload.get('constituent_results') if isinstance(payload.get('constituent_results'), list) else []
+    for result_index, result in enumerate(constituent_results, start=1):
+        if not isinstance(result, dict):
+            continue
+        local_status = result.get('status') if isinstance(result.get('status'), str) else verifier_status
+        local_severity = _severity_from_verifier_status(local_status)
+        findings_list = result.get('findings') if isinstance(result.get('findings'), list) else []
+        if findings_list:
+            for finding_index, finding in enumerate(findings_list, start=1):
+                if not isinstance(finding, dict):
+                    continue
+                findings.append(
+                    ValidationFindingView(
+                        finding_id=f"verifier:{idx}:{result_index}:{finding_index}",
+                        severity=local_severity,
+                        category=str(finding.get('category') or 'verification'),
+                        code=str(finding.get('reason_code') or result.get('reason_code') or 'VERIFIER_FINDING'),
+                        title=str((finding.get('message') or result.get('verifier_type') or 'Verifier finding')).split(':', 1)[0],
+                        message=str(finding.get('message') or result.get('explanation') or 'Verifier finding'),
+                        short_label=str(result.get('verifier_type') or artifact.artifact_type),
+                        location_ref=str(result.get('target_ref') or artifact.producer_ref or '') or None,
+                        target_type='node',
+                        target_id=(artifact.producer_node or None),
+                        source_ref=artifact.artifact_id,
+                        suggested_action=(finding.get('suggested_action') if isinstance(finding.get('suggested_action'), str) else None),
+                        user_confirmation_allowed=False,
+                        auto_resolvable=False,
+                        destructive_risk=False,
+                    )
+                )
+        else:
+            findings.append(
+                ValidationFindingView(
+                    finding_id=f"verifier:{idx}:{result_index}:aggregate",
+                    severity=local_severity,
+                    category='verification',
+                    code=str(result.get('reason_code') or 'VERIFIER_RESULT'),
+                    title=str(result.get('verifier_type') or 'Verifier result').replace('_', ' ').title(),
+                    message=str(result.get('explanation') or 'Verifier result recorded'),
+                    short_label=str(local_status or artifact.validation_status or 'verification'),
+                    location_ref=str(result.get('target_ref') or artifact.producer_ref or '') or None,
+                    target_type='node',
+                    target_id=(artifact.producer_node or None),
+                    source_ref=artifact.artifact_id,
+                    suggested_action=None,
+                    user_confirmation_allowed=False,
+                    auto_resolvable=False,
+                    destructive_risk=False,
+                )
+            )
+    if findings:
+        return findings
+    summary_message = artifact.summary or 'Verifier report recorded'
+    return [ValidationFindingView(
+        finding_id=f"verifier:{idx}:summary",
+        severity=_severity_from_verifier_status(verifier_status),
+        category='verification',
+        code='VERIFIER_REPORT',
+        title='Verifier Report',
+        message=str(summary_message),
+        short_label=str(verifier_status or artifact.validation_status or 'verification'),
+        location_ref=(artifact.producer_ref or None),
+        target_type='node',
+        target_id=(artifact.producer_node or None),
+        source_ref=artifact.artifact_id,
+        suggested_action=None,
+        user_confirmation_allowed=False,
+        auto_resolvable=False,
+        destructive_risk=False,
+    )]
+
 def _from_execution_issue(issue: ExecutionIssue, severity: str, *, idx: int) -> ValidationFindingView:
     target_type, target_id = _target_type_from_location(issue.location)
     return ValidationFindingView(
@@ -273,9 +358,16 @@ def read_validation_panel_view_model(
         informational_findings = [finding for finding in converted if finding.severity == "info"]
     elif execution_record is not None:
         source_mode = "execution_guard"
-        overall_status = "blocked" if execution_record.diagnostics.errors else ("pass_with_warnings" if execution_record.diagnostics.warnings else "pass")
         blocking_findings = [_from_execution_issue(issue, "blocking", idx=i) for i, issue in enumerate(execution_record.diagnostics.errors, start=1)]
         warning_findings = [_from_execution_issue(issue, "warning", idx=i) for i, issue in enumerate(execution_record.diagnostics.warnings, start=1)]
+        verifier_findings: list[ValidationFindingView] = []
+        for i, artifact in enumerate(execution_record.artifacts.artifact_refs, start=1):
+            if artifact.artifact_type == 'validation_report':
+                verifier_findings.extend(_from_verifier_artifact(artifact, idx=i))
+        blocking_findings.extend([finding for finding in verifier_findings if finding.severity == 'blocking'])
+        warning_findings.extend([finding for finding in verifier_findings if finding.severity == 'warning'])
+        informational_findings.extend([finding for finding in verifier_findings if finding.severity == 'info'])
+        overall_status = "blocked" if blocking_findings else ("pass_with_warnings" if warning_findings else "pass")
 
     all_findings = [*blocking_findings, *warning_findings, *confirmation_findings, *informational_findings]
     related_targets = _target_summaries(all_findings)

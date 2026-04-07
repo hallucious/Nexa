@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
 
@@ -170,6 +171,149 @@ def _resume_request_from_paused_run_state_payload(paused_run_state: dict[str, An
         return None
 
 
+
+
+def _normalize_raw_artifact(value: Any) -> Any:
+    if is_dataclass(value):
+        return asdict(value)
+    if hasattr(value, '__dict__') and not isinstance(value, type):
+        try:
+            return dict(vars(value))
+        except Exception:
+            return value
+    return value
+
+
+def _extract_typed_artifact_envelope(artifact: Any) -> dict[str, Any] | None:
+    artifact = _normalize_raw_artifact(artifact)
+    if isinstance(artifact, dict):
+        if all(key in artifact for key in ('artifact_id', 'artifact_type', 'producer_ref')):
+            return artifact
+        data = artifact.get('data')
+        if isinstance(data, dict) and all(key in data for key in ('artifact_id', 'artifact_type', 'producer_ref')):
+            return data
+    return None
+
+
+def _producer_node_from_producer_ref(producer_ref: Any) -> str | None:
+    if not isinstance(producer_ref, str) or not producer_ref:
+        return None
+    if producer_ref.startswith('node.'):
+        return producer_ref.split('.', 1)[1]
+    return None
+
+
+def _typed_artifact_summary(payload: Any, artifact_type: str, metadata: dict[str, Any]) -> str:
+    if artifact_type == 'validation_report' and isinstance(payload, dict):
+        status = payload.get('aggregate_status') or metadata.get('aggregate_status')
+        if isinstance(status, str) and status:
+            return f'verification report ({status})'
+    return _summarize_value(payload if payload is not None else {'artifact_type': artifact_type})
+
+
+def _artifact_record_card_from_raw_artifact(artifact: Any, execution_id: str, index: int) -> ArtifactRecordCard:
+    artifact = _normalize_raw_artifact(artifact)
+    envelope = _extract_typed_artifact_envelope(artifact)
+
+    if envelope is not None:
+        outer_metadata = artifact.get('metadata') if isinstance(artifact, dict) and isinstance(artifact.get('metadata'), dict) else {}
+        envelope_metadata = envelope.get('metadata') if isinstance(envelope.get('metadata'), dict) else {}
+        merged_metadata = {**outer_metadata, **envelope_metadata}
+        payload = envelope.get('payload')
+        artifact_id = str(envelope.get('artifact_id') or f'artifact::typed::{index}')
+        artifact_type = str(envelope.get('artifact_type') or 'json_object')
+        producer_ref = str(envelope.get('producer_ref') or '') or None
+        producer_node = None
+        if isinstance(artifact, dict):
+            outer_producer_node = artifact.get('producer_node')
+            if isinstance(outer_producer_node, str) and outer_producer_node:
+                producer_node = outer_producer_node
+        if producer_node is None:
+            producer_node = _producer_node_from_producer_ref(producer_ref)
+        raw_trace_refs = envelope.get('trace_refs') if isinstance(envelope.get('trace_refs'), list) else []
+        trace_refs = [str(item) for item in raw_trace_refs if item is not None]
+        ref = None
+        if isinstance(artifact, dict) and isinstance(artifact.get('ref'), str) and artifact.get('ref'):
+            ref = artifact.get('ref')
+        if ref is None:
+            ref = f'artifact://{execution_id}/{artifact_id}'
+        return ArtifactRecordCard(
+            artifact_id=artifact_id,
+            artifact_type=artifact_type,
+            producer_node=producer_node,
+            hash=(artifact.get('hash') if isinstance(artifact, dict) and isinstance(artifact.get('hash'), str) else None),
+            ref=ref,
+            summary=_typed_artifact_summary(payload, artifact_type, merged_metadata),
+            artifact_schema_version=str(envelope.get('artifact_schema_version') or '') or None,
+            producer_ref=producer_ref,
+            validation_status=str(envelope.get('validation_status') or '') or None,
+            lineage_refs=[str(item) for item in envelope.get('lineage_refs', []) if item is not None] if isinstance(envelope.get('lineage_refs'), list) else [],
+            trace_refs=trace_refs,
+            metadata=_to_json_safe(merged_metadata) if merged_metadata else None,
+            payload_preview=_to_json_safe(payload),
+        )
+
+    artifact_type = type(artifact).__name__
+    artifact_ref = None
+    summary_source = artifact
+    producer_node = None
+    if isinstance(artifact, dict):
+        artifact_type = str(artifact.get('type') or artifact.get('artifact_type') or artifact_type)
+        artifact_ref = artifact.get('ref') if isinstance(artifact.get('ref'), str) else None
+        summary_source = artifact.get('summary') if artifact.get('summary') is not None else artifact
+        producer_node = artifact.get('producer_node') if isinstance(artifact.get('producer_node'), str) else None
+    return ArtifactRecordCard(
+        artifact_id=f'artifact::raw::{index}',
+        artifact_type=artifact_type,
+        producer_node=producer_node,
+        ref=artifact_ref or f'artifact://{execution_id}/raw/{index}',
+        summary=_summarize_value(summary_source),
+        metadata=_to_json_safe(artifact) if isinstance(artifact, dict) else None,
+        payload_preview=_to_json_safe(artifact) if isinstance(artifact, (dict, list)) else None,
+    )
+
+
+def _collect_verifier_reason_codes(payload: Any) -> list[str]:
+    if not isinstance(payload, dict):
+        return []
+    codes: list[str] = []
+    def _add(code: Any) -> None:
+        if isinstance(code, str) and code and code not in codes:
+            codes.append(code)
+    for code in payload.get('blocking_reason_codes', []) if isinstance(payload.get('blocking_reason_codes'), list) else []:
+        _add(code)
+    for result in payload.get('constituent_results', []) if isinstance(payload.get('constituent_results'), list) else []:
+        if not isinstance(result, dict):
+            continue
+        _add(result.get('reason_code'))
+        for finding in result.get('findings', []) if isinstance(result.get('findings'), list) else []:
+            if isinstance(finding, dict):
+                _add(finding.get('reason_code'))
+    return codes
+
+
+def _build_verifier_summary(artifact_cards: list[ArtifactRecordCard]) -> dict[str, Any] | None:
+    verifier_artifacts = [card for card in artifact_cards if card.artifact_type == 'validation_report']
+    if not verifier_artifacts:
+        typed_count = sum(1 for card in artifact_cards if card.artifact_schema_version)
+        return {'typed_artifact_count': typed_count} if typed_count else None
+    counts = {'pass': 0, 'warning': 0, 'fail': 0, 'inconclusive': 0}
+    blocking_reason_codes: list[str] = []
+    for card in verifier_artifacts:
+        payload = card.payload_preview if isinstance(card.payload_preview, dict) else {}
+        status = payload.get('aggregate_status') if isinstance(payload.get('aggregate_status'), str) else None
+        if status in counts:
+            counts[status] += 1
+        for code in _collect_verifier_reason_codes(payload):
+            if code not in blocking_reason_codes:
+                blocking_reason_codes.append(code)
+    return {
+        'verifier_report_count': len(verifier_artifacts),
+        'typed_artifact_count': sum(1 for card in artifact_cards if card.artifact_schema_version),
+        'status_counts': counts,
+        'blocking_reason_codes': blocking_reason_codes,
+    }
+
 def _artifact_id_for_node(node_id: str) -> str:
     return f'artifact::{node_id}'
 
@@ -235,7 +379,8 @@ def _build_node_result_cards(
     *,
     trace_ref: str | None,
     event_stream_ref: str | None,
-    artifact_id_by_node: dict[str, str],
+    artifact_ids_by_node: dict[str, list[str]],
+    artifact_cards_by_node: dict[str, list[ArtifactRecordCard]],
 ) -> list[NodeResultCard]:
     hash_map = {item.node_id: item for item in snapshot.node_hashes}
     cards: list[NodeResultCard] = []
@@ -248,10 +393,19 @@ def _build_node_result_cards(
         node_hash = hash_map.get(span.node_id)
         if node_hash is not None:
             metrics = {'output_hash': node_hash.hash_value, 'hash_algorithm': node_hash.algorithm}
-        artifact_refs = []
-        artifact_id = artifact_id_by_node.get(span.node_id)
-        if artifact_id is not None:
-            artifact_refs.append(artifact_id)
+        artifact_refs = list(artifact_ids_by_node.get(span.node_id, []))
+        node_artifact_cards = list(artifact_cards_by_node.get(span.node_id, []))
+        typed_artifact_refs = [card.artifact_id for card in node_artifact_cards if card.artifact_schema_version]
+        verifier_cards = [card for card in node_artifact_cards if card.artifact_type == 'validation_report' and isinstance(card.payload_preview, dict)]
+        verifier_status = None
+        verifier_reason_codes: list[str] = []
+        if verifier_cards:
+            first_payload = verifier_cards[0].payload_preview if isinstance(verifier_cards[0].payload_preview, dict) else {}
+            verifier_status = first_payload.get('aggregate_status') if isinstance(first_payload.get('aggregate_status'), str) else None
+            for card in verifier_cards:
+                for code in _collect_verifier_reason_codes(card.payload_preview):
+                    if code not in verifier_reason_codes:
+                        verifier_reason_codes.append(code)
         cards.append(
             NodeResultCard(
                 node_id=span.node_id,
@@ -260,8 +414,11 @@ def _build_node_result_cards(
                 output_type=output_type,
                 output_preview=output_preview,
                 artifact_refs=artifact_refs,
-                warning_count=0,
-                error_count=1 if span.status == 'failed' else 0,
+                typed_artifact_refs=typed_artifact_refs,
+                verifier_status=verifier_status,
+                verifier_reason_codes=verifier_reason_codes,
+                warning_count=sum(1 for card in verifier_cards if isinstance(card.payload_preview, dict) and card.payload_preview.get('aggregate_status') == 'warning'),
+                error_count=(1 if span.status == 'failed' else 0) + sum(1 for card in verifier_cards if isinstance(card.payload_preview, dict) and card.payload_preview.get('aggregate_status') == 'fail'),
                 trace_ref=_node_trace_ref(trace_ref, event_stream_ref, span.node_id),
                 metrics=metrics,
             )
@@ -310,6 +467,9 @@ def _merge_observability_refs(
     for card in artifact_cards:
         if card.ref and card.ref not in refs:
             refs.append(card.ref)
+        for trace_ref_item in card.trace_refs:
+            if trace_ref_item and trace_ref_item not in refs:
+                refs.append(trace_ref_item)
     return refs or None
 
 
@@ -352,16 +512,19 @@ def create_execution_record_from_snapshot(
     node_order = [span.node_id for span in snapshot.timeline.node_spans]
     output_cards = _build_output_cards(final_outputs if final_outputs is not None else snapshot.node_outputs, trace_ref=trace_ref)
     artifact_card_list = _build_artifact_cards(snapshot, artifact_refs, output_cards)
-    artifact_id_by_node = {
-        card.producer_node: card.artifact_id
-        for card in artifact_card_list
-        if card.producer_node
-    }
+    artifact_ids_by_node: dict[str, list[str]] = {}
+    artifact_cards_by_node: dict[str, list[ArtifactRecordCard]] = {}
+    for card in artifact_card_list:
+        if not card.producer_node:
+            continue
+        artifact_ids_by_node.setdefault(card.producer_node, []).append(card.artifact_id)
+        artifact_cards_by_node.setdefault(card.producer_node, []).append(card)
     node_result_cards = _build_node_result_cards(
         snapshot,
         trace_ref=trace_ref,
         event_stream_ref=event_stream_ref,
-        artifact_id_by_node=artifact_id_by_node,
+        artifact_ids_by_node=artifact_ids_by_node,
+        artifact_cards_by_node=artifact_cards_by_node,
     )
     trace_summary_value = trace_summary or f'Execution {snapshot.execution_id} observed {len(snapshot.timeline.node_spans)} node span(s).'
     resolved_observability_refs = _merge_observability_refs(
@@ -429,6 +592,7 @@ def create_execution_record_from_snapshot(
             metrics=_build_observability_metrics(snapshot),
             provider_usage_summary=provider_usage_summary,
             plugin_usage_summary=plugin_usage_summary,
+            verifier_summary=_build_verifier_summary(artifact_card_list),
             trace_summary=trace_summary_value,
             observability_refs=resolved_observability_refs,
         ),
@@ -579,21 +743,7 @@ def _build_snapshot_from_payload(payload: dict[str, Any]) -> ExecutionSnapshot |
 def _artifact_record_cards_from_raw_artifacts(artifacts: list[Any] | None, execution_id: str) -> list[ArtifactRecordCard]:
     cards: list[ArtifactRecordCard] = []
     for index, artifact in enumerate(artifacts or [], start=1):
-        artifact_type = type(artifact).__name__
-        artifact_ref = None
-        summary_source = artifact
-        if isinstance(artifact, dict):
-            artifact_type = str(artifact.get('type') or artifact.get('artifact_type') or artifact_type)
-            artifact_ref = artifact.get('ref') if isinstance(artifact.get('ref'), str) else None
-            summary_source = artifact.get('summary') if artifact.get('summary') is not None else artifact
-        cards.append(
-            ArtifactRecordCard(
-                artifact_id=f'artifact::raw::{index}',
-                artifact_type=artifact_type,
-                ref=artifact_ref or f'artifact://{execution_id}/raw/{index}',
-                summary=_summarize_value(summary_source),
-            )
-        )
+        cards.append(_artifact_record_card_from_raw_artifact(artifact, execution_id, index))
     return cards
 
 

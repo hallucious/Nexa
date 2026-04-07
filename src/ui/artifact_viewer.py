@@ -44,6 +44,8 @@ class ArtifactMetadataView:
     size_bytes: int | None = None
     created_at: str | None = None
     source_label: str | None = None
+    artifact_schema_version: str | None = None
+    validation_status: str | None = None
 
 
 @dataclass(frozen=True)
@@ -51,11 +53,14 @@ class ArtifactIntegrityView:
     integrity_status: str = "unknown"
     hash_value: str | None = None
     detail_label: str | None = None
+    verifier_status: str | None = None
 
 
 @dataclass(frozen=True)
 class ArtifactLineageView:
     producer_node_id: str | None = None
+    producer_ref: str | None = None
+    lineage_refs: list[str] = field(default_factory=list)
     related_output_names: list[str] = field(default_factory=list)
     related_event_ids: list[str] = field(default_factory=list)
 
@@ -125,7 +130,14 @@ def _is_final_artifact(record: ExecutionRecordModel, artifact_id: str) -> bool:
 def _item_from_record(record: ExecutionRecordModel, artifact: ArtifactRecordCard) -> ArtifactItemView:
     is_final = _is_final_artifact(record, artifact.artifact_id)
     integrity = "ok" if artifact.hash else "hash_unavailable"
-    category = "output" if is_final else ("report" if artifact.artifact_type in {"report", "audit_pack"} else "intermediate")
+    if artifact.artifact_type == "validation_report":
+        category = "verification"
+    elif is_final or artifact.artifact_type in {"final_output", "decision", "json_object", "text"}:
+        category = "output" if is_final else "typed_output"
+    elif artifact.artifact_type in {"report", "audit_pack"}:
+        category = "report"
+    else:
+        category = "intermediate"
     return ArtifactItemView(
         artifact_id=artifact.artifact_id,
         title=artifact.summary or artifact.artifact_id,
@@ -136,23 +148,49 @@ def _item_from_record(record: ExecutionRecordModel, artifact: ArtifactRecordCard
         preview_text=artifact.summary,
         is_final=is_final,
         is_partial=artifact.ref is None,
-        integrity_status=integrity,
+        integrity_status=artifact.validation_status or integrity,
     )
 
 
 def _detail_from_item(record: ExecutionRecordModel, item: ArtifactItemView) -> ArtifactDetailView:
     related_outputs = [output.output_ref for output in record.outputs.final_outputs if output.value_ref == item.artifact_id]
+    artifact = next((artifact for artifact in record.artifacts.artifact_refs if artifact.artifact_id == item.artifact_id), None)
+    structured_preview = artifact.payload_preview if artifact is not None and isinstance(artifact.payload_preview, dict) else None
+    body_preview = None
+    body_mode = "unavailable"
+    if isinstance(structured_preview, dict):
+        body_mode = "structured"
+    elif item.preview_text:
+        body_mode = "text"
+        body_preview = item.preview_text
     return ArtifactDetailView(
         artifact_id=item.artifact_id,
         title=item.title,
         artifact_type=item.artifact_type,
-        body_mode="text" if item.preview_text else "unavailable",
-        body_preview=item.preview_text,
-        metadata=ArtifactMetadataView(created_at=item.created_at, source_label=record.meta.run_id),
-        integrity=ArtifactIntegrityView(integrity_status=item.integrity_status, hash_value=next((artifact.hash for artifact in record.artifacts.artifact_refs if artifact.artifact_id == item.artifact_id), None), detail_label=item.integrity_status),
-        lineage=ArtifactLineageView(producer_node_id=item.producer_node_id, related_output_names=related_outputs, related_event_ids=[record.meta.run_id]),
+        body_mode=body_mode,
+        body_preview=body_preview,
+        structured_preview=structured_preview,
+        metadata=ArtifactMetadataView(
+            created_at=item.created_at,
+            source_label=record.meta.run_id,
+            artifact_schema_version=(artifact.artifact_schema_version if artifact is not None else None),
+            validation_status=(artifact.validation_status if artifact is not None else None),
+        ),
+        integrity=ArtifactIntegrityView(
+            integrity_status=item.integrity_status,
+            hash_value=(artifact.hash if artifact is not None else None),
+            detail_label=item.integrity_status,
+            verifier_status=(structured_preview.get('aggregate_status') if isinstance(structured_preview, dict) else None),
+        ),
+        lineage=ArtifactLineageView(
+            producer_node_id=item.producer_node_id,
+            producer_ref=(artifact.producer_ref if artifact is not None else None),
+            lineage_refs=(list(artifact.lineage_refs) if artifact is not None else []),
+            related_output_names=related_outputs,
+            related_event_ids=([record.meta.run_id, *(artifact.trace_refs if artifact is not None else [])]),
+        ),
         related_output_names=related_outputs,
-        related_event_ids=[record.meta.run_id],
+        related_event_ids=([record.meta.run_id, *(artifact.trace_refs if artifact is not None else [])]),
     )
 
 
