@@ -28,6 +28,10 @@ from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builde
 from src.ui.command_routing import BuilderCommandRoutingViewModel, read_builder_command_routing_view_model
 from src.ui.interaction_transitions import BuilderInteractionTransitionViewModel, read_builder_interaction_transition_view_model
 from src.ui.builder_interaction_hub import BuilderInteractionHubViewModel, read_builder_interaction_hub_view_model
+from src.ui.intent_emission import IntentEmissionViewModel, read_intent_emission_view_model
+from src.ui.command_dispatch_contract import CommandDispatchContractViewModel, read_command_dispatch_contract_view_model
+from src.ui.interaction_lifecycle import InteractionLifecycleViewModel, read_interaction_lifecycle_view_model
+from src.ui.builder_dispatch_hub import BuilderDispatchHubViewModel, read_builder_dispatch_hub_view_model
 
 
 @dataclass(frozen=True)
@@ -493,6 +497,67 @@ class NexaUIViewAdapter:
             selected_action_id=selected_action_id,
             explanation=explanation,
         )
+
+
+    def read_intent_emission_view_model(
+        self,
+        source,
+        *,
+        interaction_hub: BuilderInteractionHubViewModel | None = None,
+        explanation: str | None = None,
+    ) -> IntentEmissionViewModel:
+        return read_intent_emission_view_model(
+            source,
+            interaction_hub=interaction_hub,
+            explanation=explanation,
+        )
+
+    def read_command_dispatch_contract_view_model(
+        self,
+        source,
+        *,
+        interaction_hub: BuilderInteractionHubViewModel | None = None,
+        command_routing: BuilderCommandRoutingViewModel | None = None,
+        intent_emission: IntentEmissionViewModel | None = None,
+        explanation: str | None = None,
+    ) -> CommandDispatchContractViewModel:
+        return read_command_dispatch_contract_view_model(
+            source,
+            interaction_hub=interaction_hub,
+            command_routing=command_routing,
+            intent_emission=intent_emission,
+            explanation=explanation,
+        )
+
+    def read_interaction_lifecycle_view_model(
+        self,
+        source,
+        *,
+        interaction_hub: BuilderInteractionHubViewModel | None = None,
+        dispatch_contract: CommandDispatchContractViewModel | None = None,
+        explanation: str | None = None,
+    ) -> InteractionLifecycleViewModel:
+        return read_interaction_lifecycle_view_model(
+            source,
+            interaction_hub=interaction_hub,
+            dispatch_contract=dispatch_contract,
+            explanation=explanation,
+        )
+
+
+    def read_builder_dispatch_hub_view_model(
+        self,
+        source,
+        *,
+        interaction_hub: BuilderInteractionHubViewModel | None = None,
+        explanation: str | None = None,
+    ) -> BuilderDispatchHubViewModel:
+        return read_builder_dispatch_hub_view_model(
+            source,
+            interaction_hub=interaction_hub,
+            explanation=explanation,
+        )
+
 
 
 __all__ = ["NexaUIViewAdapter"]

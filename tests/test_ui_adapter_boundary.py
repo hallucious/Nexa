@@ -388,3 +388,33 @@ def test_ui_adapter_routes_builder_command_and_interaction_layers_through_stable
     assert command_routing.source_role == "working_save"
     assert interaction_transition.target_workspace_id == "runtime_monitoring"
     assert interaction_hub.command_routing is not None
+
+
+def test_ui_adapter_routes_builder_dispatch_and_lifecycle_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    interaction_hub_vm = adapter.read_builder_interaction_hub_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run(),
+    )
+    intent_emission_vm = adapter.read_intent_emission_view_model(_working_save(), interaction_hub=interaction_hub_vm)
+    dispatch_contract_vm = adapter.read_command_dispatch_contract_view_model(
+        _working_save(),
+        interaction_hub=interaction_hub_vm,
+        intent_emission=intent_emission_vm,
+    )
+    lifecycle_vm = adapter.read_interaction_lifecycle_view_model(
+        _working_save(),
+        interaction_hub=interaction_hub_vm,
+        dispatch_contract=dispatch_contract_vm,
+    )
+    dispatch_hub_vm = adapter.read_builder_dispatch_hub_view_model(_working_save(), interaction_hub=interaction_hub_vm)
+
+    assert intent_emission_vm.source_role == "working_save"
+    assert dispatch_contract_vm.source_role == "working_save"
+    assert lifecycle_vm.source_role == "working_save"
+    assert dispatch_hub_vm.source_role == "working_save"
