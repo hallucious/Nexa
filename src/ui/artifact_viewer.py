@@ -7,6 +7,7 @@ from src.storage.models.execution_record_model import ArtifactRecordCard, Execut
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -152,7 +153,7 @@ def _item_from_record(record: ExecutionRecordModel, artifact: ArtifactRecordCard
     )
 
 
-def _detail_from_item(record: ExecutionRecordModel, item: ArtifactItemView) -> ArtifactDetailView:
+def _detail_from_item(record: ExecutionRecordModel, item: ArtifactItemView, *, app_language: str) -> ArtifactDetailView:
     related_outputs = [output.output_ref for output in record.outputs.final_outputs if output.value_ref == item.artifact_id]
     artifact = next((artifact for artifact in record.artifacts.artifact_refs if artifact.artifact_id == item.artifact_id), None)
     structured_preview = artifact.payload_preview if artifact is not None and isinstance(artifact.payload_preview, dict) else None
@@ -179,7 +180,7 @@ def _detail_from_item(record: ExecutionRecordModel, item: ArtifactItemView) -> A
         integrity=ArtifactIntegrityView(
             integrity_status=item.integrity_status,
             hash_value=(artifact.hash if artifact is not None else None),
-            detail_label=item.integrity_status,
+            detail_label=ui_text(f"artifact.integrity.{item.integrity_status}", app_language=app_language, fallback_text=item.integrity_status),
             verifier_status=(structured_preview.get('aggregate_status') if isinstance(structured_preview, dict) else None),
         ),
         lineage=ArtifactLineageView(
@@ -204,8 +205,10 @@ def read_artifact_viewer_view_model(
     """Build a UI-facing artifact projection from engine-owned truth."""
 
     source = _unwrap(source)
+    app_language = ui_language_from_sources(source, execution_record)
     if isinstance(source, ExecutionRecordModel):
         execution_record = source
+        app_language = ui_language_from_sources(execution_record)
 
     if execution_record is None:
         storage_role = "working_save" if isinstance(source, WorkingSaveModel) else ("commit_snapshot" if isinstance(source, CommitSnapshotModel) else "none")
@@ -213,7 +216,7 @@ def read_artifact_viewer_view_model(
             source_mode="unknown",
             storage_role=storage_role,
             viewer_status="idle",
-            diagnostics=ArtifactDiagnosticsView(last_error_label="No execution artifacts loaded"),
+            diagnostics=ArtifactDiagnosticsView(last_error_label=ui_text("artifact.error.no_execution_artifacts_loaded", app_language=app_language, fallback_text="No execution artifacts loaded")),
             explanation=explanation,
         )
 
@@ -221,7 +224,7 @@ def read_artifact_viewer_view_model(
     selected = None
     if items:
         selected_item = next((item for item in items if item.artifact_id == selected_artifact_id), items[0])
-        selected = _detail_from_item(execution_record, selected_item)
+        selected = _detail_from_item(execution_record, selected_item, app_language=app_language)
     total = len(items)
     final_count = sum(1 for item in items if item.is_final)
     integrity_issue_count = sum(1 for item in items if item.integrity_status != "ok")
@@ -244,7 +247,7 @@ def read_artifact_viewer_view_model(
             intermediate_artifact_count=total - final_count,
             warning_count=len(execution_record.diagnostics.warnings),
             integrity_issue_count=integrity_issue_count,
-            top_summary_label=f"{total} artifacts",
+            top_summary_label=ui_text("artifact.summary.top", app_language=app_language, fallback_text="{count} artifacts", count=total),
         ),
         artifact_list=items,
         selected_artifact=selected,

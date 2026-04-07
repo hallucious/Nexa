@@ -13,6 +13,7 @@ from src.ui.execution_panel import ExecutionPanelViewModel
 from src.ui.graph_workspace import GraphWorkspaceViewModel
 from src.ui.storage_panel import StoragePanelViewModel
 from src.ui.validation_panel import ValidationPanelViewModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -111,6 +112,7 @@ def read_panel_coordination_state(
     source = _unwrap(source)
     role = _storage_role(source)
     metadata = _ui_metadata(source)
+    app_language = ui_language_from_sources(source)
 
     selection = SelectionSummaryView(
         selected_node_ids=[str(v) for v in metadata.get("selected_node_ids", []) if v is not None],
@@ -172,7 +174,7 @@ def read_panel_coordination_state(
         if diff_count:
             badges.append(PanelBadgeView(panel_id="diff", badge_style="info", count=diff_count, label=diff_view.diff_mode))
     if storage_view is not None and storage_view.diagnostics.lifecycle_warning_count:
-        badges.append(PanelBadgeView(panel_id="storage", badge_style="warning", count=storage_view.diagnostics.lifecycle_warning_count, label="storage diagnostics"))
+        badges.append(PanelBadgeView(panel_id="storage", badge_style="warning", count=storage_view.diagnostics.lifecycle_warning_count, label=ui_text("panel.badge.storage_diagnostics", app_language=app_language, fallback_text="storage diagnostics")))
 
     stale_reference_count = 0
     if selection.primary_ref is None and any([

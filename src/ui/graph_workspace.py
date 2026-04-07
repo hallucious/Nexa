@@ -8,6 +8,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel, NodeResultCard, NodeTimingCard
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 GraphStorageRole = str
 GraphStatus = str
@@ -216,14 +217,15 @@ def _child_refs(node: Mapping[str, Any]) -> list[str] | None:
     return None
 
 
-def _input_output_summary(node: Mapping[str, Any], *, key: str) -> str | None:
+def _input_output_summary(node: Mapping[str, Any], *, key: str, app_language: str) -> str | None:
     value = node.get(key)
     if isinstance(value, Mapping):
         count = len(value)
         if count == 0:
             return None
-        label = "binding" if count == 1 else "bindings"
-        return f"{count} {label}"
+        if count == 1:
+            return ui_text("graph.binding.single", app_language=app_language, fallback_text="{count} binding", count=count)
+        return ui_text("graph.binding.multiple", app_language=app_language, fallback_text="{count} bindings", count=count)
     return None
 
 
@@ -265,7 +267,7 @@ def _normalize_validation_report(report: ValidationReport | None) -> tuple[dict[
     return by_location, summary
 
 
-def _execution_maps(record: ExecutionRecordModel | None) -> tuple[dict[str, str], dict[str, list[NodeBadgeView]], GraphFindingsSummary]:
+def _execution_maps(record: ExecutionRecordModel | None, *, app_language: str) -> tuple[dict[str, str], dict[str, list[NodeBadgeView]], GraphFindingsSummary]:
     if record is None:
         return {}, {}, GraphFindingsSummary()
 
@@ -278,18 +280,18 @@ def _execution_maps(record: ExecutionRecordModel | None) -> tuple[dict[str, str]
     for card in record.timeline.started_nodes:
         if card.outcome == "running":
             statuses[card.node_id] = "running"
-            _append_badge(card.node_id, NodeBadgeView("execution_running", "Running", severity="info"))
+            _append_badge(card.node_id, NodeBadgeView("execution_running", ui_text("graph.badge.running", app_language=app_language, fallback_text="Running"), severity="info"))
 
     for result in record.node_results.results:
         statuses[result.node_id] = result.status
         if result.status == "failed":
-            _append_badge(result.node_id, NodeBadgeView("execution_failed", "Failed", severity="error", count=max(1, result.error_count)))
+            _append_badge(result.node_id, NodeBadgeView("execution_failed", ui_text("graph.badge.failed", app_language=app_language, fallback_text="Failed"), severity="error", count=max(1, result.error_count)))
         elif result.status == "completed" or result.status == "success":
-            _append_badge(result.node_id, NodeBadgeView("execution_completed", "Completed", severity="info"))
+            _append_badge(result.node_id, NodeBadgeView("execution_completed", ui_text("graph.badge.completed", app_language=app_language, fallback_text="Completed"), severity="info"))
         elif result.status == "partial":
-            _append_badge(result.node_id, NodeBadgeView("execution_completed", "Partial", severity="warning"))
+            _append_badge(result.node_id, NodeBadgeView("execution_completed", ui_text("graph.badge.partial", app_language=app_language, fallback_text="Partial"), severity="warning"))
         if result.warning_count:
-            _append_badge(result.node_id, NodeBadgeView("validation_warning", "Warnings", severity="warning", count=result.warning_count))
+            _append_badge(result.node_id, NodeBadgeView("validation_warning", ui_text("graph.badge.warnings", app_language=app_language, fallback_text="Warnings"), severity="warning", count=result.warning_count))
 
     findings = GraphFindingsSummary(
         execution_warning_count=len(record.diagnostics.warnings),
@@ -411,8 +413,9 @@ def read_graph_view_model(
     else:
         resolved_selected_nodes, resolved_selected_edges = [], []
 
+    app_language = ui_language_from_sources(source, execution_record)
     validation_by_location, validation_summary = _normalize_validation_report(validation_report)
-    execution_status_map, execution_badges, execution_summary = _execution_maps(execution_record)
+    execution_status_map, execution_badges, execution_summary = _execution_maps(execution_record, app_language=app_language)
     storage_role, graph_status = _graph_status_for_source(
         source,
         validation_report=validation_report,
@@ -431,22 +434,22 @@ def read_graph_view_model(
         execution_state = execution_status_map.get(node_id)
         badges = list(execution_badges.get(node_id, []))
         if has_blocking:
-            badges.append(NodeBadgeView("validation_blocked", "Blocked", severity="error", count=sum(1 for f in node_findings if f.blocking)))
+            badges.append(NodeBadgeView("validation_blocked", ui_text("graph.badge.blocked", app_language=app_language, fallback_text="Blocked"), severity="error", count=sum(1 for f in node_findings if f.blocking)))
         elif has_warning:
-            badges.append(NodeBadgeView("validation_warning", "Warning", severity="warning", count=len(node_findings)))
+            badges.append(NodeBadgeView("validation_warning", ui_text("graph.badge.warning", app_language=app_language, fallback_text="Warning"), severity="warning", count=len(node_findings)))
         kind = _node_kind(node)
         if kind == "subcircuit":
-            badges.append(NodeBadgeView("subgraph", "Subcircuit", severity="info"))
+            badges.append(NodeBadgeView("subgraph", ui_text("graph.badge.subcircuit", app_language=app_language, fallback_text="Subcircuit"), severity="info"))
         if kind in {"provider", "ai"}:
-            badges.append(NodeBadgeView("provider", "Provider", severity="info"))
+            badges.append(NodeBadgeView("provider", ui_text("graph.badge.provider", app_language=app_language, fallback_text="Provider"), severity="info"))
         if kind == "plugin":
-            badges.append(NodeBadgeView("plugin", "Plugin", severity="info"))
+            badges.append(NodeBadgeView("plugin", ui_text("graph.badge.plugin", app_language=app_language, fallback_text="Plugin"), severity="info"))
         if preview_state == "added":
-            badges.append(NodeBadgeView("preview_added", "Added", severity="info"))
+            badges.append(NodeBadgeView("preview_added", ui_text("graph.badge.added", app_language=app_language, fallback_text="Added"), severity="info"))
         elif preview_state == "updated":
-            badges.append(NodeBadgeView("preview_updated", "Updated", severity="info"))
+            badges.append(NodeBadgeView("preview_updated", ui_text("graph.badge.updated", app_language=app_language, fallback_text="Updated"), severity="info"))
         elif preview_state == "removed":
-            badges.append(NodeBadgeView("preview_removed", "Removed", severity="warning"))
+            badges.append(NodeBadgeView("preview_removed", ui_text("graph.badge.removed", app_language=app_language, fallback_text="Removed"), severity="warning"))
 
         status = _project_visual_status(
             preview_state=preview_state,
@@ -476,8 +479,8 @@ def read_graph_view_model(
                 execution_state=execution_state,
                 validation_state=validation_state,
                 badges=badges,
-                input_summary=_input_output_summary(node, key="inputs"),
-                output_summary=_input_output_summary(node, key="outputs"),
+                input_summary=_input_output_summary(node, key="inputs", app_language=app_language),
+                output_summary=_input_output_summary(node, key="outputs", app_language=app_language),
                 preview_change_state=preview_state,
                 has_designer_proposal=preview_overlay is not None,
                 has_blocking_findings=has_blocking,

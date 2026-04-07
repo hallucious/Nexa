@@ -8,6 +8,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_interaction_hub import BuilderInteractionHubViewModel, read_builder_interaction_hub_view_model
 from src.ui.command_dispatch_contract import CommandDispatchContractViewModel, read_command_dispatch_contract_view_model
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -88,15 +89,16 @@ def read_interaction_lifecycle_view_model(
 ) -> InteractionLifecycleViewModel:
     source_unwrapped = _unwrap(source)
     source_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped)
     interaction_hub = interaction_hub or read_builder_interaction_hub_view_model(source_unwrapped)
     dispatch_contract = dispatch_contract or read_command_dispatch_contract_view_model(source_unwrapped, interaction_hub=interaction_hub)
 
     stages = [
-        InteractionLifecycleStageView("drafting", "Drafting", _status_for("drafting", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", "save_working_save", interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
-        InteractionLifecycleStageView("review", "Review & Approval", _status_for("review", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "node_configuration", "review_draft", interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
-        InteractionLifecycleStageView("commit", "Commit", _status_for("commit", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", "commit_snapshot", interaction_hub.workflow_hub.proposal_commit.summary.pending_decision_count),
-        InteractionLifecycleStageView("execution", "Execution", _status_for("execution", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", "run_current", interaction_hub.workflow_hub.execution_launch.summary.blocking_count),
-        InteractionLifecycleStageView("history", "History & Replay", _status_for("history", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", "replay_latest", 0),
+        InteractionLifecycleStageView("drafting", ui_text("interaction.stage.drafting", app_language=app_language, fallback_text="Drafting"), _status_for("drafting", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", "save_working_save", interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
+        InteractionLifecycleStageView("review", ui_text("interaction.stage.review", app_language=app_language, fallback_text="Review & Approval"), _status_for("review", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "node_configuration", "review_draft", interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
+        InteractionLifecycleStageView("commit", ui_text("interaction.stage.commit", app_language=app_language, fallback_text="Commit"), _status_for("commit", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", "commit_snapshot", interaction_hub.workflow_hub.proposal_commit.summary.pending_decision_count),
+        InteractionLifecycleStageView("execution", ui_text("interaction.stage.execution", app_language=app_language, fallback_text="Execution"), _status_for("execution", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", "run_current", interaction_hub.workflow_hub.execution_launch.summary.blocking_count),
+        InteractionLifecycleStageView("history", ui_text("interaction.stage.history", app_language=app_language, fallback_text="History & Replay"), _status_for("history", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", "replay_latest", 0),
     ]
 
     current_stage = next((stage.stage_id for stage in stages if stage.status == "active"), None)

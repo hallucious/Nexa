@@ -204,3 +204,21 @@ def test_read_graph_view_model_projects_preview_overlay_without_committing_truth
     assert vm.graph_metrics.preview_updated_count == 1
     assert edge.preview_change_state == "removed"
     assert edge.status == "preview_removed"
+
+
+def test_read_graph_view_model_localizes_badges_for_korean_working_save() -> None:
+    working = _working_save()
+    localized = WorkingSaveModel(
+        meta=working.meta,
+        circuit=working.circuit,
+        resources=working.resources,
+        state=working.state,
+        runtime=working.runtime,
+        ui=UIModel(layout=working.ui.layout, metadata={**working.ui.metadata, "app_language": "ko-KR"}),
+    )
+
+    vm = read_graph_view_model(localized)
+
+    review_node = next(node for node in vm.nodes if node.node_id == "review_bundle")
+    assert review_node.input_summary == "1개 바인딩"
+    assert any(badge.label == "서브회로" for badge in review_node.badges)
