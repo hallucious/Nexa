@@ -219,17 +219,52 @@ OutputSummaryView
 
 8.5 Designer Panel View Model
 
-read_designer_preview() returns DesignerPanelViewModel
+read_designer_panel_view_model() returns DesignerPanelViewModel
+
+CRITICAL:
+This is a READ-ONLY view model.
+The adapter MUST NOT generate preview content, run validation precheck,
+calculate approval eligibility, or reinterpret governance decisions.
+Those remain engine-owned.
 
 DesignerPanelViewModel
-- current_request_text: optional string
-- intent_summary: optional string
-- patch_summary: optional string
-- precheck_status: optional string
-- preview_summary: optional string
-- requires_confirmation: bool
-- pending_questions: list[string]
-- preview_ref: optional string
+- session_mode: string
+- storage_role: string
+- request_state: DesignerRequestStateView          # from engine/session state input
+- intent_state: DesignerIntentStateView            # from engine intent interpretation
+- patch_state: DesignerPatchStateView              # from engine patch planning
+- precheck_state: DesignerPrecheckStateView        # from engine precheck result
+- preview_state: DesignerPreviewStateView          # from engine preview artifact
+- approval_state: DesignerApprovalStateView        # from engine approval/governance state
+- revision_state: DesignerRevisionStateView        # from engine/session revision state
+- suggested_actions: list[DesignerActionHint]
+- related_targets: list[DesignerTargetRefView]
+- explanation: optional string
+
+Governance-bound fields exposed through the read model include:
+- `precheck_state.overall_status`                  # engine-computed precheck status
+- `preview_state.preview_id`                       # engine-generated preview identity
+- `preview_state.requires_confirmation`            # engine-generated confirmation requirement
+- `approval_state.commit_eligible`                 # engine-computed approval eligibility
+- `approval_state.final_outcome`                   # engine-owned approval outcome
+
+Data flow:
+User Request (UI collection)
+→ Engine intent interpretation
+→ Engine patch generation
+→ Engine validation precheck
+→ Engine preview generation
+→ Engine approval/governance evaluation
+→ Adapter read projection
+→ UI display
+
+Governance boundary:
+- Preview generation: ENGINE-SIDE
+- Validation precheck: ENGINE-SIDE
+- Approval eligibility: ENGINE-SIDE
+- Governance decision: ENGINE-SIDE
+- User action collection: UI-SIDE
+- Preview/precheck/approval display: UI-SIDE
 
 8.6 Storage View Model
 

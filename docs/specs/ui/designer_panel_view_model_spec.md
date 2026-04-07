@@ -459,3 +459,55 @@ Changing panel chrome language must not silently rewrite generated Designer cont
 23.3 The older `string` shorthand in this spec must be read through the adapter contract:
 chrome/system fields -> DisplayTextRef
 content-bearing fields -> ContentTextView
+
+19. GOVERNANCE DECISION BOUNDARY
+
+The Designer Panel is a READ-ONLY projection of engine-generated Designer governance state.
+
+The following responsibilities MUST remain engine-owned and MUST NOT be implemented in UI code:
+
+1. Preview generation
+   - Engine builds preview through `src/designer/preview_builder.py`
+   - UI reads preview state through `DesignerPreviewStateView`
+   - UI MUST NOT generate `CircuitDraftPreview` locally
+
+2. Validation precheck execution
+   - Engine computes `ValidationPrecheck`
+   - UI reads precheck state through `DesignerPrecheckStateView`
+   - UI MUST NOT rerun or reinterpret precheck logic to create a different status
+
+3. Approval eligibility decision
+   - Engine computes `DesignerApprovalFlowState.commit_eligible`
+   - UI reads approval readiness through `DesignerApprovalStateView.commit_eligible`
+   - UI MUST NOT calculate commit eligibility locally
+
+4. Governance policy application
+   - Engine applies governance policy and confirmation pressure
+   - UI reads the resulting confirmation requirements through preview/precheck/approval state
+   - UI MUST NOT reinterpret governance rules to weaken or bypass engine decisions
+
+UI-owned responsibilities are limited to:
+- collecting natural-language request input
+- displaying engine-generated preview state
+- displaying engine-generated precheck/approval state
+- collecting approve / reject / request-revision style user actions
+- showing governance hints and confirmation requirements without rewriting them
+
+Forbidden UI behaviors:
+- generating preview content in the panel layer
+- calculating `commit_eligible` from findings in the panel layer
+- downgrading `confirmation_required` into a soft warning in the panel layer
+- hiding destructive or blocked status because the panel prefers a simpler UX
+
+20. RELATED ENGINE CONTRACTS
+
+The Designer Panel View Model depends on the following engine-side contracts and implementations:
+- `docs/specs/designer/designer_governance_contract.md`
+- `docs/specs/designer/designer_approval_flow_contract.md`
+- `docs/specs/designer/designer_validator_precheck_contract.md`
+- `docs/specs/designer/circuit_draft_preview_contract.md`
+- `src/designer/preview_builder.py`
+- `src/designer/models/designer_approval_flow.py`
+- `src/designer/models/validation_precheck.py`
+- `src/designer/models/circuit_draft_preview.py`
+
