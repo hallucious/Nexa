@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
+from src.contracts.verifier_reason_codes import explain_verification_regression_resolution
 from src.engine.change_signal_extractor import ChangeSignal
 from src.engine.execution_regression_detector import (
     REGRESSION_SEVERITY_HIGH,
     REGRESSION_SEVERITY_MEDIUM,
+    ArtifactRegression,
+    ContextRegression,
+    NodeRegression,
     RegressionResult,
+    VerificationRegression,
 )
 
 POLICY_STATUS_PASS = "PASS"
@@ -25,6 +30,7 @@ VALID_POLICY_STATUSES = frozenset({
 class PolicyDecision:
     status: str
     reasons: List[str] = field(default_factory=list)
+    details: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.status not in VALID_POLICY_STATUSES:
@@ -32,13 +38,6 @@ class PolicyDecision:
 
 
 def _trigger_line(regression: object) -> str:
-    from src.engine.execution_regression_detector import (
-        ArtifactRegression,
-        ContextRegression,
-        NodeRegression,
-        VerificationRegression,
-    )
-
     if isinstance(regression, NodeRegression):
         return f"Trigger: node {regression.node_id} ({regression.reason_code}, {regression.severity})"
     if isinstance(regression, ArtifactRegression):
@@ -69,23 +68,54 @@ def _apply_override_immutable(regressions, overrides: Dict[str, str]):
     return updated
 
 
+def _build_verification_contract_details(regressions: RegressionResult) -> Dict[str, Any]:
+    verification_details: List[Dict[str, Any]] = []
+    for regression in regressions.verification:
+        resolution = explain_verification_regression_resolution(
+            regression.target_type,
+            regression.left_status,
+            regression.right_status,
+            regression.right_reason_codes or regression.left_reason_codes,
+        )
+        if resolution is None:
+            continue
+        verification_details.append(
+            {
+                "target_type": regression.target_type,
+                "target_id": regression.target_id,
+                "reason_code": regression.reason_code,
+                "severity": regression.severity,
+                "contract_resolution": {
+                    "resolution_source": resolution.resolution_source,
+                    "contract_reason_code": resolution.contract_reason_code,
+                    "fallback_severity": resolution.fallback_severity,
+                    "detail_severity": resolution.detail_severity,
+                    "detail_reason_codes": list(resolution.detail_reason_codes),
+                    "resolved_severity": resolution.resolved_severity,
+                },
+            }
+        )
+    return {"verification_contracts": verification_details} if verification_details else {}
+
+
 def evaluate_regression_policy(regressions: RegressionResult, overrides: Optional[Dict[str, str]] = None) -> PolicyDecision:
     ordered = list(regressions.nodes) + list(regressions.artifacts) + list(regressions.context) + list(regressions.verification)
     ordered = _apply_override_immutable(ordered, overrides or {})
+    details = _build_verification_contract_details(regressions)
 
     high = [regression for regression in ordered if regression.severity == REGRESSION_SEVERITY_HIGH]
     medium = [regression for regression in ordered if regression.severity == REGRESSION_SEVERITY_MEDIUM]
     if high:
         reasons = [f"FAIL: {len(high)} high severity regression(s) detected"]
         reasons += [_trigger_line(regression) for regression in high]
-        return PolicyDecision(status=POLICY_STATUS_FAIL, reasons=reasons)
+        return PolicyDecision(status=POLICY_STATUS_FAIL, reasons=reasons, details=details)
 
     if medium:
         reasons = [f"WARN: {len(medium)} medium severity regression(s) detected"]
         reasons += [_trigger_line(regression) for regression in medium]
-        return PolicyDecision(status=POLICY_STATUS_WARN, reasons=reasons)
+        return PolicyDecision(status=POLICY_STATUS_WARN, reasons=reasons, details=details)
 
-    return PolicyDecision(status=POLICY_STATUS_PASS, reasons=["PASS: no blocking regressions detected"])
+    return PolicyDecision(status=POLICY_STATUS_PASS, reasons=["PASS: no blocking regressions detected"], details=details)
 
 
 def evaluate_change_signals(signals: List[ChangeSignal]) -> PolicyDecision:
@@ -128,4 +158,8 @@ def evaluate_unified_policy(regressions: RegressionResult, signals: List[ChangeS
     else:
         status = POLICY_STATUS_PASS
 
-    return PolicyDecision(status=status, reasons=list(regression_decision.reasons) + list(signal_decision.reasons))
+    return PolicyDecision(
+        status=status,
+        reasons=list(regression_decision.reasons) + list(signal_decision.reasons),
+        details=dict(regression_decision.details),
+    )

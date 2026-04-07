@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List
 
 from src.engine.execution_regression_policy import PolicyDecision
@@ -9,6 +9,7 @@ class ExplainabilityResult:
     status: str
     summary: str
     categories: Dict[str, List[str]]
+    verification_contracts: List[str] = field(default_factory=list)
 
 
 def build_explainability(decision: PolicyDecision) -> ExplainabilityResult:
@@ -26,6 +27,13 @@ def build_explainability(decision: PolicyDecision) -> ExplainabilityResult:
     else:
         summary = f"{decision.status}: {len(structural)} structural issues, {len(semantic)} semantic issues"
 
+    verification_contracts: List[str] = []
+    for item in decision.details.get("verification_contracts", []):
+        contract = item.get("contract_resolution") or {}
+        verification_contracts.append(
+            f"{item.get('target_type')}:{item.get('target_id')} severity={item.get('severity')} source={contract.get('resolution_source')} fallback={contract.get('fallback_severity')} detail={contract.get('detail_severity')} codes={','.join(contract.get('detail_reason_codes', []))}"
+        )
+
     return ExplainabilityResult(
         status=decision.status,
         summary=summary,
@@ -33,4 +41,5 @@ def build_explainability(decision: PolicyDecision) -> ExplainabilityResult:
             "structural": structural,
             "semantic": semantic,
         },
+        verification_contracts=verification_contracts,
     )

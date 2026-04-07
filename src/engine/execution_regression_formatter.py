@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
+from src.contracts.verifier_reason_codes import explain_verification_regression_resolution
 from src.engine.execution_regression_detector import RegressionResult
 
 
@@ -51,7 +52,23 @@ def format_regression(result: RegressionResult) -> str:
         for ver_reg in result.verification:
             left = ver_reg.left_status if ver_reg.left_status is not None else "none"
             right = ver_reg.right_status if ver_reg.right_status is not None else "none"
-            lines.append(f"{ver_reg.target_type} {ver_reg.target_id}: {left} -> {right} ({ver_reg.reason}) [{ver_reg.severity}]")
+            resolution = explain_verification_regression_resolution(
+                ver_reg.target_type,
+                ver_reg.left_status,
+                ver_reg.right_status,
+                ver_reg.right_reason_codes or ver_reg.left_reason_codes,
+            )
+            suffix = ""
+            if resolution is not None:
+                suffix = (
+                    f" source={resolution.resolution_source}"
+                    f" contract_reason={resolution.contract_reason_code}"
+                    f" fallback={resolution.fallback_severity}"
+                    f" detail={resolution.detail_severity or 'none'}"
+                )
+                if resolution.detail_reason_codes:
+                    suffix += f" detail_codes={','.join(resolution.detail_reason_codes)}"
+            lines.append(f"{ver_reg.target_type} {ver_reg.target_id}: {left} -> {right} ({ver_reg.reason}) [{ver_reg.severity}]{suffix}")
 
     return "\n".join(lines)
 
@@ -112,6 +129,23 @@ def format_regression_json(result: RegressionResult) -> Dict[str, Any]:
                 "right_status": vr.right_status,
                 "left_reason_codes": list(vr.left_reason_codes),
                 "right_reason_codes": list(vr.right_reason_codes),
+                "contract_resolution": (
+                    lambda resolution: None if resolution is None else {
+                        "resolution_source": resolution.resolution_source,
+                        "contract_reason_code": resolution.contract_reason_code,
+                        "fallback_severity": resolution.fallback_severity,
+                        "detail_severity": resolution.detail_severity,
+                        "detail_reason_codes": list(resolution.detail_reason_codes),
+                        "resolved_severity": resolution.resolved_severity,
+                    }
+                )(
+                    explain_verification_regression_resolution(
+                        vr.target_type,
+                        vr.left_status,
+                        vr.right_status,
+                        vr.right_reason_codes or vr.left_reason_codes,
+                    )
+                ),
             }
             for vr in result.verification
         ],

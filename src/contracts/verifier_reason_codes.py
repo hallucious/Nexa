@@ -68,6 +68,19 @@ class VerificationRegressionContractRow:
     fallback_severity: str
 
 
+@dataclass(frozen=True)
+class VerificationRegressionResolution:
+    target_type: str
+    left_status: str | None
+    right_status: str | None
+    contract_reason_code: str
+    fallback_severity: str
+    detail_reason_codes: tuple[str, ...]
+    detail_severity: str | None
+    resolved_severity: str
+    resolution_source: str
+
+
 VERIFICATION_REGRESSION_CONTRACT_TABLE = (
     VerificationRegressionContractRow(VERIFICATION_TARGET_NODE, "pass", "fail", "NODE_VERIFIER_PASS_TO_FAIL", VERIFIER_REGRESSION_SEVERITY_HIGH),
     VerificationRegressionContractRow(VERIFICATION_TARGET_NODE, "pass", "warning", "NODE_VERIFIER_PASS_TO_WARNING", VERIFIER_REGRESSION_SEVERITY_MEDIUM),
@@ -86,11 +99,46 @@ def get_verification_regression_contract_rows() -> tuple[VerificationRegressionC
     return VERIFICATION_REGRESSION_CONTRACT_TABLE
 
 
-def resolve_verification_regression_reason(target_type: str, left_status: str | None, right_status: str | None) -> str | None:
+def find_verification_regression_contract_row(target_type: str, left_status: str | None, right_status: str | None) -> VerificationRegressionContractRow | None:
     for row in VERIFICATION_REGRESSION_CONTRACT_TABLE:
         if row.target_type == target_type and row.left_status == left_status and row.right_status == right_status:
-            return row.regression_reason_code
+            return row
     return None
+
+
+def explain_verification_regression_resolution(
+    target_type: str,
+    left_status: str | None,
+    right_status: str | None,
+    detail_reason_codes: Iterable[str] | None = None,
+) -> VerificationRegressionResolution | None:
+    row = find_verification_regression_contract_row(target_type, left_status, right_status)
+    if row is None:
+        return None
+    detail_codes = tuple(detail_reason_codes or ())
+    detail_severity = get_verifier_regression_severity(detail_codes) if detail_codes else None
+    if detail_severity is not None:
+        resolved_severity = detail_severity
+        resolution_source = "detail_reason_codes"
+    else:
+        resolved_severity = row.fallback_severity
+        resolution_source = "contract_fallback"
+    return VerificationRegressionResolution(
+        target_type=target_type,
+        left_status=left_status,
+        right_status=right_status,
+        contract_reason_code=row.regression_reason_code,
+        fallback_severity=row.fallback_severity,
+        detail_reason_codes=detail_codes,
+        detail_severity=detail_severity,
+        resolved_severity=resolved_severity,
+        resolution_source=resolution_source,
+    )
+
+
+def resolve_verification_regression_reason(target_type: str, left_status: str | None, right_status: str | None) -> str | None:
+    row = find_verification_regression_contract_row(target_type, left_status, right_status)
+    return row.regression_reason_code if row is not None else None
 
 
 def get_verification_regression_fallback_severity(reason_code: str) -> str | None:
@@ -101,8 +149,8 @@ def get_verification_regression_fallback_severity(reason_code: str) -> str | Non
 
 
 def resolve_verification_regression_severity(reason_code: str, detail_reason_codes: Iterable[str] | None) -> str | None:
-    if detail_reason_codes is not None:
-        detailed = get_verifier_regression_severity(list(detail_reason_codes))
-        if detailed is not None:
-            return detailed
+    detail_codes = tuple(detail_reason_codes or ())
+    detailed = get_verifier_regression_severity(detail_codes) if detail_codes else None
+    if detailed is not None:
+        return detailed
     return get_verification_regression_fallback_severity(reason_code)
