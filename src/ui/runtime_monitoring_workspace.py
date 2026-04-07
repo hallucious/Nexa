@@ -9,6 +9,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
 from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer_view_model
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
@@ -37,6 +38,7 @@ class MonitoringHealthView:
 @dataclass(frozen=True)
 class RuntimeMonitoringWorkspaceViewModel:
     workspace_status: str = "ready"
+    workspace_status_label: str | None = None
     storage_role: str = "none"
     execution: ExecutionPanelViewModel | None = None
     trace_timeline: TraceTimelineViewerViewModel | None = None
@@ -79,6 +81,7 @@ def read_runtime_monitoring_workspace_view_model(
 ) -> RuntimeMonitoringWorkspaceViewModel:
     source_unwrapped = _unwrap(source)
     storage_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
     execution_vm = read_execution_panel_view_model(
         source_unwrapped if source_unwrapped is not None else execution_record,
@@ -144,6 +147,7 @@ def read_runtime_monitoring_workspace_view_model(
 
     return RuntimeMonitoringWorkspaceViewModel(
         workspace_status=workspace_status,
+        workspace_status_label=ui_text(f"workspace.runtime.status.{workspace_status}", app_language=app_language, fallback_text=workspace_status.replace("_", " ")),
         storage_role=storage_role,
         execution=execution_vm,
         trace_timeline=trace_vm,

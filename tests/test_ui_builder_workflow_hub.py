@@ -21,7 +21,7 @@ def _working_save(active_panel: str = "designer") -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={"selected_node_ids": ["n1"], "active_panel": active_panel}),
+        ui=UIModel(layout={}, metadata={"selected_node_ids": ["n1"], "active_panel": active_panel, "app_language": "ko-KR"}),
     )
 
 
@@ -147,6 +147,7 @@ def test_builder_workflow_hub_recommends_proposal_commit_when_designer_flow_is_a
     assert vm.recommended_workflow_id == "proposal_commit"
     assert vm.active_workflow_id == "proposal_commit"
     assert vm.proposal_commit is not None
+    assert vm.recommended_workflow_label == "제안 및 커밋"
 
 
 def test_builder_workflow_hub_recommends_execution_launch_when_run_is_live() -> None:

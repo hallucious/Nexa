@@ -12,7 +12,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -23,3 +23,4 @@ def test_builder_end_user_flow_hub_unifies_user_flows_and_lifecycle_closure() ->
     assert vm.end_user_flows is not None
     assert vm.lifecycle_closure is not None
     assert vm.executable_flow_count == vm.end_user_flows.enabled_flow_count
+    assert vm.hub_status_label == "주의 필요"

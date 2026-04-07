@@ -13,6 +13,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
 from src.ui.command_routing import BuilderCommandRoutingViewModel, read_builder_command_routing_view_model
 from src.ui.interaction_transitions import BuilderInteractionTransitionViewModel, read_builder_interaction_transition_view_model
@@ -21,11 +22,13 @@ from src.ui.interaction_transitions import BuilderInteractionTransitionViewModel
 @dataclass(frozen=True)
 class BuilderInteractionHubViewModel:
     hub_status: str = "ready"
+    hub_status_label: str | None = None
     source_role: str = "none"
     workflow_hub: BuilderWorkflowHubViewModel | None = None
     command_routing: BuilderCommandRoutingViewModel | None = None
     interaction_transition: BuilderInteractionTransitionViewModel | None = None
     active_workspace_id: str = "visual_editor"
+    active_workspace_label: str | None = None
     recommended_action_id: str | None = None
     enabled_command_count: int = 0
     pending_confirmation_count: int = 0
@@ -71,6 +74,7 @@ def read_builder_interaction_hub_view_model(
 ) -> BuilderInteractionHubViewModel:
     source_unwrapped = _unwrap(source)
     source_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
     workflow_hub = read_builder_workflow_hub_view_model(
         source_unwrapped,
@@ -112,11 +116,13 @@ def read_builder_interaction_hub_view_model(
 
     return BuilderInteractionHubViewModel(
         hub_status=hub_status,
+        hub_status_label=ui_text(f"hub.status.{hub_status}", app_language=app_language, fallback_text=hub_status.replace("_", " ")),
         source_role=source_role,
         workflow_hub=workflow_hub,
         command_routing=command_routing,
         interaction_transition=transition,
         active_workspace_id=active_workspace_id,
+        active_workspace_label=ui_text(f"workspace.{active_workspace_id}.name", app_language=app_language, fallback_text=active_workspace_id.replace("_", " ")),
         recommended_action_id=transition.recommended_action_id,
         enabled_command_count=command_routing.enabled_route_count,
         pending_confirmation_count=pending_confirmation_count,

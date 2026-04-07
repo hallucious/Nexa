@@ -12,7 +12,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -25,3 +25,5 @@ def test_interaction_state_changes_project_workspace_panel_and_lifecycle_changes
     assert run_change is not None
     assert run_change.target_stage_id == "execution"
     assert run_change.target_workspace_id == "runtime_monitoring"
+    assert run_change.state_change_kind_label == "라이프사이클 전환"
+    assert vm.state_change_status_label == "주의 필요"

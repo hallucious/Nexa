@@ -12,7 +12,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -23,3 +23,4 @@ def test_builder_execution_adapter_hub_integrates_dispatch_adapters_and_state_ch
     assert vm.execution_adapters is not None
     assert vm.state_changes is not None
     assert vm.executable_action_count >= 1
+    assert vm.hub_status_label == "주의 필요"

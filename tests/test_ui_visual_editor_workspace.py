@@ -17,7 +17,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={"selected_node_ids": ["n2"]}),
+        ui=UIModel(layout={}, metadata={"selected_node_ids": ["n2"], "app_language": "ko-KR"}),
     )
 
 
@@ -56,3 +56,4 @@ def test_visual_editor_workspace_projects_phase5_editor_surface() -> None:
     assert vm.can_preview_changes is True
     assert vm.comparison_state.viewer_status == "ready"
     assert vm.action_schema.source_role == "working_save"
+    assert vm.workspace_status_label == "변경 미리보기 중"

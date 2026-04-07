@@ -15,7 +15,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -45,6 +45,7 @@ def test_builder_interaction_hub_exposes_recommended_action_and_transition() -> 
     assert hub.interaction_transition is not None
     assert hub.enabled_command_count >= 1
     assert hub.recommended_action_id == hub.interaction_transition.recommended_action_id
+    assert hub.active_workspace_label == "비주얼 에디터"
 
 
 def test_builder_interaction_hub_prefers_runtime_monitoring_during_live_run() -> None:
@@ -57,3 +58,4 @@ def test_builder_interaction_hub_prefers_runtime_monitoring_during_live_run() ->
     )
     assert hub.active_workspace_id == "runtime_monitoring"
     assert hub.recommended_action_id in {"cancel_run", "open_diff", "replay_latest", "run_current"}
+    assert hub.active_workspace_label == "런타임 모니터링"

@@ -17,7 +17,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -72,6 +72,8 @@ def test_interaction_transition_switches_to_runtime_monitoring_for_run_action() 
     assert transition.target_workspace_id == "runtime_monitoring"
     assert transition.target_panel_id == "execution"
     assert transition.transition_kind in {"switch_workspace", "focus_panel", "stay"}
+    assert transition.transition_status_label == "준비됨"
+    assert transition.transition_kind_label in {"작업공간 전환", "패널 집중", "현재 보기 유지"}
 
 
 def test_interaction_transition_uses_recommended_action_when_none_is_selected() -> None:
@@ -91,3 +93,4 @@ def test_interaction_transition_uses_recommended_action_when_none_is_selected() 
 
     assert transition.recommended_action_id is not None
     assert transition.selected_action_id == transition.recommended_action_id
+    assert transition.transition_status_label == "준비됨"

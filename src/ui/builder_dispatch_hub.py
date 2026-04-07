@@ -6,6 +6,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.builder_interaction_hub import BuilderInteractionHubViewModel, read_builder_interaction_hub_view_model
 from src.ui.command_dispatch_contract import CommandDispatchContractViewModel, read_command_dispatch_contract_view_model
 from src.ui.intent_emission import IntentEmissionViewModel, read_intent_emission_view_model
@@ -15,6 +16,7 @@ from src.ui.interaction_lifecycle import InteractionLifecycleViewModel, read_int
 @dataclass(frozen=True)
 class BuilderDispatchHubViewModel:
     hub_status: str = "ready"
+    hub_status_label: str | None = None
     source_role: str = "none"
     interaction_hub: BuilderInteractionHubViewModel | None = None
     intent_emission: IntentEmissionViewModel | None = None
@@ -53,6 +55,7 @@ def read_builder_dispatch_hub_view_model(
 ) -> BuilderDispatchHubViewModel:
     source_unwrapped = _unwrap(source)
     source_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped)
     interaction_hub = interaction_hub or read_builder_interaction_hub_view_model(source_unwrapped)
     intent_emission = read_intent_emission_view_model(source_unwrapped, interaction_hub=interaction_hub)
     dispatch_contract = read_command_dispatch_contract_view_model(source_unwrapped, interaction_hub=interaction_hub, intent_emission=intent_emission)
@@ -69,6 +72,7 @@ def read_builder_dispatch_hub_view_model(
 
     return BuilderDispatchHubViewModel(
         hub_status=hub_status,
+        hub_status_label=ui_text(f"hub.status.{hub_status}", app_language=app_language, fallback_text=hub_status.replace("_", " ")),
         source_role=source_role,
         interaction_hub=interaction_hub,
         intent_emission=intent_emission,

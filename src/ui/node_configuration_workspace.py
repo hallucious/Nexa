@@ -16,6 +16,7 @@ from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
 from src.ui.designer_panel import DesignerPanelViewModel, read_designer_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
@@ -44,6 +45,7 @@ class ConfigurationReviewStateView:
 @dataclass(frozen=True)
 class NodeConfigurationWorkspaceViewModel:
     workspace_status: str = "ready"
+    workspace_status_label: str | None = None
     storage_role: str = "none"
     inspector: SelectedObjectViewModel | None = None
     validation: ValidationPanelViewModel | None = None
@@ -94,6 +96,7 @@ def read_node_configuration_workspace_view_model(
 ) -> NodeConfigurationWorkspaceViewModel:
     source_unwrapped = _unwrap(source)
     storage_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
     inspector_vm = read_selected_object_view_model(
         source_unwrapped,
@@ -159,6 +162,7 @@ def read_node_configuration_workspace_view_model(
 
     return NodeConfigurationWorkspaceViewModel(
         workspace_status=workspace_status,
+        workspace_status_label=ui_text(f"workspace.configuration.status.{workspace_status}", app_language=app_language, fallback_text=workspace_status.replace("_", " ")),
         storage_role=storage_role,
         inspector=inspector_vm,
         validation=validation_vm,

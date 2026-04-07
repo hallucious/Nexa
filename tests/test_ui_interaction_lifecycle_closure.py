@@ -12,7 +12,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -23,3 +23,5 @@ def test_interaction_lifecycle_closure_tracks_stage_closure_and_requirements() -
     assert vm.current_stage_id in {"drafting", "review", "commit", "execution", "history"}
     assert len(vm.stages) == 5
     assert any(stage.open_requirement is not None or stage.closeable for stage in vm.stages)
+    assert vm.closure_status_label in {"주의 필요", "차단됨", "준비됨"}
+    assert all(stage.stage_label for stage in vm.stages)

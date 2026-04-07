@@ -3,8 +3,21 @@ from __future__ import annotations
 from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel, NodeTimingCard, OutputResultCard
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
+from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.runtime_monitoring_workspace import read_runtime_monitoring_workspace_view_model
 
+
+
+
+def _working_save() -> WorkingSaveModel:
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+    )
 
 def _commit() -> CommitSnapshotModel:
     return CommitSnapshotModel(
@@ -40,7 +53,7 @@ def _run_running() -> ExecutionRecordModel:
 
 def test_runtime_monitoring_workspace_projects_phase5_monitoring_surface() -> None:
     vm = read_runtime_monitoring_workspace_view_model(
-        _commit(),
+        _working_save(),
         execution_record=_run_running(),
         selected_artifact_id="art-1",
     )
@@ -55,3 +68,4 @@ def test_runtime_monitoring_workspace_projects_phase5_monitoring_surface() -> No
     assert vm.focus.visible_artifact_count == 1
     assert vm.health.cancel_available is True
     assert vm.health.execution_status == "running"
+    assert vm.workspace_status_label == "실시간 모니터링"

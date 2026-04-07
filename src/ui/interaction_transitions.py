@@ -7,6 +7,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.command_routing import BuilderCommandRouteView, BuilderCommandRoutingViewModel
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView
 
@@ -14,6 +15,7 @@ from src.ui.panel_coordination import BuilderPanelCoordinationStateView
 @dataclass(frozen=True)
 class BuilderInteractionTransitionViewModel:
     transition_status: str = "ready"
+    transition_status_label: str | None = None
     source_role: str = "none"
     current_workspace_id: str = "visual_editor"
     current_panel_id: str = "graph"
@@ -22,6 +24,7 @@ class BuilderInteractionTransitionViewModel:
     target_workspace_id: str | None = None
     target_panel_id: str | None = None
     transition_kind: str = "stay"
+    transition_kind_label: str | None = None
     can_transition: bool = False
     requires_confirmation: bool = False
     destructive: bool = False
@@ -101,6 +104,7 @@ def read_builder_interaction_transition_view_model(
 ) -> BuilderInteractionTransitionViewModel:
     source_unwrapped = _unwrap(source)
     source_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped)
     current_workspace_id, current_panel_id = _current_workspace_id(workflow_hub, coordination_state)
 
     recommended_action_id = _recommended_action_id(command_routing.routes, workflow_hub)
@@ -110,6 +114,7 @@ def read_builder_interaction_transition_view_model(
     if route is None:
         return BuilderInteractionTransitionViewModel(
             transition_status="empty",
+            transition_status_label=ui_text("hub.status.empty", app_language=app_language, fallback_text="empty"),
             source_role=source_role,
             current_workspace_id=current_workspace_id,
             current_panel_id=current_panel_id,
@@ -121,6 +126,7 @@ def read_builder_interaction_transition_view_model(
     if not route.enabled:
         return BuilderInteractionTransitionViewModel(
             transition_status="blocked",
+            transition_status_label=ui_text("hub.status.blocked", app_language=app_language, fallback_text="blocked"),
             source_role=source_role,
             current_workspace_id=current_workspace_id,
             current_panel_id=current_panel_id,
@@ -129,6 +135,7 @@ def read_builder_interaction_transition_view_model(
             target_workspace_id=route.preferred_workspace_id,
             target_panel_id=route.preferred_panel_id,
             transition_kind="blocked",
+            transition_kind_label=ui_text("transition.kind.blocked", app_language=app_language, fallback_text="blocked"),
             can_transition=False,
             requires_confirmation=route.requires_confirmation,
             destructive=route.destructive,
@@ -144,6 +151,7 @@ def read_builder_interaction_transition_view_model(
 
     return BuilderInteractionTransitionViewModel(
         transition_status="ready",
+        transition_status_label=ui_text("hub.status.ready", app_language=app_language, fallback_text="ready"),
         source_role=source_role,
         current_workspace_id=current_workspace_id,
         current_panel_id=current_panel_id,
@@ -152,6 +160,7 @@ def read_builder_interaction_transition_view_model(
         target_workspace_id=route.preferred_workspace_id,
         target_panel_id=route.preferred_panel_id,
         transition_kind=transition_kind,
+        transition_kind_label=ui_text(f"transition.kind.{transition_kind}", app_language=app_language, fallback_text=transition_kind.replace("_", " ")),
         can_transition=True,
         requires_confirmation=route.requires_confirmation,
         destructive=route.destructive,

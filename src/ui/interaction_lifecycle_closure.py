@@ -7,13 +7,16 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_execution_adapter_hub import BuilderExecutionAdapterHubViewModel, read_builder_execution_adapter_hub_view_model
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.end_user_command_flows import EndUserCommandFlowViewModel, read_end_user_command_flow_view_model
 
 
 @dataclass(frozen=True)
 class LifecycleClosureStageView:
     stage_id: str
+    stage_label: str
     stage_status: str
+    stage_status_label: str
     closed: bool
     closeable: bool
     recommended_flow_id: str | None = None
@@ -23,6 +26,7 @@ class LifecycleClosureStageView:
 @dataclass(frozen=True)
 class InteractionLifecycleClosureViewModel:
     closure_status: str = "ready"
+    closure_status_label: str | None = None
     source_role: str = "none"
     current_stage_id: str = "drafting"
     current_stage_closed: bool = False
@@ -65,6 +69,7 @@ def read_interaction_lifecycle_closure_view_model(
 ) -> InteractionLifecycleClosureViewModel:
     source_unwrapped = _unwrap(source)
     source_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped)
     execution_adapter_hub = execution_adapter_hub or read_builder_execution_adapter_hub_view_model(source_unwrapped)
     end_user_flows = end_user_flows or read_end_user_command_flow_view_model(source_unwrapped, execution_adapter_hub=execution_adapter_hub)
 
@@ -89,7 +94,9 @@ def read_interaction_lifecycle_closure_view_model(
         stages.append(
             LifecycleClosureStageView(
                 stage_id=stage.stage_id,
+                stage_label=ui_text(f"interaction.stage.{stage.stage_id}", app_language=app_language, fallback_text=stage.stage_id.replace("_", " ")),
                 stage_status=stage.status,
+                stage_status_label=ui_text(f"interaction.stage_status.{stage.status}", app_language=app_language, fallback_text=stage.status.replace("_", " ")),
                 closed=closed,
                 closeable=closeable,
                 recommended_flow_id=flow.flow_id if flow is not None else None,
@@ -114,6 +121,7 @@ def read_interaction_lifecycle_closure_view_model(
 
     return InteractionLifecycleClosureViewModel(
         closure_status=closure_status,
+        closure_status_label=ui_text(f"hub.status.{closure_status}", app_language=app_language, fallback_text=closure_status.replace("_", " ")),
         source_role=source_role,
         current_stage_id=current_stage_id,
         current_stage_closed=current_stage_closed,

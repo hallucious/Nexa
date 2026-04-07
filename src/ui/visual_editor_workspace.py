@@ -9,6 +9,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
@@ -37,6 +38,7 @@ class EditorComparisonStateView:
 @dataclass(frozen=True)
 class VisualEditorWorkspaceViewModel:
     workspace_status: str = "ready"
+    workspace_status_label: str | None = None
     storage_role: str = "none"
     graph: GraphWorkspaceViewModel | None = None
     diff: DiffViewerViewModel | None = None
@@ -82,6 +84,7 @@ def read_visual_editor_workspace_view_model(
 ) -> VisualEditorWorkspaceViewModel:
     source_unwrapped = _unwrap(source)
     storage_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped)
 
     graph_vm = read_graph_view_model(
         source,
@@ -142,6 +145,7 @@ def read_visual_editor_workspace_view_model(
 
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,
+        workspace_status_label=ui_text(f"workspace.visual_editor.status.{workspace_status}", app_language=app_language, fallback_text=workspace_status.replace("_", " ")),
         storage_role=storage_role,
         graph=graph_vm,
         diff=diff_vm,

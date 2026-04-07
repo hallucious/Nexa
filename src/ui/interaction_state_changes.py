@@ -7,6 +7,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_dispatch_hub import BuilderDispatchHubViewModel, read_builder_dispatch_hub_view_model
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.command_execution_adapter import CommandExecutionAdapterViewModel, read_command_execution_adapter_view_model
 
 
@@ -21,6 +22,8 @@ class InteractionStateChangeView:
     current_panel_id: str
     target_panel_id: str
     state_change_kind: str
+    action_label: str | None = None
+    state_change_kind_label: str | None = None
     apply_allowed: bool = False
     optimistic_ui_allowed: bool = False
     requires_confirmation: bool = False
@@ -31,6 +34,7 @@ class InteractionStateChangeView:
 @dataclass(frozen=True)
 class InteractionStateChangeViewModel:
     state_change_status: str = "ready"
+    state_change_status_label: str | None = None
     source_role: str = "none"
     changes: list[InteractionStateChangeView] = field(default_factory=list)
     enabled_change_count: int = 0
@@ -91,6 +95,7 @@ def read_interaction_state_change_view_model(
 ) -> InteractionStateChangeViewModel:
     source_unwrapped = _unwrap(source)
     source_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped)
     dispatch_hub = dispatch_hub or read_builder_dispatch_hub_view_model(source_unwrapped)
     execution_adapters = execution_adapters or read_command_execution_adapter_view_model(source_unwrapped, dispatch_hub=dispatch_hub)
 
@@ -117,6 +122,7 @@ def read_interaction_state_change_view_model(
             InteractionStateChangeView(
                 change_id=f"change:{adapter.action_id}",
                 action_id=adapter.action_id,
+                action_label=route.label,
                 current_stage_id=current_stage_id,
                 target_stage_id=target_stage_id,
                 current_workspace_id=current_workspace_id,
@@ -124,6 +130,7 @@ def read_interaction_state_change_view_model(
                 current_panel_id=current_panel_id,
                 target_panel_id=route.preferred_panel_id,
                 state_change_kind=state_change_kind,
+                state_change_kind_label=ui_text(f"transition.kind.{state_change_kind}", app_language=app_language, fallback_text=state_change_kind.replace("_", " ")),
                 apply_allowed=adapter.execute_allowed,
                 optimistic_ui_allowed=optimistic_ui_allowed,
                 requires_confirmation=route.requires_confirmation,
@@ -145,6 +152,7 @@ def read_interaction_state_change_view_model(
 
     return InteractionStateChangeViewModel(
         state_change_status=state_change_status,
+        state_change_status_label=ui_text(f"hub.status.{state_change_status}", app_language=app_language, fallback_text=state_change_status.replace("_", " ")),
         source_role=source_role,
         changes=changes,
         enabled_change_count=enabled_change_count,

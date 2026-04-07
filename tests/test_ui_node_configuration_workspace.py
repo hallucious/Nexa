@@ -19,7 +19,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -136,3 +136,4 @@ def test_node_configuration_workspace_projects_phase5_configuration_surface() ->
     assert vm.can_edit_configuration is True
     assert vm.can_submit_designer_request is True
     assert vm.review_state.commit_eligible is True
+    assert vm.workspace_status_label == "Designer 검토 진행 중"

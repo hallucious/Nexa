@@ -14,7 +14,7 @@ def _working_save() -> WorkingSaveModel:
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -40,3 +40,4 @@ def test_builder_dispatch_hub_integrates_interaction_emission_dispatch_and_lifec
     assert vm.dispatch_contract is not None
     assert vm.lifecycle is not None
     assert vm.enabled_dispatch_count >= 1
+    assert vm.hub_status_label == "주의 필요"

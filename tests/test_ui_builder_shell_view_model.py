@@ -29,6 +29,7 @@ def _working_save() -> WorkingSaveModel:
             "density_mode": "comfortable",
             "user_mode": "advanced",
             "active_panel": "validation",
+            "app_language": "ko-KR",
         }),
     )
 
@@ -177,3 +178,5 @@ def test_builder_shell_composes_connected_builder_surfaces() -> None:
     assert vm.artifact is not None
     assert vm.designer is not None
     assert vm.layout.active_theme_id == "nexa-dark"
+    assert vm.shell_mode_label == "Designer 검토"
+    assert vm.shell_status_label == "셸 준비 완료"

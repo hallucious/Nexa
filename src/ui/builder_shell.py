@@ -21,6 +21,7 @@ from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
@@ -50,8 +51,10 @@ class BuilderShellDiagnosticsView:
 @dataclass(frozen=True)
 class BuilderShellViewModel:
     shell_status: str = "ready"
+    shell_status_label: str | None = None
     storage_role: str = "none"
     shell_mode: str = "builder"
+    shell_mode_label: str | None = None
     coordination: BuilderPanelCoordinationStateView = field(default_factory=BuilderPanelCoordinationStateView)
     action_schema: BuilderActionSchemaView = field(default_factory=BuilderActionSchemaView)
     graph: GraphWorkspaceViewModel | None = None
@@ -119,6 +122,7 @@ def read_builder_shell_view_model(
 ) -> BuilderShellViewModel:
     source_unwrapped = _unwrap(source)
     role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
     graph_vm = read_graph_view_model(
         source,
@@ -209,8 +213,10 @@ def read_builder_shell_view_model(
 
     return BuilderShellViewModel(
         shell_status=shell_status,
+        shell_status_label=ui_text(f"shell.status.{shell_status}", app_language=app_language, fallback_text=shell_status.replace("_", " ")),
         storage_role=role,
         shell_mode=shell_mode,
+        shell_mode_label=ui_text(f"shell.mode.{shell_mode}", app_language=app_language, fallback_text=shell_mode.replace("_", " ")),
         coordination=coordination_vm,
         action_schema=action_schema,
         graph=graph_vm,

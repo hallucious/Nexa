@@ -269,6 +269,61 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "interaction.stage.history": "History & Replay",
 
         "panel.badge.storage_diagnostics": "storage diagnostics",
+
+        "workspace.visual_editor.name": "Visual Editor",
+        "workspace.runtime_monitoring.name": "Runtime Monitoring",
+        "workspace.node_configuration.name": "Node Configuration",
+
+        "workspace.visual_editor.status.empty": "Editor not ready",
+        "workspace.visual_editor.status.blocked": "Editor blocked",
+        "workspace.visual_editor.status.previewing": "Previewing changes",
+        "workspace.visual_editor.status.editing": "Editing graph",
+        "workspace.visual_editor.status.viewing": "Viewing graph",
+
+        "workspace.runtime.status.empty": "Monitoring workspace empty",
+        "workspace.runtime.status.live_monitoring": "Live monitoring",
+        "workspace.runtime.status.failed_review": "Run requires review",
+        "workspace.runtime.status.historical_review": "Historical run review",
+
+        "workspace.configuration.status.awaiting_selection": "Select an object to configure",
+        "workspace.configuration.status.blocked": "Configuration blocked",
+        "workspace.configuration.status.designer_review": "Designer review active",
+        "workspace.configuration.status.configuring": "Configuring selection",
+
+        "shell.status.ready": "Shell ready",
+        "shell.status.partial": "Shell partially synchronized",
+        "shell.status.failed": "Shell unavailable",
+
+        "shell.mode.builder": "Builder",
+        "shell.mode.runtime_monitoring": "Runtime monitoring",
+        "shell.mode.designer_review": "Designer review",
+        "shell.mode.draft_edit": "Draft edit",
+        "shell.mode.snapshot_review": "Snapshot review",
+        "shell.mode.run_review": "Run review",
+
+        "workflow.proposal_commit": "Proposal & Commit",
+        "workflow.execution_launch": "Execution Launch",
+
+        "hub.status.empty": "No active hub data",
+        "hub.status.ready": "Ready",
+        "hub.status.attention": "Attention required",
+        "hub.status.blocked": "Blocked",
+        "hub.status.terminal": "Terminal",
+
+        "interaction.stage_status.active": "Active",
+        "interaction.stage_status.completed": "Completed",
+        "interaction.stage_status.available": "Available",
+        "interaction.stage_status.waiting": "Waiting",
+        "interaction.stage_status.blocked": "Blocked",
+
+        "transition.kind.lifecycle_transition": "Lifecycle transition",
+        "transition.kind.workspace_transition": "Workspace transition",
+        "transition.kind.panel_transition": "Panel transition",
+        "transition.kind.in_place": "In place",
+        "transition.kind.switch_workspace": "Switch workspace",
+        "transition.kind.focus_panel": "Focus panel",
+        "transition.kind.stay": "Stay in current view",
+        "transition.kind.blocked": "Blocked transition",
     },
     "ko": {
         "designer.request.input_placeholder": "원하는 회로 변경 내용을 입력하세요.",
@@ -524,6 +579,61 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "interaction.stage.history": "기록 및 재실행",
 
         "panel.badge.storage_diagnostics": "저장소 진단",
+
+        "workspace.visual_editor.name": "비주얼 에디터",
+        "workspace.runtime_monitoring.name": "런타임 모니터링",
+        "workspace.node_configuration.name": "노드 구성",
+
+        "workspace.visual_editor.status.empty": "에디터가 아직 준비되지 않았습니다",
+        "workspace.visual_editor.status.blocked": "에디터가 차단되었습니다",
+        "workspace.visual_editor.status.previewing": "변경 미리보기 중",
+        "workspace.visual_editor.status.editing": "그래프 편집 중",
+        "workspace.visual_editor.status.viewing": "그래프 보기",
+
+        "workspace.runtime.status.empty": "모니터링 작업공간이 비어 있습니다",
+        "workspace.runtime.status.live_monitoring": "실시간 모니터링",
+        "workspace.runtime.status.failed_review": "실행 결과 검토 필요",
+        "workspace.runtime.status.historical_review": "과거 실행 검토",
+
+        "workspace.configuration.status.awaiting_selection": "구성할 대상을 선택하세요",
+        "workspace.configuration.status.blocked": "구성이 차단되었습니다",
+        "workspace.configuration.status.designer_review": "Designer 검토 진행 중",
+        "workspace.configuration.status.configuring": "선택 항목 구성 중",
+
+        "shell.status.ready": "셸 준비 완료",
+        "shell.status.partial": "셸 일부 동기화 필요",
+        "shell.status.failed": "셸을 사용할 수 없습니다",
+
+        "shell.mode.builder": "빌더",
+        "shell.mode.runtime_monitoring": "런타임 모니터링",
+        "shell.mode.designer_review": "Designer 검토",
+        "shell.mode.draft_edit": "드래프트 편집",
+        "shell.mode.snapshot_review": "스냅샷 검토",
+        "shell.mode.run_review": "실행 검토",
+
+        "workflow.proposal_commit": "제안 및 커밋",
+        "workflow.execution_launch": "실행 시작",
+
+        "hub.status.empty": "활성 허브 데이터가 없습니다",
+        "hub.status.ready": "준비됨",
+        "hub.status.attention": "주의 필요",
+        "hub.status.blocked": "차단됨",
+        "hub.status.terminal": "종료 상태",
+
+        "interaction.stage_status.active": "진행 중",
+        "interaction.stage_status.completed": "완료됨",
+        "interaction.stage_status.available": "사용 가능",
+        "interaction.stage_status.waiting": "대기 중",
+        "interaction.stage_status.blocked": "차단됨",
+
+        "transition.kind.lifecycle_transition": "라이프사이클 전환",
+        "transition.kind.workspace_transition": "작업공간 전환",
+        "transition.kind.panel_transition": "패널 전환",
+        "transition.kind.in_place": "현재 위치 유지",
+        "transition.kind.switch_workspace": "작업공간 전환",
+        "transition.kind.focus_panel": "패널 집중",
+        "transition.kind.stay": "현재 보기 유지",
+        "transition.kind.blocked": "차단된 전환",
     },
 }
 
