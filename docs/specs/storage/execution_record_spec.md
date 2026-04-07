@@ -86,6 +86,8 @@ When precision data exists in runtime trace, execution record MAY project:
 - node-level precision summaries
 - human decision summaries derived from runtime review-gate decision events
 - trace-intelligence summaries derived from node-level trace evidence
+- branch summaries derived from bounded branch-candidate declaration events
+
 
 These are observability and audit surfaces.
 They MUST NOT redefine structural truth, approval truth, or baseline gating semantics.

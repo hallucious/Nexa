@@ -14,6 +14,7 @@ from src.platform.plugin_result import PluginResult, normalize_plugin_result
 from src.contracts.provider_contract import ProviderRequest
 from src.providers.provider_contract import ProviderResult
 from src.contracts.budget_routing_contract import RiskLevel, RoutingContext
+from src.contracts.branch_contract import create_branch
 from src.contracts.confidence_contract import BasisType, ConfidenceBasis, build_assessment
 from src.contracts.safety_gate_contract import PermissionSet
 from src.engine.budget_router import decide_route, log_route
@@ -60,6 +61,7 @@ class NodeTrace:
             "confidence_assessments": [],
             "node_confidence": None,
             "outcome_memory": {},
+            "branch_candidates": [],
         }
     )
 
@@ -1322,6 +1324,40 @@ class NodeExecutionRuntime:
         )
         return envelope.artifact_id
 
+    def _record_branch_candidate_from_verifier(
+        self,
+        *,
+        node_id: str,
+        composite: Any,
+        trace: NodeTrace,
+    ) -> None:
+        recommended_next_step = str(getattr(composite, "recommended_next_step", "") or "")
+        aggregate_status = str(getattr(composite, "aggregate_status", "") or "")
+        if recommended_next_step not in {"retry", "verify_more"} and aggregate_status not in {"fail", "inconclusive"}:
+            return
+
+        blocking_reason_codes = list(getattr(composite, "blocking_reason_codes", []) or [])
+        branch_reason = blocking_reason_codes[0] if blocking_reason_codes else f"verifier_{recommended_next_step or aggregate_status or 'followup'}"
+        branch_ref = create_branch(
+            parent_state_ref=f"run:{self.execution_id}",
+            branch_reason=branch_reason,
+            branch_policy="verifier_followup",
+        )
+        payload = {
+            "branch_ref": branch_ref.to_dict(),
+            "target_ref": str(getattr(composite, "target_ref", f"node.{node_id}.output") or f"node.{node_id}.output"),
+            "aggregate_status": aggregate_status or None,
+            "recommended_next_step": recommended_next_step or None,
+            "blocking_reason_codes": blocking_reason_codes,
+        }
+        branch_candidates = trace.precision.setdefault("branch_candidates", [])
+        if isinstance(branch_candidates, list):
+            branch_candidates.append(payload)
+        else:
+            trace.precision["branch_candidates"] = [payload]
+        trace.events.append("branch_candidate:verifier_followup")
+        self._emit_event("branch_candidate_declared", payload, node_id=node_id)
+
     def _run_output_verifier_if_configured(
         self,
         *,
@@ -1399,6 +1435,11 @@ class NodeExecutionRuntime:
                 "trace_refs": emitted_trace_refs,
             },
             node_id=node_id,
+        )
+        self._record_branch_candidate_from_verifier(
+            node_id=node_id,
+            composite=composite,
+            trace=trace,
         )
 
         if bool(verifier_config.get("blocking", False)) and composite.aggregate_status == "fail":

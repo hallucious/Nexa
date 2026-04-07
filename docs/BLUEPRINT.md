@@ -161,6 +161,8 @@ Current implementation baseline:
 * confidence, budget-aware routing, and safety-gate semantics are now wired into the real provider runtime boundary and projected into execution-record-facing observability summaries
 * execution-record node cards and observability summaries can now surface routing / safety / confidence precision data when runtime trace includes it
 * the precision documentation set has been merged back into existing best-fit architectural / contract / storage documents; a standalone precision sector is no longer the intended long-term documentation shape
+* verifier follow-up branch candidates are now projected as bounded branch records and surfaced into execution-record observability rather than remaining an unused contract surface
+
 * outcome memory now participates as a bounded runtime hint / post-run learning store at the node execution boundary
 * execution record now projects a trace-intelligence summary when node-level trace evidence is available
 * designer proposal precheck now consumes the designer constraint lint / auto-critique system instead of leaving it as an isolated helper

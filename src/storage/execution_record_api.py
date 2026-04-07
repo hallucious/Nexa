@@ -452,6 +452,59 @@ def _extract_trace_intelligence_summary(
     return report.to_dict()
 
 
+def _extract_branch_summary(trace: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(trace, dict):
+        return None
+    events = trace.get('events') if isinstance(trace.get('events'), list) else []
+    branch_events: list[dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        if str(event.get('type') or '').lower() != 'branch_candidate_declared':
+            continue
+        payload = event.get('payload') if isinstance(event.get('payload'), dict) else {}
+        branch_events.append(payload)
+    if not branch_events:
+        return None
+
+    branch_ids: list[str] = []
+    target_refs: list[str] = []
+    policies: list[str] = []
+    recommended_next_steps: list[str] = []
+    aggregate_statuses: list[str] = []
+    reason_codes: list[str] = []
+    for payload in branch_events:
+        branch_ref = payload.get('branch_ref') if isinstance(payload.get('branch_ref'), dict) else {}
+        branch_id = branch_ref.get('branch_id')
+        branch_policy = branch_ref.get('branch_policy')
+        target_ref = payload.get('target_ref')
+        recommended_next_step = payload.get('recommended_next_step')
+        aggregate_status = payload.get('aggregate_status')
+        for code in payload.get('blocking_reason_codes', []) if isinstance(payload.get('blocking_reason_codes'), list) else []:
+            if isinstance(code, str) and code and code not in reason_codes:
+                reason_codes.append(code)
+        if isinstance(branch_id, str) and branch_id and branch_id not in branch_ids:
+            branch_ids.append(branch_id)
+        if isinstance(branch_policy, str) and branch_policy and branch_policy not in policies:
+            policies.append(branch_policy)
+        if isinstance(target_ref, str) and target_ref and target_ref not in target_refs:
+            target_refs.append(target_ref)
+        if isinstance(recommended_next_step, str) and recommended_next_step and recommended_next_step not in recommended_next_steps:
+            recommended_next_steps.append(recommended_next_step)
+        if isinstance(aggregate_status, str) and aggregate_status and aggregate_status not in aggregate_statuses:
+            aggregate_statuses.append(aggregate_status)
+
+    return {
+        'branch_candidate_count': len(branch_events),
+        'branch_ids': branch_ids,
+        'policies': policies,
+        'target_refs': target_refs,
+        'recommended_next_steps': recommended_next_steps,
+        'aggregate_statuses': aggregate_statuses,
+        'reason_codes': reason_codes,
+    }
+
+
 def _extract_human_decision_summary(trace: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(trace, dict):
         return None
@@ -707,6 +760,7 @@ def create_execution_record_from_snapshot(
     node_precision: dict[str, dict[str, Any]] | None = None,
     trace_intelligence_summary: dict[str, Any] | None = None,
     human_decision_summary: dict[str, Any] | None = None,
+    branch_summary: dict[str, Any] | None = None,
 ) -> ExecutionRecordModel:
     created = created_at or _iso_now()
     started = started_at or _ms_to_iso(snapshot.timeline.start_ms) or created
@@ -806,6 +860,7 @@ def create_execution_record_from_snapshot(
             confidence_summary=_normalize_precision_summary(confidence_summary),
             trace_intelligence_summary=_to_json_safe(trace_intelligence_summary) if trace_intelligence_summary is not None else None,
             human_decision_summary=_to_json_safe(human_decision_summary) if human_decision_summary is not None else None,
+            branch_summary=_to_json_safe(branch_summary) if branch_summary is not None else None,
         ),
     )
 
@@ -1013,6 +1068,7 @@ def create_serialized_execution_record_from_circuit_run(
     trace_refs = [item for item in [trace_ref, event_stream_ref] if item]
     trace_intelligence_summary = _extract_trace_intelligence_summary(trace, run_ref=resolved_execution_id, trace_refs=trace_refs)
     human_decision_summary = _extract_human_decision_summary(trace)
+    branch_summary = _extract_branch_summary(trace)
 
     resolved_paused_run_state = paused_run_state
     if resolved_paused_run_state is None:
@@ -1051,6 +1107,7 @@ def create_serialized_execution_record_from_circuit_run(
         node_precision=node_precision,
         trace_intelligence_summary=trace_intelligence_summary,
         human_decision_summary=human_decision_summary,
+        branch_summary=branch_summary,
     )
     return serialize_execution_record(record)
 def create_serialized_execution_record_from_savefile_trace(

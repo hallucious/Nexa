@@ -218,6 +218,7 @@ class ExecutionObservabilityModel:
     confidence_summary: Optional[dict[str, Any]] = None
     trace_intelligence_summary: Optional[dict[str, Any]] = None
     human_decision_summary: Optional[dict[str, Any]] = None
+    branch_summary: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)
