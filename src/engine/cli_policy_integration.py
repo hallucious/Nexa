@@ -10,11 +10,11 @@ from src.contracts.regression_reason_codes import (
     NODE_REMOVED_SUCCESS,
     NODE_SUCCESS_TO_FAILURE,
     NODE_SUCCESS_TO_SKIPPED,
-    NODE_VERIFIER_INCONCLUSIVE_TO_FAIL,
-    NODE_VERIFIER_PASS_TO_FAIL,
-    NODE_VERIFIER_PASS_TO_INCONCLUSIVE,
-    NODE_VERIFIER_PASS_TO_WARNING,
-    NODE_VERIFIER_WARNING_TO_FAIL,
+)
+from src.contracts.verifier_reason_codes import (
+    VERIFICATION_TARGET_ARTIFACT,
+    VERIFICATION_TARGET_NODE,
+    resolve_verification_regression_reason,
 )
 from src.engine.execution_regression_detector import NodeRegression, RegressionResult, VerificationRegression
 from src.engine.execution_regression_policy import (
@@ -40,14 +40,6 @@ def build_regression_result_from_summaries(
 
     regressions: list[NodeRegression] = []
     verification_regressions: list[VerificationRegression] = []
-
-    verifier_mapping = {
-        ("pass", "fail"): NODE_VERIFIER_PASS_TO_FAIL,
-        ("pass", "warning"): NODE_VERIFIER_PASS_TO_WARNING,
-        ("pass", "inconclusive"): NODE_VERIFIER_PASS_TO_INCONCLUSIVE,
-        ("warning", "fail"): NODE_VERIFIER_WARNING_TO_FAIL,
-        ("inconclusive", "fail"): NODE_VERIFIER_INCONCLUSIVE_TO_FAIL,
-    }
 
     for node_id in sorted(set(baseline_nodes) | set(current_nodes)):
         left = baseline_nodes.get(node_id)
@@ -86,7 +78,7 @@ def build_regression_result_from_summaries(
 
         left_verifier_status = (left or {}).get("verifier_status")
         right_verifier_status = (right or {}).get("verifier_status")
-        verifier_reason = verifier_mapping.get((left_verifier_status, right_verifier_status))
+        verifier_reason = resolve_verification_regression_reason(VERIFICATION_TARGET_NODE, left_verifier_status, right_verifier_status)
         if verifier_reason is not None:
             verification_regressions.append(
                 VerificationRegression(
@@ -107,7 +99,7 @@ def build_regression_result_from_summaries(
         right = current_artifacts.get(artifact_id)
         left_validation_status = (left or {}).get("validation_status")
         right_validation_status = (right or {}).get("validation_status")
-        verifier_reason = verifier_mapping.get((left_validation_status, right_validation_status))
+        verifier_reason = resolve_verification_regression_reason(VERIFICATION_TARGET_ARTIFACT, left_validation_status, right_validation_status)
         if verifier_reason is not None:
             verification_regressions.append(
                 VerificationRegression(

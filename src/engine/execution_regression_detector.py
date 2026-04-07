@@ -42,7 +42,12 @@ from src.contracts.regression_reason_codes import (
     VALID_NODE_REASON_CODES,
     VALID_VERIFICATION_REASON_CODES,
 )
-from src.contracts.verifier_reason_codes import get_verifier_regression_severity
+from src.contracts.verifier_reason_codes import (
+    VERIFICATION_TARGET_ARTIFACT,
+    VERIFICATION_TARGET_NODE,
+    resolve_verification_regression_reason,
+    resolve_verification_regression_severity,
+)
 from src.engine.execution_diff_model import CHANGE_TYPE_MODIFIED, CHANGE_TYPE_REMOVED, RunDiff
 
 REGRESSION_STATUS_CLEAN = "clean"
@@ -218,8 +223,8 @@ class VerificationRegression:
                 f"Invalid reason_code '{self.reason_code}' for VerificationRegression. "
                 f"Must be one of: {', '.join(sorted(VALID_VERIFICATION_REASON_CODES))}"
             )
-        reason_code_severity = get_verifier_regression_severity(self.right_reason_codes)
-        self.severity = reason_code_severity or _get_severity(self.reason_code)
+        resolved = resolve_verification_regression_severity(self.reason_code, self.right_reason_codes)
+        self.severity = resolved or _get_severity(self.reason_code)
         if self.severity not in VALID_REGRESSION_SEVERITIES:
             raise ValueError(
                 f"Invalid severity '{self.severity}' for VerificationRegression. "
@@ -282,23 +287,11 @@ def _detect_context_regressions(diff: RunDiff) -> List[ContextRegression]:
 
 
 def _verification_node_reason(left_status: str | None, right_status: str | None) -> str | None:
-    return {
-        ("pass", "fail"): NODE_VERIFIER_PASS_TO_FAIL,
-        ("pass", "warning"): NODE_VERIFIER_PASS_TO_WARNING,
-        ("pass", "inconclusive"): NODE_VERIFIER_PASS_TO_INCONCLUSIVE,
-        ("warning", "fail"): NODE_VERIFIER_WARNING_TO_FAIL,
-        ("inconclusive", "fail"): NODE_VERIFIER_INCONCLUSIVE_TO_FAIL,
-    }.get((left_status, right_status))
+    return resolve_verification_regression_reason(VERIFICATION_TARGET_NODE, left_status, right_status)
 
 
 def _verification_artifact_reason(left_status: str | None, right_status: str | None) -> str | None:
-    return {
-        ("pass", "fail"): ARTIFACT_VALIDATION_PASS_TO_FAIL,
-        ("pass", "warning"): ARTIFACT_VALIDATION_PASS_TO_WARNING,
-        ("pass", "inconclusive"): ARTIFACT_VALIDATION_PASS_TO_INCONCLUSIVE,
-        ("warning", "fail"): ARTIFACT_VALIDATION_WARNING_TO_FAIL,
-        ("inconclusive", "fail"): ARTIFACT_VALIDATION_INCONCLUSIVE_TO_FAIL,
-    }.get((left_status, right_status))
+    return resolve_verification_regression_reason(VERIFICATION_TARGET_ARTIFACT, left_status, right_status)
 
 
 def _detect_verification_regressions(diff: RunDiff) -> List[VerificationRegression]:
