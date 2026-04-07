@@ -22,6 +22,9 @@ from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_pa
 from src.ui.visual_editor_workspace import VisualEditorWorkspaceViewModel, read_visual_editor_workspace_view_model
 from src.ui.node_configuration_workspace import NodeConfigurationWorkspaceViewModel, read_node_configuration_workspace_view_model
 from src.ui.runtime_monitoring_workspace import RuntimeMonitoringWorkspaceViewModel, read_runtime_monitoring_workspace_view_model
+from src.ui.proposal_commit_workflow import ProposalCommitWorkflowViewModel, read_proposal_commit_workflow_view_model
+from src.ui.execution_launch_workflow import ExecutionLaunchWorkflowViewModel, read_execution_launch_workflow_view_model
+from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
 
 
 @dataclass(frozen=True)
@@ -326,6 +329,91 @@ class NexaUIViewAdapter:
             execution_record=execution_record if execution_record is not None else self.latest_execution_record,
             live_events=live_events,
             selected_artifact_id=selected_artifact_id,
+            explanation=explanation,
+        )
+
+    def read_proposal_commit_workflow_view_model(
+        self,
+        source,
+        *,
+        selected_ref: str | None = None,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        preview_overlay: GraphPreviewOverlay | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        explanation: str | None = None,
+    ) -> ProposalCommitWorkflowViewModel:
+        return read_proposal_commit_workflow_view_model(
+            source,
+            selected_ref=selected_ref,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            preview_overlay=preview_overlay,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+            explanation=explanation,
+        )
+
+    def read_execution_launch_workflow_view_model(
+        self,
+        source,
+        *,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        live_events=None,
+        selected_artifact_id: str | None = None,
+        explanation: str | None = None,
+    ) -> ExecutionLaunchWorkflowViewModel:
+        return read_execution_launch_workflow_view_model(
+            source,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            live_events=live_events,
+            selected_artifact_id=selected_artifact_id,
+            explanation=explanation,
+        )
+
+    def read_builder_workflow_hub_view_model(
+        self,
+        source,
+        *,
+        selected_ref: str | None = None,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        preview_overlay: GraphPreviewOverlay | None = None,
+        live_events=None,
+        selected_artifact_id: str | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        explanation: str | None = None,
+    ) -> BuilderWorkflowHubViewModel:
+        return read_builder_workflow_hub_view_model(
+            source,
+            selected_ref=selected_ref,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            preview_overlay=preview_overlay,
+            live_events=live_events,
+            selected_artifact_id=selected_artifact_id,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
             explanation=explanation,
         )
 

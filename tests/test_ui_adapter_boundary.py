@@ -288,3 +288,66 @@ def test_ui_adapter_routes_phase5_workspace_integrations_through_stable_boundary
     assert visual_vm.storage_role == "working_save"
     assert config_vm.storage_role == "working_save"
     assert monitoring_vm.execution is not None
+
+
+def test_ui_adapter_routes_builder_workflow_layers_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+
+    proposal_vm = adapter.read_proposal_commit_workflow_view_model(
+        _working_save(),
+        selected_ref="node:n1",
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        preview_overlay=GraphPreviewOverlay(overlay_id="preview-001", summary="test preview"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=DesignerApprovalFlowState(
+            approval_id="approval-002",
+            intent_ref="intent-001",
+            patch_ref="patch-001",
+            precheck_ref="pre-001",
+            preview_ref="preview-001",
+            current_stage="awaiting_decision",
+            final_outcome="approved_for_commit",
+            precheck_status="pass",
+        ),
+    )
+    launch_vm = adapter.read_execution_launch_workflow_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run(),
+    )
+    hub_vm = adapter.read_builder_workflow_hub_view_model(
+        _working_save(),
+        selected_ref="node:n1",
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        preview_overlay=GraphPreviewOverlay(overlay_id="preview-001", summary="test preview"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=DesignerApprovalFlowState(
+            approval_id="approval-002",
+            intent_ref="intent-001",
+            patch_ref="patch-001",
+            precheck_ref="pre-001",
+            preview_ref="preview-001",
+            current_stage="awaiting_decision",
+            final_outcome="approved_for_commit",
+            precheck_status="pass",
+        ),
+    )
+
+    assert proposal_vm.storage_role == "working_save"
+    assert launch_vm.storage_role == "working_save"
+    assert hub_vm.proposal_commit is not None
+    assert hub_vm.execution_launch is not None
