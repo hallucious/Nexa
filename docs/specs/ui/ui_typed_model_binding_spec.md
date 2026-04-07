@@ -1,5 +1,5 @@
 [DESIGN]
-[UI_TYPED_MODEL_BINDING_SPEC v0.1]
+[UI_TYPED_MODEL_BINDING_SPEC v0.2]
 
 1. PURPOSE
 
@@ -313,3 +313,16 @@ as canonical typed state.
 `CommitSnapshotModel` must remain free of authoritative `ui`.
 
 Any future typed-model design that makes `ui` a generic shared role field is invalid.
+
+17. LOCALIZATION TYPED-BINDING RULES
+
+17.1 WorkingSaveModel may bind UI-owned locale preferences through `UISection`.
+Recommended typed content includes:
+- app_language: str | None
+- locale: str | None
+- formatting_preferences: FormattingPreferences | None
+
+17.2 CommitSnapshotModel must not gain canonical locale/UI preference fields through convenience binding.
+
+17.3 Non-canonical snapshot-side localized UI payload may be preserved only in auxiliary migration space,
+never in authoritative snapshot typed state.

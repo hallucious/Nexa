@@ -1,5 +1,5 @@
 [DESIGN]
-[UI_ADAPTER_VIEW_MODEL_CONTRACT v0.1]
+[UI_ADAPTER_VIEW_MODEL_CONTRACT v0.2]
 
 1. PURPOSE
 
@@ -444,3 +444,51 @@ This preserves:
 - module replaceability
 - proposal-safe Designer flow
 - storage lifecycle clarity
+
+16. INTERNATIONALIZATION / LOCALIZATION BOUNDARY
+
+The simplified `string` notation used in older v0.1 field tables is no longer sufficient
+for all user-facing UI work.
+
+Normative v0.2 rule:
+
+- UI chrome and system-message fields are localization-facing text
+- content-bearing fields remain content-bearing text
+- canonical ids/enums remain language-neutral values
+- locale-sensitive primitive formatting is a separate concern from text ownership
+
+17. SHARED TEXT / FORMAT TYPES
+
+DisplayTextRef
+- text_key: string
+- fallback_text: optional string
+- params: optional dict[str, primitive]
+
+Purpose:
+For UI chrome and system-message text.
+
+ContentTextView
+- raw_text: string
+- source_kind: enum("user", "ai", "engine", "imported", "unknown")
+- source_language: optional string
+- translation_state: optional enum("none", "available", "requested", "translated", "unknown")
+
+Purpose:
+For user-authored or AI-authored content-bearing text.
+
+LocaleFormatHint
+- format_kind: enum("date", "time", "datetime", "duration", "number", "percent", "currency", "unknown")
+- raw_value: primitive
+- locale_override: optional string
+
+Purpose:
+For locale-aware formatting of canonical raw values.
+
+18. ADAPTER RULES FOR LOCALIZATION
+
+18.1 The adapter must not blur DisplayTextRef and ContentTextView.
+18.2 New user-facing chrome text must not be introduced without a translation key path.
+18.3 Canonical engine/storage values must remain available separately from localized display text.
+18.4 App language may be read from UI-owned state, but AI response language must not be inferred from it.
+18.5 Locale formatting must happen at presentation time or adapter-formatting time,
+not by mutating underlying canonical values.

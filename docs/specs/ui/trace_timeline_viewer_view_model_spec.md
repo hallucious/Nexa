@@ -1,5 +1,5 @@
 [DESIGN]
-[TRACE_TIMELINE_VIEWER_VIEW_MODEL_SPEC v0.1]
+[TRACE_TIMELINE_VIEWER_VIEW_MODEL_SPEC v0.2]
 
 1. PURPOSE
 
@@ -417,3 +417,28 @@ for Trace / Timeline Viewer UI modules.
 
 It is not the trace source itself,
 and it must never become a fabricated history layer.
+
+23. LOCALIZATION ALIGNMENT
+
+23.1 Trace/Timeline Viewer must separate stable event identity from localized presentation.
+
+Stable internal values:
+- event ids
+- event types
+- node ids
+- severity ids
+- replay/original provenance refs
+
+Localized UI-facing values:
+- event labels
+- temporal explanations
+- retry/replay badges
+- empty-state text
+- shell-authored diagnostics messages
+
+Content-bearing fields:
+- event-linked content snippets
+- artifact previews
+- user-authored labels attached to traced objects
+
+23.2 Raw timestamps/durations remain canonical values and should be formatted per locale at presentation time.

@@ -1,5 +1,5 @@
 [DESIGN]
-[GRAPH_WORKSPACE_VIEW_MODEL_SPEC v0.1]
+[GRAPH_WORKSPACE_VIEW_MODEL_SPEC v0.2]
 
 1. PURPOSE
 
@@ -432,3 +432,30 @@ of Nexa graph state.
 It is not the source of truth.
 It is the stable visual contract through which UI shells/modules
 see graph structure, status, and previewed change state.
+
+23. LOCALIZATION ALIGNMENT
+
+23.1 Text ownership in Graph Workspace must be split.
+
+Localization-facing chrome/system fields:
+- graph-level empty states
+- graph status labels derived from enums
+- panel/tool action hints
+- warnings that are UI/system messages
+- explanation text when it is shell-authored help text
+
+Content-bearing fields:
+- graph title when authored by user/import/source artifact
+- node labels
+- group labels
+- input/output summaries
+- preview snippets derived from circuit/resource content
+
+23.2 Canonical ids and statuses remain unlocalized values.
+Localized labels are derived from them separately.
+
+23.3 The view model should interpret the older `string` shorthand as:
+- DisplayTextRef for chrome/system fields
+- ContentTextView for content-bearing fields
+
+23.4 Graph layout must tolerate translated status text expansion without changing node semantics.

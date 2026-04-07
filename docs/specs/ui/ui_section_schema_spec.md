@@ -1,5 +1,5 @@
 [DESIGN]
-[UI_SECTION_SCHEMA_SPEC v0.1]
+[UI_SECTION_SCHEMA_SPEC v0.2]
 
 1. PURPOSE
 
@@ -404,3 +404,23 @@ It exists to restore workspace ergonomics safely.
 It is not a secondary truth system.
 
 Any future use of `.nex.ui` that changes structural, approval, execution, or storage meaning is invalid.
+
+21. LOCALIZATION-RELATED UI SECTION RULES
+
+21.1 The `.nex.ui` section may carry UI-owned locale preference only on the Working Save side.
+
+Recommended canonical subsection:
+- ui.preferences.app_language
+- ui.preferences.locale
+- ui.preferences.formatting
+
+21.2 `ui.preferences.formatting` may include presentation preferences such as:
+- datetime_style
+- number_style
+- percent_style
+- compact_number_preference
+
+21.3 The `ui` section must not persist resolved translated chrome strings.
+It stores preferences/state, not rendered locale output.
+
+21.4 The `ui` section must not store AI response language as if it were identical to app language.

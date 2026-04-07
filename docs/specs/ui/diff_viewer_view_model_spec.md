@@ -1,5 +1,5 @@
 [DESIGN]
-[DIFF_VIEWER_VIEW_MODEL_SPEC v0.1]
+[DIFF_VIEWER_VIEW_MODEL_SPEC v0.2]
 
 1. PURPOSE
 
@@ -417,3 +417,24 @@ for Diff Viewer UI modules.
 
 It is not the diff engine itself,
 and it must never become a shortcut that rewrites source or target truth.
+
+23. LOCALIZATION ALIGNMENT
+
+23.1 Diff Viewer must separate normalized change identity from localized display.
+
+Stable internal values:
+- diff source/target refs
+- change operation ids
+- severity/category ids
+- compared artifact ids
+
+Localized UI-facing values:
+- human-readable change summaries
+- destructive-change warnings
+- navigation labels
+- empty-state text
+
+Content-bearing fields:
+- compared titles/names/snippets when sourced from user/authored/imported/generated content
+
+23.2 Canonical diff meaning remains source/target anchored and language-neutral.

@@ -1,5 +1,5 @@
 [DESIGN]
-[UI_SECTION_BRANCH_RULES_SPEC v0.1]
+[UI_SECTION_BRANCH_RULES_SPEC v0.2]
 
 1. PURPOSE
 
@@ -326,3 +326,18 @@ The `.nex.ui` section is officially a Working Save-oriented continuity section.
 Parser and validator behavior must branch by storage role.
 
 Any interpretation of `.nex.ui` as approved structural, validation, execution, or storage truth is invalid.
+
+18. LOCALIZATION BRANCH RULES
+
+18.1 Working Save
+- `ui.preferences.app_language` is allowed
+- `ui.preferences.locale` is allowed
+- formatting preferences are allowed when UI-owned
+- translated rendered message blobs are non-canonical and should be rejected or dropped
+
+18.2 Commit Snapshot
+- canonical `ui` remains absent by default
+- canonical app-language / locale preference must not cross the commit boundary inside snapshot truth
+- any snapshot-side raw localized UI payload is a role-violation finding, not canonical state
+
+18.3 Validation should classify forbidden localized payloads separately from ordinary UI preference data.

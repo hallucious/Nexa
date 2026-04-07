@@ -1,5 +1,5 @@
 [DESIGN]
-[THEME_LAYOUT_LAYER_SPEC v0.1]
+[THEME_LAYOUT_LAYER_SPEC v0.2]
 
 1. PURPOSE
 
@@ -365,3 +365,25 @@ for Theme / Layout UI systems.
 It is not an engine contract,
 and it must never become a path that changes structural,
 approval, execution, or storage truth.
+
+20. INTERNATIONALIZATION / LOCALIZATION ALIGNMENT
+
+20.1 Theme / Layout must remain presentation-only while becoming locale-aware.
+
+Required considerations:
+- text expansion tolerance
+- locale-aware typography choices
+- icon-plus-text resilience
+- truncation / wrapping strategy
+- accessibility-safe contrast across languages/scripts
+
+20.2 App language and locale preference belong to UI-owned presentation state,
+not to engine-owned truth.
+
+20.3 AI response language is not a Theme / Layout setting.
+It must remain a separate runtime/designer/provider policy concern.
+
+20.4 Deferred scope:
+- full RTL layout adaptation
+- script-specific advanced typography tuning
+These remain future expansion items, not hidden assumptions of v0.2.

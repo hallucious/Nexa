@@ -1,5 +1,5 @@
 [DESIGN]
-[INSPECTOR_PANEL_VIEW_MODEL_SPEC v0.1]
+[INSPECTOR_PANEL_VIEW_MODEL_SPEC v0.2]
 
 1. PURPOSE
 
@@ -460,3 +460,27 @@ for Inspector Panel UI modules.
 
 It is not structural truth,
 and it must never become a direct mutation path.
+
+22. LOCALIZATION ALIGNMENT
+
+22.1 Inspector text must be classified by ownership.
+
+Localization-facing chrome/system fields:
+- field labels
+- section headers
+- warnings and constraints when system-authored
+- action hints
+- empty-state text
+- disabled reasons
+- shell-authored explanation text
+
+Content-bearing fields:
+- selected object title/subtitle/description when sourced from user/authored/imported/AI content
+- current field values
+- preview snippets or execution-linked content samples
+
+22.2 The older `string` shorthand in this document must be interpreted through the adapter contract:
+- chrome/system message fields -> DisplayTextRef
+- content-bearing fields -> ContentTextView
+
+22.3 Canonical object ids, enum values, and validation codes remain language-neutral.

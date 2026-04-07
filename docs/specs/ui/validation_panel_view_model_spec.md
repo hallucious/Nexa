@@ -1,5 +1,5 @@
 [DESIGN]
-[VALIDATION_PANEL_VIEW_MODEL_SPEC v0.1]
+[VALIDATION_PANEL_VIEW_MODEL_SPEC v0.2]
 
 1. PURPOSE
 
@@ -414,3 +414,27 @@ for Validation Panel UI modules.
 
 It is not the validator itself,
 and it must never become an auto-fix mutation path.
+
+21. LOCALIZATION ALIGNMENT
+
+21.1 Validation presentation must separate stable findings from localized display.
+
+Stable internal values:
+- finding ids
+- category ids
+- severity ids
+- reason codes
+- target refs
+
+Localized UI-facing values:
+- finding titles
+- explanatory messages
+- suggestion labels
+- confirmation-required prompts
+- blocked/warning status labels
+
+21.2 Validation messages must preferably be rendered from stable message ids/reason codes,
+not hardcoded English strings.
+
+21.3 Compared object names or user-authored target labels remain content-bearing text,
+not locale-resource strings.

@@ -127,6 +127,54 @@ Source-of-Truth: `docs/specs/_active_specs.yaml`
 
 ---
 
+## 2.7 Supporting UI / I18n Reference Set
+
+The following documents currently serve as **supporting UI-sector references**.
+They are important for UI architecture continuity, but they are **not** yet part of the YAML-backed code-synchronized active spec core.
+
+### 2.7.1 UI Architecture / Module References
+
+* `docs/specs/ui/ui_architecture_package.md`
+* `docs/specs/ui/ui_adapter_view_model_contract.md`
+* `docs/specs/ui/graph_workspace_view_model_spce.md`
+* `docs/specs/ui/inspector_panel_view_model_spec.md`
+* `docs/specs/ui/validation_panel_view_model_spec.md`
+* `docs/specs/ui/execution_panel_view_model_spec.md`
+* `docs/specs/ui/designer_panel_view_model_spec.md`
+* `docs/specs/ui/trace_timeline_viewer_view_model_spec.md`
+* `docs/specs/ui/artifact_viewer_view_model_spec.md`
+* `docs/specs/ui/storage_panel_view_model_spec.md`
+* `docs/specs/ui/diff_viewer_view_model_spec.md`
+* `docs/specs/ui/theme_layout_layer_spec.md`
+* `docs/specs/ui/ui_state_ownership_and_persistence_spec.md`
+* `docs/specs/ui/ui_section_schema_spec.md`
+* `docs/specs/ui/ui_section_branch_rules_spec.md`
+* `docs/specs/ui/ui_public_api_exposure_spec.md`
+* `docs/specs/ui/ui_commit_boundary_stripping_spec.md`
+* `docs/specs/ui/ui_typed_model_binding_spec.md`
+* `docs/specs/ui/ui_workflow_collaboration_protocol.md`
+
+### 2.7.2 UI Internationalization / Localization References
+
+* `docs/specs/ui/ui_i18n_spec_index.md`
+* `docs/specs/ui/ui_i18n_bundle_manifest.md`
+* `docs/specs/ui/ui_multilingual_localization_architecture.md`
+* `docs/specs/ui/ui_language_settings_contract.md`
+* `docs/specs/ui/i18n_resource_schema_spec.md`
+* `docs/specs/ui/ui_i18n_fallback_behavior_spec.md`
+* `docs/specs/ui/localized_message_resolution_spec.md`
+* `docs/specs/ui/validation_reason_code_localization_spec.md`
+* `docs/specs/ui/ai_response_language_policy_spec.md`
+* `docs/specs/ui/ui_i18n_persistence_boundary_spec.md`
+* `docs/specs/ui/localization_test_strategy_spec.md`
+
+Rule:
+
+* These UI/i18n documents must respect engine-owned truth, approval truth, execution truth, and storage lifecycle truth.
+* They must not be added to `docs/specs/_active_specs.yaml` until code and contract tests are synchronized with them.
+
+---
+
 ## 3. ExecutionConfig Architecture
 
 There is no Node type.

@@ -1,4 +1,4 @@
-# UI Workflow Collaboration Protocol v0.1
+# UI Workflow Collaboration Protocol v0.2
 
 ## Recommended save path
 `docs/specs/ui/ui_workflow_collaboration_protocol.md`
@@ -961,3 +961,23 @@ This protocol exists to maximize:
 - session-to-session continuity
 
 It is the official workflow layer for Nexa UI collaboration.
+
+26. INTERNATIONALIZATION / LOCALIZATION REVIEW DISCIPLINE
+
+26.1 Any new UI work that introduces user-facing text must classify that text as one of:
+- UI chrome
+- system message
+- content-bearing text
+- canonical internal value
+
+26.2 New UI review artifacts or docs must not assume that all visible text is locale-resource text.
+User/AI-authored content must remain distinguishable.
+
+26.3 UI documentation sync is incomplete if it changes:
+- user-facing strings
+- locale preference behavior
+- formatting behavior
+- app language handling
+without updating the relevant UI i18n-facing rules.
+
+26.4 Implementation review for UI work must include a check that no new hardcoded user-facing chrome text has been added without translation-key handling.

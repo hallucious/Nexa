@@ -1,5 +1,5 @@
 [DESIGN]
-[UI_COMMIT_BOUNDARY_STRIPPING_SPEC v0.1]
+[UI_COMMIT_BOUNDARY_STRIPPING_SPEC v0.2]
 
 1. PURPOSE
 
@@ -341,3 +341,13 @@ At the commit boundary, `ui` must not cross into canonical Commit Snapshot truth
 
 Any commit builder, API, or model path that allows canonical snapshot-side `ui`
 is invalid.
+
+19. LOCALIZATION COMMIT-BOUNDARY RULES
+
+19.1 UI-owned locale/app-language preference is stripped together with the rest of canonical `ui` during Working Save -> Commit Snapshot conversion.
+
+19.2 Commit builders must not serialize translated chrome strings, locale-specific rendered status text,
+or UI language preference into canonical snapshot truth.
+
+19.3 If continuity across commit is desired, it must remain on the Working Save side or separate UI-owned storage,
+not inside approved structural snapshot state.

@@ -74,6 +74,45 @@ Active spec list: `docs/specs/_active_specs.yaml`
 | `docs/specs/` (root) | ExecutionConfig binding and registry contracts |
 
 ---
+# UI / Editor Reference Set (`docs/specs/ui/`)
+
+These documents define the replaceable UI shell, module view-model contracts, UI-owned state rules, and `.nex.ui` boundaries. They are currently **supporting reference specs**, not part of the YAML-backed active spec core.
+
+| Directory / File | Purpose |
+|---|---|
+| `docs/specs/ui/ui_architecture_package.md` | overall UI architecture position and module-slot system |
+| `docs/specs/ui/ui_adapter_view_model_contract.md` | canonical engine ↔ UI adapter boundary |
+| `docs/specs/ui/*_view_model_spec.md` | module-level view-model contracts for Graph / Inspector / Validation / Execution / Designer / Trace / Artifact / Storage / Diff |
+| `docs/specs/ui/theme_layout_layer_spec.md` | outer visual layer rules |
+| `docs/specs/ui/ui_state_ownership_and_persistence_spec.md` | UI-owned state boundary |
+| `docs/specs/ui/ui_section_schema_spec.md` | `.nex.ui` schema |
+| `docs/specs/ui/ui_section_branch_rules_spec.md` | role-aware handling of `.nex.ui` |
+| `docs/specs/ui/ui_public_api_exposure_spec.md` | public API exposure rules for `.nex.ui` |
+| `docs/specs/ui/ui_commit_boundary_stripping_spec.md` | commit-boundary stripping of UI-owned state |
+| `docs/specs/ui/ui_typed_model_binding_spec.md` | UI typed-model binding rules |
+| `docs/specs/ui/ui_workflow_collaboration_protocol.md` | UI collaboration / workflow protocol |
+
+## UI Internationalization Reference Bundle
+
+These new documents define multilingual UI behavior as a **UI-owned supporting reference set**. They must not be treated as engine-owned truth.
+
+| File | Purpose |
+|---|---|
+| `docs/specs/ui/ui_i18n_spec_index.md` | canonical index for the UI i18n document bundle |
+| `docs/specs/ui/ui_i18n_bundle_manifest.md` | bundle manifest and placement guide |
+| `docs/specs/ui/ui_multilingual_localization_architecture.md` | top-level multilingual architecture |
+| `docs/specs/ui/ui_language_settings_contract.md` | app language / AI response language / format locale contract |
+| `docs/specs/ui/i18n_resource_schema_spec.md` | translation resource bundle structure |
+| `docs/specs/ui/ui_i18n_fallback_behavior_spec.md` | deterministic fallback resolution rules |
+| `docs/specs/ui/localized_message_resolution_spec.md` | localized message lookup and rendering path |
+| `docs/specs/ui/validation_reason_code_localization_spec.md` | reason_code → localized validation message mapping |
+| `docs/specs/ui/ai_response_language_policy_spec.md` | AI response language policy separate from UI language |
+| `docs/specs/ui/ui_i18n_persistence_boundary_spec.md` | i18n persistence boundary within UI-owned state |
+| `docs/specs/ui/localization_test_strategy_spec.md` | localization regression and coverage strategy |
+
+**Important:** `docs/specs/_active_specs.yaml` is intentionally **not** updated by this bundle because these i18n documents are not yet code-synchronized active specs.
+
+---
 
 # Current Public Release Notes
 

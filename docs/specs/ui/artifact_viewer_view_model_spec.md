@@ -1,5 +1,5 @@
 [DESIGN]
-[ARTIFACT_VIEWER_VIEW_MODEL_SPEC v0.1]
+[ARTIFACT_VIEWER_VIEW_MODEL_SPEC v0.2]
 
 1. PURPOSE
 
@@ -363,3 +363,22 @@ for Artifact Viewer UI modules.
 
 It is not the artifact store itself,
 and it must never become a mutation surface for artifact truth.
+
+22. LOCALIZATION ALIGNMENT
+
+22.1 Artifact Viewer must distinguish artifact content from UI chrome.
+
+Localization-facing chrome/system fields:
+- viewer controls
+- section labels
+- unsupported-preview messages
+- integrity-warning text
+- empty-state text
+
+Content-bearing fields:
+- artifact title when authored/imported/generated
+- artifact preview body
+- metadata values that originate from run content
+
+22.2 Artifact ids, hashes, provenance refs, and integrity states remain canonical values.
+Localized labels are derived separately.

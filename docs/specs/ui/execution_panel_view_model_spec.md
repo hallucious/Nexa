@@ -1,5 +1,5 @@
 [DESIGN]
-[EXECUTION_PANEL_VIEW_MODEL_SPEC v0.1]
+[EXECUTION_PANEL_VIEW_MODEL_SPEC v0.2]
 
 1. PURPOSE
 
@@ -436,3 +436,24 @@ for Execution Panel UI modules.
 
 It is not the runtime itself,
 and it must never become a source of fabricated execution truth.
+
+23. LOCALIZATION ALIGNMENT
+
+23.1 Execution Panel must separate localized chrome from execution content.
+
+Localization-facing chrome/system fields:
+- execution status labels
+- control labels
+- disabled reasons
+- diagnostics messages
+- shell-authored explanations
+
+Content-bearing fields:
+- output summaries when sourced from run content
+- artifact snippets
+- user/authored run labels
+
+23.2 Timing/metric primitives must remain canonical raw values.
+Locale-aware formatting should be applied through LocaleFormatHint or equivalent presentation logic.
+
+23.3 App language must not be used to silently rewrite AI-produced output language inside execution result previews.

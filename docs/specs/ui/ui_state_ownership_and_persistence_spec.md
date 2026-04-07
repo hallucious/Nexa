@@ -1,5 +1,5 @@
 [DESIGN]
-[UI_STATE_OWNERSHIP_AND_PERSISTENCE_SPEC v0.1]
+[UI_STATE_OWNERSHIP_AND_PERSISTENCE_SPEC v0.2]
 
 1. PURPOSE
 
@@ -358,3 +358,21 @@ UI persistence is an ergonomic continuity system,
 not a structural, approval, execution, or storage truth system.
 
 Any future UI restore mechanism that blurs that boundary is invalid.
+
+23. INTERNATIONALIZATION / LOCALIZATION OWNERSHIP RULES
+
+23.1 UI-owned i18n state may include:
+- app_language
+- locale
+- date/time/number formatting preferences
+- direction/accessibility overrides when later supported
+
+23.2 UI-owned i18n state must not include:
+- translated copies of canonical engine/storage values
+- translated copies of user-authored circuit content as authoritative truth
+- implicitly coupled AI response language state
+
+23.3 AI response language is not automatically part of UI-owned state.
+It may only be persisted through a separate explicit future contract.
+
+23.4 Persisted UI-owned locale state must remain safe even when Working Save is invalid.

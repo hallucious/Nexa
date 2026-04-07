@@ -1,5 +1,5 @@
 [DESIGN]
-[STORAGE_PANEL_VIEW_MODEL_SPEC v0.1]
+[STORAGE_PANEL_VIEW_MODEL_SPEC v0.2]
 
 1. PURPOSE
 
@@ -364,3 +364,28 @@ for Storage Panel UI modules.
 It is not the storage system itself,
 and it must never become a shortcut that collapses
 Working Save, Commit Snapshot, and Execution Record into one truth.
+
+21. LOCALIZATION ALIGNMENT
+
+21.1 Storage Panel must localize lifecycle chrome without translating canonical storage values.
+
+Stable internal values:
+- working_save
+- commit_snapshot
+- execution_record
+- commit ids
+- run ids
+- lineage refs
+
+Localized UI-facing values:
+- lifecycle labels
+- action labels
+- warnings / explanations
+- empty-state text
+
+Content-bearing fields:
+- savefile names
+- snapshot titles
+- user-authored descriptions
+
+21.2 The panel must not serialize translated storage-role labels into any canonical storage field.

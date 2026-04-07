@@ -1,5 +1,5 @@
 [DESIGN]
-[UI_PUBLIC_API_EXPOSURE_SPEC v0.1]
+[UI_PUBLIC_API_EXPOSURE_SPEC v0.2]
 
 1. PURPOSE
 
@@ -329,3 +329,16 @@ at the public API level.
 
 Any public API behavior that makes snapshot-side `ui`
 look authoritative is invalid.
+
+18. LOCALIZATION API EXPOSURE RULES
+
+18.1 `load_nex()` may expose canonical UI-owned app-language / locale preference only for Working Save.
+
+18.2 `validate_working_save()` may return findings about invalid locale/app-language preference values or forbidden rendered-string payloads.
+
+18.3 `validate_commit_snapshot()` must not expose canonical snapshot-side locale/UI preference as authoritative data.
+
+18.4 Public APIs must preserve the distinction between:
+- canonical locale/app-language preference
+- non-canonical rendered localized payloads
+- separate AI response language policy outside `.nex.ui`

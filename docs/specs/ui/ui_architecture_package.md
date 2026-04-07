@@ -1,6 +1,5 @@
-```text id="4rmhx2"
 [DESIGN]
-[NEXA_UI_ARCHITECTURE_PACKAGE v0.1]
+[NEXA_UI_ARCHITECTURE_PACKAGE v0.2]
 
 1. PURPOSE
 
@@ -21,9 +20,10 @@ This package fixes:
 7. UI data flow model
 8. current allowed UI-design scope
 9. deferred UI-implementation scope
+10. i18n / localization boundary
 
 This direction matches the existing Nexa principle that UI is an upper platform layer,
-not the engine core, and that UI-owned data must not redefine execution semantics. fileciteturn1file1 fileciteturn1file12
+not the engine core, and that UI-owned data must not redefine execution semantics.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 2. POSITION OF UI IN NEXA
@@ -69,7 +69,7 @@ All UI shells and modules must operate through a shared UI contract / adapter bo
 
 3.5 UI may not redefine storage lifecycle
 Working Save, Commit Snapshot, and Execution Record remain engine/storage concepts,
-not UI-defined concepts. fileciteturn1file13 fileciteturn1file14 fileciteturn1file15
+not UI-defined concepts.
 
 3.6 UI state is separate from engine state
 UI-specific layout and interaction state must not be mixed with execution semantics.
@@ -77,7 +77,7 @@ UI-specific layout and interaction state must not be mixed with execution semant
 3.7 Designer interaction remains proposal-based
 Designer-originated changes must remain:
 Intent → Patch → Precheck → Preview → Approval → Commit,
-never direct committed mutation. fileciteturn1file17 fileciteturn1file18 fileciteturn1file19 fileciteturn1file20
+never direct committed mutation.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 4. WHOLE-UI REPLACEABILITY
@@ -262,7 +262,7 @@ The following may be UI-owned:
 - temporary visual emphasis
 - workspace layout presets
 
-This matches the rule that UI data may exist, but must not redefine execution semantics. fileciteturn1file0 fileciteturn1file12
+This matches the rule that UI data may exist, but must not redefine execution semantics.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 10. UI DATA FLOW MODEL
@@ -411,4 +411,26 @@ Nexa UI shall be designed as:
 One-sentence summary:
 
 Nexa UI is a modular, replaceable editor/view shell above an engine that remains the sole owner of structural, approval, and execution truth.
-```
+
+16. INTERNATIONALIZATION / LOCALIZATION ALIGNMENT
+
+16.1 UI architecture must remain i18n-ready.
+The absence of early i18n structure is now treated as an avoidable inefficiency,
+not as a neutral omission.
+
+16.2 UI chrome, system message text, content-bearing text,
+and canonical engine values must be kept separate.
+
+16.3 App language belongs to UI-owned state.
+AI response language is a separate policy concern and must not be fused into
+Theme / Layout or shell chrome assumptions.
+
+16.4 UI modules must be designed to tolerate text expansion and locale-aware formatting.
+
+16.5 Canonical engine/storage ids and enums remain language-neutral.
+Localization happens only at presentation time.
+
+16.6 This package must be read together with:
+- `docs/specs/ui/ui_internationalization_localization_spec.md`
+- `docs/specs/ui/ui_adapter_view_model_contract.md`
+- `docs/specs/ui/ui_state_ownership_and_persistence_spec.md`
