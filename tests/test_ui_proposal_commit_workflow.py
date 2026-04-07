@@ -163,3 +163,12 @@ def test_proposal_commit_workflow_is_blocked_when_validation_is_blocked() -> Non
     assert vm.workflow_status == "blocked"
     assert vm.can_commit is False
     assert vm.summary.blocking_count == 1
+
+
+def test_proposal_commit_workflow_localizes_next_step_for_korean_app_language() -> None:
+    working = _working_save()
+    working.ui.metadata["app_language"] = "ko-KR"
+
+    vm = read_proposal_commit_workflow_view_model(working, selected_ref="node:n1", validation_report=_validation_report())
+
+    assert vm.summary.next_step_label == "Designer 제안을 시작하거나 현재 드래프트 검토"

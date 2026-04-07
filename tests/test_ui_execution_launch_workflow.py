@@ -61,3 +61,12 @@ def test_execution_launch_workflow_is_launch_ready_when_run_is_allowed() -> None
     vm = read_execution_launch_workflow_view_model(_working_save(), validation_report=_validation_report(), execution_record=_run("completed"))
     assert vm.workflow_status in {"launch_ready", "replay_ready"}
     assert vm.can_launch is True or vm.can_replay is True
+
+
+def test_execution_launch_workflow_localizes_next_step_for_korean_app_language() -> None:
+    working = _working_save()
+    working.ui.metadata["app_language"] = "ko-KR"
+
+    vm = read_execution_launch_workflow_view_model(working, validation_report=_validation_report(), execution_record=_run("completed"))
+
+    assert vm.summary.next_step_label in {"최신 실행 재실행 또는 검토", "현재 구조 실행"}

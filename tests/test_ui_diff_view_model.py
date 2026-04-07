@@ -114,3 +114,13 @@ def test_read_diff_view_model_supports_preview_vs_current_without_implying_commi
     assert vm.source_ref.endpoint_type == "preview"
     assert vm.summary.destructive_change_count >= 1
     assert any(group.group_label == "Edge" for group in vm.grouped_changes)
+
+
+def test_read_diff_view_model_localizes_summary_and_groups_for_korean_app_language() -> None:
+    working = _working_save()
+    working.ui.metadata["app_language"] = "ko-KR"
+
+    vm = read_diff_view_model(diff_mode="draft_vs_commit", source=working, target=_commit_snapshot())
+
+    assert "변경" in (vm.summary.top_summary_label or "")
+    assert any(group.group_label == "노드" for group in vm.grouped_changes)

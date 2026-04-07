@@ -27,3 +27,13 @@ def test_end_user_command_flows_project_engine_safe_user_flows() -> None:
     review_flow = next(flow for flow in vm.flows if flow.action_id == "review_draft")
     assert review_flow.preferred_workspace_id == "node_configuration"
     assert review_flow.steps[0].step_id == "intent"
+
+
+def test_end_user_command_flows_localize_step_labels_for_korean_app_language() -> None:
+    working = _working_save()
+    working.ui.metadata["app_language"] = "ko-KR"
+
+    vm = read_end_user_command_flow_view_model(working)
+    review_flow = next(flow for flow in vm.flows if flow.action_id == "review_draft")
+
+    assert review_flow.steps[0].label == "의도 생성"

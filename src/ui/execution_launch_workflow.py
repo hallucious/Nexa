@@ -8,6 +8,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, read_builder_action_schema
+from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.runtime_monitoring_workspace import RuntimeMonitoringWorkspaceViewModel, read_runtime_monitoring_workspace_view_model
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.visual_editor_workspace import VisualEditorWorkspaceViewModel, read_visual_editor_workspace_view_model
@@ -87,6 +88,7 @@ def read_execution_launch_workflow_view_model(
 ) -> ExecutionLaunchWorkflowViewModel:
     source_unwrapped = _unwrap(source)
     storage_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
     visual_editor_vm = read_visual_editor_workspace_view_model(source_unwrapped, validation_report=validation_report) if source_unwrapped is not None else None
     monitoring_vm = (
@@ -118,16 +120,16 @@ def read_execution_launch_workflow_view_model(
     execution_status = monitoring_vm.health.execution_status if monitoring_vm is not None else "unknown"
     if execution_status in {"running", "queued"}:
         launch_mode = "live_run"
-        next_step_label = "Monitor live execution"
+        next_step_label = ui_text("launch.next.monitor_live", app_language=app_language, fallback_text="Monitor live execution")
     elif replay_action is not None and replay_action.enabled:
         launch_mode = "replay_ready"
-        next_step_label = "Replay or inspect latest run"
+        next_step_label = ui_text("launch.next.replay_latest", app_language=app_language, fallback_text="Replay or inspect latest run")
     elif run_action is not None and run_action.enabled:
         launch_mode = "run_ready"
-        next_step_label = "Launch current structure"
+        next_step_label = ui_text("launch.next.launch_current", app_language=app_language, fallback_text="Launch current structure")
     else:
         launch_mode = "idle"
-        next_step_label = "Resolve validation or select a run target"
+        next_step_label = ui_text("launch.next.resolve_validation", app_language=app_language, fallback_text="Resolve validation or select a run target")
 
     summary = ExecutionLaunchSummaryView(
         run_id=run_identity.run_id if run_identity is not None else None,

@@ -15,6 +15,8 @@ from src.storage.models.execution_record_model import (
     NodeResultsModel,
     NodeTimingCard,
 )
+from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
+from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.trace_timeline_viewer import read_trace_timeline_view_model
 
 
@@ -29,6 +31,17 @@ def _record(*, trigger_type: str = "manual_run") -> ExecutionRecordModel:
         artifacts=ExecutionArtifactsModel(),
         diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
         observability=ExecutionObservabilityModel(),
+    )
+
+
+def _working_save_ko() -> WorkingSaveModel:
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "draft"}], edges=[], entry="draft", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -65,3 +78,10 @@ def test_read_trace_timeline_view_model_supports_live_event_stream_projection() 
     assert vm.timeline_status == "streaming"
     assert vm.events[-1].relative_offset_ms == 5
     assert vm.summary.artifact_link_count == 1
+
+
+def test_read_trace_timeline_view_model_localizes_korean_summary_labels() -> None:
+    vm = read_trace_timeline_view_model(_working_save_ko(), execution_record=_record())
+
+    assert "레인" in (vm.summary.top_summary_label or "")
+    assert vm.focused_slice.summary_label == "트레이스 슬라이스"

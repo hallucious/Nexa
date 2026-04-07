@@ -74,3 +74,14 @@ def test_intent_emission_blocks_commit_related_emissions_when_review_state_is_bl
 
     assert commit.emit_allowed is False
     assert commit.reason_blocked is not None
+
+
+def test_intent_emission_localizes_preview_text_for_korean_app_language() -> None:
+    working = _working_save()
+    working.ui.metadata["app_language"] = "ko-KR"
+    hub = read_builder_interaction_hub_view_model(working, validation_report=_validation_report(), execution_record=_run(), approval_flow=_approval(False))
+
+    vm = read_intent_emission_view_model(working, interaction_hub=hub)
+    run_item = next(item for item in vm.emissions if item.action_id == "run_current")
+
+    assert run_item.emission_preview == "현재 대상 실행 시작"

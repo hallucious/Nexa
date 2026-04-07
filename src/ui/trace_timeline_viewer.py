@@ -8,6 +8,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -160,18 +161,18 @@ def _resource_type_for_event(event_type: str) -> str:
     return "runtime"
 
 
-def _short_message_for_event(event_type: str, payload: dict[str, Any] | None, node_id: str | None) -> str:
+def _short_message_for_event(event_type: str, payload: dict[str, Any] | None, node_id: str | None, *, app_language: str) -> str:
     payload = payload or {}
     if event_type == "verification_completed":
         status = payload.get("status") or "unknown"
-        return f"verification completed ({node_id or 'runtime'}): {status}"
+        return ui_text("trace.event.verification_completed", app_language=app_language, fallback_text=f"verification completed ({node_id or 'runtime'}): {status}", target=node_id or "runtime", status=status)
     if event_type.startswith("typed_artifact"):
         artifact_type = payload.get("artifact_type") or "artifact"
-        return f"typed artifact recorded ({node_id or 'runtime'}): {artifact_type}"
-    return event_type.replace("_", " ")
+        return ui_text("trace.event.typed_artifact_recorded", app_language=app_language, fallback_text=f"typed artifact recorded ({node_id or 'runtime'}): {artifact_type}", target=node_id or "runtime", artifact_type=artifact_type)
+    return ui_text(f"trace.event.{event_type}", app_language=app_language, fallback_text=event_type.replace("_", " "), node_id=node_id or "runtime", status=payload.get("status") or "unknown", outcome=payload.get("outcome") or payload.get("status") or "unknown")
 
 
-def _events_from_live(live_events: Sequence[ExecutionEvent]) -> list[TraceEventView]:
+def _events_from_live(live_events: Sequence[ExecutionEvent], *, app_language: str) -> list[TraceEventView]:
     if not live_events:
         return []
     first = live_events[0].timestamp_ms
@@ -189,7 +190,7 @@ def _events_from_live(live_events: Sequence[ExecutionEvent]) -> list[TraceEventV
                 node_id=event.node_id,
                 resource_type=_resource_type_for_event(event.type),
                 severity=_severity_from_event(event.type, payload),
-                short_message=_short_message_for_event(event.type, payload, event.node_id),
+                short_message=_short_message_for_event(event.type, payload, event.node_id, app_language=app_language),
                 details_preview=(str(payload) if payload else None),
                 artifact_refs=[str(v) for v in payload.get("artifact_refs", [])] if isinstance(payload.get("artifact_refs"), list) else [],
                 replay_marker=False,
@@ -198,16 +199,16 @@ def _events_from_live(live_events: Sequence[ExecutionEvent]) -> list[TraceEventV
     return views
 
 
-def _events_from_record(record: ExecutionRecordModel) -> list[TraceEventView]:
+def _events_from_record(record: ExecutionRecordModel, *, app_language: str) -> list[TraceEventView]:
     views: list[TraceEventView] = []
     idx = 1
-    views.append(TraceEventView(event_id=f"event-{idx}", sequence_index=idx, event_type="execution_started", timestamp=record.meta.started_at, lane_ref="runtime", resource_type="runtime", short_message="execution started"))
+    views.append(TraceEventView(event_id=f"event-{idx}", sequence_index=idx, event_type="execution_started", timestamp=record.meta.started_at, lane_ref="runtime", resource_type="runtime", short_message=ui_text("trace.event.execution_started", app_language=app_language, fallback_text="execution started")))
     idx += 1
     for card in record.timeline.started_nodes:
-        views.append(TraceEventView(event_id=f"event-{idx}", sequence_index=idx, event_type="node_started", timestamp=card.started_at or record.meta.started_at, lane_ref=f"node:{card.node_id}", node_id=card.node_id, resource_type="runtime", short_message=f"node started ({card.node_id})"))
+        views.append(TraceEventView(event_id=f"event-{idx}", sequence_index=idx, event_type="node_started", timestamp=card.started_at or record.meta.started_at, lane_ref=f"node:{card.node_id}", node_id=card.node_id, resource_type="runtime", short_message=ui_text("trace.event.node_started", app_language=app_language, fallback_text=f"node started ({card.node_id})", node_id=card.node_id)))
         idx += 1
     for card in record.timeline.completed_nodes:
-        views.append(TraceEventView(event_id=f"event-{idx}", sequence_index=idx, event_type="node_completed", timestamp=card.finished_at or record.meta.finished_at or record.meta.started_at, lane_ref=f"node:{card.node_id}", node_id=card.node_id, resource_type="runtime", severity="error" if card.outcome == "failed" else "info", short_message=f"node completed ({card.node_id}): {card.outcome}", details_preview=getattr(card, "error", None)))
+        views.append(TraceEventView(event_id=f"event-{idx}", sequence_index=idx, event_type="node_completed", timestamp=card.finished_at or record.meta.finished_at or record.meta.started_at, lane_ref=f"node:{card.node_id}", node_id=card.node_id, resource_type="runtime", severity="error" if card.outcome == "failed" else "info", short_message=ui_text("trace.event.node_completed", app_language=app_language, fallback_text=f"node completed ({card.node_id}): {card.outcome}", node_id=card.node_id, outcome=card.outcome), details_preview=getattr(card, "error", None)))
         idx += 1
 
     for artifact in record.artifacts.artifact_refs:
@@ -225,7 +226,7 @@ def _events_from_record(record: ExecutionRecordModel) -> list[TraceEventView]:
                     node_id=artifact.producer_node,
                     resource_type="verifier",
                     severity=_severity_from_event("verification_completed", {"status": status}),
-                    short_message=f"verification completed ({artifact.producer_node or 'runtime'}): {status}",
+                    short_message=ui_text("trace.event.verification_completed", app_language=app_language, fallback_text=f"verification completed ({artifact.producer_node or 'runtime'}): {status}", target=artifact.producer_node or "runtime", status=status),
                     details_preview=artifact.summary,
                     artifact_refs=[artifact.artifact_id, *artifact.trace_refs],
                     location_ref=artifact.producer_ref,
@@ -244,7 +245,7 @@ def _events_from_record(record: ExecutionRecordModel) -> list[TraceEventView]:
                     node_id=artifact.producer_node,
                     resource_type="artifact",
                     severity="info",
-                    short_message=f"typed artifact recorded ({artifact.producer_node or artifact.artifact_id}): {artifact.artifact_type}",
+                    short_message=ui_text("trace.event.typed_artifact_recorded", app_language=app_language, fallback_text=f"typed artifact recorded ({artifact.producer_node or artifact.artifact_id}): {artifact.artifact_type}", target=artifact.producer_node or artifact.artifact_id, artifact_type=artifact.artifact_type),
                     details_preview=artifact.summary,
                     artifact_refs=[artifact.artifact_id, *artifact.trace_refs],
                     location_ref=artifact.producer_ref,
@@ -253,11 +254,11 @@ def _events_from_record(record: ExecutionRecordModel) -> list[TraceEventView]:
             idx += 1
 
     terminal = "execution_completed" if record.meta.status != "failed" else "execution_failed"
-    views.append(TraceEventView(event_id=f"event-{idx}", sequence_index=idx, event_type=terminal, timestamp=record.meta.finished_at or record.meta.started_at, lane_ref="runtime", resource_type="runtime", severity="error" if record.meta.status == "failed" else "info", short_message=f"execution {record.meta.status}", replay_marker=record.source.trigger_type == "replay_run"))
+    views.append(TraceEventView(event_id=f"event-{idx}", sequence_index=idx, event_type=terminal, timestamp=record.meta.finished_at or record.meta.started_at, lane_ref="runtime", resource_type="runtime", severity="error" if record.meta.status == "failed" else "info", short_message=ui_text("trace.event.execution_terminal", app_language=app_language, fallback_text=f"execution {record.meta.status}", status=record.meta.status), replay_marker=record.source.trigger_type == "replay_run"))
     return views
 
 
-def _lanes_from_record(record: ExecutionRecordModel) -> list[TraceLaneView]:
+def _lanes_from_record(record: ExecutionRecordModel, *, app_language: str) -> list[TraceLaneView]:
     lanes: list[TraceLaneView] = []
     statuses = {card.node_id: card.status for card in record.node_results.results}
     verifier_by_node = {card.node_id: card.verifier_status for card in record.node_results.results if card.verifier_status}
@@ -271,16 +272,16 @@ def _lanes_from_record(record: ExecutionRecordModel) -> list[TraceLaneView]:
         _append_lane(TraceLaneView(lane_id=f"node:{node_id}", lane_type="node", node_id=node_id, label=node_id, segment_count=1, status={"success": "completed", "failed": "failed", "partial": "partial", "cancelled": "failed", "paused": "warning", "skipped": "normal"}.get(statuses.get(node_id, "unknown"), "unknown")))
         verifier_status = verifier_by_node.get(node_id)
         if verifier_status:
-            _append_lane(TraceLaneView(lane_id=f"verification:{node_id}", lane_type="verification", node_id=node_id, resource_type="verifier", label=f"{node_id} verifier", segment_count=1, status={"pass": "completed", "warning": "warning", "fail": "failed", "inconclusive": "partial"}.get(verifier_status, "unknown"), collapsed_by_default=True))
+            _append_lane(TraceLaneView(lane_id=f"verification:{node_id}", lane_type="verification", node_id=node_id, resource_type="verifier", label=ui_text("trace.lane.verifier", app_language=app_language, fallback_text=f"{node_id} verifier", node_id=node_id), segment_count=1, status={"pass": "completed", "warning": "warning", "fail": "failed", "inconclusive": "partial"}.get(verifier_status, "unknown"), collapsed_by_default=True))
         if typed_counts_by_node.get(node_id):
-            _append_lane(TraceLaneView(lane_id=f"artifact:{node_id}", lane_type="artifact", node_id=node_id, resource_type="artifact", label=f"{node_id} artifacts", segment_count=typed_counts_by_node[node_id], status="completed", collapsed_by_default=True))
+            _append_lane(TraceLaneView(lane_id=f"artifact:{node_id}", lane_type="artifact", node_id=node_id, resource_type="artifact", label=ui_text("trace.lane.artifacts", app_language=app_language, fallback_text=f"{node_id} artifacts", node_id=node_id), segment_count=typed_counts_by_node[node_id], status="completed", collapsed_by_default=True))
     if not lanes:
         for card in record.node_results.results:
             _append_lane(TraceLaneView(lane_id=f"node:{card.node_id}", lane_type="node", node_id=card.node_id, label=card.node_id, segment_count=1, status={"success": "completed", "failed": "failed"}.get(card.status, "unknown")))
     return lanes
 
 
-def _summary(events: list[TraceEventView], lanes: list[TraceLaneView], record: ExecutionRecordModel | None) -> TraceTimelineSummaryView:
+def _summary(events: list[TraceEventView], lanes: list[TraceLaneView], record: ExecutionRecordModel | None, *, app_language: str) -> TraceTimelineSummaryView:
     warning_count = sum(1 for event in events if event.severity == "warning")
     error_count = sum(1 for event in events if event.severity == "error")
     artifact_link_count = sum(len(event.artifact_refs) for event in events)
@@ -301,7 +302,7 @@ def _summary(events: list[TraceEventView], lanes: list[TraceLaneView], record: E
         started_at=started_at,
         finished_at=finished_at,
         duration_seconds=duration_seconds,
-        top_summary_label=f"{len(events)} events across {len(lanes)} lanes" if events or lanes else "No trace events available",
+        top_summary_label=(ui_text("trace.summary.top", app_language=app_language, fallback_text=f"{len(events)} events across {len(lanes)} lanes", event_count=len(events), lane_count=len(lanes)) if events or lanes else ui_text("trace.summary.empty", app_language=app_language, fallback_text="No trace events available")),
     )
 
 
@@ -315,11 +316,12 @@ def read_trace_timeline_view_model(
     """Build a UI-facing trace/timeline projection from engine-owned truth."""
 
     source = _unwrap(source)
+    app_language = ui_language_from_sources(source, execution_record)
     if isinstance(source, ExecutionRecordModel):
         execution_record = source
 
     if live_events:
-        events = _events_from_live(live_events)
+        events = _events_from_live(live_events, app_language=app_language)
         storage_role = "execution_record" if execution_record else ("working_save" if isinstance(source, WorkingSaveModel) else ("commit_snapshot" if isinstance(source, CommitSnapshotModel) else "none"))
         lanes = sorted({TraceLaneView(lane_id=event.lane_ref or "runtime", lane_type=("verification" if (event.lane_ref or "").startswith("verification:") else ("artifact" if (event.lane_ref or "").startswith("artifact:") else ("node" if event.node_id else "runtime"))), node_id=event.node_id, resource_type=event.resource_type, label=(event.lane_ref.split(':', 1)[1] if event.lane_ref and ':' in event.lane_ref else (event.node_id or "runtime")), segment_count=1, status=("warning" if event.severity == "warning" else ("failed" if event.severity == "error" else "running")), collapsed_by_default=((event.lane_ref or "").startswith(("verification:", "artifact:"))) ) for event in events}, key=lambda lane: lane.lane_id)
         run_id = execution_record.meta.run_id if execution_record else live_events[0].execution_id
@@ -327,19 +329,19 @@ def read_trace_timeline_view_model(
             source_mode="live_event_stream",
             storage_role=storage_role,
             timeline_status="streaming",
-            run_identity=TraceRunIdentityView(run_id=run_id, execution_id=run_id, commit_id=execution_record.source.commit_id if execution_record else None, source_label="live execution"),
-            summary=_summary(events, lanes, execution_record),
+            run_identity=TraceRunIdentityView(run_id=run_id, execution_id=run_id, commit_id=execution_record.source.commit_id if execution_record else None, source_label=ui_text("trace.source.live_execution", app_language=app_language, fallback_text="live execution")),
+            summary=_summary(events, lanes, execution_record, app_language=app_language),
             lanes=lanes,
             events=events,
-            focused_slice=TraceFocusedSliceView(focused_event_ids=[events[-1].event_id] if events else [], focused_lane_ids=[events[-1].lane_ref] if events and events[-1].lane_ref else [], start_timestamp=events[0].timestamp if events else None, end_timestamp=events[-1].timestamp if events else None, summary_label="Latest live slice" if events else None),
+            focused_slice=TraceFocusedSliceView(focused_event_ids=[events[-1].event_id] if events else [], focused_lane_ids=[events[-1].lane_ref] if events and events[-1].lane_ref else [], start_timestamp=events[0].timestamp if events else None, end_timestamp=events[-1].timestamp if events else None, summary_label=(ui_text("trace.slice.latest_live", app_language=app_language, fallback_text="Latest live slice") if events else None)),
             replay_state=TraceReplayStateView(),
             diagnostics=TraceDiagnosticsView(partial_trace=True if execution_record is None else False),
             explanation=explanation,
         )
 
     if execution_record is not None:
-        events = _events_from_record(execution_record)
-        lanes = _lanes_from_record(execution_record)
+        events = _events_from_record(execution_record, app_language=app_language)
+        lanes = _lanes_from_record(execution_record, app_language=app_language)
         source_mode = "replay_trace" if execution_record.source.trigger_type == "replay_run" else "execution_record_trace"
         timeline_status = "streaming" if execution_record.meta.status == "running" else "finalized"
         missing_trace_ref = execution_record.timeline.trace_ref is None
@@ -354,10 +356,10 @@ def read_trace_timeline_view_model(
             storage_role="execution_record",
             timeline_status=timeline_status,
             run_identity=TraceRunIdentityView(run_id=execution_record.meta.run_id, execution_id=execution_record.meta.run_id, commit_id=execution_record.source.commit_id, replay_session_id=replay_state.replay_session_id, title=execution_record.meta.title, source_label=execution_record.source.trigger_type),
-            summary=_summary(events, lanes, execution_record),
+            summary=_summary(events, lanes, execution_record, app_language=app_language),
             lanes=lanes,
             events=events,
-            focused_slice=TraceFocusedSliceView(focused_event_ids=[events[0].event_id] if events else [], focused_lane_ids=[lanes[0].lane_id] if lanes else [], start_timestamp=events[0].timestamp if events else None, end_timestamp=events[-1].timestamp if events else None, summary_label="Trace slice" if events else None),
+            focused_slice=TraceFocusedSliceView(focused_event_ids=[events[0].event_id] if events else [], focused_lane_ids=[lanes[0].lane_id] if lanes else [], start_timestamp=events[0].timestamp if events else None, end_timestamp=events[-1].timestamp if events else None, summary_label=(ui_text("trace.slice.trace", app_language=app_language, fallback_text="Trace slice") if events else None)),
             replay_state=replay_state,
             diagnostics=TraceDiagnosticsView(missing_trace_ref=missing_trace_ref, missing_event_stream_ref=missing_event_stream_ref, partial_trace=missing_trace_ref or missing_event_stream_ref, warning_count=len(execution_record.diagnostics.warnings), error_count=len(execution_record.diagnostics.errors), last_error_label=execution_record.diagnostics.errors[-1].message if execution_record.diagnostics.errors else None),
             explanation=explanation,
@@ -368,7 +370,7 @@ def read_trace_timeline_view_model(
         source_mode="unknown",
         storage_role=storage_role,
         timeline_status="idle",
-        diagnostics=TraceDiagnosticsView(missing_trace_ref=True, missing_event_stream_ref=True, partial_trace=True, last_error_label="No execution trace loaded"),
+        diagnostics=TraceDiagnosticsView(missing_trace_ref=True, missing_event_stream_ref=True, partial_trace=True, last_error_label=ui_text("trace.error.no_execution_trace_loaded", app_language=app_language, fallback_text="No execution trace loaded")),
         explanation=explanation,
     )
 

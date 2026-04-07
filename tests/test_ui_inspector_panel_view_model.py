@@ -95,3 +95,13 @@ def test_read_selected_object_view_model_projects_output_as_readonly_in_commit_s
     assert vm.object_type == "output"
     assert vm.status_summary.editability == "readonly"
     assert vm.readonly_fields[0].field_key == "source"
+
+
+def test_read_selected_object_view_model_localizes_field_labels_for_korean_app_language() -> None:
+    working = _working_save()
+    working.ui.metadata["app_language"] = "ko-KR"
+
+    vm = read_selected_object_view_model(working, selected_ref="node:review_bundle")
+
+    assert vm.readonly_fields[0].label == "노드 ID"
+    assert any(constraint.label == "서브회로 경계" for constraint in vm.constraints)

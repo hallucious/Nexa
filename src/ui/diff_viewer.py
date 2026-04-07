@@ -8,6 +8,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.graph_workspace import GraphPreviewOverlay
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -227,7 +228,7 @@ def _make_change(
 
 
 
-def _compare_circuits(source: WorkingSaveModel | CommitSnapshotModel, target: CommitSnapshotModel) -> list[_DiffChange]:
+def _compare_circuits(source: WorkingSaveModel | CommitSnapshotModel, target: CommitSnapshotModel, *, app_language: str) -> list[_DiffChange]:
     changes: list[_DiffChange] = []
     source_nodes = _node_map(source.circuit)
     target_nodes = _node_map(target.circuit)
@@ -235,11 +236,11 @@ def _compare_circuits(source: WorkingSaveModel | CommitSnapshotModel, target: Co
         s = source_nodes.get(node_id)
         t = target_nodes.get(node_id)
         if s is None:
-            changes.append(_make_change(change_id=f"node:add:{node_id}", change_type="added", category="node", target_type="node", target_id=node_id, short_label=f"Node {node_id} added", before=None, after=t, signal_type="ADD"))
+            changes.append(_make_change(change_id=f"node:add:{node_id}", change_type="added", category="node", target_type="node", target_id=node_id, short_label=ui_text("diff.change.node_added", app_language=app_language, fallback_text=f"Node {node_id} added", target_id=node_id), before=None, after=t, signal_type="ADD"))
         elif t is None:
-            changes.append(_make_change(change_id=f"node:remove:{node_id}", change_type="removed", category="node", target_type="node", target_id=node_id, short_label=f"Node {node_id} removed", before=s, after=None, destructive=True, severity="warning", signal_type="REMOVE"))
+            changes.append(_make_change(change_id=f"node:remove:{node_id}", change_type="removed", category="node", target_type="node", target_id=node_id, short_label=ui_text("diff.change.node_removed", app_language=app_language, fallback_text=f"Node {node_id} removed", target_id=node_id), before=s, after=None, destructive=True, severity="warning", signal_type="REMOVE"))
         elif s != t:
-            changes.append(_make_change(change_id=f"node:update:{node_id}", change_type="updated", category="node", target_type="node", target_id=node_id, short_label=f"Node {node_id} updated", before=s, after=t, severity="info", signal_type="MODIFY"))
+            changes.append(_make_change(change_id=f"node:update:{node_id}", change_type="updated", category="node", target_type="node", target_id=node_id, short_label=ui_text("diff.change.node_updated", app_language=app_language, fallback_text=f"Node {node_id} updated", target_id=node_id), before=s, after=t, severity="info", signal_type="MODIFY"))
 
     source_edges = _edge_map(source.circuit)
     target_edges = _edge_map(target.circuit)
@@ -247,21 +248,21 @@ def _compare_circuits(source: WorkingSaveModel | CommitSnapshotModel, target: Co
         s = source_edges.get(edge_id)
         t = target_edges.get(edge_id)
         if s is None:
-            changes.append(_make_change(change_id=f"edge:add:{edge_id}", change_type="added", category="edge", target_type="edge", target_id=edge_id, short_label=f"Edge {edge_id} added", before=None, after=t, signal_type="ADD"))
+            changes.append(_make_change(change_id=f"edge:add:{edge_id}", change_type="added", category="edge", target_type="edge", target_id=edge_id, short_label=ui_text("diff.change.edge_added", app_language=app_language, fallback_text=f"Edge {edge_id} added", target_id=edge_id), before=None, after=t, signal_type="ADD"))
         elif t is None:
-            changes.append(_make_change(change_id=f"edge:remove:{edge_id}", change_type="removed", category="edge", target_type="edge", target_id=edge_id, short_label=f"Edge {edge_id} removed", before=s, after=None, destructive=True, severity="warning", signal_type="REMOVE"))
+            changes.append(_make_change(change_id=f"edge:remove:{edge_id}", change_type="removed", category="edge", target_type="edge", target_id=edge_id, short_label=ui_text("diff.change.edge_removed", app_language=app_language, fallback_text=f"Edge {edge_id} removed", target_id=edge_id), before=s, after=None, destructive=True, severity="warning", signal_type="REMOVE"))
         elif s != t:
-            changes.append(_make_change(change_id=f"edge:update:{edge_id}", change_type="updated", category="edge", target_type="edge", target_id=edge_id, short_label=f"Edge {edge_id} updated", before=s, after=t, severity="info", signal_type="MODIFY"))
+            changes.append(_make_change(change_id=f"edge:update:{edge_id}", change_type="updated", category="edge", target_type="edge", target_id=edge_id, short_label=ui_text("diff.change.edge_updated", app_language=app_language, fallback_text=f"Edge {edge_id} updated", target_id=edge_id), before=s, after=t, severity="info", signal_type="MODIFY"))
 
     if source.resources != target.resources:
-        changes.append(_make_change(change_id="resources:update", change_type="updated", category="resource", target_type="storage", target_id="resources", short_label="Resources changed", before=source.resources, after=target.resources, severity="info", signal_type="MODIFY"))
+        changes.append(_make_change(change_id="resources:update", change_type="updated", category="resource", target_type="storage", target_id="resources", short_label=ui_text("diff.change.resources_changed", app_language=app_language, fallback_text="Resources changed"), before=source.resources, after=target.resources, severity="info", signal_type="MODIFY"))
     if source.circuit.outputs != target.circuit.outputs:
-        changes.append(_make_change(change_id="outputs:update", change_type="updated", category="output", target_type="output", target_id="outputs", short_label="Outputs changed", before=source.circuit.outputs, after=target.circuit.outputs, severity="info", signal_type="MODIFY"))
+        changes.append(_make_change(change_id="outputs:update", change_type="updated", category="output", target_type="output", target_id="outputs", short_label=ui_text("diff.change.outputs_changed", app_language=app_language, fallback_text="Outputs changed"), before=source.circuit.outputs, after=target.circuit.outputs, severity="info", signal_type="MODIFY"))
     return changes
 
 
 
-def _compare_runs(source: ExecutionRecordModel, target: ExecutionRecordModel) -> list[_DiffChange]:
+def _compare_runs(source: ExecutionRecordModel, target: ExecutionRecordModel, *, app_language: str) -> list[_DiffChange]:
     changes: list[_DiffChange] = []
     related_runs = [source.meta.run_id, target.meta.run_id]
     source_results = {card.node_id: card for card in source.node_results.results}
@@ -270,27 +271,27 @@ def _compare_runs(source: ExecutionRecordModel, target: ExecutionRecordModel) ->
         s = source_results.get(node_id)
         t = target_results.get(node_id)
         if s is None:
-            changes.append(_make_change(change_id=f"run:add:{node_id}", change_type="added", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} added", before=None, after=t.status if t else None, signal_type="ADD", related_run_ids=related_runs))
+            changes.append(_make_change(change_id=f"run:add:{node_id}", change_type="added", category="execution_result", target_type="run", target_id=node_id, short_label=ui_text("diff.change.run_result_added", app_language=app_language, fallback_text=f"Node result {node_id} added", target_id=node_id), before=None, after=t.status if t else None, signal_type="ADD", related_run_ids=related_runs))
             continue
         if t is None:
-            changes.append(_make_change(change_id=f"run:remove:{node_id}", change_type="removed", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} removed", before=s.status if s else None, after=None, destructive=True, severity="warning", signal_type="REMOVE", related_run_ids=related_runs))
+            changes.append(_make_change(change_id=f"run:remove:{node_id}", change_type="removed", category="execution_result", target_type="run", target_id=node_id, short_label=ui_text("diff.change.run_result_removed", app_language=app_language, fallback_text=f"Node result {node_id} removed", target_id=node_id), before=s.status if s else None, after=None, destructive=True, severity="warning", signal_type="REMOVE", related_run_ids=related_runs))
             continue
         if (s.status, s.output_summary) != (t.status, t.output_summary):
-            changes.append(_make_change(change_id=f"run:update:{node_id}", change_type="updated", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} changed", before={"status": s.status, "output": s.output_summary}, after={"status": t.status, "output": t.output_summary}, severity="info", signal_type="MODIFY", related_run_ids=related_runs))
+            changes.append(_make_change(change_id=f"run:update:{node_id}", change_type="updated", category="execution_result", target_type="run", target_id=node_id, short_label=ui_text("diff.change.run_result_changed", app_language=app_language, fallback_text=f"Node result {node_id} changed", target_id=node_id), before={"status": s.status, "output": s.output_summary}, after={"status": t.status, "output": t.output_summary}, severity="info", signal_type="MODIFY", related_run_ids=related_runs))
 
         source_verifier = {"status": s.verifier_status, "reason_codes": sorted(set(s.verifier_reason_codes))}
         target_verifier = {"status": t.verifier_status, "reason_codes": sorted(set(t.verifier_reason_codes))}
         if source_verifier != target_verifier and (source_verifier["status"] or target_verifier["status"] or source_verifier["reason_codes"] or target_verifier["reason_codes"]):
-            changes.append(_make_change(change_id=f"verification:update:{node_id}", change_type="updated", category="verification", target_type="run", target_id=node_id, short_label=f"Verifier outcome {node_id} changed", before=source_verifier, after=target_verifier, severity="info", signal_type="VERIFY", related_run_ids=related_runs, related_artifact_ids=sorted(set(s.typed_artifact_refs + t.typed_artifact_refs))))
+            changes.append(_make_change(change_id=f"verification:update:{node_id}", change_type="updated", category="verification", target_type="run", target_id=node_id, short_label=ui_text("diff.change.verifier_outcome_changed", app_language=app_language, fallback_text=f"Verifier outcome {node_id} changed", target_id=node_id), before=source_verifier, after=target_verifier, severity="info", signal_type="VERIFY", related_run_ids=related_runs, related_artifact_ids=sorted(set(s.typed_artifact_refs + t.typed_artifact_refs))))
 
         if sorted(set(s.typed_artifact_refs)) != sorted(set(t.typed_artifact_refs)):
-            changes.append(_make_change(change_id=f"typed_artifact:update:{node_id}", change_type="updated", category="artifact", target_type="artifact", target_id=node_id, short_label=f"Typed artifacts for {node_id} changed", before=sorted(set(s.typed_artifact_refs)), after=sorted(set(t.typed_artifact_refs)), severity="info", signal_type="MODIFY", related_run_ids=related_runs, related_artifact_ids=sorted(set(s.typed_artifact_refs + t.typed_artifact_refs))))
+            changes.append(_make_change(change_id=f"typed_artifact:update:{node_id}", change_type="updated", category="artifact", target_type="artifact", target_id=node_id, short_label=ui_text("diff.change.typed_artifacts_changed", app_language=app_language, fallback_text=f"Typed artifacts for {node_id} changed", target_id=node_id), before=sorted(set(s.typed_artifact_refs)), after=sorted(set(t.typed_artifact_refs)), severity="info", signal_type="MODIFY", related_run_ids=related_runs, related_artifact_ids=sorted(set(s.typed_artifact_refs + t.typed_artifact_refs))))
 
     source_artifact_map = {artifact.artifact_id: artifact for artifact in source.artifacts.artifact_refs}
     target_artifact_map = {artifact.artifact_id: artifact for artifact in target.artifacts.artifact_refs}
     for artifact_id in sorted(set(source_artifact_map) ^ set(target_artifact_map)):
         change_type = "added" if artifact_id in target_artifact_map else "removed"
-        changes.append(_make_change(change_id=f"artifact:{change_type}:{artifact_id}", change_type=change_type, category="artifact", target_type="artifact", target_id=artifact_id, short_label=f"Artifact {artifact_id} {change_type}", before=artifact_id if change_type == "removed" else None, after=artifact_id if change_type == "added" else None, destructive=change_type == "removed", severity="info", signal_type="ADD" if change_type == "added" else "REMOVE", related_run_ids=related_runs, related_artifact_ids=[artifact_id]))
+        changes.append(_make_change(change_id=f"artifact:{change_type}:{artifact_id}", change_type=change_type, category="artifact", target_type="artifact", target_id=artifact_id, short_label=ui_text("diff.change.artifact_transition", app_language=app_language, fallback_text=f"Artifact {artifact_id} {change_type}", target_id=artifact_id, change_type=change_type), before=artifact_id if change_type == "removed" else None, after=artifact_id if change_type == "added" else None, destructive=change_type == "removed", severity="info", signal_type="ADD" if change_type == "added" else "REMOVE", related_run_ids=related_runs, related_artifact_ids=[artifact_id]))
 
     shared_artifacts = set(source_artifact_map) & set(target_artifact_map)
     for artifact_id in sorted(shared_artifacts):
@@ -310,34 +311,34 @@ def _compare_runs(source: ExecutionRecordModel, target: ExecutionRecordModel) ->
             sorted(set(t_artifact.trace_refs)),
         ):
             category = "verification" if s_artifact.artifact_type == "validation_report" or t_artifact.artifact_type == "validation_report" else "artifact"
-            changes.append(_make_change(change_id=f"artifact:update:{artifact_id}", change_type="updated", category=category, target_type="artifact", target_id=artifact_id, short_label=f"Artifact {artifact_id} metadata changed", before={"validation_status": s_artifact.validation_status, "validation_reason_codes": sorted(set(s_artifact.validation_reason_codes)), "schema_version": s_artifact.artifact_schema_version, "recorded_at": s_artifact.recorded_at, "trace_refs": sorted(set(s_artifact.trace_refs))}, after={"validation_status": t_artifact.validation_status, "validation_reason_codes": sorted(set(t_artifact.validation_reason_codes)), "schema_version": t_artifact.artifact_schema_version, "recorded_at": t_artifact.recorded_at, "trace_refs": sorted(set(t_artifact.trace_refs))}, severity="info", signal_type="MODIFY", related_run_ids=related_runs, related_artifact_ids=[artifact_id]))
+            changes.append(_make_change(change_id=f"artifact:update:{artifact_id}", change_type="updated", category=category, target_type="artifact", target_id=artifact_id, short_label=ui_text("diff.change.artifact_metadata_changed", app_language=app_language, fallback_text=f"Artifact {artifact_id} metadata changed", target_id=artifact_id), before={"validation_status": s_artifact.validation_status, "validation_reason_codes": sorted(set(s_artifact.validation_reason_codes)), "schema_version": s_artifact.artifact_schema_version, "recorded_at": s_artifact.recorded_at, "trace_refs": sorted(set(s_artifact.trace_refs))}, after={"validation_status": t_artifact.validation_status, "validation_reason_codes": sorted(set(t_artifact.validation_reason_codes)), "schema_version": t_artifact.artifact_schema_version, "recorded_at": t_artifact.recorded_at, "trace_refs": sorted(set(t_artifact.trace_refs))}, severity="info", signal_type="MODIFY", related_run_ids=related_runs, related_artifact_ids=[artifact_id]))
 
     if source.outputs.output_summary != target.outputs.output_summary:
-        changes.append(_make_change(change_id="run:outputs:update", change_type="updated", category="execution_result", target_type="run", target_id="outputs", short_label="Run output summary changed", before=source.outputs.output_summary, after=target.outputs.output_summary, severity="info", signal_type="MODIFY", related_run_ids=related_runs))
+        changes.append(_make_change(change_id="run:outputs:update", change_type="updated", category="execution_result", target_type="run", target_id="outputs", short_label=ui_text("diff.change.run_output_summary_changed", app_language=app_language, fallback_text="Run output summary changed"), before=source.outputs.output_summary, after=target.outputs.output_summary, severity="info", signal_type="MODIFY", related_run_ids=related_runs))
 
     if source.observability.verifier_summary != target.observability.verifier_summary:
-        changes.append(_make_change(change_id="verification:summary:update", change_type="updated", category="verification", target_type="run", target_id="verifier_summary", short_label="Verifier summary changed", before=source.observability.verifier_summary, after=target.observability.verifier_summary, severity="info", signal_type="VERIFY", related_run_ids=related_runs))
+        changes.append(_make_change(change_id="verification:summary:update", change_type="updated", category="verification", target_type="run", target_id="verifier_summary", short_label=ui_text("diff.change.verifier_summary_changed", app_language=app_language, fallback_text="Verifier summary changed"), before=source.observability.verifier_summary, after=target.observability.verifier_summary, severity="info", signal_type="VERIFY", related_run_ids=related_runs))
     return changes
 
 
 
-def _changes_from_preview(preview_overlay: GraphPreviewOverlay) -> list[_DiffChange]:
+def _changes_from_preview(preview_overlay: GraphPreviewOverlay, *, app_language: str) -> list[_DiffChange]:
     changes: list[_DiffChange] = []
     for node_id in preview_overlay.added_node_ids:
-        changes.append(_make_change(change_id=f"preview:add:{node_id}", change_type="added", category="node", target_type="preview", target_id=node_id, short_label=f"Preview adds node {node_id}", before=None, after=node_id, signal_type="ADD"))
+        changes.append(_make_change(change_id=f"preview:add:{node_id}", change_type="added", category="node", target_type="preview", target_id=node_id, short_label=ui_text("diff.change.preview_add_node", app_language=app_language, fallback_text=f"Preview adds node {node_id}", target_id=node_id), before=None, after=node_id, signal_type="ADD"))
     for node_id in preview_overlay.updated_node_ids:
-        changes.append(_make_change(change_id=f"preview:update:{node_id}", change_type="updated", category="node", target_type="preview", target_id=node_id, short_label=f"Preview updates node {node_id}", before=node_id, after=node_id, severity="info", signal_type="MODIFY"))
+        changes.append(_make_change(change_id=f"preview:update:{node_id}", change_type="updated", category="node", target_type="preview", target_id=node_id, short_label=ui_text("diff.change.preview_update_node", app_language=app_language, fallback_text=f"Preview updates node {node_id}", target_id=node_id), before=node_id, after=node_id, severity="info", signal_type="MODIFY"))
     for node_id in preview_overlay.removed_node_ids:
-        changes.append(_make_change(change_id=f"preview:remove:{node_id}", change_type="removed", category="node", target_type="preview", target_id=node_id, short_label=f"Preview removes node {node_id}", before=node_id, after=None, destructive=True, severity="warning", signal_type="REMOVE"))
+        changes.append(_make_change(change_id=f"preview:remove:{node_id}", change_type="removed", category="node", target_type="preview", target_id=node_id, short_label=ui_text("diff.change.preview_remove_node", app_language=app_language, fallback_text=f"Preview removes node {node_id}", target_id=node_id), before=node_id, after=None, destructive=True, severity="warning", signal_type="REMOVE"))
     for edge_id in preview_overlay.added_edge_ids:
-        changes.append(_make_change(change_id=f"preview:edge:add:{edge_id}", change_type="added", category="edge", target_type="preview", target_id=edge_id, short_label=f"Preview adds edge {edge_id}", before=None, after=edge_id, signal_type="ADD"))
+        changes.append(_make_change(change_id=f"preview:edge:add:{edge_id}", change_type="added", category="edge", target_type="preview", target_id=edge_id, short_label=ui_text("diff.change.preview_add_edge", app_language=app_language, fallback_text=f"Preview adds edge {edge_id}", target_id=edge_id), before=None, after=edge_id, signal_type="ADD"))
     for edge_id in preview_overlay.removed_edge_ids:
-        changes.append(_make_change(change_id=f"preview:edge:remove:{edge_id}", change_type="removed", category="edge", target_type="preview", target_id=edge_id, short_label=f"Preview removes edge {edge_id}", before=edge_id, after=None, destructive=True, severity="warning", signal_type="REMOVE"))
+        changes.append(_make_change(change_id=f"preview:edge:remove:{edge_id}", change_type="removed", category="edge", target_type="preview", target_id=edge_id, short_label=ui_text("diff.change.preview_remove_edge", app_language=app_language, fallback_text=f"Preview removes edge {edge_id}", target_id=edge_id), before=edge_id, after=None, destructive=True, severity="warning", signal_type="REMOVE"))
     return changes
 
 
 
-def _endpoint_ref(source: Any, *, fallback_type: str = "unknown") -> DiffEndpointRefView:
+def _endpoint_ref(source: Any, *, fallback_type: str = "unknown", app_language: str) -> DiffEndpointRefView:
     source = _unwrap(source)
     if isinstance(source, WorkingSaveModel):
         return DiffEndpointRefView(endpoint_type="working_save", ref_id=f"working_save:{source.meta.working_save_id}", title=source.meta.name, created_at=source.meta.updated_at or source.meta.created_at, status_label=str(source.runtime.status))
@@ -346,12 +347,12 @@ def _endpoint_ref(source: Any, *, fallback_type: str = "unknown") -> DiffEndpoin
     if isinstance(source, ExecutionRecordModel):
         return DiffEndpointRefView(endpoint_type="execution_record", ref_id=f"execution_record:{source.meta.run_id}", title=source.meta.title, created_at=source.meta.created_at, status_label=source.meta.status)
     if isinstance(source, GraphPreviewOverlay):
-        return DiffEndpointRefView(endpoint_type="preview", ref_id=source.overlay_id, title=source.summary, status_label="preview")
+        return DiffEndpointRefView(endpoint_type="preview", ref_id=source.overlay_id, title=source.summary, status_label=ui_text("diff.endpoint.preview", app_language=app_language, fallback_text="preview"))
     return DiffEndpointRefView(endpoint_type=fallback_type)
 
 
 
-def _group_changes(changes: Sequence[_DiffChange]) -> list[DiffGroupView]:
+def _group_changes(changes: Sequence[_DiffChange], *, app_language: str) -> list[DiffGroupView]:
     by_category: dict[str, list[DiffChangeItemView]] = {}
     for change in changes:
         item = DiffChangeItemView(
@@ -369,13 +370,13 @@ def _group_changes(changes: Sequence[_DiffChange]) -> list[DiffGroupView]:
         )
         by_category.setdefault(change.category, []).append(item)
     return [
-        DiffGroupView(group_id=f"category:{category}", group_label=category.replace("_", " ").title(), group_type="category", changes=items, count=len(items))
+        DiffGroupView(group_id=f"category:{category}", group_label=ui_text(f"diff.group.{category}", app_language=app_language, fallback_text=category.replace("_", " ").title()), group_type="category", changes=items, count=len(items))
         for category, items in sorted(by_category.items())
     ]
 
 
 
-def _summary(changes: Sequence[_DiffChange], *, diff_mode: str) -> DiffSummaryView:
+def _summary(changes: Sequence[_DiffChange], *, diff_mode: str, app_language: str) -> DiffSummaryView:
     added_count = sum(1 for c in changes if c.change_type == "added")
     removed_count = sum(1 for c in changes if c.change_type == "removed")
     updated_count = sum(1 for c in changes if c.change_type == "updated")
@@ -396,7 +397,7 @@ def _summary(changes: Sequence[_DiffChange], *, diff_mode: str) -> DiffSummaryVi
         execution_change_count=execution_change_count,
         artifact_change_count=artifact_change_count,
         verification_change_count=verification_change_count,
-        top_summary_label=f"{len(changes)} changes in {diff_mode}",
+        top_summary_label=ui_text("diff.summary.top", app_language=app_language, fallback_text=f"{len(changes)} changes in {diff_mode}", count=len(changes), diff_mode=diff_mode),
     )
 
 
@@ -463,6 +464,7 @@ def read_diff_view_model(
 
     source_unwrapped = _unwrap(source)
     target_unwrapped = _unwrap(target)
+    app_language = ui_language_from_sources(source_unwrapped, target_unwrapped)
     diagnostics = DiffDiagnosticsView(
         missing_source_ref=source_unwrapped is None and not isinstance(source, GraphPreviewOverlay),
         missing_target_ref=target_unwrapped is None and not isinstance(target, GraphPreviewOverlay),
@@ -471,25 +473,25 @@ def read_diff_view_model(
         return DiffViewerViewModel(
             diff_mode=diff_mode,
             viewer_status="failed",
-            source_ref=_endpoint_ref(source_unwrapped, fallback_type="unknown"),
-            target_ref=_endpoint_ref(target_unwrapped, fallback_type="unknown"),
-            summary=DiffSummaryView(top_summary_label="Comparison endpoints are incomplete"),
+            source_ref=_endpoint_ref(source_unwrapped, fallback_type="unknown", app_language=app_language),
+            target_ref=_endpoint_ref(target_unwrapped, fallback_type="unknown", app_language=app_language),
+            summary=DiffSummaryView(top_summary_label=ui_text("diff.summary.incomplete_endpoints", app_language=app_language, fallback_text="Comparison endpoints are incomplete")),
             diagnostics=diagnostics,
             explanation=explanation,
         )
 
     changes: list[_DiffChange]
     if diff_mode == "draft_vs_commit" and isinstance(source_unwrapped, WorkingSaveModel) and isinstance(target_unwrapped, CommitSnapshotModel):
-        changes = _compare_circuits(source_unwrapped, target_unwrapped)
+        changes = _compare_circuits(source_unwrapped, target_unwrapped, app_language=app_language)
     elif diff_mode == "run_vs_run" and isinstance(source_unwrapped, ExecutionRecordModel) and isinstance(target_unwrapped, ExecutionRecordModel):
-        changes = _compare_runs(source_unwrapped, target_unwrapped)
+        changes = _compare_runs(source_unwrapped, target_unwrapped, app_language=app_language)
     elif diff_mode == "preview_vs_current" and isinstance(source, GraphPreviewOverlay) and isinstance(target_unwrapped, (WorkingSaveModel, CommitSnapshotModel)):
-        changes = _changes_from_preview(source)
+        changes = _changes_from_preview(source, app_language=app_language)
     elif diff_mode == "commit_vs_commit" and isinstance(source_unwrapped, CommitSnapshotModel) and isinstance(target_unwrapped, CommitSnapshotModel):
-        changes = _compare_circuits(source_unwrapped, target_unwrapped)
+        changes = _compare_circuits(source_unwrapped, target_unwrapped, app_language=app_language)
     else:
         changes = []
-        diagnostics = DiffDiagnosticsView(incomplete_diff=True, unsupported_section_count=1, last_error_label=f"Unsupported diff mode/endpoints: {diff_mode}")
+        diagnostics = DiffDiagnosticsView(incomplete_diff=True, unsupported_section_count=1, last_error_label=ui_text("diff.error.unsupported_mode", app_language=app_language, fallback_text=f"Unsupported diff mode/endpoints: {diff_mode}", diff_mode=diff_mode))
 
     viewer_status = "ready" if changes or diagnostics.unsupported_section_count == 0 else "partial"
     if diagnostics.unsupported_section_count:
@@ -498,10 +500,10 @@ def read_diff_view_model(
     return DiffViewerViewModel(
         diff_mode=diff_mode,
         viewer_status=viewer_status,
-        source_ref=_endpoint_ref(source, fallback_type="unknown"),
-        target_ref=_endpoint_ref(target, fallback_type="unknown"),
-        summary=_summary(changes, diff_mode=diff_mode),
-        grouped_changes=_group_changes(changes),
+        source_ref=_endpoint_ref(source, fallback_type="unknown", app_language=app_language),
+        target_ref=_endpoint_ref(target, fallback_type="unknown", app_language=app_language),
+        summary=_summary(changes, diff_mode=diff_mode, app_language=app_language),
+        grouped_changes=_group_changes(changes, app_language=app_language),
         selected_change=_selected_change(changes),
         filter_state=DiffFilterStateView(),
         related_links=_related_links(changes),

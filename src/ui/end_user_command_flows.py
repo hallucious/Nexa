@@ -7,6 +7,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_execution_adapter_hub import BuilderExecutionAdapterHubViewModel, read_builder_execution_adapter_hub_view_model
+from src.ui.i18n import ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -65,7 +66,7 @@ def _storage_role(source) -> str:
     return "none"
 
 
-def _label_for(action_id: str) -> str:
+def _label_for(action_id: str, *, app_language: str) -> str:
     mapping = {
         "save_working_save": "Save draft",
         "review_draft": "Open review",
@@ -77,7 +78,7 @@ def _label_for(action_id: str) -> str:
         "replay_latest": "Replay latest",
         "open_diff": "Open diff",
     }
-    return mapping.get(action_id, action_id.replace("_", " ").title())
+    return ui_text(f"builder.action.{action_id}", app_language=app_language, fallback_text=mapping.get(action_id, action_id.replace("_", " ").title()))
 
 
 def _flow_status(*, execute_allowed: bool, requires_confirmation: bool, closure_ready: bool) -> str:
@@ -98,6 +99,7 @@ def read_end_user_command_flow_view_model(
 ) -> EndUserCommandFlowViewModel:
     source_unwrapped = _unwrap(source)
     source_role = _storage_role(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped)
     execution_adapter_hub = execution_adapter_hub or read_builder_execution_adapter_hub_view_model(source_unwrapped)
 
     adapters_by_action = {item.action_id: item for item in execution_adapter_hub.execution_adapters.adapters} if execution_adapter_hub.execution_adapters is not None else {}
@@ -117,16 +119,16 @@ def read_end_user_command_flow_view_model(
 
         closure_ready = adapter.execute_allowed and state_change.apply_allowed
         steps = [
-            EndUserCommandFlowStepView("intent", "Intent emission", "ready" if intent is not None and intent.emit_allowed else "waiting", dispatch.command_type if dispatch is not None else "none"),
-            EndUserCommandFlowStepView("dispatch", "Dispatch contract", "ready" if dispatch.dispatch_allowed else "blocked", dispatch.boundary_target),
-            EndUserCommandFlowStepView("execute", "Execution adapter", "ready" if adapter.execute_allowed else "blocked", adapter.engine_boundary),
-            EndUserCommandFlowStepView("state_change", "UI state change", "ready" if state_change.apply_allowed else "blocked", state_change.state_change_kind),
+            EndUserCommandFlowStepView("intent", ui_text("flow.step.intent", app_language=app_language, fallback_text="Intent emission"), "ready" if intent is not None and intent.emit_allowed else "waiting", dispatch.command_type if dispatch is not None else "none"),
+            EndUserCommandFlowStepView("dispatch", ui_text("flow.step.dispatch", app_language=app_language, fallback_text="Dispatch contract"), "ready" if dispatch.dispatch_allowed else "blocked", dispatch.boundary_target),
+            EndUserCommandFlowStepView("execute", ui_text("flow.step.execute", app_language=app_language, fallback_text="Execution adapter"), "ready" if adapter.execute_allowed else "blocked", adapter.engine_boundary),
+            EndUserCommandFlowStepView("state_change", ui_text("flow.step.state_change", app_language=app_language, fallback_text="UI state change"), "ready" if state_change.apply_allowed else "blocked", state_change.state_change_kind),
         ]
         flows.append(
             EndUserCommandFlowView(
                 flow_id=f"flow:{action_id}",
                 action_id=action_id,
-                user_label=_label_for(action_id),
+                user_label=route.label or _label_for(action_id, app_language=app_language),
                 flow_status=_flow_status(
                     execute_allowed=adapter.execute_allowed,
                     requires_confirmation=route.requires_confirmation,
