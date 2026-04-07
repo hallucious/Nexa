@@ -148,3 +148,162 @@ def test_read_storage_view_model_surfaces_stale_commit_reference_diagnostics() -
     assert vm.diagnostics.stale_reference_count >= 1
     assert vm.diagnostics.lifecycle_warning_count >= 1
     assert vm.diagnostics.last_error_label is not None
+
+
+
+def test_read_storage_view_model_projects_working_save_only_state_without_collapsing_commit_or_run_truth() -> None:
+    vm = read_storage_view_model(_working_save(), latest_commit_snapshot=None, latest_execution_record=None)
+
+    assert vm.active_storage_role == "working_save"
+    assert vm.panel_mode == "draft_focus"
+    assert vm.lifecycle_summary.has_working_save is True
+    assert vm.lifecycle_summary.has_latest_commit_snapshot is False
+    assert vm.lifecycle_summary.has_latest_execution_record is False
+    assert vm.relationship_graph.draft_vs_commit_status == "no_commit"
+    assert any(action.action_type == "compare_draft_to_commit" and action.enabled is False for action in vm.available_actions)
+
+
+
+def test_read_storage_view_model_projects_commit_only_state_as_approved_non_editable_truth() -> None:
+    vm = read_storage_view_model(_commit(), latest_working_save=None, latest_execution_record=None)
+
+    assert vm.active_storage_role == "commit_snapshot"
+    assert vm.panel_mode == "commit_focus"
+    assert vm.lifecycle_summary.current_stage == "approved"
+    assert vm.working_save_card is None
+    assert vm.commit_snapshot_card is not None
+    assert vm.execution_record_card is None
+    assert vm.relationship_graph.draft_vs_commit_status is None
+
+
+
+def test_read_storage_view_model_projects_execution_only_state_as_history_first_without_fabricating_commit_card() -> None:
+    vm = read_storage_view_model(_execution(), latest_working_save=None, latest_commit_snapshot=None)
+
+    assert vm.active_storage_role == "execution_record"
+    assert vm.panel_mode == "execution_focus"
+    assert vm.lifecycle_summary.current_stage == "executed"
+    assert vm.working_save_card is None
+    assert vm.commit_snapshot_card is None
+    assert vm.execution_record_card is not None
+    assert vm.execution_record_card.commit_id == "commit-001"
+
+
+
+def test_read_storage_view_model_projects_lifecycle_overview_from_latest_refs_without_collapsing_role_truth() -> None:
+    vm = read_storage_view_model(
+        None,
+        latest_working_save=_working_save(source_commit_id="commit-001"),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_execution(),
+    )
+
+    assert vm.active_storage_role == "none"
+    assert vm.panel_mode == "lifecycle_overview"
+    assert vm.working_save_card is not None
+    assert vm.commit_snapshot_card is not None
+    assert vm.execution_record_card is not None
+    assert vm.lifecycle_summary.has_working_save is True
+    assert vm.lifecycle_summary.has_latest_commit_snapshot is True
+    assert vm.lifecycle_summary.has_latest_execution_record is True
+
+
+
+def test_read_storage_view_model_surfaces_missing_run_reference_when_working_save_points_to_unloaded_run() -> None:
+    vm = read_storage_view_model(
+        _working_save(source_commit_id="commit-001"),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=None,
+    )
+
+    assert vm.diagnostics.missing_run_ref_count == 1
+    assert vm.execution_record_card is None
+
+
+
+def test_read_storage_view_model_surfaces_missing_commit_reference_when_working_save_points_to_unloaded_commit() -> None:
+    vm = read_storage_view_model(
+        _working_save(),
+        latest_commit_snapshot=None,
+        latest_execution_record=None,
+    )
+
+    assert vm.diagnostics.missing_commit_ref_count == 1
+    assert vm.commit_snapshot_card is None
+
+
+
+def test_read_storage_view_model_surfaces_resume_revalidation_warning_without_collapsing_storage_roles() -> None:
+    working_save = _working_save(source_commit_id="commit-001")
+    working_save = WorkingSaveModel(
+        meta=working_save.meta,
+        circuit=working_save.circuit,
+        resources=working_save.resources,
+        state=working_save.state,
+        runtime=RuntimeModel(
+            status=working_save.runtime.status,
+            validation_summary=working_save.runtime.validation_summary,
+            last_run={**working_save.runtime.last_run, "resume_ready": False},
+            errors=working_save.runtime.errors,
+        ),
+        ui=working_save.ui,
+        designer=working_save.designer,
+    )
+
+    vm = read_storage_view_model(
+        working_save,
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_execution(),
+    )
+
+    assert vm.diagnostics.lifecycle_warning_count >= 1
+    assert vm.diagnostics.last_error_label is not None
+    assert vm.active_storage_role == "working_save"
+    assert vm.commit_snapshot_card is not None
+    assert vm.execution_record_card is not None
+
+
+
+def test_read_storage_view_model_marks_compare_runs_enabled_only_when_second_run_exists() -> None:
+    base_vm = read_storage_view_model(
+        _execution(),
+        latest_working_save=_working_save(source_commit_id="commit-001"),
+        latest_commit_snapshot=_commit(),
+        recent_run_refs=["execution_record:run-001"],
+    )
+    enabled_vm = read_storage_view_model(
+        _execution(),
+        latest_working_save=_working_save(source_commit_id="commit-001"),
+        latest_commit_snapshot=_commit(),
+        recent_run_refs=["execution_record:run-001", "execution_record:run-002"],
+    )
+
+    disabled_action = next(action for action in base_vm.available_actions if action.action_type == "compare_runs")
+    enabled_action = next(action for action in enabled_vm.available_actions if action.action_type == "compare_runs")
+
+    assert disabled_action.enabled is False
+    assert enabled_action.enabled is True
+
+
+
+def test_read_storage_view_model_uses_app_language_from_working_save_ui_metadata_for_storage_labels() -> None:
+    working_save = _working_save(source_commit_id="commit-001")
+    working_save = WorkingSaveModel(
+        meta=working_save.meta,
+        circuit=working_save.circuit,
+        resources=working_save.resources,
+        state=working_save.state,
+        runtime=working_save.runtime,
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+        designer=working_save.designer,
+    )
+
+    vm = read_storage_view_model(
+        working_save,
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_execution(),
+    )
+
+    assert vm.lifecycle_summary.summary_label == "드래프트가 검토 준비 상태입니다"
+    save_action = next(action for action in vm.available_actions if action.action_type == "save_working_save")
+    assert save_action.label == "드래프트 저장"
