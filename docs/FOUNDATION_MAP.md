@@ -97,3 +97,10 @@ They are not part of the active spec YAML set yet, but they are valid supporting
 | nex_parser_validator_branch_rules | docs/specs/formats/nex_parser_validator_branch_rules.md | Supporting | formats |
 | nex_typed_model_spec | docs/specs/formats/nex_typed_model_spec.md | Supporting | formats |
 | nex_load_validate_api_spec | docs/specs/formats/nex_load_validate_api_spec.md | Supporting | formats |
+
+
+## Precision Documentation Governance
+
+- Precision concepts are valid, but they must live in existing best-fit architectural / contract / storage / designer documents.
+- A standalone `docs/specs/precision/` sector is not the long-term canonical documentation shape.
+- When precision semantics evolve, update the existing source-of-truth documents rather than reintroducing a separate precision namespace.

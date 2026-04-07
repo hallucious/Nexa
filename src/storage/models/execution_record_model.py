@@ -99,6 +99,9 @@ class NodeResultCard:
     error_count: int = 0
     trace_ref: Optional[str] = None
     metrics: Optional[dict[str, Any]] = None
+    route_summary: Optional[dict[str, Any]] = None
+    safety_summary: Optional[dict[str, Any]] = None
+    confidence_summary: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.node_id:
@@ -210,6 +213,9 @@ class ExecutionObservabilityModel:
     verifier_summary: Optional[dict[str, Any]] = None
     trace_summary: Optional[str] = None
     observability_refs: Optional[list[str]] = None
+    routing_summary: Optional[dict[str, Any]] = None
+    safety_summary: Optional[dict[str, Any]] = None
+    confidence_summary: Optional[dict[str, Any]] = None
 
 
 @dataclass(frozen=True)

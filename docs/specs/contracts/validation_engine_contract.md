@@ -203,3 +203,15 @@ Engine MUST:
 - Deduplicate rule ids
 - Sort rule ids lexicographically
 - Produce stable JSON structure
+
+## Precision Addendum (v1.1.0)
+The validation engine is the canonical home for the evaluation / verifier layer.
+Verifier semantics MUST therefore include the following precision rules:
+
+1. execution success and quality success are separate states
+2. verification remains structured, machine-actionable, and traceable
+3. structural / logical / requirement / policy / evidence verification modes may coexist
+4. composite verification MUST preserve blocking reason codes and aggregate confidence
+5. verifier outcomes MAY drive retry / reroute / branch / escalate decisions, but MUST NOT silently rewrite node truth
+6. missing evidence or strong disagreement MUST lower aggregate confidence rather than being hidden behind PASS-only semantics
+

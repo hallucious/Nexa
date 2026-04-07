@@ -158,3 +158,22 @@ High-severity risks must block silent auto-commit.
 Designer AI is a proposal-producing design layer.
 It must output normalized intent first.
 No hidden direct savefile mutation is allowed.
+
+## 13. Designer Constraint Integration (v0.2)
+Designer intent normalization now operates under an explicit constraint system.
+That constraint layer MUST keep Designer behavior:
+
+- bounded
+- lintable
+- critiqueable
+- simulation-checkable before commit
+
+At minimum the constraint system may define:
+- allowed node kinds / resource types
+- forbidden structural patterns
+- mandatory verifier requirements on risky paths
+- complexity / depth ceilings
+- pre-review auto-critique findings
+
+Designer remains proposal-producing. The constraint system tightens proposal quality; it does not grant hidden authority.
+

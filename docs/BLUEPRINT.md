@@ -155,19 +155,13 @@ Engine
 
 Current implementation baseline:
 
-* authoritative implementation baseline commit: `62c081d`
-* authoritative verified baseline: `1338 passed, 3 skipped`
-* Subcircuit Batch 1 is closed across parser -> validator -> runtime -> load/write preservation -> Review Bundle example lock
-* Subcircuit Batch 2 core observability / inspectability is implemented at a practical level
-* Designer Session State Card is now a code-backed foundation rather than a spec-only direction
-* Designer proposal control is now connected to session-state persistence and revision history accumulation
-* approval-boundary continuation now feeds persisted clarification / revision context back into later proposal attempts
-* approval-ready patch-applied candidates can now be resumed more explicitly through persisted commit-candidate state
-* successful commit now reduces stale ready-for-commit continuation state into post-commit summary semantics
-* a new Designer request after commit now starts a fresh proposal cycle from the committed baseline instead of inheriting consumed continuation context
-* committed-summary history now has explicit exposure/priority semantics: the latest committed summary is primary, older retained summaries are history-only, and referential requests bias toward latest-only interpretation
-* referential post-commit requests now have a minimal action-resolution policy: safe revert / undo / rollback patterns may auto-resolve into bounded revert actions, while mixed-action requests remain confirmation-bounded and now stop without auto-emitting partial structural actions; mixed cases also carry reason-like mixed-action flags for clarification and are now surfaced into precheck/preview confirmation messaging rather than remaining normalization-only
-* the next rational implementation move is continued Phase 2 control-plane maturation, especially longer-horizon control governance and repeated-cycle interpretation safety
+* authoritative implementation baseline commit: `5d16172`
+* authoritative verified baseline: `1761 passed, 9 skipped`
+* broad precision foundations are now present in the existing engine / contract / designer sectors rather than in a separate precision namespace
+* confidence, budget-aware routing, and safety-gate semantics are now wired into the real provider runtime boundary and projected into execution-record-facing observability summaries
+* execution-record node cards and observability summaries can now surface routing / safety / confidence precision data when runtime trace includes it
+* the precision documentation set has been merged back into existing best-fit architectural / contract / storage documents; a standalone precision sector is no longer the intended long-term documentation shape
+* the next rational implementation move is continued convergence: deeper use of outcome memory / trace intelligence / designer constraints in real downstream consumers, plus cleanup of any residual precision-only duplication
 
 Interpretation rule:
 

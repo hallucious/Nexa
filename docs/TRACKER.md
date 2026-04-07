@@ -258,10 +258,10 @@ CLI
 ### Current Status
 
 ```text
-1338 passed, 3 skipped
+1761 passed, 9 skipped
 ```
 
-* authoritative implementation baseline commit: `62c081d`
+* authoritative implementation baseline commit: `5d16172`
 * SubcircuitNode Batch 1 is closed across the practical lifecycle:
   parse -> validate -> execute -> preserve -> load/write API -> official example lock
 * Subcircuit Batch 2 core observability / inspectability is now implemented at a practical level
@@ -283,7 +283,7 @@ CLI
 
 * formally treat SubcircuitNode Batch 1 as closed unless a new concrete regression is found
 * formally treat Subcircuit Batch 2 core observability as implemented, not as speculative future work
-* sync top-level status docs to the current `62c081d` reality before opening new implementation
+* sync top-level status docs to the current `5d16172` reality before opening new implementation
 * Phase 2 now includes a real Designer control line rather than only a handoff target:
   - retry / fallback control foundation
   - session-state persistence for control results
@@ -373,3 +373,12 @@ CLI
 
 
 - Redirected recent revision threads are archived out of active continuity using `approval_revision_redirect_archived_*` notes and are cleared when a new active revision thread forms.
+
+
+## Precision convergence snapshot
+
+- broad precision foundations were added in the correct existing sectors
+- confidence + budget-aware routing + safety gate are now connected to the real provider execution boundary
+- execution record can now project routing / safety / confidence summaries from runtime trace
+- standalone `docs/specs/precision/` documents were transitional and have been merged into existing docs
+- next cleanup focus: outcome-memory / trace-intelligence / designer-constraint downstream call-site hardening

@@ -157,3 +157,42 @@ Fingerprint MUST be deterministic (canonical JSON + sha256).
 ---
 
 End of AI-PROVIDER v1.1.0
+
+## 13. Budget-Aware Routing Integration (v1.2.0)
+Provider execution MAY be preceded by a deterministic budget-aware routing decision.
+When routing is used, the runtime/provider path MUST preserve these rules:
+
+1. route choice remains policy-bounded and deterministic
+2. the selected provider/model MAY differ from the originally requested default only within the allowed provider/model set
+3. final route choice MUST be logged in execution-facing trace/record surfaces
+4. routing metadata MUST remain explainability data and MUST NOT silently alter regression semantics
+
+Minimum route surfaces when present:
+- `route_decision.selected_provider_id`
+- `route_decision.selected_model_id`
+- `route_decision.selected_route_tier`
+- `route_log.routing_context`
+- `route_log.verifier_contradicted`
+
+## 14. Safety Gate Integration (v1.2.0)
+Provider execution sits behind an engine-owned safety gate boundary.
+The provider path MUST support:
+
+- pre-execution gate evaluation
+- allow / allow_with_review / restrict / block semantics
+- explicit permission-set checks for provider/model/plugin usage
+- blocked execution refusal before the provider call is sent
+
+Gate outcomes MUST remain visible in trace / execution-record surfaces.
+UI may show them, but UI MUST NOT invent or override them.
+
+## 15. Confidence Surface (v1.2.0)
+Provider execution MAY emit a confidence assessment for the provider-side result.
+When present, confidence MUST remain explicit and structured.
+Minimum rule set:
+
+- provider-side confidence MUST cite its basis
+- downstream node confidence MUST not silently reset low-confidence upstream output to high
+- verifier outcomes MAY improve confidence only through explicit propagation/aggregation
+- confidence data is precision metadata, not a hidden success substitute
+

@@ -393,6 +393,81 @@ def _build_artifact_cards(
     return artifact_cards
 
 
+def _normalize_precision_summary(payload: Any) -> dict[str, Any] | None:
+    if isinstance(payload, dict):
+        return _to_json_safe(payload)
+    return None
+
+
+def _extract_precision_from_trace(trace: dict[str, Any] | None) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, dict[str, dict[str, Any]]]:
+    if not isinstance(trace, dict):
+        return None, None, None, {}
+
+    routing_entries = trace.get('routing') if isinstance(trace.get('routing'), list) else []
+    safety_entries = trace.get('safety_gates') if isinstance(trace.get('safety_gates'), list) else []
+    confidence_entries = trace.get('confidence_assessments') if isinstance(trace.get('confidence_assessments'), list) else []
+
+    node_precision: dict[str, dict[str, Any]] = {}
+    node_results = trace.get('node_results') if isinstance(trace.get('node_results'), dict) else {}
+    for node_id, node_result in node_results.items():
+        if not isinstance(node_id, str):
+            continue
+        precision_payload = None
+        if isinstance(node_result, dict):
+            precision_payload = node_result.get('precision')
+            if precision_payload is None:
+                nested_trace = node_result.get('trace') if isinstance(node_result.get('trace'), dict) else {}
+                precision_payload = nested_trace.get('precision')
+        else:
+            precision_payload = getattr(node_result, 'precision', None)
+            if precision_payload is None:
+                node_trace = getattr(node_result, 'trace', None)
+                precision_payload = getattr(node_trace, 'precision', None)
+        if isinstance(precision_payload, dict):
+            node_precision[node_id] = _to_json_safe(precision_payload)
+            routing = precision_payload.get('routing') if isinstance(precision_payload.get('routing'), list) else []
+            safety = precision_payload.get('safety_gates') if isinstance(precision_payload.get('safety_gates'), list) else []
+            confidence = precision_payload.get('confidence_assessments') if isinstance(precision_payload.get('confidence_assessments'), list) else []
+            routing_entries.extend([item for item in routing if isinstance(item, dict)])
+            safety_entries.extend([item for item in safety if isinstance(item, dict)])
+            confidence_entries.extend([item for item in confidence if isinstance(item, dict)])
+            node_confidence = precision_payload.get('node_confidence')
+            if isinstance(node_confidence, dict):
+                confidence_entries.append(node_confidence)
+
+    routing_summary = None
+    if routing_entries:
+        last_route = routing_entries[-1]
+        route_tiers = [item.get('route_decision', {}).get('selected_route_tier') for item in routing_entries if isinstance(item.get('route_decision'), dict)]
+        routing_summary = {
+            'route_count': len(routing_entries),
+            'last_selected_provider_id': ((last_route.get('route_decision') or {}).get('selected_provider_id') if isinstance(last_route.get('route_decision'), dict) else None),
+            'route_tiers': [tier for tier in route_tiers if isinstance(tier, str)],
+        }
+
+    safety_summary = None
+    if safety_entries:
+        statuses = [item.get('status') for item in safety_entries if isinstance(item.get('status'), str)]
+        safety_summary = {
+            'gate_count': len(safety_entries),
+            'statuses': statuses,
+            'blocked': any(status == 'block' for status in statuses),
+        }
+
+    confidence_summary = None
+    if confidence_entries:
+        scores = [float(item.get('confidence_score')) for item in confidence_entries if isinstance(item, dict) and item.get('confidence_score') is not None]
+        node_confidences = [item for item in confidence_entries if isinstance(item, dict) and isinstance(item.get('target_ref'), str) and item.get('target_ref', '').endswith('.output')]
+        confidence_summary = {
+            'assessment_count': len(confidence_entries),
+            'node_confidence_count': len(node_confidences),
+            'max_confidence_score': max(scores) if scores else None,
+            'min_confidence_score': min(scores) if scores else None,
+        }
+
+    return routing_summary, safety_summary, confidence_summary, node_precision
+
+
 def _build_node_result_cards(
     snapshot: ExecutionSnapshot,
     *,
@@ -400,6 +475,7 @@ def _build_node_result_cards(
     event_stream_ref: str | None,
     artifact_ids_by_node: dict[str, list[str]],
     artifact_cards_by_node: dict[str, list[ArtifactRecordCard]],
+    node_precision: dict[str, dict[str, Any]] | None = None,
 ) -> list[NodeResultCard]:
     hash_map = {item.node_id: item for item in snapshot.node_hashes}
     cards: list[NodeResultCard] = []
@@ -425,6 +501,10 @@ def _build_node_result_cards(
                 for code in _collect_verifier_reason_codes(card.payload_preview):
                     if code not in verifier_reason_codes:
                         verifier_reason_codes.append(code)
+        precision_payload = (node_precision or {}).get(span.node_id, {})
+        route_entries = precision_payload.get('routing') if isinstance(precision_payload.get('routing'), list) else []
+        safety_entries = precision_payload.get('safety_gates') if isinstance(precision_payload.get('safety_gates'), list) else []
+        confidence_entries = precision_payload.get('confidence_assessments') if isinstance(precision_payload.get('confidence_assessments'), list) else []
         cards.append(
             NodeResultCard(
                 node_id=span.node_id,
@@ -440,6 +520,9 @@ def _build_node_result_cards(
                 error_count=(1 if span.status == 'failed' else 0) + sum(1 for card in verifier_cards if isinstance(card.payload_preview, dict) and card.payload_preview.get('aggregate_status') == 'fail'),
                 trace_ref=_node_trace_ref(trace_ref, event_stream_ref, span.node_id),
                 metrics=metrics,
+                route_summary=_normalize_precision_summary(route_entries[-1]) if route_entries else None,
+                safety_summary=_normalize_precision_summary(safety_entries[-1]) if safety_entries else None,
+                confidence_summary=_normalize_precision_summary(precision_payload.get('node_confidence') or (confidence_entries[-1] if confidence_entries else None)),
             )
         )
     return cards
@@ -523,6 +606,10 @@ def create_execution_record_from_snapshot(
     plugin_usage_summary: dict[str, Any] | None = None,
     trace_summary: str | None = None,
     observability_refs: list[str] | None = None,
+    routing_summary: dict[str, Any] | None = None,
+    safety_summary: dict[str, Any] | None = None,
+    confidence_summary: dict[str, Any] | None = None,
+    node_precision: dict[str, dict[str, Any]] | None = None,
 ) -> ExecutionRecordModel:
     created = created_at or _iso_now()
     started = started_at or _ms_to_iso(snapshot.timeline.start_ms) or created
@@ -544,6 +631,7 @@ def create_execution_record_from_snapshot(
         event_stream_ref=event_stream_ref,
         artifact_ids_by_node=artifact_ids_by_node,
         artifact_cards_by_node=artifact_cards_by_node,
+        node_precision=node_precision,
     )
     trace_summary_value = trace_summary or f'Execution {snapshot.execution_id} observed {len(snapshot.timeline.node_spans)} node span(s).'
     resolved_observability_refs = _merge_observability_refs(
@@ -614,6 +702,9 @@ def create_execution_record_from_snapshot(
             verifier_summary=_build_verifier_summary(artifact_card_list),
             trace_summary=trace_summary_value,
             observability_refs=resolved_observability_refs,
+            routing_summary=_normalize_precision_summary(routing_summary),
+            safety_summary=_normalize_precision_summary(safety_summary),
+            confidence_summary=_normalize_precision_summary(confidence_summary),
         ),
     )
 
@@ -817,6 +908,7 @@ def create_serialized_execution_record_from_circuit_run(
     trace_ref = f'trace://{resolved_execution_id}' if isinstance(trace, dict) and trace else None
     event_stream_ref = f'events://{resolved_execution_id}' if isinstance(trace, dict) and trace.get('events') else None
     explicit_artifact_refs = _artifact_record_cards_from_raw_artifacts(artifacts, resolved_execution_id)
+    routing_summary, safety_summary, confidence_summary, node_precision = _extract_precision_from_trace(trace)
 
     resolved_paused_run_state = paused_run_state
     if resolved_paused_run_state is None:
@@ -849,6 +941,10 @@ def create_serialized_execution_record_from_circuit_run(
         pause_boundary=_pause_boundary_from_trace(trace, status=record_status),
         paused_run_state=resolved_paused_run_state,
         observability_refs=[item for item in [trace_ref, event_stream_ref] if item],
+        routing_summary=routing_summary,
+        safety_summary=safety_summary,
+        confidence_summary=confidence_summary,
+        node_precision=node_precision,
     )
     return serialize_execution_record(record)
 def create_serialized_execution_record_from_savefile_trace(
@@ -892,6 +988,12 @@ def create_serialized_execution_record_from_savefile_trace(
     record_status = _infer_record_status(status=overall_status)
     raw_artifacts = list(getattr(trace, 'all_artifacts', []) or [])
     explicit_artifact_refs = _artifact_record_cards_from_raw_artifacts(raw_artifacts, run_id)
+    trace_mapping = trace.to_dict() if hasattr(trace, 'to_dict') else None
+    if not isinstance(trace_mapping, dict):
+        trace_mapping = getattr(trace, '__dict__', None)
+    if not isinstance(trace_mapping, dict):
+        trace_mapping = {}
+    routing_summary, safety_summary, confidence_summary, node_precision = _extract_precision_from_trace(trace_mapping)
     errors: list[ExecutionIssue] = []
     for node_id, node_result in node_results.items():
         error_message = getattr(node_result, 'error', None)
@@ -927,6 +1029,10 @@ def create_serialized_execution_record_from_savefile_trace(
         provider_usage_summary={'savefile_name': getattr(getattr(savefile, 'meta', None), 'name', None)},
         trace_summary=f'Savefile trace materialized for {run_id} with {len(node_order)} node(s).',
         observability_refs=[f'trace://{run_id}'],
+        routing_summary=routing_summary,
+        safety_summary=safety_summary,
+        confidence_summary=confidence_summary,
+        node_precision=node_precision,
     )
     return serialize_execution_record(record)
 

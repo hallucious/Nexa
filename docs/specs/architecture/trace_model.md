@@ -368,3 +368,18 @@ Rules:
 - Replay-triggered executions must remain semantically distinct from resumed executions even when pause-style metadata is present in surrounding storage or audit surfaces.
 - Resume readiness must never be inferred from replay trigger semantics alone.
 - `artifact_preview` events must remain explicitly preview-only and must not be interpreted as final artifact truth.
+
+## Precision Trace Enrichment (v1.1.0)
+Trace is the canonical home of trace-intelligence inputs.
+At minimum, precision-enriched trace MAY carry:
+
+- route decisions and route logs
+- safety-gate outcomes
+- confidence assessments and node-confidence propagation results
+- verifier aggregates and blocking reason codes
+- retry / pause / review boundaries
+- branch / merge markers when present
+
+Trace intelligence consumes this evidence to produce failure taxonomy, bottleneck summaries, replay mutation summaries, and run-to-run diff explanations.
+The original run truth remains immutable; enrichment must not rewrite history.
+

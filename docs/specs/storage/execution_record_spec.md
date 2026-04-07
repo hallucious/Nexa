@@ -75,3 +75,16 @@ It is an execution-history artifact, not a replacement for Working Save or Commi
 
 Execution Record is the run-scoped historical artifact of Nexa.
 It captures what actually happened during one execution of one approved structural snapshot.
+
+## 8. Precision Projection Addendum (v0.2)
+Execution Record is the canonical projection surface for runtime-visible precision metadata.
+When precision data exists in runtime trace, execution record MAY project:
+
+- route summaries
+- safety summaries
+- confidence summaries
+- node-level precision summaries
+
+These are observability and audit surfaces.
+They MUST NOT redefine structural truth, approval truth, or baseline gating semantics.
+

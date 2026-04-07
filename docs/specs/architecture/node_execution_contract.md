@@ -96,3 +96,18 @@ Node must map failures to the platform taxonomy (ReasonCode catalog). At minimum
 - AI-directed tool calling (tool-calling) and its guardrails
 - parallel execution semantics
 - distributed execution, sandbox hardening beyond current policy
+
+## 9. Precision Runtime Addendum (v1.1.0)
+The node runtime now owns the first integration boundary for the precision foundations.
+This means:
+
+- provider execution MAY be preceded by budget-aware routing
+- provider/plugin use MAY be pre-checked by an engine-owned safety gate
+- node/runtime trace MAY carry route logs, gate results, and confidence assessments
+- human review pause / resume semantics remain node-bounded and explicit
+- typed artifacts, verifier reports, and confidence artifacts remain append-only outputs
+- branch / merge / outcome-memory concepts remain bounded representation layers rather than free-form execution semantics
+
+These additions MUST NOT collapse Nexa into a fixed prompt → provider → plugin pipeline.
+Execution remains dependency-based.
+
