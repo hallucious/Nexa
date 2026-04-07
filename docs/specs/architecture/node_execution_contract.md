@@ -108,6 +108,7 @@ This means:
 - typed artifacts, verifier reports, and confidence artifacts remain append-only outputs
 - branch / merge remain bounded representation layers rather than free-form execution semantics
 - outcome memory MAY influence routing only as a deterministic soft hint and MAY record post-run success/failure summaries after node completion
+- review-gated resume MAY consume explicit human decision payloads from the caller; when present, those decisions MAY be appended to the human decision registry and emitted as runtime events, but MUST NOT auto-approve silently
 
 These additions MUST NOT collapse Nexa into a fixed prompt → provider → plugin pipeline.
 Execution remains dependency-based.

@@ -164,6 +164,7 @@ Current implementation baseline:
 * outcome memory now participates as a bounded runtime hint / post-run learning store at the node execution boundary
 * execution record now projects a trace-intelligence summary when node-level trace evidence is available
 * designer proposal precheck now consumes the designer constraint lint / auto-critique system instead of leaving it as an isolated helper
+* review-gate resume now supports explicit human decision recording: actor-tagged resume decisions can be appended into the human decision registry and surfaced through runtime events / execution-record observability summaries
 * the next rational implementation move is cleanup of any residual precision-only duplication plus continued audit of under-consumed precision helpers
 
 Interpretation rule:

@@ -382,6 +382,7 @@ CLI
 - execution record can now project routing / safety / confidence summaries from runtime trace
 - standalone `docs/specs/precision/` documents were transitional and have been merged into existing docs
 - outcome memory now provides bounded runtime route-tier hints and post-run success/failure pattern recording at the node boundary
+- review-gate resume can now consume explicit human decision metadata, register it append-only, and project a summarized view into execution-record observability
 - execution record now projects a trace-intelligence summary when trace carries enough node-level evidence
 - designer proposal precheck now surfaces designer-constraint lint / critique findings in the actual proposal flow
 - next cleanup focus: residual duplication cleanup and any remaining under-consumed precision helpers

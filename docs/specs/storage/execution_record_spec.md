@@ -84,6 +84,7 @@ When precision data exists in runtime trace, execution record MAY project:
 - safety summaries
 - confidence summaries
 - node-level precision summaries
+- human decision summaries derived from runtime review-gate decision events
 - trace-intelligence summaries derived from node-level trace evidence
 
 These are observability and audit surfaces.

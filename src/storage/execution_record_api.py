@@ -452,6 +452,48 @@ def _extract_trace_intelligence_summary(
     return report.to_dict()
 
 
+def _extract_human_decision_summary(trace: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(trace, dict):
+        return None
+    events = trace.get('events') if isinstance(trace.get('events'), list) else []
+    decision_events: list[dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        if str(event.get('type') or '').lower() != 'human_decision_recorded':
+            continue
+        payload = event.get('payload') if isinstance(event.get('payload'), dict) else {}
+        decision_events.append(payload)
+    if not decision_events:
+        return None
+
+    decision_types: list[str] = []
+    actor_refs: list[str] = []
+    downstream_actions: list[str] = []
+    target_refs: list[str] = []
+    for payload in decision_events:
+        decision_type = payload.get('decision_type')
+        actor_ref = payload.get('actor_ref')
+        downstream_action = payload.get('downstream_action')
+        target_ref = payload.get('target_ref')
+        if isinstance(decision_type, str) and decision_type and decision_type not in decision_types:
+            decision_types.append(decision_type)
+        if isinstance(actor_ref, str) and actor_ref and actor_ref not in actor_refs:
+            actor_refs.append(actor_ref)
+        if isinstance(downstream_action, str) and downstream_action and downstream_action not in downstream_actions:
+            downstream_actions.append(downstream_action)
+        if isinstance(target_ref, str) and target_ref and target_ref not in target_refs:
+            target_refs.append(target_ref)
+
+    return {
+        'decision_count': len(decision_events),
+        'decision_types': decision_types,
+        'actor_refs': actor_refs,
+        'downstream_actions': downstream_actions,
+        'target_refs': target_refs,
+    }
+
+
 def _extract_precision_from_trace(trace: dict[str, Any] | None) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None, dict[str, dict[str, Any]]]:
     if not isinstance(trace, dict):
         return None, None, None, {}
@@ -664,6 +706,7 @@ def create_execution_record_from_snapshot(
     confidence_summary: dict[str, Any] | None = None,
     node_precision: dict[str, dict[str, Any]] | None = None,
     trace_intelligence_summary: dict[str, Any] | None = None,
+    human_decision_summary: dict[str, Any] | None = None,
 ) -> ExecutionRecordModel:
     created = created_at or _iso_now()
     started = started_at or _ms_to_iso(snapshot.timeline.start_ms) or created
@@ -762,6 +805,7 @@ def create_execution_record_from_snapshot(
             safety_summary=_normalize_precision_summary(safety_summary),
             confidence_summary=_normalize_precision_summary(confidence_summary),
             trace_intelligence_summary=_to_json_safe(trace_intelligence_summary) if trace_intelligence_summary is not None else None,
+            human_decision_summary=_to_json_safe(human_decision_summary) if human_decision_summary is not None else None,
         ),
     )
 
@@ -968,6 +1012,7 @@ def create_serialized_execution_record_from_circuit_run(
     routing_summary, safety_summary, confidence_summary, node_precision = _extract_precision_from_trace(trace)
     trace_refs = [item for item in [trace_ref, event_stream_ref] if item]
     trace_intelligence_summary = _extract_trace_intelligence_summary(trace, run_ref=resolved_execution_id, trace_refs=trace_refs)
+    human_decision_summary = _extract_human_decision_summary(trace)
 
     resolved_paused_run_state = paused_run_state
     if resolved_paused_run_state is None:
@@ -1005,6 +1050,7 @@ def create_serialized_execution_record_from_circuit_run(
         confidence_summary=confidence_summary,
         node_precision=node_precision,
         trace_intelligence_summary=trace_intelligence_summary,
+        human_decision_summary=human_decision_summary,
     )
     return serialize_execution_record(record)
 def create_serialized_execution_record_from_savefile_trace(

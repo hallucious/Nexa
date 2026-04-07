@@ -58,6 +58,12 @@ from src.engine.validation.result import (
 )
 from src.engine.node_execution_runtime import ReviewRequiredPause
 from src.engine.paused_run_state import PausedRunState, PausedRunStateError
+from src.contracts.human_decision_contract import (
+    DownstreamAction,
+    HumanDecisionType,
+    record_human_decision,
+)
+from src.engine.human_decision_registry import HumanDecisionRegistry
 
 
 # ── Cross-node reference extraction ──────────────────────────────────────────
@@ -99,6 +105,7 @@ class ReviewGateResumeRequest:
     source_commit_id: Optional[str] = None
     structure_fingerprint: Optional[str] = None
     execution_surface_fingerprint: Optional[str] = None
+    human_decision_record: Optional[Dict[str, Any]] = None
 
     def to_payload(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -115,6 +122,8 @@ class ReviewGateResumeRequest:
             payload["structure_fingerprint"] = self.structure_fingerprint
         if self.execution_surface_fingerprint:
             payload["execution_surface_fingerprint"] = self.execution_surface_fingerprint
+        if isinstance(self.human_decision_record, dict) and self.human_decision_record:
+            payload["human_decision"] = dict(self.human_decision_record)
         return payload
 
 
@@ -364,10 +373,11 @@ class CircuitRunner:
     delegates to EngineGovernanceOrchestrator). No governance logic is duplicated.
     """
 
-    def __init__(self, runtime, registry):
+    def __init__(self, runtime, registry, human_decision_registry: Optional[HumanDecisionRegistry] = None):
         self.runtime = runtime
         self.registry = registry
         self._policy = ValidationDecisionPolicy()
+        self.human_decision_registry = human_decision_registry or getattr(runtime, "human_decision_registry", None)
 
     def _build_governance_trace(
         self,
@@ -422,6 +432,62 @@ class CircuitRunner:
         emit_fn = getattr(self.runtime, "_emit_event", None)
         if callable(emit_fn):
             emit_fn(event_type, payload, node_id=node_id)
+
+    def _build_resume_human_decision_record(
+        self,
+        raw: Any,
+        *,
+        resume_from_node_id: str,
+        previous_execution_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        if raw is None:
+            return None
+        if not isinstance(raw, dict):
+            raise TypeError("__resume__.human_decision must be a dict when provided")
+
+        decision_type = raw.get("decision_type")
+        actor_ref = raw.get("actor_ref")
+        if not isinstance(decision_type, str) or not decision_type:
+            raise ValueError("__resume__.human_decision.decision_type must be a non-empty string")
+        if not isinstance(actor_ref, str) or not actor_ref:
+            raise ValueError("__resume__.human_decision.actor_ref must be a non-empty string")
+
+        allowed_types = {
+            HumanDecisionType.APPROVE: DownstreamAction.CONTINUE,
+            HumanDecisionType.OVERRIDE_WITH_REASON: DownstreamAction.CONTINUE,
+            HumanDecisionType.REQUEST_REVISION: DownstreamAction.RERUN,
+        }
+        if decision_type not in allowed_types:
+            raise ValueError(
+                "resume human_decision decision_type must be one of: "
+                + ", ".join(sorted(allowed_types))
+            )
+
+        rationale_text = raw.get("rationale_text")
+        if rationale_text is not None and not isinstance(rationale_text, str):
+            raise TypeError("__resume__.human_decision.rationale_text must be a string when provided")
+        selected_option_ref = raw.get("selected_option_ref")
+        if selected_option_ref is not None and not isinstance(selected_option_ref, str):
+            raise TypeError("__resume__.human_decision.selected_option_ref must be a string when provided")
+
+        trace_refs: List[str] = []
+        if isinstance(previous_execution_id, str) and previous_execution_id:
+            trace_refs.append(f"trace://{previous_execution_id}#node:{resume_from_node_id}")
+
+        record = record_human_decision(
+            target_ref=f"node.{resume_from_node_id}.review_gate",
+            decision_type=decision_type,
+            actor_ref=actor_ref,
+            downstream_action=allowed_types[decision_type],
+            trace_refs=trace_refs,
+            rationale_text=rationale_text,
+            selected_option_ref=selected_option_ref,
+        )
+
+        if isinstance(self.human_decision_registry, HumanDecisionRegistry):
+            self.human_decision_registry.register(record)
+
+        return record.to_dict()
 
     # ── Circuit-native structural validation ──────────────────────────────────
 
@@ -702,6 +768,12 @@ class CircuitRunner:
         if not isinstance(reason, str):
             raise TypeError("resume reason must be a string when provided")
 
+        human_decision_record = self._build_resume_human_decision_record(
+            raw.get("human_decision"),
+            resume_from_node_id=resume_from_node_id,
+            previous_execution_id=previous_execution_id,
+        )
+
         return ReviewGateResumeRequest(
             resume_from_node_id=resume_from_node_id,
             previous_execution_id=previous_execution_id,
@@ -712,6 +784,7 @@ class CircuitRunner:
             execution_surface_fingerprint=(
                 execution_surface_fingerprint or current_execution_surface_fingerprint
             ),
+            human_decision_record=human_decision_record,
         )
 
     def _build_resume_nodes(
@@ -881,6 +954,12 @@ class CircuitRunner:
         self._emit_runtime_event("execution_started", started_payload)
         if resume_request is not None:
             self._emit_runtime_event("execution_resumed", resume_request.to_payload())
+            if isinstance(resume_request.human_decision_record, dict):
+                self._emit_runtime_event(
+                    "human_decision_recorded",
+                    dict(resume_request.human_decision_record),
+                    node_id=resume_request.resume_from_node_id,
+                )
 
         execution_failed = False
         execution_error: Optional[Exception] = None
@@ -1142,6 +1221,12 @@ class CircuitRunner:
         self._emit_runtime_event("execution_started", started_payload)
         if resume_request is not None:
             self._emit_runtime_event("execution_resumed", resume_request.to_payload())
+            if isinstance(resume_request.human_decision_record, dict):
+                self._emit_runtime_event(
+                    "human_decision_recorded",
+                    dict(resume_request.human_decision_record),
+                    node_id=resume_request.resume_from_node_id,
+                )
 
         execution_failed = False
         execution_error: Optional[Exception] = None
