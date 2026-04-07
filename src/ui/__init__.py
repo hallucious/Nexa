@@ -13,6 +13,9 @@ from src.ui.runtime_monitoring_workspace import RuntimeMonitoringWorkspaceViewMo
 from src.ui.proposal_commit_workflow import ProposalCommitWorkflowViewModel, read_proposal_commit_workflow_view_model
 from src.ui.execution_launch_workflow import ExecutionLaunchWorkflowViewModel, read_execution_launch_workflow_view_model
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
+from src.ui.command_routing import BuilderCommandRouteView, BuilderCommandRoutingViewModel, read_builder_command_routing_view_model
+from src.ui.interaction_transitions import BuilderInteractionTransitionViewModel, read_builder_interaction_transition_view_model
+from src.ui.builder_interaction_hub import BuilderInteractionHubViewModel, read_builder_interaction_hub_view_model
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
@@ -34,6 +37,10 @@ __all__ = [
     "ProposalCommitWorkflowViewModel",
     "ExecutionLaunchWorkflowViewModel",
     "BuilderWorkflowHubViewModel",
+    "BuilderCommandRouteView",
+    "BuilderCommandRoutingViewModel",
+    "BuilderInteractionTransitionViewModel",
+    "BuilderInteractionHubViewModel",
     "SelectedObjectViewModel",
     "StoragePanelViewModel",
     "TraceTimelineViewerViewModel",
@@ -52,6 +59,9 @@ __all__ = [
     "read_proposal_commit_workflow_view_model",
     "read_execution_launch_workflow_view_model",
     "read_builder_workflow_hub_view_model",
+    "read_builder_command_routing_view_model",
+    "read_builder_interaction_transition_view_model",
+    "read_builder_interaction_hub_view_model",
     "read_selected_object_view_model",
     "read_storage_view_model",
     "read_trace_timeline_view_model",

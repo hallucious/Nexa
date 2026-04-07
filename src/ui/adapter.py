@@ -25,6 +25,9 @@ from src.ui.runtime_monitoring_workspace import RuntimeMonitoringWorkspaceViewMo
 from src.ui.proposal_commit_workflow import ProposalCommitWorkflowViewModel, read_proposal_commit_workflow_view_model
 from src.ui.execution_launch_workflow import ExecutionLaunchWorkflowViewModel, read_execution_launch_workflow_view_model
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
+from src.ui.command_routing import BuilderCommandRoutingViewModel, read_builder_command_routing_view_model
+from src.ui.interaction_transitions import BuilderInteractionTransitionViewModel, read_builder_interaction_transition_view_model
+from src.ui.builder_interaction_hub import BuilderInteractionHubViewModel, read_builder_interaction_hub_view_model
 
 
 @dataclass(frozen=True)
@@ -414,6 +417,80 @@ class NexaUIViewAdapter:
             precheck=precheck,
             preview=preview,
             approval_flow=approval_flow,
+            explanation=explanation,
+        )
+
+
+    def read_builder_command_routing_view_model(
+        self,
+        source,
+        *,
+        action_schema: BuilderActionSchemaView | None = None,
+        workflow_hub: BuilderWorkflowHubViewModel | None = None,
+        coordination_state: BuilderPanelCoordinationStateView | None = None,
+        explanation: str | None = None,
+    ) -> BuilderCommandRoutingViewModel:
+        return read_builder_command_routing_view_model(
+            source,
+            action_schema=action_schema,
+            workflow_hub=workflow_hub,
+            coordination_state=coordination_state,
+            explanation=explanation,
+        )
+
+    def read_builder_interaction_transition_view_model(
+        self,
+        source,
+        *,
+        command_routing: BuilderCommandRoutingViewModel,
+        workflow_hub: BuilderWorkflowHubViewModel | None = None,
+        coordination_state: BuilderPanelCoordinationStateView | None = None,
+        selected_action_id: str | None = None,
+        explanation: str | None = None,
+    ) -> BuilderInteractionTransitionViewModel:
+        return read_builder_interaction_transition_view_model(
+            source,
+            command_routing=command_routing,
+            workflow_hub=workflow_hub,
+            coordination_state=coordination_state,
+            selected_action_id=selected_action_id,
+            explanation=explanation,
+        )
+
+    def read_builder_interaction_hub_view_model(
+        self,
+        source,
+        *,
+        selected_ref: str | None = None,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        preview_overlay: GraphPreviewOverlay | None = None,
+        live_events=None,
+        selected_artifact_id: str | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        selected_action_id: str | None = None,
+        explanation: str | None = None,
+    ) -> BuilderInteractionHubViewModel:
+        return read_builder_interaction_hub_view_model(
+            source,
+            selected_ref=selected_ref,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            preview_overlay=preview_overlay,
+            live_events=live_events,
+            selected_artifact_id=selected_artifact_id,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+            selected_action_id=selected_action_id,
             explanation=explanation,
         )
 

@@ -351,3 +351,40 @@ def test_ui_adapter_routes_builder_workflow_layers_through_stable_boundary() -> 
     assert launch_vm.storage_role == "working_save"
     assert hub_vm.proposal_commit is not None
     assert hub_vm.execution_launch is not None
+
+
+
+def test_ui_adapter_routes_builder_command_and_interaction_layers_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    workflow_hub = adapter.read_builder_workflow_hub_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run(),
+    )
+    command_routing = adapter.read_builder_command_routing_view_model(
+        _working_save(),
+        action_schema=workflow_hub.shell.action_schema,
+        workflow_hub=workflow_hub,
+        coordination_state=workflow_hub.shell.coordination,
+    )
+    interaction_transition = adapter.read_builder_interaction_transition_view_model(
+        _working_save(),
+        command_routing=command_routing,
+        workflow_hub=workflow_hub,
+        coordination_state=workflow_hub.shell.coordination,
+        selected_action_id="run_current",
+    )
+    interaction_hub = adapter.read_builder_interaction_hub_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        selected_action_id="run_current",
+    )
+
+    assert command_routing.source_role == "working_save"
+    assert interaction_transition.target_workspace_id == "runtime_monitoring"
+    assert interaction_hub.command_routing is not None
