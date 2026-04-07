@@ -79,6 +79,7 @@ class DiffSummary:
 
     trace_keys_changed: int = 0
     context_keys_changed: int = 0
+    verification_changes: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -108,6 +109,11 @@ class NodeDiff:
     artifact_ids_removed: List[str] = field(default_factory=list)
     artifact_ids_changed: List[str] = field(default_factory=list)
 
+    left_verifier_status: Optional[str] = None
+    right_verifier_status: Optional[str] = None
+    left_verifier_reason_codes: List[str] = field(default_factory=list)
+    right_verifier_reason_codes: List[str] = field(default_factory=list)
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -135,6 +141,10 @@ class ArtifactDiff:
 
     left_kind: Optional[str] = None
     right_kind: Optional[str] = None
+    left_validation_status: Optional[str] = None
+    right_validation_status: Optional[str] = None
+    left_artifact_schema_version: Optional[str] = None
+    right_artifact_schema_version: Optional[str] = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -157,6 +167,30 @@ class TraceDiff:
 
     scope: str
     key: str
+    change_type: str
+
+    left_value: Any = None
+    right_value: Any = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), ensure_ascii=False)
+
+
+
+
+# ---------------------------------------------------------------------------
+# VerificationDiff
+# ---------------------------------------------------------------------------
+
+@dataclass
+class VerificationDiff:
+    """Records verifier-aware changes between two runs."""
+
+    target_type: str
+    target_id: str
     change_type: str
 
     left_value: Any = None
@@ -217,6 +251,7 @@ class RunDiff:
     artifact_diffs: List[ArtifactDiff] = field(default_factory=list)
     trace_diffs: List[TraceDiff] = field(default_factory=list)
     context_diffs: List[ContextDiff] = field(default_factory=list)
+    verification_diffs: List[VerificationDiff] = field(default_factory=list)
     summary: DiffSummary = field(default_factory=DiffSummary)
 
     def to_dict(self) -> dict[str, Any]:

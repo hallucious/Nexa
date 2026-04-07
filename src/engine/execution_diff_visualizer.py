@@ -49,6 +49,9 @@ class ExecutionDiffVisualizer:
                 if node.metadata_changed:
                     lines.append("  metadata changed")
 
+                if getattr(node, "verifier_changed", False):
+                    lines.append("  verifier changed")
+
                 lines.append("")
 
         # Summary
@@ -61,5 +64,7 @@ class ExecutionDiffVisualizer:
         lines.append(f"added: {summary['added_count']}")
         lines.append(f"removed: {summary['removed_count']}")
         lines.append(f"modified: {summary['modified_count']}")
+        if "verifier_changed_count" in summary:
+            lines.append(f"verifier_changed: {summary['verifier_changed_count']}")
 
         return "\n".join(lines)

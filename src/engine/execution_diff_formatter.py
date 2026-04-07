@@ -28,6 +28,7 @@ def format_diff_summary(diff: RunDiff) -> str:
         f"nodes: added={s.nodes_added} removed={s.nodes_removed} changed={s.nodes_changed}",
         f"artifacts: added={s.artifacts_added} removed={s.artifacts_removed} changed={s.artifacts_changed}",
         f"context_keys_changed: {s.context_keys_changed}",
+        f"verification_changes: {s.verification_changes}",
     ]
     return "\n".join(lines)
 
@@ -284,6 +285,10 @@ def format_diff_details(diff: RunDiff) -> str:
                 lines.append(f"    artifacts removed: {', '.join(nd.artifact_ids_removed)}")
             if nd.artifact_ids_changed:
                 lines.append(f"    artifacts changed: {', '.join(nd.artifact_ids_changed)}")
+            left_verifier = {"status": nd.left_verifier_status, "reason_codes": nd.left_verifier_reason_codes}
+            right_verifier = {"status": nd.right_verifier_status, "reason_codes": nd.right_verifier_reason_codes}
+            if left_verifier != right_verifier and any([nd.left_verifier_status, nd.right_verifier_status, nd.left_verifier_reason_codes, nd.right_verifier_reason_codes]):
+                lines.append(f"    verifier: {left_verifier} -> {right_verifier}")
         sections.append("\n".join(lines))
 
     if diff.artifact_diffs:
@@ -294,12 +299,24 @@ def format_diff_details(diff: RunDiff) -> str:
                 lines.append(f"    hash: {ad.left_hash} -> {ad.right_hash}")
             if ad.left_kind or ad.right_kind:
                 lines.append(f"    kind: {ad.left_kind} -> {ad.right_kind}")
+            if ad.left_validation_status or ad.right_validation_status:
+                lines.append(f"    validation_status: {ad.left_validation_status} -> {ad.right_validation_status}")
+            if ad.left_artifact_schema_version or ad.right_artifact_schema_version:
+                lines.append(f"    artifact_schema_version: {ad.left_artifact_schema_version} -> {ad.right_artifact_schema_version}")
         sections.append("\n".join(lines))
 
     if diff.context_diffs:
         lines = ["Context Changes", "-" * 15]
         for cd in diff.context_diffs:
             lines.append(format_context_value_pair(cd.context_key, cd.left_value, cd.right_value))
+        sections.append("\n".join(lines))
+
+    if diff.verification_diffs:
+        lines = ["Verification Changes", "-" * 20]
+        for vd in diff.verification_diffs:
+            lines.append(f"  [{vd.change_type}] {vd.target_type}:{vd.target_id}")
+            lines.append(f"    left: {vd.left_value}")
+            lines.append(f"    right: {vd.right_value}")
         sections.append("\n".join(lines))
 
     return "\n\n".join(sections)
@@ -329,6 +346,7 @@ def format_diff_json(diff: RunDiff) -> dict:
             "artifacts_changed":     s.artifacts_changed,
             "trace_keys_changed":    s.trace_keys_changed,
             "context_keys_changed":  s.context_keys_changed,
+            "verification_changes": s.verification_changes,
         },
         "nodes": [
             {
@@ -341,6 +359,10 @@ def format_diff_json(diff: RunDiff) -> dict:
                 "artifact_ids_added":    nd.artifact_ids_added,
                 "artifact_ids_removed":  nd.artifact_ids_removed,
                 "artifact_ids_changed":  nd.artifact_ids_changed,
+                "left_verifier_status": nd.left_verifier_status,
+                "right_verifier_status": nd.right_verifier_status,
+                "left_verifier_reason_codes": nd.left_verifier_reason_codes,
+                "right_verifier_reason_codes": nd.right_verifier_reason_codes,
             }
             for nd in diff.node_diffs
         ],
@@ -352,6 +374,10 @@ def format_diff_json(diff: RunDiff) -> dict:
                 "right_hash":   ad.right_hash,
                 "left_kind":    ad.left_kind,
                 "right_kind":   ad.right_kind,
+                "left_validation_status": ad.left_validation_status,
+                "right_validation_status": ad.right_validation_status,
+                "left_artifact_schema_version": ad.left_artifact_schema_version,
+                "right_artifact_schema_version": ad.right_artifact_schema_version,
             }
             for ad in diff.artifact_diffs
         ],
@@ -363,5 +389,15 @@ def format_diff_json(diff: RunDiff) -> dict:
                 "right_value": cd.right_value,
             }
             for cd in diff.context_diffs
+        ],
+        "verification": [
+            {
+                "target_type": vd.target_type,
+                "target_id": vd.target_id,
+                "change_type": vd.change_type,
+                "left_value": vd.left_value,
+                "right_value": vd.right_value,
+            }
+            for vd in diff.verification_diffs
         ],
     }

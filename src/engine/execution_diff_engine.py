@@ -59,6 +59,7 @@ from src.engine.execution_diff_model import (
     NodeDiff,
     RunDiff,
     TraceDiff,
+    VerificationDiff,
 )
 
 
@@ -76,6 +77,10 @@ def _get_artifacts(run: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
 
 def _get_context(run: Dict[str, Any]) -> Dict[str, Any]:
     return dict(run.get("context") or {})
+
+
+def _get_observability(run: Dict[str, Any]) -> Dict[str, Any]:
+    return dict(run.get("observability") or {})
 
 
 def _get_node_artifacts(node: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -117,7 +122,11 @@ def _diff_artifact_maps(
             rh = ra.get("hash")
             lk = la.get("kind")
             rk = ra.get("kind")
-            if lh != rh or lk != rk:
+            lvs = la.get("validation_status")
+            rvs = ra.get("validation_status")
+            lsv = la.get("artifact_schema_version")
+            rsv = ra.get("artifact_schema_version")
+            if lh != rh or lk != rk or lvs != rvs or lsv != rsv:
                 diffs.append(ArtifactDiff(
                     artifact_id=art_id,
                     change_type=CHANGE_TYPE_MODIFIED,
@@ -125,6 +134,10 @@ def _diff_artifact_maps(
                     right_hash=rh,
                     left_kind=lk,
                     right_kind=rk,
+                    left_validation_status=lvs,
+                    right_validation_status=rvs,
+                    left_artifact_schema_version=lsv,
+                    right_artifact_schema_version=rsv,
                 ))
 
     return diffs
@@ -144,6 +157,10 @@ def _diff_node(
     right_deps = right_node.get("dependencies", [])
     left_meta = left_node.get("metadata", {})
     right_meta = right_node.get("metadata", {})
+    left_verifier_status = left_node.get("verifier_status")
+    right_verifier_status = right_node.get("verifier_status")
+    left_verifier_reason_codes = sorted(str(code) for code in (left_node.get("verifier_reason_codes") or []) if code is not None)
+    right_verifier_reason_codes = sorted(str(code) for code in (right_node.get("verifier_reason_codes") or []) if code is not None)
 
     left_art = _get_node_artifacts(left_node)
     right_art = _get_node_artifacts(right_node)
@@ -155,8 +172,9 @@ def _diff_node(
     output_ref_changed = left_node.get("output_ref") != right_node.get("output_ref")
     dep_changed = sorted(left_deps or []) != sorted(right_deps or [])
     meta_changed = (left_meta or {}) != (right_meta or {})
+    verifier_changed = (left_verifier_status, left_verifier_reason_codes) != (right_verifier_status, right_verifier_reason_codes)
 
-    if not (status_changed or output_changed or output_ref_changed or dep_changed or meta_changed or artifact_diffs):
+    if not (status_changed or output_changed or output_ref_changed or dep_changed or meta_changed or verifier_changed or artifact_diffs):
         return None  # unchanged
 
     art_added = [d.artifact_id for d in artifact_diffs if d.change_type == CHANGE_TYPE_ADDED]
@@ -173,6 +191,10 @@ def _diff_node(
         artifact_ids_added=art_added,
         artifact_ids_removed=art_removed,
         artifact_ids_changed=art_changed,
+        left_verifier_status=left_verifier_status,
+        right_verifier_status=right_verifier_status,
+        left_verifier_reason_codes=left_verifier_reason_codes,
+        right_verifier_reason_codes=right_verifier_reason_codes,
     )
 
 
@@ -244,6 +266,66 @@ def _diff_context(
                 left_value=left_ctx[key],
                 right_value=right_ctx[key],
             ))
+
+    return diffs
+
+
+
+
+def _diff_verification(
+    left_run: Dict[str, Any],
+    right_run: Dict[str, Any],
+    node_diffs: List[NodeDiff],
+    artifact_diffs: List[ArtifactDiff],
+) -> List[VerificationDiff]:
+    diffs: List[VerificationDiff] = []
+
+    for nd in node_diffs:
+        left_payload = {
+            "status": nd.left_verifier_status,
+            "reason_codes": list(nd.left_verifier_reason_codes),
+        }
+        right_payload = {
+            "status": nd.right_verifier_status,
+            "reason_codes": list(nd.right_verifier_reason_codes),
+        }
+        if left_payload != right_payload and any([left_payload["status"], right_payload["status"], left_payload["reason_codes"], right_payload["reason_codes"]]):
+            diffs.append(VerificationDiff(
+                target_type="node",
+                target_id=nd.node_id,
+                change_type=CHANGE_TYPE_MODIFIED,
+                left_value=left_payload,
+                right_value=right_payload,
+            ))
+
+    for ad in artifact_diffs:
+        left_payload = {
+            "validation_status": ad.left_validation_status,
+            "artifact_schema_version": ad.left_artifact_schema_version,
+        }
+        right_payload = {
+            "validation_status": ad.right_validation_status,
+            "artifact_schema_version": ad.right_artifact_schema_version,
+        }
+        if left_payload != right_payload and any([left_payload["validation_status"], right_payload["validation_status"], left_payload["artifact_schema_version"], right_payload["artifact_schema_version"]]):
+            diffs.append(VerificationDiff(
+                target_type="artifact",
+                target_id=ad.artifact_id,
+                change_type=CHANGE_TYPE_MODIFIED,
+                left_value=left_payload,
+                right_value=right_payload,
+            ))
+
+    left_summary = (_get_observability(left_run).get("verifier_summary") if isinstance(_get_observability(left_run).get("verifier_summary"), dict) else _get_observability(left_run).get("verifier_summary"))
+    right_summary = (_get_observability(right_run).get("verifier_summary") if isinstance(_get_observability(right_run).get("verifier_summary"), dict) else _get_observability(right_run).get("verifier_summary"))
+    if left_summary != right_summary and (left_summary is not None or right_summary is not None):
+        diffs.append(VerificationDiff(
+            target_type="run",
+            target_id="verifier_summary",
+            change_type=CHANGE_TYPE_MODIFIED,
+            left_value=left_summary,
+            right_value=right_summary,
+        ))
 
     return diffs
 
@@ -323,6 +405,8 @@ def compare_runs(
     right_ctx = _get_context(right_run)
     context_diffs = _diff_context(left_ctx, right_ctx)
 
+    verification_diffs = _diff_verification(left_run, right_run, node_diffs, artifact_diffs)
+
     output_changed_node_ids = _extract_changed_node_ids_from_context_diffs(context_diffs)
     output_only_node_ids = sorted(output_changed_node_ids - structural_changed_node_ids - set_left.symmetric_difference(set_right))
 
@@ -343,10 +427,11 @@ def compare_runs(
         artifacts_removed=sum(1 for a in artifact_diffs if a.change_type == CHANGE_TYPE_REMOVED),
         artifacts_changed=sum(1 for a in artifact_diffs if a.change_type == CHANGE_TYPE_MODIFIED),
         context_keys_changed=len(context_diffs),
+        verification_changes=len(verification_diffs),
     )
 
     any_change = bool(
-        node_diffs or artifact_diffs or context_diffs
+        node_diffs or artifact_diffs or context_diffs or verification_diffs
     )
     status = RUN_DIFF_STATUS_CHANGED if any_change else RUN_DIFF_STATUS_IDENTICAL
 
@@ -357,5 +442,6 @@ def compare_runs(
         node_diffs=node_diffs,
         artifact_diffs=artifact_diffs,
         context_diffs=context_diffs,
+        verification_diffs=verification_diffs,
         summary=summary,
     )

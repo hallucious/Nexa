@@ -836,6 +836,8 @@ def _snapshot_from_execution_record_payload(execution_record: dict) -> dict | No
         artifact_map[str(item["artifact_id"])] = {
             "hash": item.get("hash"),
             "kind": item.get("artifact_type"),
+            "validation_status": item.get("validation_status"),
+            "artifact_schema_version": item.get("artifact_schema_version"),
         }
 
     nodes: dict[str, dict] = {}
@@ -847,10 +849,15 @@ def _snapshot_from_execution_record_payload(execution_record: dict) -> dict | No
         node_id = str(item["node_id"])
         output_preview = item.get("output_preview")
         artifact_ids = item.get("artifact_refs") if isinstance(item.get("artifact_refs"), list) else []
+        typed_artifact_ids = item.get("typed_artifact_refs") if isinstance(item.get("typed_artifact_refs"), list) else []
+        merged_artifact_ids = [artifact_id for artifact_id in [*artifact_ids, *typed_artifact_ids] if artifact_id in artifact_map]
         nodes[node_id] = {
             "status": item.get("status"),
             "output": output_preview,
-            "artifacts": {artifact_id: artifact_map[artifact_id] for artifact_id in artifact_ids if artifact_id in artifact_map},
+            "artifacts": {artifact_id: artifact_map[artifact_id] for artifact_id in merged_artifact_ids if artifact_id in artifact_map},
+            "verifier_status": item.get("verifier_status"),
+            "verifier_reason_codes": item.get("verifier_reason_codes") if isinstance(item.get("verifier_reason_codes"), list) else [],
+            "typed_artifact_refs": typed_artifact_ids,
         }
         context[f"{node_id}.output"] = output_preview
 
@@ -863,11 +870,17 @@ def _snapshot_from_execution_record_payload(execution_record: dict) -> dict | No
     if not nodes and not context and not artifact_map:
         return None
 
+    observability_payload = execution_record.get("observability") if isinstance(execution_record.get("observability"), dict) else {}
+    observability = {}
+    if observability_payload.get("verifier_summary") is not None:
+        observability["verifier_summary"] = observability_payload.get("verifier_summary")
+
     return {
         "run_id": run_id,
         "nodes": nodes,
         "artifacts": artifact_map,
         "context": context,
+        "observability": observability,
     }
 
 
@@ -891,7 +904,13 @@ def _normalize_run_output_to_snapshot(raw: dict) -> dict:
             "nodes": raw.get("nodes") or {},
             "artifacts": raw.get("artifacts") if isinstance(raw.get("artifacts"), dict) else {},
             "context": raw.get("context") if isinstance(raw.get("context"), dict) else {},
+            "observability": raw.get("observability") if isinstance(raw.get("observability"), dict) else {},
         }
+
+    explicit_execution_record = raw.get("execution_record") if isinstance(raw.get("execution_record"), dict) else {}
+    snapshot = _snapshot_from_execution_record_payload(explicit_execution_record)
+    if snapshot is not None:
+        return snapshot
 
     components = create_serialized_execution_artifact_components(raw)
     execution_record = components.get("execution_record")
@@ -932,6 +951,7 @@ def _normalize_run_output_to_snapshot(raw: dict) -> dict:
         "nodes": nodes,
         "artifacts": {},
         "context": context,
+        "observability": {},
     }
 
 
