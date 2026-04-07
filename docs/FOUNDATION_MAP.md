@@ -1,6 +1,6 @@
 # FOUNDATION_MAP
 
-Version: 1.4.1
+Version: 1.5.0
 
 ## Purpose
 
@@ -29,6 +29,7 @@ It serves two roles:
 | execution_rules | docs/architecture/EXECUTION_RULES.md | Active | derived execution rules |
 | tracker | docs/TRACKER.md | Active | implementation tracker, release snapshot, and next steps |
 | development | docs/DEVELOPMENT.md | Active | development workflow |
+| current_state | docs/status/CURRENT_STATE.md | Supporting | repository status snapshot and sector truth matrix |
 
 ---
 

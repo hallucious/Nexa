@@ -6,7 +6,7 @@ Version: 3.0.0
 
 ## Completed Steps
 
-## Release Snapshot (runtime convergence baseline)
+## Release Snapshot (current convergence baseline)
 
 The current repository state includes the following implemented surface:
 
@@ -45,7 +45,16 @@ The current repository state includes the following implemented surface:
 * deletion of remaining legacy nex contract support files (`nex_format`, `nex_serializer`, `nex_validator`)
 * deletion of legacy `.nex` reverse-conversion / writer surface (`build_nex_from_engine`, `serialize_nex`, `save_nex_file`)
 
-### 4. Diff / Replay / Audit Tooling
+### 4. Storage / Savefile Lifecycle
+
+* role-aware `.nex` storage with `working_save` and `commit_snapshot` as official `.nex` roles
+* Execution Record treated as the run-history layer rather than a savefile role
+* canonical savefile lifecycle entry points across create / serialize / load / validate
+* storage semantics owned by storage/lifecycle APIs rather than CLI/export/replay path-local interpretation
+* subcircuit-preserving save/load roundtrip support
+* subcircuit loader / validator / runtime support present in baseline code and tests
+
+### 5. Diff / Replay / Audit Tooling
 
 * run comparison
 * execution diff formatting
@@ -55,29 +64,29 @@ The current repository state includes the following implemented surface:
 * determinism / provenance tooling
 * alignment-based diff contracts present in tests
 
-### 5. Public Demo Baseline
+### 6. UI / Editor Foundation
 
-* only `examples/real_ai_bug_autopsy_multinode/` remains as the official demo
+* adapter / view-model boundary implemented across the UI sector
+* Core 5 module view-model surfaces present: Graph / Inspector / Validation / Execution / Designer
+* expanded view-model surfaces present: Trace / Timeline / Artifact / Storage / Diff
+* builder shell / workflow / interaction / dispatch / execution-adapter / end-user-flow hub surfaces present
+* workspace-level surfaces present: visual editor / runtime monitoring / node configuration
+* UI-owned persistence boundary and `.nex.ui` rules are reflected in code and tests
+* storage-role distinctions are projected into UI-facing models rather than collapsed away
 
-### 6. Designer Control Plane
+### 7. UI Internationalization / Localization
+
+* shared UI language resolution and localized message lookup foundation
+* English / Korean resource support in the baseline UI layer
+* i18n persistence boundary locked so UI language remains Working Save-side UI-owned state
+* canonical snapshot-side `ui` state remains excluded from approved structural truth
+* panel, workflow, workspace, shell, and hub-level localized display projection substantially retrofitted
+
+### 8. Designer Control Plane
 
 * explicit reopened-from-redirect continuity origin is now preserved across active recent-history reuse rather than flattened into ordinary recent continuity
 * if a reopened older thread is later replaced by a newer active revision thread, reopened-origin continuity is now cleared and reduced into low-priority replacement context instead of continuing to control nearby continuity as if the older reopened thread were still active
 * obsolete demo-coupled tests were removed to keep the suite aligned with the retained demo set
-
-### 6. Current Verified Baseline
-
-```text
-1354 passed, 3 skipped
-```
-
-* authoritative storage/runtime durability baseline commit: `8fef812`
-* root `README.md` and `docs/CONTRIBUTING.md` were polished for GitHub release readiness
-* canonical savefile lifecycle entry points exist across create / serialize / load / validate
-* bounded CLI savefile surface remains intact
-* role-aware `.nex` storage is now part of the active storage architecture, with `working_save` and `commit_snapshot` treated as official `.nex` roles and Execution Record treated as the run-history layer
-* storage semantics are owned by storage/lifecycle APIs rather than CLI/export/replay path-local interpretation
-* current storage-sector state is final hardening + spec ↔ implementation sync, not future-only foundation work
 * mixed referential rollback+edit requests now surface explicit confirmation reasons through Designer precheck/preview instead of living only inside request normalization
 * repeated referential confirmation loops now raise a persisted control-governance policy tier, and that tier is surfaced back through Designer precheck/preview as explicit anchor-required guidance rather than remaining notes-only state
 * pending governance anchor-carryover is now cleared once a later referential retry satisfies the stronger-anchor requirement, instead of lingering indefinitely as stale continuity pressure
@@ -85,6 +94,16 @@ The current repository state includes the following implemented surface:
 * when a redirected older scope is explicitly reopened, rebuilt session cards and request normalization now mark that thread as a restored multi-step continuity path rather than treating it like ordinary nearby recent history
 * cleared governance carryover is now reusable as low-priority recent-resolution context for later referential follow-up requests, while non-referential follow-up hides it and any new unresolved governance revision clears the old resolution history
 * low-priority recent-resolution governance context now expires after one nearby follow-up cycle; once consumed, it should be dropped rather than lingering indefinitely as stale low-priority history
+
+### 9. Current Verified Baseline
+
+```text
+1806 passed, 9 skipped
+```
+
+* authoritative implementation baseline commit: `d11e80c`
+* current repository state is no longer “UI not started”; it is UI foundation + i18n convergence + storage/designer boundary locking + remaining product-flow integration work
+* the main near-term risk is documentation/status drift, not absence of UI foundation code
 
 ---
 

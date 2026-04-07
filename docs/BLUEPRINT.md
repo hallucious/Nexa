@@ -136,7 +136,7 @@ They are important for UI architecture continuity, but they are **not** yet part
 
 * `docs/specs/ui/ui_architecture_package.md`
 * `docs/specs/ui/ui_adapter_view_model_contract.md`
-* `docs/specs/ui/graph_workspace_view_model_spce.md`
+* `docs/specs/ui/graph_workspace_view_model_spec.md`
 * `docs/specs/ui/inspector_panel_view_model_spec.md`
 * `docs/specs/ui/validation_panel_view_model_spec.md`
 * `docs/specs/ui/execution_panel_view_model_spec.md`
@@ -203,11 +203,14 @@ Engine
 
 Current implementation baseline:
 
-* authoritative implementation baseline commit: `46b4df3`
-* authoritative verified baseline: `1771 passed, 9 skipped`
+* authoritative implementation baseline commit: `d11e80c`
+* authoritative verified baseline: `1806 passed, 9 skipped`
 * broad precision foundations are now present in the existing engine / contract / designer sectors rather than in a separate precision namespace
 * confidence, budget-aware routing, and safety-gate semantics are now wired into the real provider runtime boundary and projected into execution-record-facing observability summaries
 * execution-record node cards and observability summaries can now surface routing / safety / confidence precision data when runtime trace includes it
+* UI adapter / view-model foundation is now broadly implemented across panel, workspace, shell, and hub surfaces
+* UI-owned storage persistence and commit-boundary stripping are now code-backed and regression-backed rather than doc-only direction
+* UI i18n foundation is present, and major user-facing surfaces now resolve through the shared localization layer for English/Korean
 * the precision documentation set has been merged back into existing best-fit architectural / contract / storage documents; a standalone precision sector is no longer the intended long-term documentation shape
 * verifier follow-up branch candidates are now projected as bounded branch records and surfaced into execution-record observability rather than remaining an unused contract surface
 
