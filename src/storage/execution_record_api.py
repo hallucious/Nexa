@@ -505,6 +505,61 @@ def _extract_branch_summary(trace: dict[str, Any] | None) -> dict[str, Any] | No
     }
 
 
+def _extract_merge_summary(trace: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(trace, dict):
+        return None
+    events = trace.get('events') if isinstance(trace.get('events'), list) else []
+    merge_events: list[dict[str, Any]] = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        if str(event.get('type') or '').lower() != 'merge_result_declared':
+            continue
+        payload = event.get('payload') if isinstance(event.get('payload'), dict) else {}
+        merge_events.append(payload)
+    if not merge_events:
+        return None
+
+    merge_ids: list[str] = []
+    selected_branch_ids: list[str] = []
+    discarded_branch_ids: list[str] = []
+    policies: list[str] = []
+    target_refs: list[str] = []
+    decision_types: list[str] = []
+    for payload in merge_events:
+        merge_result = payload.get('merge_result') if isinstance(payload.get('merge_result'), dict) else {}
+        merge_id = merge_result.get('merge_id')
+        selected_branch_id = merge_result.get('selected_branch_id')
+        target_ref = payload.get('target_ref')
+        decision_type = payload.get('decision_type')
+        merge_policy = merge_result.get('merge_policy') if isinstance(merge_result.get('merge_policy'), dict) else {}
+        strategy = merge_policy.get('strategy')
+        discarded = merge_result.get('discarded_branch_ids') if isinstance(merge_result.get('discarded_branch_ids'), list) else []
+        if isinstance(merge_id, str) and merge_id and merge_id not in merge_ids:
+            merge_ids.append(merge_id)
+        if isinstance(selected_branch_id, str) and selected_branch_id and selected_branch_id not in selected_branch_ids:
+            selected_branch_ids.append(selected_branch_id)
+        if isinstance(target_ref, str) and target_ref and target_ref not in target_refs:
+            target_refs.append(target_ref)
+        if isinstance(decision_type, str) and decision_type and decision_type not in decision_types:
+            decision_types.append(decision_type)
+        if isinstance(strategy, str) and strategy and strategy not in policies:
+            policies.append(strategy)
+        for branch_id in discarded:
+            if isinstance(branch_id, str) and branch_id and branch_id not in discarded_branch_ids:
+                discarded_branch_ids.append(branch_id)
+
+    return {
+        'merge_count': len(merge_events),
+        'merge_ids': merge_ids,
+        'selected_branch_ids': selected_branch_ids,
+        'discarded_branch_ids': discarded_branch_ids,
+        'policies': policies,
+        'target_refs': target_refs,
+        'decision_types': decision_types,
+    }
+
+
 def _extract_human_decision_summary(trace: dict[str, Any] | None) -> dict[str, Any] | None:
     if not isinstance(trace, dict):
         return None
@@ -761,6 +816,7 @@ def create_execution_record_from_snapshot(
     trace_intelligence_summary: dict[str, Any] | None = None,
     human_decision_summary: dict[str, Any] | None = None,
     branch_summary: dict[str, Any] | None = None,
+    merge_summary: dict[str, Any] | None = None,
 ) -> ExecutionRecordModel:
     created = created_at or _iso_now()
     started = started_at or _ms_to_iso(snapshot.timeline.start_ms) or created
@@ -861,6 +917,7 @@ def create_execution_record_from_snapshot(
             trace_intelligence_summary=_to_json_safe(trace_intelligence_summary) if trace_intelligence_summary is not None else None,
             human_decision_summary=_to_json_safe(human_decision_summary) if human_decision_summary is not None else None,
             branch_summary=_to_json_safe(branch_summary) if branch_summary is not None else None,
+            merge_summary=_to_json_safe(merge_summary) if merge_summary is not None else None,
         ),
     )
 
@@ -1069,6 +1126,7 @@ def create_serialized_execution_record_from_circuit_run(
     trace_intelligence_summary = _extract_trace_intelligence_summary(trace, run_ref=resolved_execution_id, trace_refs=trace_refs)
     human_decision_summary = _extract_human_decision_summary(trace)
     branch_summary = _extract_branch_summary(trace)
+    merge_summary = _extract_merge_summary(trace)
 
     resolved_paused_run_state = paused_run_state
     if resolved_paused_run_state is None:
@@ -1108,6 +1166,7 @@ def create_serialized_execution_record_from_circuit_run(
         trace_intelligence_summary=trace_intelligence_summary,
         human_decision_summary=human_decision_summary,
         branch_summary=branch_summary,
+        merge_summary=merge_summary,
     )
     return serialize_execution_record(record)
 def create_serialized_execution_record_from_savefile_trace(

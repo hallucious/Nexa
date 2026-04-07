@@ -104,3 +104,10 @@ They are not part of the active spec YAML set yet, but they are valid supporting
 - Precision concepts are valid, but they must live in existing best-fit architectural / contract / storage / designer documents.
 - A standalone `docs/specs/precision/` sector is not the long-term canonical documentation shape.
 - When precision semantics evolve, update the existing source-of-truth documents rather than reintroducing a separate precision namespace.
+
+
+## Precision Closeout Status
+
+- Precision-era foundations should now be treated as converged into the canonical engine / contract / storage / designer documents.
+- New work in this area should prefer cleanup, deduplication, and stronger contract tests over additional precision-branded subsystems.
+- Do not recreate a standalone precision documentation sector.

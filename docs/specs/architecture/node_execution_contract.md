@@ -111,6 +111,7 @@ This means:
 
 - outcome memory MAY influence routing only as a deterministic soft hint and MAY record post-run success/failure summaries after node completion
 - review-gated resume MAY consume explicit human decision payloads from the caller; when present, those decisions MAY be appended to the human decision registry and emitted as runtime events, but MUST NOT auto-approve silently
+- explicit human branch/merge choices at the review-gate boundary MAY be translated into bounded branch/merge declaration events for observability purposes, but MUST NOT promote Nexa into a free-form branching/merging execution engine
 
 These additions MUST NOT collapse Nexa into a fixed prompt → provider → plugin pipeline.
 Execution remains dependency-based.

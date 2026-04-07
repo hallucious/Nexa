@@ -261,7 +261,7 @@ CLI
 1761 passed, 9 skipped
 ```
 
-* authoritative implementation baseline commit: `5d16172`
+* authoritative implementation baseline commit: `46b4df3`
 * SubcircuitNode Batch 1 is closed across the practical lifecycle:
   parse -> validate -> execute -> preserve -> load/write API -> official example lock
 * Subcircuit Batch 2 core observability / inspectability is now implemented at a practical level
@@ -385,6 +385,7 @@ CLI
 
 - outcome memory now provides bounded runtime route-tier hints and post-run success/failure pattern recording at the node boundary
 - review-gate resume can now consume explicit human decision metadata, register it append-only, and project a summarized view into execution-record observability
+- explicit human merge choices at review-gate resume can now be materialized as bounded merge-result declarations and projected into execution-record observability
 - execution record now projects a trace-intelligence summary when trace carries enough node-level evidence
 - designer proposal precheck now surfaces designer-constraint lint / critique findings in the actual proposal flow
-- next cleanup focus: residual duplication cleanup and any remaining under-consumed precision helpers
+- precision closeout status: branch/merge now both have bounded downstream consumers; remaining work is cleanup of duplicated semantics / stale helpers, not new precision feature expansion

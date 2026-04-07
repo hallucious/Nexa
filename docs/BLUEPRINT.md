@@ -155,8 +155,8 @@ Engine
 
 Current implementation baseline:
 
-* authoritative implementation baseline commit: `5d16172`
-* authoritative verified baseline: `1761 passed, 9 skipped`
+* authoritative implementation baseline commit: `46b4df3`
+* authoritative verified baseline: `1771 passed, 9 skipped`
 * broad precision foundations are now present in the existing engine / contract / designer sectors rather than in a separate precision namespace
 * confidence, budget-aware routing, and safety-gate semantics are now wired into the real provider runtime boundary and projected into execution-record-facing observability summaries
 * execution-record node cards and observability summaries can now surface routing / safety / confidence precision data when runtime trace includes it
@@ -167,7 +167,8 @@ Current implementation baseline:
 * execution record now projects a trace-intelligence summary when node-level trace evidence is available
 * designer proposal precheck now consumes the designer constraint lint / auto-critique system instead of leaving it as an isolated helper
 * review-gate resume now supports explicit human decision recording: actor-tagged resume decisions can be appended into the human decision registry and surfaced through runtime events / execution-record observability summaries
-* the next rational implementation move is cleanup of any residual precision-only duplication plus continued audit of under-consumed precision helpers
+* review-gate resume may now turn explicit human merge choices into bounded merge-result declarations, emitted as runtime events and projected into execution-record observability without introducing free-form merge execution semantics
+* precision closeout status: all originally introduced precision-era foundations now have at least one bounded real downstream consumer; remaining work is simplification / cleanup rather than new precision subsystem growth
 
 Interpretation rule:
 

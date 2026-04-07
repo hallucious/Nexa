@@ -85,6 +85,7 @@ When precision data exists in runtime trace, execution record MAY project:
 - confidence summaries
 - node-level precision summaries
 - human decision summaries derived from runtime review-gate decision events
+- merge summaries derived from bounded merge-result declaration events when explicit human merge decisions are surfaced at a review boundary
 - trace-intelligence summaries derived from node-level trace evidence
 - branch summaries derived from bounded branch-candidate declaration events
 

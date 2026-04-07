@@ -64,6 +64,7 @@ from src.contracts.human_decision_contract import (
     record_human_decision,
 )
 from src.engine.human_decision_registry import HumanDecisionRegistry
+from src.contracts.branch_contract import MergePolicy, MergeResult, MergeStrategy
 
 
 # ── Cross-node reference extraction ──────────────────────────────────────────
@@ -106,6 +107,7 @@ class ReviewGateResumeRequest:
     structure_fingerprint: Optional[str] = None
     execution_surface_fingerprint: Optional[str] = None
     human_decision_record: Optional[Dict[str, Any]] = None
+    merge_result_record: Optional[Dict[str, Any]] = None
 
     def to_payload(self) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
@@ -124,6 +126,8 @@ class ReviewGateResumeRequest:
             payload["execution_surface_fingerprint"] = self.execution_surface_fingerprint
         if isinstance(self.human_decision_record, dict) and self.human_decision_record:
             payload["human_decision"] = dict(self.human_decision_record)
+        if isinstance(self.merge_result_record, dict) and self.merge_result_record:
+            payload["merge_result"] = dict(self.merge_result_record)
         return payload
 
 
@@ -456,6 +460,8 @@ class CircuitRunner:
             HumanDecisionType.APPROVE: DownstreamAction.CONTINUE,
             HumanDecisionType.OVERRIDE_WITH_REASON: DownstreamAction.CONTINUE,
             HumanDecisionType.REQUEST_REVISION: DownstreamAction.RERUN,
+            HumanDecisionType.CHOOSE_BRANCH: DownstreamAction.BRANCH,
+            HumanDecisionType.CHOOSE_MERGE: DownstreamAction.MERGE,
         }
         if decision_type not in allowed_types:
             raise ValueError(
@@ -488,6 +494,69 @@ class CircuitRunner:
             self.human_decision_registry.register(record)
 
         return record.to_dict()
+
+    def _build_resume_merge_result_record(
+        self,
+        raw: Any,
+        *,
+        resume_from_node_id: str,
+        previous_execution_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(raw, dict):
+            return None
+
+        decision_type = raw.get("decision_type")
+        if decision_type not in {HumanDecisionType.CHOOSE_BRANCH, HumanDecisionType.CHOOSE_MERGE}:
+            return None
+
+        selected_option_ref = raw.get("selected_option_ref")
+        if not isinstance(selected_option_ref, str) or not selected_option_ref:
+            return None
+
+        candidate_branch_ids = raw.get("candidate_branch_ids")
+        if not isinstance(candidate_branch_ids, list):
+            return None
+        normalized_candidate_ids: List[str] = []
+        for item in candidate_branch_ids:
+            if not isinstance(item, str) or not item:
+                raise TypeError("__resume__.human_decision.candidate_branch_ids entries must be non-empty strings")
+            if item not in normalized_candidate_ids:
+                normalized_candidate_ids.append(item)
+        if len(normalized_candidate_ids) < 2:
+            return None
+        if selected_option_ref not in normalized_candidate_ids:
+            raise ValueError("__resume__.human_decision.selected_option_ref must be present in candidate_branch_ids")
+
+        policy = MergePolicy(
+            policy_id="review_gate_human_merge",
+            strategy=MergeStrategy.HUMAN_CHOICE,
+            conflict_action="escalate",
+            require_human_on_tie=False,
+        )
+        discarded = [branch_id for branch_id in normalized_candidate_ids if branch_id != selected_option_ref]
+        explanation = (
+            f"review_gate_human_merge selected={selected_option_ref}; "
+            f"discarded={len(discarded)}; source={resume_from_node_id}"
+        )
+        result = MergeResult(
+            merge_id=str(uuid.uuid4()),
+            selected_branch_id=selected_option_ref,
+            discarded_branch_ids=discarded,
+            merge_policy=policy,
+            conflict_detected=False,
+            requires_human_decision=False,
+            merged_artifact_refs=[],
+            explanation=explanation,
+        )
+        payload = {
+            "merge_result": result.to_dict(),
+            "target_ref": f"node.{resume_from_node_id}.review_gate",
+            "decision_type": decision_type,
+            "selected_option_ref": selected_option_ref,
+            "candidate_branch_ids": normalized_candidate_ids,
+            "previous_execution_id": previous_execution_id,
+        }
+        return payload
 
     # ── Circuit-native structural validation ──────────────────────────────────
 
@@ -774,6 +843,12 @@ class CircuitRunner:
             previous_execution_id=previous_execution_id,
         )
 
+        merge_result_record = self._build_resume_merge_result_record(
+            raw.get("human_decision"),
+            resume_from_node_id=resume_from_node_id,
+            previous_execution_id=previous_execution_id,
+        )
+
         return ReviewGateResumeRequest(
             resume_from_node_id=resume_from_node_id,
             previous_execution_id=previous_execution_id,
@@ -785,6 +860,7 @@ class CircuitRunner:
                 execution_surface_fingerprint or current_execution_surface_fingerprint
             ),
             human_decision_record=human_decision_record,
+            merge_result_record=merge_result_record,
         )
 
     def _build_resume_nodes(
@@ -958,6 +1034,12 @@ class CircuitRunner:
                 self._emit_runtime_event(
                     "human_decision_recorded",
                     dict(resume_request.human_decision_record),
+                    node_id=resume_request.resume_from_node_id,
+                )
+            if isinstance(resume_request.merge_result_record, dict):
+                self._emit_runtime_event(
+                    "merge_result_declared",
+                    dict(resume_request.merge_result_record),
                     node_id=resume_request.resume_from_node_id,
                 )
 
@@ -1225,6 +1307,12 @@ class CircuitRunner:
                 self._emit_runtime_event(
                     "human_decision_recorded",
                     dict(resume_request.human_decision_record),
+                    node_id=resume_request.resume_from_node_id,
+                )
+            if isinstance(resume_request.merge_result_record, dict):
+                self._emit_runtime_event(
+                    "merge_result_declared",
+                    dict(resume_request.merge_result_record),
                     node_id=resume_request.resume_from_node_id,
                 )
 
