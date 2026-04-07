@@ -46,6 +46,12 @@ def _trigger_line(regression: object) -> str:
     if isinstance(regression, ContextRegression):
         return f"Trigger: context {regression.context_key} ({regression.reason_code}, {regression.severity})"
     if isinstance(regression, VerificationRegression):
+        detail_codes = list(regression.right_reason_codes) or list(regression.left_reason_codes)
+        if detail_codes:
+            return (
+                f"Trigger: {regression.target_type} {regression.target_id} "
+                f"({regression.reason_code}, {regression.severity}; verifier_codes={','.join(detail_codes)})"
+            )
         return f"Trigger: {regression.target_type} {regression.target_id} ({regression.reason_code}, {regression.severity})"
     return f"Trigger: unknown regression ({regression!r})"
 
@@ -69,7 +75,6 @@ def evaluate_regression_policy(regressions: RegressionResult, overrides: Optiona
 
     high = [regression for regression in ordered if regression.severity == REGRESSION_SEVERITY_HIGH]
     medium = [regression for regression in ordered if regression.severity == REGRESSION_SEVERITY_MEDIUM]
-
     if high:
         reasons = [f"FAIL: {len(high)} high severity regression(s) detected"]
         reasons += [_trigger_line(regression) for regression in high]

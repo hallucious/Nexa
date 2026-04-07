@@ -42,6 +42,7 @@ from src.contracts.regression_reason_codes import (
     VALID_NODE_REASON_CODES,
     VALID_VERIFICATION_REASON_CODES,
 )
+from src.contracts.verifier_reason_codes import get_verifier_regression_severity
 from src.engine.execution_diff_model import CHANGE_TYPE_MODIFIED, CHANGE_TYPE_REMOVED, RunDiff
 
 REGRESSION_STATUS_CLEAN = "clean"
@@ -217,7 +218,8 @@ class VerificationRegression:
                 f"Invalid reason_code '{self.reason_code}' for VerificationRegression. "
                 f"Must be one of: {', '.join(sorted(VALID_VERIFICATION_REASON_CODES))}"
             )
-        self.severity = _get_severity(self.reason_code)
+        reason_code_severity = get_verifier_regression_severity(self.right_reason_codes)
+        self.severity = reason_code_severity or _get_severity(self.reason_code)
         if self.severity not in VALID_REGRESSION_SEVERITIES:
             raise ValueError(
                 f"Invalid severity '{self.severity}' for VerificationRegression. "
