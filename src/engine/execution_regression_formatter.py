@@ -2,14 +2,6 @@
 execution_regression_formatter.py
 
 Formatters for RegressionResult from execution_regression_detector.
-
-This module provides text and JSON formatters for regression detection results.
-
-IMPORTANT: This is a pure formatter layer.
-- No engine logic
-- No detector logic
-- No CLI imports
-- Deterministic output
 """
 from __future__ import annotations
 
@@ -19,76 +11,59 @@ from src.engine.execution_regression_detector import RegressionResult
 
 
 def format_regression_summary(result: RegressionResult) -> str:
-    """Format a short summary of regression results.
-    
-    Returns a compact summary with status and counts.
-    """
     lines = [
         "Execution Regression",
         f"status: {result.status}",
         f"nodes: {result.summary.node_regressions}",
         f"artifacts: {result.summary.artifact_regressions}",
         f"context: {result.summary.context_regressions}",
+        f"verification: {result.summary.verification_regressions}",
         f"severity: high={result.summary.high_regressions} medium={result.summary.medium_regressions} low={result.summary.low_regressions}",
     ]
     return "\n".join(lines)
 
 
 def format_regression(result: RegressionResult) -> str:
-    """Format full regression result with details.
-    
-    Returns summary + detailed sections for each regression category.
-    """
     lines = [format_regression_summary(result)]
-    
-    # Only add detail sections if regressions exist
-    if not result.nodes and not result.artifacts and not result.context:
+    if not result.nodes and not result.artifacts and not result.context and not result.verification:
         return "\n".join(lines)
-    
-    # Node regressions section
+
     if result.nodes:
-        lines.append("")
-        lines.append("Node Regressions")
-        lines.append("----------------")
+        lines.extend(["", "Node Regressions", "----------------"])
         for node_reg in result.nodes:
             if node_reg.right_status is None:
-                # Removed node
                 lines.append(f"{node_reg.node_id}: removed (was {node_reg.left_status}) [{node_reg.severity}]")
             else:
-                # Status change
                 lines.append(f"{node_reg.node_id}: {node_reg.left_status} -> {node_reg.right_status} [{node_reg.severity}]")
-    
-    # Artifact regressions section
+
     if result.artifacts:
-        lines.append("")
-        lines.append("Artifact Regressions")
-        lines.append("--------------------")
+        lines.extend(["", "Artifact Regressions", "--------------------"])
         for art_reg in result.artifacts:
             lines.append(f"{art_reg.artifact_id}: {art_reg.reason} [{art_reg.severity}]")
-    
-    # Context regressions section
+
     if result.context:
-        lines.append("")
-        lines.append("Context Regressions")
-        lines.append("-------------------")
+        lines.extend(["", "Context Regressions", "-------------------"])
         for ctx_reg in result.context:
             lines.append(f"{ctx_reg.context_key}: {ctx_reg.reason} [{ctx_reg.severity}]")
-    
+
+    if result.verification:
+        lines.extend(["", "Verification Regressions", "------------------------"])
+        for ver_reg in result.verification:
+            left = ver_reg.left_status if ver_reg.left_status is not None else "none"
+            right = ver_reg.right_status if ver_reg.right_status is not None else "none"
+            lines.append(f"{ver_reg.target_type} {ver_reg.target_id}: {left} -> {right} ({ver_reg.reason}) [{ver_reg.severity}]")
+
     return "\n".join(lines)
 
 
 def format_regression_json(result: RegressionResult) -> Dict[str, Any]:
-    """Format regression result as a JSON-serializable dict.
-    
-    Returns a dict suitable for json.dumps().
-    Includes reason_code for stable programmatic access and reason for human readability.
-    """
     return {
         "status": result.status,
         "summary": {
             "node_regressions": result.summary.node_regressions,
             "artifact_regressions": result.summary.artifact_regressions,
             "context_regressions": result.summary.context_regressions,
+            "verification_regressions": result.summary.verification_regressions,
             "high_regressions": result.summary.high_regressions,
             "medium_regressions": result.summary.medium_regressions,
             "low_regressions": result.summary.low_regressions,
@@ -125,5 +100,19 @@ def format_regression_json(result: RegressionResult) -> Dict[str, Any]:
                 "right_value": cr.right_value,
             }
             for cr in result.context
+        ],
+        "verification": [
+            {
+                "target_type": vr.target_type,
+                "target_id": vr.target_id,
+                "reason_code": vr.reason_code,
+                "reason": vr.reason,
+                "severity": vr.severity,
+                "left_status": vr.left_status,
+                "right_status": vr.right_status,
+                "left_reason_codes": list(vr.left_reason_codes),
+                "right_reason_codes": list(vr.right_reason_codes),
+            }
+            for vr in result.verification
         ],
     }

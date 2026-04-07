@@ -10,8 +10,13 @@ from src.contracts.regression_reason_codes import (
     NODE_REMOVED_SUCCESS,
     NODE_SUCCESS_TO_FAILURE,
     NODE_SUCCESS_TO_SKIPPED,
+    NODE_VERIFIER_INCONCLUSIVE_TO_FAIL,
+    NODE_VERIFIER_PASS_TO_FAIL,
+    NODE_VERIFIER_PASS_TO_INCONCLUSIVE,
+    NODE_VERIFIER_PASS_TO_WARNING,
+    NODE_VERIFIER_WARNING_TO_FAIL,
 )
-from src.engine.execution_regression_detector import NodeRegression, RegressionResult
+from src.engine.execution_regression_detector import NodeRegression, RegressionResult, VerificationRegression
 from src.engine.execution_regression_policy import (
     POLICY_STATUS_FAIL,
     POLICY_STATUS_WARN,
@@ -34,6 +39,15 @@ def build_regression_result_from_summaries(
     current_nodes = current_payload.get("nodes") or {}
 
     regressions: list[NodeRegression] = []
+    verification_regressions: list[VerificationRegression] = []
+
+    verifier_mapping = {
+        ("pass", "fail"): NODE_VERIFIER_PASS_TO_FAIL,
+        ("pass", "warning"): NODE_VERIFIER_PASS_TO_WARNING,
+        ("pass", "inconclusive"): NODE_VERIFIER_PASS_TO_INCONCLUSIVE,
+        ("warning", "fail"): NODE_VERIFIER_WARNING_TO_FAIL,
+        ("inconclusive", "fail"): NODE_VERIFIER_INCONCLUSIVE_TO_FAIL,
+    }
 
     for node_id in sorted(set(baseline_nodes) | set(current_nodes)):
         left = baseline_nodes.get(node_id)
@@ -70,8 +84,24 @@ def build_regression_result_from_summaries(
                 )
             )
 
-    if regressions:
-        return RegressionResult(status="regression", nodes=regressions)
+        left_verifier_status = (left or {}).get("verifier_status")
+        right_verifier_status = (right or {}).get("verifier_status")
+        verifier_reason = verifier_mapping.get((left_verifier_status, right_verifier_status))
+        if verifier_reason is not None:
+            verification_regressions.append(
+                VerificationRegression(
+                    target_type="node",
+                    target_id=node_id,
+                    reason_code=verifier_reason,
+                    left_status=left_verifier_status,
+                    right_status=right_verifier_status,
+                    left_reason_codes=list((left or {}).get("verifier_reason_codes") or []),
+                    right_reason_codes=list((right or {}).get("verifier_reason_codes") or []),
+                )
+            )
+
+    if regressions or verification_regressions:
+        return RegressionResult(status="regression", nodes=regressions, verification=verification_regressions)
     return RegressionResult(status="clean")
 
 
