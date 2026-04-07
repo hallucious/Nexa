@@ -418,3 +418,24 @@ def test_ui_adapter_routes_builder_dispatch_and_lifecycle_through_stable_boundar
     assert dispatch_contract_vm.source_role == "working_save"
     assert lifecycle_vm.source_role == "working_save"
     assert dispatch_hub_vm.source_role == "working_save"
+
+
+
+def test_ui_adapter_routes_execution_adapter_and_state_change_layers_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    dispatch_hub_vm = adapter.read_builder_dispatch_hub_view_model(_working_save())
+    execution_adapter_vm = adapter.read_command_execution_adapter_view_model(_working_save(), dispatch_hub=dispatch_hub_vm)
+    state_change_vm = adapter.read_interaction_state_change_view_model(
+        _working_save(),
+        dispatch_hub=dispatch_hub_vm,
+        execution_adapters=execution_adapter_vm,
+    )
+    execution_hub_vm = adapter.read_builder_execution_adapter_hub_view_model(_working_save(), dispatch_hub=dispatch_hub_vm)
+
+    assert execution_adapter_vm.source_role == "working_save"
+    assert state_change_vm.source_role == "working_save"
+    assert execution_hub_vm.source_role == "working_save"

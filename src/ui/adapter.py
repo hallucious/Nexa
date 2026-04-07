@@ -32,6 +32,9 @@ from src.ui.intent_emission import IntentEmissionViewModel, read_intent_emission
 from src.ui.command_dispatch_contract import CommandDispatchContractViewModel, read_command_dispatch_contract_view_model
 from src.ui.interaction_lifecycle import InteractionLifecycleViewModel, read_interaction_lifecycle_view_model
 from src.ui.builder_dispatch_hub import BuilderDispatchHubViewModel, read_builder_dispatch_hub_view_model
+from src.ui.command_execution_adapter import CommandExecutionAdapterViewModel, read_command_execution_adapter_view_model
+from src.ui.interaction_state_changes import InteractionStateChangeViewModel, read_interaction_state_change_view_model
+from src.ui.builder_execution_adapter_hub import BuilderExecutionAdapterHubViewModel, read_builder_execution_adapter_hub_view_model
 
 
 @dataclass(frozen=True)
@@ -558,6 +561,48 @@ class NexaUIViewAdapter:
             explanation=explanation,
         )
 
+
+
+    def read_command_execution_adapter_view_model(
+        self,
+        source,
+        *,
+        dispatch_hub: BuilderDispatchHubViewModel | None = None,
+        explanation: str | None = None,
+    ) -> CommandExecutionAdapterViewModel:
+        return read_command_execution_adapter_view_model(
+            source,
+            dispatch_hub=dispatch_hub,
+            explanation=explanation,
+        )
+
+    def read_interaction_state_change_view_model(
+        self,
+        source,
+        *,
+        dispatch_hub: BuilderDispatchHubViewModel | None = None,
+        execution_adapters: CommandExecutionAdapterViewModel | None = None,
+        explanation: str | None = None,
+    ) -> InteractionStateChangeViewModel:
+        return read_interaction_state_change_view_model(
+            source,
+            dispatch_hub=dispatch_hub,
+            execution_adapters=execution_adapters,
+            explanation=explanation,
+        )
+
+    def read_builder_execution_adapter_hub_view_model(
+        self,
+        source,
+        *,
+        dispatch_hub: BuilderDispatchHubViewModel | None = None,
+        explanation: str | None = None,
+    ) -> BuilderExecutionAdapterHubViewModel:
+        return read_builder_execution_adapter_hub_view_model(
+            source,
+            dispatch_hub=dispatch_hub,
+            explanation=explanation,
+        )
 
 
 __all__ = ["NexaUIViewAdapter"]
