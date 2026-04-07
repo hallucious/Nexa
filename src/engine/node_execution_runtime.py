@@ -24,6 +24,8 @@ from src.engine.final_output_resolver import (
     resolve_final_output,
 )
 from src.engine.graph_scheduler import GraphScheduler
+from src.engine.validation.output_verifier import run_output_verifier
+from src.contracts.artifact_contract import infer_artifact_type, make_typed_artifact
 
 
 @dataclass
@@ -42,6 +44,8 @@ class NodeTrace:
     timings_ms: Dict[str, float] = field(default_factory=dict)
     provider_trace: Optional[Any] = None
     plugin_trace: Dict[str, List[str]] = field(default_factory=lambda: {"pre": [], "post": []})
+    verifier_trace: List[Dict[str, Any]] = field(default_factory=list)
+    typed_artifact_refs: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -316,6 +320,8 @@ class NodeExecutionRuntime:
             "events": trace.events,
             "timings_ms": trace.timings_ms,
             "provider": trace.provider_trace.get("provider") if isinstance(trace.provider_trace, dict) else None,
+            "verifier_trace": trace.verifier_trace,
+            "typed_artifact_refs": trace.typed_artifact_refs,
         }
         with self.observability_file.open("a", encoding="utf-8") as f:
             f.write(json.dumps(record) + "\n")
@@ -801,6 +807,119 @@ class NodeExecutionRuntime:
             trace.events.append(f"wave:{wave.index}:{','.join(wave.resource_ids)}")
         return state_holder["last_provider_output"]
 
+    def _append_typed_artifact(
+        self,
+        *,
+        artifacts: List[Artifact],
+        trace: NodeTrace,
+        artifact_type: str,
+        producer_ref: str,
+        payload: Any,
+        validation_status: str,
+        artifact_name: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        trace_refs: Optional[List[str]] = None,
+    ) -> None:
+        envelope = make_typed_artifact(
+            artifact_type=artifact_type,
+            producer_ref=producer_ref,
+            payload=payload,
+            validation_status=validation_status,
+            metadata=dict(metadata or {}),
+            trace_refs=list(trace_refs or []),
+        )
+        trace.typed_artifact_refs.append(envelope.artifact_id)
+        artifacts.append(
+            Artifact(
+                type=artifact_type,
+                name=artifact_name,
+                data=envelope.to_dict(),
+                metadata={
+                    "typed_artifact": True,
+                    "artifact_type": envelope.artifact_type,
+                    "artifact_schema_version": envelope.artifact_schema_version,
+                    **dict(metadata or {}),
+                },
+                producer_node=producer_ref.replace("node.", "", 1),
+                timestamp_ms=time.time() * 1000.0,
+            )
+        )
+
+    def _run_output_verifier_if_configured(
+        self,
+        *,
+        config: Dict[str, Any],
+        node_id: str,
+        final_output: Any,
+        trace: NodeTrace,
+        artifacts: List[Artifact],
+    ) -> None:
+        verifier_config = config.get("verifier")
+        if verifier_config is None:
+            return
+        if not isinstance(verifier_config, dict):
+            raise ValueError("verifier must be object")
+
+        target_ref = f"node.{node_id}.output"
+        composite = run_output_verifier(final_output, verifier_config, target_ref=target_ref)
+        trace.verifier_trace.append(composite.to_dict())
+        trace.events.append(f"verifier:{composite.aggregate_status}")
+
+        verifier_id = str(verifier_config.get("verifier_id") or "output_verifier")
+        self._append_typed_artifact(
+            artifacts=artifacts,
+            trace=trace,
+            artifact_type="validation_report",
+            producer_ref=f"node.{node_id}",
+            payload=composite.to_dict(),
+            validation_status="valid" if composite.aggregate_status == "pass" else "partial",
+            artifact_name=verifier_id,
+            metadata={
+                "report_kind": "verifier",
+                "target_ref": target_ref,
+                "aggregate_status": composite.aggregate_status,
+            },
+            trace_refs=[f"trace://{self.execution_id}/{node_id}/verifier"],
+        )
+
+        if bool(verifier_config.get("emit_output_artifact", False)):
+            declared_output_type = verifier_config.get("expected_artifact_type")
+            if not isinstance(declared_output_type, str) or not declared_output_type:
+                declared_output_type = infer_artifact_type(final_output)
+            self._append_typed_artifact(
+                artifacts=artifacts,
+                trace=trace,
+                artifact_type=declared_output_type,
+                producer_ref=f"node.{node_id}",
+                payload=final_output,
+                validation_status="valid" if composite.aggregate_status == "pass" else "partial",
+                artifact_name="final_typed_output",
+                metadata={
+                    "report_kind": "typed_output",
+                    "target_ref": target_ref,
+                },
+                trace_refs=[f"trace://{self.execution_id}/{node_id}/output"],
+            )
+
+        self._emit_event(
+            "verification_completed",
+            {
+                "verifier_id": verifier_id,
+                "target_ref": target_ref,
+                "status": composite.aggregate_status,
+                "score": composite.aggregate_score,
+                "confidence": composite.aggregate_confidence,
+                "blocking_reason_codes": composite.blocking_reason_codes,
+                "recommended_next_step": composite.recommended_next_step,
+            },
+            node_id=node_id,
+        )
+
+        if bool(verifier_config.get("blocking", False)) and composite.aggregate_status == "fail":
+            raise ValueError(
+                "output verification failed: " + ", ".join(composite.blocking_reason_codes or ["verification_failed"])
+            )
+
     def _resolve_final_output(
         self,
         config: Dict[str, Any],
@@ -878,6 +997,14 @@ class NodeExecutionRuntime:
                 )
             except FinalOutputResolverError as exc:
                 raise ValueError(f"final output resolution failed: {exc}") from exc
+
+            self._run_output_verifier_if_configured(
+                config=config,
+                node_id=node_id,
+                final_output=final_output,
+                trace=trace,
+                artifacts=artifacts,
+            )
 
             result = NodeResult(
                 node_id=node_id,
@@ -1101,6 +1228,14 @@ class NodeExecutionRuntime:
                 )
             except FinalOutputResolverError as exc:
                 raise ValueError(f"final output resolution failed: {exc}") from exc
+
+            self._run_output_verifier_if_configured(
+                config=config,
+                node_id=node_id,
+                final_output=final_output,
+                trace=trace,
+                artifacts=artifacts,
+            )
 
             result = NodeResult(
                 node_id=node_id,

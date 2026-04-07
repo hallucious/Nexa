@@ -43,6 +43,7 @@ class ExecutionConfigModel:
     provider_ref: Optional[str] = None
     validation_rules: list[str] = field(default_factory=list)
     output_mapping: Dict[str, str] = field(default_factory=dict)
+    verifier: Dict[str, Any] = field(default_factory=dict)
     policy: Dict[str, Any] = field(default_factory=dict)
     runtime_config: Dict[str, Any] = field(default_factory=dict)
 
@@ -94,6 +95,10 @@ class ExecutionConfigModel:
         if provider_ref is not None and not isinstance(provider_ref, str):
             raise ExecutionConfigFormatError("provider_ref must be string when present")
 
+        verifier = payload.get("verifier") or {}
+        if not isinstance(verifier, dict):
+            raise ExecutionConfigFormatError("verifier must be dict")
+
         policy = payload.get("policy") or {}
         if not isinstance(policy, dict):
             raise ExecutionConfigFormatError("policy must be dict")
@@ -130,6 +135,7 @@ class ExecutionConfigModel:
             provider_ref=provider_ref,
             validation_rules=_list_str(payload.get("validation_rules"), "validation_rules"),
             output_mapping=_dict_str_str(payload.get("output_mapping"), "output_mapping"),
+            verifier=dict(verifier),
             policy=dict(policy),
             runtime_config=dict(runtime_config),
         )
@@ -238,6 +244,7 @@ class ExecutionConfigSchemaValidator:
         "plugins",
         "validation_rules",
         "output_mapping",
+        "verifier",
         "runtime_config",
     }
 
@@ -259,6 +266,7 @@ class ExecutionConfigSchemaValidator:
         self._validate_optional_string_list_field(payload, "plugins")
         self._validate_optional_string_list_field(payload, "validation_rules")
         self._validate_output_mapping(payload)
+        self._validate_verifier(payload)
         self._validate_runtime_config(payload)
         return payload
 
@@ -334,6 +342,15 @@ class ExecutionConfigSchemaValidator:
                 raise ExecutionConfigSchemaValidationError(
                     f"execution config field 'output_mapping' has invalid value for key '{key}'"
                 )
+
+    def _validate_verifier(self, payload: Dict[str, Any]) -> None:
+        if "verifier" not in payload:
+            return
+        verifier = payload["verifier"]
+        if not isinstance(verifier, dict):
+            raise ExecutionConfigSchemaValidationError(
+                "execution config field 'verifier' must be an object"
+            )
 
     def _validate_runtime_config(self, payload: Dict[str, Any]) -> None:
         if "runtime_config" not in payload:

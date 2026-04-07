@@ -29,3 +29,6 @@ def validate_execution_config_schema(payload: Dict[str, Any]) -> None:
 
     if "output_mapping" in payload and not isinstance(payload["output_mapping"], dict):
         raise ExecutionConfigSchemaError("'output_mapping' must be a dict")
+
+    if "verifier" in payload and not isinstance(payload["verifier"], dict):
+        raise ExecutionConfigSchemaError("'verifier' must be a dict")
