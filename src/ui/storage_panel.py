@@ -63,6 +63,8 @@ class ExecutionRecordCardView:
     finished_at: str | None = None
     output_summary_label: str | None = None
     artifact_count: int | None = None
+    verifier_summary_label: str | None = None
+    verification_available: bool = False
     trace_available: bool = False
     replay_available: bool = False
     can_open_trace: bool = False
@@ -275,6 +277,21 @@ def _build_execution_record_card(execution_record: ExecutionRecordModel | None, 
     output_summary_label = execution_record.outputs.output_summary
     if output_summary_label is None and execution_record.outputs.final_outputs:
         output_summary_label = ", ".join(output.output_ref for output in execution_record.outputs.final_outputs)
+    verifier_summary = execution_record.observability.verifier_summary or {}
+    verifier_summary_label = None
+    verification_available = False
+    if verifier_summary:
+        verification_available = True
+        status_counts = verifier_summary.get("status_counts") if isinstance(verifier_summary.get("status_counts"), dict) else {}
+        parts: list[str] = []
+        report_count = verifier_summary.get("verifier_report_count")
+        if isinstance(report_count, int):
+            parts.append(f"reports={report_count}")
+        for key in ("fail", "warning", "pass", "inconclusive"):
+            value = status_counts.get(key)
+            if isinstance(value, int) and value > 0:
+                parts.append(f"{key}={value}")
+        verifier_summary_label = ", ".join(parts) if parts else "verifier data available"
     return ExecutionRecordCardView(
         run_id=execution_record.meta.run_id,
         commit_id=execution_record.source.commit_id,
@@ -283,6 +300,8 @@ def _build_execution_record_card(execution_record: ExecutionRecordModel | None, 
         finished_at=execution_record.meta.finished_at,
         output_summary_label=output_summary_label,
         artifact_count=artifact_count,
+        verifier_summary_label=verifier_summary_label,
+        verification_available=verification_available,
         trace_available=trace_available,
         replay_available=replay_available,
         can_open_trace=trace_available,
@@ -499,6 +518,7 @@ def _available_actions(
     working_save: WorkingSaveModel | None,
     commit_snapshot: CommitSnapshotModel | None,
     execution_record: ExecutionRecordModel | None,
+    recent_entries: StorageRecentEntriesView,
 ) -> list[StorageActionHint]:
     actions: list[StorageActionHint] = []
     if working_save is not None:
@@ -566,7 +586,8 @@ def _available_actions(
     if active_role == "none" and not actions:
         actions.append(StorageActionHint("none", "No lifecycle action available", False, reason_disabled="No storage artifact loaded"))
     if lifecycle_summary.has_latest_execution_record and execution_record is not None:
-        actions.append(StorageActionHint("compare_runs", "Compare runs", False, reason_disabled="A second execution record is required", target_ref=_run_ref(execution_record)))
+        can_compare_runs = len(recent_entries.recent_run_refs) >= 2
+        actions.append(StorageActionHint("compare_runs", "Compare runs", can_compare_runs, None if can_compare_runs else "A second execution record is required", target_ref=_run_ref(execution_record)))
     return actions
 
 
@@ -633,7 +654,7 @@ def read_storage_view_model(
         lifecycle_summary=lifecycle_summary,
         working_save_card=_build_working_save_card(working_save, commit_snapshot=commit_snapshot),
         commit_snapshot_card=_build_commit_snapshot_card(commit_snapshot),
-        execution_record_card=_build_execution_record_card(execution_record, compare_runs_enabled=False),
+        execution_record_card=_build_execution_record_card(execution_record, compare_runs_enabled=len(recent_entries.recent_run_refs) >= 2),
         relationship_graph=_relationship_view(working_save, commit_snapshot, execution_record),
         recent_entries=recent_entries,
         available_actions=_available_actions(
@@ -642,6 +663,7 @@ def read_storage_view_model(
             working_save=working_save,
             commit_snapshot=commit_snapshot,
             execution_record=execution_record,
+            recent_entries=recent_entries,
         ),
         diagnostics=diagnostics,
         explanation=explanation,

@@ -30,6 +30,7 @@ class DiffSummaryView:
     structural_change_count: int = 0
     execution_change_count: int = 0
     artifact_change_count: int = 0
+    verification_change_count: int = 0
     top_summary_label: str | None = None
 
 
@@ -262,26 +263,58 @@ def _compare_circuits(source: WorkingSaveModel | CommitSnapshotModel, target: Co
 
 def _compare_runs(source: ExecutionRecordModel, target: ExecutionRecordModel) -> list[_DiffChange]:
     changes: list[_DiffChange] = []
+    related_runs = [source.meta.run_id, target.meta.run_id]
     source_results = {card.node_id: card for card in source.node_results.results}
     target_results = {card.node_id: card for card in target.node_results.results}
     for node_id in sorted(set(source_results) | set(target_results)):
         s = source_results.get(node_id)
         t = target_results.get(node_id)
         if s is None:
-            changes.append(_make_change(change_id=f"run:add:{node_id}", change_type="added", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} added", before=None, after=t.status if t else None, signal_type="ADD", related_run_ids=[source.meta.run_id, target.meta.run_id]))
-        elif t is None:
-            changes.append(_make_change(change_id=f"run:remove:{node_id}", change_type="removed", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} removed", before=s.status if s else None, after=None, destructive=True, severity="warning", signal_type="REMOVE", related_run_ids=[source.meta.run_id, target.meta.run_id]))
-        elif (s.status, s.output_summary) != (t.status, t.output_summary):
-            changes.append(_make_change(change_id=f"run:update:{node_id}", change_type="updated", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} changed", before={"status": s.status, "output": s.output_summary}, after={"status": t.status, "output": t.output_summary}, severity="info", signal_type="MODIFY", related_run_ids=[source.meta.run_id, target.meta.run_id]))
+            changes.append(_make_change(change_id=f"run:add:{node_id}", change_type="added", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} added", before=None, after=t.status if t else None, signal_type="ADD", related_run_ids=related_runs))
+            continue
+        if t is None:
+            changes.append(_make_change(change_id=f"run:remove:{node_id}", change_type="removed", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} removed", before=s.status if s else None, after=None, destructive=True, severity="warning", signal_type="REMOVE", related_run_ids=related_runs))
+            continue
+        if (s.status, s.output_summary) != (t.status, t.output_summary):
+            changes.append(_make_change(change_id=f"run:update:{node_id}", change_type="updated", category="execution_result", target_type="run", target_id=node_id, short_label=f"Node result {node_id} changed", before={"status": s.status, "output": s.output_summary}, after={"status": t.status, "output": t.output_summary}, severity="info", signal_type="MODIFY", related_run_ids=related_runs))
 
-    source_artifacts = {artifact.artifact_id for artifact in source.artifacts.artifact_refs}
-    target_artifacts = {artifact.artifact_id for artifact in target.artifacts.artifact_refs}
-    for artifact_id in sorted(source_artifacts ^ target_artifacts):
-        change_type = "added" if artifact_id in target_artifacts else "removed"
-        changes.append(_make_change(change_id=f"artifact:{change_type}:{artifact_id}", change_type=change_type, category="artifact", target_type="artifact", target_id=artifact_id, short_label=f"Artifact {artifact_id} {change_type}", before=artifact_id if change_type == "removed" else None, after=artifact_id if change_type == "added" else None, destructive=change_type == "removed", severity="info", signal_type="ADD" if change_type == "added" else "REMOVE", related_run_ids=[source.meta.run_id, target.meta.run_id], related_artifact_ids=[artifact_id]))
+        source_verifier = {"status": s.verifier_status, "reason_codes": sorted(set(s.verifier_reason_codes))}
+        target_verifier = {"status": t.verifier_status, "reason_codes": sorted(set(t.verifier_reason_codes))}
+        if source_verifier != target_verifier and (source_verifier["status"] or target_verifier["status"] or source_verifier["reason_codes"] or target_verifier["reason_codes"]):
+            changes.append(_make_change(change_id=f"verification:update:{node_id}", change_type="updated", category="verification", target_type="run", target_id=node_id, short_label=f"Verifier outcome {node_id} changed", before=source_verifier, after=target_verifier, severity="info", signal_type="VERIFY", related_run_ids=related_runs, related_artifact_ids=sorted(set(s.typed_artifact_refs + t.typed_artifact_refs))))
+
+        if sorted(set(s.typed_artifact_refs)) != sorted(set(t.typed_artifact_refs)):
+            changes.append(_make_change(change_id=f"typed_artifact:update:{node_id}", change_type="updated", category="artifact", target_type="artifact", target_id=node_id, short_label=f"Typed artifacts for {node_id} changed", before=sorted(set(s.typed_artifact_refs)), after=sorted(set(t.typed_artifact_refs)), severity="info", signal_type="MODIFY", related_run_ids=related_runs, related_artifact_ids=sorted(set(s.typed_artifact_refs + t.typed_artifact_refs))))
+
+    source_artifact_map = {artifact.artifact_id: artifact for artifact in source.artifacts.artifact_refs}
+    target_artifact_map = {artifact.artifact_id: artifact for artifact in target.artifacts.artifact_refs}
+    for artifact_id in sorted(set(source_artifact_map) ^ set(target_artifact_map)):
+        change_type = "added" if artifact_id in target_artifact_map else "removed"
+        changes.append(_make_change(change_id=f"artifact:{change_type}:{artifact_id}", change_type=change_type, category="artifact", target_type="artifact", target_id=artifact_id, short_label=f"Artifact {artifact_id} {change_type}", before=artifact_id if change_type == "removed" else None, after=artifact_id if change_type == "added" else None, destructive=change_type == "removed", severity="info", signal_type="ADD" if change_type == "added" else "REMOVE", related_run_ids=related_runs, related_artifact_ids=[artifact_id]))
+
+    shared_artifacts = set(source_artifact_map) & set(target_artifact_map)
+    for artifact_id in sorted(shared_artifacts):
+        s_artifact = source_artifact_map[artifact_id]
+        t_artifact = target_artifact_map[artifact_id]
+        if (
+            s_artifact.validation_status,
+            s_artifact.artifact_schema_version,
+            s_artifact.recorded_at,
+            sorted(set(s_artifact.trace_refs)),
+        ) != (
+            t_artifact.validation_status,
+            t_artifact.artifact_schema_version,
+            t_artifact.recorded_at,
+            sorted(set(t_artifact.trace_refs)),
+        ):
+            category = "verification" if s_artifact.artifact_type == "validation_report" or t_artifact.artifact_type == "validation_report" else "artifact"
+            changes.append(_make_change(change_id=f"artifact:update:{artifact_id}", change_type="updated", category=category, target_type="artifact", target_id=artifact_id, short_label=f"Artifact {artifact_id} metadata changed", before={"validation_status": s_artifact.validation_status, "schema_version": s_artifact.artifact_schema_version, "recorded_at": s_artifact.recorded_at, "trace_refs": sorted(set(s_artifact.trace_refs))}, after={"validation_status": t_artifact.validation_status, "schema_version": t_artifact.artifact_schema_version, "recorded_at": t_artifact.recorded_at, "trace_refs": sorted(set(t_artifact.trace_refs))}, severity="info", signal_type="MODIFY", related_run_ids=related_runs, related_artifact_ids=[artifact_id]))
 
     if source.outputs.output_summary != target.outputs.output_summary:
-        changes.append(_make_change(change_id="run:outputs:update", change_type="updated", category="execution_result", target_type="run", target_id="outputs", short_label="Run output summary changed", before=source.outputs.output_summary, after=target.outputs.output_summary, severity="info", signal_type="MODIFY", related_run_ids=[source.meta.run_id, target.meta.run_id]))
+        changes.append(_make_change(change_id="run:outputs:update", change_type="updated", category="execution_result", target_type="run", target_id="outputs", short_label="Run output summary changed", before=source.outputs.output_summary, after=target.outputs.output_summary, severity="info", signal_type="MODIFY", related_run_ids=related_runs))
+
+    if source.observability.verifier_summary != target.observability.verifier_summary:
+        changes.append(_make_change(change_id="verification:summary:update", change_type="updated", category="verification", target_type="run", target_id="verifier_summary", short_label="Verifier summary changed", before=source.observability.verifier_summary, after=target.observability.verifier_summary, severity="info", signal_type="VERIFY", related_run_ids=related_runs))
     return changes
 
 
@@ -349,6 +382,7 @@ def _summary(changes: Sequence[_DiffChange], *, diff_mode: str) -> DiffSummaryVi
     structural_change_count = sum(1 for c in changes if c.category in {"node", "edge", "resource", "output", "parameter"})
     execution_change_count = sum(1 for c in changes if c.category == "execution_result")
     artifact_change_count = sum(1 for c in changes if c.category == "artifact")
+    verification_change_count = sum(1 for c in changes if c.category == "verification")
     return DiffSummaryView(
         total_change_count=len(changes),
         added_count=added_count,
@@ -359,6 +393,7 @@ def _summary(changes: Sequence[_DiffChange], *, diff_mode: str) -> DiffSummaryVi
         structural_change_count=structural_change_count,
         execution_change_count=execution_change_count,
         artifact_change_count=artifact_change_count,
+        verification_change_count=verification_change_count,
         top_summary_label=f"{len(changes)} changes in {diff_mode}",
     )
 
