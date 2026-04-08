@@ -35,6 +35,7 @@ from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_produc
 from src.ui.product_flow_readiness import ProductFlowBoundaryReadinessView, ProductFlowReadinessViewModel, read_product_flow_readiness_view_model
 from src.ui.product_flow_e2e_path import ProductFlowE2ECheckpointView, ProductFlowE2EPathViewModel, read_product_flow_e2e_path_view_model
 from src.ui.product_flow_closure import ProductFlowClosureStageView, ProductFlowClosureViewModel, read_product_flow_closure_view_model
+from src.ui.product_flow_gateway import ProductFlowGatewayStageView, ProductFlowGatewayViewModel, read_product_flow_gateway_view_model
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
@@ -92,6 +93,8 @@ __all__ = [
     "ProductFlowShellViewModel",
     "ProductFlowClosureStageView",
     "ProductFlowClosureViewModel",
+    "ProductFlowGatewayStageView",
+    "ProductFlowGatewayViewModel",
     "ProductFlowTransitionView",
     "ProductFlowTransitionViewModel",
     "ProductFlowStageView",
@@ -135,6 +138,7 @@ __all__ = [
     "read_product_flow_journey_view_model",
     "read_product_flow_shell_view_model",
     "read_product_flow_closure_view_model",
+    "read_product_flow_gateway_view_model",
     "read_product_flow_transition_view_model",
     "read_selected_object_view_model",
     "read_storage_view_model",

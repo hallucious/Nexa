@@ -46,6 +46,7 @@ from src.ui.product_flow_readiness import ProductFlowReadinessViewModel, read_pr
 from src.ui.product_flow_e2e_path import ProductFlowE2EPathViewModel, read_product_flow_e2e_path_view_model
 from src.ui.product_flow_closure import ProductFlowClosureViewModel, read_product_flow_closure_view_model
 from src.ui.product_flow_transition import ProductFlowTransitionViewModel, read_product_flow_transition_view_model
+from src.ui.product_flow_gateway import ProductFlowGatewayViewModel, read_product_flow_gateway_view_model
 
 
 @dataclass(frozen=True)
@@ -905,6 +906,38 @@ class NexaUIViewAdapter:
             e2e_path=e2e_path,
             closure=closure,
             end_user_flow_hub=end_user_flow_hub,
+            explanation=explanation,
+        )
+
+
+    def read_product_flow_gateway_view_model(
+        self,
+        source,
+        *,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        proposal_commit=None,
+        execution_launch=None,
+        explanation: str | None = None,
+    ) -> ProductFlowGatewayViewModel:
+        return read_product_flow_gateway_view_model(
+            source,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+            proposal_commit=proposal_commit,
+            execution_launch=execution_launch,
             explanation=explanation,
         )
 

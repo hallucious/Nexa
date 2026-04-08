@@ -209,6 +209,8 @@ def test_product_flow_shell_prioritizes_review_diff_and_designer_when_approval_i
     assert vm.journey.current_step_id == "commit_snapshot"
     assert vm.transition is not None
     assert vm.transition.recommended_transition_id == "approval_to_commit"
+    assert vm.gateway is not None
+    assert vm.gateway.recommended_gateway_id == "commit"
     assert vm.stage.pending_approval_count >= 1
     assert vm.closure is not None
     assert any(target.target_id == "diff" and target.active for target in vm.bottom_dock_targets)
@@ -236,6 +238,7 @@ def test_product_flow_shell_exposes_runbook_and_prefers_runbook_action_when_revi
     assert vm.handoff is not None
     assert vm.closure is not None
     assert vm.transition is not None
+    assert vm.gateway is not None
     assert vm.handoff.primary_entry_id == "commit_snapshot"
     assert vm.handoff.followthrough_entry_id == "run_current"
     assert vm.focus.recommended_action_id == "commit_snapshot"
