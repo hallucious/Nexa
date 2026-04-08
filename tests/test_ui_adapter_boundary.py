@@ -218,6 +218,27 @@ def test_ui_adapter_routes_inspector_validation_and_designer_read_models_through
     assert designer_vm.intent_state.intent_id == "intent-001"
 
 
+def test_ui_adapter_routes_product_flow_e2e_path_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    e2e_vm = adapter.read_product_flow_e2e_path_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert e2e_vm.source_role == "working_save"
+    assert e2e_vm.current_checkpoint_id in {"review", "approval", "commit", "run"}
+
+
 def test_ui_adapter_routes_builder_shell_coordination_and_action_schema_through_stable_boundary() -> None:
     adapter = NexaUIViewAdapter(
         latest_working_save=_working_save(),

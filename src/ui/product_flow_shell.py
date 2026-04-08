@@ -24,6 +24,7 @@ from src.ui.product_flow_journey import ProductFlowJourneyViewModel, read_produc
 from src.ui.product_flow_runbook import ProductFlowRunbookViewModel, read_product_flow_runbook_view_model
 from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_product_flow_handoff_view_model
 from src.ui.product_flow_readiness import ProductFlowReadinessViewModel, read_product_flow_readiness_view_model
+from src.ui.product_flow_e2e_path import ProductFlowE2EPathViewModel, read_product_flow_e2e_path_view_model
 
 
 @dataclass(frozen=True)
@@ -79,6 +80,7 @@ class ProductFlowShellViewModel:
     runbook: ProductFlowRunbookViewModel | None = None
     handoff: ProductFlowHandoffViewModel | None = None
     readiness: ProductFlowReadinessViewModel | None = None
+    e2e_path: ProductFlowE2EPathViewModel | None = None
     right_stack_targets: list[ProductFlowSurfaceTargetView] = field(default_factory=list)
     bottom_dock_targets: list[ProductFlowSurfaceTargetView] = field(default_factory=list)
     command_entry_count: int = 0
@@ -424,6 +426,24 @@ def read_product_flow_shell_view_model(
         end_user_flow_hub=end_user_flow_hub,
     ) if (source_unwrapped is not None or execution_record is not None) else None
 
+    e2e_path_vm = read_product_flow_e2e_path_view_model(
+        source_unwrapped if source_unwrapped is not None else execution_record,
+        validation_report=validation_report,
+        execution_record=execution_record,
+        session_state_card=session_state_card,
+        intent=intent,
+        patch_plan=patch_plan,
+        precheck=precheck,
+        preview=preview,
+        approval_flow=approval_flow,
+        workflow_hub=workflow_hub,
+        journey=journey_vm,
+        runbook=runbook_vm,
+        handoff=handoff_vm,
+        readiness=readiness_vm,
+        end_user_flow_hub=end_user_flow_hub,
+    ) if (source_unwrapped is not None or execution_record is not None) else None
+
     stage_id = _stage_id(shell_vm, workflow_hub)
     recommended_flow_id = end_user_flow_hub.recommended_flow_id if end_user_flow_hub is not None else None
     recommended_action_id = (next((entry.action_id for entry in (runbook_vm.entries if runbook_vm is not None else []) if entry.entry_id == runbook_vm.recommended_entry_id and entry.action_id is not None), None) if runbook_vm is not None else None) or (execution_adapter_hub.recommended_action_id if execution_adapter_hub is not None else None)
@@ -470,6 +490,7 @@ def read_product_flow_shell_view_model(
         runbook=runbook_vm,
         handoff=handoff_vm,
         readiness=readiness_vm,
+        e2e_path=e2e_path_vm,
         right_stack_targets=right_stack_targets,
         bottom_dock_targets=bottom_dock_targets,
         command_entry_count=(shell_vm.command_palette.enabled_entry_count if shell_vm is not None and shell_vm.command_palette is not None else 0),
