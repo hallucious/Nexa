@@ -463,3 +463,41 @@ def test_ui_adapter_routes_end_user_flow_and_lifecycle_closure_through_stable_bo
     assert end_user_flow_vm.source_role == "working_save"
     assert lifecycle_closure_vm.source_role == "working_save"
     assert user_hub_vm.source_role == "working_save"
+
+
+def test_ui_adapter_routes_product_flow_shell_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+
+    vm = adapter.read_product_flow_shell_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        preview_overlay=GraphPreviewOverlay(overlay_id="preview-001", summary="test preview"),
+        selected_ref="node:n1",
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=DesignerApprovalFlowState(
+            approval_id="approval-003",
+            intent_ref="intent-001",
+            patch_ref="patch-001",
+            precheck_ref="pre-001",
+            preview_ref="preview-001",
+            current_stage="awaiting_decision",
+            final_outcome="approved_for_commit",
+            precheck_status="pass",
+        ),
+    )
+
+    assert vm.storage_role == "working_save"
+    assert vm.shell is not None
+    assert vm.workflow_hub is not None
+    assert vm.dispatch_hub is not None
+    assert vm.execution_adapter_hub is not None
+    assert vm.end_user_flow_hub is not None

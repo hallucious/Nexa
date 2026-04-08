@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.contracts.nex_contract import ValidationFinding, ValidationReport
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
-from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
+from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.command_palette import read_command_palette_view_model
@@ -35,10 +35,14 @@ def _run() -> ExecutionRecordModel:
         meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-08T00:00:00Z", started_at="2026-04-08T00:00:00Z", finished_at="2026-04-08T00:00:05Z", status="completed"),
         source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
         input=ExecutionInputModel(),
-        timeline=ExecutionTimelineModel(),
+        timeline=ExecutionTimelineModel(event_count=2),
         node_results=NodeResultsModel(),
         outputs=ExecutionOutputModel(output_summary="done"),
-        artifacts=ExecutionArtifactsModel(),
+        artifacts=ExecutionArtifactsModel(
+            artifact_refs=[ArtifactRecordCard(artifact_id="art-1", artifact_type="final_output", producer_node="n2", hash="abc123", ref="artifact://art-1", summary="final answer")],
+            artifact_count=1,
+            artifact_summary="1 artifact",
+        ),
         diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
         observability=ExecutionObservabilityModel(),
     )
@@ -71,4 +75,7 @@ def test_command_palette_combines_jump_and_action_entries() -> None:
     labels = {entry.label for entry in vm.entries}
     assert "Draft Generator" in labels
     assert "현재 승인 결정을 열기" in labels
+    assert "현재 트레이스 타임라인 열기" in labels
+    assert "선택된 아티팩트 열기" in labels
+    assert "현재 차이 보기 열기" in labels
     assert any(entry.action_id == "run_current" for entry in vm.entries if entry.entry_type == "action")

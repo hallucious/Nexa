@@ -9,11 +9,14 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
+from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer_view_model
+from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
+from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
 
 
@@ -153,6 +156,72 @@ def _execution_entries(execution_view: ExecutionPanelViewModel | None, *, app_la
     ]
 
 
+def _trace_entries(trace_view: TraceTimelineViewerViewModel | None, *, app_language: str) -> list[CommandPaletteEntryView]:
+    if trace_view is None:
+        return []
+    run_id = trace_view.run_identity.run_id
+    if run_id is None and not trace_view.events:
+        return []
+    return [
+        CommandPaletteEntryView(
+            entry_id=f"jump:trace:{run_id or 'latest'}",
+            entry_type="jump",
+            label=ui_text("palette.jump.trace_timeline", app_language=app_language, fallback_text="Open current trace timeline"),
+            target_ref=f"trace:{run_id or 'latest'}",
+            preferred_workspace_id="runtime_monitoring",
+            preferred_panel_id="trace_timeline",
+        )
+    ]
+
+
+def _artifact_entries(artifact_view: ArtifactViewerViewModel | None, *, app_language: str) -> list[CommandPaletteEntryView]:
+    if artifact_view is None or not artifact_view.artifact_list:
+        return []
+    selected = artifact_view.selected_artifact.artifact_id if artifact_view.selected_artifact is not None else artifact_view.artifact_list[0].artifact_id
+    return [
+        CommandPaletteEntryView(
+            entry_id=f"jump:artifact:{selected}",
+            entry_type="jump",
+            label=ui_text("palette.jump.artifact", app_language=app_language, fallback_text="Open selected artifact"),
+            target_ref=f"artifact:{selected}",
+            preferred_workspace_id="runtime_monitoring",
+            preferred_panel_id="artifact",
+        )
+    ]
+
+
+def _diff_entries(
+    diff_view: DiffViewerViewModel | None,
+    *,
+    preview_overlay: GraphPreviewOverlay | None,
+    app_language: str,
+) -> list[CommandPaletteEntryView]:
+    entries: list[CommandPaletteEntryView] = []
+    if diff_view is not None and diff_view.viewer_status in {"ready", "partial"}:
+        entries.append(
+            CommandPaletteEntryView(
+                entry_id=f"jump:diff:{diff_view.diff_mode}",
+                entry_type="jump",
+                label=ui_text("palette.jump.diff", app_language=app_language, fallback_text="Open current diff view"),
+                target_ref=f"diff:{diff_view.diff_mode}",
+                preferred_workspace_id="visual_editor",
+                preferred_panel_id="diff",
+            )
+        )
+    elif preview_overlay is not None:
+        entries.append(
+            CommandPaletteEntryView(
+                entry_id=f"jump:preview:{preview_overlay.overlay_id}",
+                entry_type="jump",
+                label=ui_text("palette.jump.preview", app_language=app_language, fallback_text="Open current preview overlay"),
+                target_ref=preview_overlay.preview_ref or preview_overlay.overlay_id,
+                preferred_workspace_id="visual_editor",
+                preferred_panel_id="diff",
+            )
+        )
+    return entries
+
+
 def _action_entries(action_schema: BuilderActionSchemaView) -> list[CommandPaletteEntryView]:
     workspace_map = {
         "run_current": ("runtime_monitoring", "execution"),
@@ -192,6 +261,9 @@ def read_command_palette_view_model(
     storage_view: StoragePanelViewModel | None = None,
     validation_view: ValidationPanelViewModel | None = None,
     execution_view: ExecutionPanelViewModel | None = None,
+    trace_view: TraceTimelineViewerViewModel | None = None,
+    artifact_view: ArtifactViewerViewModel | None = None,
+    diff_view: DiffViewerViewModel | None = None,
     graph_view: GraphWorkspaceViewModel | None = None,
     action_schema: BuilderActionSchemaView | None = None,
     coordination_state: BuilderPanelCoordinationStateView | None = None,
@@ -204,7 +276,11 @@ def read_command_palette_view_model(
     storage_view = storage_view or (read_storage_view_model(source_unwrapped) if source_unwrapped is not None else None)
     validation_view = validation_view or (read_validation_panel_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record) if source_unwrapped is not None else None)
     execution_view = execution_view or (read_execution_panel_view_model(source_unwrapped, execution_record=execution_record) if source_unwrapped is not None else None)
+    trace_view = trace_view or (read_trace_timeline_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record) if (source_unwrapped is not None or execution_record is not None) else None)
+    artifact_view = artifact_view or (read_artifact_viewer_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record) if (source_unwrapped is not None or execution_record is not None) else None)
     graph_view = graph_view or (read_graph_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay) if source_unwrapped is not None else None)
+    if diff_view is None and preview_overlay is not None and source_unwrapped is not None:
+        diff_view = read_diff_view_model(diff_mode="preview_vs_current", source=preview_overlay, target=source_unwrapped)
     coordination_state = coordination_state or read_panel_coordination_state(source_unwrapped, graph_view=graph_view, storage_view=storage_view, execution_view=execution_view, validation_view=validation_view)
     action_schema = action_schema or read_builder_action_schema(source_unwrapped, storage_view=storage_view, validation_view=validation_view, execution_view=execution_view)
 
@@ -214,20 +290,10 @@ def read_command_palette_view_model(
         *_finding_entries(validation_view, app_language=app_language),
         *_storage_entries(storage_view, app_language=app_language),
         *_execution_entries(execution_view, app_language=app_language),
+        *_trace_entries(trace_view, app_language=app_language),
+        *_artifact_entries(artifact_view, app_language=app_language),
+        *_diff_entries(diff_view, preview_overlay=preview_overlay, app_language=app_language),
     ]
-
-    if preview_overlay is not None:
-        entries.insert(
-            0,
-            CommandPaletteEntryView(
-                entry_id=f"jump:preview:{preview_overlay.overlay_id}",
-                entry_type="jump",
-                label=ui_text("palette.jump.preview", app_language=app_language, fallback_text="Open current preview overlay"),
-                target_ref=preview_overlay.preview_ref or preview_overlay.overlay_id,
-                preferred_workspace_id="visual_editor",
-                preferred_panel_id="diff",
-            ),
-        )
 
     if approval_flow is not None and approval_flow.current_stage not in {None, "idle", "none", "completed"}:
         entries.insert(
@@ -259,8 +325,4 @@ def read_command_palette_view_model(
     )
 
 
-__all__ = [
-    "CommandPaletteEntryView",
-    "CommandPaletteViewModel",
-    "read_command_palette_view_model",
-]
+__all__ = ["CommandPaletteEntryView", "CommandPaletteViewModel", "read_command_palette_view_model"]

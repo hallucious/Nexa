@@ -38,6 +38,7 @@ from src.ui.builder_execution_adapter_hub import BuilderExecutionAdapterHubViewM
 from src.ui.end_user_command_flows import EndUserCommandFlowViewModel, read_end_user_command_flow_view_model
 from src.ui.interaction_lifecycle_closure import InteractionLifecycleClosureViewModel, read_interaction_lifecycle_closure_view_model
 from src.ui.builder_end_user_flow_hub import BuilderEndUserFlowHubViewModel, read_builder_end_user_flow_hub_view_model
+from src.ui.product_flow_shell import ProductFlowShellViewModel, read_product_flow_shell_view_model
 
 
 @dataclass(frozen=True)
@@ -645,6 +646,47 @@ class NexaUIViewAdapter:
         return read_builder_end_user_flow_hub_view_model(
             source,
             execution_adapter_hub=execution_adapter_hub,
+            explanation=explanation,
+        )
+
+    def read_product_flow_shell_view_model(
+        self,
+        source,
+        *,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        preview_overlay: GraphPreviewOverlay | None = None,
+        selected_ref: str | None = None,
+        live_events=None,
+        diff_mode: str | None = None,
+        diff_source=None,
+        diff_target=None,
+        selected_artifact_id: str | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        explanation: str | None = None,
+    ) -> ProductFlowShellViewModel:
+        return read_product_flow_shell_view_model(
+            source,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            preview_overlay=preview_overlay,
+            selected_ref=selected_ref,
+            live_events=live_events,
+            diff_mode=diff_mode,
+            diff_source=diff_source,
+            diff_target=diff_target,
+            selected_artifact_id=selected_artifact_id,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
             explanation=explanation,
         )
 
