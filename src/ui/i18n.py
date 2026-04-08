@@ -283,6 +283,12 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "runbook.status.blocked": "Runbook blocked",
         "runbook.status.live": "Runbook in live execution",
         "runbook.status.complete": "Runbook complete",
+        "handoff.status.empty": "Next-step handoff unavailable",
+        "handoff.status.blocked": "Next-step handoff blocked",
+        "handoff.status.ready": "Next-step handoff ready",
+        "handoff.status.confirmation_required": "Next-step handoff needs confirmation",
+        "handoff.status.followthrough": "Next-step handoff in follow-through",
+        "handoff.status.complete": "Next-step handoff complete",
 
         "graph.binding.single": "{count} binding",
         "graph.binding.multiple": "{count} bindings",

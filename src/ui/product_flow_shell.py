@@ -22,6 +22,7 @@ from src.ui.graph_workspace import GraphPreviewOverlay
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, read_product_flow_journey_view_model
 from src.ui.product_flow_runbook import ProductFlowRunbookViewModel, read_product_flow_runbook_view_model
+from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_product_flow_handoff_view_model
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ class ProductFlowShellViewModel:
     end_user_flow_hub: BuilderEndUserFlowHubViewModel | None = None
     journey: ProductFlowJourneyViewModel | None = None
     runbook: ProductFlowRunbookViewModel | None = None
+    handoff: ProductFlowHandoffViewModel | None = None
     right_stack_targets: list[ProductFlowSurfaceTargetView] = field(default_factory=list)
     bottom_dock_targets: list[ProductFlowSurfaceTargetView] = field(default_factory=list)
     command_entry_count: int = 0
@@ -158,7 +160,7 @@ def _change_count(shell_vm: BuilderShellViewModel | None) -> int:
     return shell_vm.diff.summary.total_change_count
 
 
-def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_action_id: str | None, recommended_flow_id: str | None, *, app_language: str) -> ProductFlowFocusView:
+def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_action_id: str | None, recommended_flow_id: str | None, *, app_language: str, handoff: ProductFlowHandoffViewModel | None = None) -> ProductFlowFocusView:
     if shell_vm is None:
         return ProductFlowFocusView()
 
@@ -214,6 +216,20 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
         else:
             active_bottom_panel_id = "storage"
             focus_reason = "draft_edit"
+
+    if handoff is not None and handoff.primary_workspace_id is not None and handoff.primary_panel_id is not None:
+        if stage_id != "run" and handoff.primary_action_id is not None and handoff.primary_enabled:
+            active_workspace_id = handoff.primary_workspace_id
+            active_right_panel_id = handoff.primary_panel_id
+            focus_reason = "handoff_primary"
+        elif handoff.primary_enabled and not handoff.primary_complete:
+            active_workspace_id = handoff.primary_workspace_id
+            active_right_panel_id = handoff.primary_panel_id
+            focus_reason = "handoff_primary"
+        elif handoff.followthrough_available and handoff.followthrough_workspace_id is not None and handoff.followthrough_panel_id is not None:
+            active_workspace_id = handoff.followthrough_workspace_id
+            active_right_panel_id = handoff.followthrough_panel_id
+            focus_reason = "handoff_followthrough"
 
     return ProductFlowFocusView(
         active_workspace_id=active_workspace_id,
@@ -374,10 +390,25 @@ def read_product_flow_shell_view_model(
         journey=journey_vm,
     ) if (source_unwrapped is not None or execution_record is not None) else None
 
+    handoff_vm = read_product_flow_handoff_view_model(
+        source_unwrapped if source_unwrapped is not None else execution_record,
+        validation_report=validation_report,
+        execution_record=execution_record,
+        session_state_card=session_state_card,
+        intent=intent,
+        patch_plan=patch_plan,
+        precheck=precheck,
+        preview=preview,
+        approval_flow=approval_flow,
+        workflow_hub=workflow_hub,
+        journey=journey_vm,
+        runbook=runbook_vm,
+    ) if (source_unwrapped is not None or execution_record is not None) else None
+
     stage_id = _stage_id(shell_vm, workflow_hub)
     recommended_flow_id = end_user_flow_hub.recommended_flow_id if end_user_flow_hub is not None else None
     recommended_action_id = (next((entry.action_id for entry in (runbook_vm.entries if runbook_vm is not None else []) if entry.entry_id == runbook_vm.recommended_entry_id and entry.action_id is not None), None) if runbook_vm is not None else None) or (execution_adapter_hub.recommended_action_id if execution_adapter_hub is not None else None)
-    focus = _focus(shell_vm, stage_id, recommended_action_id, recommended_flow_id, app_language=app_language)
+    focus = _focus(shell_vm, stage_id, recommended_action_id, recommended_flow_id, app_language=app_language, handoff=handoff_vm)
     right_stack_targets, bottom_dock_targets = _surface_targets(shell_vm, app_language=app_language, focus=focus)
 
     stage = ProductFlowStageView(
@@ -418,6 +449,7 @@ def read_product_flow_shell_view_model(
         end_user_flow_hub=end_user_flow_hub,
         journey=journey_vm,
         runbook=runbook_vm,
+        handoff=handoff_vm,
         right_stack_targets=right_stack_targets,
         bottom_dock_targets=bottom_dock_targets,
         command_entry_count=(shell_vm.command_palette.enabled_entry_count if shell_vm is not None and shell_vm.command_palette is not None else 0),
