@@ -10,18 +10,17 @@ from src.designer.models.validation_precheck import AmbiguityAssessmentReport, C
 from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel, NodeTimingCard, OutputResultCard
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
-from src.ui.graph_workspace import GraphPreviewOverlay
-from src.ui.product_flow_shell import read_product_flow_shell_view_model
+from src.ui.product_flow_runbook import read_product_flow_runbook_view_model
 
 
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
-        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Product Flow Draft"),
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Runbook Draft"),
         circuit=CircuitModel(nodes=[{"id": "n1", "label": "Draft Generator"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={"run_id": "run-001"}, errors=[]),
-        ui=UIModel(layout={}, metadata={"selected_node_ids": ["n1"], "active_panel": "designer", "app_language": "ko-KR"}),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
 
@@ -35,35 +34,19 @@ def _validation_report() -> ValidationReport:
     )
 
 
-def _run_running() -> ExecutionRecordModel:
+def _run(status: str = "completed") -> ExecutionRecordModel:
     return ExecutionRecordModel(
-        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-08T00:00:00Z", started_at="2026-04-08T00:00:00Z", status="running"),
-        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-08T00:00:00Z", started_at="2026-04-08T00:00:00Z", finished_at=(None if status == "running" else "2026-04-08T00:00:05Z"), status=status),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type=("manual_run" if status != "running" else "manual_run")),
         input=ExecutionInputModel(),
-        timeline=ExecutionTimelineModel(
-            total_duration_ms=500,
-            event_count=1,
-            node_order=["n1"],
-            started_nodes=[NodeTimingCard(node_id="n1", started_at="2026-04-08T00:00:01Z")],
-            completed_nodes=[],
+        timeline=ExecutionTimelineModel(started_nodes=[NodeTimingCard(node_id="n1", started_at="2026-04-08T00:00:01Z")], completed_nodes=[] if status == "running" else [NodeTimingCard(node_id="n1", finished_at="2026-04-08T00:00:04Z", outcome="success")], event_count=(1 if status == "running" else 3)),
+        node_results=NodeResultsModel(results=[NodeResultCard(node_id="n1", status=("partial" if status == "running" else "success"))]),
+        outputs=ExecutionOutputModel(output_summary=("in progress" if status == "running" else "done"), final_outputs=[OutputResultCard(output_ref="result", source_node="n1", value_summary="done", value_ref="art-1")]),
+        artifacts=ExecutionArtifactsModel(
+            artifact_refs=[ArtifactRecordCard(artifact_id="art-1", artifact_type="final_output", producer_node="n1", hash="abc123", ref="artifact://art-1", summary="final answer", artifact_schema_version="1.0.0")],
+            artifact_count=1,
+            artifact_summary="1 artifact",
         ),
-        node_results=NodeResultsModel(results=[NodeResultCard(node_id="n1", status="partial")]),
-        outputs=ExecutionOutputModel(output_summary="in progress", final_outputs=[OutputResultCard(output_ref="result", source_node="n1", value_summary="in progress", value_ref="art-1")]),
-        artifacts=ExecutionArtifactsModel(artifact_refs=[ArtifactRecordCard(artifact_id="art-1", artifact_type="final_output", producer_node="n1", hash="abc123", ref="artifact://art-1", summary="artifact summary")], artifact_count=1, artifact_summary="1 artifact"),
-        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
-        observability=ExecutionObservabilityModel(),
-    )
-
-
-def _run_completed() -> ExecutionRecordModel:
-    return ExecutionRecordModel(
-        meta=ExecutionMetaModel(run_id="run-002", record_format_version="1.0.0", created_at="2026-04-08T00:00:00Z", started_at="2026-04-08T00:00:00Z", finished_at="2026-04-08T00:00:05Z", status="completed"),
-        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
-        input=ExecutionInputModel(),
-        timeline=ExecutionTimelineModel(event_count=2),
-        node_results=NodeResultsModel(results=[NodeResultCard(node_id="n1", status="success")]),
-        outputs=ExecutionOutputModel(output_summary="done", final_outputs=[OutputResultCard(output_ref="result", source_node="n1", value_summary="done", value_ref="art-1")]),
-        artifacts=ExecutionArtifactsModel(artifact_refs=[ArtifactRecordCard(artifact_id="art-1", artifact_type="final_output", producer_node="n1", hash="abc123", ref="artifact://art-1", summary="artifact summary")], artifact_count=1, artifact_summary="1 artifact"),
         diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
         observability=ExecutionObservabilityModel(),
     )
@@ -146,44 +129,22 @@ def _preview() -> CircuitDraftPreview:
     )
 
 
-def _approval() -> DesignerApprovalFlowState:
+def _approval(stage: str = "awaiting_decision", outcome: str = "approved_for_commit") -> DesignerApprovalFlowState:
     return DesignerApprovalFlowState(
         approval_id="approval-001",
         intent_ref="intent-001",
         patch_ref="patch-001",
         precheck_ref="pre-001",
         preview_ref="preview-001",
-        current_stage="awaiting_decision",
-        final_outcome="approved_for_commit",
+        current_stage=stage,
+        final_outcome=outcome,
     )
 
 
-def test_product_flow_shell_prioritizes_live_execution_control_plane_navigation() -> None:
-    vm = read_product_flow_shell_view_model(
+def test_product_flow_runbook_highlights_commit_entry_after_review_is_approved() -> None:
+    vm = read_product_flow_runbook_view_model(
         _working_save(),
         validation_report=_validation_report(),
-        execution_record=_run_running(),
-        selected_artifact_id="art-1",
-    )
-
-    assert vm.stage.stage_id == "run"
-    assert vm.shell_status == "live_run"
-    assert vm.focus.active_workspace_id == "runtime_monitoring"
-    assert vm.focus.active_right_panel_id == "execution"
-    assert vm.focus.active_bottom_panel_id == "trace_timeline"
-    assert vm.stage.visible_event_count >= 1
-    assert vm.stage.visible_artifact_count == 1
-    assert any(target.target_id == "artifact" for target in vm.bottom_dock_targets)
-    assert vm.command_entry_count > 0
-
-
-def test_product_flow_shell_prioritizes_review_diff_and_designer_when_approval_is_open() -> None:
-    vm = read_product_flow_shell_view_model(
-        _working_save(),
-        validation_report=_validation_report(),
-        execution_record=_run_completed(),
-        preview_overlay=GraphPreviewOverlay(overlay_id="preview-ov-1", preview_ref="preview:001", summary="preview"),
-        selected_ref="node:n1",
         session_state_card=_session_card(),
         intent=_intent(),
         patch_plan=_patch(),
@@ -192,28 +153,20 @@ def test_product_flow_shell_prioritizes_review_diff_and_designer_when_approval_i
         approval_flow=_approval(),
     )
 
-    assert vm.stage.stage_id == "review"
-    assert vm.shell_status == "review_focus"
-    assert vm.focus.active_workspace_id == "node_configuration"
-    assert vm.focus.active_right_panel_id == "designer"
-    assert vm.focus.active_bottom_panel_id == "diff"
-    assert vm.workflow_hub is not None
-    assert vm.dispatch_hub is not None
-    assert vm.execution_adapter_hub is not None
-    assert vm.end_user_flow_hub is not None
-    assert vm.journey is not None
-    assert vm.journey.current_step_id == "commit_snapshot"
-    assert vm.stage.pending_approval_count >= 1
-    assert any(target.target_id == "diff" and target.active for target in vm.bottom_dock_targets)
+    assert vm.source_role == "working_save"
+    assert vm.runbook_status == "ready"
+    assert vm.current_entry_id == "commit_snapshot"
+    commit_entry = next(entry for entry in vm.entries if entry.entry_id == "commit_snapshot")
+    assert commit_entry.entry_status == "ready"
+    assert commit_entry.enabled is True
+    assert commit_entry.action_id == "commit_snapshot"
 
 
-def test_product_flow_shell_exposes_runbook_and_prefers_runbook_action_when_review_chain_is_open() -> None:
-    vm = read_product_flow_shell_view_model(
+def test_product_flow_runbook_moves_to_trace_followthrough_after_completed_run() -> None:
+    vm = read_product_flow_runbook_view_model(
         _working_save(),
         validation_report=_validation_report(),
-        execution_record=_run_completed(),
-        preview_overlay=GraphPreviewOverlay(overlay_id="preview-ov-2", preview_ref="preview:002", summary="preview"),
-        selected_ref="node:n1",
+        execution_record=_run("completed"),
         session_state_card=_session_card(),
         intent=_intent(),
         patch_plan=_patch(),
@@ -222,6 +175,24 @@ def test_product_flow_shell_exposes_runbook_and_prefers_runbook_action_when_revi
         approval_flow=_approval(),
     )
 
-    assert vm.runbook is not None
-    assert vm.runbook.current_entry_id == "commit_snapshot"
-    assert vm.focus.recommended_action_id == "commit_snapshot"
+    assert vm.current_entry_id == "inspect_trace"
+    trace_entry = next(entry for entry in vm.entries if entry.entry_id == "inspect_trace")
+    artifact_entry = next(entry for entry in vm.entries if entry.entry_id == "inspect_artifacts")
+    assert trace_entry.entry_status == "complete"
+    assert trace_entry.enabled is True
+    assert artifact_entry.entry_status == "complete"
+    assert vm.completed_entry_count >= 4
+
+
+def test_product_flow_runbook_marks_live_execution_as_live_and_offers_cancel_or_trace_monitoring() -> None:
+    vm = read_product_flow_runbook_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run("running"),
+    )
+
+    assert vm.runbook_status == "live"
+    run_entry = next(entry for entry in vm.entries if entry.entry_id == "run_current")
+    assert run_entry.entry_status == "active"
+    assert run_entry.enabled is True
+    assert run_entry.action_id == "cancel_run"

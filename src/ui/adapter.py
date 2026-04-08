@@ -40,6 +40,7 @@ from src.ui.interaction_lifecycle_closure import InteractionLifecycleClosureView
 from src.ui.builder_end_user_flow_hub import BuilderEndUserFlowHubViewModel, read_builder_end_user_flow_hub_view_model
 from src.ui.product_flow_shell import ProductFlowShellViewModel, read_product_flow_shell_view_model
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, read_product_flow_journey_view_model
+from src.ui.product_flow_runbook import ProductFlowRunbookViewModel, read_product_flow_runbook_view_model
 
 
 @dataclass(frozen=True)
@@ -679,6 +680,37 @@ class NexaUIViewAdapter:
             approval_flow=approval_flow,
             workflow_hub=workflow_hub,
             prefer_active_workflow_focus=prefer_active_workflow_focus,
+            explanation=explanation,
+        )
+
+    def read_product_flow_runbook_view_model(
+        self,
+        source,
+        *,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        workflow_hub: BuilderWorkflowHubViewModel | None = None,
+        journey: ProductFlowJourneyViewModel | None = None,
+        explanation: str | None = None,
+    ) -> ProductFlowRunbookViewModel:
+        return read_product_flow_runbook_view_model(
+            source,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+            workflow_hub=workflow_hub,
+            journey=journey,
             explanation=explanation,
         )
 
