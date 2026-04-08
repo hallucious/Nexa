@@ -270,6 +270,30 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
 
         "panel.badge.storage_diagnostics": "storage diagnostics",
 
+        "storage.role.working_save": "Working Save",
+        "storage.role.commit_snapshot": "Commit Snapshot",
+        "storage.role.execution_record": "Execution Record",
+        "storage.role.none": "No storage role",
+
+        "topbar.status.ready": "Ready",
+        "topbar.status.warning": "Warnings present",
+        "topbar.status.attention": "Decision required",
+        "topbar.status.active": "Execution active",
+        "topbar.status.blocked": "Blocked",
+        "topbar.mode.build": "Build",
+        "topbar.mode.review": "Review",
+        "topbar.mode.run": "Run",
+        "execution.summary.idle": "Idle",
+
+        "palette.placeholder": "Search nodes, findings, runs, actions",
+        "palette.finding.untitled": "Validation finding",
+        "palette.jump.working_save": "Open current working save",
+        "palette.jump.commit_snapshot": "Open latest commit snapshot",
+        "palette.jump.execution_record": "Open latest execution record",
+        "palette.jump.current_run": "Focus current run",
+        "palette.jump.preview": "Open current preview overlay",
+        "palette.jump.approval": "Open current approval decision",
+
         "workspace.visual_editor.name": "Visual Editor",
         "workspace.runtime_monitoring.name": "Runtime Monitoring",
         "workspace.node_configuration.name": "Node Configuration",
@@ -579,6 +603,30 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "interaction.stage.history": "기록 및 재실행",
 
         "panel.badge.storage_diagnostics": "저장소 진단",
+
+        "storage.role.working_save": "워킹 세이브",
+        "storage.role.commit_snapshot": "커밋 스냅샷",
+        "storage.role.execution_record": "실행 기록",
+        "storage.role.none": "저장 역할 없음",
+
+        "topbar.status.ready": "준비됨",
+        "topbar.status.warning": "경고 있음",
+        "topbar.status.attention": "결정 필요",
+        "topbar.status.active": "실행 중",
+        "topbar.status.blocked": "차단됨",
+        "topbar.mode.build": "구성",
+        "topbar.mode.review": "검토",
+        "topbar.mode.run": "실행",
+        "execution.summary.idle": "대기 중",
+
+        "palette.placeholder": "노드, 문제, 실행, 액션 검색",
+        "palette.finding.untitled": "검증 문제",
+        "palette.jump.working_save": "현재 워킹 세이브 열기",
+        "palette.jump.commit_snapshot": "최신 커밋 스냅샷 열기",
+        "palette.jump.execution_record": "최신 실행 기록 열기",
+        "palette.jump.current_run": "현재 실행에 집중",
+        "palette.jump.preview": "현재 미리보기 오버레이 열기",
+        "palette.jump.approval": "현재 승인 결정을 열기",
 
         "workspace.visual_editor.name": "비주얼 에디터",
         "workspace.runtime_monitoring.name": "런타임 모니터링",

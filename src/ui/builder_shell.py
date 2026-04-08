@@ -23,6 +23,11 @@ from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel,
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
+from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
+from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
+from src.ui.visual_editor_workspace import VisualEditorWorkspaceViewModel, read_visual_editor_workspace_view_model
+from src.ui.runtime_monitoring_workspace import RuntimeMonitoringWorkspaceViewModel, read_runtime_monitoring_workspace_view_model
+from src.ui.node_configuration_workspace import NodeConfigurationWorkspaceViewModel, read_node_configuration_workspace_view_model
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
@@ -55,6 +60,10 @@ class BuilderShellViewModel:
     storage_role: str = "none"
     shell_mode: str = "builder"
     shell_mode_label: str | None = None
+    active_workspace_id: str = "visual_editor"
+    active_workspace_label: str | None = None
+    top_bar: BuilderTopBarViewModel | None = None
+    command_palette: CommandPaletteViewModel | None = None
     coordination: BuilderPanelCoordinationStateView = field(default_factory=BuilderPanelCoordinationStateView)
     action_schema: BuilderActionSchemaView = field(default_factory=BuilderActionSchemaView)
     graph: GraphWorkspaceViewModel | None = None
@@ -66,6 +75,9 @@ class BuilderShellViewModel:
     artifact: ArtifactViewerViewModel | None = None
     diff: DiffViewerViewModel | None = None
     designer: DesignerPanelViewModel | None = None
+    visual_editor: VisualEditorWorkspaceViewModel | None = None
+    runtime_monitoring: RuntimeMonitoringWorkspaceViewModel | None = None
+    node_configuration: NodeConfigurationWorkspaceViewModel | None = None
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
     explanation: str | None = None
@@ -199,6 +211,37 @@ def read_builder_shell_view_model(
     elif role == "execution_record":
         shell_mode = "run_review"
 
+    visual_editor_vm = read_visual_editor_workspace_view_model(
+        source_unwrapped,
+        validation_report=validation_report,
+        preview_overlay=preview_overlay,
+        diff_mode=diff_mode,
+        diff_source=diff_source,
+        diff_target=diff_target,
+    ) if source_unwrapped is not None else None
+
+    runtime_monitoring_vm = read_runtime_monitoring_workspace_view_model(
+        source_unwrapped if source_unwrapped is not None else execution_record,
+        validation_report=validation_report,
+        execution_record=execution_record,
+        live_events=live_events,
+        selected_artifact_id=selected_artifact_id,
+    ) if (source_unwrapped is not None or execution_record is not None) else None
+
+    node_configuration_vm = read_node_configuration_workspace_view_model(
+        source_unwrapped,
+        selected_ref=selected_ref,
+        validation_report=validation_report,
+        execution_record=execution_record,
+        preview_overlay=preview_overlay,
+        session_state_card=session_state_card,
+        intent=intent,
+        patch_plan=patch_plan,
+        precheck=precheck,
+        preview=preview,
+        approval_flow=approval_flow,
+    ) if source_unwrapped is not None else None
+
     diagnostics = BuilderShellDiagnosticsView(
         warning_count=warning_count,
         stale_selection_count=coordination_vm.stale_reference_count,
@@ -211,12 +254,47 @@ def read_builder_shell_view_model(
     if source_unwrapped is None:
         shell_status = "failed"
 
+    if shell_mode == "runtime_monitoring":
+        active_workspace_id = "runtime_monitoring"
+    elif shell_mode == "designer_review":
+        active_workspace_id = "node_configuration"
+    else:
+        active_workspace_id = "visual_editor"
+
+    top_bar_vm = read_builder_top_bar_view_model(
+        source_unwrapped if source_unwrapped is not None else execution_record,
+        validation_report=validation_report,
+        execution_record=execution_record,
+        storage_view=storage_vm,
+        validation_view=validation_vm,
+        execution_view=execution_vm,
+        action_schema=action_schema,
+        approval_flow=approval_flow,
+    )
+    command_palette_vm = read_command_palette_view_model(
+        source_unwrapped if source_unwrapped is not None else execution_record,
+        validation_report=validation_report,
+        execution_record=execution_record,
+        preview_overlay=preview_overlay,
+        storage_view=storage_vm,
+        validation_view=validation_vm,
+        execution_view=execution_vm,
+        graph_view=graph_vm,
+        action_schema=action_schema,
+        coordination_state=coordination_vm,
+        approval_flow=approval_flow,
+    )
+
     return BuilderShellViewModel(
         shell_status=shell_status,
         shell_status_label=ui_text(f"shell.status.{shell_status}", app_language=app_language, fallback_text=shell_status.replace("_", " ")),
         storage_role=role,
         shell_mode=shell_mode,
         shell_mode_label=ui_text(f"shell.mode.{shell_mode}", app_language=app_language, fallback_text=shell_mode.replace("_", " ")),
+        active_workspace_id=active_workspace_id,
+        active_workspace_label=ui_text(f"workspace.{active_workspace_id}.name", app_language=app_language, fallback_text=active_workspace_id.replace("_", " ")),
+        top_bar=top_bar_vm,
+        command_palette=command_palette_vm,
         coordination=coordination_vm,
         action_schema=action_schema,
         graph=graph_vm,
@@ -228,6 +306,9 @@ def read_builder_shell_view_model(
         artifact=artifact_vm,
         diff=diff_vm,
         designer=designer_vm,
+        visual_editor=visual_editor_vm,
+        runtime_monitoring=runtime_monitoring_vm,
+        node_configuration=node_configuration_vm,
         layout=layout_vm,
         diagnostics=diagnostics,
         explanation=explanation,

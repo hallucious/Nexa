@@ -2,6 +2,8 @@ from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, rea
 from src.ui.adapter import NexaUIViewAdapter
 from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer_view_model
 from src.ui.builder_shell import BuilderShellViewModel, read_builder_shell_view_model
+from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
+from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
 from src.ui.designer_panel import DesignerPanelViewModel, read_designer_panel_view_model
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
@@ -37,6 +39,8 @@ __all__ = [
     "BuilderActionView",
     "BuilderPanelCoordinationStateView",
     "BuilderShellViewModel",
+    "BuilderTopBarViewModel",
+    "CommandPaletteViewModel",
     "DesignerPanelViewModel",
     "DiffViewerViewModel",
     "ExecutionPanelViewModel",
@@ -78,6 +82,8 @@ __all__ = [
     "read_artifact_viewer_view_model",
     "read_builder_action_schema",
     "read_builder_shell_view_model",
+    "read_builder_top_bar_view_model",
+    "read_command_palette_view_model",
     "read_designer_panel_view_model",
     "read_diff_view_model",
     "read_execution_panel_view_model",

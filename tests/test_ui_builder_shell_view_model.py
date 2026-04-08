@@ -169,6 +169,12 @@ def test_builder_shell_composes_connected_builder_surfaces() -> None:
     assert vm.shell_mode == "designer_review"
     assert vm.coordination.active_panel == "validation"
     assert vm.action_schema.source_role == "working_save"
+    assert vm.top_bar is not None
+    assert vm.command_palette is not None
+    assert vm.active_workspace_id == "node_configuration"
+    assert vm.visual_editor is not None
+    assert vm.runtime_monitoring is not None
+    assert vm.node_configuration is not None
     assert vm.graph is not None
     assert vm.inspector is not None
     assert vm.validation is not None
@@ -178,5 +184,8 @@ def test_builder_shell_composes_connected_builder_surfaces() -> None:
     assert vm.artifact is not None
     assert vm.designer is not None
     assert vm.layout.active_theme_id == "nexa-dark"
+    assert vm.top_bar.storage_badge.label == "워킹 세이브"
+    assert vm.command_palette.placeholder == "노드, 문제, 실행, 액션 검색"
     assert vm.shell_mode_label == "Designer 검토"
+    assert vm.active_workspace_label == "노드 구성"
     assert vm.shell_status_label == "셸 준비 완료"
