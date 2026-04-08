@@ -643,3 +643,25 @@ def test_ui_adapter_routes_product_flow_closure_through_stable_boundary() -> Non
 
     assert closure_vm.source_role == "working_save"
     assert closure_vm.current_stage_id in {"review", "approval", "commit", "run", "followthrough"}
+
+
+def test_ui_adapter_routes_product_flow_transition_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    transition_vm = adapter.read_product_flow_transition_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert transition_vm.source_role == "working_save"
+    assert transition_vm.current_transition_id in {"review_to_approval", "approval_to_commit", "commit_to_run", "run_to_followthrough"}
+    assert transition_vm.transitions
