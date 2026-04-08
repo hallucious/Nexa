@@ -622,3 +622,24 @@ def test_ui_adapter_routes_product_flow_handoff_through_stable_boundary() -> Non
     assert handoff_vm.source_role == "working_save"
     assert handoff_vm.primary_entry_id == "commit_snapshot"
     assert handoff_vm.followthrough_entry_id == "run_current"
+
+
+def test_ui_adapter_routes_product_flow_closure_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    closure_vm = adapter.read_product_flow_closure_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert closure_vm.source_role == "working_save"
+    assert closure_vm.current_stage_id in {"review", "approval", "commit", "run", "followthrough"}

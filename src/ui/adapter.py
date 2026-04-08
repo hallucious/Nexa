@@ -44,6 +44,7 @@ from src.ui.product_flow_runbook import ProductFlowRunbookViewModel, read_produc
 from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_product_flow_handoff_view_model
 from src.ui.product_flow_readiness import ProductFlowReadinessViewModel, read_product_flow_readiness_view_model
 from src.ui.product_flow_e2e_path import ProductFlowE2EPathViewModel, read_product_flow_e2e_path_view_model
+from src.ui.product_flow_closure import ProductFlowClosureViewModel, read_product_flow_closure_view_model
 
 
 @dataclass(frozen=True)
@@ -822,6 +823,45 @@ class NexaUIViewAdapter:
             runbook=runbook,
             handoff=handoff,
             readiness=readiness,
+            end_user_flow_hub=end_user_flow_hub,
+            explanation=explanation,
+        )
+
+    def read_product_flow_closure_view_model(
+        self,
+        source,
+        *,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        workflow_hub: BuilderWorkflowHubViewModel | None = None,
+        runbook: ProductFlowRunbookViewModel | None = None,
+        handoff: ProductFlowHandoffViewModel | None = None,
+        readiness: ProductFlowReadinessViewModel | None = None,
+        e2e_path: ProductFlowE2EPathViewModel | None = None,
+        end_user_flow_hub: BuilderEndUserFlowHubViewModel | None = None,
+        explanation: str | None = None,
+    ) -> ProductFlowClosureViewModel:
+        return read_product_flow_closure_view_model(
+            source,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+            workflow_hub=workflow_hub,
+            runbook=runbook,
+            handoff=handoff,
+            readiness=readiness,
+            e2e_path=e2e_path,
             end_user_flow_hub=end_user_flow_hub,
             explanation=explanation,
         )

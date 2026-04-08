@@ -175,6 +175,7 @@ def test_product_flow_shell_prioritizes_live_execution_control_plane_navigation(
     assert vm.stage.visible_artifact_count == 1
     assert vm.e2e_path is not None
     assert vm.e2e_path.path_status in {"followthrough", "terminal", "actionable"}
+    assert vm.closure is not None
     assert any(target.target_id == "artifact" for target in vm.bottom_dock_targets)
     assert vm.command_entry_count > 0
 
@@ -207,6 +208,7 @@ def test_product_flow_shell_prioritizes_review_diff_and_designer_when_approval_i
     assert vm.journey is not None
     assert vm.journey.current_step_id == "commit_snapshot"
     assert vm.stage.pending_approval_count >= 1
+    assert vm.closure is not None
     assert any(target.target_id == "diff" and target.active for target in vm.bottom_dock_targets)
 
 
@@ -230,6 +232,7 @@ def test_product_flow_shell_exposes_runbook_and_prefers_runbook_action_when_revi
     assert vm.readiness is not None
     assert vm.readiness.current_boundary_id == "commit"
     assert vm.handoff is not None
+    assert vm.closure is not None
     assert vm.handoff.primary_entry_id == "commit_snapshot"
     assert vm.handoff.followthrough_entry_id == "run_current"
     assert vm.focus.recommended_action_id == "commit_snapshot"
