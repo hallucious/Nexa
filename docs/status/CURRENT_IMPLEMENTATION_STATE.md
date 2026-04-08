@@ -1,6 +1,6 @@
 # CURRENT_IMPLEMENTATION_STATE
 
-Version: 1.0.0
+Version: 1.1.0
 
 ## Purpose
 
@@ -11,21 +11,21 @@ It exists to answer four practical questions quickly:
 1. What is already implemented in code?
 2. What is only partially converged?
 3. What should not be reopened casually?
-4. What must remain open until product-flow integration is truly closed?
+4. What is still genuinely open after the recent product-flow shell convergence work?
 
 This document is intentionally implementation-first.
 It is not a replacement for the detailed architecture/spec documents.
 
 ## Authoritative Snapshot
 
-- authoritative implementation baseline commit: `8f111dd`
-- authoritative verified baseline: `1806 passed, 9 skipped`
-- status source: latest repository snapshot after top-level current-state sync and before product-flow shell integration closure
+- authoritative implementation baseline commit: `f143396`
+- authoritative verified baseline: `1844 passed, 9 skipped`
+- status source: latest repository snapshot after product-flow gateway projection and top-level documentation synchronization
 
 ## One-Line Position
 
 Nexa is **not** in a "UI not started" state.
-It is in a **UI foundation implemented, shell/product integration still open** state.
+It is in a **runtime/storage foundation complete, UI foundation implemented, product-flow shell largely converged, final live E2E proof still open** state.
 
 ## Sector Matrix
 
@@ -34,12 +34,12 @@ It is in a **UI foundation implemented, shell/product integration still open** s
 | UI adapter / view-model layer | Complete baseline | Core UI projections exist and are test-backed across panel/workspace/hub surfaces |
 | UI persistence / storage boundary | Complete baseline | Working Save may carry UI continuity; Commit Snapshot must not carry canonical `ui` |
 | i18n foundation | Complete baseline | translation lookup, EN fallback, KO/EN resources, UI language persistence boundary all exist |
-| i18n major retrofit | Mostly complete | main panel / workflow / workspace / shell / hub surfaces are localized; small scattered surfaces may remain |
-| live execution / trace / artifact / diff view-model surface | Implemented view-model layer | Python-side projections exist; end-user shell/product flow still needs stronger integration |
-| Designer proposal flow projection | Implemented view-model layer | intent / patch / precheck / preview / approval data is projected into UI surfaces |
-| product-flow shell integration | Partial | shell/workspace/hub composition exists, but top-level product-flow closure is still in progress |
-| Subcircuit | Implemented foundation | schema/model/validator/runtime/example coverage exists; broader convergence should now be code-first |
-| E2E user flow closure | Not closed | cross-surface story exists in pieces, but not yet locked as a full user workflow contract + regression set |
+| i18n major retrofit | Complete baseline | main panel / workflow / workspace / shell / hub surfaces are localized; residual cleanup is minor rather than architectural |
+| live execution / trace / artifact / diff shell surface | Implemented shell-linked baseline | Python-side projections exist and are linked into product-flow shell composition |
+| Designer proposal flow projection | Implemented shell-linked baseline | intent / patch / precheck / preview / approval data is projected into UI surfaces |
+| product-flow shell integration | Implemented convergence baseline | shell/workspace/hub composition plus journey / runbook / handoff / readiness / E2E path / closure / transition / gateway projections are present |
+| Subcircuit | Implemented foundation | schema/model/validator/runtime/example coverage exists; broader future work should be code-first, not theory-first |
+| E2E user flow closure | Mostly converged | scenario-level shell/gateway projections now exist, but final live commit/run/follow-through proof is still an open engineering task |
 
 ## Stable Enough To Stop Reopening
 
@@ -67,21 +67,22 @@ The following should now be treated as closed baseline decisions unless a real c
 - adapter/view-model boundary remains mandatory
 - panel/workspace/hub composition must not bypass the adapter boundary
 
+### 5. Product-flow shell projection stack
+- journey / runbook / handoff / readiness / E2E path / closure / transition / gateway are now part of the implemented shell-level convergence baseline
+- future work should tighten real boundary behavior rather than reopen whether these projection families should exist
+
 ## Must Remain Open
 
 The following are still open and should not be falsely marked complete.
 
-### 1. Product-flow shell closure
-The pieces exist, but they are not yet fully closed into the most direct end-user build/review/run workflow.
+### 1. Final live commit/run/follow-through proof
+The shell now projects the relevant gates and boundaries, but live boundary proof still needs final convergence against real workflow behavior.
 
-### 2. Execution observability integration at shell level
-Trace, artifact, diff, execution, and storage surfaces exist, but they still need stronger shell-level linking and final UX closure.
+### 2. Final integrated Designer control-plane proof
+The proposal-flow surfaces and gates exist, but end-to-end review/approval/revision behavior still needs final proof at the workflow boundary level.
 
-### 3. Full Designer proposal control-plane closure
-The proposal-flow surfaces exist, but full review/approval/revision interaction closure still requires integrated user-flow proof.
-
-### 4. Full E2E user scenario regression
-The repository still needs more user-journey-oriented tests rather than only module-by-module coverage.
+### 3. Broader end-user frontend productization
+The Python-side UI shell and product-flow control-plane models are substantially implemented, but they are not yet the same thing as a finished user-facing frontend product.
 
 ## Reopen-Prohibited Topics
 
@@ -92,27 +93,19 @@ Do not casually reopen the following:
 - whether UI i18n should be postponed until later
 - whether Designer may silently mutate committed truth
 - whether storage-role visibility matters in the shell
+- whether product-flow shell convergence should be replaced by another theory-only document cycle
 
 ## Keep-Open Topics
 
 Continue treating the following as active implementation topics:
 
-- shell-level product-flow integration
-- execution/trace/artifact/diff linkage inside the shell
-- Designer review/approval loop closure
-- final small-surface i18n cleanup
-- E2E user-scenario regression closure
+- final live E2E workflow proof
+- real commit/run/follow-through convergence
+- final Designer control-plane closure
+- broader frontend/product shell realization beyond Python-side projection models
 
 ## Recommended Immediate Next Batch
 
 The most rational immediate next batch is:
 
-**continue shell/product-flow integration on top of the existing UI foundation, rather than producing another theory-only document bundle.**
-
-Concretely, this means prioritizing:
-
-1. shell-level workspace composition and top-level actions
-2. command/quick-jump integration
-3. execution/trace/artifact/diff linkage through shell-level navigation
-4. Designer review/approval actions at shell level
-5. user-flow-oriented regression tests
+**perform one last technical convergence pass only if a real live E2E gap is found; otherwise treat top-level documentation as synchronized and move toward the next product-facing implementation line.**

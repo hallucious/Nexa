@@ -9,7 +9,8 @@
 3. `docs/architecture/ARCHITECTURE.md` — execution model and runtime structure
 4. `docs/TRACKER.md` — implemented surface, completed milestones, next targets
 5. `docs/status/CURRENT_STATE.md` — latest implementation truth snapshot and sector-status matrix
-6. `docs/DEVELOPMENT.md` — local setup, testing, and contributor workflow
+6. `docs/status/CURRENT_IMPLEMENTATION_STATE.md` — short-form implementation truth sheet for the current code baseline
+7. `docs/DEVELOPMENT.md` — local setup, testing, and contributor workflow
 
 ---
 
@@ -22,6 +23,7 @@
 | `docs/FOUNDATION_MAP.md` | canonical doc index, Active/Partial/Planned status |
 | `docs/TRACKER.md` | implementation tracker, release snapshot, next steps |
 | `docs/status/CURRENT_STATE.md` | latest implementation truth snapshot and sector status matrix |
+| `docs/status/CURRENT_IMPLEMENTATION_STATE.md` | short-form implementation truth sheet for the current code baseline |
 | `docs/ARCHITECTURE_CONSTITUTION.md` | non-negotiable architectural principles |
 | `docs/CONTRIBUTING.md` | spec change procedure, PR requirements |
 | `docs/DEVELOPMENT.md` | environment setup, testing, contributor workflow |
@@ -120,7 +122,7 @@ These new documents define multilingual UI behavior as a **UI-owned supporting r
 
 - The repository keeps one official demo: `examples/real_ai_bug_autopsy_multinode/`
 - Provider environment guidance is implemented across OpenAI, Codex, Claude, Gemini, and Perplexity
-- Current verified baseline: `1806 passed, 9 skipped`
+- Current verified baseline: `1844 passed, 9 skipped`
 
 ---
 

@@ -1,6 +1,6 @@
 # FOUNDATION_MAP
 
-Version: 1.5.0
+Version: 1.6.0
 
 ## Purpose
 
@@ -30,6 +30,7 @@ It serves two roles:
 | tracker | docs/TRACKER.md | Active | implementation tracker, release snapshot, and next steps |
 | development | docs/DEVELOPMENT.md | Active | development workflow |
 | current_state | docs/status/CURRENT_STATE.md | Supporting | repository status snapshot and sector truth matrix |
+| current_implementation_state | docs/status/CURRENT_IMPLEMENTATION_STATE.md | Supporting | short-form implementation truth sheet |
 
 ---
 

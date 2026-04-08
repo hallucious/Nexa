@@ -203,14 +203,16 @@ Engine
 
 Current implementation baseline:
 
-* authoritative implementation baseline commit: `d11e80c`
-* authoritative verified baseline: `1806 passed, 9 skipped`
+* authoritative implementation baseline commit: `f143396`
+* authoritative verified baseline: `1844 passed, 9 skipped`
 * broad precision foundations are now present in the existing engine / contract / designer sectors rather than in a separate precision namespace
 * confidence, budget-aware routing, and safety-gate semantics are now wired into the real provider runtime boundary and projected into execution-record-facing observability summaries
 * execution-record node cards and observability summaries can now surface routing / safety / confidence precision data when runtime trace includes it
 * UI adapter / view-model foundation is now broadly implemented across panel, workspace, shell, and hub surfaces
 * UI-owned storage persistence and commit-boundary stripping are now code-backed and regression-backed rather than doc-only direction
 * UI i18n foundation is present, and major user-facing surfaces now resolve through the shared localization layer for English/Korean
+* product-flow shell convergence is now present across journey, runbook, handoff, readiness, E2E path, closure, transition, and gateway projection layers
+* the remaining shell-side gap is no longer whether product-flow projection exists, but whether final live commit/run/follow-through behavior is fully proven
 * the precision documentation set has been merged back into existing best-fit architectural / contract / storage documents; a standalone precision sector is no longer the intended long-term documentation shape
 * verifier follow-up branch candidates are now projected as bounded branch records and surfaced into execution-record observability rather than remaining an unused contract surface
 

@@ -25,48 +25,66 @@
 * CLI: run, compare, diff, export, replay, info, and task commands
 * Regression policy reason detail (trigger lines)
 
-Current baseline: 1283 passed, 3 skipped
+Current baseline at closeout: `1283 passed, 3 skipped`
 
 ---
 
-# Public GitHub Baseline (current)
+# Phase 3 — Role-Aware Savefile / Storage Lifecycle ✓ Complete baseline
+
+* unified `.nex` family with `working_save` / `commit_snapshot`
+* Execution Record treated as run-history layer rather than a savefile role
+* canonical savefile lifecycle entry points across create / serialize / load / validate
+* role-aware `.nex` loading / validation / typed-model split
+* storage semantics concentrated in lifecycle APIs rather than scattered CLI-only interpretation
+* commit-boundary rules for UI-owned continuity state
+
+---
+
+# Phase 4 — UI Foundation / i18n Foundation ✓ Complete baseline
+
+* adapter / view-model boundary across the UI sector
+* Core 5 module view-model surfaces: Graph / Inspector / Validation / Execution / Designer
+* expanded surfaces: Trace / Timeline / Artifact / Storage / Diff
+* builder shell / workflow / interaction / dispatch / execution-adapter / end-user-flow hub surfaces
+* workspace-level surfaces: visual editor / runtime monitoring / node configuration
+* English / Korean localization foundation and persistence boundary
+* canonical Working Save-side UI continuity with snapshot-side canonical UI exclusion
+
+---
+
+# Phase 5 — Product-Flow Shell Convergence ◐ Late convergence
+
+* journey projection
+* runbook projection
+* handoff projection
+* readiness projection
+* E2E path projection
+* closure projection
+* transition projection
+* gateway projection tied to proposal/commit and execution-launch workflow gates
+
+Interpretation:
+- the shell can now describe lifecycle position, next action, boundary closure, and gate state
+- the remaining gap is final live end-to-end proof, not absence of shell/product-flow structure
+
+---
+
+# Public Baseline (current)
 
 * Official retained demo consolidated to `examples/real_ai_bug_autopsy_multinode/`
 * Provider environment guidance unified across OpenAI, Codex, Claude, Gemini, and Perplexity
 * Canonical public CLI clarified as `src.cli.nexa_cli:main`
-* Legacy Nex compatibility is now wrapper-oriented: `src/engine/cli.py` is a bounded compatibility shim, `src/cli/savefile_runtime.py` owns execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic
-* Legacy `.nex` reverse-conversion / writer support removed; compatibility is execution-only
-* Current repository baseline: 1283 passed, 3 skipped
-* Role-aware `.nex` storage foundation started: `load_nex(...)`, `validate_working_save(...)`, `validate_commit_snapshot(...)`, and typed model split for `working_save` / `commit_snapshot`
-* Storage lifecycle linkage started: Working Save → Commit Snapshot creation and Execution Record → Working Save last-run summary update APIs
-* Pause/resume durability line now enforces commit-anchor, structure-fingerprint, execution-surface-fingerprint, and source-commit evidence presence before `resume_ready` may be true
-* Replay-triggered runs are explicitly separated from resume-ready paused runs in storage/runtime summaries
+* Role-aware `.nex` storage and UI continuity boundary are implemented in code and tests
+* Product-flow shell convergence exists across journey / runbook / handoff / readiness / E2E path / closure / transition / gateway
+* Current repository baseline: `1844 passed, 9 skipped`
+* Authoritative implementation baseline commit: `f143396`
 
 ---
 
-# Phase 3 — CLI Regression Gating
+# Next Technical Focus
 
-Goal: Make regression policy actionable in CI/CD.
-
-* `--baseline` flag for comparison run
-* Exit code driven by PolicyDecision
-* Configurable policy rules per-circuit or per-run
-
----
-
-# Phase 4 — Developer Platform
-
-* Configuration-driven policy rules
-* Plugin versioning and marketplace
-* CLI improvements and debugging dashboards
-
----
-
-# Phase 5 — Circuit Builder
-
-* Visual circuit editor
-* Node configuration UI
-* Runtime monitoring
+* finish the last live end-to-end proof only if a real commit/run/follow-through gap is still found
+* otherwise shift from shell convergence to broader product-facing implementation and UX realization
 
 ---
 
@@ -77,15 +95,3 @@ Nexa as a general-purpose runtime for AI computation systems — production pipe
 ---
 
 End of Roadmap
-
-
-* legacy `.nex` plugin validation is owned by `src/platform/external_loader.py`; CLI keeps only branching, savefile fallback, and policy/output handling
-
-
-- Legacy engine CLI compatibility is now fully wrapper-oriented: `src/engine/cli.py` is a bounded shim, `src/cli/savefile_runtime.py` owns execution dispatch, summary generation, payload emission, and baseline-policy wrapping, and `src/circuit/runtime_adapter.py` owns legacy preparation/adaptation logic.
-
-
-- Execution record foundation implemented in code: contract, model, serialization, and working-save summary integration.
-
-
-* Storage runtime linkage implemented in code: Commit Snapshot–anchored Execution Record creation and Working Save last-run update can now be driven from one lifecycle path

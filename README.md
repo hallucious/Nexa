@@ -110,8 +110,9 @@ This makes the system better suited to real workflows where small upstream chang
 
 ### Savefile
 
-A **`.nex` file** is Nexa’s runnable savefile artifact.
-It packages the **circuit**, **state**, **resources**, and **UI-related data** needed for reproducible execution.
+A **`.nex` file** is Nexa’s role-aware savefile artifact.
+It packages the **circuit**, **state**, and **resources** needed for execution, while Working Save artifacts may additionally carry UI-owned continuity data.
+Canonical Commit Snapshots must not carry canonical UI state.
 
 ---
 
@@ -138,6 +139,26 @@ Official public demo:
 ```text
 examples/real_ai_bug_autopsy_multinode/
 ```
+
+---
+
+## 🧩 Current implementation status
+
+The current repository is best understood as:
+
+- **execution/runtime foundation implemented**
+- **role-aware savefile/storage boundary implemented**
+- **Python-side UI/editor foundation broadly implemented**
+- **product-flow shell convergence substantially implemented**
+- **final live end-to-end proof still remaining**
+
+In practical terms:
+
+- engine-owned structural / approval / execution truth remains canonical
+- Working Save may carry UI-owned continuity state
+- Commit Snapshot must not carry canonical UI state
+- multilingual UI support is structurally present in the current UI layer
+- the current UI code is a strong control-plane / shell foundation, not yet a finished end-user frontend product
 
 ---
 

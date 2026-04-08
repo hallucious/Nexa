@@ -1,12 +1,12 @@
 # CURRENT_STATE
 
-Version: 1.0.0
+Version: 1.1.0
 
 ---
 
 ## Purpose
 
-This document is the current truth snapshot for the repository state at the latest verified UI/i18n convergence point.
+This document is the current truth snapshot for the repository state at the latest verified convergence point.
 
 It exists to reduce ambiguity about what is already implemented, what is only partially closed, and what should happen next.
 
@@ -17,9 +17,9 @@ It does not replace the canonical architecture or contract documents.
 
 ## Authoritative Snapshot
 
-* authoritative implementation baseline commit: `d11e80c`
-* authoritative verified baseline: `1806 passed, 9 skipped`
-* status source: latest repository snapshot aligned to the post-workspace/hub UI i18n batch
+* authoritative implementation baseline commit: `f143396`
+* authoritative verified baseline: `1844 passed, 9 skipped`
+* status source: latest repository snapshot aligned to the post-gateway product-flow shell baseline
 
 ---
 
@@ -27,7 +27,7 @@ It does not replace the canonical architecture or contract documents.
 
 The current repository is no longer in a “UI not started” state.
 
-The UI sector has already moved through:
+The UI / storage / designer line has already moved through:
 
 * adapter / view-model foundation
 * module-level view models for Core 5 and expanded slots
@@ -35,6 +35,7 @@ The UI sector has already moved through:
 * multilingual UI foundation
 * i18n persistence boundary verification
 * panel-level and workspace / shell / hub-level localized display retrofit
+* product-flow shell convergence across journey / runbook / handoff / readiness / E2E path / closure / transition / gateway
 
 The practical meaning is:
 
@@ -42,6 +43,7 @@ The practical meaning is:
 * UI-owned state remains bounded
 * Working Save / Commit Snapshot / Execution Record separation is preserved
 * multilingual UI is structurally present now, not postponed to a hypothetical later redesign
+* product-flow shell work is now in late convergence rather than early construction
 
 ---
 
@@ -55,10 +57,11 @@ The practical meaning is:
 | UI persistence boundary | Complete baseline | `.nex.ui` and commit-boundary stripping rules implemented and test-backed |
 | UI i18n foundation | Complete baseline | language resolution, fallback, localized message lookup, persistence boundary present |
 | UI i18n retrofit (major surfaces) | Complete baseline | panel, workflow, workspace, shell, and hub display surfaces substantially localized |
-| trace / artifact / storage / diff UI surfaces | Implemented view-model layer | underlying view-model contracts and Python-side projections exist; full end-user frontend shell is still a later integration layer |
-| Designer proposal-flow UI surface | Implemented view-model layer | proposal / precheck / preview / approval projection exists at view-model level |
+| trace / artifact / storage / diff shell surface | Implemented shell-linked baseline | underlying view-model contracts and shell-linked Python-side projections exist |
+| Designer proposal-flow UI surface | Implemented shell-linked baseline | proposal / precheck / preview / approval projection exists and is shell-linked |
 | Subcircuit support | Implemented foundation | loader, validator, runtime path, savefile roundtrip, and review-bundle example coverage exist |
-| productized frontend shell | Not closed | replaceable UI shell architecture exists, but final end-user frontend product integration remains later work |
+| productized frontend shell | Not fully closed | replaceable UI shell architecture exists and late convergence is substantial, but final end-user frontend productization remains later work |
+| live E2E user-flow proof | Not fully closed | the product-flow shell can now describe and gate the path, but final live commit/run/follow-through proof still remains |
 
 ---
 
@@ -92,6 +95,14 @@ The following are now baseline decisions, not open debate topics:
 * i18n is not cosmetic-only; it is a UI architecture concern
 * localized display must not leak into engine-owned truth
 
+### 4. Product-flow shell convergence baseline
+
+The following are now part of the current implemented baseline:
+
+* product-flow shell composition exists
+* journey / runbook / handoff / readiness / E2E path / closure / transition / gateway projections exist
+* the remaining gap is no longer “should these shell layers exist,” but “is the final live boundary behavior fully closed?”
+
 ---
 
 ## Important Corrections To Earlier Mental Models
@@ -104,69 +115,36 @@ The repository already contains substantial UI-sector code and tests under `src/
 The current stage is closer to:
 
 * foundation implemented
-* view-model surfaces broadly covered
-* shell/product integration and documentation sync still remaining
+* shell/product-flow convergence substantially implemented
+* final live E2E proof and broader frontend realization still remaining
 
 ### 2. The immediate bottleneck is not new UI theory
 
 The bottleneck is now:
 
-* keeping status/index documents aligned with code
-* integrating the existing UI foundation into more product-shaped flows
-* avoiding documentation drift that misrepresents actual completion state
+* keeping top-level documents synchronized with actual code reality
+* finishing final live boundary proof where needed
+* avoiding drift between high-level status language and the implemented shell/product-flow state
 
 ---
 
-## Recommended Next Work
+## What Still Remains Open
 
-### 1. Adapter / versioning / cross-reference sync
+The following items are still open and should not be overclaimed.
 
-High priority.
+### 1. Final live E2E verification
+The shell can now describe the user-flow path and its gates, but real workflow proof across commit/run/follow-through remains the last serious technical gap.
 
-The UI and i18n code has moved ahead of some top-level summary documents.
-That drift should be kept small.
+### 2. Final Designer control-plane convergence
+Designer proposal/gating surfaces are present, but final proof of the whole review/approval/revision path still needs to be treated as live workflow work, not merely projection work.
 
-### 2. Product-flow integration across existing UI sectors
-
-High priority.
-
-The next practical integration problem is not another isolated view model.
-It is connecting the already-built pieces into clearer end-user shell flows across:
-
-* visual editing
-* validation / approval
-* storage lifecycle
-* execution monitoring
-* designer proposal review
-
-### 3. Low-priority remaining text-surface cleanup
-
-Medium priority.
-
-Major UI surfaces are already localized, but small scattered fallback-backed text surfaces may still remain.
-These should be cleaned in grouped passes rather than reopened one string at a time.
-
-### 4. Full frontend shell/productization
-
-Later priority.
-
-The architecture explicitly supports a replaceable UI shell, but the repository is still stronger in engine/view-model foundations than in final end-user frontend packaging.
+### 3. Finished frontend product shell
+The Python-side shell/product-flow control plane is strong enough to guide further implementation, but it is not yet the same thing as a finished end-user frontend application.
 
 ---
 
-## Non-Goals For The Immediate Next Batch
+## Practical Interpretation
 
-The following are not the best immediate next step:
+The project should now be interpreted as:
 
-* inventing another large UI theory bundle
-* reopening already-closed storage-role boundaries
-* treating UI continuity as if it were approved truth
-* broad architecture reshaping without status/doc sync first
-
----
-
-## Short Next-Step Recommendation
-
-The most rational immediate next batch after this status sync is:
-
-**adapter/versioning + current-state documentation convergence, followed by product-flow integration work on top of the existing UI foundation.**
+**engine/storage/UI foundations implemented, shell/product-flow convergence largely present, final live E2E proof still open, and documentation now synchronized to that reality.**
