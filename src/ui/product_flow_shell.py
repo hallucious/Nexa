@@ -20,6 +20,7 @@ from src.ui.builder_shell import BuilderShellViewModel, read_builder_shell_view_
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
 from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.product_flow_journey import ProductFlowJourneyViewModel, read_product_flow_journey_view_model
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ class ProductFlowShellViewModel:
     dispatch_hub: BuilderDispatchHubViewModel | None = None
     execution_adapter_hub: BuilderExecutionAdapterHubViewModel | None = None
     end_user_flow_hub: BuilderEndUserFlowHubViewModel | None = None
+    journey: ProductFlowJourneyViewModel | None = None
     right_stack_targets: list[ProductFlowSurfaceTargetView] = field(default_factory=list)
     bottom_dock_targets: list[ProductFlowSurfaceTargetView] = field(default_factory=list)
     command_entry_count: int = 0
@@ -343,6 +345,19 @@ def read_product_flow_shell_view_model(
     dispatch_hub = read_builder_dispatch_hub_view_model(source_unwrapped if source_unwrapped is not None else execution_record) if (source_unwrapped is not None or execution_record is not None) else None
     execution_adapter_hub = read_builder_execution_adapter_hub_view_model(source_unwrapped if source_unwrapped is not None else execution_record, dispatch_hub=dispatch_hub) if (source_unwrapped is not None or execution_record is not None) else None
     end_user_flow_hub = read_builder_end_user_flow_hub_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_adapter_hub=execution_adapter_hub) if (source_unwrapped is not None or execution_record is not None) else None
+    journey_vm = read_product_flow_journey_view_model(
+        source_unwrapped if source_unwrapped is not None else execution_record,
+        validation_report=validation_report,
+        execution_record=execution_record,
+        session_state_card=session_state_card,
+        intent=intent,
+        patch_plan=patch_plan,
+        precheck=precheck,
+        preview=preview,
+        approval_flow=approval_flow,
+        workflow_hub=workflow_hub,
+        prefer_active_workflow_focus=True,
+    ) if (source_unwrapped is not None or execution_record is not None) else None
 
     stage_id = _stage_id(shell_vm, workflow_hub)
     recommended_flow_id = end_user_flow_hub.recommended_flow_id if end_user_flow_hub is not None else None
@@ -386,6 +401,7 @@ def read_product_flow_shell_view_model(
         dispatch_hub=dispatch_hub,
         execution_adapter_hub=execution_adapter_hub,
         end_user_flow_hub=end_user_flow_hub,
+        journey=journey_vm,
         right_stack_targets=right_stack_targets,
         bottom_dock_targets=bottom_dock_targets,
         command_entry_count=(shell_vm.command_palette.enabled_entry_count if shell_vm is not None and shell_vm.command_palette is not None else 0),

@@ -501,3 +501,25 @@ def test_ui_adapter_routes_product_flow_shell_through_stable_boundary() -> None:
     assert vm.dispatch_hub is not None
     assert vm.execution_adapter_hub is not None
     assert vm.end_user_flow_hub is not None
+
+
+def test_ui_adapter_routes_product_flow_journey_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+    journey_vm = adapter.read_product_flow_journey_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+    assert journey_vm.source_role == "working_save"
+    assert journey_vm.steps
+    assert journey_vm.current_step_id in {"observe_results", "commit_snapshot", "run_current", "approval"}

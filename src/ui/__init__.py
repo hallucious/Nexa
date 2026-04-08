@@ -29,6 +29,7 @@ from src.ui.end_user_command_flows import EndUserCommandFlowStepView, EndUserCom
 from src.ui.interaction_lifecycle_closure import LifecycleClosureStageView, InteractionLifecycleClosureViewModel, read_interaction_lifecycle_closure_view_model
 from src.ui.builder_end_user_flow_hub import BuilderEndUserFlowHubViewModel, read_builder_end_user_flow_hub_view_model
 from src.ui.product_flow_shell import ProductFlowFocusView, ProductFlowShellViewModel, ProductFlowStageView, ProductFlowSurfaceTargetView, read_product_flow_shell_view_model
+from src.ui.product_flow_journey import ProductFlowJourneyStepView, ProductFlowJourneyViewModel, read_product_flow_journey_view_model
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
@@ -76,6 +77,8 @@ __all__ = [
     "InteractionLifecycleClosureViewModel",
     "BuilderEndUserFlowHubViewModel",
     "ProductFlowFocusView",
+    "ProductFlowJourneyStepView",
+    "ProductFlowJourneyViewModel",
     "ProductFlowShellViewModel",
     "ProductFlowStageView",
     "ProductFlowSurfaceTargetView",
@@ -112,6 +115,7 @@ __all__ = [
     "read_end_user_command_flow_view_model",
     "read_interaction_lifecycle_closure_view_model",
     "read_builder_end_user_flow_hub_view_model",
+    "read_product_flow_journey_view_model",
     "read_product_flow_shell_view_model",
     "read_selected_object_view_model",
     "read_storage_view_model",
