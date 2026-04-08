@@ -224,6 +224,8 @@ def test_product_flow_shell_exposes_runbook_and_prefers_runbook_action_when_revi
 
     assert vm.runbook is not None
     assert vm.runbook.current_entry_id == "commit_snapshot"
+    assert vm.readiness is not None
+    assert vm.readiness.current_boundary_id == "commit"
     assert vm.handoff is not None
     assert vm.handoff.primary_entry_id == "commit_snapshot"
     assert vm.handoff.followthrough_entry_id == "run_current"

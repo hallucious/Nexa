@@ -42,6 +42,7 @@ from src.ui.product_flow_shell import ProductFlowShellViewModel, read_product_fl
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, read_product_flow_journey_view_model
 from src.ui.product_flow_runbook import ProductFlowRunbookViewModel, read_product_flow_runbook_view_model
 from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_product_flow_handoff_view_model
+from src.ui.product_flow_readiness import ProductFlowReadinessViewModel, read_product_flow_readiness_view_model
 
 
 @dataclass(frozen=True)
@@ -745,6 +746,43 @@ class NexaUIViewAdapter:
             workflow_hub=workflow_hub,
             journey=journey,
             runbook=runbook,
+            explanation=explanation,
+        )
+
+    def read_product_flow_readiness_view_model(
+        self,
+        source,
+        *,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        workflow_hub: BuilderWorkflowHubViewModel | None = None,
+        journey: ProductFlowJourneyViewModel | None = None,
+        runbook: ProductFlowRunbookViewModel | None = None,
+        handoff: ProductFlowHandoffViewModel | None = None,
+        end_user_flow_hub: BuilderEndUserFlowHubViewModel | None = None,
+        explanation: str | None = None,
+    ) -> ProductFlowReadinessViewModel:
+        return read_product_flow_readiness_view_model(
+            source,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+            workflow_hub=workflow_hub,
+            journey=journey,
+            runbook=runbook,
+            handoff=handoff,
+            end_user_flow_hub=end_user_flow_hub,
             explanation=explanation,
         )
 
