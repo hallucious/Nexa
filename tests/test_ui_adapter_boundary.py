@@ -544,6 +544,7 @@ def test_ui_adapter_routes_product_flow_shell_through_stable_boundary() -> None:
     assert vm.execution_adapter_hub is not None
     assert vm.end_user_flow_hub is not None
     assert vm.readiness is not None
+    assert vm.e2e_proof is not None
 
 
 def test_ui_adapter_routes_product_flow_readiness_through_stable_boundary() -> None:
@@ -686,3 +687,27 @@ def test_ui_adapter_routes_product_flow_transition_through_stable_boundary() -> 
     assert transition_vm.source_role == "working_save"
     assert transition_vm.current_transition_id in {"review_to_approval", "approval_to_commit", "commit_to_run", "run_to_followthrough"}
     assert transition_vm.transitions
+
+
+def test_ui_adapter_routes_product_flow_e2e_proof_through_stable_boundary() -> None:
+    adapter = NexaUIViewAdapter(
+        latest_working_save=_working_save(),
+        latest_commit_snapshot=_commit(),
+        latest_execution_record=_run(),
+    )
+
+    proof_vm = adapter.read_product_flow_e2e_proof_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert proof_vm.source_role == "working_save"
+    assert proof_vm.checkpoints
+    assert proof_vm.proven_checkpoint_count >= 1

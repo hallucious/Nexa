@@ -47,6 +47,7 @@ from src.ui.product_flow_e2e_path import ProductFlowE2EPathViewModel, read_produ
 from src.ui.product_flow_closure import ProductFlowClosureViewModel, read_product_flow_closure_view_model
 from src.ui.product_flow_transition import ProductFlowTransitionViewModel, read_product_flow_transition_view_model
 from src.ui.product_flow_gateway import ProductFlowGatewayViewModel, read_product_flow_gateway_view_model
+from src.ui.product_flow_e2e_proof import ProductFlowE2EProofViewModel, read_product_flow_e2e_proof_view_model
 
 
 @dataclass(frozen=True)
@@ -938,6 +939,41 @@ class NexaUIViewAdapter:
             approval_flow=approval_flow,
             proposal_commit=proposal_commit,
             execution_launch=execution_launch,
+            explanation=explanation,
+        )
+
+    def read_product_flow_e2e_proof_view_model(
+        self,
+        source,
+        *,
+        validation_report: ValidationReport | None = None,
+        execution_record: ExecutionRecordModel | None = None,
+        session_state_card=None,
+        intent=None,
+        patch_plan=None,
+        precheck=None,
+        preview=None,
+        approval_flow=None,
+        proposal_commit: ProposalCommitWorkflowViewModel | None = None,
+        execution_launch: ExecutionLaunchWorkflowViewModel | None = None,
+        end_user_flow_hub: BuilderEndUserFlowHubViewModel | None = None,
+        gateway: ProductFlowGatewayViewModel | None = None,
+        explanation: str | None = None,
+    ) -> ProductFlowE2EProofViewModel:
+        return read_product_flow_e2e_proof_view_model(
+            source,
+            validation_report=validation_report,
+            execution_record=execution_record if execution_record is not None else self.latest_execution_record,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+            proposal_commit=proposal_commit,
+            execution_launch=execution_launch,
+            end_user_flow_hub=end_user_flow_hub,
+            gateway=gateway,
             explanation=explanation,
         )
 
