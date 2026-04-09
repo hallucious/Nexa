@@ -178,20 +178,20 @@ def record_not_attempted_delivery(*, plan: DeliveryPlan) -> DeliveryRecord:
 def _project_payload(*, plan: DeliveryPlan, outputs: Mapping[str, Any], artifacts: Mapping[str, Any]) -> tuple[Any, Optional[str]]:
     if plan.selected_artifact_ref is not None:
         if plan.selected_artifact_ref not in artifacts:
-            return None, 'DELIVERY_ARTIFACT_NOT_FOUND'
+            return None, 'delivery.payload.artifact_not_found'
         selected = artifacts[plan.selected_artifact_ref]
     else:
         if not plan.selected_output_ref:
-            return None, 'DELIVERY_OUTPUT_REF_REQUIRED'
+            return None, 'delivery.payload.output_ref_required'
         if plan.selected_output_ref not in outputs:
-            return None, 'DELIVERY_OUTPUT_NOT_FOUND'
+            return None, 'delivery.payload.output_not_found'
         selected = outputs[plan.selected_output_ref]
 
     if plan.payload_projection_mode == 'summary':
         return str(selected), None
     if plan.payload_projection_mode in {'final_output', 'artifact_content', 'custom_projection', 'artifact_ref'}:
         return selected, None
-    return None, 'DELIVERY_UNSUPPORTED_PROJECTION'
+    return None, 'delivery.payload.unsupported_projection'
 
 
 def attempt_delivery(
@@ -213,7 +213,7 @@ def attempt_delivery(
     retry_eligible = False
 
     if capability.destination_ref != plan.destination_ref or capability.destination_type != plan.destination_type:
-        failure_reason = 'DELIVERY_DESTINATION_MISMATCH'
+        failure_reason = 'delivery.destination.mismatch'
         attempt = DeliveryAttempt(
             attempt_id=str(uuid.uuid4()),
             delivery_plan_ref=plan.delivery_plan_id,
@@ -231,13 +231,13 @@ def attempt_delivery(
         return {'attempt': attempt.to_dict(), 'record': record.to_dict(), 'payload': None}
 
     if not authorization_allowed:
-        failure_reason = 'DELIVERY_AUTHORIZATION_BLOCKED'
+        failure_reason = 'delivery.destination.authorization_blocked'
         attempt = DeliveryAttempt(str(uuid.uuid4()), plan.delivery_plan_id, plan.run_ref, plan.destination_ref, started_at, _utc_now_iso(), 'blocked', idempotency_key, None, failure_reason, False)
         record = DeliveryRecord(plan.run_ref, plan.destination_ref, plan.destination_type, plan.selected_output_ref, plan.selected_artifact_ref, 'blocked', (attempt.attempt_id,), None, {'reason_code': failure_reason})
         return {'attempt': attempt.to_dict(), 'record': record.to_dict(), 'payload': None}
 
     if plan.requires_confirmation and not confirmation_granted:
-        failure_reason = 'DELIVERY_CONFIRMATION_REQUIRED'
+        failure_reason = 'delivery.destination.confirmation_required'
         attempt = DeliveryAttempt(str(uuid.uuid4()), plan.delivery_plan_id, plan.run_ref, plan.destination_ref, started_at, _utc_now_iso(), 'blocked', idempotency_key, None, failure_reason, False)
         record = DeliveryRecord(plan.run_ref, plan.destination_ref, plan.destination_type, plan.selected_output_ref, plan.selected_artifact_ref, 'blocked', (attempt.attempt_id,), None, {'reason_code': failure_reason})
         return {'attempt': attempt.to_dict(), 'record': record.to_dict(), 'payload': None}
@@ -250,12 +250,12 @@ def attempt_delivery(
 
     if isinstance(payload, str):
         if not capability.supports_text:
-            projection_error = 'DELIVERY_TEXT_UNSUPPORTED'
+            projection_error = 'delivery.payload.text_unsupported'
         else:
             projection_error = None
     else:
         if not capability.supports_structured_payload:
-            projection_error = 'DELIVERY_STRUCTURED_PAYLOAD_UNSUPPORTED'
+            projection_error = 'delivery.payload.structured_payload_unsupported'
         else:
             projection_error = None
 

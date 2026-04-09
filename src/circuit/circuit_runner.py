@@ -464,6 +464,73 @@ class CircuitRunner:
             state["__governance__"] = governance
         return governance
 
+    @staticmethod
+    def _refresh_governance_summary(current_state: Dict[str, Any]) -> Dict[str, Any]:
+        governance = CircuitRunner._ensure_governance_store(current_state)
+        summary = dict(governance.get("summary") or {})
+        reason_codes: list[str] = []
+
+        input_safety = governance.get("input_safety") if isinstance(governance.get("input_safety"), dict) else {}
+        safety_decision = input_safety.get("decision") if isinstance(input_safety.get("decision"), dict) else {}
+        safety_status = safety_decision.get("overall_status")
+        if safety_status == "allow":
+            summary["safety_status"] = "safe"
+        elif safety_status == "allow_with_warning":
+            summary["safety_status"] = "warning"
+        elif safety_status == "confirmation_required":
+            summary["safety_status"] = "confirmation_required"
+        elif safety_status == "blocked":
+            summary["safety_status"] = "blocked"
+        safety_findings = input_safety.get("findings") if isinstance(input_safety.get("findings"), list) else []
+        if safety_findings:
+            codes = [str(item.get("reason_code")) for item in safety_findings if isinstance(item, dict) and item.get("reason_code")]
+            if codes:
+                summary["safety_reason_code"] = codes[0]
+                reason_codes.extend(codes)
+
+        quota_bundle = governance.get("quota") if isinstance(governance.get("quota"), dict) else {}
+        quota_decision = quota_bundle.get("decision") if isinstance(quota_bundle.get("decision"), dict) else {}
+        quota_status = quota_decision.get("overall_status")
+        if quota_status == "blocked":
+            summary["quota_status"] = "blocked"
+        elif quota_status == "allow_with_warning":
+            summary["quota_status"] = "near_limit"
+        elif quota_status == "allow":
+            summary["quota_status"] = "within_limit"
+        if quota_decision.get("blocking_reason_code"):
+            summary["quota_reason_code"] = quota_decision["blocking_reason_code"]
+            reason_codes.append(str(quota_decision["blocking_reason_code"]))
+        elif quota_decision.get("warning_summary"):
+            summary["quota_reason_code"] = str(quota_decision["warning_summary"])
+            reason_codes.append(str(quota_decision["warning_summary"]))
+
+        delivery_bundle = governance.get("delivery") if isinstance(governance.get("delivery"), dict) else {}
+        delivery_record = delivery_bundle.get("record") if isinstance(delivery_bundle.get("record"), dict) else {}
+        delivery_attempt = delivery_bundle.get("attempt") if isinstance(delivery_bundle.get("attempt"), dict) else {}
+        if delivery_record.get("latest_status"):
+            summary["delivery_status"] = str(delivery_record.get("latest_status"))
+        if delivery_record.get("destination_ref"):
+            summary["delivery_destination_ref"] = str(delivery_record.get("destination_ref"))
+        delivery_reason = delivery_attempt.get("failure_reason_code") or (delivery_record.get("delivery_summary") or {}).get("reason_code") if isinstance(delivery_record.get("delivery_summary"), dict) else None
+        if delivery_reason:
+            summary["delivery_reason_code"] = str(delivery_reason)
+            reason_codes.append(str(delivery_reason))
+
+        launch_status = governance.get("launch_status")
+        if isinstance(launch_status, str) and launch_status:
+            summary["launch_status"] = launch_status
+
+        if reason_codes:
+            unique: list[str] = []
+            for code in reason_codes:
+                if code not in unique:
+                    unique.append(code)
+            summary["reason_codes"] = unique
+            summary["top_reason_code"] = unique[0]
+
+        governance["summary"] = summary
+        return summary
+
     def _maybe_evaluate_input_safety(
         self,
         current_state: Dict[str, Any],
@@ -484,6 +551,7 @@ class CircuitRunner:
         governance = self._ensure_governance_store(current_state)
         governance["input_safety"] = evaluation
         raw["evaluation"] = evaluation
+        self._refresh_governance_summary(current_state)
 
         decision = dict(evaluation.get("decision") or {})
         payload = {
@@ -562,6 +630,7 @@ class CircuitRunner:
         governance = self._ensure_governance_store(current_state)
         governance["quota"] = bundle
         raw["evaluation"] = bundle
+        self._refresh_governance_summary(current_state)
         return bundle
 
     def _apply_quota_accounting(
@@ -594,6 +663,7 @@ class CircuitRunner:
         quota_governance["state_record"] = updated_state.to_dict()
         accounting_records = quota_governance.setdefault("accounting_records", [])
         accounting_records.append(accounting.to_dict())
+        self._refresh_governance_summary(current_state)
         return {
             "accounting": accounting.to_dict(),
             "state_record": updated_state.to_dict(),
@@ -664,6 +734,7 @@ class CircuitRunner:
         raw["last_result"] = result
         governance = self._ensure_governance_store(current_state)
         governance["delivery"] = result
+        self._refresh_governance_summary(current_state)
         latest_status = dict(result.get("record") or {}).get("latest_status", DeliveryStatus.UNKNOWN.value if hasattr(DeliveryStatus, 'UNKNOWN') else 'unknown')
         event_type = {
             DeliveryStatus.SUCCEEDED.value: "delivery_succeeded",

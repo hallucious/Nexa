@@ -207,40 +207,40 @@ def evaluate_quota(
     if requested_action_type in {'run_launch', 'automation_launch'} and policy.max_run_count is not None:
         projected = state_record.consumed_run_count + int(usage.get('run_count', 1) or 1)
         if projected > policy.max_run_count:
-            _block('QUOTA_RUN_COUNT_EXCEEDED')
+            _block('quota.run.count_limit_exceeded')
         elif policy.warning_threshold_ratio is not None and projected >= max(1, int(policy.max_run_count * policy.warning_threshold_ratio)):
-            _set_warning('run count is near quota limit')
+            _set_warning('quota.policy.near_limit_warning')
 
     estimated_cost = _coerce_float(usage.get('estimated_cost'))
     if estimated_cost is not None and policy.max_estimated_cost is not None:
         projected_cost = float(state_record.consumed_estimated_cost or 0.0) + estimated_cost
         if projected_cost > policy.max_estimated_cost:
-            _block('QUOTA_ESTIMATED_COST_EXCEEDED')
+            _block('quota.cost.estimated_limit_exceeded')
         elif policy.warning_threshold_ratio is not None and projected_cost >= policy.max_estimated_cost * policy.warning_threshold_ratio:
-            _set_warning('estimated cost is near quota limit')
+            _set_warning('quota.policy.near_limit_warning')
 
     stream_minutes = _coerce_float(usage.get('stream_minutes'))
     if requested_action_type == 'streaming_continuation' and stream_minutes is not None and policy.max_stream_minutes is not None:
         projected_stream = float(state_record.consumed_stream_minutes or 0.0) + stream_minutes
         if projected_stream > policy.max_stream_minutes:
-            _block('QUOTA_STREAM_MINUTES_EXCEEDED')
+            _block('quota.streaming.minutes_limit_exceeded')
         elif policy.warning_threshold_ratio is not None and projected_stream >= policy.max_stream_minutes * policy.warning_threshold_ratio:
-            _set_warning('streaming minutes are near quota limit')
+            _set_warning('quota.policy.near_limit_warning')
 
     delivery_actions = int(usage.get('delivery_actions', 0) or 0)
     if requested_action_type == 'delivery_action' and policy.max_delivery_actions is not None:
         projected_delivery = int(state_record.consumed_delivery_actions or 0) + max(1, delivery_actions)
         if projected_delivery > policy.max_delivery_actions:
-            _block('QUOTA_DELIVERY_ACTIONS_EXCEEDED')
+            _block('quota.delivery.action_limit_exceeded')
         elif policy.warning_threshold_ratio is not None and projected_delivery >= max(1, int(policy.max_delivery_actions * policy.warning_threshold_ratio)):
-            _set_warning('delivery actions are near quota limit')
+            _set_warning('quota.policy.near_limit_warning')
 
     if requested_action_type == 'automation_launch' and policy.max_automation_launches is not None:
         projected_launches = int(state_record.consumed_automation_launches or 0) + int(usage.get('automation_launches', 1) or 1)
         if projected_launches > policy.max_automation_launches:
-            _block('QUOTA_AUTOMATION_LAUNCHES_EXCEEDED')
+            _block('quota.automation.launch_limit_exceeded')
         elif policy.warning_threshold_ratio is not None and projected_launches >= max(1, int(policy.max_automation_launches * policy.warning_threshold_ratio)):
-            _set_warning('automation launches are near quota limit')
+            _set_warning('quota.policy.near_limit_warning')
 
     return QuotaDecision(
         decision_id=str(uuid.uuid4()),

@@ -8,6 +8,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel, Node
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.engine.execution_event import ExecutionEvent
+from src.contracts.status_taxonomy import lookup_reason_code_record
 from src.ui.i18n import ui_language_from_sources, ui_text
 
 
@@ -115,6 +116,24 @@ class ExecutionFindingRefView:
 
 
 @dataclass(frozen=True)
+class GovernanceSignalView:
+    family: str
+    status: str
+    reason_code: str | None = None
+    severity: str = "info"
+    label: str | None = None
+    summary: str | None = None
+
+
+@dataclass(frozen=True)
+class DeliveryOutcomeView:
+    status: str
+    destination_ref: str | None = None
+    reason_code: str | None = None
+    summary: str | None = None
+
+
+@dataclass(frozen=True)
 class ExecutionPanelViewModel:
     source_mode: str
     storage_role: str
@@ -129,6 +148,8 @@ class ExecutionPanelViewModel:
     metrics: ExecutionMetricsView = field(default_factory=ExecutionMetricsView)
     control_state: ExecutionControlStateView = field(default_factory=ExecutionControlStateView)
     related_findings: list[ExecutionFindingRefView] = field(default_factory=list)
+    governance_signals: list[GovernanceSignalView] = field(default_factory=list)
+    delivery_outcome: DeliveryOutcomeView | None = None
     explanation: str | None = None
 
 
@@ -381,6 +402,10 @@ def _status_from_source(source: WorkingSaveModel | CommitSnapshotModel | Executi
         return source_mode, storage_role, execution_record.meta.status
 
     if isinstance(source, WorkingSaveModel):
+        last_run = source.runtime.last_run if isinstance(source.runtime.last_run, dict) else {}
+        last_status = last_run.get("status") or last_run.get("semantic_status")
+        if isinstance(last_status, str) and last_status:
+            return "working_save_last_run", "working_save", last_status
         return "unknown", "working_save", "idle"
     if isinstance(source, CommitSnapshotModel):
         return "unknown", "commit_snapshot", "idle"
@@ -401,7 +426,15 @@ def _run_identity_for_record(record: ExecutionRecordModel) -> RunIdentityView:
 
 def _run_identity_for_idle_source(source: WorkingSaveModel | CommitSnapshotModel | None) -> RunIdentityView:
     if isinstance(source, WorkingSaveModel):
-        return RunIdentityView(working_save_id=source.meta.working_save_id, title=source.meta.name)
+        last_run = source.runtime.last_run if isinstance(source.runtime.last_run, dict) else {}
+        return RunIdentityView(
+            run_id=(str(last_run.get("run_id")) if last_run.get("run_id") is not None else None),
+            execution_id=(str(last_run.get("run_id")) if last_run.get("run_id") is not None else None),
+            commit_id=(str(last_run.get("commit_id")) if last_run.get("commit_id") is not None else None),
+            working_save_id=source.meta.working_save_id,
+            trigger_type=(str(last_run.get("trigger_type")) if last_run.get("trigger_type") is not None else None),
+            title=source.meta.name,
+        )
     if isinstance(source, CommitSnapshotModel):
         return RunIdentityView(commit_id=source.meta.commit_id, working_save_id=source.meta.source_working_save_id, title=source.meta.name)
     return RunIdentityView()
@@ -419,6 +452,76 @@ def _control_state_for_idle_source(source: WorkingSaveModel | CommitSnapshotMode
         ExecutionControlActionView("replay", ui_text("execution.control.replay", app_language=app_language), False, ui_text("execution.control.no_execution_record", app_language=app_language)),
     ]
     return ExecutionControlStateView(can_run=can_run, available_actions=actions)
+
+
+def _severity_from_governance_status(status: str) -> str:
+    lowered = status.lower()
+    if "blocked" in lowered or lowered in {"failed", "terminated"}:
+        return "error"
+    if "warning" in lowered or "near" in lowered or "confirmation" in lowered:
+        return "warning"
+    return "info"
+
+
+def _governance_summary_from_sources(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None, execution_record: ExecutionRecordModel | None) -> dict[str, Any]:
+    if execution_record is not None:
+        metrics = execution_record.observability.metrics if isinstance(execution_record.observability.metrics, dict) else {}
+        governance = metrics.get("governance") if isinstance(metrics.get("governance"), Mapping) else None
+        if governance is not None:
+            return dict(governance)
+    if isinstance(source, WorkingSaveModel):
+        last_run = source.runtime.last_run if isinstance(source.runtime.last_run, dict) else {}
+        governance = last_run.get("governance") if isinstance(last_run.get("governance"), Mapping) else None
+        if governance is not None:
+            return dict(governance)
+        projected: dict[str, Any] = {}
+        for key in (
+            "launch_status",
+            "safety_status",
+            "safety_reason_code",
+            "quota_status",
+            "quota_reason_code",
+            "delivery_status",
+            "delivery_reason_code",
+            "delivery_destination_ref",
+            "reason_codes",
+            "top_reason_code",
+        ):
+            value = last_run.get(key)
+            if value is not None and value != "" and value != []:
+                projected[key] = value
+        return projected
+    return {}
+
+
+def _governance_views(summary: Mapping[str, Any]) -> tuple[list[GovernanceSignalView], DeliveryOutcomeView | None]:
+    signals: list[GovernanceSignalView] = []
+    delivery_outcome: DeliveryOutcomeView | None = None
+    for family in ("launch_status", "safety_status", "quota_status", "streaming_status", "delivery_status"):
+        status = summary.get(family)
+        if not isinstance(status, str) or not status:
+            continue
+        family_prefix = family.replace("_status", "")
+        reason_code = summary.get(f"{family_prefix}_reason_code") if isinstance(summary.get(f"{family_prefix}_reason_code"), str) else None
+        record = lookup_reason_code_record(reason_code) if isinstance(reason_code, str) else None
+        signals.append(
+            GovernanceSignalView(
+                family=family,
+                status=status,
+                reason_code=reason_code,
+                severity=(record.severity if record is not None else _severity_from_governance_status(status)),
+                label=family_prefix.replace("_", " ").title(),
+                summary=(record.human_summary if record is not None else None),
+            )
+        )
+        if family == "delivery_status":
+            delivery_outcome = DeliveryOutcomeView(
+                status=status,
+                destination_ref=(str(summary.get("delivery_destination_ref")) if summary.get("delivery_destination_ref") is not None else None),
+                reason_code=reason_code,
+                summary=(record.human_summary if record is not None else None),
+            )
+    return signals, delivery_outcome
 
 
 def read_execution_panel_view_model(
@@ -440,6 +543,9 @@ def read_execution_panel_view_model(
         source_mode = "live_execution"
         if execution_status in {"idle", "unknown"}:
             execution_status = "running"
+
+    governance_summary = _governance_summary_from_sources(source, execution_record)
+    governance_signals, delivery_outcome = _governance_views(governance_summary)
 
     if execution_record is not None:
         recent_events = _event_views_from_live_events(live_events, app_language=app_language) if live_events else _event_views_from_record(execution_record, app_language=app_language)
@@ -464,6 +570,8 @@ def read_execution_panel_view_model(
             metrics=_metrics_from_record(execution_record),
             control_state=_control_state_for_record(execution_record, app_language=app_language),
             related_findings=[],
+            governance_signals=governance_signals,
+            delivery_outcome=delivery_outcome,
             explanation=explanation,
         )
 
@@ -476,6 +584,8 @@ def read_execution_panel_view_model(
         active_context=ActiveExecutionContextView(status_message=ui_text("execution.panel.no_active_execution", app_language=app_language)),
         diagnostics=ExecutionDiagnosticsSummary(),
         control_state=_control_state_for_idle_source(source, app_language=app_language),
+        governance_signals=governance_signals,
+        delivery_outcome=delivery_outcome,
         explanation=explanation,
     )
 
@@ -492,6 +602,8 @@ __all__ = [
     "ExecutionControlActionView",
     "ExecutionControlStateView",
     "ExecutionFindingRefView",
+    "GovernanceSignalView",
+    "DeliveryOutcomeView",
     "ExecutionPanelViewModel",
     "read_execution_panel_view_model",
 ]

@@ -112,7 +112,7 @@ def test_quota_blocked_launch_stops_before_execution() -> None:
     assert runtime.calls == []
     event_types = [event.type for event in runtime.event_emitter.get_events()]
     assert event_types == ["quota_evaluated", "quota_blocked"]
-    assert result["__governance__"]["quota"]["decision"]["blocking_reason_code"] == "QUOTA_RUN_COUNT_EXCEEDED"
+    assert result["__governance__"]["quota"]["decision"]["blocking_reason_code"] == "quota.run.count_limit_exceeded"
 
 
 
@@ -221,5 +221,5 @@ def test_circuit_runner_blocks_delivery_when_destination_cannot_accept_structure
     result = runner.execute(circuit, state)
 
     assert result["__governance__"]["delivery"]["record"]["latest_status"] == "blocked"
-    assert result["__governance__"]["delivery"]["attempt"]["failure_reason_code"] == "DELIVERY_STRUCTURED_PAYLOAD_UNSUPPORTED"
+    assert result["__governance__"]["delivery"]["attempt"]["failure_reason_code"] == "delivery.payload.structured_payload_unsupported"
     assert [event.type for event in runtime.event_emitter.get_events()][-1] == "delivery_blocked"

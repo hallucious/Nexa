@@ -72,10 +72,11 @@ def _has_trace_or_artifacts(workflow_hub: BuilderWorkflowHubViewModel | None) ->
     if workflow_hub is None or workflow_hub.execution_launch is None or workflow_hub.execution_launch.runtime_monitoring is None:
         return False
     monitoring = workflow_hub.execution_launch.runtime_monitoring
+    shell = workflow_hub.shell
     return bool(
         (monitoring.trace_timeline is not None and monitoring.trace_timeline.events)
         or (monitoring.artifact is not None and monitoring.artifact.artifact_list)
-        or (monitoring.diff is not None and monitoring.diff.summary.total_change_count > 0)
+        or (shell is not None and shell.diff is not None and shell.diff.summary.total_change_count > 0)
     )
 
 

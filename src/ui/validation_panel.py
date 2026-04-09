@@ -9,6 +9,7 @@ from src.storage.models.execution_record_model import ExecutionIssue, ExecutionR
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
+from src.contracts.status_taxonomy import lookup_reason_code_record
 from src.ui.i18n import ui_language_from_sources, ui_text
 
 
@@ -278,6 +279,95 @@ def _from_execution_issue(issue: ExecutionIssue, severity: str, *, idx: int) -> 
     )
 
 
+def _governance_summary_from_sources(source, execution_record: ExecutionRecordModel | None) -> dict[str, object]:
+    if execution_record is not None:
+        metrics = execution_record.observability.metrics if isinstance(execution_record.observability.metrics, dict) else {}
+        governance = metrics.get("governance") if isinstance(metrics.get("governance"), dict) else None
+        if governance is not None:
+            return dict(governance)
+    if isinstance(source, WorkingSaveModel):
+        last_run = source.runtime.last_run if isinstance(source.runtime.last_run, dict) else {}
+        governance = last_run.get("governance") if isinstance(last_run.get("governance"), dict) else None
+        if governance is not None:
+            return dict(governance)
+        projected: dict[str, object] = {}
+        for key in (
+            "launch_status",
+            "safety_status",
+            "safety_reason_code",
+            "quota_status",
+            "quota_reason_code",
+            "delivery_status",
+            "delivery_reason_code",
+            "delivery_destination_ref",
+            "reason_codes",
+            "top_reason_code",
+        ):
+            value = last_run.get(key)
+            if value is not None and value != "" and value != []:
+                projected[key] = value
+        return projected
+    return {}
+
+
+def _severity_for_governance_status(status: str, *, family: str) -> str:
+    lowered = status.lower()
+    if family == "delivery" and lowered in {"failed", "blocked"}:
+        return "warning"
+    if "blocked" in lowered:
+        return "blocking"
+    if "confirmation" in lowered:
+        return "confirmation_required"
+    if "warning" in lowered or "near" in lowered:
+        return "warning"
+    return "info"
+
+
+def _governance_findings(summary: dict[str, object], *, app_language: str) -> list[ValidationFindingView]:
+    findings: list[ValidationFindingView] = []
+    family_to_reason = {
+        "launch": "launch_reason_code",
+        "safety": "safety_reason_code",
+        "quota": "quota_reason_code",
+        "delivery": "delivery_reason_code",
+        "streaming": "streaming_reason_code",
+    }
+    specific_status_present = any(
+        isinstance(summary.get(key), str) and summary.get(key)
+        for key in ("safety_status", "quota_status", "delivery_status", "streaming_status")
+    )
+    index = 1
+    for family in ("launch", "safety", "quota", "delivery", "streaming"):
+        if family == "launch" and specific_status_present:
+            continue
+        status = summary.get(f"{family}_status")
+        if not isinstance(status, str) or not status or status in {"allowed", "safe", "within_limit", "succeeded", "completed", "available", "not_attempted"}:
+            continue
+        reason_code = summary.get(family_to_reason[family]) if isinstance(summary.get(family_to_reason[family]), str) else None
+        record = lookup_reason_code_record(reason_code) if reason_code else None
+        findings.append(
+            ValidationFindingView(
+                finding_id=f"governance:{index}:{family}",
+                severity=_severity_for_governance_status(status, family=family),
+                category="governance",
+                code=reason_code or f"{family}.{status}",
+                title=f"{family.title()} {status.replace('_', ' ').title()}",
+                message=(record.human_summary if record is not None else f"{family.title()} status is {status.replace('_', ' ')}."),
+                short_label=status.replace("_", " "),
+                location_ref=None,
+                target_type="graph",
+                target_id=None,
+                source_ref="governance_summary",
+                suggested_action=(record.recommended_next_action if record is not None else None),
+                user_confirmation_allowed=(status == "confirmation_required"),
+                auto_resolvable=False,
+                destructive_risk=False,
+            )
+        )
+        index += 1
+    return findings
+
+
 def _group_by_severity(all_findings: list[ValidationFindingView], *, app_language: str) -> list[ValidationGroupView]:
     groups: list[ValidationGroupView] = []
     for severity in ("blocking", "warning", "confirmation_required", "info"):
@@ -334,6 +424,7 @@ def read_validation_panel_view_model(
     informational_findings: list[ValidationFindingView] = []
     source_mode = "unknown"
     overall_status = "unknown"
+    governance_summary = _governance_summary_from_sources(source, execution_record)
 
     if precheck is not None:
         source_mode = "designer_precheck"
@@ -369,7 +460,21 @@ def read_validation_panel_view_model(
         blocking_findings.extend([finding for finding in verifier_findings if finding.severity == 'blocking'])
         warning_findings.extend([finding for finding in verifier_findings if finding.severity == 'warning'])
         informational_findings.extend([finding for finding in verifier_findings if finding.severity == 'info'])
-        overall_status = "blocked" if blocking_findings else ("pass_with_warnings" if warning_findings else "pass")
+        governance_findings = _governance_findings(governance_summary, app_language=app_language)
+        blocking_findings.extend([finding for finding in governance_findings if finding.severity == 'blocking'])
+        warning_findings.extend([finding for finding in governance_findings if finding.severity == 'warning'])
+        confirmation_findings.extend([finding for finding in governance_findings if finding.severity == 'confirmation_required'])
+        informational_findings.extend([finding for finding in governance_findings if finding.severity == 'info'])
+        overall_status = "blocked" if blocking_findings else ("confirmation_required" if confirmation_findings else ("pass_with_warnings" if warning_findings else "pass"))
+
+    if source_mode == "unknown" and governance_summary:
+        source_mode = "governance_summary"
+        governance_findings = _governance_findings(governance_summary, app_language=app_language)
+        blocking_findings.extend([finding for finding in governance_findings if finding.severity == 'blocking'])
+        warning_findings.extend([finding for finding in governance_findings if finding.severity == 'warning'])
+        confirmation_findings.extend([finding for finding in governance_findings if finding.severity == 'confirmation_required'])
+        informational_findings.extend([finding for finding in governance_findings if finding.severity == 'info'])
+        overall_status = "blocked" if blocking_findings else ("confirmation_required" if confirmation_findings else ("pass_with_warnings" if warning_findings else "pass"))
 
     all_findings = [*blocking_findings, *warning_findings, *confirmation_findings, *informational_findings]
     related_targets = _target_summaries(all_findings, app_language=app_language)

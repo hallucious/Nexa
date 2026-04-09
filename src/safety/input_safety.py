@@ -177,7 +177,7 @@ def _classify_item(item: InputItem) -> Tuple[InputSafetyClassification, List[Inp
                 input_ref=item.input_ref,
                 severity='blocking',
                 category='credential_exposure',
-                reason_code='INPUT_CREDENTIAL_EXPOSURE',
+                reason_code='safety.credential.exposed_secret_pattern',
                 human_summary='Input appears to contain a credential or API secret.',
                 suggested_next_action='Remove the secret before launch.',
             )
@@ -191,7 +191,7 @@ def _classify_item(item: InputItem) -> Tuple[InputSafetyClassification, List[Inp
                 input_ref=item.input_ref,
                 severity='warning',
                 category='personal_data',
-                reason_code='INPUT_PERSONAL_DATA_DETECTED',
+                reason_code='safety.personal.detected_personal_data_warning',
                 human_summary='Input appears to contain personal contact information.',
                 suggested_next_action='Confirm that sharing this data with providers is intended.',
             )
@@ -205,7 +205,7 @@ def _classify_item(item: InputItem) -> Tuple[InputSafetyClassification, List[Inp
                 input_ref=item.input_ref,
                 severity='warning',
                 category='confidential_data',
-                reason_code='INPUT_CONFIDENTIAL_DATA_HINT',
+                reason_code='safety.confidential.detected_confidential_data_warning',
                 human_summary='Input is marked as confidential or internal-only.',
                 suggested_next_action='Confirm that this content may leave the workspace.',
             )
@@ -219,7 +219,7 @@ def _classify_item(item: InputItem) -> Tuple[InputSafetyClassification, List[Inp
                 input_ref=item.input_ref,
                 severity='warning',
                 category='unsafe_automation_input',
-                reason_code='INPUT_AUTOMATION_SENSITIVE_CONTENT',
+                reason_code='safety.policy.confirmation_required_sensitive_input',
                 human_summary='Input looks sensitive for unattended automation or external delivery.',
                 suggested_next_action='Require explicit confirmation before unattended launch.',
             )
@@ -233,7 +233,7 @@ def _classify_item(item: InputItem) -> Tuple[InputSafetyClassification, List[Inp
                 input_ref=item.input_ref,
                 severity='info',
                 category='unknown_risk',
-                reason_code='INPUT_EXTERNAL_SOURCE_REVIEW_RECOMMENDED',
+                reason_code='safety.external.review_recommended',
                 human_summary='External file or URL input should be reviewed before provider submission.',
                 suggested_next_action='Review the external source and confirm it is expected.',
             )
