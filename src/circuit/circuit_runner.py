@@ -36,7 +36,25 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 import re
 
+from src.automation.output_destination import (
+    DeliveryAttempt,
+    DeliveryPlan,
+    DeliveryRecord,
+    DestinationCapability,
+    attempt_delivery,
+    record_not_attempted_delivery,
+)
 from src.automation.trigger_model import DEFAULT_TRIGGER_SOURCE, normalize_trigger_source
+from src.contracts.status_taxonomy import DeliveryStatus, GovernanceStatus, LaunchStatus
+from src.governance.quota import (
+    QuotaPolicy,
+    QuotaScope,
+    QuotaStateRecord,
+    UsageAccountingRecord,
+    apply_usage_accounting,
+    evaluate_quota,
+)
+from src.safety.input_safety import evaluate_input_safety
 from src.circuit.circuit_scheduler import CircuitScheduler
 from src.circuit.circuit_validator import CircuitValidator, CircuitValidationError
 from src.circuit.fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
@@ -437,6 +455,242 @@ class CircuitRunner:
         emit_fn = getattr(self.runtime, "_emit_event", None)
         if callable(emit_fn):
             emit_fn(event_type, payload, node_id=node_id)
+
+    @staticmethod
+    def _ensure_governance_store(state: Dict[str, Any]) -> Dict[str, Any]:
+        governance = state.get("__governance__")
+        if not isinstance(governance, dict):
+            governance = {}
+            state["__governance__"] = governance
+        return governance
+
+    def _maybe_evaluate_input_safety(
+        self,
+        current_state: Dict[str, Any],
+        *,
+        trigger_source: str,
+        execution_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        raw = current_state.get("__input_safety__")
+        if not isinstance(raw, dict):
+            return None
+
+        evaluation = evaluate_input_safety(
+            raw.get("inputs") or [],
+            trigger_source=trigger_source,
+            confirmed_by=raw.get("confirmed_by"),
+            confirmed_at=raw.get("confirmed_at"),
+        )
+        governance = self._ensure_governance_store(current_state)
+        governance["input_safety"] = evaluation
+        raw["evaluation"] = evaluation
+
+        decision = dict(evaluation.get("decision") or {})
+        payload = {
+            "execution_id": execution_id,
+            "overall_status": decision.get("overall_status"),
+            "launch_allowed": bool(decision.get("launch_allowed")),
+            "finding_count": len(evaluation.get("findings") or []),
+            "finding_reason_codes": [finding.get("reason_code") for finding in evaluation.get("findings") or []],
+            "governance_status": GovernanceStatus.INPUT_SAFE.value if decision.get("overall_status") == "allow" else (
+                GovernanceStatus.INPUT_WARNING.value if decision.get("overall_status") == "allow_with_warning" else (
+                    GovernanceStatus.CONFIRMATION_REQUIRED.value if decision.get("overall_status") == "confirmation_required" else GovernanceStatus.INPUT_BLOCKED.value
+                )
+            ),
+        }
+        self._emit_runtime_event("input_safety_evaluated", payload)
+        if not decision.get("launch_allowed"):
+            event_type = "input_safety_confirmation_required" if decision.get("overall_status") == "confirmation_required" else "input_safety_blocked"
+            self._emit_runtime_event(event_type, payload)
+        return evaluation
+
+    def _resolve_quota_components(self, current_state: Dict[str, Any]) -> Optional[Tuple[Dict[str, Any], QuotaScope, QuotaPolicy, QuotaStateRecord]]:
+        raw = current_state.get("__quota__")
+        if not isinstance(raw, dict):
+            return None
+        scope = QuotaScope.from_raw(dict(raw.get("scope") or {}))
+        policy = QuotaPolicy.from_raw(dict(raw.get("policy") or {}), scope_ref=scope.scope_ref)
+        period_ref = str(raw.get("period_ref") or f"{policy.period_type}:default")
+        state_record = QuotaStateRecord.from_raw(dict(raw.get("state_record") or {}), scope_ref=scope.scope_ref, period_ref=period_ref)
+        return raw, scope, policy, state_record
+
+    def _maybe_evaluate_quota(
+        self,
+        current_state: Dict[str, Any],
+        *,
+        trigger_source: str,
+        execution_id: str,
+        requested_action_type: Optional[str] = None,
+        estimated_usage: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        resolved = self._resolve_quota_components(current_state)
+        if resolved is None:
+            return None
+        raw, scope, policy, state_record = resolved
+        action_type = requested_action_type or str(raw.get("requested_action_type") or ("automation_launch" if trigger_source != DEFAULT_TRIGGER_SOURCE else "run_launch"))
+        usage = dict(estimated_usage or raw.get("estimated_usage") or {"run_count": 1})
+        decision = evaluate_quota(
+            scope=scope,
+            policy=policy,
+            state_record=state_record,
+            requested_action_type=action_type,
+            estimated_usage=usage,
+        )
+        payload = {
+            "execution_id": execution_id,
+            "scope_ref": scope.scope_ref,
+            "requested_action_type": action_type,
+            "overall_status": decision.overall_status,
+            "blocking_reason_code": decision.blocking_reason_code,
+            "warning_summary": decision.warning_summary,
+            "governance_status": GovernanceStatus.OVER_QUOTA_BLOCKED.value if decision.overall_status == "blocked" else (
+                GovernanceStatus.NEAR_QUOTA.value if decision.overall_status == "allow_with_warning" else GovernanceStatus.WITHIN_QUOTA.value
+            ),
+        }
+        self._emit_runtime_event("quota_evaluated", payload)
+        if decision.overall_status == "blocked":
+            self._emit_runtime_event("quota_blocked", payload)
+        elif decision.overall_status == "allow_with_warning":
+            self._emit_runtime_event("quota_warning", payload)
+
+        bundle = {
+            "scope": scope.to_dict(),
+            "policy": policy.to_dict(),
+            "state_record": state_record.to_dict(),
+            "decision": decision.to_dict(),
+        }
+        governance = self._ensure_governance_store(current_state)
+        governance["quota"] = bundle
+        raw["evaluation"] = bundle
+        return bundle
+
+    def _apply_quota_accounting(
+        self,
+        current_state: Dict[str, Any],
+        *,
+        run_ref: str,
+        action_type: str,
+        estimated_cost: Optional[float] = None,
+        delivery_actions_used: Optional[int] = None,
+        automation_launches_used: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        resolved = self._resolve_quota_components(current_state)
+        if resolved is None:
+            return None
+        raw, _scope, _policy, state_record = resolved
+        accounting = UsageAccountingRecord(
+            accounting_id=str(uuid.uuid4()),
+            scope_ref=state_record.scope_ref,
+            run_ref=run_ref,
+            action_type=action_type,
+            estimated_cost=estimated_cost,
+            delivery_actions_used=delivery_actions_used,
+            automation_launches_used=automation_launches_used,
+        )
+        updated_state = apply_usage_accounting(state_record=state_record, accounting=accounting)
+        raw["state_record"] = updated_state.to_dict()
+        governance = self._ensure_governance_store(current_state)
+        quota_governance = governance.setdefault("quota", {})
+        quota_governance["state_record"] = updated_state.to_dict()
+        accounting_records = quota_governance.setdefault("accounting_records", [])
+        accounting_records.append(accounting.to_dict())
+        return {
+            "accounting": accounting.to_dict(),
+            "state_record": updated_state.to_dict(),
+        }
+
+    def _maybe_attempt_output_delivery(
+        self,
+        current_state: Dict[str, Any],
+        *,
+        execution_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        raw = current_state.get("__delivery__")
+        if not isinstance(raw, dict):
+            return None
+
+        capability = DestinationCapability.from_raw(dict(raw.get("capability") or {}))
+        plan = DeliveryPlan.from_raw(dict(raw.get("plan") or raw), run_ref=execution_id)
+        outputs = dict(current_state.get("__node_outputs__") or {})
+        if not outputs:
+            outputs = {key: value for key, value in current_state.items() if isinstance(key, str) and not key.startswith("__")}
+        artifacts = dict(raw.get("artifacts") or {})
+        authorization_allowed = bool(raw.get("authorization_allowed", True))
+        confirmation_granted = bool(raw.get("confirmation_granted", False))
+
+        quota_bundle = self._maybe_evaluate_quota(
+            current_state,
+            trigger_source=DEFAULT_TRIGGER_SOURCE,
+            execution_id=execution_id,
+            requested_action_type="delivery_action",
+            estimated_usage={"delivery_actions": 1},
+        )
+        if quota_bundle is not None and dict(quota_bundle.get("decision") or {}).get("overall_status") == "blocked":
+            blocked_attempt = {
+                "attempt_id": str(uuid.uuid4()),
+                "delivery_plan_ref": plan.delivery_plan_id,
+                "run_ref": execution_id,
+                "destination_ref": plan.destination_ref,
+                "started_at": None,
+                "completed_at": None,
+                "status": DeliveryStatus.BLOCKED.value,
+                "idempotency_key": None,
+                "response_summary": None,
+                "failure_reason_code": dict(quota_bundle["decision"]).get("blocking_reason_code"),
+                "retry_eligible": False,
+            }
+            record = DeliveryRecord(
+                run_ref=execution_id,
+                destination_ref=plan.destination_ref,
+                destination_type=plan.destination_type,
+                selected_output_ref=plan.selected_output_ref,
+                selected_artifact_ref=plan.selected_artifact_ref,
+                latest_status=DeliveryStatus.BLOCKED.value,
+                attempt_refs=(blocked_attempt["attempt_id"],),
+                delivered_at=None,
+                delivery_summary={"reason_code": blocked_attempt["failure_reason_code"]},
+            ).to_dict()
+            result = {"attempt": blocked_attempt, "record": record, "payload": None}
+        else:
+            result = attempt_delivery(
+                capability=capability,
+                plan=plan,
+                outputs=outputs,
+                artifacts=artifacts,
+                authorization_allowed=authorization_allowed,
+                confirmation_granted=confirmation_granted,
+            )
+
+        raw["last_result"] = result
+        governance = self._ensure_governance_store(current_state)
+        governance["delivery"] = result
+        latest_status = dict(result.get("record") or {}).get("latest_status", DeliveryStatus.UNKNOWN.value if hasattr(DeliveryStatus, 'UNKNOWN') else 'unknown')
+        event_type = {
+            DeliveryStatus.SUCCEEDED.value: "delivery_succeeded",
+            DeliveryStatus.FAILED.value: "delivery_failed",
+            DeliveryStatus.BLOCKED.value: "delivery_blocked",
+            DeliveryStatus.CANCELLED.value: "delivery_cancelled",
+        }.get(latest_status, "delivery_recorded")
+        self._emit_runtime_event(
+            event_type,
+            {
+                "execution_id": execution_id,
+                "destination_ref": plan.destination_ref,
+                "destination_type": plan.destination_type,
+                "latest_status": latest_status,
+                "attempt_id": dict(result.get("attempt") or {}).get("attempt_id"),
+                "failure_reason_code": dict(result.get("attempt") or {}).get("failure_reason_code"),
+            },
+        )
+        if latest_status in {DeliveryStatus.SUCCEEDED.value, DeliveryStatus.FAILED.value, DeliveryStatus.BLOCKED.value}:
+            self._apply_quota_accounting(
+                current_state,
+                run_ref=execution_id,
+                action_type="delivery_action",
+                delivery_actions_used=1,
+            )
+        return result
+
 
     def _build_resume_human_decision_record(
         self,
@@ -963,6 +1217,9 @@ class CircuitRunner:
         nodes: List[Dict[str, Any]] = circuit.get("nodes", [])
         resume_request = self._extract_resume_request(current_state, circuit_nodes=nodes, circuit_definition=circuit)
         current_state.setdefault("__node_outputs__", {})
+        normalized_trigger_source = normalize_trigger_source(trigger_source)
+        governance_store = self._ensure_governance_store(current_state)
+        governance_store.setdefault("launch_status", LaunchStatus.REQUESTED.value)
 
         # ── Phase 1: Structural pre-validation ───────────────────────────────
         structural_result = self._run_structural_validation(circuit)
@@ -987,6 +1244,7 @@ class CircuitRunner:
         )
 
         if pre_decision.blocks_execution:
+            governance_store["launch_status"] = LaunchStatus.BLOCKED.value
             # Build blocked governance trace — no execution takes place
             finished_ms = time.monotonic()
             governance = self._build_governance_trace(
@@ -1008,12 +1266,71 @@ class CircuitRunner:
             )
             return CircuitRunResult(current_state, governance)
 
+        safety_bundle = self._maybe_evaluate_input_safety(
+            current_state,
+            trigger_source=normalized_trigger_source,
+            execution_id=execution_id,
+        )
+        if safety_bundle is not None and not dict(safety_bundle.get("decision") or {}).get("launch_allowed"):
+            governance_store["launch_status"] = (
+                LaunchStatus.CONFIRMATION_REQUIRED.value
+                if dict(safety_bundle.get("decision") or {}).get("overall_status") == "confirmation_required"
+                else LaunchStatus.SAFETY_BLOCKED.value
+            )
+            finished_ms = time.monotonic()
+            governance = self._build_governance_trace(
+                execution_id=execution_id,
+                circuit_id=circuit_id,
+                structural_result=structural_result,
+                pre_det_result=pre_det_result,
+                pre_decision=pre_decision,
+                execution_allowed=False,
+                post_det_result=None,
+                post_decision=PostDecisionResult(
+                    decision=ValidationDecision.ACCEPT,
+                    reason="execution blocked by input safety",
+                ),
+                execution_completed=False,
+                final_status="blocked",
+                started_at_ms=started_at_ms,
+                finished_at_ms=finished_ms,
+            )
+            return CircuitRunResult(current_state, governance)
+
+        quota_bundle = self._maybe_evaluate_quota(
+            current_state,
+            trigger_source=normalized_trigger_source,
+            execution_id=execution_id,
+        )
+        if quota_bundle is not None and dict(quota_bundle.get("decision") or {}).get("overall_status") == "blocked":
+            governance_store["launch_status"] = LaunchStatus.QUOTA_BLOCKED.value
+            finished_ms = time.monotonic()
+            governance = self._build_governance_trace(
+                execution_id=execution_id,
+                circuit_id=circuit_id,
+                structural_result=structural_result,
+                pre_det_result=pre_det_result,
+                pre_decision=pre_decision,
+                execution_allowed=False,
+                post_det_result=None,
+                post_decision=PostDecisionResult(
+                    decision=ValidationDecision.ACCEPT,
+                    reason="execution blocked by quota",
+                ),
+                execution_completed=False,
+                final_status="blocked",
+                started_at_ms=started_at_ms,
+                finished_at_ms=finished_ms,
+            )
+            return CircuitRunResult(current_state, governance)
+
+        governance_store["launch_status"] = LaunchStatus.ALLOWED.value
+
         # ── Phase 3: Node execution ───────────────────────────────────────────
         execution_nodes = nodes if resume_request is None else self._build_resume_nodes(nodes, current_state, resume_request)
         scheduler = CircuitScheduler(execution_nodes)
         waves = scheduler.execution_waves()
 
-        normalized_trigger_source = normalize_trigger_source(trigger_source)
         set_execution_identity_fn = getattr(self.runtime, "set_execution_identity", None)
         if callable(set_execution_identity_fn):
             set_execution_identity_fn(
@@ -1034,6 +1351,7 @@ class CircuitRunner:
             "total_waves": len(waves),
             "is_resume": resume_request is not None,
             "trigger_source": normalized_trigger_source,
+            "launch_status": governance_store.get("launch_status", LaunchStatus.ALLOWED.value),
         }
         if automation_id is not None:
             started_payload["automation_id"] = automation_id
@@ -1089,7 +1407,7 @@ class CircuitRunner:
             execution_error = exc
             raise
         finally:
-            visible_keys = len([k for k in current_state if k != "__node_outputs__"])
+            visible_keys = len([k for k in current_state if not (isinstance(k, str) and k.startswith("__"))])
             if execution_paused:
                 completed_event_type = "execution_paused"
             else:
@@ -1154,6 +1472,36 @@ class CircuitRunner:
                         "warning_count": warning_count,
                     },
                 )
+
+            launch_action_type = "automation_launch" if normalized_trigger_source != DEFAULT_TRIGGER_SOURCE else "run_launch"
+            self._apply_quota_accounting(
+                current_state,
+                run_ref=execution_id,
+                action_type=launch_action_type,
+                estimated_cost=(dict(current_state.get("__quota__") or {}).get("estimated_usage") or {}).get("estimated_cost"),
+                automation_launches_used=(1 if launch_action_type == "automation_launch" else None),
+            )
+
+            if execution_paused or execution_failed:
+                raw_delivery = current_state.get("__delivery__")
+                if isinstance(raw_delivery, dict):
+                    plan = DeliveryPlan.from_raw(dict(raw_delivery.get("plan") or raw_delivery), run_ref=execution_id)
+                    delivery_result = {"attempt": None, "record": record_not_attempted_delivery(plan=plan).to_dict(), "payload": None}
+                    raw_delivery["last_result"] = delivery_result
+                    governance_store["delivery"] = delivery_result
+                    self._emit_runtime_event(
+                        "delivery_recorded",
+                        {
+                            "execution_id": execution_id,
+                            "destination_ref": plan.destination_ref,
+                            "destination_type": plan.destination_type,
+                            "latest_status": DeliveryStatus.NOT_ATTEMPTED.value,
+                            "attempt_id": None,
+                            "failure_reason_code": None,
+                        },
+                    )
+            else:
+                self._maybe_attempt_output_delivery(current_state, execution_id=execution_id)
 
             final_status = "paused" if execution_paused else ("failed" if execution_failed else "success")
 
@@ -1251,6 +1599,9 @@ class CircuitRunner:
             current_state, circuit_nodes=nodes, circuit_definition=circuit
         )
         current_state.setdefault("__node_outputs__", {})
+        normalized_trigger_source = normalize_trigger_source(trigger_source)
+        governance_store = self._ensure_governance_store(current_state)
+        governance_store.setdefault("launch_status", LaunchStatus.REQUESTED.value)
 
         # ── Phase 1: Structural pre-validation ───────────────────────────────
         structural_result = self._run_structural_validation(circuit)
@@ -1275,6 +1626,7 @@ class CircuitRunner:
         )
 
         if pre_decision.blocks_execution:
+            governance_store["launch_status"] = LaunchStatus.BLOCKED.value
             finished_ms = time.monotonic()
             governance = self._build_governance_trace(
                 execution_id=execution_id,
@@ -1295,6 +1647,66 @@ class CircuitRunner:
             )
             return CircuitRunResult(current_state, governance)
 
+        safety_bundle = self._maybe_evaluate_input_safety(
+            current_state,
+            trigger_source=normalized_trigger_source,
+            execution_id=execution_id,
+        )
+        if safety_bundle is not None and not dict(safety_bundle.get("decision") or {}).get("launch_allowed"):
+            governance_store["launch_status"] = (
+                LaunchStatus.CONFIRMATION_REQUIRED.value
+                if dict(safety_bundle.get("decision") or {}).get("overall_status") == "confirmation_required"
+                else LaunchStatus.SAFETY_BLOCKED.value
+            )
+            finished_ms = time.monotonic()
+            governance = self._build_governance_trace(
+                execution_id=execution_id,
+                circuit_id=circuit_id,
+                structural_result=structural_result,
+                pre_det_result=pre_det_result,
+                pre_decision=pre_decision,
+                execution_allowed=False,
+                post_det_result=None,
+                post_decision=PostDecisionResult(
+                    decision=ValidationDecision.ACCEPT,
+                    reason="execution blocked by input safety",
+                ),
+                execution_completed=False,
+                final_status="blocked",
+                started_at_ms=started_at_ms,
+                finished_at_ms=finished_ms,
+            )
+            return CircuitRunResult(current_state, governance)
+
+        quota_bundle = self._maybe_evaluate_quota(
+            current_state,
+            trigger_source=normalized_trigger_source,
+            execution_id=execution_id,
+        )
+        if quota_bundle is not None and dict(quota_bundle.get("decision") or {}).get("overall_status") == "blocked":
+            governance_store["launch_status"] = LaunchStatus.QUOTA_BLOCKED.value
+            finished_ms = time.monotonic()
+            governance = self._build_governance_trace(
+                execution_id=execution_id,
+                circuit_id=circuit_id,
+                structural_result=structural_result,
+                pre_det_result=pre_det_result,
+                pre_decision=pre_decision,
+                execution_allowed=False,
+                post_det_result=None,
+                post_decision=PostDecisionResult(
+                    decision=ValidationDecision.ACCEPT,
+                    reason="execution blocked by quota",
+                ),
+                execution_completed=False,
+                final_status="blocked",
+                started_at_ms=started_at_ms,
+                finished_at_ms=finished_ms,
+            )
+            return CircuitRunResult(current_state, governance)
+
+        governance_store["launch_status"] = LaunchStatus.ALLOWED.value
+
         # ── Phase 3: Node execution (async wave loop) ─────────────────────────
         execution_nodes = (
             nodes if resume_request is None
@@ -1303,7 +1715,6 @@ class CircuitRunner:
         scheduler = CircuitScheduler(execution_nodes)
         waves = scheduler.execution_waves()
 
-        normalized_trigger_source = normalize_trigger_source(trigger_source)
         set_execution_identity_fn = getattr(self.runtime, "set_execution_identity", None)
         if callable(set_execution_identity_fn):
             set_execution_identity_fn(
@@ -1325,6 +1736,7 @@ class CircuitRunner:
             "is_resume": resume_request is not None,
             "execution_mode": "async",
             "trigger_source": normalized_trigger_source,
+            "launch_status": governance_store.get("launch_status", LaunchStatus.ALLOWED.value),
         }
         if automation_id is not None:
             started_payload["automation_id"] = automation_id
@@ -1391,7 +1803,7 @@ class CircuitRunner:
             execution_error = exc
             raise
         finally:
-            visible_keys = len([k for k in current_state if k != "__node_outputs__"])
+            visible_keys = len([k for k in current_state if not (isinstance(k, str) and k.startswith("__"))])
             if execution_paused:
                 completed_event_type = "execution_paused"
             else:
@@ -1440,6 +1852,36 @@ class CircuitRunner:
         post_decision = self._policy.decide_post(
             post_det_result, strict_determinism=strict_determinism
         )
+
+        launch_action_type = "automation_launch" if normalized_trigger_source != DEFAULT_TRIGGER_SOURCE else "run_launch"
+        self._apply_quota_accounting(
+            current_state,
+            run_ref=execution_id,
+            action_type=launch_action_type,
+            estimated_cost=(dict(current_state.get("__quota__") or {}).get("estimated_usage") or {}).get("estimated_cost"),
+            automation_launches_used=(1 if launch_action_type == "automation_launch" else None),
+        )
+
+        if execution_paused or execution_failed:
+            raw_delivery = current_state.get("__delivery__")
+            if isinstance(raw_delivery, dict):
+                plan = DeliveryPlan.from_raw(dict(raw_delivery.get("plan") or raw_delivery), run_ref=execution_id)
+                delivery_result = {"attempt": None, "record": record_not_attempted_delivery(plan=plan).to_dict(), "payload": None}
+                raw_delivery["last_result"] = delivery_result
+                governance_store["delivery"] = delivery_result
+                self._emit_runtime_event(
+                    "delivery_recorded",
+                    {
+                        "execution_id": execution_id,
+                        "destination_ref": plan.destination_ref,
+                        "destination_type": plan.destination_type,
+                        "latest_status": DeliveryStatus.NOT_ATTEMPTED.value,
+                        "attempt_id": None,
+                        "failure_reason_code": None,
+                    },
+                )
+        else:
+            self._maybe_attempt_output_delivery(current_state, execution_id=execution_id)
 
         final_status = (
             "paused" if execution_paused
