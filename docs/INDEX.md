@@ -122,7 +122,7 @@ These new documents define multilingual UI behavior as a **UI-owned supporting r
 
 - The repository keeps one official demo: `examples/real_ai_bug_autopsy_multinode/`
 - Provider environment guidance is implemented across OpenAI, Codex, Claude, Gemini, and Perplexity
-- Current verified baseline: `1844 passed, 9 skipped`
+- Current verified baseline: `1848 passed, 9 skipped`
 
 ---
 

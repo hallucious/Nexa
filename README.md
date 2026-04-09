@@ -150,7 +150,7 @@ The current repository is best understood as:
 - **role-aware savefile/storage boundary implemented**
 - **Python-side UI/editor foundation broadly implemented**
 - **product-flow shell convergence substantially implemented**
-- **final live end-to-end proof still remaining**
+- **final live end-to-end proof reflected in the current shell/workflow evidence layer**
 
 In practical terms:
 

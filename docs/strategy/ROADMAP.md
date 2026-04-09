@@ -62,9 +62,10 @@ Current baseline at closeout: `1283 passed, 3 skipped`
 * closure projection
 * transition projection
 * gateway projection tied to proposal/commit and execution-launch workflow gates
+* E2E proof projection tied to completed-run commit anchoring and follow-through evidence
 
 Interpretation:
-- the shell can now describe lifecycle position, next action, boundary closure, and gate state
+- the shell can now describe lifecycle position, next action, boundary closure, gate state, and E2E proof status
 - the remaining gap is final live end-to-end proof, not absence of shell/product-flow structure
 
 ---
@@ -76,15 +77,15 @@ Interpretation:
 * Canonical public CLI clarified as `src.cli.nexa_cli:main`
 * Role-aware `.nex` storage and UI continuity boundary are implemented in code and tests
 * Product-flow shell convergence exists across journey / runbook / handoff / readiness / E2E path / closure / transition / gateway
-* Current repository baseline: `1844 passed, 9 skipped`
-* Authoritative implementation baseline commit: `f143396`
+* Current repository baseline: `1848 passed, 9 skipped`
+* Authoritative implementation baseline commit: `c869806`
 
 ---
 
 # Next Technical Focus
 
-* finish the last live end-to-end proof only if a real commit/run/follow-through gap is still found
-* otherwise shift from shell convergence to broader product-facing implementation and UX realization
+* treat shell/product-flow proof convergence as the current closed baseline
+* shift from proof-layer convergence to broader product-facing implementation, beginner productization, and next major engine sector selection
 
 ---
 

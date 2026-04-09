@@ -17,9 +17,9 @@ It does not replace the canonical architecture or contract documents.
 
 ## Authoritative Snapshot
 
-* authoritative implementation baseline commit: `f143396`
-* authoritative verified baseline: `1844 passed, 9 skipped`
-* status source: latest repository snapshot aligned to the post-gateway product-flow shell baseline
+* authoritative implementation baseline commit: `c869806`
+* authoritative verified baseline: `1848 passed, 9 skipped`
+* status source: latest repository snapshot aligned to the post-E2E-proof product-flow shell baseline
 
 ---
 
@@ -35,7 +35,7 @@ The UI / storage / designer line has already moved through:
 * multilingual UI foundation
 * i18n persistence boundary verification
 * panel-level and workspace / shell / hub-level localized display retrofit
-* product-flow shell convergence across journey / runbook / handoff / readiness / E2E path / closure / transition / gateway
+* product-flow shell convergence across journey / runbook / handoff / readiness / E2E path / closure / transition / gateway / E2E proof
 
 The practical meaning is:
 
@@ -116,7 +116,7 @@ The current stage is closer to:
 
 * foundation implemented
 * shell/product-flow convergence substantially implemented
-* final live E2E proof and broader frontend realization still remaining
+* broader frontend realization and general-user productization still remaining
 
 ### 2. The immediate bottleneck is not new UI theory
 
@@ -147,4 +147,4 @@ The Python-side shell/product-flow control plane is strong enough to guide furth
 
 The project should now be interpreted as:
 
-**engine/storage/UI foundations implemented, shell/product-flow convergence largely present, final live E2E proof still open, and documentation now synchronized to that reality.**
+**engine/storage/UI foundations implemented, shell/product-flow convergence broadly present through E2E proof, and documentation synchronized to that reality.**

@@ -18,14 +18,14 @@ It is not a replacement for the detailed architecture/spec documents.
 
 ## Authoritative Snapshot
 
-- authoritative implementation baseline commit: `f143396`
-- authoritative verified baseline: `1844 passed, 9 skipped`
-- status source: latest repository snapshot after product-flow gateway projection and top-level documentation synchronization
+- authoritative implementation baseline commit: `c869806`
+- authoritative verified baseline: `1848 passed, 9 skipped`
+- status source: latest repository snapshot after product-flow E2E proof projection
 
 ## One-Line Position
 
 Nexa is **not** in a "UI not started" state.
-It is in a **runtime/storage foundation complete, UI foundation implemented, product-flow shell largely converged, final live E2E proof still open** state.
+It is in a **runtime/storage foundation complete, UI foundation implemented, product-flow shell largely converged, final live E2E proof now reflected in the shell/workflow evidence layer** state.
 
 ## Sector Matrix
 
@@ -37,9 +37,9 @@ It is in a **runtime/storage foundation complete, UI foundation implemented, pro
 | i18n major retrofit | Complete baseline | main panel / workflow / workspace / shell / hub surfaces are localized; residual cleanup is minor rather than architectural |
 | live execution / trace / artifact / diff shell surface | Implemented shell-linked baseline | Python-side projections exist and are linked into product-flow shell composition |
 | Designer proposal flow projection | Implemented shell-linked baseline | intent / patch / precheck / preview / approval data is projected into UI surfaces |
-| product-flow shell integration | Implemented convergence baseline | shell/workspace/hub composition plus journey / runbook / handoff / readiness / E2E path / closure / transition / gateway projections are present |
+| product-flow shell integration | Implemented convergence baseline | shell/workspace/hub composition plus journey / runbook / handoff / readiness / E2E path / closure / transition / gateway / E2E proof projections are present |
 | Subcircuit | Implemented foundation | schema/model/validator/runtime/example coverage exists; broader future work should be code-first, not theory-first |
-| E2E user flow closure | Mostly converged | scenario-level shell/gateway projections now exist, but final live commit/run/follow-through proof is still an open engineering task |
+| E2E user flow closure | Converged shell proof baseline | scenario-level shell/workflow evidence now includes the final proof projection for review / commit / run / follow-through closure |
 
 ## Stable Enough To Stop Reopening
 
@@ -68,7 +68,7 @@ The following should now be treated as closed baseline decisions unless a real c
 - panel/workspace/hub composition must not bypass the adapter boundary
 
 ### 5. Product-flow shell projection stack
-- journey / runbook / handoff / readiness / E2E path / closure / transition / gateway are now part of the implemented shell-level convergence baseline
+- journey / runbook / handoff / readiness / E2E path / closure / transition / gateway / E2E proof are now part of the implemented shell-level convergence baseline
 - future work should tighten real boundary behavior rather than reopen whether these projection families should exist
 
 ## Must Remain Open
@@ -101,7 +101,7 @@ Continue treating the following as active implementation topics:
 
 - final live E2E workflow proof
 - real commit/run/follow-through convergence
-- final Designer control-plane closure
+- broader product-facing realization beyond the now-implemented shell proof baseline
 - broader frontend/product shell realization beyond Python-side projection models
 
 ## Recommended Immediate Next Batch

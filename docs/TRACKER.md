@@ -98,13 +98,13 @@ The current repository state includes the following implemented surface:
 ### 9. Current Verified Baseline
 
 ```text
-1844 passed, 9 skipped
+1848 passed, 9 skipped
 ```
 
-* authoritative implementation baseline commit: `f143396`
-* current repository state is no longer “UI not started”; it is runtime/storage/UI foundation complete + product-flow shell convergence substantially implemented + final live E2E proof still open
-* the main near-term risk is overclaiming final E2E closure before the remaining live boundary proof is actually done
-* product-flow shell convergence now includes journey / runbook / handoff / readiness / E2E path / closure / transition / gateway layers tied into the shell baseline
+* authoritative implementation baseline commit: `c869806`
+* current repository state is no longer “UI not started”; it is runtime/storage/UI foundation complete + product-flow shell convergence substantially implemented + final live E2E proof now reflected in the shell/workflow evidence layer
+* the main near-term risk is no longer missing shell-level proof projection, but drifting out of sync between the new proof layer and top-level product documentation
+* product-flow shell convergence now includes journey / runbook / handoff / readiness / E2E path / closure / transition / gateway / E2E proof layers tied into the shell baseline
 
 ---
 
