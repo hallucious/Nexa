@@ -29,3 +29,4 @@ class ProviderResult:
     artifacts: List[Any]
     trace: Dict[str, Any]
     error: Optional[ProviderError]
+    stream: Optional[Dict[str, Any]] = None

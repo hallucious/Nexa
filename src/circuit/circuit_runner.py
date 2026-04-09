@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 import re
 
+from src.automation.trigger_model import DEFAULT_TRIGGER_SOURCE, normalize_trigger_source
 from src.circuit.circuit_scheduler import CircuitScheduler
 from src.circuit.circuit_validator import CircuitValidator, CircuitValidationError
 from src.circuit.fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
@@ -937,6 +938,8 @@ class CircuitRunner:
         state: Dict[str, Any],
         *,
         strict_determinism: bool = False,
+        trigger_source: str = DEFAULT_TRIGGER_SOURCE,
+        automation_id: Optional[str] = None,
     ) -> CircuitRunResult:
         """
         Execute the circuit with full governance lifecycle.
@@ -1010,9 +1013,18 @@ class CircuitRunner:
         scheduler = CircuitScheduler(execution_nodes)
         waves = scheduler.execution_waves()
 
-        set_execution_id_fn = getattr(self.runtime, "set_execution_id", None)
-        if callable(set_execution_id_fn):
-            set_execution_id_fn(execution_id)
+        normalized_trigger_source = normalize_trigger_source(trigger_source)
+        set_execution_identity_fn = getattr(self.runtime, "set_execution_identity", None)
+        if callable(set_execution_identity_fn):
+            set_execution_identity_fn(
+                execution_id=execution_id,
+                trigger_source=normalized_trigger_source,
+                automation_id=automation_id,
+            )
+        else:
+            set_execution_id_fn = getattr(self.runtime, "set_execution_id", None)
+            if callable(set_execution_id_fn):
+                set_execution_id_fn(execution_id)
 
         started_payload = {
             "circuit_id": circuit_id,
@@ -1021,7 +1033,11 @@ class CircuitRunner:
             "total_nodes_in_circuit": len(nodes),
             "total_waves": len(waves),
             "is_resume": resume_request is not None,
+            "trigger_source": normalized_trigger_source,
         }
+        if automation_id is not None:
+            started_payload["automation_id"] = automation_id
+
         if resume_request is not None:
             started_payload["resume_from_node_id"] = resume_request.resume_from_node_id
             if resume_request.previous_execution_id:
@@ -1085,7 +1101,10 @@ class CircuitRunner:
                 "total_waves": len(waves),
                 "executed_nodes": executed_nodes_count,
                 "state_keys": visible_keys,
+                "trigger_source": normalized_trigger_source,
             }
+            if automation_id is not None:
+                completed_payload["automation_id"] = automation_id
             if execution_error is not None:
                 completed_payload["error"] = str(execution_error)
                 completed_payload["error_type"] = type(execution_error).__name__
@@ -1204,6 +1223,8 @@ class CircuitRunner:
         state: Dict[str, Any],
         *,
         strict_determinism: bool = False,
+        trigger_source: str = DEFAULT_TRIGGER_SOURCE,
+        automation_id: Optional[str] = None,
     ) -> "CircuitRunResult":
         """True async execution path for a circuit.
 
@@ -1282,9 +1303,18 @@ class CircuitRunner:
         scheduler = CircuitScheduler(execution_nodes)
         waves = scheduler.execution_waves()
 
-        set_execution_id_fn = getattr(self.runtime, "set_execution_id", None)
-        if callable(set_execution_id_fn):
-            set_execution_id_fn(execution_id)
+        normalized_trigger_source = normalize_trigger_source(trigger_source)
+        set_execution_identity_fn = getattr(self.runtime, "set_execution_identity", None)
+        if callable(set_execution_identity_fn):
+            set_execution_identity_fn(
+                execution_id=execution_id,
+                trigger_source=normalized_trigger_source,
+                automation_id=automation_id,
+            )
+        else:
+            set_execution_id_fn = getattr(self.runtime, "set_execution_id", None)
+            if callable(set_execution_id_fn):
+                set_execution_id_fn(execution_id)
 
         started_payload = {
             "circuit_id": circuit_id,
@@ -1294,7 +1324,10 @@ class CircuitRunner:
             "total_waves": len(waves),
             "is_resume": resume_request is not None,
             "execution_mode": "async",
+            "trigger_source": normalized_trigger_source,
         }
+        if automation_id is not None:
+            started_payload["automation_id"] = automation_id
         if resume_request is not None:
             started_payload["resume_from_node_id"] = resume_request.resume_from_node_id
             if resume_request.previous_execution_id:
@@ -1371,7 +1404,10 @@ class CircuitRunner:
                 "executed_nodes": executed_nodes_count,
                 "state_keys": visible_keys,
                 "execution_mode": "async",
+                "trigger_source": normalized_trigger_source,
             }
+            if automation_id is not None:
+                completed_payload["automation_id"] = automation_id
             if execution_error is not None:
                 completed_payload["error"] = str(execution_error)
                 completed_payload["error_type"] = type(execution_error).__name__

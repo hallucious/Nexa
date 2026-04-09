@@ -11,6 +11,7 @@ from src.platform.prompt_loader import PromptLoaderError
 from src.platform.prompt_registry import PromptRegistry
 from src.platform.prompt_spec import PromptSpecError
 from src.platform.plugin_result import PluginResult, normalize_plugin_result
+from src.automation.trigger_model import DEFAULT_TRIGGER_SOURCE, normalize_trigger_source
 from src.contracts.provider_contract import ProviderRequest
 from src.providers.provider_contract import ProviderResult
 from src.contracts.budget_routing_contract import RiskLevel, RoutingContext
@@ -34,6 +35,7 @@ from src.engine.final_output_resolver import (
 from src.engine.graph_scheduler import GraphScheduler
 from src.engine.validation.output_verifier import run_output_verifier
 from src.contracts.artifact_contract import infer_artifact_type, make_typed_artifact
+from src.contracts.status_taxonomy import StreamingStatus
 
 
 @dataclass
@@ -129,6 +131,8 @@ class NodeExecutionRuntime:
         self.metrics = RuntimeMetrics()
         self.event_emitter = event_emitter or ExecutionEventEmitter()
         self.execution_id: str = "runtime-default"
+        self.trigger_source: str = DEFAULT_TRIGGER_SOURCE
+        self.automation_id: Optional[str] = None
         self.outcome_memory_store = outcome_memory_store
 
     # ------------------------------------------------------------------
@@ -143,6 +147,19 @@ class NodeExecutionRuntime:
 
     def set_execution_id(self, execution_id: str) -> None:
         self.execution_id = execution_id
+        self.trigger_source = DEFAULT_TRIGGER_SOURCE
+        self.automation_id = None
+
+    def set_execution_identity(
+        self,
+        *,
+        execution_id: str,
+        trigger_source: str = DEFAULT_TRIGGER_SOURCE,
+        automation_id: Optional[str] = None,
+    ) -> None:
+        self.execution_id = execution_id
+        self.trigger_source = normalize_trigger_source(trigger_source)
+        self.automation_id = (str(automation_id).strip() if automation_id is not None else None) or None
 
     def execute_plugin(self, plugin_id: str, **kwargs):
         if plugin_id not in self.plugin_registry:
@@ -202,7 +219,90 @@ class NodeExecutionRuntime:
                 payload or {},
                 execution_id=self.execution_id,
                 node_id=node_id,
+                trigger_source=self.trigger_source,
+                automation_id=self.automation_id,
             )
+        )
+
+    @staticmethod
+    def _streaming_enabled(runtime_config: Optional[Dict[str, Any]], provider_cfg: Optional[Dict[str, Any]]) -> bool:
+        runtime_config = dict(runtime_config or {})
+        provider_cfg = dict(provider_cfg or {})
+        for source in (runtime_config, provider_cfg):
+            if "stream" in source:
+                return bool(source.get("stream"))
+            if "enable_streaming" in source:
+                return bool(source.get("enable_streaming"))
+        return False
+
+    def _emit_streaming_events(
+        self,
+        *,
+        node_id: str,
+        stream_payload: Dict[str, Any],
+        selected_provider_id: str,
+    ) -> None:
+        if not isinstance(stream_payload, dict) or not stream_payload.get("engaged"):
+            return
+
+        chunks = [dict(chunk) for chunk in stream_payload.get("chunks", []) if isinstance(chunk, dict)]
+        chunk_count = int(stream_payload.get("chunk_count", len(chunks)) or 0)
+        native_stream = bool(stream_payload.get("native_stream"))
+        self._emit_event(
+            "stream_started",
+            {
+                "provider_id": selected_provider_id,
+                "streaming_status": StreamingStatus.STARTED.value,
+                "chunk_count": chunk_count,
+                "native_stream": native_stream,
+            },
+            node_id=node_id,
+        )
+        for index, chunk in enumerate(chunks):
+            text = chunk.get("text")
+            if not isinstance(text, str) or not text:
+                continue
+            self._emit_event(
+                "token_chunk",
+                {
+                    "provider_id": selected_provider_id,
+                    "streaming_status": StreamingStatus.CHUNKING.value,
+                    "chunk_index": int(chunk.get("index", index) or index),
+                    "text": text,
+                    "is_final": bool(chunk.get("is_final", False)),
+                },
+                node_id=node_id,
+            )
+        partial_output = stream_payload.get("partial_output")
+        if partial_output is not None:
+            self._emit_event(
+                "partial_output",
+                {
+                    "provider_id": selected_provider_id,
+                    "streaming_status": StreamingStatus.CHUNKING.value,
+                    "output": partial_output,
+                },
+                node_id=node_id,
+            )
+        self._emit_event(
+            "stream_completed",
+            {
+                "provider_id": selected_provider_id,
+                "streaming_status": StreamingStatus.COMPLETED.value,
+                "chunk_count": chunk_count,
+                "native_stream": native_stream,
+            },
+            node_id=node_id,
+        )
+
+    def _emit_final_output_event(self, *, node_id: str, output: Any) -> None:
+        self._emit_event(
+            "final_output",
+            {
+                "streaming_status": StreamingStatus.COMPLETED.value,
+                "output": output,
+            },
+            node_id=node_id,
         )
 
     def _build_artifact_preview_payload(self, artifact: Artifact) -> Dict[str, Any]:
@@ -756,6 +856,9 @@ class NodeExecutionRuntime:
         request_options: Dict[str, Any] = {}
         if isinstance(route_decision.selected_model_id, str) and route_decision.selected_model_id:
             request_options["model"] = route_decision.selected_model_id
+        streaming_requested = self._streaming_enabled(runtime_config, provider_cfg)
+        if streaming_requested:
+            request_options["stream"] = True
 
         request = ProviderRequest(
             provider_id=route_decision.selected_provider_id,
@@ -821,6 +924,20 @@ class NodeExecutionRuntime:
             payload["reason_code"] = result.reason_code
         if result.error is not None:
             payload["error"] = result.error
+
+        stream_payload = dict(raw.get("stream")) if isinstance(raw.get("stream"), dict) else None
+        if stream_payload is not None and stream_payload.get("engaged"):
+            self._emit_streaming_events(
+                node_id=node_id,
+                stream_payload=stream_payload,
+                selected_provider_id=route_decision.selected_provider_id,
+            )
+            payload["stream"] = stream_payload
+        elif streaming_requested:
+            payload["stream"] = {
+                "engaged": False,
+                "streaming_status": StreamingStatus.SKIPPED.value,
+            }
 
         if output is None and isinstance(structured, dict):
             payload.update(structured)
@@ -1546,6 +1663,9 @@ class NodeExecutionRuntime:
                 trace=trace,
             )
 
+            if any(event.type == "stream_completed" and event.node_id == node_id for event in self.get_execution_events()):
+                self._emit_final_output_event(node_id=node_id, output=final_output)
+
             self._record_outcome_memory_success(
                 node_id=node_id,
                 config=config,
@@ -1793,6 +1913,9 @@ class NodeExecutionRuntime:
                 artifacts=artifacts,
                 trace=trace,
             )
+
+            if any(event.type == "stream_completed" and event.node_id == node_id for event in self.get_execution_events()):
+                self._emit_final_output_event(node_id=node_id, output=final_output)
 
             self._record_outcome_memory_success(
                 node_id=node_id,

@@ -57,10 +57,12 @@ class PerplexityProvider:
         temperature: float = 0.0,
         max_output_tokens: int = 1024,
         instructions: Optional[str] = None,
+        stream: bool = False,
     ) -> ProviderResult:
         return self._universal.generate_text(
             prompt=prompt,
             temperature=float(temperature),
             max_output_tokens=int(max_output_tokens),
             instructions=instructions,
+            stream=bool(stream),
         )

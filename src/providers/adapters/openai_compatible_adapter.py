@@ -3,11 +3,11 @@ from __future__ import annotations
 import json
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Iterator, Optional, Tuple
 
 from src.providers.provider_contract import ProviderRequest
 
-from .base_adapter import AdapterConfig, ProviderAdapter
+from .base_adapter import AdapterConfig, ProviderAdapter, StreamChunk
 
 
 @dataclass
@@ -79,6 +79,18 @@ class OpenAICompatibleAdapter(ProviderAdapter):
         raw_text = raw_bytes.decode("utf-8", errors="replace")
         raw: Dict[str, Any] = json.loads(raw_text)
         return raw
+
+    def stream(self, payload: Dict[str, Any]) -> Iterator[StreamChunk]:  # type: ignore[override]
+        """Foundation streaming path with safe non-stream fallback."""
+        raw = self.send(dict(payload))
+        text, tokens_used = self.parse(raw)
+        yield {
+            "text": text,
+            "raw": raw,
+            "tokens_used": tokens_used,
+            "is_final": True,
+            "native_stream": False,
+        }
 
     def parse(self, raw: Dict[str, Any]) -> Tuple[str, Optional[int]]:  # type: ignore[override]
         if self.mode == "responses":

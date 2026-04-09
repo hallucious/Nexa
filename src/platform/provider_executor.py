@@ -43,6 +43,8 @@ class GenerateTextProviderBridge:
             kwargs["instructions"] = options.get("instructions")
         if options.get("timeout_sec") is not None:
             kwargs["timeout_sec"] = options.get("timeout_sec")
+        if options.get("stream") is not None:
+            kwargs["stream"] = bool(options.get("stream"))
         return kwargs
 
     @staticmethod
@@ -83,6 +85,7 @@ class GenerateTextProviderBridge:
                     message=str(exc),
                     retryable=False,
                 ),
+                stream=None,
             )
 
         return self._normalize_generate_text_result(raw_result)
@@ -109,6 +112,7 @@ class GenerateTextProviderBridge:
                         message=str(err),
                         retryable=False,
                     ),
+                    stream=dict(raw.get("stream")) if isinstance(raw, dict) and isinstance(raw.get("stream"), dict) else None,
                 )
             return RuntimeProviderResult(
                 output=text,
@@ -117,6 +121,7 @@ class GenerateTextProviderBridge:
                 artifacts=[],
                 trace=trace,
                 error=None,
+                stream=dict(raw.get("stream")) if isinstance(raw, dict) and isinstance(raw.get("stream"), dict) else None,
             )
 
         return RuntimeProviderResult(
@@ -126,6 +131,7 @@ class GenerateTextProviderBridge:
             artifacts=[],
             trace={"provider": self.provider_name},
             error=None,
+            stream=None,
         )
 
     def _canonical_to_runtime_result(
@@ -154,6 +160,7 @@ class GenerateTextProviderBridge:
             artifacts=list(artifacts),
             trace=trace,
             error=error,
+            stream=dict(raw.get("stream")) if isinstance(raw.get("stream"), dict) else None,
         )
 
 
@@ -250,6 +257,8 @@ class ProviderExecutor:
             "trace": dict(result.trace or {}),
             "artifacts": list(result.artifacts or []),
         }
+        if isinstance(result.stream, dict):
+            raw["stream"] = dict(result.stream)
         if isinstance(result.structured, dict):
             raw["structured"] = dict(result.structured)
 
@@ -286,7 +295,7 @@ class ProviderExecutor:
             reason_code = "provider_internal_error"
             error_text = str(error)
 
-        standard = {"output", "raw_text", "structured", "artifacts", "trace", "error", "metrics"}
+        standard = {"output", "raw_text", "structured", "artifacts", "trace", "error", "metrics", "stream"}
         extras = {k: v for k, v in payload.items() if k not in standard}
         structured = payload.get("structured")
         if structured is None and extras:

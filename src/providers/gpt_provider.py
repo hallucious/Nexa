@@ -66,6 +66,7 @@ class GPTProvider:
         temperature: float = 0.0,
         max_output_tokens: int = 1024,
         instructions: Optional[str] = None,
+        stream: bool = False,
     ) -> ProviderResult:
         # Delegate to UniversalProvider (SAFE_MODE handled there).
         return self._universal.generate_text(
@@ -73,4 +74,5 @@ class GPTProvider:
             temperature=float(temperature),
             max_output_tokens=int(max_output_tokens),
             instructions=instructions,
+            stream=bool(stream),
         )
