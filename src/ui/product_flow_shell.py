@@ -541,7 +541,7 @@ def read_product_flow_shell_view_model(
 
     if shell_vm is None:
         shell_status = "empty"
-    elif stage.blocking_count:
+    elif stage.blocking_count or (dispatch_hub is not None and dispatch_hub.hub_status == "blocked") or (execution_adapter_hub is not None and execution_adapter_hub.hub_status == "blocked"):
         shell_status = "blocked"
     elif stage.stage_id == "run" and stage.live_execution:
         shell_status = "live_run"
@@ -549,6 +549,8 @@ def read_product_flow_shell_view_model(
         shell_status = "review_focus"
     elif stage.stage_id == "build":
         shell_status = "build_focus"
+    elif (workflow_hub is not None and workflow_hub.hub_status == "attention") or (dispatch_hub is not None and dispatch_hub.hub_status == "attention") or (execution_adapter_hub is not None and execution_adapter_hub.hub_status == "attention") or stage.warning_count or stage.pending_approval_count:
+        shell_status = "attention"
     else:
         shell_status = "ready"
 

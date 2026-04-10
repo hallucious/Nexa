@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from src.contracts.nex_contract import ValidationFinding, ValidationReport
 from src.designer.models.circuit_draft_preview import CircuitDraftPreview, ConfirmationPreview, GraphViewModel, SummaryCard, StructuralPreview
 from src.designer.models.circuit_patch_plan import ChangeScope, CircuitPatchPlan, PatchOperation
@@ -279,3 +280,20 @@ def test_product_flow_shell_treats_execution_record_as_runtime_monitoring_source
     assert vm.stage.stage_id == "run"
     assert vm.focus.active_workspace_id == "runtime_monitoring"
     assert vm.focus.active_right_panel_id in {"artifact", "trace_timeline", "execution"}
+
+
+
+def test_product_flow_shell_propagates_blocked_validation_into_shell_status() -> None:
+    failed = ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="ERR", category="structural", severity="high", blocking=True, location="node:n1", message="blocked")],
+        blocking_count=1,
+        warning_count=0,
+        result="failed",
+    )
+    vm = read_product_flow_shell_view_model(
+        _working_save(),
+        validation_report=failed,
+        execution_record=_run_completed(),
+    )
+    assert vm.shell_status == "blocked"

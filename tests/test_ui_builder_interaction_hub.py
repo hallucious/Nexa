@@ -110,3 +110,19 @@ def test_builder_interaction_hub_surfaces_attention_when_routing_is_attention() 
     assert hub.command_routing is not None
     assert hub.command_routing.routing_status == "attention"
     assert hub.hub_status == "attention"
+
+
+def test_builder_interaction_hub_propagates_terminal_status_for_execution_record() -> None:
+    hub = read_builder_interaction_hub_view_model(_run())
+    assert hub.hub_status == "terminal"
+
+
+def test_builder_interaction_hub_respects_workflow_attention_state() -> None:
+    hub = read_builder_interaction_hub_view_model(
+        _working_save(),
+        validation_report=_validation(),
+        execution_record=_run(),
+    )
+    assert hub.workflow_hub is not None
+    assert hub.workflow_hub.hub_status in {"attention", "ready"}
+    assert hub.hub_status == "attention"

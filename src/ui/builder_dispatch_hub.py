@@ -61,11 +61,11 @@ def read_builder_dispatch_hub_view_model(
     dispatch_contract = read_command_dispatch_contract_view_model(source_unwrapped, interaction_hub=interaction_hub, intent_emission=intent_emission)
     lifecycle = read_interaction_lifecycle_view_model(source_unwrapped, interaction_hub=interaction_hub, dispatch_contract=dispatch_contract)
 
-    if lifecycle.lifecycle_status == "terminal":
+    if interaction_hub.hub_status == "terminal" or lifecycle.lifecycle_status == "terminal":
         hub_status = "terminal"
-    elif dispatch_contract.dispatch_status == "blocked":
+    elif interaction_hub.hub_status == "blocked" or dispatch_contract.dispatch_status == "blocked":
         hub_status = "blocked"
-    elif lifecycle.lifecycle_status == "attention" or intent_emission.emission_status == "attention":
+    elif interaction_hub.hub_status == "attention" or lifecycle.lifecycle_status == "attention" or intent_emission.emission_status == "attention":
         hub_status = "attention"
     else:
         hub_status = "ready"

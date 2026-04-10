@@ -114,9 +114,11 @@ def read_builder_interaction_hub_view_model(
     pending_confirmation_count = sum(1 for route in command_routing.routes if route.enabled and route.requires_confirmation)
     if command_routing.routing_status == "empty":
         hub_status = "empty"
-    elif transition.transition_status == "blocked" or command_routing.routing_status == "blocked":
+    elif workflow_hub.hub_status == "terminal" and transition.transition_status != "blocked":
+        hub_status = "terminal"
+    elif workflow_hub.hub_status == "blocked" or transition.transition_status == "blocked" or command_routing.routing_status == "blocked":
         hub_status = "blocked"
-    elif pending_confirmation_count or command_routing.routing_status == "attention":
+    elif workflow_hub.alert_count or workflow_hub.hub_status == "attention" or pending_confirmation_count or command_routing.routing_status == "attention":
         hub_status = "attention"
     else:
         hub_status = "ready"

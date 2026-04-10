@@ -14,6 +14,7 @@ from src.storage.models.execution_record_model import (
 )
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
+from dataclasses import replace
 from src.ui.builder_execution_adapter_hub import read_builder_execution_adapter_hub_view_model
 
 
@@ -60,3 +61,11 @@ def test_builder_execution_adapter_hub_prioritizes_terminal_status_for_execution
     assert vm.dispatch_hub.lifecycle is not None
     assert vm.dispatch_hub.lifecycle.terminal is True
     assert vm.hub_status == "terminal"
+
+
+def test_builder_execution_adapter_hub_propagates_blocked_from_dispatch_hub() -> None:
+    vm = read_builder_execution_adapter_hub_view_model(_working_save())
+    assert vm.dispatch_hub is not None
+    blocked_dispatch = replace(vm.dispatch_hub, hub_status="blocked")
+    blocked_vm = read_builder_execution_adapter_hub_view_model(_working_save(), dispatch_hub=blocked_dispatch)
+    assert blocked_vm.hub_status == "blocked"

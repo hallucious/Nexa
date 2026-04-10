@@ -427,6 +427,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "product.status.live_run": "Live execution focus",
         "product.status.review_focus": "Review focus",
         "product.status.build_focus": "Build focus",
+        "product.status.attention": "Product shell needs attention",
 
         "workflow.proposal_commit": "Proposal & Commit",
         "workflow.execution_launch": "Execution Launch",
@@ -847,6 +848,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "product.status.live_run": "실시간 실행 중심",
         "product.status.review_focus": "검토 중심",
         "product.status.build_focus": "구성 중심",
+        "product.status.attention": "제품 셸 주의 필요",
 
         "workflow.proposal_commit": "제안 및 커밋",
         "workflow.execution_launch": "실행 시작",

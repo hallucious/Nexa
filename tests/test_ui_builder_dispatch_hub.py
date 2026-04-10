@@ -22,6 +22,7 @@ from src.storage.models.execution_record_model import (
 )
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
+from dataclasses import replace
 from src.ui.builder_dispatch_hub import read_builder_dispatch_hub_view_model
 
 
@@ -88,3 +89,11 @@ def test_builder_dispatch_hub_keeps_commit_snapshot_launch_ready() -> None:
     assert vm.source_role == "commit_snapshot"
     assert vm.hub_status in {"ready", "attention"}
     assert vm.recommended_action_id in {"run_from_commit", "open_latest_commit"}
+
+
+def test_builder_dispatch_hub_propagates_blocked_from_interaction_hub() -> None:
+    vm = read_builder_dispatch_hub_view_model(_working_save(), interaction_hub=None)
+    assert vm.interaction_hub is not None
+    blocked_interaction = replace(vm.interaction_hub, hub_status="blocked")
+    blocked_vm = read_builder_dispatch_hub_view_model(_working_save(), interaction_hub=blocked_interaction)
+    assert blocked_vm.hub_status == "blocked"

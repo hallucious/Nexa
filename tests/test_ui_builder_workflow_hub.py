@@ -174,3 +174,17 @@ def test_builder_workflow_hub_recommends_execution_launch_for_approved_commit_sn
     vm = read_builder_workflow_hub_view_model(_commit(), execution_record=_run())
     assert vm.recommended_workflow_id == "execution_launch"
     assert vm.execution_launch is not None
+
+def test_builder_workflow_hub_surfaces_attention_for_review_ready_working_save() -> None:
+    vm = read_builder_workflow_hub_view_model(
+        _working_save("designer"),
+        selected_ref="node:n1",
+        validation_report=_validation_report(),
+    )
+    assert vm.hub_status == "attention"
+
+
+def test_builder_workflow_hub_marks_execution_record_as_terminal_history_context() -> None:
+    vm = read_builder_workflow_hub_view_model(_run())
+    assert vm.storage_role == "execution_record"
+    assert vm.hub_status == "terminal"

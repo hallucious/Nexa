@@ -56,6 +56,41 @@ def _storage_role(source) -> str:
     return "none"
 
 
+def _normalized_hub_status(*,
+    storage_role: str,
+    proposal_commit_vm: ProposalCommitWorkflowViewModel | None,
+    execution_launch_vm: ExecutionLaunchWorkflowViewModel | None,
+    recommended: str,
+    shell_vm: BuilderShellViewModel | None,
+    alert_count: int,
+) -> str:
+    if proposal_commit_vm is None and execution_launch_vm is None:
+        return "empty"
+    if shell_vm is not None and shell_vm.validation is not None and shell_vm.validation.overall_status == "blocked":
+        return "blocked"
+    if recommended == "execution_launch" and execution_launch_vm is not None:
+        status = execution_launch_vm.workflow_status
+        if storage_role == "execution_record" and status in {"replay_ready", "idle"}:
+            return "terminal"
+        if status == "blocked":
+            return "blocked"
+        if status in {"live_monitoring", "launch_ready"}:
+            return "ready"
+        if status == "replay_ready":
+            return "attention"
+        return "attention" if alert_count else "ready"
+    if recommended == "proposal_commit" and proposal_commit_vm is not None:
+        status = proposal_commit_vm.workflow_status
+        if status in {"historical_context", "committed_context"}:
+            return "terminal"
+        if status == "blocked":
+            return "blocked"
+        if status in {"awaiting_approval", "preview_ready", "proposal_in_progress", "review_ready"}:
+            return "attention"
+        return "attention" if alert_count else "ready"
+    return "attention" if alert_count else "ready"
+
+
 def read_builder_workflow_hub_view_model(
     source: SourceLike,
     *,
@@ -138,14 +173,14 @@ def read_builder_workflow_hub_view_model(
     if execution_launch_vm is not None:
         alert_count += execution_launch_vm.summary.blocking_count
 
-    if proposal_commit_vm is None and execution_launch_vm is None:
-        hub_status = "empty"
-    elif recommended == "execution_launch" and execution_launch_vm is not None:
-        hub_status = execution_launch_vm.workflow_status
-    elif recommended == "proposal_commit" and proposal_commit_vm is not None:
-        hub_status = proposal_commit_vm.workflow_status
-    else:
-        hub_status = "ready"
+    hub_status = _normalized_hub_status(
+        storage_role=storage_role,
+        proposal_commit_vm=proposal_commit_vm,
+        execution_launch_vm=execution_launch_vm,
+        recommended=recommended,
+        shell_vm=shell_vm,
+        alert_count=alert_count,
+    )
 
     return BuilderWorkflowHubViewModel(
         hub_status=hub_status,
