@@ -8,6 +8,7 @@ from src.designer.models.designer_intent import ConstraintSet, DesignerIntent, O
 from src.designer.models.designer_session_state_card import AvailableResources, ConversationContext, CurrentSelectionState, DesignerSessionStateCard, SessionTargetScope, WorkingSaveReality
 from src.designer.models.validation_precheck import AmbiguityAssessmentReport, CostAssessmentReport, EvaluatedScope, ResolutionReport, ValidationPrecheck, ValidityReport
 from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
+from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.graph_workspace import GraphPreviewOverlay
@@ -24,6 +25,19 @@ def _working_save() -> WorkingSaveModel:
         ui=UIModel(layout={}, metadata={"selected_node_ids": ["n1"]}),
     )
 
+
+
+
+def _commit() -> CommitSnapshotModel:
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
 
 def _run() -> ExecutionRecordModel:
     return ExecutionRecordModel(
@@ -172,3 +186,20 @@ def test_proposal_commit_workflow_localizes_next_step_for_korean_app_language() 
     vm = read_proposal_commit_workflow_view_model(working, selected_ref="node:n1", validation_report=_validation_report())
 
     assert vm.summary.next_step_label == "Designer 제안을 시작하거나 현재 드래프트 검토"
+
+
+def test_proposal_commit_workflow_propagates_latest_run_into_commit_snapshot_storage_context() -> None:
+    vm = read_proposal_commit_workflow_view_model(_commit(), execution_record=_run())
+    assert vm.storage is not None
+    assert vm.storage.execution_record_card is not None
+    assert vm.storage.execution_record_card.run_id == "run-001"
+    assert vm.summary.next_step_label == "Run from commit"
+
+
+def test_proposal_commit_workflow_prefers_followthrough_action_for_execution_record_context() -> None:
+    vm = read_proposal_commit_workflow_view_model(_run())
+    assert vm.storage is not None
+    assert vm.storage.execution_record_card is not None
+    assert vm.action_state.compare_action is not None
+    assert vm.action_state.compare_action.action_id in {"open_trace", "open_artifacts", "compare_runs", "open_latest_run", "open_diff"}
+    assert vm.summary.next_step_label in {"Open trace", "Open artifacts", "Compare runs", "Open latest run", "Open Diff"}

@@ -280,7 +280,12 @@ def read_command_palette_view_model(
     source_unwrapped = _unwrap(source)
     source_role = _storage_role(source_unwrapped)
     app_language = ui_language_from_sources(source_unwrapped, execution_record)
-    storage_view = storage_view or (read_storage_view_model(source_unwrapped) if source_unwrapped is not None else None)
+    storage_view = storage_view or (
+        read_storage_view_model(
+            source_unwrapped,
+            latest_execution_record=(execution_record if execution_record is not None and not isinstance(source_unwrapped, ExecutionRecordModel) else None),
+        ) if source_unwrapped is not None else None
+    )
     validation_view = validation_view or (read_validation_panel_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record) if source_unwrapped is not None else None)
     execution_view = execution_view or (read_execution_panel_view_model(source_unwrapped, execution_record=execution_record) if source_unwrapped is not None else None)
     trace_view = trace_view or (read_trace_timeline_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record) if (source_unwrapped is not None or execution_record is not None) else None)

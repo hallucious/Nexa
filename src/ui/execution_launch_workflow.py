@@ -92,7 +92,7 @@ def read_execution_launch_workflow_view_model(
     storage_role = _storage_role(source_unwrapped)
     app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
-    visual_editor_vm = read_visual_editor_workspace_view_model(source_unwrapped, validation_report=validation_report) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
+    visual_editor_vm = read_visual_editor_workspace_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
     monitoring_vm = (
         read_runtime_monitoring_workspace_view_model(
             source_unwrapped if source_unwrapped is not None else execution_record,
@@ -104,7 +104,10 @@ def read_execution_launch_workflow_view_model(
         if (source_unwrapped is not None or execution_record is not None)
         else None
     )
-    storage_vm = read_storage_view_model(source_unwrapped if source_unwrapped is not None else execution_record) if (source_unwrapped is not None or execution_record is not None) else None
+    storage_vm = read_storage_view_model(
+        source_unwrapped if source_unwrapped is not None else execution_record,
+        latest_execution_record=(execution_record if execution_record is not None and not isinstance(source_unwrapped, ExecutionRecordModel) else None),
+    ) if (source_unwrapped is not None or execution_record is not None) else None
 
     action_schema = read_builder_action_schema(
         source_unwrapped if source_unwrapped is not None else execution_record,

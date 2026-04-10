@@ -393,6 +393,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "workspace.visual_editor.status.previewing": "Previewing changes",
         "workspace.visual_editor.status.editing": "Editing graph",
         "workspace.visual_editor.status.viewing": "Viewing graph",
+        "workspace.visual_editor.status.reviewing": "Reviewing graph",
 
         "workspace.runtime.status.empty": "Monitoring workspace empty",
         "workspace.runtime.status.live_monitoring": "Live monitoring",
@@ -812,6 +813,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "workspace.visual_editor.status.previewing": "변경 미리보기 중",
         "workspace.visual_editor.status.editing": "그래프 편집 중",
         "workspace.visual_editor.status.viewing": "그래프 보기",
+        "workspace.visual_editor.status.reviewing": "그래프 검토 중",
 
         "workspace.runtime.status.empty": "모니터링 작업공간이 비어 있습니다",
         "workspace.runtime.status.live_monitoring": "실시간 모니터링",

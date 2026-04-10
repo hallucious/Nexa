@@ -8,6 +8,7 @@ from src.storage.models.shared_sections import CircuitModel, ResourcesModel, Sta
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.graph_workspace import GraphPreviewOverlay
 from src.ui.visual_editor_workspace import read_visual_editor_workspace_view_model
+from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 
 
 def _working_save() -> WorkingSaveModel:
@@ -20,6 +21,33 @@ def _working_save() -> WorkingSaveModel:
         ui=UIModel(layout={}, metadata={"selected_node_ids": ["n2"], "app_language": "ko-KR"}),
     )
 
+
+
+
+def _commit() -> CommitSnapshotModel:
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}, {"id": "n2"}], edges=[{"from": "n1", "to": "n2"}], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
+
+
+def _run() -> ExecutionRecordModel:
+    return ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-06T00:00:00Z", started_at="2026-04-06T00:00:00Z", finished_at="2026-04-06T00:00:05Z", status="completed"),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(event_count=3),
+        node_results=NodeResultsModel(),
+        outputs=ExecutionOutputModel(output_summary="done"),
+        artifacts=ExecutionArtifactsModel(),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(),
+    )
 
 def _validation() -> ValidationReport:
     return ValidationReport(
@@ -57,3 +85,17 @@ def test_visual_editor_workspace_projects_phase5_editor_surface() -> None:
     assert vm.comparison_state.viewer_status == "ready"
     assert vm.action_schema.source_role == "working_save"
     assert vm.workspace_status_label == "변경 미리보기 중"
+
+
+def test_visual_editor_workspace_enters_reviewing_when_commit_snapshot_has_execution_context() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run())
+    assert vm.storage is not None
+    assert vm.storage.execution_record_card is not None
+    assert vm.storage.execution_record_card.run_id == "run-001"
+    assert vm.workspace_status == "reviewing"
+
+
+def test_visual_editor_workspace_treats_compare_runs_as_comparison_availability() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run())
+    assert vm.comparison_state.can_open_diff is True
+    assert vm.workspace_status_label == "Reviewing graph"

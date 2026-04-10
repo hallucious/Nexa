@@ -154,7 +154,10 @@ def read_builder_shell_view_model(
     ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
     resolved_selected_ref = selected_ref or _selected_ref_from_graph(graph_vm)
 
-    storage_vm = read_storage_view_model(source_unwrapped) if source_unwrapped is not None else None
+    storage_vm = read_storage_view_model(
+        source_unwrapped,
+        latest_execution_record=(execution_record if execution_record is not None and not isinstance(source_unwrapped, ExecutionRecordModel) else None),
+    ) if source_unwrapped is not None else None
     execution_vm = read_execution_panel_view_model(source_unwrapped, execution_record=execution_record, live_events=live_events) if source_unwrapped is not None else None
     trace_vm = read_trace_timeline_view_model(source_unwrapped if isinstance(source_unwrapped, ExecutionRecordModel) else source_unwrapped, execution_record=execution_record, live_events=live_events) if (source_unwrapped is not None or execution_record is not None) else None
     artifact_vm = read_artifact_viewer_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record, selected_artifact_id=selected_artifact_id) if (source_unwrapped is not None or execution_record is not None) else None

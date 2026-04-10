@@ -76,6 +76,7 @@ def read_visual_editor_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
     validation_report: ValidationReport | None = None,
+    execution_record: ExecutionRecordModel | None = None,
     preview_overlay: GraphPreviewOverlay | None = None,
     diff_mode: str | None = None,
     diff_source=None,
@@ -84,14 +85,17 @@ def read_visual_editor_workspace_view_model(
 ) -> VisualEditorWorkspaceViewModel:
     source_unwrapped = _unwrap(source)
     storage_role = _storage_role(source_unwrapped)
-    app_language = ui_language_from_sources(source_unwrapped)
+    app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
     graph_vm = read_graph_view_model(
         source,
         validation_report=validation_report,
         preview_overlay=preview_overlay,
     ) if source is not None else None
-    storage_vm = read_storage_view_model(source_unwrapped) if source_unwrapped is not None else None
+    storage_vm = read_storage_view_model(
+        source_unwrapped,
+        latest_execution_record=(execution_record if execution_record is not None and not isinstance(source_unwrapped, ExecutionRecordModel) else None),
+    ) if source_unwrapped is not None else None
     validation_vm = read_validation_panel_view_model(source_unwrapped, validation_report=validation_report) if source_unwrapped is not None else None
 
     diff_vm = None
@@ -131,7 +135,7 @@ def read_visual_editor_workspace_view_model(
         viewer_status=diff_vm.viewer_status if diff_vm is not None else "hidden",
         change_count=sum(group.count for group in diff_vm.grouped_changes) if diff_vm is not None else 0,
         selected_change_id=diff_vm.selected_change.change_id if diff_vm is not None and diff_vm.selected_change is not None else None,
-        can_open_diff=any(action.action_id == "open_diff" and action.enabled for action in [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions]) or diff_vm is not None,
+        can_open_diff=any(action.action_id in {"open_diff", "compare_runs"} and action.enabled for action in [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions]) or diff_vm is not None,
     )
 
     if graph_vm is None:
@@ -141,7 +145,17 @@ def read_visual_editor_workspace_view_model(
     elif graph_vm.preview_overlay is not None:
         workspace_status = "previewing"
     else:
-        workspace_status = "editing" if storage_role == "working_save" else "viewing"
+        has_review_context = storage_role != "working_save" and (
+            execution_record is not None
+            or (storage_vm is not None and storage_vm.execution_record_card is not None and storage_vm.execution_record_card.run_id is not None)
+            or comparison_state.can_open_diff
+        )
+        if storage_role == "working_save":
+            workspace_status = "editing"
+        elif has_review_context:
+            workspace_status = "reviewing"
+        else:
+            workspace_status = "viewing"
 
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,

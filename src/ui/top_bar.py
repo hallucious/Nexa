@@ -192,7 +192,12 @@ def read_builder_top_bar_view_model(
     source_unwrapped = _unwrap(source)
     role = _storage_role(source_unwrapped)
     app_language = ui_language_from_sources(source_unwrapped, execution_record)
-    storage_view = storage_view or (read_storage_view_model(source_unwrapped) if source_unwrapped is not None else None)
+    storage_view = storage_view or (
+        read_storage_view_model(
+            source_unwrapped,
+            latest_execution_record=(execution_record if execution_record is not None and not isinstance(source_unwrapped, ExecutionRecordModel) else None),
+        ) if source_unwrapped is not None else None
+    )
     validation_view = validation_view or (read_validation_panel_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record) if source_unwrapped is not None else None)
     execution_view = execution_view or (read_execution_panel_view_model(source_unwrapped, execution_record=execution_record) if source_unwrapped is not None else None)
     action_schema = action_schema or read_builder_action_schema(source_unwrapped, storage_view=storage_view, validation_view=validation_view, execution_view=execution_view)

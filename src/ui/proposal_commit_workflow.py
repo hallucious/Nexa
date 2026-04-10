@@ -92,6 +92,25 @@ def _find_action(action_schema: BuilderActionSchemaView, action_id: str) -> Buil
     return None
 
 
+def _preferred_compare_action(action_schema: BuilderActionSchemaView, *, storage_role: str) -> BuilderActionView | None:
+    if storage_role == "execution_record":
+        priority = ["open_trace", "open_artifacts", "compare_runs", "open_latest_run", "open_diff"]
+    elif storage_role == "commit_snapshot":
+        priority = ["compare_runs", "open_diff", "open_latest_run", "open_trace", "open_artifacts"]
+    else:
+        priority = ["open_diff", "compare_runs"]
+    fallback: BuilderActionView | None = None
+    for action_id in priority:
+        action = _find_action(action_schema, action_id)
+        if action is None:
+            continue
+        if action.enabled:
+            return action
+        if fallback is None:
+            fallback = action
+    return fallback
+
+
 def read_proposal_commit_workflow_view_model(
     source: SourceLike,
     *,
@@ -111,15 +130,18 @@ def read_proposal_commit_workflow_view_model(
     storage_role = _storage_role(source_unwrapped)
     app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
-    storage_vm = read_storage_view_model(source_unwrapped) if source_unwrapped is not None else None
+    storage_vm = read_storage_view_model(
+        source_unwrapped,
+        latest_execution_record=(execution_record if execution_record is not None and not isinstance(source_unwrapped, ExecutionRecordModel) else None),
+    ) if source_unwrapped is not None else None
     validation_vm = (
         read_validation_panel_view_model(source_unwrapped, validation_report=validation_report, precheck=precheck, execution_record=execution_record)
         if source_unwrapped is not None
         else None
     )
     visual_editor_vm = (
-        read_visual_editor_workspace_view_model(source_unwrapped, validation_report=validation_report, preview_overlay=preview_overlay)
-        if source_unwrapped is not None
+        read_visual_editor_workspace_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay)
+        if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel))
         else None
     )
     node_config_vm = (
@@ -152,7 +174,7 @@ def read_proposal_commit_workflow_view_model(
     commit_action = _find_action(action_schema, "commit_snapshot")
     approve_action = _find_action(action_schema, "approve_for_commit")
     request_revision_action = _find_action(action_schema, "request_revision")
-    compare_action = _find_action(action_schema, "open_diff")
+    compare_action = _preferred_compare_action(action_schema, storage_role=storage_role)
 
     preview_state = designer_vm.preview_state if designer_vm is not None else None
     approval_state = designer_vm.approval_state if designer_vm is not None else None
@@ -174,6 +196,15 @@ def read_proposal_commit_workflow_view_model(
         next_step_label = ui_text("proposal.next.review_preview", app_language=app_language, fallback_text="Review preview and approval state")
     elif has_intent and intent_state is not None:
         next_step_label = ui_text("proposal.next.generate_patch", app_language=app_language, fallback_text="Generate patch and preview")
+    elif storage_role == "commit_snapshot":
+        launch_action = _find_action(action_schema, "run_from_commit")
+        if launch_action is not None and launch_action.enabled:
+            next_step_label = launch_action.label
+        elif compare_action is not None and compare_action.enabled:
+            next_step_label = compare_action.label
+    elif storage_role == "execution_record":
+        if compare_action is not None and compare_action.enabled:
+            next_step_label = compare_action.label
     elif storage_role == "working_save":
         next_step_label = ui_text("proposal.next.start_designer", app_language=app_language, fallback_text="Start a designer proposal or review current draft")
 
