@@ -79,6 +79,19 @@ def _find_action(action_schema: BuilderActionSchemaView, action_id: str) -> Buil
     return None
 
 
+def _preferred_action(action_schema: BuilderActionSchemaView, *action_ids: str) -> BuilderActionView | None:
+    fallback: BuilderActionView | None = None
+    for action_id in action_ids:
+        action = _find_action(action_schema, action_id)
+        if action is None:
+            continue
+        if action.enabled:
+            return action
+        if fallback is None:
+            fallback = action
+    return fallback
+
+
 def read_execution_launch_workflow_view_model(
     source: SourceLike,
     *,
@@ -116,10 +129,19 @@ def read_execution_launch_workflow_view_model(
         execution_view=monitoring_vm.execution if monitoring_vm is not None else None,
     )
 
-    run_action = _find_action(action_schema, "run_current") or _find_action(action_schema, "run_from_commit")
+    if storage_role == "commit_snapshot":
+        run_action = _preferred_action(action_schema, "run_from_commit", "run_current")
+        replay_action = _preferred_action(action_schema, "open_latest_run", "replay_latest")
+        compare_action = _preferred_action(action_schema, "compare_runs", "open_diff")
+    elif storage_role == "execution_record":
+        run_action = None
+        replay_action = _preferred_action(action_schema, "open_latest_run", "open_trace", "open_artifacts", "replay_latest")
+        compare_action = _preferred_action(action_schema, "compare_runs", "open_diff")
+    else:
+        run_action = _preferred_action(action_schema, "run_current", "run_from_commit")
+        replay_action = _preferred_action(action_schema, "replay_latest", "open_latest_run")
+        compare_action = _preferred_action(action_schema, "open_diff", "compare_runs")
     cancel_action = _find_action(action_schema, "cancel_run")
-    replay_action = _find_action(action_schema, "replay_latest") or _find_action(action_schema, "open_latest_run")
-    compare_action = _find_action(action_schema, "open_diff") or _find_action(action_schema, "compare_runs")
     trace_action = _find_action(action_schema, "open_trace")
     artifact_action = _find_action(action_schema, "open_artifacts")
 
@@ -128,12 +150,15 @@ def read_execution_launch_workflow_view_model(
     if execution_status in {"running", "queued"}:
         launch_mode = "live_run"
         next_step_label = ui_text("launch.next.monitor_live", app_language=app_language, fallback_text="Monitor live execution")
-    elif replay_action is not None and replay_action.enabled:
-        launch_mode = "replay_ready"
-        next_step_label = ui_text("launch.next.replay_latest", app_language=app_language, fallback_text="Replay or inspect latest run")
+    elif storage_role == "execution_record" and replay_action is not None and replay_action.enabled:
+        launch_mode = "history_review"
+        next_step_label = replay_action.label
     elif run_action is not None and run_action.enabled:
         launch_mode = "run_ready"
-        next_step_label = ui_text("launch.next.launch_current", app_language=app_language, fallback_text="Launch current structure")
+        next_step_label = run_action.label
+    elif replay_action is not None and replay_action.enabled:
+        launch_mode = "replay_ready"
+        next_step_label = replay_action.label or ui_text("launch.next.replay_latest", app_language=app_language, fallback_text="Replay or inspect latest run")
     else:
         launch_mode = "idle"
         next_step_label = ui_text("launch.next.resolve_validation", app_language=app_language, fallback_text="Resolve validation or select a run target")
@@ -156,10 +181,12 @@ def read_execution_launch_workflow_view_model(
         workflow_status = "blocked"
     elif execution_status in {"running", "queued"}:
         workflow_status = "live_monitoring"
-    elif replay_action is not None and replay_action.enabled:
-        workflow_status = "replay_ready"
+    elif storage_role == "execution_record" and replay_action is not None and replay_action.enabled:
+        workflow_status = "terminal_review"
     elif run_action is not None and run_action.enabled:
         workflow_status = "launch_ready"
+    elif replay_action is not None and replay_action.enabled:
+        workflow_status = "replay_ready"
     else:
         workflow_status = "idle"
 

@@ -70,7 +70,7 @@ def _normalized_hub_status(*,
         return "blocked"
     if recommended == "execution_launch" and execution_launch_vm is not None:
         status = execution_launch_vm.workflow_status
-        if storage_role == "execution_record" and status in {"replay_ready", "idle"}:
+        if storage_role == "execution_record" and status in {"terminal_review", "replay_ready", "idle"}:
             return "terminal"
         if status == "blocked":
             return "blocked"

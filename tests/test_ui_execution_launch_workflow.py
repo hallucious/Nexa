@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.contracts.nex_contract import ValidationFinding, ValidationReport
+from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
@@ -15,6 +16,18 @@ def _working_save() -> WorkingSaveModel:
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
         ui=UIModel(layout={}, metadata={}),
+    )
+
+
+def _commit() -> CommitSnapshotModel:
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
     )
 
 
@@ -59,8 +72,10 @@ def test_execution_launch_workflow_enters_live_monitoring_for_running_run() -> N
 
 def test_execution_launch_workflow_is_launch_ready_when_run_is_allowed() -> None:
     vm = read_execution_launch_workflow_view_model(_working_save(), validation_report=_validation_report(), execution_record=_run("completed"))
-    assert vm.workflow_status in {"launch_ready", "replay_ready"}
-    assert vm.can_launch is True or vm.can_replay is True
+    assert vm.workflow_status == "launch_ready"
+    assert vm.can_launch is True
+    assert vm.action_state.run_action is not None
+    assert vm.action_state.run_action.action_id == "run_current"
 
 
 def test_execution_launch_workflow_localizes_next_step_for_korean_app_language() -> None:
@@ -69,13 +84,26 @@ def test_execution_launch_workflow_localizes_next_step_for_korean_app_language()
 
     vm = read_execution_launch_workflow_view_model(working, validation_report=_validation_report(), execution_record=_run("completed"))
 
-    assert vm.summary.next_step_label in {"최신 실행 재실행 또는 검토", "현재 구조 실행"}
+    assert vm.summary.next_step_label in {"최신 실행 재실행 또는 검토", "현재 구조 실행", "현재 대상 실행"}
 
 
 def test_execution_launch_workflow_projects_trace_and_artifact_actions_for_execution_record() -> None:
     vm = read_execution_launch_workflow_view_model(_run("completed"))
     assert vm.storage_role == "execution_record"
+    assert vm.workflow_status == "terminal_review"
+    assert vm.action_state.replay_action is not None
+    assert vm.action_state.replay_action.action_id == "open_latest_run"
     assert vm.action_state.trace_action is not None
     assert vm.action_state.trace_action.action_id == "open_trace"
     assert vm.action_state.artifact_action is not None
     assert vm.action_state.artifact_action.action_id == "open_artifacts"
+
+
+def test_execution_launch_workflow_keeps_commit_snapshot_launch_ready_even_with_attached_history() -> None:
+    vm = read_execution_launch_workflow_view_model(_commit(), execution_record=_run("completed"))
+
+    assert vm.storage_role == "commit_snapshot"
+    assert vm.workflow_status == "launch_ready"
+    assert vm.can_launch is True
+    assert vm.action_state.run_action is not None
+    assert vm.action_state.run_action.action_id == "run_from_commit"
