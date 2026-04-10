@@ -108,6 +108,8 @@ def read_runtime_monitoring_workspace_view_model(
         source_unwrapped,
         execution_view=execution_vm,
         validation_view=validation_vm,
+        trace_view=trace_vm,
+        artifact_view=artifact_vm,
     )
     action_schema = read_builder_action_schema(
         source_unwrapped if source_unwrapped is not None else execution_record,

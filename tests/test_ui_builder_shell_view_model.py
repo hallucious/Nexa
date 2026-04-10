@@ -8,7 +8,7 @@ from src.designer.models.designer_intent import ConstraintSet, DesignerIntent, O
 from src.designer.models.designer_session_state_card import AvailableResources, ConversationContext, CurrentSelectionState, DesignerSessionStateCard, SessionTargetScope, WorkingSaveReality
 from src.designer.models.validation_precheck import AmbiguityAssessmentReport, CostAssessmentReport, EvaluatedScope, ResolutionReport, ValidationPrecheck, ValidityReport
 from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
-from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
+from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.builder_shell import read_builder_shell_view_model
@@ -51,10 +51,10 @@ def _run() -> ExecutionRecordModel:
         meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-06T00:00:00Z", started_at="2026-04-06T00:00:00Z", finished_at="2026-04-06T00:00:05Z", status="completed"),
         source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
         input=ExecutionInputModel(),
-        timeline=ExecutionTimelineModel(),
+        timeline=ExecutionTimelineModel(event_count=1),
         node_results=NodeResultsModel(),
         outputs=ExecutionOutputModel(output_summary="done"),
-        artifacts=ExecutionArtifactsModel(),
+        artifacts=ExecutionArtifactsModel(artifact_refs=[ArtifactRecordCard(artifact_id="art-1", artifact_type="final_output", producer_node="n1", hash="abc123", ref="artifact://art-1", summary="summary")], artifact_count=1, artifact_summary="1 artifact"),
         diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
         observability=ExecutionObservabilityModel(),
     )
@@ -234,3 +234,35 @@ def test_builder_shell_uses_runtime_monitoring_workspace_for_execution_record_so
     assert vm.active_workspace_id == "runtime_monitoring"
     assert vm.runtime_monitoring is not None
     assert vm.visual_editor is None
+
+
+def test_builder_shell_prefers_runtime_monitoring_workspace_when_artifact_panel_is_active() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-003", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"selected_artifact_ids": ["art-1"], "app_language": "ko-KR"}),
+    )
+
+    vm = read_builder_shell_view_model(source, execution_record=_run())
+
+    assert vm.coordination.active_panel == "artifact"
+    assert vm.active_workspace_id == "runtime_monitoring"
+
+
+def test_builder_shell_prefers_runtime_monitoring_workspace_when_trace_panel_is_active() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-004", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"selected_trace_event_ids": ["event-1"], "app_language": "ko-KR"}),
+    )
+
+    vm = read_builder_shell_view_model(source, execution_record=_run())
+
+    assert vm.coordination.active_panel == "trace_timeline"
+    assert vm.active_workspace_id == "runtime_monitoring"

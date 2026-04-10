@@ -179,6 +179,8 @@ def read_builder_shell_view_model(
         execution_view=execution_vm,
         validation_view=validation_vm,
         designer_view=designer_vm,
+        trace_view=trace_vm,
+        artifact_view=artifact_vm,
     )
     action_schema = read_builder_action_schema(
         source_unwrapped,
@@ -269,7 +271,7 @@ def read_builder_shell_view_model(
     elif diagnostics.panel_coordination_warning or warning_count > 0:
         shell_status = "partial"
 
-    if shell_mode in {"runtime_monitoring", "run_review"}:
+    if coordination_vm.active_panel in {"execution", "trace_timeline", "artifact"} or shell_mode in {"runtime_monitoring", "run_review"}:
         active_workspace_id = "runtime_monitoring"
     elif shell_mode == "designer_review":
         active_workspace_id = "node_configuration"

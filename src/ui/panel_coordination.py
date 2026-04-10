@@ -13,6 +13,8 @@ from src.ui.execution_panel import ExecutionPanelViewModel
 from src.ui.graph_workspace import GraphWorkspaceViewModel
 from src.ui.storage_panel import StoragePanelViewModel
 from src.ui.validation_panel import ValidationPanelViewModel
+from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel
+from src.ui.artifact_viewer import ArtifactViewerViewModel
 from src.ui.i18n import ui_language_from_sources, ui_text
 
 
@@ -50,15 +52,6 @@ class BuilderPanelCoordinationStateView:
     explanation: str | None = None
 
 
-_DEFAULT_VISIBLE_PANELS = [
-    "graph",
-    "inspector",
-    "validation",
-    "storage",
-    "execution",
-    "designer",
-]
-
 
 def _unwrap(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None):
     if isinstance(source, LoadedNexArtifact):
@@ -81,6 +74,46 @@ def _ui_metadata(source) -> dict[str, Any]:
         return dict(source.ui.metadata or {})
     return {}
 
+
+
+
+def _default_visible_panels(
+    *,
+    graph_view: GraphWorkspaceViewModel | None = None,
+    storage_view: StoragePanelViewModel | None = None,
+    diff_view: DiffViewerViewModel | None = None,
+    execution_view: ExecutionPanelViewModel | None = None,
+    validation_view: ValidationPanelViewModel | None = None,
+    designer_view: DesignerPanelViewModel | None = None,
+    trace_view: TraceTimelineViewerViewModel | None = None,
+    artifact_view: ArtifactViewerViewModel | None = None,
+) -> list[str]:
+    panels: list[str] = []
+    if graph_view is not None:
+        panels.extend(["graph", "inspector"])
+    if validation_view is not None:
+        panels.append("validation")
+    if storage_view is not None:
+        panels.append("storage")
+    if execution_view is not None:
+        panels.append("execution")
+    if trace_view is not None and trace_view.timeline_status != "idle":
+        panels.append("trace_timeline")
+    if artifact_view is not None and artifact_view.viewer_status != "idle":
+        panels.append("artifact")
+    if diff_view is not None and diff_view.viewer_status != "hidden":
+        panels.append("diff")
+    if designer_view is not None:
+        panels.append("designer")
+    if not panels:
+        panels.append("graph")
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for panel_id in panels:
+        if panel_id not in seen:
+            seen.add(panel_id)
+            ordered.append(panel_id)
+    return ordered
 
 def _resolve_primary_ref(selection: SelectionSummaryView) -> str | None:
     if selection.selected_node_ids:
@@ -107,6 +140,8 @@ def read_panel_coordination_state(
     execution_view: ExecutionPanelViewModel | None = None,
     validation_view: ValidationPanelViewModel | None = None,
     designer_view: DesignerPanelViewModel | None = None,
+    trace_view: TraceTimelineViewerViewModel | None = None,
+    artifact_view: ArtifactViewerViewModel | None = None,
     explanation: str | None = None,
 ) -> BuilderPanelCoordinationStateView:
     source = _unwrap(source)
@@ -141,14 +176,32 @@ def read_panel_coordination_state(
         selected_diff_change_id=selection.selected_diff_change_id,
     )
 
-    visible_panels_raw = metadata.get("visible_panels") or _DEFAULT_VISIBLE_PANELS
-    visible_panels = [str(v) for v in visible_panels_raw if v is not None]
+    visible_panels_raw = metadata.get("visible_panels")
+    if visible_panels_raw is None:
+        visible_panels = _default_visible_panels(
+            graph_view=graph_view,
+            storage_view=storage_view,
+            diff_view=diff_view,
+            execution_view=execution_view,
+            validation_view=validation_view,
+            designer_view=designer_view,
+            trace_view=trace_view,
+            artifact_view=artifact_view,
+        )
+    else:
+        visible_panels = [str(v) for v in visible_panels_raw if v is not None]
     pinned_panels = [str(v) for v in metadata.get("pinned_panels", []) if v is not None]
     panel_order = [str(v) for v in metadata.get("panel_order", visible_panels) if v is not None]
 
     active_panel = str(metadata.get("active_panel")) if metadata.get("active_panel") else ""
     if not active_panel:
-        if selection.selected_storage_ref is not None:
+        if selection.selected_artifact_ids:
+            active_panel = "artifact"
+        elif selection.selected_trace_event_ids:
+            active_panel = "trace_timeline"
+        elif selection.selected_diff_change_id is not None:
+            active_panel = "diff"
+        elif selection.selected_storage_ref is not None:
             active_panel = "storage"
         elif execution_view is not None and execution_view.execution_status in {"running", "queued"}:
             active_panel = "execution"
@@ -181,6 +234,14 @@ def read_panel_coordination_state(
         diff_count = sum(group.count for group in diff_view.grouped_changes)
         if diff_count:
             badges.append(PanelBadgeView(panel_id="diff", badge_style="info", count=diff_count, label=diff_view.diff_mode))
+    if trace_view is not None and trace_view.timeline_status != "idle":
+        event_count = len(trace_view.events)
+        if event_count:
+            badges.append(PanelBadgeView(panel_id="trace_timeline", badge_style="info", count=event_count, label=trace_view.timeline_status))
+    if artifact_view is not None and artifact_view.viewer_status in {"ready", "partial"}:
+        artifact_count = len(artifact_view.artifact_list)
+        if artifact_count:
+            badges.append(PanelBadgeView(panel_id="artifact", badge_style="info", count=artifact_count, label=artifact_view.viewer_status))
     if storage_view is not None and storage_view.diagnostics.lifecycle_warning_count:
         badges.append(PanelBadgeView(panel_id="storage", badge_style="warning", count=storage_view.diagnostics.lifecycle_warning_count, label=ui_text("panel.badge.storage_diagnostics", app_language=app_language, fallback_text="storage diagnostics")))
 
