@@ -58,6 +58,19 @@ SourceLike = WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | Loa
 _BOUNDARY_ORDER = ("review", "approval", "commit", "run", "followthrough")
 
 
+def _relevant_boundary_ids(*, source_role: str) -> tuple[str, ...]:
+    if source_role == "commit_snapshot":
+        return ("commit", "run", "followthrough")
+    if source_role == "execution_record":
+        return ("run", "followthrough")
+    return _BOUNDARY_ORDER
+
+
+def _relevant_boundaries(boundaries: list[ProductFlowBoundaryReadinessView], *, source_role: str) -> list[ProductFlowBoundaryReadinessView]:
+    relevant = set(_relevant_boundary_ids(source_role=source_role))
+    return [boundary for boundary in boundaries if boundary.boundary_id in relevant]
+
+
 def _unwrap(source: SourceLike):
     if isinstance(source, LoadedNexArtifact):
         return source.parsed_model
@@ -169,6 +182,11 @@ def _current_boundary(boundaries: list[ProductFlowBoundaryReadinessView], *, sou
         preferred = mapping.get(handoff.primary_entry_id)
         if preferred is not None:
             return preferred
+    if source_role == "commit_snapshot":
+        for boundary_id in ("run", "followthrough", "commit"):
+            for boundary in boundaries:
+                if boundary.boundary_id == boundary_id and (boundary.ready or boundary.complete):
+                    return boundary.boundary_id
     if source_role == "execution_record":
         for boundary_id in ("followthrough", "run"):
             for boundary in boundaries:
@@ -271,15 +289,26 @@ def read_product_flow_readiness_view_model(
 
     current_boundary_id = _current_boundary(boundaries, source_role=source_role, handoff=handoff, execution_record=execution_record)
     current_boundary = next((boundary for boundary in boundaries if boundary.boundary_id == current_boundary_id), None)
-    ready_boundary_count = sum(1 for boundary in boundaries if boundary.ready)
-    complete_boundary_count = sum(1 for boundary in boundaries if boundary.complete)
-    blocked_boundary_count = sum(1 for boundary in boundaries if boundary.boundary_status == "blocked")
-    open_requirement_count = sum(1 for boundary in boundaries if boundary.open_requirement is not None)
-    terminal_ready = bool(boundaries and boundaries[-1].complete and (source_role == "execution_record" or (end_user_flow_hub is not None and end_user_flow_hub.lifecycle_closure is not None and end_user_flow_hub.lifecycle_closure.terminal_completion_ready and source_role == "execution_record")))
+    relevant_boundaries = _relevant_boundaries(boundaries, source_role=source_role)
+    if source_role == "working_save":
+        active_path_boundaries = relevant_boundaries
+    elif current_boundary is not None:
+        try:
+            current_index = next(index for index, boundary in enumerate(relevant_boundaries) if boundary.boundary_id == current_boundary.boundary_id)
+            active_path_boundaries = relevant_boundaries[: current_index + 1]
+        except StopIteration:
+            active_path_boundaries = relevant_boundaries
+    else:
+        active_path_boundaries = relevant_boundaries
+    ready_boundary_count = sum(1 for boundary in relevant_boundaries if boundary.ready)
+    complete_boundary_count = sum(1 for boundary in relevant_boundaries if boundary.complete)
+    blocked_boundary_count = sum(1 for boundary in active_path_boundaries if boundary.boundary_status == "blocked")
+    open_requirement_count = sum(1 for boundary in active_path_boundaries if boundary.open_requirement is not None)
+    terminal_ready = bool(relevant_boundaries and relevant_boundaries[-1].complete and (source_role == "execution_record" or (end_user_flow_hub is not None and end_user_flow_hub.lifecycle_closure is not None and end_user_flow_hub.lifecycle_closure.terminal_completion_ready and source_role == "execution_record")))
 
     if not boundaries:
         readiness_status = "empty"
-    elif blocked_boundary_count and any(boundary.boundary_id != "followthrough" for boundary in boundaries if boundary.boundary_status == "blocked"):
+    elif blocked_boundary_count and any(boundary.boundary_id != "followthrough" for boundary in active_path_boundaries if boundary.boundary_status == "blocked"):
         readiness_status = "blocked"
     elif terminal_ready:
         readiness_status = "terminal"
