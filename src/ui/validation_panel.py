@@ -444,6 +444,7 @@ def read_validation_panel_view_model(
             "passed": "pass",
             "passed_with_findings": "pass_with_warnings",
             "failed": "blocked",
+            "blocked": "blocked",
         }.get(validation_report.result, "unknown")
         converted = [_from_validation_finding(finding, idx=i) for i, finding in enumerate(validation_report.findings, start=1)]
         blocking_findings = [finding for finding in converted if finding.severity == "blocking"]

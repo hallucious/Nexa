@@ -406,6 +406,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
 
         "shell.status.ready": "Shell ready",
         "shell.status.partial": "Shell partially synchronized",
+        "shell.status.blocked": "Shell blocked",
+        "shell.status.active": "Shell active",
         "shell.status.failed": "Shell unavailable",
 
         "shell.mode.builder": "Builder",
@@ -822,6 +824,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
 
         "shell.status.ready": "셸 준비 완료",
         "shell.status.partial": "셸 일부 동기화 필요",
+        "shell.status.blocked": "셸 차단 상태",
+        "shell.status.active": "셸 활성 상태",
         "shell.status.failed": "셸을 사용할 수 없습니다",
 
         "shell.mode.builder": "빌더",

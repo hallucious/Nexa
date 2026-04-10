@@ -61,6 +61,9 @@ class OutputSummaryView:
     source_node: str | None = None
     value_summary: str = ""
     value_type: str | None = None
+    full_value: str | None = None
+    is_copyable: bool = False
+    streaming_in_progress: bool = False
 
 
 @dataclass(frozen=True)
@@ -303,20 +306,106 @@ def _metrics_from_record(record: ExecutionRecordModel) -> ExecutionMetricsView:
     )
 
 
+def _stringify_output_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    try:
+        import json
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except TypeError:
+        return str(value)
+
+
+def _truncate_summary(text: str | None, *, limit: int = 120) -> str:
+    if not text:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[: limit - 1] + "…"
+
+
 def _latest_outputs_from_record(record: ExecutionRecordModel) -> list[OutputSummaryView]:
     outputs: list[OutputSummaryView] = []
     for output in record.outputs.final_outputs:
+        full_value = _stringify_output_value(output.value_payload)
         outputs.append(
             OutputSummaryView(
                 output_ref=output.output_ref,
                 source_node=output.source_node,
-                value_summary=output.value_summary,
+                value_summary=output.value_summary or _truncate_summary(full_value),
                 value_type=output.value_type,
+                full_value=full_value,
+                is_copyable=bool(full_value),
+                streaming_in_progress=False,
             )
         )
     if not outputs and record.outputs.output_summary:
-        outputs.append(OutputSummaryView(output_ref="output_summary", value_summary=record.outputs.output_summary, value_type=None))
+        outputs.append(
+            OutputSummaryView(
+                output_ref="output_summary",
+                value_summary=record.outputs.output_summary,
+                value_type=None,
+                full_value=record.outputs.output_summary,
+                is_copyable=True,
+                streaming_in_progress=False,
+            )
+        )
     return outputs
+
+
+def _latest_outputs_from_live_events(
+    events: Sequence[ExecutionEvent],
+    *,
+    fallback_record: ExecutionRecordModel | None = None,
+) -> list[OutputSummaryView]:
+    tracked: dict[str, OutputSummaryView] = {}
+    stream_chunks: dict[str, str] = {}
+    for event in events:
+        payload = event.payload if isinstance(event.payload, Mapping) else {}
+        if event.type == "token_chunk":
+            chunk = payload.get("chunk") or payload.get("text") or payload.get("token")
+            if not isinstance(chunk, str) or not chunk:
+                continue
+            output_ref = str(payload.get("output_ref") or payload.get("stream_id") or event.node_id or "live_stream")
+            stream_chunks[output_ref] = stream_chunks.get(output_ref, "") + chunk
+            full_value = stream_chunks[output_ref]
+            tracked[output_ref] = OutputSummaryView(
+                output_ref=output_ref,
+                source_node=event.node_id,
+                value_summary=_truncate_summary(full_value),
+                value_type=str(payload.get("value_type") or "text"),
+                full_value=full_value,
+                is_copyable=True,
+                streaming_in_progress=True,
+            )
+            continue
+        if event.type not in {"partial_output", "final_output"}:
+            continue
+        output_ref = str(payload.get("output_ref") or payload.get("name") or event.node_id or ("final_output" if event.type == "final_output" else "partial_output"))
+        value = payload.get("value", payload.get("full_value"))
+        full_value = _stringify_output_value(value)
+        summary = payload.get("value_summary") or payload.get("summary") or _truncate_summary(full_value)
+        value_type = payload.get("value_type")
+        if not isinstance(value_type, str):
+            value_type = "text" if isinstance(value, str) else (type(value).__name__ if value is not None else None)
+        tracked[output_ref] = OutputSummaryView(
+            output_ref=output_ref,
+            source_node=str(payload.get("source_node") or event.node_id) if (payload.get("source_node") is not None or event.node_id is not None) else None,
+            value_summary=str(summary or ""),
+            value_type=value_type,
+            full_value=full_value,
+            is_copyable=bool(full_value),
+            streaming_in_progress=event.type == "partial_output",
+        )
+    if tracked:
+        return list(tracked.values())
+    if fallback_record is not None:
+        return _latest_outputs_from_record(fallback_record)
+    return []
 
 
 def _diagnostics_from_record(record: ExecutionRecordModel) -> ExecutionDiagnosticsSummary:
@@ -559,7 +648,7 @@ def read_execution_panel_view_model(
             progress=progress,
             active_context=active_context,
             recent_events=recent_events,
-            latest_outputs=_latest_outputs_from_record(execution_record),
+            latest_outputs=_latest_outputs_from_live_events(live_events, fallback_record=execution_record) if live_events else _latest_outputs_from_record(execution_record),
             diagnostics=_diagnostics_from_record(execution_record),
             timing=ExecutionTimingView(
                 started_at=execution_record.meta.started_at,

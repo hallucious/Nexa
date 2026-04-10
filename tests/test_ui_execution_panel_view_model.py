@@ -101,3 +101,50 @@ def test_read_execution_panel_view_model_surfaces_idle_runnable_state_without_ex
     assert vm.storage_role == "working_save"
     assert vm.control_state.can_run is True
     assert vm.control_state.can_replay is False
+
+
+
+def test_read_execution_panel_view_model_exposes_record_output_payload_when_available() -> None:
+    record = ExecutionRecordModel(
+        meta=ExecutionMetaModel(
+            run_id="run-002",
+            record_format_version="1.0.0",
+            created_at="2026-04-07T00:00:00Z",
+            started_at="2026-04-07T00:00:00Z",
+            finished_at="2026-04-07T00:00:05Z",
+            status="completed",
+            title="Payload Run",
+        ),
+        source=ExecutionSourceModel(commit_id="commit-001", working_save_id="ws-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(total_duration_ms=5000, event_count=1),
+        node_results=NodeResultsModel(),
+        outputs=ExecutionOutputModel(final_outputs=[OutputResultCard(output_ref="final", source_node="draft", value_summary="done", value_payload={"answer": "ok"}, value_type="json")], output_summary="done"),
+        artifacts=ExecutionArtifactsModel(artifact_count=0),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+    vm = read_execution_panel_view_model(record)
+
+    assert vm.latest_outputs[0].full_value == '{"answer": "ok"}'
+    assert vm.latest_outputs[0].is_copyable is True
+    assert vm.latest_outputs[0].streaming_in_progress is False
+
+
+def test_read_execution_panel_view_model_projects_live_partial_and_final_outputs() -> None:
+    record = _record(status="running")
+    live_events = [
+        ExecutionEvent("execution_started", "run-001", None, 0, {}),
+        ExecutionEvent("token_chunk", "run-001", "draft", 5, {"output_ref": "final", "chunk": "Hel"}),
+        ExecutionEvent("token_chunk", "run-001", "draft", 6, {"output_ref": "final", "chunk": "lo"}),
+        ExecutionEvent("partial_output", "run-001", "draft", 7, {"output_ref": "final", "value": "Hello", "value_type": "text"}),
+        ExecutionEvent("final_output", "run-001", "draft", 8, {"output_ref": "final", "value": "Hello world", "value_type": "text", "value_summary": "Hello world"}),
+    ]
+
+    vm = read_execution_panel_view_model(_working_save(), execution_record=record, live_events=live_events)
+
+    assert vm.latest_outputs[0].output_ref == "final"
+    assert vm.latest_outputs[0].full_value == "Hello world"
+    assert vm.latest_outputs[0].is_copyable is True
+    assert vm.latest_outputs[0].streaming_in_progress is False

@@ -189,3 +189,38 @@ def test_builder_shell_composes_connected_builder_surfaces() -> None:
     assert vm.shell_mode_label == "Designer 검토"
     assert vm.active_workspace_label == "노드 구성"
     assert vm.shell_status_label == "셸 준비 완료"
+
+
+
+def test_builder_shell_uses_graph_selection_as_inspector_selection_when_selected_ref_is_omitted() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-002", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"selected_node_ids": ["n1"], "app_language": "ko-KR"}),
+    )
+
+    vm = read_builder_shell_view_model(source)
+
+    assert vm.inspector is not None
+    assert vm.inspector.object_id == "n1"
+    assert vm.coordination.active_panel == "inspector"
+
+
+def test_builder_shell_marks_blocked_shell_status_when_validation_is_blocked() -> None:
+    report = ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="BLOCK", category="structural", severity="high", blocking=True, location="node:n1", message="blocked")],
+        blocking_count=1,
+        warning_count=0,
+        result="blocked",
+    )
+
+    vm = read_builder_shell_view_model(_working_save(), validation_report=report)
+
+    assert vm.validation is not None
+    assert vm.validation.overall_status == "blocked"
+    assert vm.shell_status == "blocked"
+    assert vm.shell_status_label == "셸 차단 상태"

@@ -68,3 +68,21 @@ def test_panel_coordination_projects_selection_active_panel_and_badges() -> None
     assert vm.pinned_panels == ["validation"]
     assert any(b.panel_id == "validation" for b in vm.panel_badges)
     assert any(b.panel_id == "execution" for b in vm.panel_badges)
+
+
+
+def test_panel_coordination_defaults_to_inspector_when_graph_selection_exists_and_no_active_panel_is_set() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-002", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"selected_node_ids": ["n1"]}),
+    )
+
+    graph = read_graph_view_model(source)
+    vm = read_panel_coordination_state(source, graph_view=graph)
+
+    assert vm.active_panel == "inspector"
+    assert vm.selection.primary_ref == "node:n1"

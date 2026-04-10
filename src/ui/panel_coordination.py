@@ -150,10 +150,12 @@ def read_panel_coordination_state(
     if not active_panel:
         if execution_view is not None and execution_view.execution_status in {"running", "queued"}:
             active_panel = "execution"
-        elif designer_view is not None and designer_view.request_state.request_status in {"submitted", "editing"}:
-            active_panel = "designer"
         elif validation_view is not None and validation_view.overall_status == "blocked":
             active_panel = "validation"
+        elif designer_view is not None and designer_view.request_state.request_status in {"submitted", "editing"}:
+            active_panel = "designer"
+        elif selection.primary_ref is not None and role in {"working_save", "commit_snapshot"}:
+            active_panel = "inspector"
         else:
             active_panel = "graph"
 

@@ -112,6 +112,16 @@ def _ui_layout(source) -> dict[str, Any]:
     return {}
 
 
+def _selected_ref_from_graph(graph_view: GraphWorkspaceViewModel | None) -> str | None:
+    if graph_view is None:
+        return None
+    if graph_view.selected_node_ids:
+        return f"node:{graph_view.selected_node_ids[0]}"
+    if graph_view.selected_edge_ids:
+        return f"edge:{graph_view.selected_edge_ids[0]}"
+    return None
+
+
 def read_builder_shell_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -142,12 +152,13 @@ def read_builder_shell_view_model(
         execution_record=execution_record,
         preview_overlay=preview_overlay,
     ) if source is not None else None
+    resolved_selected_ref = selected_ref or _selected_ref_from_graph(graph_vm)
 
     storage_vm = read_storage_view_model(source_unwrapped) if source_unwrapped is not None else None
     execution_vm = read_execution_panel_view_model(source_unwrapped, execution_record=execution_record, live_events=live_events) if source_unwrapped is not None else None
     trace_vm = read_trace_timeline_view_model(source_unwrapped if isinstance(source_unwrapped, ExecutionRecordModel) else source_unwrapped, execution_record=execution_record, live_events=live_events) if (source_unwrapped is not None or execution_record is not None) else None
     artifact_vm = read_artifact_viewer_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record, selected_artifact_id=selected_artifact_id) if (source_unwrapped is not None or execution_record is not None) else None
-    inspector_vm = read_selected_object_view_model(source_unwrapped, selected_ref=selected_ref, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay) if source_unwrapped is not None else None
+    inspector_vm = read_selected_object_view_model(source_unwrapped, selected_ref=resolved_selected_ref, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay) if source_unwrapped is not None else None
     validation_vm = read_validation_panel_view_model(source_unwrapped, validation_report=validation_report, precheck=precheck, execution_record=execution_record) if source_unwrapped is not None else None
     designer_vm = read_designer_panel_view_model(source_unwrapped, session_state_card=session_state_card, intent=intent, patch_plan=patch_plan, precheck=precheck, preview=preview, approval_flow=approval_flow) if source_unwrapped is not None else None
 
@@ -230,7 +241,7 @@ def read_builder_shell_view_model(
 
     node_configuration_vm = read_node_configuration_workspace_view_model(
         source_unwrapped,
-        selected_ref=selected_ref,
+        selected_ref=resolved_selected_ref,
         validation_report=validation_report,
         execution_record=execution_record,
         preview_overlay=preview_overlay,
@@ -249,10 +260,14 @@ def read_builder_shell_view_model(
         partial_panel_count=partial_panel_count,
     )
     shell_status = "ready"
-    if diagnostics.panel_coordination_warning:
-        shell_status = "partial"
     if source_unwrapped is None:
         shell_status = "failed"
+    elif validation_vm is not None and validation_vm.overall_status == "blocked":
+        shell_status = "blocked"
+    elif execution_vm is not None and execution_vm.execution_status in {"running", "queued"}:
+        shell_status = "active"
+    elif diagnostics.panel_coordination_warning or warning_count > 0:
+        shell_status = "partial"
 
     if shell_mode == "runtime_monitoring":
         active_workspace_id = "runtime_monitoring"
