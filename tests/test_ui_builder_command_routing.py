@@ -99,3 +99,20 @@ def test_builder_command_routing_marks_disabled_routes_when_validation_blocks_ru
     assert routing.disabled_route_count >= 1
     assert run_route.enabled is False
     assert cancel_route.enabled is True
+
+
+from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView
+
+
+def test_builder_command_routing_marks_blocked_when_all_routes_disabled() -> None:
+    action_schema = BuilderActionSchemaView(
+        source_role="working_save",
+        primary_actions=[BuilderActionView("run_current", "Run", "execution", False, reason_disabled="blocked")],
+        secondary_actions=[BuilderActionView("open_diff", "Diff", "comparison", False, reason_disabled="blocked")],
+    )
+
+    routing = read_builder_command_routing_view_model(_working_save(), action_schema=action_schema)
+
+    assert routing.enabled_route_count == 0
+    assert routing.disabled_route_count == 2
+    assert routing.routing_status == "blocked"

@@ -89,3 +89,24 @@ def test_builder_interaction_hub_prefers_open_latest_run_for_execution_record() 
     assert hub.interaction_transition is not None
     assert hub.interaction_transition.target_workspace_id == "runtime_monitoring"
     assert hub.interaction_transition.target_panel_id == "execution"
+
+
+
+def test_builder_interaction_hub_marks_blocked_when_selected_transition_is_blocked() -> None:
+    failed_validation = ValidationReport(role="working_save", findings=[], blocking_count=1, warning_count=0, result="failed")
+    hub = read_builder_interaction_hub_view_model(
+        _working_save(),
+        validation_report=failed_validation,
+        execution_record=_run(),
+        selected_action_id="run_current",
+    )
+    assert hub.interaction_transition is not None
+    assert hub.interaction_transition.transition_status == "blocked"
+    assert hub.hub_status == "blocked"
+
+
+def test_builder_interaction_hub_surfaces_attention_when_routing_is_attention() -> None:
+    hub = read_builder_interaction_hub_view_model(_working_save(), validation_report=_validation(), execution_record=_run())
+    assert hub.command_routing is not None
+    assert hub.command_routing.routing_status == "attention"
+    assert hub.hub_status == "attention"

@@ -112,7 +112,14 @@ def read_builder_interaction_hub_view_model(
         active_workspace_id = "node_configuration"
 
     pending_confirmation_count = sum(1 for route in command_routing.routes if route.enabled and route.requires_confirmation)
-    hub_status = "empty" if command_routing.enabled_route_count == 0 else ("attention" if pending_confirmation_count else "ready")
+    if command_routing.routing_status == "empty":
+        hub_status = "empty"
+    elif transition.transition_status == "blocked" or command_routing.routing_status == "blocked":
+        hub_status = "blocked"
+    elif pending_confirmation_count or command_routing.routing_status == "attention":
+        hub_status = "attention"
+    else:
+        hub_status = "ready"
 
     return BuilderInteractionHubViewModel(
         hub_status=hub_status,

@@ -135,7 +135,14 @@ def read_builder_command_routing_view_model(
 
     enabled_route_count = sum(1 for route in routes if route.enabled)
     disabled_route_count = len(routes) - enabled_route_count
-    routing_status = "empty" if not routes else ("attention" if disabled_route_count else "ready")
+    if not routes:
+        routing_status = "empty"
+    elif enabled_route_count == 0:
+        routing_status = "blocked"
+    elif any(route.requires_confirmation for route in routes if route.enabled) or disabled_route_count:
+        routing_status = "attention"
+    else:
+        routing_status = "ready"
     return BuilderCommandRoutingViewModel(
         routing_status=routing_status,
         source_role=source_role,

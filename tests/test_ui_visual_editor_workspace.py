@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.contracts.nex_contract import ValidationFinding, ValidationReport
 from src.designer.models.circuit_draft_preview import GraphViewModel
 from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
-from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
+from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionIssue, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.graph_workspace import GraphPreviewOverlay
@@ -46,6 +46,35 @@ def _run() -> ExecutionRecordModel:
         outputs=ExecutionOutputModel(output_summary="done"),
         artifacts=ExecutionArtifactsModel(),
         diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+
+
+def _run_with_focus() -> ExecutionRecordModel:
+    return ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-002", record_format_version="1.0.0", created_at="2026-04-06T00:00:00Z", started_at="2026-04-06T00:00:00Z", finished_at="2026-04-06T00:00:05Z", status="completed"),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(event_count=3),
+        node_results=NodeResultsModel(results=[NodeResultCard(node_id="n2", status="failed")]),
+        outputs=ExecutionOutputModel(output_summary="done"),
+        artifacts=ExecutionArtifactsModel(artifact_refs=[ArtifactRecordCard(artifact_id="a1", artifact_type="text", producer_node="n2")]),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+
+def _run_with_validation_issue() -> ExecutionRecordModel:
+    return ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-003", record_format_version="1.0.0", created_at="2026-04-06T00:00:00Z", started_at="2026-04-06T00:00:00Z", finished_at="2026-04-06T00:00:05Z", status="completed"),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(event_count=1),
+        node_results=NodeResultsModel(),
+        outputs=ExecutionOutputModel(output_summary="done"),
+        artifacts=ExecutionArtifactsModel(),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[ExecutionIssue(issue_code="WARN_EXEC", category="validation", severity="medium", location="node:n2", message="warning")], errors=[]),
         observability=ExecutionObservabilityModel(),
     )
 
@@ -99,3 +128,18 @@ def test_visual_editor_workspace_treats_compare_runs_as_comparison_availability(
     vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run())
     assert vm.comparison_state.can_open_diff is True
     assert vm.workspace_status_label == "Reviewing graph"
+
+
+def test_visual_editor_workspace_propagates_execution_record_into_graph_focus() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run_with_focus())
+    assert vm.graph is not None
+    assert vm.graph.layout_hints is not None
+    assert vm.graph.layout_hints.suggested_focus_node_id == "n2"
+
+
+def test_visual_editor_workspace_propagates_execution_record_into_validation() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run_with_validation_issue())
+    assert vm.validation is not None
+    assert vm.validation.source_mode == "execution_guard"
+    assert vm.validation.summary.warning_count == 1
+    assert vm.workspace_status == "reviewing"

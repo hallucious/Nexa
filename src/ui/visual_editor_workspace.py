@@ -90,13 +90,14 @@ def read_visual_editor_workspace_view_model(
     graph_vm = read_graph_view_model(
         source,
         validation_report=validation_report,
+        execution_record=execution_record,
         preview_overlay=preview_overlay,
     ) if source is not None else None
     storage_vm = read_storage_view_model(
         source_unwrapped,
         latest_execution_record=(execution_record if execution_record is not None and not isinstance(source_unwrapped, ExecutionRecordModel) else None),
     ) if source_unwrapped is not None else None
-    validation_vm = read_validation_panel_view_model(source_unwrapped, validation_report=validation_report) if source_unwrapped is not None else None
+    validation_vm = read_validation_panel_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record) if source_unwrapped is not None else None
 
     diff_vm = None
     if diff_mode and diff_source is not None and diff_target is not None:
