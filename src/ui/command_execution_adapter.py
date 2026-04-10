@@ -107,9 +107,11 @@ def read_command_execution_adapter_view_model(
     blocked_adapter_count = len(adapters) - enabled_adapter_count
     if not adapters:
         adapter_status = "empty"
-    elif blocked_adapter_count == len(adapters):
+    elif dispatch_hub.hub_status == "blocked" or blocked_adapter_count == len(adapters):
         adapter_status = "blocked"
-    elif blocked_adapter_count:
+    elif (source_role == "execution_record" or dispatch_hub.hub_status == "terminal") and enabled_adapter_count > 0:
+        adapter_status = "terminal"
+    elif dispatch_hub.hub_status == "attention" or blocked_adapter_count:
         adapter_status = "attention"
     else:
         adapter_status = "ready"

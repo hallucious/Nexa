@@ -42,3 +42,11 @@ def test_command_dispatch_contract_exposes_required_fields_and_boundary_targets(
     assert vm.enabled_dispatch_count >= 1
     assert run_current.boundary_target == "execution_runner"
     assert any(field.field_name == "target_ref" for field in run_current.required_fields)
+
+
+def test_command_dispatch_contract_marks_execution_record_terminal_when_dispatch_is_available() -> None:
+    vm = read_command_dispatch_contract_view_model(_run())
+
+    assert vm.source_role == "execution_record"
+    assert vm.enabled_dispatch_count >= 1
+    assert vm.dispatch_status == "terminal"

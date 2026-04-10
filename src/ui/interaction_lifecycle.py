@@ -162,15 +162,18 @@ def read_interaction_lifecycle_view_model(
     current_stage = next((stage.stage_id for stage in stages if stage.status == "active"), None)
     if current_stage is None:
         current_stage = next((stage.stage_id for stage in stages if stage.status == "available"), "drafting")
-    next_stage = None
-    for stage in stages:
-        if stage.stage_id == current_stage:
-            continue
-        if stage.status in {"available", "active"}:
-            next_stage = stage.stage_id
-            break
     terminal = source_role == "execution_record"
-    can_advance = any(stage.status == "available" for stage in stages if stage.stage_id != current_stage)
+    if terminal:
+        current_stage = "history"
+    next_stage = None
+    if not terminal:
+        for stage in stages:
+            if stage.stage_id == current_stage:
+                continue
+            if stage.status in {"available", "active"}:
+                next_stage = stage.stage_id
+                break
+    can_advance = False if terminal else any(stage.status == "available" for stage in stages if stage.stage_id != current_stage)
     lifecycle_status = "terminal" if terminal else ("attention" if any(stage.status == "blocked" for stage in stages) else "ready")
 
     return InteractionLifecycleViewModel(

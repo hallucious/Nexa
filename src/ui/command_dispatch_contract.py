@@ -133,9 +133,11 @@ def read_command_dispatch_contract_view_model(
     blocked_dispatch_count = len(contracts) - enabled_dispatch_count
     if not contracts:
         dispatch_status = "empty"
-    elif blocked_dispatch_count == len(contracts):
+    elif interaction_hub.hub_status == "blocked" or blocked_dispatch_count == len(contracts):
         dispatch_status = "blocked"
-    elif blocked_dispatch_count:
+    elif (source_role == "execution_record" or interaction_hub.hub_status == "terminal") and enabled_dispatch_count > 0:
+        dispatch_status = "terminal"
+    elif interaction_hub.hub_status == "attention" or blocked_dispatch_count:
         dispatch_status = "attention"
     else:
         dispatch_status = "ready"

@@ -40,3 +40,12 @@ def test_interaction_lifecycle_orders_builder_progression_from_drafting_to_execu
     assert vm.current_stage_id in {"drafting", "review", "execution"}
     assert any(stage.stage_id == "execution" for stage in vm.stages)
     assert vm.lifecycle_status in {"ready", "attention"}
+
+
+def test_interaction_lifecycle_marks_execution_record_as_history_terminal() -> None:
+    vm = read_interaction_lifecycle_view_model(_run())
+
+    assert vm.source_role == "execution_record"
+    assert vm.terminal is True
+    assert vm.lifecycle_status == "terminal"
+    assert vm.current_stage_id == "history"
