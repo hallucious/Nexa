@@ -10,7 +10,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.contracts.status_taxonomy import lookup_reason_code_record
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -87,10 +87,19 @@ class ValidationFilterState:
 
 
 @dataclass(frozen=True)
+class BeginnerValidationSummaryView:
+    status_signal: str | None = None
+    cause: str | None = None
+    next_action_type: str | None = None
+    next_action_label: str | None = None
+
+
+@dataclass(frozen=True)
 class ValidationPanelViewModel:
     source_mode: str
     storage_role: str
     overall_status: str
+    beginner_mode: bool = False
     summary: ValidationSummaryView = field(default_factory=ValidationSummaryView)
     blocking_findings: list[ValidationFindingView] = field(default_factory=list)
     warning_findings: list[ValidationFindingView] = field(default_factory=list)
@@ -99,6 +108,8 @@ class ValidationPanelViewModel:
     grouped_sections: list[ValidationGroupView] = field(default_factory=list)
     related_targets: list[ValidationTargetSummary] = field(default_factory=list)
     suggested_actions: list[ValidationActionHint] = field(default_factory=list)
+    beginner_summary: BeginnerValidationSummaryView = field(default_factory=BeginnerValidationSummaryView)
+    hide_raw_findings_by_default: bool = False
     filter_state: ValidationFilterState = field(default_factory=ValidationFilterState)
     explanation: str | None = None
 
@@ -386,6 +397,48 @@ def _group_by_severity(all_findings: list[ValidationFindingView], *, app_languag
     return groups
 
 
+
+
+def _beginner_status_signal(overall_status: str, *, app_language: str) -> str:
+    if overall_status == "blocked":
+        key = "validation.beginner.status.blocked"
+    elif overall_status in {"confirmation_required", "pass_with_warnings"}:
+        key = "validation.beginner.status.confirmation_required"
+    else:
+        key = "validation.beginner.status.ready"
+    return ui_text(key, app_language=app_language)
+
+
+def _beginner_next_action(*, overall_status: str, source_mode: str, app_language: str) -> tuple[str | None, str | None]:
+    if overall_status == "blocked":
+        return "focus_top_issue", ui_text("validation.beginner.action.fix_issue", app_language=app_language)
+    if overall_status in {"confirmation_required", "pass_with_warnings"}:
+        action_type = "proceed_to_approval" if source_mode == "designer_precheck" else "request_revision"
+        return action_type, ui_text("validation.beginner.action.review_change", app_language=app_language)
+    return "run", ui_text("validation.beginner.action.run", app_language=app_language)
+
+
+def _beginner_summary(
+    *,
+    source,
+    execution_record: ExecutionRecordModel | None,
+    overall_status: str,
+    source_mode: str,
+    all_findings: list[ValidationFindingView],
+    app_language: str,
+) -> BeginnerValidationSummaryView:
+    if not beginner_language_enabled(source, execution_record):
+        return BeginnerValidationSummaryView()
+    top_finding = all_findings[0] if all_findings else None
+    cause = top_finding.message if top_finding is not None else ui_text("validation.beginner.cause.ready", app_language=app_language)
+    action_type, action_label = _beginner_next_action(overall_status=overall_status, source_mode=source_mode, app_language=app_language)
+    return BeginnerValidationSummaryView(
+        status_signal=_beginner_status_signal(overall_status, app_language=app_language),
+        cause=cause,
+        next_action_type=action_type,
+        next_action_label=action_label,
+    )
+
 def _target_summaries(all_findings: list[ValidationFindingView], *, app_language: str) -> list[ValidationTargetSummary]:
     by_target: dict[tuple[str, str | None], list[ValidationFindingView]] = {}
     for finding in all_findings:
@@ -477,6 +530,7 @@ def read_validation_panel_view_model(
         informational_findings.extend([finding for finding in governance_findings if finding.severity == 'info'])
         overall_status = "blocked" if blocking_findings else ("confirmation_required" if confirmation_findings else ("pass_with_warnings" if warning_findings else "pass"))
 
+    beginner_mode = beginner_language_enabled(source, execution_record)
     all_findings = [*blocking_findings, *warning_findings, *confirmation_findings, *informational_findings]
     related_targets = _target_summaries(all_findings, app_language=app_language)
     summary = ValidationSummaryView(
@@ -531,6 +585,7 @@ def read_validation_panel_view_model(
         source_mode=source_mode,
         storage_role=storage_role,
         overall_status=overall_status,
+        beginner_mode=beginner_mode,
         summary=summary,
         blocking_findings=blocking_findings,
         warning_findings=warning_findings,
@@ -539,11 +594,14 @@ def read_validation_panel_view_model(
         grouped_sections=_group_by_severity(all_findings, app_language=app_language),
         related_targets=related_targets,
         suggested_actions=suggested_actions,
+        beginner_summary=_beginner_summary(source=source, execution_record=execution_record, overall_status=overall_status, source_mode=source_mode, all_findings=all_findings, app_language=app_language),
+        hide_raw_findings_by_default=beginner_mode,
         explanation=explanation,
     )
 
 
 __all__ = [
+    "BeginnerValidationSummaryView",
     "ValidationActionHint",
     "ValidationFilterState",
     "ValidationFindingView",

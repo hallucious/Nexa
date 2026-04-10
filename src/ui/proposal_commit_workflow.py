@@ -20,7 +20,7 @@ from src.ui.node_configuration_workspace import NodeConfigurationWorkspaceViewMo
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
 from src.ui.visual_editor_workspace import VisualEditorWorkspaceViewModel, read_visual_editor_workspace_view_model
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -49,9 +49,20 @@ class ProposalCommitActionStateView:
 
 
 @dataclass(frozen=True)
+class BeginnerProposalConfirmationView:
+    visible: bool = False
+    title: str | None = None
+    summary: str | None = None
+    prompt: str | None = None
+    primary_action_label: str | None = None
+    secondary_action_label: str | None = None
+
+
+@dataclass(frozen=True)
 class ProposalCommitWorkflowViewModel:
     workflow_status: str = "ready"
     storage_role: str = "none"
+    beginner_mode: bool = False
     visual_editor: VisualEditorWorkspaceViewModel | None = None
     node_configuration: NodeConfigurationWorkspaceViewModel | None = None
     storage: StoragePanelViewModel | None = None
@@ -60,6 +71,8 @@ class ProposalCommitWorkflowViewModel:
     action_schema: BuilderActionSchemaView = field(default_factory=BuilderActionSchemaView)
     summary: ProposalCommitSummaryView = field(default_factory=ProposalCommitSummaryView)
     action_state: ProposalCommitActionStateView = field(default_factory=ProposalCommitActionStateView)
+    beginner_confirmation: BeginnerProposalConfirmationView = field(default_factory=BeginnerProposalConfirmationView)
+    hide_internal_governance_by_default: bool = False
     can_review: bool = False
     can_commit: bool = False
     can_compare_to_commit: bool = False
@@ -111,6 +124,41 @@ def _preferred_compare_action(action_schema: BuilderActionSchemaView, *, storage
     return fallback
 
 
+
+
+def _beginner_confirmation(
+    *,
+    source,
+    execution_record: ExecutionRecordModel | None,
+    preview: CircuitDraftPreview | None,
+    patch_plan: CircuitPatchPlan | None,
+    intent: DesignerIntent | None,
+    approve_action: BuilderActionView | None,
+    request_revision_action: BuilderActionView | None,
+    app_language: str,
+) -> BeginnerProposalConfirmationView:
+    if not beginner_language_enabled(source, execution_record):
+        return BeginnerProposalConfirmationView()
+    summary: str | None = None
+    if preview is not None and getattr(preview, "summary_card", None) is not None:
+        summary = preview.summary_card.one_sentence_summary
+    elif patch_plan is not None and patch_plan.summary:
+        summary = patch_plan.summary
+    elif intent is not None and intent.explanation:
+        summary = intent.explanation
+    elif intent is not None and intent.objective.primary_goal:
+        summary = intent.objective.primary_goal
+    if summary is None:
+        return BeginnerProposalConfirmationView()
+    return BeginnerProposalConfirmationView(
+        visible=True,
+        title=ui_text("proposal.beginner.title", app_language=app_language),
+        summary=summary,
+        prompt=ui_text("proposal.beginner.prompt", app_language=app_language),
+        primary_action_label=(ui_text("proposal.beginner.action.approve", app_language=app_language) if approve_action is not None else None),
+        secondary_action_label=(ui_text("proposal.beginner.action.revise", app_language=app_language) if request_revision_action is not None else None),
+    )
+
 def read_proposal_commit_workflow_view_model(
     source: SourceLike,
     *,
@@ -129,6 +177,7 @@ def read_proposal_commit_workflow_view_model(
     source_unwrapped = _unwrap(source)
     storage_role = _storage_role(source_unwrapped)
     app_language = ui_language_from_sources(source_unwrapped, execution_record)
+    beginner_mode = beginner_language_enabled(source_unwrapped, execution_record)
 
     storage_vm = read_storage_view_model(
         source_unwrapped,
@@ -245,6 +294,7 @@ def read_proposal_commit_workflow_view_model(
     return ProposalCommitWorkflowViewModel(
         workflow_status=workflow_status,
         storage_role=storage_role,
+        beginner_mode=beginner_mode,
         visual_editor=visual_editor_vm,
         node_configuration=node_config_vm,
         storage=storage_vm,
@@ -259,6 +309,8 @@ def read_proposal_commit_workflow_view_model(
             request_revision_action=request_revision_action,
             compare_action=compare_action,
         ),
+        beginner_confirmation=_beginner_confirmation(source=source_unwrapped, execution_record=execution_record, preview=preview, patch_plan=patch_plan, intent=intent, approve_action=approve_action, request_revision_action=request_revision_action, app_language=app_language),
+        hide_internal_governance_by_default=beginner_mode,
         can_review=bool(review_action and review_action.enabled),
         can_commit=bool(commit_action and commit_action.enabled),
         can_compare_to_commit=bool(compare_action and compare_action.enabled),
@@ -269,6 +321,7 @@ def read_proposal_commit_workflow_view_model(
 __all__ = [
     "ProposalCommitSummaryView",
     "ProposalCommitActionStateView",
+    "BeginnerProposalConfirmationView",
     "ProposalCommitWorkflowViewModel",
     "read_proposal_commit_workflow_view_model",
 ]

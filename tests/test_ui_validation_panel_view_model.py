@@ -109,3 +109,27 @@ def test_validation_panel_projects_execution_guard_as_history_review_actions() -
     assert [action.action_type for action in vm.suggested_actions] == ["focus_top_issue", "open_trace", "open_artifacts"]
     assert vm.suggested_actions[1].enabled is False
     assert vm.suggested_actions[2].enabled is False
+
+
+
+def test_validation_panel_compresses_beginner_blocked_message() -> None:
+    vm = read_validation_panel_view_model(_working_save(), validation_report=_validation_report())
+
+    assert vm.beginner_mode is True
+    assert vm.hide_raw_findings_by_default is True
+    assert vm.beginner_summary.status_signal == "Cannot run yet."
+    assert vm.beginner_summary.cause == "input missing"
+    assert vm.beginner_summary.next_action_type == "focus_top_issue"
+    assert vm.beginner_summary.next_action_label == "Fix this step"
+
+
+def test_validation_panel_compresses_beginner_ready_message() -> None:
+    ready_report = ValidationReport(role="working_save", findings=[], blocking_count=0, warning_count=0, result="passed")
+
+    vm = read_validation_panel_view_model(_working_save(), validation_report=ready_report)
+
+    assert vm.beginner_mode is True
+    assert vm.beginner_summary.status_signal == "Ready to run."
+    assert vm.beginner_summary.cause == "Everything needed to run is ready."
+    assert vm.beginner_summary.next_action_type == "run"
+    assert vm.beginner_summary.next_action_label == "Run"

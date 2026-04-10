@@ -203,3 +203,46 @@ def test_proposal_commit_workflow_prefers_followthrough_action_for_execution_rec
     assert vm.action_state.compare_action is not None
     assert vm.action_state.compare_action.action_id in {"open_trace", "open_artifacts", "compare_runs", "open_latest_run", "open_diff"}
     assert vm.summary.next_step_label in {"Open trace", "Open artifacts", "Compare runs", "Open latest run", "Open Diff"}
+
+
+
+def test_proposal_commit_workflow_exposes_beginner_confirmation_summary_before_first_success() -> None:
+    vm = read_proposal_commit_workflow_view_model(
+        _working_save(),
+        selected_ref="node:n1",
+        validation_report=_validation_report(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.beginner_mode is True
+    assert vm.hide_internal_governance_by_default is True
+    assert vm.beginner_confirmation.visible is True
+    assert vm.beginner_confirmation.title == "Here is what I will build"
+    assert vm.beginner_confirmation.summary == "modify node"
+    assert vm.beginner_confirmation.prompt == "Does this look right?"
+    assert vm.beginner_confirmation.primary_action_label == "Approve"
+    assert vm.beginner_confirmation.secondary_action_label == "Revise"
+
+
+def test_proposal_commit_workflow_disables_beginner_confirmation_after_first_success() -> None:
+    vm = read_proposal_commit_workflow_view_model(
+        _working_save(),
+        selected_ref="node:n1",
+        validation_report=_validation_report(),
+        execution_record=_run(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.beginner_mode is False
+    assert vm.hide_internal_governance_by_default is False
+    assert vm.beginner_confirmation.visible is False
