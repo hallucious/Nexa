@@ -172,3 +172,33 @@ def test_product_flow_gateway_prefers_followthrough_when_completed_run_history_e
     assert vm.gateway_status in {"actionable", "ready"}
     assert vm.current_gateway_id in {"followthrough", "run"}
     assert any(item.gateway_id == "followthrough" and item.boundary_ready for item in vm.stages)
+
+
+def test_product_flow_gateway_prefers_trace_action_for_execution_record_followthrough() -> None:
+    vm = read_product_flow_gateway_view_model(_run("completed"))
+
+    assert vm.source_role == "execution_record"
+    assert vm.current_gateway_id == "followthrough"
+    followthrough = next(item for item in vm.stages if item.gateway_id == "followthrough")
+    assert followthrough.actionable is True
+    assert followthrough.required_action_id == "open_trace"
+
+
+def test_product_flow_gateway_keeps_followthrough_idle_for_commit_snapshot_without_run_history() -> None:
+    from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
+    from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
+
+    snapshot = CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
+
+    vm = read_product_flow_gateway_view_model(snapshot)
+    followthrough = next(item for item in vm.stages if item.gateway_id == "followthrough")
+    assert followthrough.gateway_status == "idle"
+    assert followthrough.required_action_id is None

@@ -272,7 +272,7 @@ def _build_commit_snapshot_card(commit_snapshot: CommitSnapshotModel | None) -> 
 def _build_execution_record_card(execution_record: ExecutionRecordModel | None, *, compare_runs_enabled: bool, app_language: str) -> ExecutionRecordCardView | None:
     if execution_record is None:
         return None
-    trace_available = bool(execution_record.timeline.trace_ref or execution_record.timeline.event_stream_ref)
+    trace_available = bool(execution_record.timeline.trace_ref or execution_record.timeline.event_stream_ref or (execution_record.timeline.event_count or 0) > 0)
     replay_available = bool(execution_record.timeline.trace_ref or execution_record.timeline.event_stream_ref)
     artifact_count = execution_record.artifacts.artifact_count or len(execution_record.artifacts.artifact_refs)
     output_summary_label = execution_record.outputs.output_summary
@@ -559,7 +559,7 @@ def _available_actions(
         )
         actions.append(StorageActionHint("select_rollback_target", ui_text("storage.action.select_rollback_target", app_language=app_language), True, target_ref=_commit_ref(commit_snapshot)))
     if execution_record is not None:
-        trace_enabled = bool(execution_record.timeline.trace_ref or execution_record.timeline.event_stream_ref)
+        trace_enabled = bool(execution_record.timeline.trace_ref or execution_record.timeline.event_stream_ref or (execution_record.timeline.event_count or 0) > 0)
         artifact_enabled = (execution_record.artifacts.artifact_count or len(execution_record.artifacts.artifact_refs)) > 0
         actions.append(
             StorageActionHint(

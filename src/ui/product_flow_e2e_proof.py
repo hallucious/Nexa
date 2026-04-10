@@ -111,6 +111,24 @@ def _stage_status(*, proven: bool, live: bool, blocked: bool, actionable: bool, 
     return "idle"
 
 
+
+
+def _preferred_followthrough_action(execution: ExecutionLaunchWorkflowViewModel | None, *, source_role: str) -> str | None:
+    if execution is None:
+        return None
+    trace_action = execution.action_state.trace_action
+    artifact_action = execution.action_state.artifact_action
+    compare_action = execution.action_state.compare_action
+    replay_action = execution.action_state.replay_action
+    has_trace = execution.summary.visible_event_count > 0
+    has_artifacts = execution.summary.visible_artifact_count > 0
+    has_run = execution.summary.run_id is not None or source_role == "execution_record"
+    ordered = [trace_action if has_trace else None, artifact_action if has_artifacts else None, compare_action if has_run else None, replay_action if has_run else None]
+    for action in ordered:
+        if action is not None and action.enabled:
+            return action.action_id
+    return None
+
 def _review_checkpoint(proposal: ProposalCommitWorkflowViewModel | None, *, app_language: str) -> ProductFlowE2EProofCheckpointView:
     review_action = proposal.action_state.review_action if proposal is not None else None
     open_state = bool(
@@ -226,22 +244,15 @@ def _run_checkpoint(execution: ExecutionLaunchWorkflowViewModel | None, source_r
 
 
 def _followthrough_checkpoint(execution: ExecutionLaunchWorkflowViewModel | None, source_role: str, *, app_language: str) -> ProductFlowE2EProofCheckpointView:
-    compare_action = execution.action_state.compare_action if execution is not None else None
-    replay_action = execution.action_state.replay_action if execution is not None else None
     event_count = execution.summary.visible_event_count if execution is not None else 0
     artifact_count = execution.summary.visible_artifact_count if execution is not None else 0
     run_id = execution.summary.run_id if execution is not None else None
-    evidence_present = bool(run_id is not None and (event_count > 0 or artifact_count > 0)) or (source_role == "execution_record" and (event_count > 0 or artifact_count > 0))
+    evidence_present = bool(run_id is not None and (event_count > 0 or artifact_count > 0)) or (source_role == "execution_record" and (event_count > 0 or artifact_count > 0 or run_id is not None))
     proven = evidence_present
     open_state = bool(run_id is not None or source_role == "execution_record")
-    actionable = bool((compare_action is not None and compare_action.enabled) or (replay_action is not None and replay_action.enabled))
+    required_action_id = _preferred_followthrough_action(execution, source_role=source_role)
+    actionable = bool(required_action_id is not None)
     blocked = False
-    required_action_id = None
-    if actionable:
-        if compare_action is not None and compare_action.enabled:
-            required_action_id = compare_action.action_id
-        elif replay_action is not None and replay_action.enabled:
-            required_action_id = replay_action.action_id
     status = _stage_status(proven=proven, live=False, blocked=blocked, actionable=actionable and not proven, open_state=open_state)
     return ProductFlowE2EProofCheckpointView(
         checkpoint_id="followthrough",
@@ -251,8 +262,8 @@ def _followthrough_checkpoint(execution: ExecutionLaunchWorkflowViewModel | None
         proven=proven,
         actionable=bool(actionable and not proven),
         blocked=blocked,
-        required_action_id=required_action_id if not proven else None,
-        required_action_label=_action_label(required_action_id if not proven else None, app_language=app_language),
+        required_action_id=required_action_id,
+        required_action_label=_action_label(required_action_id, app_language=app_language),
         next_step_label=(execution.summary.next_step_label if execution is not None else None),
         evidence_ref=(f"execution_record:{run_id}" if run_id is not None else None),
         boundary_ref="followthrough_inspection",

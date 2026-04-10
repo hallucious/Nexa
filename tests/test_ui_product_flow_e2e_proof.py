@@ -184,3 +184,13 @@ def test_product_flow_e2e_proof_marks_live_run_checkpoint_when_execution_is_runn
     assert run.checkpoint_status == "live"
     assert vm.proof_status == "live"
     assert vm.live_checkpoint_id == "run"
+
+
+def test_product_flow_e2e_proof_followthrough_checkpoint_carries_trace_action_for_execution_record() -> None:
+    vm = read_product_flow_e2e_proof_view_model(_run("completed"))
+
+    assert vm.source_role == "execution_record"
+    assert vm.current_checkpoint_id == "followthrough"
+    followthrough = next(item for item in vm.checkpoints if item.checkpoint_id == "followthrough")
+    assert followthrough.proven is True
+    assert followthrough.required_action_id == "open_trace"

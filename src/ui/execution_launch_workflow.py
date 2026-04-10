@@ -33,6 +33,8 @@ class ExecutionLaunchActionStateView:
     cancel_action: BuilderActionView | None = None
     replay_action: BuilderActionView | None = None
     compare_action: BuilderActionView | None = None
+    trace_action: BuilderActionView | None = None
+    artifact_action: BuilderActionView | None = None
 
 
 @dataclass(frozen=True)
@@ -115,6 +117,8 @@ def read_execution_launch_workflow_view_model(
     cancel_action = _find_action(action_schema, "cancel_run")
     replay_action = _find_action(action_schema, "replay_latest") or _find_action(action_schema, "open_latest_run")
     compare_action = _find_action(action_schema, "open_diff") or _find_action(action_schema, "compare_runs")
+    trace_action = _find_action(action_schema, "open_trace")
+    artifact_action = _find_action(action_schema, "open_artifacts")
 
     run_identity = monitoring_vm.execution.run_identity if monitoring_vm is not None and monitoring_vm.execution is not None else None
     execution_status = monitoring_vm.health.execution_status if monitoring_vm is not None else "unknown"
@@ -169,6 +173,8 @@ def read_execution_launch_workflow_view_model(
             cancel_action=cancel_action,
             replay_action=replay_action,
             compare_action=compare_action,
+            trace_action=trace_action,
+            artifact_action=artifact_action,
         ),
         can_launch=bool(run_action and run_action.enabled),
         can_cancel=bool(cancel_action and cancel_action.enabled),

@@ -70,3 +70,12 @@ def test_execution_launch_workflow_localizes_next_step_for_korean_app_language()
     vm = read_execution_launch_workflow_view_model(working, validation_report=_validation_report(), execution_record=_run("completed"))
 
     assert vm.summary.next_step_label in {"최신 실행 재실행 또는 검토", "현재 구조 실행"}
+
+
+def test_execution_launch_workflow_projects_trace_and_artifact_actions_for_execution_record() -> None:
+    vm = read_execution_launch_workflow_view_model(_run("completed"))
+    assert vm.storage_role == "execution_record"
+    assert vm.action_state.trace_action is not None
+    assert vm.action_state.trace_action.action_id == "open_trace"
+    assert vm.action_state.artifact_action is not None
+    assert vm.action_state.artifact_action.action_id == "open_artifacts"

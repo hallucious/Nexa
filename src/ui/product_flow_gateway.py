@@ -158,6 +158,24 @@ def _commit_stage(proposal: ProposalCommitWorkflowViewModel | None, *, app_langu
     )
 
 
+
+
+def _preferred_followthrough_action(execution: ExecutionLaunchWorkflowViewModel | None, *, source_role: str) -> str | None:
+    if execution is None:
+        return None
+    trace_action = execution.action_state.trace_action
+    artifact_action = execution.action_state.artifact_action
+    compare_action = execution.action_state.compare_action
+    replay_action = execution.action_state.replay_action
+    has_trace = execution.summary.visible_event_count > 0
+    has_artifacts = execution.summary.visible_artifact_count > 0
+    has_run = execution.summary.run_id is not None or source_role == "execution_record"
+    ordered = [trace_action if has_trace else None, artifact_action if has_artifacts else None, compare_action if has_run else None, replay_action if has_run else None]
+    for action in ordered:
+        if action is not None and action.enabled:
+            return action.action_id
+    return None
+
 def _run_stage(execution: ExecutionLaunchWorkflowViewModel | None, *, app_language: str) -> ProductFlowGatewayStageView:
     run_action = execution.action_state.run_action if execution is not None else None
     live = bool(execution is not None and execution.workflow_status == "live_monitoring")
@@ -193,12 +211,11 @@ def _run_stage(execution: ExecutionLaunchWorkflowViewModel | None, *, app_langua
     )
 
 
-def _followthrough_stage(execution: ExecutionLaunchWorkflowViewModel | None, *, app_language: str) -> ProductFlowGatewayStageView:
-    compare_action = execution.action_state.compare_action if execution is not None else None
-    replay_action = execution.action_state.replay_action if execution is not None else None
-    has_outputs = bool(execution is not None and (execution.summary.visible_event_count > 0 or execution.summary.visible_artifact_count > 0 or execution.summary.run_id is not None))
-    actionable = bool((compare_action is not None and compare_action.enabled) or (replay_action is not None and replay_action.enabled))
+def _followthrough_stage(execution: ExecutionLaunchWorkflowViewModel | None, *, source_role: str, app_language: str) -> ProductFlowGatewayStageView:
     live = bool(execution is not None and execution.workflow_status == "live_monitoring")
+    has_outputs = bool(execution is not None and (execution.summary.visible_event_count > 0 or execution.summary.visible_artifact_count > 0 or execution.summary.run_id is not None or source_role == "execution_record"))
+    required_action_id = _preferred_followthrough_action(execution, source_role=source_role)
+    actionable = required_action_id is not None
     boundary_ready = has_outputs
     if live:
         status = "live"
@@ -208,7 +225,6 @@ def _followthrough_stage(execution: ExecutionLaunchWorkflowViewModel | None, *, 
         status = "ready"
     else:
         status = "idle"
-    required_action_id = (compare_action.action_id if compare_action is not None and compare_action.enabled else None) or (replay_action.action_id if replay_action is not None and replay_action.enabled else None)
     return ProductFlowGatewayStageView(
         gateway_id="followthrough",
         label=_stage_label("followthrough", app_language=app_language),
@@ -273,7 +289,7 @@ def read_product_flow_gateway_view_model(
         _review_stage(proposal_commit, app_language=app_language),
         _commit_stage(proposal_commit, app_language=app_language),
         _run_stage(execution_launch, app_language=app_language),
-        _followthrough_stage(execution_launch, app_language=app_language),
+        _followthrough_stage(execution_launch, source_role=source_role, app_language=app_language),
     ]
 
     stage_by_id = {stage.gateway_id: stage for stage in stages}

@@ -307,3 +307,20 @@ def test_read_storage_view_model_uses_app_language_from_working_save_ui_metadata
     assert vm.lifecycle_summary.summary_label == "드래프트가 검토 준비 상태입니다"
     save_action = next(action for action in vm.available_actions if action.action_type == "save_working_save")
     assert save_action.label == "드래프트 저장"
+
+
+def test_storage_view_enables_trace_action_when_execution_record_has_event_count_without_trace_ref() -> None:
+    from dataclasses import replace
+    from src.storage.models.execution_record_model import ExecutionTimelineModel
+
+    record = replace(
+        _execution(),
+        timeline=ExecutionTimelineModel(total_duration_ms=None, event_count=3, node_order=[], started_nodes=[], completed_nodes=[], trace_ref=None, event_stream_ref=None),
+    )
+
+    vm = read_storage_view_model(record, latest_working_save=None, latest_commit_snapshot=None)
+
+    assert vm.execution_record_card is not None
+    assert vm.execution_record_card.trace_available is True
+    trace_action = next(action for action in vm.available_actions if action.action_type == "open_trace")
+    assert trace_action.enabled is True
