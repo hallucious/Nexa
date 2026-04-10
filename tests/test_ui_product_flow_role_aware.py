@@ -58,9 +58,10 @@ def test_product_flow_gateway_prefers_run_gateway_for_commit_snapshot_source() -
     assert run_stage.required_action_id == "run_from_commit"
 
 
-def test_product_flow_gateway_accepts_execution_record_source_without_proposal_cycle() -> None:
+def test_product_flow_gateway_marks_execution_record_as_terminal_review_without_proposal_cycle() -> None:
     vm = read_product_flow_gateway_view_model(_run("completed"))
     assert vm.source_role == "execution_record"
+    assert vm.gateway_status == "terminal_review"
     assert vm.current_gateway_id in {"followthrough", "run"}
 
 

@@ -189,7 +189,7 @@ def test_product_flow_shell_prioritizes_live_execution_control_plane_navigation(
     assert vm.stage.visible_event_count >= 1
     assert vm.stage.visible_artifact_count == 1
     assert vm.e2e_path is not None
-    assert vm.e2e_path.path_status in {"followthrough", "terminal", "actionable"}
+    assert vm.e2e_path.path_status in {"followthrough", "terminal", "actionable", "terminal_review"}
     assert vm.closure is not None
     assert any(target.target_id == "artifact" for target in vm.bottom_dock_targets)
     assert vm.command_entry_count > 0

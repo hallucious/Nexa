@@ -191,3 +191,12 @@ def test_product_flow_e2e_path_marks_commit_path_blocked_when_precheck_blocks_co
     assert vm.path_status == "actionable"
     assert vm.next_action_id == "request_revision"
     assert vm.blocked_checkpoint_count >= 1
+
+
+def test_product_flow_e2e_path_marks_execution_record_as_terminal_review_while_focusing_followthrough() -> None:
+    vm = read_product_flow_e2e_path_view_model(_run("completed"))
+
+    assert vm.source_role == "execution_record"
+    assert vm.path_status == "terminal_review"
+    assert vm.current_checkpoint_id in {"trace", "artifact", "diff", "run"}
+    assert vm.recommended_checkpoint_id in {"trace", "artifact", "diff", "run"}

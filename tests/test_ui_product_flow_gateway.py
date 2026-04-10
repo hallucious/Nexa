@@ -174,10 +174,11 @@ def test_product_flow_gateway_prefers_followthrough_when_completed_run_history_e
     assert any(item.gateway_id == "followthrough" and item.boundary_ready for item in vm.stages)
 
 
-def test_product_flow_gateway_prefers_trace_action_for_execution_record_followthrough() -> None:
+def test_product_flow_gateway_marks_execution_record_as_terminal_review_and_prefers_trace_followthrough() -> None:
     vm = read_product_flow_gateway_view_model(_run("completed"))
 
     assert vm.source_role == "execution_record"
+    assert vm.gateway_status == "terminal_review"
     assert vm.current_gateway_id == "followthrough"
     followthrough = next(item for item in vm.stages if item.gateway_id == "followthrough")
     assert followthrough.actionable is True

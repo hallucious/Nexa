@@ -326,7 +326,7 @@ def read_product_flow_e2e_path_view_model(
     elif non_followthrough_blocked and (recommended_checkpoint is None or not recommended_checkpoint.actionable):
         path_status = "blocked"
     elif source_role == "execution_record" and followthrough_available:
-        path_status = "followthrough"
+        path_status = "terminal_review"
     elif terminal_ready:
         path_status = "terminal"
     elif recommended_checkpoint is not None and recommended_checkpoint.actionable:

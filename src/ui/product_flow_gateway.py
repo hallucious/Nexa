@@ -305,11 +305,11 @@ def read_product_flow_gateway_view_model(
         current_stage = live_stage
         recommended_stage = live_stage
     elif source_role == "execution_record" and followthrough_stage is not None and followthrough_stage.boundary_ready:
-        gateway_status = "actionable" if followthrough_stage.actionable else "ready"
+        gateway_status = "terminal_review"
         current_stage = followthrough_stage
         recommended_stage = followthrough_stage
     elif source_role == "execution_record" and run_stage is not None and run_stage.boundary_ready:
-        gateway_status = "actionable" if run_stage.actionable else "ready"
+        gateway_status = "terminal_review"
         current_stage = run_stage
         recommended_stage = run_stage
     elif source_role == "commit_snapshot" and run_stage is not None and run_stage.boundary_ready:
