@@ -94,3 +94,45 @@ def test_interaction_transition_uses_recommended_action_when_none_is_selected() 
     assert transition.recommended_action_id is not None
     assert transition.selected_action_id == transition.recommended_action_id
     assert transition.transition_status_label == "준비됨"
+
+
+def test_interaction_transition_prefers_run_from_commit_for_commit_snapshot_when_no_action_is_selected() -> None:
+    workflow_hub = read_builder_workflow_hub_view_model(_commit(), validation_report=_validation())
+    routing = read_builder_command_routing_view_model(
+        _commit(),
+        action_schema=workflow_hub.shell.action_schema,
+        workflow_hub=workflow_hub,
+        coordination_state=workflow_hub.shell.coordination,
+    )
+    transition = read_builder_interaction_transition_view_model(
+        _commit(),
+        command_routing=routing,
+        workflow_hub=workflow_hub,
+        coordination_state=workflow_hub.shell.coordination,
+    )
+
+    assert transition.recommended_action_id == "run_from_commit"
+    assert transition.selected_action_id == "run_from_commit"
+    assert transition.target_workspace_id == "runtime_monitoring"
+    assert transition.target_panel_id == "execution"
+
+
+def test_interaction_transition_prefers_open_latest_run_for_execution_record_when_no_action_is_selected() -> None:
+    workflow_hub = read_builder_workflow_hub_view_model(_run())
+    routing = read_builder_command_routing_view_model(
+        _run(),
+        action_schema=workflow_hub.shell.action_schema,
+        workflow_hub=workflow_hub,
+        coordination_state=workflow_hub.shell.coordination,
+    )
+    transition = read_builder_interaction_transition_view_model(
+        _run(),
+        command_routing=routing,
+        workflow_hub=workflow_hub,
+        coordination_state=workflow_hub.shell.coordination,
+    )
+
+    assert transition.recommended_action_id == "open_latest_run"
+    assert transition.selected_action_id == "open_latest_run"
+    assert transition.target_workspace_id == "runtime_monitoring"
+    assert transition.target_panel_id == "execution"

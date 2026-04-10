@@ -88,9 +88,49 @@ def _recommended_action_id(
                 return action_id
         return None
 
+    source_role = workflow_hub.storage_role if workflow_hub is not None else "none"
+
     if workflow_hub is not None and workflow_hub.recommended_workflow_id == "execution_launch":
-        return first_enabled(["cancel_run", "run_current", "replay_latest", "open_diff"]) or first_enabled([route.action_id for route in routes])
-    return first_enabled(["approve_for_commit", "commit_snapshot", "review_draft", "request_revision", "open_diff", "run_current", "replay_latest"]) or first_enabled([route.action_id for route in routes])
+        if source_role == "commit_snapshot":
+            return first_enabled([
+                "cancel_run",
+                "run_from_commit",
+                "open_latest_commit",
+                "select_rollback_target",
+                "open_trace",
+                "open_artifacts",
+                "compare_runs",
+                "open_diff",
+            ]) or first_enabled([route.action_id for route in routes])
+        if source_role == "execution_record":
+            return first_enabled([
+                "cancel_run",
+                "open_latest_run",
+                "open_trace",
+                "open_artifacts",
+                "compare_runs",
+                "replay_latest",
+                "open_diff",
+            ]) or first_enabled([route.action_id for route in routes])
+        return first_enabled([
+            "cancel_run",
+            "run_current",
+            "replay_latest",
+            "open_diff",
+            "open_trace",
+            "open_artifacts",
+        ]) or first_enabled([route.action_id for route in routes])
+    return first_enabled([
+        "approve_for_commit",
+        "commit_snapshot",
+        "review_draft",
+        "request_revision",
+        "open_diff",
+        "run_current",
+        "replay_latest",
+        "run_from_commit",
+        "open_latest_run",
+    ]) or first_enabled([route.action_id for route in routes])
 
 
 def read_builder_interaction_transition_view_model(

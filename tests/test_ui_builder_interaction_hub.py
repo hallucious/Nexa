@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.contracts.nex_contract import ValidationReport
 from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
+from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.builder_interaction_hub import read_builder_interaction_hub_view_model
@@ -59,3 +60,32 @@ def test_builder_interaction_hub_prefers_runtime_monitoring_during_live_run() ->
     assert hub.active_workspace_id == "runtime_monitoring"
     assert hub.recommended_action_id in {"cancel_run", "open_diff", "replay_latest", "run_current"}
     assert hub.active_workspace_label == "런타임 모니터링"
+
+
+
+def _commit() -> CommitSnapshotModel:
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[{"name": "out", "source": "n1"}]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
+
+
+def test_builder_interaction_hub_prefers_run_from_commit_for_commit_snapshot() -> None:
+    hub = read_builder_interaction_hub_view_model(_commit())
+    assert hub.recommended_action_id == "run_from_commit"
+    assert hub.interaction_transition is not None
+    assert hub.interaction_transition.target_workspace_id == "runtime_monitoring"
+    assert hub.interaction_transition.target_panel_id == "execution"
+
+
+def test_builder_interaction_hub_prefers_open_latest_run_for_execution_record() -> None:
+    hub = read_builder_interaction_hub_view_model(_run())
+    assert hub.recommended_action_id == "open_latest_run"
+    assert hub.interaction_transition is not None
+    assert hub.interaction_transition.target_workspace_id == "runtime_monitoring"
+    assert hub.interaction_transition.target_panel_id == "execution"
