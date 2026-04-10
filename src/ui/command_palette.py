@@ -285,7 +285,11 @@ def read_command_palette_view_model(
     execution_view = execution_view or (read_execution_panel_view_model(source_unwrapped, execution_record=execution_record) if source_unwrapped is not None else None)
     trace_view = trace_view or (read_trace_timeline_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record) if (source_unwrapped is not None or execution_record is not None) else None)
     artifact_view = artifact_view or (read_artifact_viewer_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record) if (source_unwrapped is not None or execution_record is not None) else None)
-    graph_view = graph_view or (read_graph_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay) if source_unwrapped is not None else None)
+    graph_view = graph_view or (
+        read_graph_view_model(source_unwrapped, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay)
+        if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel, LoadedNexArtifact))
+        else None
+    )
     if diff_view is None and preview_overlay is not None and source_unwrapped is not None:
         diff_view = read_diff_view_model(diff_mode="preview_vs_current", source=preview_overlay, target=source_unwrapped)
     coordination_state = coordination_state or read_panel_coordination_state(source_unwrapped, graph_view=graph_view, storage_view=storage_view, execution_view=execution_view, validation_view=validation_view)

@@ -65,13 +65,18 @@ _REQUIRED_ACTION_BY_STAGE = {
     "approval": "approve_for_commit",
     "commit": "commit_snapshot",
     "run": "run_current",
-    "followthrough": "open_diff",
+    "followthrough": "open_trace",
 }
 _FLOW_BY_ACTION = {
     "review_draft": "flow:review_draft",
     "approve_for_commit": "flow:approve_for_commit",
     "commit_snapshot": "flow:commit_snapshot",
     "run_current": "flow:run_current",
+    "run_from_commit": "flow:run_from_commit",
+    "open_latest_run": "flow:open_latest_run",
+    "open_trace": "flow:open_trace",
+    "open_artifacts": "flow:open_artifacts",
+    "compare_runs": "flow:compare_runs",
     "open_diff": "flow:open_diff",
     "replay_latest": "flow:replay_latest",
 }
@@ -134,11 +139,11 @@ def _action_label(action_id: str | None, *, app_language: str) -> str | None:
 def _flow_id_for_stage(stage_id: str, *, handoff: ProductFlowHandoffViewModel | None = None) -> str | None:
     if stage_id == "followthrough" and handoff is not None and handoff.followthrough_entry_id is not None:
         mapping = {
-            "inspect_trace": "flow:open_diff",
-            "inspect_artifacts": "flow:open_diff",
-            "compare_results": "flow:open_diff",
+            "inspect_trace": "flow:open_trace",
+            "inspect_artifacts": "flow:open_artifacts",
+            "compare_results": "flow:compare_runs",
         }
-        return mapping.get(handoff.followthrough_entry_id, "flow:open_diff")
+        return mapping.get(handoff.followthrough_entry_id, "flow:open_trace")
     return _FLOW_BY_ACTION.get(_REQUIRED_ACTION_BY_STAGE.get(stage_id, ""))
 
 

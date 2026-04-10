@@ -290,7 +290,14 @@ def read_product_flow_journey_view_model(
         if current_step is None:
             current_step = next((step for step in steps if step.step_id == "observe_results"), None)
     if current_step is None:
-        current_step = next((step for step in steps if not step.complete), steps[-1] if steps else None)
+        if source_role == "commit_snapshot":
+            preferred_ids = ("run_current", "observe_results", "commit_snapshot")
+            current_step = next((step for step in steps if step.step_id in preferred_ids and (step.step_status == "active" or step.actionable or not step.complete)), None)
+        elif source_role == "execution_record":
+            preferred_ids = ("observe_results", "run_current", "commit_snapshot")
+            current_step = next((step for step in steps if step.step_id in preferred_ids and (step.step_status == "active" or step.actionable or step.complete or not step.complete)), None)
+        if current_step is None:
+            current_step = next((step for step in steps if not step.complete), steps[-1] if steps else None)
 
     if not steps:
         journey_status = "empty"

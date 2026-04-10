@@ -128,10 +128,17 @@ def _choose_followthrough(runbook: ProductFlowRunbookViewModel | None, primary: 
 def _prioritized_primary(runbook: ProductFlowRunbookViewModel | None, *, source_role: str) -> ProductFlowRunbookEntryView | None:
     entries = _entry_map(runbook)
     if source_role == "working_save":
-        for entry_id in ("commit_snapshot", "approval_decision", "review_proposal", "run_current"):
-            candidate = entries.get(entry_id)
-            if candidate is not None and (candidate.enabled or candidate.complete):
-                return candidate
+        priority = ("commit_snapshot", "approval_decision", "review_proposal", "run_current")
+    elif source_role == "commit_snapshot":
+        priority = ("run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot")
+    elif source_role == "execution_record":
+        priority = ("inspect_trace", "inspect_artifacts", "compare_results", "run_current")
+    else:
+        priority = ()
+    for entry_id in priority:
+        candidate = entries.get(entry_id)
+        if candidate is not None and (candidate.enabled or candidate.complete):
+            return candidate
     return _choose_primary(runbook)
 
 def read_product_flow_handoff_view_model(

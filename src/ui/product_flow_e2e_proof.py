@@ -284,16 +284,20 @@ def read_product_flow_e2e_proof_view_model(
         return ProductFlowE2EProofViewModel()
 
     base_source = source_unwrapped if source_unwrapped is not None else execution_record
-    proposal_commit = proposal_commit or read_proposal_commit_workflow_view_model(
-        base_source,
-        validation_report=validation_report,
-        execution_record=execution_record,
-        session_state_card=session_state_card,
-        intent=intent,
-        patch_plan=patch_plan,
-        precheck=precheck,
-        preview=preview,
-        approval_flow=approval_flow,
+    proposal_commit = proposal_commit or (
+        read_proposal_commit_workflow_view_model(
+            base_source,
+            validation_report=validation_report,
+            execution_record=execution_record,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+        )
+        if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel))
+        else None
     )
     execution_launch = execution_launch or read_execution_launch_workflow_view_model(
         base_source,

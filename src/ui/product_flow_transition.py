@@ -182,14 +182,14 @@ def _build_transition(
 
     if to_stage_id == "followthrough" and handoff is not None:
         followthrough_action_map = {
-            "inspect_trace": "open_diff",
-            "inspect_artifacts": "open_diff",
-            "compare_results": "open_diff",
+            "inspect_trace": "open_trace",
+            "inspect_artifacts": "open_artifacts",
+            "compare_results": "compare_runs",
         }
         followthrough_flow_map = {
-            "inspect_trace": "flow:open_diff",
-            "inspect_artifacts": "flow:open_diff",
-            "compare_results": "flow:open_diff",
+            "inspect_trace": "flow:open_trace",
+            "inspect_artifacts": "flow:open_artifacts",
+            "compare_results": "flow:compare_runs",
         }
         required_action_id = followthrough_action_map.get(handoff.followthrough_entry_id) or handoff.primary_action_id
         recommended_flow_id = followthrough_flow_map.get(handoff.followthrough_entry_id)

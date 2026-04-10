@@ -74,6 +74,12 @@ def _storage_role(source) -> str:
     return "none"
 
 
+def _action_label(action_id: str | None, *, app_language: str) -> str | None:
+    if action_id is None:
+        return None
+    return ui_text(f"builder.action.{action_id}", app_language=app_language, fallback_text=action_id.replace("_", " ").title())
+
+
 def _entry_map(runbook: ProductFlowRunbookViewModel | None) -> dict[str, ProductFlowRunbookEntryView]:
     if runbook is None:
         return {}
@@ -132,7 +138,7 @@ def _followthrough_boundary(runbook: ProductFlowRunbookViewModel | None, handoff
         preferred = entries.get(handoff.followthrough_entry_id)
     if preferred is None:
         preferred = next((entry for entry in follow_entries if entry is not None and (entry.enabled or entry.complete)), None)
-    open_requirement = None if complete or ready else "run_current"
+    open_requirement = None if complete or ready else (handoff.primary_action_id if handoff is not None and handoff.primary_entry_id == "run_current" and handoff.primary_action_id is not None else "run_current")
     return ProductFlowBoundaryReadinessView(
         boundary_id="followthrough",
         label=ui_text("readiness.boundary.followthrough", app_language=app_language, fallback_text="Follow-through"),
@@ -145,7 +151,7 @@ def _followthrough_boundary(runbook: ProductFlowRunbookViewModel | None, handoff
         panel_id=(preferred.preferred_panel_id if preferred is not None else handoff.followthrough_panel_id if handoff is not None else None),
         target_ref=(preferred.target_ref if preferred is not None else handoff.followthrough_target_ref if handoff is not None else None),
         open_requirement=open_requirement,
-        open_requirement_label=(ui_text("builder.action.run_current", app_language=app_language, fallback_text="Run Current") if open_requirement is not None else None),
+        open_requirement_label=(_action_label(open_requirement, app_language=app_language) if open_requirement is not None else None),
     )
 
 

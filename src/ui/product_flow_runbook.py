@@ -324,7 +324,21 @@ def read_product_flow_runbook_view_model(
         }
         current_entry_id = mapping.get(journey.current_step_id, "review_proposal")
 
+    entries_by_id = {entry.entry_id: entry for entry in entries}
+    if source_role == "commit_snapshot":
+        preferred = next((entry_id for entry_id in ("run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot") if entry_id in entries_by_id and (entries_by_id[entry_id].enabled or entries_by_id[entry_id].complete)), None)
+        if preferred is not None:
+            current_entry_id = preferred
+    elif source_role == "execution_record":
+        preferred = next((entry_id for entry_id in ("inspect_trace", "inspect_artifacts", "compare_results", "run_current") if entry_id in entries_by_id and (entries_by_id[entry_id].enabled or entries_by_id[entry_id].complete)), None)
+        if preferred is not None:
+            current_entry_id = preferred
+
     recommended_entry = next((entry for entry in entries if entry.entry_id == current_entry_id and entry.enabled), None)
+    if recommended_entry is None and source_role == "commit_snapshot":
+        recommended_entry = next((entries_by_id[entry_id] for entry_id in ("run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot") if entry_id in entries_by_id and entries_by_id[entry_id].enabled), None)
+    if recommended_entry is None and source_role == "execution_record":
+        recommended_entry = next((entries_by_id[entry_id] for entry_id in ("inspect_trace", "inspect_artifacts", "compare_results", "run_current") if entry_id in entries_by_id and entries_by_id[entry_id].enabled), None)
     if recommended_entry is None:
         recommended_entry = next((entry for entry in entries if entry.entry_status in {"active", "ready"} and entry.enabled), None)
     if recommended_entry is None:

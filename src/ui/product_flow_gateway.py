@@ -248,16 +248,20 @@ def read_product_flow_gateway_view_model(
         return ProductFlowGatewayViewModel()
 
     base_source = source_unwrapped if source_unwrapped is not None else execution_record
-    proposal_commit = proposal_commit or read_proposal_commit_workflow_view_model(
-        base_source,
-        validation_report=validation_report,
-        execution_record=execution_record,
-        session_state_card=session_state_card,
-        intent=intent,
-        patch_plan=patch_plan,
-        precheck=precheck,
-        preview=preview,
-        approval_flow=approval_flow,
+    proposal_commit = proposal_commit or (
+        read_proposal_commit_workflow_view_model(
+            base_source,
+            validation_report=validation_report,
+            execution_record=execution_record,
+            session_state_card=session_state_card,
+            intent=intent,
+            patch_plan=patch_plan,
+            precheck=precheck,
+            preview=preview,
+            approval_flow=approval_flow,
+        )
+        if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel))
+        else None
     )
     execution_launch = execution_launch or read_execution_launch_workflow_view_model(
         base_source,
@@ -284,6 +288,18 @@ def read_product_flow_gateway_view_model(
         gateway_status = "live"
         current_stage = live_stage
         recommended_stage = live_stage
+    elif source_role == "execution_record" and followthrough_stage is not None and followthrough_stage.boundary_ready:
+        gateway_status = "actionable" if followthrough_stage.actionable else "ready"
+        current_stage = followthrough_stage
+        recommended_stage = followthrough_stage
+    elif source_role == "execution_record" and run_stage is not None and run_stage.boundary_ready:
+        gateway_status = "actionable" if run_stage.actionable else "ready"
+        current_stage = run_stage
+        recommended_stage = run_stage
+    elif source_role == "commit_snapshot" and run_stage is not None and run_stage.boundary_ready:
+        gateway_status = "actionable" if run_stage.actionable else "ready"
+        current_stage = run_stage
+        recommended_stage = run_stage
     elif commit_stage is not None and commit_stage.gateway_status in {"actionable", "open", "ready"} and commit_stage.open:
         gateway_status = "actionable" if commit_stage.actionable else "ready"
         current_stage = commit_stage
