@@ -198,3 +198,22 @@ def test_designer_panel_uses_beginner_placeholder_for_empty_working_save() -> No
     vm = read_designer_panel_view_model(source)
 
     assert vm.request_state.input_placeholder == "What would you like to build? Describe your goal."
+
+
+def test_designer_panel_exposes_starter_template_gallery_for_empty_working_save() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_designer_panel_view_model(source)
+
+    assert vm.template_gallery.visible is True
+    assert len(vm.template_gallery.templates) == 10
+    assert vm.template_gallery.templates[0].template_id == "text_summarizer"
+    assert vm.template_gallery.templates[0].action_type == "create_circuit_from_template"
+    assert "workflow" in vm.template_gallery.title.lower()

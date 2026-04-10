@@ -392,3 +392,21 @@ def test_builder_shell_projects_beginner_onboarding_hint_for_blocked_validation(
     assert vm.beginner_onboarding.summary == "Choose an AI model for step 1"
     assert vm.beginner_onboarding.primary_action_label == "Fix this step"
     assert vm.beginner_onboarding.primary_action_target == "validation"
+
+
+def test_builder_shell_projects_template_gallery_through_designer_for_empty_workspace() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_builder_shell_view_model(source)
+
+    assert vm.designer is not None
+    assert vm.designer.template_gallery.visible is True
+    assert len(vm.designer.template_gallery.templates) == 10
+    assert vm.designer.template_gallery.category_count >= 5

@@ -36,6 +36,100 @@ class DesignerProposalBundle:
         return self.precheck.can_proceed_to_preview
 
 
+@dataclass(frozen=True)
+class StarterCircuitTemplateSpec:
+    template_id: str
+    display_name: str
+    category: str
+    summary: str
+    designer_request_text: str
+
+
+_STARTER_CIRCUIT_TEMPLATES: tuple[StarterCircuitTemplateSpec, ...] = (
+    StarterCircuitTemplateSpec(
+        template_id="text_summarizer",
+        display_name="Text Summarizer",
+        category="summarization",
+        summary="Summarize pasted text into a short structured brief.",
+        designer_request_text="Create a workflow that takes pasted text, summarizes the key points, and returns a short readable summary.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="review_classifier",
+        display_name="Review Classifier",
+        category="classification",
+        summary="Classify customer reviews by sentiment and key issues.",
+        designer_request_text="Create a workflow that reads customer reviews, classifies sentiment, and extracts the main issue categories.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="document_analyzer",
+        display_name="Document Analyzer",
+        category="document_analysis",
+        summary="Read a document and produce a clear analysis summary.",
+        designer_request_text="Create a workflow that analyzes an uploaded document, identifies the important sections, and explains the main points clearly.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="email_drafter",
+        display_name="Email Drafter",
+        category="writing",
+        summary="Draft a professional email from a goal and key details.",
+        designer_request_text="Create a workflow that takes a goal and key details, then drafts a professional email the user can review and send.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="code_reviewer",
+        display_name="Code Reviewer",
+        category="code",
+        summary="Review code and explain issues, risks, and improvements.",
+        designer_request_text="Create a workflow that reviews pasted code, explains problems or risks, and suggests concrete improvements.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="news_briefer",
+        display_name="News Briefer",
+        category="summarization",
+        summary="Turn multiple news items into a concise daily brief.",
+        designer_request_text="Create a workflow that takes several news items and turns them into a concise daily briefing with the main takeaways.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="qa_responder",
+        display_name="Q&A Responder",
+        category="writing",
+        summary="Answer a question clearly using the provided context.",
+        designer_request_text="Create a workflow that accepts a question and supporting context, then produces a clear and direct answer for the user.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="data_extractor",
+        display_name="Data Extractor",
+        category="classification",
+        summary="Extract key fields from semi-structured text.",
+        designer_request_text="Create a workflow that reads semi-structured text and extracts the important fields into a clean structured output.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="translation_helper",
+        display_name="Translation Helper",
+        category="writing",
+        summary="Translate text while preserving tone and intent.",
+        designer_request_text="Create a workflow that translates text into the target language while preserving the original tone and intent.",
+    ),
+    StarterCircuitTemplateSpec(
+        template_id="content_rewriter",
+        display_name="Content Rewriter",
+        category="writing",
+        summary="Rewrite text for clarity, tone, and readability.",
+        designer_request_text="Create a workflow that rewrites text to improve clarity, tone, and readability while preserving meaning.",
+    ),
+)
+
+
+def list_starter_circuit_templates() -> tuple[StarterCircuitTemplateSpec, ...]:
+    return _STARTER_CIRCUIT_TEMPLATES
+
+
+def get_starter_circuit_template(template_id: str) -> StarterCircuitTemplateSpec:
+    for template in _STARTER_CIRCUIT_TEMPLATES:
+        if template.template_id == template_id:
+            return template
+    raise KeyError(f"unknown starter template: {template_id}")
+
+
 class DesignerProposalFlow:
     def __init__(
         self,
@@ -134,3 +228,13 @@ class DesignerProposalFlow:
             control_state=control_state,
             control_policy=control_policy,
         )
+
+
+
+__all__ = [
+    "StarterCircuitTemplateSpec",
+    "list_starter_circuit_templates",
+    "get_starter_circuit_template",
+    "DesignerProposalBundle",
+    "DesignerProposalFlow",
+]
