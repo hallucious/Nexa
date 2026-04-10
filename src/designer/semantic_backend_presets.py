@@ -13,6 +13,7 @@ class SemanticBackendPresetSpec:
     aliases: tuple[str, ...]
     env_var_names: tuple[str, ...]
     provider_name: str
+    display_name: str
 
 
 _PRESET_SPECS: tuple[SemanticBackendPresetSpec, ...] = (
@@ -21,24 +22,28 @@ _PRESET_SPECS: tuple[SemanticBackendPresetSpec, ...] = (
         aliases=("openai", "gpt"),
         env_var_names=("OPENAI_API_KEY",),
         provider_name="designer.semantic.gpt",
+        display_name="OpenAI",
     ),
     SemanticBackendPresetSpec(
         preset="claude",
         aliases=("anthropic", "claude"),
         env_var_names=("ANTHROPIC_API_KEY",),
         provider_name="designer.semantic.claude",
+        display_name="Claude",
     ),
     SemanticBackendPresetSpec(
         preset="gemini",
         aliases=("google", "gemini"),
         env_var_names=("GEMINI_API_KEY", "GOOGLE_API_KEY"),
         provider_name="designer.semantic.gemini",
+        display_name="Gemini",
     ),
     SemanticBackendPresetSpec(
         preset="perplexity",
         aliases=("perplexity", "pplx"),
         env_var_names=("PERPLEXITY_API_KEY",),
         provider_name="designer.semantic.perplexity",
+        display_name="Perplexity",
     ),
 )
 

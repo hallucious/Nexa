@@ -217,3 +217,5 @@ def test_designer_panel_exposes_starter_template_gallery_for_empty_working_save(
     assert vm.template_gallery.templates[0].template_id == "text_summarizer"
     assert vm.template_gallery.templates[0].action_type == "create_circuit_from_template"
     assert "workflow" in vm.template_gallery.title.lower()
+    assert vm.provider_setup_guidance.visible is True
+    assert vm.provider_setup_guidance.primary_action_target == "provider_setup"

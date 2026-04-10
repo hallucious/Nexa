@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Mapping
 
 from src.designer.models.circuit_draft_preview import CircuitDraftPreview
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan
@@ -13,6 +14,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.provider_setup_guidance import ProviderSetupGuidanceView, read_provider_setup_guidance_view_model
 from src.ui.template_gallery import TemplateGalleryViewModel, read_template_gallery_view_model
 
 
@@ -134,6 +136,7 @@ class DesignerPanelViewModel:
     suggested_actions: list[DesignerActionHint] = field(default_factory=list)
     related_targets: list[DesignerTargetRefView] = field(default_factory=list)
     template_gallery: TemplateGalleryViewModel = field(default_factory=TemplateGalleryViewModel)
+    provider_setup_guidance: ProviderSetupGuidanceView = field(default_factory=ProviderSetupGuidanceView)
     explanation: str | None = None
 
 
@@ -158,6 +161,21 @@ def _working_save_metadata(source) -> dict[str, object]:
         return _working_save_metadata(source.parsed_model)
     return {}
 
+
+
+def _provider_setup_env(source) -> Mapping[str, str] | None:
+    metadata = _working_save_metadata(source)
+    raw_env = metadata.get("provider_setup_env")
+    if isinstance(raw_env, Mapping):
+        normalized: dict[str, str] = {}
+        for key, value in raw_env.items():
+            if key is None:
+                continue
+            normalized[str(key)] = "" if value is None else str(value)
+        return normalized
+    if bool(metadata.get("provider_setup_detect_process_env")):
+        return None
+    return {}
 
 def _is_beginner_empty_workspace(source) -> bool:
     if not isinstance(source, WorkingSaveModel):
@@ -201,6 +219,7 @@ def read_designer_panel_view_model(
 
     placeholder_key = "designer.request.input_placeholder.beginner" if _is_beginner_empty_workspace(source) else "designer.request.input_placeholder"
     template_gallery_vm = read_template_gallery_view_model(source)
+    provider_setup_guidance_vm = read_provider_setup_guidance_view_model(source, env=_provider_setup_env(source))
 
     request_state = DesignerRequestStateView(
         current_request_text=session_state_card.conversation_context.user_request_text if session_state_card is not None else None,
@@ -309,6 +328,7 @@ def read_designer_panel_view_model(
         suggested_actions=suggested_actions,
         related_targets=related_targets,
         template_gallery=template_gallery_vm,
+        provider_setup_guidance=provider_setup_guidance_vm,
         explanation=explanation,
     )
 
@@ -321,6 +341,7 @@ __all__ = [
     "DesignerPatchStateView",
     "DesignerPrecheckStateView",
     "DesignerPreviewStateView",
+    "ProviderSetupGuidanceView",
     "DesignerRequestStateView",
     "DesignerRevisionStateView",
     "DesignerTargetRefView",

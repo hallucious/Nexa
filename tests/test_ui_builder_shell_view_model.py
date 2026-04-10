@@ -410,3 +410,5 @@ def test_builder_shell_projects_template_gallery_through_designer_for_empty_work
     assert vm.designer.template_gallery.visible is True
     assert len(vm.designer.template_gallery.templates) == 10
     assert vm.designer.template_gallery.category_count >= 5
+    assert vm.designer.provider_setup_guidance.visible is True
+    assert vm.designer.provider_setup_guidance.primary_action_target == "provider_setup"

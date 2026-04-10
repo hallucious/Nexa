@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 NEXA_DOTENV_INSTALLED = "NEXA_DOTENV_INSTALLED"
@@ -152,3 +153,29 @@ def resolve_api_key_or_raise(var_name: str, *, aliases: tuple[str, ...] = ()) ->
         return key
 
     raise RuntimeError(_missing_key_message(var_name, dotenv_path, aliases))
+
+
+@dataclass(frozen=True)
+class EnvSetupStatus:
+    dotenv_installed: bool
+    dotenv_file_found: bool
+    dotenv_file_path: str | None = None
+
+
+def read_env_setup_status() -> EnvSetupStatus:
+    dotenv_path = _find_existing_env_file()
+    return EnvSetupStatus(
+        dotenv_installed=_dotenv_installed(),
+        dotenv_file_found=dotenv_path is not None,
+        dotenv_file_path=(str(dotenv_path) if dotenv_path is not None else None),
+    )
+
+
+__all__ = [
+    "EnvSetupStatus",
+    "NEXA_DOTENV_INSTALLED",
+    "NEXA_DOTENV_PATH",
+    "publish_dotenv_status",
+    "read_env_setup_status",
+    "resolve_api_key_or_raise",
+]
