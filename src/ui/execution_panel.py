@@ -65,6 +65,12 @@ class OutputSummaryView:
     full_value: str | None = None
     is_copyable: bool = False
     streaming_in_progress: bool = False
+    display_mode: str = "text"
+    preview_items: list[str] = field(default_factory=list)
+    item_count: int | None = None
+    copy_action_label: str | None = None
+    artifact_ref: str | None = None
+    open_artifact_action_label: str | None = None
 
 
 @dataclass(frozen=True)
@@ -322,6 +328,42 @@ def _stringify_output_value(value: Any) -> str | None:
         return str(value)
 
 
+def _pretty_output_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float, bool)):
+        return str(value)
+    try:
+        import json
+        return json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2)
+    except TypeError:
+        return str(value)
+
+
+def _preview_items_for_value(value: Any) -> tuple[str, list[str], int | None]:
+    if isinstance(value, Mapping):
+        items = []
+        for key, item_value in list(value.items())[:3]:
+            items.append(f"{key}: {_truncate_summary(_stringify_output_value(item_value), limit=60)}")
+        return "structured", items, len(value)
+    if isinstance(value, (list, tuple)):
+        items = [_truncate_summary(_stringify_output_value(item), limit=60) for item in list(value)[:3]]
+        return "list", items, len(value)
+    if isinstance(value, str):
+        lines = [line.strip() for line in value.splitlines() if line.strip()]
+        if len(lines) > 1:
+            return "multiline_text", lines[:3], len(lines)
+        return "text", ([] if not value else [value]), None
+    if isinstance(value, (int, float, bool)):
+        return "scalar", [str(value)], None
+    if value is None:
+        return "empty", [], 0
+    stringified = _stringify_output_value(value)
+    return (("text" if stringified else "empty"), ([stringified] if stringified else []), None)
+
+
 def _truncate_summary(text: str | None, *, limit: int = 120) -> str:
     if not text:
         return ""
@@ -330,10 +372,21 @@ def _truncate_summary(text: str | None, *, limit: int = 120) -> str:
     return text[: limit - 1] + "…"
 
 
-def _latest_outputs_from_record(record: ExecutionRecordModel) -> list[OutputSummaryView]:
+def _artifact_ref_for_output(record: ExecutionRecordModel, source_node: str | None) -> str | None:
+    if source_node is None:
+        return None
+    for artifact in record.artifacts.artifact_refs:
+        if artifact.producer_node == source_node and artifact.artifact_type in {"final_output", "output", "text_output", "json_output"}:
+            return artifact.ref or artifact.artifact_id
+    return None
+
+
+def _latest_outputs_from_record(record: ExecutionRecordModel, *, app_language: str) -> list[OutputSummaryView]:
     outputs: list[OutputSummaryView] = []
     for output in record.outputs.final_outputs:
-        full_value = _stringify_output_value(output.value_payload)
+        full_value = _pretty_output_value(output.value_payload)
+        display_mode, preview_items, item_count = _preview_items_for_value(output.value_payload if output.value_payload is not None else output.value_summary)
+        artifact_ref = _artifact_ref_for_output(record, output.source_node)
         outputs.append(
             OutputSummaryView(
                 output_ref=output.output_ref,
@@ -343,9 +396,16 @@ def _latest_outputs_from_record(record: ExecutionRecordModel) -> list[OutputSumm
                 full_value=full_value,
                 is_copyable=bool(full_value),
                 streaming_in_progress=False,
+                display_mode=display_mode,
+                preview_items=preview_items,
+                item_count=item_count,
+                copy_action_label=(ui_text("execution.output.copy", app_language=app_language) if full_value else None),
+                artifact_ref=artifact_ref,
+                open_artifact_action_label=(ui_text("execution.output.open_artifact", app_language=app_language) if artifact_ref else None),
             )
         )
     if not outputs and record.outputs.output_summary:
+        display_mode, preview_items, item_count = _preview_items_for_value(record.outputs.output_summary)
         outputs.append(
             OutputSummaryView(
                 output_ref="output_summary",
@@ -354,6 +414,10 @@ def _latest_outputs_from_record(record: ExecutionRecordModel) -> list[OutputSumm
                 full_value=record.outputs.output_summary,
                 is_copyable=True,
                 streaming_in_progress=False,
+                display_mode=display_mode,
+                preview_items=preview_items,
+                item_count=item_count,
+                copy_action_label=ui_text("execution.output.copy", app_language=app_language),
             )
         )
     return outputs
@@ -363,6 +427,7 @@ def _latest_outputs_from_live_events(
     events: Sequence[ExecutionEvent],
     *,
     fallback_record: ExecutionRecordModel | None = None,
+    app_language: str,
 ) -> list[OutputSummaryView]:
     tracked: dict[str, OutputSummaryView] = {}
     stream_chunks: dict[str, str] = {}
@@ -383,6 +448,12 @@ def _latest_outputs_from_live_events(
                 full_value=full_value,
                 is_copyable=True,
                 streaming_in_progress=True,
+                display_mode="text",
+                preview_items=[_truncate_summary(full_value, limit=60)],
+                item_count=None,
+                copy_action_label=ui_text("execution.output.copy", app_language=app_language),
+                artifact_ref=(_artifact_ref_for_output(fallback_record, event.node_id) if fallback_record is not None else None),
+                open_artifact_action_label=(ui_text("execution.output.open_artifact", app_language=app_language) if fallback_record is not None and _artifact_ref_for_output(fallback_record, event.node_id) else None),
             )
             continue
         if event.type not in {"partial_output", "final_output"}:
@@ -394,19 +465,28 @@ def _latest_outputs_from_live_events(
         value_type = payload.get("value_type")
         if not isinstance(value_type, str):
             value_type = "text" if isinstance(value, str) else (type(value).__name__ if value is not None else None)
+        source_node = str(payload.get("source_node") or event.node_id) if (payload.get("source_node") is not None or event.node_id is not None) else None
+        display_mode, preview_items, item_count = _preview_items_for_value(value if value is not None else summary)
+        artifact_ref = _artifact_ref_for_output(fallback_record, source_node) if fallback_record is not None else None
         tracked[output_ref] = OutputSummaryView(
             output_ref=output_ref,
-            source_node=str(payload.get("source_node") or event.node_id) if (payload.get("source_node") is not None or event.node_id is not None) else None,
+            source_node=source_node,
             value_summary=str(summary or ""),
             value_type=value_type,
             full_value=full_value,
             is_copyable=bool(full_value),
             streaming_in_progress=event.type == "partial_output",
+            display_mode=display_mode,
+            preview_items=preview_items,
+            item_count=item_count,
+            copy_action_label=(ui_text("execution.output.copy", app_language=app_language) if full_value else None),
+            artifact_ref=artifact_ref,
+            open_artifact_action_label=(ui_text("execution.output.open_artifact", app_language=app_language) if artifact_ref else None),
         )
     if tracked:
         return list(tracked.values())
     if fallback_record is not None:
-        return _latest_outputs_from_record(fallback_record)
+        return _latest_outputs_from_record(fallback_record, app_language=app_language)
     return []
 
 
@@ -700,7 +780,7 @@ def read_execution_panel_view_model(
             progress=progress,
             active_context=active_context,
             recent_events=recent_events,
-            latest_outputs=_latest_outputs_from_live_events(live_events, fallback_record=execution_record) if live_events else _latest_outputs_from_record(execution_record),
+            latest_outputs=_latest_outputs_from_live_events(live_events, fallback_record=execution_record, app_language=app_language) if live_events else _latest_outputs_from_record(execution_record, app_language=app_language),
             diagnostics=_diagnostics_from_record(execution_record),
             timing=ExecutionTimingView(
                 started_at=execution_record.meta.started_at,

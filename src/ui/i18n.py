@@ -117,6 +117,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "execution.control.no_execution_record": "No execution record available",
         "execution.panel.no_execution_record": "No execution record loaded",
         "execution.panel.no_active_execution": "No active execution",
+        "execution.output.copy": "Copy result",
+        "execution.output.open_artifact": "Open artifact",
         "friendly_error.API_KEY_MISSING.title": "AI connection needed",
         "friendly_error.API_KEY_MISSING.message": "AI connection settings are required before you can run this workflow.",
         "friendly_error.API_KEY_MISSING.action": "Open setup",
@@ -681,6 +683,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "execution.control.no_execution_record": "사용 가능한 실행 기록이 없습니다",
         "execution.panel.no_execution_record": "로드된 실행 기록이 없습니다",
         "execution.panel.no_active_execution": "활성 실행이 없습니다",
+        "execution.output.copy": "결과 복사",
+        "execution.output.open_artifact": "아티팩트 열기",
 
         "validation.group.blocking": "차단",
         "validation.group.warning": "경고",

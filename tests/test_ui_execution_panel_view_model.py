@@ -127,7 +127,13 @@ def test_read_execution_panel_view_model_exposes_record_output_payload_when_avai
 
     vm = read_execution_panel_view_model(record)
 
-    assert vm.latest_outputs[0].full_value == '{"answer": "ok"}'
+    assert vm.latest_outputs[0].full_value == """{
+  "answer": "ok"
+}"""
+    assert vm.latest_outputs[0].display_mode == "structured"
+    assert vm.latest_outputs[0].preview_items == ["answer: ok"]
+    assert vm.latest_outputs[0].item_count == 1
+    assert vm.latest_outputs[0].copy_action_label == "Copy result"
     assert vm.latest_outputs[0].is_copyable is True
     assert vm.latest_outputs[0].streaming_in_progress is False
 
@@ -146,5 +152,37 @@ def test_read_execution_panel_view_model_projects_live_partial_and_final_outputs
 
     assert vm.latest_outputs[0].output_ref == "final"
     assert vm.latest_outputs[0].full_value == "Hello world"
+    assert vm.latest_outputs[0].display_mode == "text"
+    assert vm.latest_outputs[0].copy_action_label == "Copy result"
     assert vm.latest_outputs[0].is_copyable is True
     assert vm.latest_outputs[0].streaming_in_progress is False
+
+
+def test_read_execution_panel_view_model_projects_list_outputs_and_artifact_link() -> None:
+    record = ExecutionRecordModel(
+        meta=ExecutionMetaModel(
+            run_id="run-003",
+            record_format_version="1.0.0",
+            created_at="2026-04-07T00:00:00Z",
+            started_at="2026-04-07T00:00:00Z",
+            finished_at="2026-04-07T00:00:05Z",
+            status="completed",
+            title="List Run",
+        ),
+        source=ExecutionSourceModel(commit_id="commit-001", working_save_id="ws-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(total_duration_ms=5000, event_count=1),
+        node_results=NodeResultsModel(),
+        outputs=ExecutionOutputModel(final_outputs=[OutputResultCard(output_ref="final", source_node="draft", value_summary="3 items", value_payload=["alpha", "beta", "gamma"], value_type="list")], output_summary="3 items"),
+        artifacts=ExecutionArtifactsModel(artifact_refs=[ArtifactRecordCard(artifact_id="artifact::result", ref="artifact://result", artifact_type="final_output", producer_node="draft", hash="abc")], artifact_count=1),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+    vm = read_execution_panel_view_model(record)
+
+    assert vm.latest_outputs[0].display_mode == "list"
+    assert vm.latest_outputs[0].preview_items == ["alpha", "beta", "gamma"]
+    assert vm.latest_outputs[0].item_count == 3
+    assert vm.latest_outputs[0].artifact_ref == "artifact://result"
+    assert vm.latest_outputs[0].open_artifact_action_label == "Open artifact"
