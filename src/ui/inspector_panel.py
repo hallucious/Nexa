@@ -142,6 +142,28 @@ def _circuit_from_source(source):
     return None
 
 
+
+
+def _default_selected_ref_from_execution_record(execution_record: ExecutionRecordModel | None) -> str | None:
+    if execution_record is None:
+        return None
+    for issue in [*execution_record.diagnostics.errors, *execution_record.diagnostics.warnings]:
+        location = issue.location or ""
+        if location.startswith("node:"):
+            return location
+        if ":" not in location and location:
+            return f"node:{location}"
+    for result in execution_record.node_results.results:
+        if result.status == "failed":
+            return f"node:{result.node_id}"
+    for result in execution_record.node_results.results:
+        if result.status in {"warning", "partial", "success", "completed"}:
+            return f"node:{result.node_id}"
+    for artifact in execution_record.artifacts.artifact_refs:
+        if artifact.producer_node:
+            return f"node:{artifact.producer_node}"
+    return None
+
 def _default_selected_ref(source) -> str | None:
     if isinstance(source, WorkingSaveModel):
         node_ids = source.ui.metadata.get("selected_node_ids")
@@ -196,6 +218,9 @@ def _node_result_for(execution_record: ExecutionRecordModel | None, node_id: str
     for result in execution_record.node_results.results:
         if result.node_id == node_id:
             return result
+    for artifact in execution_record.artifacts.artifact_refs:
+        if artifact.producer_node == node_id and execution_record.meta.status == "completed":
+            return NodeResultCard(node_id=node_id, status="success", output_summary=artifact.summary)
     return None
 
 
@@ -395,7 +420,7 @@ def read_selected_object_view_model(
     source = _unwrap(source)
     storage_role = _storage_role(source)
     app_language = ui_language_from_sources(source, execution_record)
-    selected_ref = selected_ref or _default_selected_ref(source)
+    selected_ref = selected_ref or _default_selected_ref(source) or _default_selected_ref_from_execution_record(execution_record if execution_record is not None else (source if isinstance(source, ExecutionRecordModel) else None))
     if selected_ref is None:
         return SelectedObjectViewModel(
             object_type="none",

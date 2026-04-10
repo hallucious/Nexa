@@ -150,6 +150,8 @@ def read_node_configuration_workspace_view_model(
 
     if inspector_vm is None or inspector_vm.object_type in {"none", "unknown"}:
         workspace_status = "awaiting_selection"
+    elif storage_role != "working_save" and inspector_vm.status_summary.execution_state in {"running", "failed", "completed", "success", "partial"}:
+        workspace_status = "run_review"
     elif validation_vm is not None and validation_vm.overall_status == "blocked":
         workspace_status = "blocked"
     elif designer_vm is not None and designer_vm.approval_state.current_stage not in {None, "idle", "none"}:

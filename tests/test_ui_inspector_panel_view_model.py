@@ -105,3 +105,12 @@ def test_read_selected_object_view_model_localizes_field_labels_for_korean_app_l
 
     assert vm.readonly_fields[0].label == "노드 ID"
     assert any(constraint.label == "서브회로 경계" for constraint in vm.constraints)
+
+
+def test_read_selected_object_view_model_defaults_to_execution_record_focus_when_commit_snapshot_has_run_history() -> None:
+    vm = read_selected_object_view_model(_commit(), execution_record=_execution_record())
+
+    assert vm.object_type == "node"
+    assert vm.object_id == "review_bundle"
+    assert vm.status_summary.overall_status == "failed"
+    assert vm.status_summary.editability == "readonly"

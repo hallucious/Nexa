@@ -241,6 +241,33 @@ def _edge_endpoint(edge: Mapping[str, Any], *names: str) -> str | None:
     return None
 
 
+
+
+def _preferred_execution_focus_node(record: ExecutionRecordModel | None) -> str | None:
+    if record is None:
+        return None
+    for result in record.node_results.results:
+        if result.status == "failed":
+            return result.node_id
+    for issue in [*record.diagnostics.errors, *record.diagnostics.warnings]:
+        location = issue.location or ""
+        if location.startswith("node:"):
+            return location.split(":", 1)[1]
+    for started in record.timeline.started_nodes:
+        if started.outcome == "running":
+            return started.node_id
+    for result in record.node_results.results:
+        if result.status in {"warning", "partial"}:
+            return result.node_id
+    for artifact in record.artifacts.artifact_refs:
+        if artifact.producer_node:
+            return artifact.producer_node
+    if record.node_results.results:
+        return record.node_results.results[0].node_id
+    if record.timeline.started_nodes:
+        return record.timeline.started_nodes[0].node_id
+    return None
+
 def _selection_from_working_save(source: WorkingSaveModel) -> tuple[list[str], list[str]]:
     metadata = source.ui.metadata or {}
     selected_nodes = metadata.get("selected_node_ids")
@@ -411,7 +438,9 @@ def read_graph_view_model(
     elif isinstance(source, WorkingSaveModel):
         resolved_selected_nodes, resolved_selected_edges = _selection_from_working_save(source)
     else:
-        resolved_selected_nodes, resolved_selected_edges = [], []
+        focus_node = _preferred_execution_focus_node(execution_record)
+        resolved_selected_nodes = [focus_node] if focus_node else []
+        resolved_selected_edges = []
 
     app_language = ui_language_from_sources(source, execution_record)
     validation_by_location, validation_summary = _normalize_validation_report(validation_report)
@@ -554,6 +583,10 @@ def read_graph_view_model(
                 suggested_zoom_region=layout.get("suggested_zoom_region") if isinstance(layout.get("suggested_zoom_region"), Mapping) else None,
                 minimap_enabled=bool(layout.get("minimap_enabled")) if "minimap_enabled" in layout else None,
             )
+    elif layout_hints is None and execution_record is not None:
+        focus_node = _preferred_execution_focus_node(execution_record)
+        if focus_node is not None:
+            layout_hints = GraphLayoutHints(suggested_focus_node_id=focus_node)
 
     if execution_record is not None:
         graph_id = f"execution_record:{execution_record.meta.run_id}"

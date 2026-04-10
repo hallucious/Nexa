@@ -266,3 +266,16 @@ def test_builder_shell_prefers_runtime_monitoring_workspace_when_trace_panel_is_
 
     assert vm.coordination.active_panel == "trace_timeline"
     assert vm.active_workspace_id == "runtime_monitoring"
+
+
+def test_builder_shell_uses_execution_record_focus_node_for_commit_snapshot_run_review() -> None:
+    snapshot = _commit()
+    record = _run()
+
+    vm = read_builder_shell_view_model(snapshot, execution_record=record)
+
+    assert vm.graph is not None
+    assert vm.graph.selected_node_ids == ["n1"]
+    assert vm.inspector is not None
+    assert vm.inspector.object_id == "n1"
+    assert vm.inspector.status_summary.execution_state in {"failed", "completed", "running", "partial"}

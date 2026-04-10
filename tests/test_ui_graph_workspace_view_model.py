@@ -222,3 +222,14 @@ def test_read_graph_view_model_localizes_badges_for_korean_working_save() -> Non
     review_node = next(node for node in vm.nodes if node.node_id == "review_bundle")
     assert review_node.input_summary == "1개 바인딩"
     assert any(badge.label == "서브회로" for badge in review_node.badges)
+
+
+def test_read_graph_view_model_defaults_selection_to_failed_node_from_execution_record() -> None:
+    snapshot = _commit_snapshot()
+    record = _execution_record()
+
+    vm = read_graph_view_model(snapshot, execution_record=record)
+
+    assert vm.selected_node_ids == ["review_bundle"]
+    assert vm.layout_hints is not None
+    assert vm.layout_hints.suggested_focus_node_id == "review_bundle"

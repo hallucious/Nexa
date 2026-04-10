@@ -137,3 +137,40 @@ def test_node_configuration_workspace_projects_phase5_configuration_surface() ->
     assert vm.can_submit_designer_request is True
     assert vm.review_state.commit_eligible is True
     assert vm.workspace_status_label == "Designer 검토 진행 중"
+
+
+
+def _execution_record_context() -> ExecutionRecordModel:
+    from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionIssue, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel
+    return ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-07T00:00:00Z", started_at="2026-04-07T00:00:00Z", finished_at="2026-04-07T00:00:05Z", status="completed"),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(),
+        node_results=NodeResultsModel(results=[NodeResultCard(node_id="n1", status="failed", output_summary="failed", error_count=1)]),
+        outputs=ExecutionOutputModel(),
+        artifacts=ExecutionArtifactsModel(),
+        diagnostics=ExecutionDiagnosticsModel(errors=[ExecutionIssue(issue_code="RUNTIME_ERROR", category="runtime", severity="high", location="node:n1", message="failed")], warnings=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+
+def test_node_configuration_workspace_uses_execution_record_focus_for_commit_snapshot_context() -> None:
+    from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
+    working = _working_save()
+    snapshot = CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
+        circuit=working.circuit,
+        resources=working.resources,
+        state=working.state,
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
+
+    vm = read_node_configuration_workspace_view_model(snapshot, execution_record=_execution_record_context())
+
+    assert vm.selection_summary.selected_ref == "node:n1"
+    assert vm.selection_summary.object_type == "node"
+    assert vm.workspace_status == "run_review"
+    assert vm.can_edit_configuration is False
