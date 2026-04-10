@@ -367,6 +367,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "topbar.status.attention": "Decision required",
         "topbar.status.active": "Execution active",
         "topbar.status.blocked": "Blocked",
+        "topbar.status.terminal": "History view",
         "topbar.mode.build": "Build",
         "topbar.mode.review": "Review",
         "topbar.mode.run": "Run",
@@ -411,6 +412,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "shell.status.blocked": "Shell blocked",
         "shell.status.active": "Shell active",
         "shell.status.failed": "Shell unavailable",
+        "shell.status.terminal": "Shell in history mode",
 
         "shell.mode.builder": "Builder",
         "shell.mode.runtime_monitoring": "Runtime monitoring",
@@ -428,6 +430,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "product.status.review_focus": "Review focus",
         "product.status.build_focus": "Build focus",
         "product.status.attention": "Product shell needs attention",
+        "product.status.terminal": "History focus",
 
         "workflow.proposal_commit": "Proposal & Commit",
         "workflow.execution_launch": "Execution Launch",
@@ -788,6 +791,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "topbar.status.attention": "결정 필요",
         "topbar.status.active": "실행 중",
         "topbar.status.blocked": "차단됨",
+        "topbar.status.terminal": "히스토리 보기",
         "topbar.mode.build": "구성",
         "topbar.mode.review": "검토",
         "topbar.mode.run": "실행",
@@ -832,6 +836,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "shell.status.blocked": "셸 차단 상태",
         "shell.status.active": "셸 활성 상태",
         "shell.status.failed": "셸을 사용할 수 없습니다",
+        "shell.status.terminal": "셸 히스토리 모드",
 
         "shell.mode.builder": "빌더",
         "shell.mode.runtime_monitoring": "런타임 모니터링",
@@ -849,6 +854,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "product.status.review_focus": "검토 중심",
         "product.status.build_focus": "구성 중심",
         "product.status.attention": "제품 셸 주의 필요",
+        "product.status.terminal": "히스토리 중심",
 
         "workflow.proposal_commit": "제안 및 커밋",
         "workflow.execution_launch": "실행 시작",

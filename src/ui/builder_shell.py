@@ -290,6 +290,8 @@ def read_builder_shell_view_model(
         shell_status = "blocked"
     elif execution_vm is not None and execution_vm.execution_status in {"running", "queued"}:
         shell_status = "active"
+    elif role == "execution_record" and execution_vm is not None and execution_vm.execution_status in {"completed", "failed", "cancelled", "partial", "idle"} and not diagnostics.panel_coordination_warning and warning_count == 0:
+        shell_status = "terminal"
     elif diagnostics.panel_coordination_warning or warning_count > 0:
         shell_status = "partial"
 

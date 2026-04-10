@@ -129,7 +129,7 @@ def _execution_label(execution_status: str, *, app_language: str) -> str:
     return ui_text(f"execution.status.{execution_status}", app_language=app_language, fallback_text=execution_status.replace("_", " "))
 
 
-def _overall_status(*, validation_view: ValidationPanelViewModel | None, execution_view: ExecutionPanelViewModel | None, approval_flow: DesignerApprovalFlowState | None) -> tuple[str, int, int, int]:
+def _overall_status(*, role: str, validation_view: ValidationPanelViewModel | None, execution_view: ExecutionPanelViewModel | None, approval_flow: DesignerApprovalFlowState | None) -> tuple[str, int, int, int]:
     blocking_count = validation_view.summary.blocking_count if validation_view is not None else 0
     warning_count = 0
     if validation_view is not None:
@@ -146,6 +146,8 @@ def _overall_status(*, validation_view: ValidationPanelViewModel | None, executi
         return "attention", blocking_count, warning_count, pending_approval_count
     if warning_count:
         return "warning", blocking_count, warning_count, pending_approval_count
+    if role == "execution_record" and execution_view is not None and execution_view.execution_status in {"completed", "failed", "cancelled", "partial", "idle"}:
+        return "terminal", blocking_count, warning_count, pending_approval_count
     return "ready", blocking_count, warning_count, pending_approval_count
 
 
@@ -203,6 +205,7 @@ def read_builder_top_bar_view_model(
     action_schema = action_schema or read_builder_action_schema(source_unwrapped, storage_view=storage_view, validation_view=validation_view, execution_view=execution_view)
 
     overall_status, blocking_count, warning_count, pending_approval_count = _overall_status(
+        role=role,
         validation_view=validation_view,
         execution_view=execution_view,
         approval_flow=approval_flow,

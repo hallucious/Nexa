@@ -327,7 +327,16 @@ def read_command_palette_view_model(
     enabled_entry_count = sum(1 for entry in entries if entry.enabled)
     jump_entry_count = sum(1 for entry in entries if entry.entry_type == "jump")
     action_entry_count = sum(1 for entry in entries if entry.entry_type == "action")
-    palette_status = "empty" if not entries else ("attention" if any(not entry.enabled for entry in entries if entry.entry_type == "action") else "ready")
+    if not entries:
+        palette_status = "empty"
+    elif enabled_entry_count == 0:
+        palette_status = "blocked"
+    elif source_role == "execution_record":
+        palette_status = "terminal"
+    elif any(not entry.enabled for entry in entries if entry.entry_type == "action"):
+        palette_status = "attention"
+    else:
+        palette_status = "ready"
 
     return CommandPaletteViewModel(
         palette_status=palette_status,

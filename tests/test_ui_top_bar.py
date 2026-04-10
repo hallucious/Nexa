@@ -119,3 +119,13 @@ def test_top_bar_marks_execution_record_primary_actions_as_primary_emphasis() ->
     emphasis_by_action = {button.action_id: button.emphasis for button in vm.primary_actions}
     assert emphasis_by_action["open_latest_run"] == "primary"
     assert emphasis_by_action["open_trace"] == "primary"
+
+
+def test_top_bar_marks_execution_record_context_as_terminal_status() -> None:
+    vm = read_builder_top_bar_view_model(_run(status="completed"))
+
+    assert vm.source_role == "execution_record"
+    assert vm.topbar_status == "terminal"
+    assert vm.global_status.overall_status == "terminal"
+    assert vm.global_status.overall_status_label == "History view"
+

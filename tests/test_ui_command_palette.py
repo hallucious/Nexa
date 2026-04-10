@@ -79,3 +79,12 @@ def test_command_palette_combines_jump_and_action_entries() -> None:
     assert "선택된 아티팩트 열기" in labels
     assert "현재 차이 보기 열기" in labels
     assert any(entry.action_id == "run_current" for entry in vm.entries if entry.entry_type == "action")
+
+
+def test_command_palette_marks_execution_record_context_as_terminal() -> None:
+    vm = read_command_palette_view_model(_run())
+
+    assert vm.source_role == "execution_record"
+    assert vm.palette_status == "terminal"
+    assert vm.enabled_entry_count > 0
+

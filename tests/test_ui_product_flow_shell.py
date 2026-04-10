@@ -297,3 +297,13 @@ def test_product_flow_shell_propagates_blocked_validation_into_shell_status() ->
         execution_record=_run_completed(),
     )
     assert vm.shell_status == "blocked"
+
+
+def test_product_flow_shell_marks_execution_record_run_review_as_terminal() -> None:
+    vm = read_product_flow_shell_view_model(_run_completed())
+
+    assert vm.storage_role == "execution_record"
+    assert vm.stage.stage_id == "run"
+    assert vm.shell_status == "terminal"
+    assert vm.shell_status_label == "History focus"
+

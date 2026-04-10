@@ -545,6 +545,8 @@ def read_product_flow_shell_view_model(
         shell_status = "blocked"
     elif stage.stage_id == "run" and stage.live_execution:
         shell_status = "live_run"
+    elif storage_role == "execution_record" and stage.stage_id == "run" and not stage.live_execution:
+        shell_status = "terminal"
     elif stage.stage_id == "review":
         shell_status = "review_focus"
     elif stage.stage_id == "build":

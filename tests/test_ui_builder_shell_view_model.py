@@ -303,3 +303,12 @@ def test_builder_shell_recovers_inspector_selection_from_blocking_validation_loc
     assert vm.graph is not None and vm.graph.selected_node_ids == ["n2"]
     assert vm.inspector is not None and vm.inspector.object_id == "n2"
     assert vm.coordination.active_panel == "validation"
+
+
+def test_builder_shell_marks_execution_record_context_as_terminal_when_not_live() -> None:
+    vm = read_builder_shell_view_model(_run())
+
+    assert vm.storage_role == "execution_record"
+    assert vm.shell_status == "terminal"
+    assert vm.shell_status_label == "Shell in history mode"
+
