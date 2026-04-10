@@ -278,6 +278,69 @@ def _selection_from_working_save(source: WorkingSaveModel) -> tuple[list[str], l
     )
 
 
+def _validation_focus_refs(
+    report: ValidationReport | None,
+    *,
+    source: WorkingSaveModel | CommitSnapshotModel,
+) -> tuple[list[str], list[str]]:
+    if report is None:
+        return [], []
+
+    def _resolve_edge_ref(location: str) -> str | None:
+        if location.startswith("edge:"):
+            return location.split(":", 1)[1]
+        if location.startswith("circuit.edges[") and location.endswith("]"):
+            index_text = location[len("circuit.edges["):-1]
+            if index_text.isdigit():
+                index = int(index_text)
+                if 0 <= index < len(source.circuit.edges):
+                    edge = source.circuit.edges[index]
+                    from_node = _edge_endpoint(edge, "from", "source", "from_node", "fromNode")
+                    to_node = _edge_endpoint(edge, "to", "target", "to_node", "toNode")
+                    if from_node and to_node:
+                        return f"{from_node}->{to_node}"
+        return None
+
+    def _resolve_node_ref(location: str) -> str | None:
+        if location.startswith("node:"):
+            return location.split(":", 1)[1]
+        if location.startswith("circuit.nodes[") and location.endswith("]"):
+            index_text = location[len("circuit.nodes["):-1]
+            if index_text.isdigit():
+                index = int(index_text)
+                if 0 <= index < len(source.circuit.nodes):
+                    node = source.circuit.nodes[index]
+                    if isinstance(node, Mapping):
+                        return _node_id(node, index)
+        node_ids = {
+            _node_id(node, idx)
+            for idx, node in enumerate(source.circuit.nodes)
+            if isinstance(node, Mapping)
+        }
+        if location in node_ids:
+            return location
+        return None
+
+    ordered = sorted(
+        list(report.findings),
+        key=lambda finding: (
+            0 if finding.blocking else 1,
+            0 if (finding.severity or "") == "high" else 1,
+        ),
+    )
+    for finding in ordered:
+        location = str(finding.location or "")
+        if not location:
+            continue
+        edge_ref = _resolve_edge_ref(location)
+        if edge_ref is not None:
+            return [], [edge_ref]
+        node_ref = _resolve_node_ref(location)
+        if node_ref is not None:
+            return [node_ref], []
+    return [], []
+
+
 def _normalize_validation_report(report: ValidationReport | None) -> tuple[dict[str, list[Any]], GraphFindingsSummary]:
     if report is None:
         return {}, GraphFindingsSummary()
@@ -437,10 +500,19 @@ def read_graph_view_model(
         resolved_selected_edges = [str(v) for v in (selected_edge_ids or [])]
     elif isinstance(source, WorkingSaveModel):
         resolved_selected_nodes, resolved_selected_edges = _selection_from_working_save(source)
+        if not resolved_selected_nodes and not resolved_selected_edges:
+            validation_nodes, validation_edges = _validation_focus_refs(validation_report, source=source)
+            resolved_selected_nodes = validation_nodes
+            resolved_selected_edges = validation_edges
     else:
         focus_node = _preferred_execution_focus_node(execution_record)
-        resolved_selected_nodes = [focus_node] if focus_node else []
-        resolved_selected_edges = []
+        if focus_node:
+            resolved_selected_nodes = [focus_node]
+            resolved_selected_edges = []
+        else:
+            validation_nodes, validation_edges = _validation_focus_refs(validation_report, source=source)
+            resolved_selected_nodes = validation_nodes
+            resolved_selected_edges = validation_edges
 
     app_language = ui_language_from_sources(source, execution_record)
     validation_by_location, validation_summary = _normalize_validation_report(validation_report)

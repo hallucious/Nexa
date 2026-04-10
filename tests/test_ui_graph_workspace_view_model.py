@@ -1,4 +1,5 @@
 from __future__ import annotations
+from src.contracts.nex_contract import ValidationFinding, ValidationReport
 
 from src.storage.models.commit_snapshot_model import (
     CommitApprovalModel,
@@ -233,3 +234,26 @@ def test_read_graph_view_model_defaults_selection_to_failed_node_from_execution_
     assert vm.selected_node_ids == ["review_bundle"]
     assert vm.layout_hints is not None
     assert vm.layout_hints.suggested_focus_node_id == "review_bundle"
+
+
+def test_read_graph_view_model_uses_blocking_validation_location_as_default_focus_when_no_ui_selection() -> None:
+    base = _working_save()
+    working = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="0.1.0", storage_role="working_save", working_save_id="ws-003", name="demo graph"),
+        circuit=base.circuit,
+        resources=base.resources,
+        state=base.state,
+        runtime=base.runtime,
+        ui=UIModel(layout={"layout_mode": "manual"}, metadata={}),
+    )
+    report = ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="BLOCK", category="structural", severity="high", blocking=True, location="node:draft_generator", message="blocked")],
+        blocking_count=1,
+        warning_count=0,
+        result="blocked",
+    )
+
+    vm = read_graph_view_model(working, validation_report=report)
+
+    assert vm.selected_node_ids == ["draft_generator"]

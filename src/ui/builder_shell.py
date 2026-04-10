@@ -122,6 +122,25 @@ def _selected_ref_from_graph(graph_view: GraphWorkspaceViewModel | None) -> str 
     return None
 
 
+def _selected_ref_from_validation(validation_report: ValidationReport | None) -> str | None:
+    if validation_report is None:
+        return None
+    ordered = sorted(
+        list(validation_report.findings),
+        key=lambda finding: (
+            0 if finding.blocking else 1,
+            0 if (finding.severity or "") == "high" else 1,
+        ),
+    )
+    for finding in ordered:
+        location = str(finding.location or "")
+        if location.startswith(("node:", "edge:", "output:", "group:", "subcircuit:")):
+            return location
+        if location:
+            return location
+    return None
+
+
 def read_builder_shell_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -152,7 +171,7 @@ def read_builder_shell_view_model(
         execution_record=execution_record,
         preview_overlay=preview_overlay,
     ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
-    resolved_selected_ref = selected_ref or _selected_ref_from_graph(graph_vm)
+    resolved_selected_ref = selected_ref or _selected_ref_from_graph(graph_vm) or _selected_ref_from_validation(validation_report)
 
     storage_vm = read_storage_view_model(
         source_unwrapped,

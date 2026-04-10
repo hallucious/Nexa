@@ -279,3 +279,27 @@ def test_builder_shell_uses_execution_record_focus_node_for_commit_snapshot_run_
     assert vm.inspector is not None
     assert vm.inspector.object_id == "n1"
     assert vm.inspector.status_summary.execution_state in {"failed", "completed", "running", "partial"}
+
+
+def test_builder_shell_recovers_inspector_selection_from_blocking_validation_location_when_ui_selection_is_missing() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-003", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}, {"id": "n2"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+    )
+    report = ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="BLOCK", category="structural", severity="high", blocking=True, location="node:n2", message="blocked")],
+        blocking_count=1,
+        warning_count=0,
+        result="blocked",
+    )
+
+    vm = read_builder_shell_view_model(source, validation_report=report)
+
+    assert vm.graph is not None and vm.graph.selected_node_ids == ["n2"]
+    assert vm.inspector is not None and vm.inspector.object_id == "n2"
+    assert vm.coordination.active_panel == "validation"

@@ -172,6 +172,55 @@ def _default_selected_ref(source) -> str | None:
     return None
 
 
+def _default_selected_ref_from_validation_report(
+    source,
+    validation_report: ValidationReport | None,
+) -> str | None:
+    if validation_report is None:
+        return None
+
+    def _resolve_from_location(location: str) -> str | None:
+        if location.startswith(("node:", "edge:", "output:", "group:", "subcircuit:")):
+            return location
+        if location.startswith("circuit.nodes[") and location.endswith("]") and isinstance(source, (WorkingSaveModel, CommitSnapshotModel)):
+            index_text = location[len("circuit.nodes["):-1]
+            if index_text.isdigit() and 0 <= int(index_text) < len(source.circuit.nodes):
+                node = source.circuit.nodes[int(index_text)]
+                node_id = node.get("id") if isinstance(node, Mapping) else None
+                if node_id:
+                    return f"node:{node_id}"
+        if location.startswith("circuit.edges[") and location.endswith("]") and isinstance(source, (WorkingSaveModel, CommitSnapshotModel)):
+            index_text = location[len("circuit.edges["):-1]
+            if index_text.isdigit() and 0 <= int(index_text) < len(source.circuit.edges):
+                edge = source.circuit.edges[int(index_text)]
+                if isinstance(edge, Mapping):
+                    from_node = edge.get("from") or edge.get("source")
+                    to_node = edge.get("to") or edge.get("target")
+                    if from_node and to_node:
+                        return f"edge:{from_node}->{to_node}"
+        if isinstance(source, (WorkingSaveModel, CommitSnapshotModel)):
+            for node in source.circuit.nodes:
+                if isinstance(node, Mapping) and location == node.get("id"):
+                    return f"node:{location}"
+        return None
+
+    ordered = sorted(
+        list(validation_report.findings),
+        key=lambda finding: (
+            0 if finding.blocking else 1,
+            0 if (finding.severity or "") == "high" else 1,
+        ),
+    )
+    for finding in ordered:
+        location = str(finding.location or "")
+        if not location:
+            continue
+        resolved = _resolve_from_location(location)
+        if resolved is not None:
+            return resolved
+    return None
+
+
 def _find_validation_findings(validation_report: ValidationReport | None, target_id: str | None) -> list[FindingRefView]:
     if validation_report is None or not target_id:
         return []
@@ -420,7 +469,12 @@ def read_selected_object_view_model(
     source = _unwrap(source)
     storage_role = _storage_role(source)
     app_language = ui_language_from_sources(source, execution_record)
-    selected_ref = selected_ref or _default_selected_ref(source) or _default_selected_ref_from_execution_record(execution_record if execution_record is not None else (source if isinstance(source, ExecutionRecordModel) else None))
+    selected_ref = (
+        selected_ref
+        or _default_selected_ref(source)
+        or _default_selected_ref_from_validation_report(source, validation_report)
+        or _default_selected_ref_from_execution_record(execution_record if execution_record is not None else (source if isinstance(source, ExecutionRecordModel) else None))
+    )
     if selected_ref is None:
         return SelectedObjectViewModel(
             object_type="none",

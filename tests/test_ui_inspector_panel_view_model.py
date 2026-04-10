@@ -114,3 +114,20 @@ def test_read_selected_object_view_model_defaults_to_execution_record_focus_when
     assert vm.object_id == "review_bundle"
     assert vm.status_summary.overall_status == "failed"
     assert vm.status_summary.editability == "readonly"
+
+
+def test_inspector_uses_blocking_validation_location_when_selection_is_missing() -> None:
+    vm = read_selected_object_view_model(
+        _working_save(),
+        validation_report=ValidationReport(
+            role="working_save",
+            findings=[ValidationFinding(code="BLOCK", category="structural", severity="high", blocking=True, location="node:review_bundle", message="blocked")],
+            blocking_count=1,
+            warning_count=0,
+            result="blocked",
+        ),
+    )
+
+    assert vm.object_type == "node"
+    assert vm.object_id == "review_bundle"
+    assert vm.status_summary.overall_status == "blocked"
