@@ -50,6 +50,9 @@ class BuilderShellDiagnosticsView:
     stale_selection_count: int = 0
     panel_coordination_warning: bool = False
     partial_panel_count: int = 0
+    beginner_mode: bool = False
+    empty_workspace_mode: bool = False
+    advanced_surfaces_unlocked: bool = True
     explanation: str | None = None
 
 
@@ -110,6 +113,28 @@ def _ui_layout(source) -> dict[str, Any]:
     if isinstance(source, WorkingSaveModel):
         return dict(source.ui.layout or {})
     return {}
+
+
+def _is_empty_working_save(source: WorkingSaveModel | None) -> bool:
+    if not isinstance(source, WorkingSaveModel):
+        return False
+    return not source.circuit.nodes and not source.circuit.edges
+
+
+def _beginner_first_success_achieved(metadata: dict[str, Any], *, execution_vm: ExecutionPanelViewModel | None = None) -> bool:
+    if bool(metadata.get("beginner_first_success_achieved")):
+        return True
+    if execution_vm is not None and execution_vm.execution_status == "completed" and execution_vm.run_identity.run_id is not None:
+        return True
+    return False
+
+
+def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_vm: ExecutionPanelViewModel | None = None) -> bool:
+    if bool(metadata.get("advanced_mode_requested")):
+        return True
+    if str(metadata.get("user_mode") or "").lower() == "advanced":
+        return True
+    return _beginner_first_success_achieved(metadata, execution_vm=execution_vm)
 
 
 def _selected_ref_from_graph(graph_view: GraphWorkspaceViewModel | None) -> str | None:
@@ -277,11 +302,17 @@ def read_builder_shell_view_model(
         approval_flow=approval_flow,
     ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
 
+    empty_workspace_mode = _is_empty_working_save(source_unwrapped)
+    advanced_unlocked = _advanced_surfaces_unlocked(metadata, execution_vm=execution_vm)
+    beginner_mode = role == "working_save" and not advanced_unlocked
     diagnostics = BuilderShellDiagnosticsView(
         warning_count=warning_count,
         stale_selection_count=coordination_vm.stale_reference_count,
         panel_coordination_warning=coordination_vm.active_panel not in coordination_vm.visible_panels,
         partial_panel_count=partial_panel_count,
+        beginner_mode=beginner_mode,
+        empty_workspace_mode=empty_workspace_mode,
+        advanced_surfaces_unlocked=advanced_unlocked,
     )
     shell_status = "ready"
     if source_unwrapped is None:

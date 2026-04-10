@@ -152,3 +152,56 @@ def test_panel_coordination_prefers_trace_timeline_when_trace_selection_exists()
     assert vm.active_panel == "trace_timeline"
     assert "trace_timeline" in vm.visible_panels
     assert any(b.panel_id == "trace_timeline" for b in vm.panel_badges)
+
+
+def test_panel_coordination_defaults_empty_beginner_workspace_to_designer_and_hides_advanced_panels() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"visible_panels": ["graph", "designer", "diff", "trace_timeline", "artifact"]}),
+    )
+    graph = read_graph_view_model(source)
+    designer = read_designer_panel_view_model(source)
+
+    vm = read_panel_coordination_state(source, graph_view=graph, designer_view=designer)
+
+    assert vm.active_panel == "designer"
+    assert vm.visible_panels == ["graph", "designer"]
+    assert "diff" not in vm.visible_panels
+    assert "trace_timeline" not in vm.visible_panels
+    assert "artifact" not in vm.visible_panels
+
+
+def test_panel_coordination_unlocks_advanced_panels_after_first_success() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty-2", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={
+            "beginner_first_success_achieved": True,
+            "visible_panels": ["graph", "designer", "diff", "trace_timeline", "artifact"],
+        }),
+    )
+    graph = read_graph_view_model(source)
+    designer = read_designer_panel_view_model(source)
+    execution = read_execution_panel_view_model(source, execution_record=_run(status="completed"))
+    trace = read_trace_timeline_view_model(_run(status="completed"))
+    artifact = read_artifact_viewer_view_model(_run(status="completed"), selected_artifact_id="art-1")
+
+    vm = read_panel_coordination_state(
+        source,
+        graph_view=graph,
+        designer_view=designer,
+        execution_view=execution,
+        trace_view=trace,
+        artifact_view=artifact,
+    )
+
+    assert "diff" in vm.visible_panels
+    assert "trace_timeline" in vm.visible_panels
+    assert "artifact" in vm.visible_panels

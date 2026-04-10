@@ -312,3 +312,23 @@ def test_builder_shell_marks_execution_record_context_as_terminal_when_not_live(
     assert vm.shell_status == "terminal"
     assert vm.shell_status_label == "Shell in history mode"
 
+
+
+def test_builder_shell_projects_beginner_empty_workspace_state() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_builder_shell_view_model(source)
+
+    assert vm.coordination.active_panel == "designer"
+    assert vm.diagnostics.beginner_mode is True
+    assert vm.diagnostics.empty_workspace_mode is True
+    assert vm.diagnostics.advanced_surfaces_unlocked is False
+    assert vm.designer is not None
+    assert vm.designer.request_state.input_placeholder == "What would you like to build? Describe your goal."

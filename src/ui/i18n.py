@@ -17,6 +17,7 @@ class DisplayTextRef:
 _TRANSLATIONS: dict[str, dict[str, str]] = {
     "en": {
         "designer.request.input_placeholder": "Describe the circuit change you want to make.",
+        "designer.request.input_placeholder.beginner": "What would you like to build? Describe your goal.",
         "designer.request.read_only_disabled": "Designer editing is read-only outside Working Save.",
         "designer.action.submit_request": "Submit request",
         "designer.action.preview_patch": "Preview patch",
@@ -365,6 +366,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "panel.artifact": "Artifacts",
         "panel.diff": "Diff",
         "panel.designer": "Designer",
+        "beginner.term.circuit": "workflow",
+        "beginner.term.node": "step",
+        "beginner.term.provider": "AI model",
 
         "storage.role.working_save": "Working Save",
         "storage.role.commit_snapshot": "Commit Snapshot",
@@ -506,6 +510,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "ko": {
         "designer.request.input_placeholder": "원하는 회로 변경 내용을 입력하세요.",
+        "designer.request.input_placeholder.beginner": "어떤 것을 만들고 싶으세요? 목표를 설명해주세요.",
         "designer.request.read_only_disabled": "Working Save 외부에서는 Designer 편집이 읽기 전용입니다.",
         "designer.action.submit_request": "요청 제출",
         "designer.action.preview_patch": "패치 미리보기",
@@ -800,6 +805,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "panel.artifact": "아티팩트",
         "panel.diff": "차이 비교",
         "panel.designer": "Designer",
+        "beginner.term.circuit": "워크플로우",
+        "beginner.term.node": "단계",
+        "beginner.term.provider": "AI 모델",
 
         "storage.role.working_save": "워킹 세이브",
         "storage.role.commit_snapshot": "커밋 스냅샷",

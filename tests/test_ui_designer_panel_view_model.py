@@ -183,3 +183,18 @@ def test_read_designer_panel_view_model_projects_connected_designer_flow() -> No
     assert vm.approval_state.commit_eligible is True
     assert any(action.action_type == "approve_for_commit" and action.enabled for action in vm.suggested_actions)
     assert vm.related_targets[0].target_ref == "node:review_bundle"
+
+
+def test_designer_panel_uses_beginner_placeholder_for_empty_working_save() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_designer_panel_view_model(source)
+
+    assert vm.request_state.input_placeholder == "What would you like to build? Describe your goal."

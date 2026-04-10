@@ -17,6 +17,8 @@ from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel
 from src.ui.artifact_viewer import ArtifactViewerViewModel
 from src.ui.i18n import ui_language_from_sources, ui_text
 
+_ADVANCED_ONLY_PANELS = {"trace_timeline", "artifact", "diff"}
+
 
 @dataclass(frozen=True)
 class PanelBadgeView:
@@ -75,10 +77,51 @@ def _ui_metadata(source) -> dict[str, Any]:
     return {}
 
 
+def _is_empty_working_save(source: WorkingSaveModel | None, *, graph_view: GraphWorkspaceViewModel | None = None) -> bool:
+    if not isinstance(source, WorkingSaveModel):
+        return False
+    if graph_view is not None and graph_view.graph_metrics.node_count:
+        return False
+    if source.circuit.nodes:
+        return False
+    if source.circuit.edges:
+        return False
+    return True
+
+
+def _beginner_first_success_achieved(metadata: dict[str, Any], *, execution_view: ExecutionPanelViewModel | None = None) -> bool:
+    if bool(metadata.get("beginner_first_success_achieved")):
+        return True
+    if execution_view is not None and execution_view.execution_status == "completed" and execution_view.run_identity.run_id is not None:
+        return True
+    return False
+
+
+def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_view: ExecutionPanelViewModel | None = None) -> bool:
+    if bool(metadata.get("advanced_mode_requested")):
+        return True
+    if str(metadata.get("user_mode") or "").lower() == "advanced":
+        return True
+    return _beginner_first_success_achieved(metadata, execution_view=execution_view)
+
+
+def _beginner_shell_active(
+    source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
+    *,
+    graph_view: GraphWorkspaceViewModel | None = None,
+    execution_view: ExecutionPanelViewModel | None = None,
+) -> bool:
+    if not isinstance(source, WorkingSaveModel):
+        return False
+    metadata = _ui_metadata(source)
+    if _advanced_surfaces_unlocked(metadata, execution_view=execution_view):
+        return False
+    return _is_empty_working_save(source, graph_view=graph_view)
 
 
 def _default_visible_panels(
     *,
+    source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None = None,
     graph_view: GraphWorkspaceViewModel | None = None,
     storage_view: StoragePanelViewModel | None = None,
     diff_view: DiffViewerViewModel | None = None,
@@ -88,9 +131,18 @@ def _default_visible_panels(
     trace_view: TraceTimelineViewerViewModel | None = None,
     artifact_view: ArtifactViewerViewModel | None = None,
 ) -> list[str]:
-    panels: list[str] = []
-    if graph_view is not None:
-        panels.extend(["graph", "inspector"])
+    if _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view):
+        panels: list[str] = []
+        if designer_view is not None:
+            panels.append("designer")
+        if graph_view is not None:
+            panels.append("graph")
+        if validation_view is not None and validation_view.overall_status == "blocked":
+            panels.append("validation")
+    else:
+        panels: list[str] = []
+        if graph_view is not None:
+            panels.extend(["graph", "inspector"])
     if validation_view is not None:
         panels.append("validation")
     if storage_view is not None:
@@ -179,6 +231,7 @@ def read_panel_coordination_state(
     visible_panels_raw = metadata.get("visible_panels")
     if visible_panels_raw is None:
         visible_panels = _default_visible_panels(
+            source=source,
             graph_view=graph_view,
             storage_view=storage_view,
             diff_view=diff_view,
@@ -191,9 +244,18 @@ def read_panel_coordination_state(
     else:
         visible_panels = [str(v) for v in visible_panels_raw if v is not None]
     pinned_panels = [str(v) for v in metadata.get("pinned_panels", []) if v is not None]
+    beginner_shell_active = _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view)
+    advanced_unlocked = _advanced_surfaces_unlocked(metadata, execution_view=execution_view)
+    if beginner_shell_active and not advanced_unlocked:
+        visible_panels = [panel_id for panel_id in visible_panels if panel_id not in _ADVANCED_ONLY_PANELS]
     panel_order = [str(v) for v in metadata.get("panel_order", visible_panels) if v is not None]
+    if beginner_shell_active and not advanced_unlocked:
+        panel_order = [panel_id for panel_id in panel_order if panel_id not in _ADVANCED_ONLY_PANELS]
+        pinned_panels = [panel_id for panel_id in pinned_panels if panel_id not in _ADVANCED_ONLY_PANELS]
 
     active_panel = str(metadata.get("active_panel")) if metadata.get("active_panel") else ""
+    if beginner_shell_active and not advanced_unlocked and active_panel in _ADVANCED_ONLY_PANELS:
+        active_panel = ""
     if not active_panel:
         if selection.selected_artifact_ids:
             active_panel = "artifact"
@@ -203,6 +265,8 @@ def read_panel_coordination_state(
             active_panel = "diff"
         elif selection.selected_storage_ref is not None:
             active_panel = "storage"
+        elif beginner_shell_active and designer_view is not None:
+            active_panel = "designer"
         elif execution_view is not None and execution_view.execution_status in {"running", "queued"}:
             active_panel = "execution"
         elif role == "execution_record":

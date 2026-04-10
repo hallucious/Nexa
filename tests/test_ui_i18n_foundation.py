@@ -92,3 +92,10 @@ def test_ui_i18n_localizes_storage_execution_validation_and_builder_actions() ->
     assert validation_vm.suggested_actions[0].label == "최상위 이슈로 이동"
     actions = {a.action_id: a for a in action_vm.primary_actions + action_vm.secondary_actions + action_vm.contextual_actions}
     assert actions["save_working_save"].label == "드래프트 저장"
+
+
+def test_ui_i18n_exposes_beginner_placeholder_and_terms() -> None:
+    assert ui_text("designer.request.input_placeholder.beginner", app_language="en") == "What would you like to build? Describe your goal."
+    assert ui_text("designer.request.input_placeholder.beginner", app_language="ko") == "어떤 것을 만들고 싶으세요? 목표를 설명해주세요."
+    assert ui_text("beginner.term.circuit", app_language="en") == "workflow"
+    assert ui_text("beginner.term.circuit", app_language="ko") == "워크플로우"

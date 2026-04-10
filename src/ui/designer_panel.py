@@ -149,6 +149,25 @@ def _storage_role(source) -> str:
     return "none"
 
 
+def _working_save_metadata(source) -> dict[str, object]:
+    if isinstance(source, WorkingSaveModel):
+        return dict(source.ui.metadata or {})
+    if isinstance(source, LoadedNexArtifact):
+        return _working_save_metadata(source.parsed_model)
+    return {}
+
+
+def _is_beginner_empty_workspace(source) -> bool:
+    if not isinstance(source, WorkingSaveModel):
+        return False
+    metadata = _working_save_metadata(source)
+    if bool(metadata.get("advanced_mode_requested")) or str(metadata.get("user_mode") or "").lower() == "advanced":
+        return False
+    if bool(metadata.get("beginner_first_success_achieved")):
+        return False
+    return not source.circuit.nodes and not source.circuit.edges
+
+
 def _session_mode_from_card(card: DesignerSessionStateCard | None) -> str:
     if card is None:
         return "idle"
@@ -178,10 +197,11 @@ def read_designer_panel_view_model(
 
     app_language = ui_language_from_sources(source)
 
+    placeholder_key = "designer.request.input_placeholder.beginner" if _is_beginner_empty_workspace(source) else "designer.request.input_placeholder"
     request_state = DesignerRequestStateView(
         current_request_text=session_state_card.conversation_context.user_request_text if session_state_card is not None else None,
         request_status=("submitted" if session_state_card is not None else "empty"),
-        input_placeholder=ui_text("designer.request.input_placeholder", app_language=app_language),
+        input_placeholder=ui_text(placeholder_key, app_language=app_language),
         can_submit=storage_role in {"working_save", "none"},
         submit_reason_disabled=None if storage_role in {"working_save", "none"} else ui_text("designer.request.read_only_disabled", app_language=app_language),
     )
