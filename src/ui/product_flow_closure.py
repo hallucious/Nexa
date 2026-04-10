@@ -136,14 +136,11 @@ def _action_label(action_id: str | None, *, app_language: str) -> str | None:
     return ui_text(f"builder.action.{action_id}", app_language=app_language, fallback_text=action_id.replace("_", " ").title())
 
 
-def _flow_id_for_stage(stage_id: str, *, handoff: ProductFlowHandoffViewModel | None = None) -> str | None:
-    if stage_id == "followthrough" and handoff is not None and handoff.followthrough_entry_id is not None:
-        mapping = {
-            "inspect_trace": "flow:open_trace",
-            "inspect_artifacts": "flow:open_artifacts",
-            "compare_results": "flow:compare_runs",
-        }
-        return mapping.get(handoff.followthrough_entry_id, "flow:open_trace")
+def _flow_id_for_stage(stage_id: str, *, handoff: ProductFlowHandoffViewModel | None = None, required_action_id: str | None = None) -> str | None:
+    if stage_id == "followthrough" and handoff is not None and handoff.followthrough_action_id is not None:
+        return _FLOW_BY_ACTION.get(handoff.followthrough_action_id)
+    if required_action_id is not None:
+        return _FLOW_BY_ACTION.get(required_action_id)
     return _FLOW_BY_ACTION.get(_REQUIRED_ACTION_BY_STAGE.get(stage_id, ""))
 
 
@@ -199,7 +196,7 @@ def _build_stage_view(
         panel_id = readiness.panel_id
         target_ref = readiness.target_ref
     elif stage_id == "followthrough" and handoff is not None:
-        required_action_id = _REQUIRED_ACTION_BY_STAGE[stage_id]
+        required_action_id = handoff.followthrough_action_id or _REQUIRED_ACTION_BY_STAGE[stage_id]
         workspace_id = handoff.followthrough_workspace_id
         panel_id = handoff.followthrough_panel_id
         target_ref = handoff.followthrough_target_ref
@@ -220,7 +217,7 @@ def _build_stage_view(
         closeable=closeable,
         required_action_id=required_action_id,
         required_action_label=_action_label(required_action_id, app_language=app_language),
-        recommended_flow_id=_flow_id_for_stage(stage_id, handoff=handoff),
+        recommended_flow_id=_flow_id_for_stage(stage_id, handoff=handoff, required_action_id=required_action_id),
         workspace_id=workspace_id,
         panel_id=panel_id,
         target_ref=target_ref,

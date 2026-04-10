@@ -10,7 +10,7 @@ from src.designer.models.validation_precheck import AmbiguityAssessmentReport, C
 from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel, NodeTimingCard, OutputResultCard
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
-from src.ui.product_flow_handoff import read_product_flow_handoff_view_model
+from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_product_flow_handoff_view_model
 
 
 def _working_save() -> WorkingSaveModel:
@@ -176,3 +176,44 @@ def test_product_flow_handoff_keeps_commit_primary_and_run_as_followthrough_when
     assert vm.primary_complete is True
     assert vm.followthrough_entry_id == "run_current"
     assert vm.followthrough_available is True
+
+
+
+def test_product_flow_handoff_exposes_followthrough_action_identity_for_completed_history() -> None:
+    vm = read_product_flow_handoff_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run("completed"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.followthrough_entry_id in {"inspect_trace", "inspect_artifacts", "compare_results", "run_current"}
+    assert vm.followthrough_action_id in {"run_current", "open_trace", "open_artifacts", "compare_runs", "open_latest_run", None}
+
+
+def test_product_flow_closure_uses_handoff_followthrough_action_identity() -> None:
+    from src.ui.product_flow_closure import read_product_flow_closure_view_model
+
+    handoff = ProductFlowHandoffViewModel(
+        source_role="working_save",
+        handoff_status="followthrough",
+        primary_entry_id="run_current",
+        primary_action_id="run_current",
+        followthrough_entry_id="inspect_artifacts",
+        followthrough_action_id="open_artifacts",
+        followthrough_workspace_id="runtime_monitoring",
+        followthrough_panel_id="artifact",
+        followthrough_target_ref="artifact://art-1",
+        followthrough_available=True,
+    )
+
+    vm = read_product_flow_closure_view_model(_working_save(), execution_record=_run("completed"), handoff=handoff)
+    follow_stage = next(stage for stage in vm.stages if stage.stage_id == "followthrough")
+
+    assert follow_stage.required_action_id == "open_artifacts"
+    assert follow_stage.recommended_flow_id == "flow:open_artifacts"

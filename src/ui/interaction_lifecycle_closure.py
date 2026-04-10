@@ -56,33 +56,37 @@ def _storage_role(source) -> str:
     return "none"
 
 
-def _find_flow(flows: EndUserCommandFlowViewModel, action_id: str):
-    return next((item for item in flows.flows if item.action_id == action_id), None)
+def _find_flow(flows: EndUserCommandFlowViewModel, action_ids: tuple[str, ...]):
+    for action_id in action_ids:
+        flow = next((item for item in flows.flows if item.action_id == action_id), None)
+        if flow is not None:
+            return flow
+    return None
 
 
-def _stage_requirements_for(*, source_role: str) -> dict[str, str]:
+def _stage_requirements_for(*, source_role: str) -> dict[str, tuple[str, ...]]:
     if source_role == "commit_snapshot":
         return {
-            "drafting": "open_latest_commit",
-            "review": "open_latest_commit",
-            "commit": "open_latest_commit",
-            "execution": "run_from_commit",
-            "history": "open_latest_run",
+            "drafting": ("open_latest_commit",),
+            "review": ("open_latest_commit",),
+            "commit": ("open_latest_commit", "select_rollback_target"),
+            "execution": ("run_from_commit",),
+            "history": ("open_latest_run", "open_trace", "open_artifacts", "compare_runs"),
         }
     if source_role == "execution_record":
         return {
-            "drafting": "open_latest_run",
-            "review": "open_latest_run",
-            "commit": "open_latest_run",
-            "execution": "open_latest_run",
-            "history": "open_trace",
+            "drafting": ("open_latest_run",),
+            "review": ("open_latest_run",),
+            "commit": ("open_latest_run",),
+            "execution": ("open_latest_run",),
+            "history": ("open_trace", "open_artifacts", "compare_runs", "open_latest_run"),
         }
     return {
-        "drafting": "review_draft",
-        "review": "approve_for_commit",
-        "commit": "commit_snapshot",
-        "execution": "run_current",
-        "history": "replay_latest",
+        "drafting": ("review_draft",),
+        "review": ("approve_for_commit",),
+        "commit": ("commit_snapshot",),
+        "execution": ("run_current", "run_from_commit"),
+        "history": ("replay_latest", "open_latest_run", "open_trace", "open_artifacts", "compare_runs"),
     }
 
 
@@ -106,11 +110,11 @@ def read_interaction_lifecycle_closure_view_model(
 
     stages: list[LifecycleClosureStageView] = []
     for stage in lifecycle.stages if lifecycle is not None else []:
-        required_action_id = stage_requirements.get(stage.stage_id)
-        flow = _find_flow(end_user_flows, required_action_id) if required_action_id is not None else None
+        required_action_ids = stage_requirements.get(stage.stage_id, ())
+        flow = _find_flow(end_user_flows, required_action_ids) if required_action_ids else None
         closed = stage.status == "completed" or (flow is not None and flow.closure_ready and stage.stage_id != current_stage_id)
         closeable = flow is not None and flow.execute_allowed
-        open_requirement = None if closed or closeable else (required_action_id or "no_requirement")
+        open_requirement = None if closed or closeable else ((flow.action_id if flow is not None else (required_action_ids[0] if required_action_ids else None)) or "no_requirement")
         stages.append(
             LifecycleClosureStageView(
                 stage_id=stage.stage_id,

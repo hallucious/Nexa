@@ -36,6 +36,7 @@ class ProductFlowHandoffViewModel:
     primary_requires_confirmation: bool = False
     followthrough_entry_id: str | None = None
     followthrough_entry_label: str | None = None
+    followthrough_action_id: str | None = None
     followthrough_workspace_id: str | None = None
     followthrough_panel_id: str | None = None
     followthrough_target_ref: str | None = None
@@ -241,6 +242,7 @@ def read_product_flow_handoff_view_model(
         primary_requires_confirmation=bool(primary is not None and primary.requires_confirmation),
         followthrough_entry_id=(followthrough.entry_id if followthrough is not None else None),
         followthrough_entry_label=(followthrough.label if followthrough is not None else None),
+        followthrough_action_id=(followthrough.action_id if followthrough is not None else None),
         followthrough_workspace_id=(followthrough.preferred_workspace_id if followthrough is not None else None),
         followthrough_panel_id=(followthrough.preferred_panel_id if followthrough is not None else None),
         followthrough_target_ref=(followthrough.target_ref if followthrough is not None else None),
