@@ -30,9 +30,9 @@ def _validation_report() -> ValidationReport:
     )
 
 
-def _run() -> ExecutionRecordModel:
+def _run(status: str = "completed") -> ExecutionRecordModel:
     return ExecutionRecordModel(
-        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-08T00:00:00Z", started_at="2026-04-08T00:00:00Z", finished_at="2026-04-08T00:00:05Z", status="completed"),
+        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-08T00:00:00Z", started_at="2026-04-08T00:00:00Z", finished_at=None if status == "running" else "2026-04-08T00:00:05Z", status=status),
         source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
         input=ExecutionInputModel(),
         timeline=ExecutionTimelineModel(event_count=2),
@@ -88,3 +88,21 @@ def test_command_palette_marks_execution_record_context_as_terminal() -> None:
     assert vm.palette_status == "terminal"
     assert vm.enabled_entry_count > 0
 
+
+
+def test_command_palette_uses_beginner_storage_jump_labels_before_first_success() -> None:
+    beginner = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner", name="Starter"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+    )
+    running = _run(status="running")
+    vm = read_command_palette_view_model(beginner, execution_record=running)
+
+    labels = {entry.entry_id: entry.label for entry in vm.entries}
+    assert vm.placeholder == "단계, 문제, 실행, 액션 검색"
+    assert labels["jump:storage:working_save"] == "현재 초안 열기"
+    assert labels["jump:storage:execution_record"] == "결과 기록 열기"

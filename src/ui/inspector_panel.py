@@ -9,7 +9,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel, Node
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.graph_workspace import GraphPreviewOverlay
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -365,12 +365,12 @@ def _normalize_display(value: Any) -> str | None:
     return str(value)
 
 
-def _field_views_for_node(node: Mapping[str, Any], *, storage_role: str, app_language: str) -> tuple[list[EditableFieldView], list[ReadonlyFieldView], list[ConstraintView]]:
+def _field_views_for_node(node: Mapping[str, Any], *, storage_role: str, app_language: str, source=None) -> tuple[list[EditableFieldView], list[ReadonlyFieldView], list[ConstraintView]]:
     editable: list[EditableFieldView] = []
     readonly: list[ReadonlyFieldView] = []
     constraints: list[ConstraintView] = []
     editable_allowed = storage_role == "working_save"
-    readonly.append(ReadonlyFieldView("node_id", ui_text("inspector.field.node_id", app_language=app_language, fallback_text="Node ID"), node.get("id"), display_value=_normalize_display(node.get("id")), reason_readonly=ui_text("inspector.reason.stable_object_identity", app_language=app_language, fallback_text="Stable object identity")))
+    readonly.append(ReadonlyFieldView("node_id", beginner_ui_text("inspector.field.node_id", beginner_text_key="inspector.field.node_id.beginner", sources=(source,), app_language=app_language, fallback_text="Node ID"), node.get("id"), display_value=_normalize_display(node.get("id")), reason_readonly=ui_text("inspector.reason.stable_object_identity", app_language=app_language, fallback_text="Stable object identity")))
     kind = node.get("kind") or node.get("type") or "unknown"
     readonly.append(ReadonlyFieldView("kind", ui_text("inspector.field.kind", app_language=app_language, fallback_text="Kind"), kind, display_value=_normalize_display(kind), reason_readonly=ui_text("inspector.reason.derived_structural_truth", app_language=app_language, fallback_text="Derived from structural truth")))
     editable.append(
@@ -415,7 +415,7 @@ def _field_views_for_node(node: Mapping[str, Any], *, storage_role: str, app_lan
         )
     if kind == "subcircuit" or kind == "subcircuit_node":
         child_ref = (((node.get("execution") or {}).get("subcircuit") or {}).get("child_circuit_ref"))
-        readonly.append(ReadonlyFieldView("child_circuit_ref", ui_text("inspector.field.child_circuit_ref", app_language=app_language, fallback_text="Child Circuit"), child_ref, display_value=_normalize_display(child_ref), reason_readonly=ui_text("inspector.reason.bounded_child_ref", app_language=app_language, fallback_text="Bounded child circuit reference")))
+        readonly.append(ReadonlyFieldView("child_circuit_ref", beginner_ui_text("inspector.field.child_circuit_ref", beginner_text_key="inspector.field.child_circuit_ref.beginner", sources=(source,), app_language=app_language, fallback_text="Child Circuit"), child_ref, display_value=_normalize_display(child_ref), reason_readonly=ui_text("inspector.reason.bounded_child_ref", app_language=app_language, fallback_text="Bounded child circuit reference")))
         constraints.append(ConstraintView(label=ui_text("inspector.constraint.subcircuit_boundary.label", app_language=app_language, fallback_text="Subcircuit boundary"), message=ui_text("inspector.constraint.subcircuit_boundary.message", app_language=app_language, fallback_text="Parent/child data exchange remains mapping-bound and read-only at runtime boundary.")))
     return editable, readonly, constraints
 
@@ -482,7 +482,7 @@ def read_selected_object_view_model(
             storage_role=storage_role,
             title=ui_text("inspector.title.nothing_selected", app_language=app_language, fallback_text="Nothing selected"),
             status_summary=ObjectStatusSummary(overall_status="unknown", editability="unknown"),
-            empty_state_message=ui_text("inspector.empty.select_object", app_language=app_language, fallback_text="Select a node, edge, output, or group to inspect details."),
+            empty_state_message=beginner_ui_text("inspector.empty.select_object", beginner_text_key="inspector.empty.select_object.beginner", sources=(source,), app_language=app_language, fallback_text="Select a node, edge, output, or group to inspect details."),
             explanation=explanation,
         )
     prefix, _, target_id = selected_ref.partition(":")
@@ -498,10 +498,10 @@ def read_selected_object_view_model(
     if circuit is not None and object_type == "node":
         node = next((node for node in circuit.nodes if node.get("id") == target_id), None)
         if node is not None:
-            editable_fields, readonly_fields, constraints = _field_views_for_node(node, storage_role=storage_role, app_language=app_language)
+            editable_fields, readonly_fields, constraints = _field_views_for_node(node, storage_role=storage_role, app_language=app_language, source=source)
             title = node.get("label") or target_id
-            subtitle = ui_text("inspector.subtitle.node", app_language=app_language, fallback_text=str(node.get("kind") or node.get("type") or "node"))
-            description = ui_text("inspector.description.node", app_language=app_language, fallback_text=f"Node {target_id}", target_id=target_id)
+            subtitle = beginner_ui_text("inspector.subtitle.node", beginner_text_key="inspector.subtitle.node.beginner", sources=(source,), app_language=app_language, fallback_text=str(node.get("kind") or node.get("type") or "node"))
+            description = beginner_ui_text("inspector.description.node", beginner_text_key="inspector.description.node.beginner", sources=(source,), app_language=app_language, fallback_text=f"Node {target_id}", target_id=target_id)
     elif circuit is not None and object_type == "edge":
         parts = target_id.split("->")
         edge = None
@@ -529,7 +529,7 @@ def read_selected_object_view_model(
             subtitle = ui_text("inspector.subtitle.subcircuit", app_language=app_language, fallback_text="subcircuit")
             description = ui_text("inspector.description.subcircuit", app_language=app_language, fallback_text="Referenced child circuit")
             readonly_fields = [
-                ReadonlyFieldView("node_count", ui_text("inspector.field.node_count", app_language=app_language, fallback_text="Node Count"), len(subcircuit.get("nodes", [])), display_value=str(len(subcircuit.get("nodes", []))), reason_readonly=ui_text("inspector.reason.derived_child_size", app_language=app_language, fallback_text="Derived child circuit size")),
+                ReadonlyFieldView("node_count", beginner_ui_text("inspector.field.node_count", beginner_text_key="inspector.field.node_count.beginner", sources=(source,), app_language=app_language, fallback_text="Node Count"), len(subcircuit.get("nodes", [])), display_value=str(len(subcircuit.get("nodes", []))), reason_readonly=ui_text("inspector.reason.derived_child_size", app_language=app_language, fallback_text="Derived child circuit size")),
                 ReadonlyFieldView("edge_count", ui_text("inspector.field.edge_count", app_language=app_language, fallback_text="Edge Count"), len(subcircuit.get("edges", [])), display_value=str(len(subcircuit.get("edges", []))), reason_readonly=ui_text("inspector.reason.derived_child_size", app_language=app_language, fallback_text="Derived child circuit size")),
             ]
             constraints = [ConstraintView(label=ui_text("inspector.constraint.nested_execution.label", app_language=app_language, fallback_text="Nested execution"), message=ui_text("inspector.constraint.nested_execution.message", app_language=app_language, fallback_text="Subcircuits remain wrapped by a node-kind boundary and are not top-level runtime units."))]

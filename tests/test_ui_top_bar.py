@@ -82,11 +82,11 @@ def test_top_bar_projects_role_status_actions_and_modes() -> None:
     )
     assert vm.source_role == "working_save"
     assert vm.breadcrumb.workspace_title == "Strategy Review"
-    assert vm.storage_badge.label == "워킹 세이브"
+    assert vm.storage_badge.label == "저장되지 않음"
     assert vm.global_status.overall_status == "blocked"
     assert vm.global_status.blocking_count == 1
     assert vm.global_status.pending_approval_count == 1
-    assert vm.quick_jump_placeholder == "노드, 문제, 실행, 액션 검색"
+    assert vm.quick_jump_placeholder == "단계, 문제, 실행, 액션 검색"
     assert any(button.action_id == "run_current" for button in vm.primary_actions)
     assert any(option.mode_id == "run" and option.active for option in vm.mode_options)
 
@@ -129,3 +129,21 @@ def test_top_bar_marks_execution_record_context_as_terminal_status() -> None:
     assert vm.global_status.overall_status == "terminal"
     assert vm.global_status.overall_status_label == "History view"
 
+
+
+def test_top_bar_uses_beginner_storage_role_and_search_copy_before_first_success() -> None:
+    beginner = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner", name="Starter"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+    )
+    vm = read_builder_top_bar_view_model(beginner)
+
+    assert vm.storage_badge.label == "저장되지 않음"
+    assert vm.quick_jump_placeholder == "단계, 문제, 실행, 액션 검색"
+
+    assert vm.storage_badge.label == "저장되지 않음"
+    assert vm.quick_jump_placeholder == "단계, 문제, 실행, 액션 검색"

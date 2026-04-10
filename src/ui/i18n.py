@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
+from src.storage.models.commit_snapshot_model import CommitSnapshotModel
+from src.storage.models.execution_record_model import ExecutionRecordModel
+from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
+from src.storage.models.working_save_model import WorkingSaveModel
+
 DEFAULT_UI_LANGUAGE = "en"
 SUPPORTED_UI_LANGUAGES = ("en", "ko")
 
@@ -369,6 +374,23 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "beginner.term.circuit": "workflow",
         "beginner.term.node": "step",
         "beginner.term.provider": "AI model",
+        "storage.role.beginner.working_save": "Not saved",
+        "storage.role.beginner.commit_snapshot": "Saved",
+        "storage.role.beginner.execution_record": "Result history",
+        "storage.role.beginner.none": "No saved state",
+        "palette.placeholder.beginner": "Search steps, issues, runs, actions",
+        "palette.jump.working_save.beginner": "Open current draft",
+        "palette.jump.commit_snapshot.beginner": "Open saved version",
+        "palette.jump.execution_record.beginner": "Open result history",
+        "graph.badge.subcircuit.beginner": "Workflow",
+        "graph.badge.provider.beginner": "AI model",
+        "inspector.empty.select_object.beginner": "Select a step, connection, output, or group to inspect details.",
+        "inspector.field.node_id.beginner": "Step ID",
+        "inspector.field.child_circuit_ref.beginner": "Child Workflow",
+        "inspector.field.node_count.beginner": "Step Count",
+        "inspector.subtitle.node.beginner": "step",
+        "inspector.description.node.beginner": "Step {target_id}",
+        "workspace.node_configuration.name.beginner": "Step Settings",
 
         "storage.role.working_save": "Working Save",
         "storage.role.commit_snapshot": "Commit Snapshot",
@@ -808,6 +830,23 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "beginner.term.circuit": "워크플로우",
         "beginner.term.node": "단계",
         "beginner.term.provider": "AI 모델",
+        "storage.role.beginner.working_save": "저장되지 않음",
+        "storage.role.beginner.commit_snapshot": "저장됨",
+        "storage.role.beginner.execution_record": "결과 기록",
+        "storage.role.beginner.none": "저장 상태 없음",
+        "palette.placeholder.beginner": "단계, 문제, 실행, 액션 검색",
+        "palette.jump.working_save.beginner": "현재 초안 열기",
+        "palette.jump.commit_snapshot.beginner": "저장된 버전 열기",
+        "palette.jump.execution_record.beginner": "결과 기록 열기",
+        "graph.badge.subcircuit.beginner": "워크플로우",
+        "graph.badge.provider.beginner": "AI 모델",
+        "inspector.empty.select_object.beginner": "세부 정보를 보려면 단계, 연결, 출력 또는 그룹을 선택하세요.",
+        "inspector.field.node_id.beginner": "단계 ID",
+        "inspector.field.child_circuit_ref.beginner": "하위 워크플로우",
+        "inspector.field.node_count.beginner": "단계 수",
+        "inspector.subtitle.node.beginner": "단계",
+        "inspector.description.node.beginner": "단계 {target_id}",
+        "workspace.node_configuration.name.beginner": "단계 설정",
 
         "storage.role.working_save": "워킹 세이브",
         "storage.role.commit_snapshot": "커밋 스냅샷",
@@ -1000,6 +1039,56 @@ def ui_text(text_key: str, *, app_language: str | None = None, fallback_text: st
     return resolve_display_text(ref, app_language=app_language)
 
 
+def _unwrap_beginner_source(source: Any) -> Any:
+    if isinstance(source, LoadedNexArtifact):
+        return source.parsed_model
+    return source
+
+
+def _beginner_metadata_from_source(source: Any) -> Mapping[str, Any]:
+    source = _unwrap_beginner_source(source)
+    if isinstance(source, WorkingSaveModel) and isinstance(getattr(source.ui, 'metadata', None), Mapping):
+        return source.ui.metadata
+    return {}
+
+
+def _beginner_first_success_achieved(*sources: Any) -> bool:
+    for source in sources:
+        source = _unwrap_beginner_source(source)
+        if isinstance(source, ExecutionRecordModel) and source.meta.status == 'completed':
+            return True
+        metadata = _beginner_metadata_from_source(source)
+        if bool(metadata.get('beginner_first_success_achieved')):
+            return True
+        if isinstance(source, WorkingSaveModel):
+            last_run = getattr(source.runtime, 'last_run', None) or {}
+            status = str(last_run.get('status') or last_run.get('semantic_status') or '').lower()
+            if status == 'completed':
+                return True
+    return False
+
+
+def beginner_language_enabled(*sources: Any) -> bool:
+    has_working_save = False
+    for source in sources:
+        source = _unwrap_beginner_source(source)
+        if isinstance(source, WorkingSaveModel):
+            has_working_save = True
+            metadata = _beginner_metadata_from_source(source)
+            if bool(metadata.get('advanced_mode_requested')):
+                return False
+            if str(metadata.get('user_mode') or '').lower() == 'advanced':
+                return False
+    if not has_working_save:
+        return False
+    return not _beginner_first_success_achieved(*sources)
+
+
+def beginner_ui_text(text_key: str, *, beginner_text_key: str | None = None, sources: tuple[Any, ...] = (), app_language: str | None = None, fallback_text: str | None = None, params: Mapping[str, Any] | None = None, **kwargs: Any) -> str:
+    resolved_key = beginner_text_key if beginner_text_key and beginner_language_enabled(*sources) else text_key
+    return ui_text(resolved_key, app_language=app_language, fallback_text=fallback_text, params=params, **kwargs)
+
+
 __all__ = [
     'DEFAULT_UI_LANGUAGE',
     'SUPPORTED_UI_LANGUAGES',
@@ -1009,4 +1098,6 @@ __all__ = [
     'resolve_display_text',
     'ui_language_from_sources',
     'ui_text',
+    'beginner_language_enabled',
+    'beginner_ui_text',
 ]

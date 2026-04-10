@@ -222,7 +222,7 @@ def test_read_graph_view_model_localizes_badges_for_korean_working_save() -> Non
 
     review_node = next(node for node in vm.nodes if node.node_id == "review_bundle")
     assert review_node.input_summary == "1개 바인딩"
-    assert any(badge.label == "서브회로" for badge in review_node.badges)
+    assert any(badge.label == "워크플로우" for badge in review_node.badges)
 
 
 def test_read_graph_view_model_defaults_selection_to_failed_node_from_execution_record() -> None:
@@ -257,3 +257,12 @@ def test_read_graph_view_model_uses_blocking_validation_location_as_default_focu
     vm = read_graph_view_model(working, validation_report=report)
 
     assert vm.selected_node_ids == ["draft_generator"]
+
+
+def test_graph_workspace_uses_beginner_badges_before_first_success() -> None:
+    vm = read_graph_view_model(_working_save())
+
+    draft = next(node for node in vm.nodes if node.node_id == "draft_generator")
+    review = next(node for node in vm.nodes if node.node_id == "review_bundle")
+    assert any(badge.label == "AI model" for badge in draft.badges)
+    assert any(badge.label == "Workflow" for badge in review.badges)

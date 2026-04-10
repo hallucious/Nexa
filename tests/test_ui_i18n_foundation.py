@@ -9,7 +9,7 @@ from src.storage.models.working_save_model import RuntimeModel, UIModel, Working
 from src.ui.action_schema import read_builder_action_schema
 from src.ui.designer_panel import read_designer_panel_view_model
 from src.ui.execution_panel import read_execution_panel_view_model
-from src.ui.i18n import normalize_ui_language, ui_text
+from src.ui.i18n import beginner_ui_text, normalize_ui_language, ui_text
 from src.ui.storage_panel import read_storage_view_model
 from src.ui.validation_panel import read_validation_panel_view_model
 
@@ -99,3 +99,10 @@ def test_ui_i18n_exposes_beginner_placeholder_and_terms() -> None:
     assert ui_text("designer.request.input_placeholder.beginner", app_language="ko") == "어떤 것을 만들고 싶으세요? 목표를 설명해주세요."
     assert ui_text("beginner.term.circuit", app_language="en") == "workflow"
     assert ui_text("beginner.term.circuit", app_language="ko") == "워크플로우"
+
+
+def test_ui_i18n_resolves_beginner_specific_terms_before_first_success() -> None:
+    working = _working_save("ko")
+
+    assert beginner_ui_text("palette.placeholder", beginner_text_key="palette.placeholder.beginner", sources=(working,), app_language="ko") == "단계, 문제, 실행, 액션 검색"
+    assert beginner_ui_text("storage.role.working_save", beginner_text_key="storage.role.beginner.working_save", sources=(working,), app_language="ko") == "저장되지 않음"

@@ -103,7 +103,7 @@ def test_read_selected_object_view_model_localizes_field_labels_for_korean_app_l
 
     vm = read_selected_object_view_model(working, selected_ref="node:review_bundle")
 
-    assert vm.readonly_fields[0].label == "노드 ID"
+    assert vm.readonly_fields[0].label == "단계 ID"
     assert any(constraint.label == "서브회로 경계" for constraint in vm.constraints)
 
 
@@ -131,3 +131,28 @@ def test_inspector_uses_blocking_validation_location_when_selection_is_missing()
     assert vm.object_type == "node"
     assert vm.object_id == "review_bundle"
     assert vm.status_summary.overall_status == "blocked"
+
+
+def test_inspector_uses_beginner_node_terms_before_first_success() -> None:
+    vm = read_selected_object_view_model(_working_save(), selected_ref="node:review_bundle")
+
+    assert vm.readonly_fields[0].label == "Step ID"
+    assert vm.subtitle == "step"
+    assert vm.description == "Step review_bundle"
+
+
+def test_inspector_uses_beginner_empty_state_and_child_workflow_terms() -> None:
+    base = _working_save()
+    empty_source = WorkingSaveModel(
+        meta=base.meta,
+        circuit=base.circuit,
+        resources=base.resources,
+        state=base.state,
+        runtime=base.runtime,
+        ui=UIModel(layout=base.ui.layout, metadata={}),
+    )
+    empty_vm = read_selected_object_view_model(empty_source, selected_ref=None)
+    child_vm = read_selected_object_view_model(_working_save(), selected_ref="node:review_bundle")
+
+    assert empty_vm.empty_state_message == "Select a step, connection, output, or group to inspect details."
+    assert any(field.label == "Child Workflow" for field in child_vm.readonly_fields)

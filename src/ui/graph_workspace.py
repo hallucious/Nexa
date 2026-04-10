@@ -8,7 +8,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel, NodeResultCard, NodeTimingCard
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 
 GraphStorageRole = str
 GraphStatus = str
@@ -540,9 +540,9 @@ def read_graph_view_model(
             badges.append(NodeBadgeView("validation_warning", ui_text("graph.badge.warning", app_language=app_language, fallback_text="Warning"), severity="warning", count=len(node_findings)))
         kind = _node_kind(node)
         if kind == "subcircuit":
-            badges.append(NodeBadgeView("subgraph", ui_text("graph.badge.subcircuit", app_language=app_language, fallback_text="Subcircuit"), severity="info"))
+            badges.append(NodeBadgeView("subgraph", beginner_ui_text("graph.badge.subcircuit", beginner_text_key="graph.badge.subcircuit.beginner", sources=(source, execution_record), app_language=app_language, fallback_text="Subcircuit"), severity="info"))
         if kind in {"provider", "ai"}:
-            badges.append(NodeBadgeView("provider", ui_text("graph.badge.provider", app_language=app_language, fallback_text="Provider"), severity="info"))
+            badges.append(NodeBadgeView("provider", beginner_ui_text("graph.badge.provider", beginner_text_key="graph.badge.provider.beginner", sources=(source, execution_record), app_language=app_language, fallback_text="Provider"), severity="info"))
         if kind == "plugin":
             badges.append(NodeBadgeView("plugin", ui_text("graph.badge.plugin", app_language=app_language, fallback_text="Plugin"), severity="info"))
         if preview_state == "added":

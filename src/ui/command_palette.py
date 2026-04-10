@@ -13,7 +13,7 @@ from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
@@ -101,7 +101,7 @@ def _finding_entries(validation_view: ValidationPanelViewModel | None, *, app_la
     return entries
 
 
-def _storage_entries(storage_view: StoragePanelViewModel | None, *, app_language: str) -> list[CommandPaletteEntryView]:
+def _storage_entries(storage_view: StoragePanelViewModel | None, *, app_language: str, source=None, execution_record=None) -> list[CommandPaletteEntryView]:
     if storage_view is None:
         return []
     entries: list[CommandPaletteEntryView] = []
@@ -110,7 +110,7 @@ def _storage_entries(storage_view: StoragePanelViewModel | None, *, app_language
             CommandPaletteEntryView(
                 entry_id="jump:storage:working_save",
                 entry_type="jump",
-                label=ui_text("palette.jump.working_save", app_language=app_language, fallback_text="Open current working save"),
+                label=beginner_ui_text("palette.jump.working_save", beginner_text_key="palette.jump.working_save.beginner", sources=(source, execution_record), app_language=app_language, fallback_text="Open current working save"),
                 target_ref=f"working_save:{storage_view.working_save_card.working_save_id}",
                 preferred_workspace_id="visual_editor",
                 preferred_panel_id="storage",
@@ -121,7 +121,7 @@ def _storage_entries(storage_view: StoragePanelViewModel | None, *, app_language
             CommandPaletteEntryView(
                 entry_id="jump:storage:commit_snapshot",
                 entry_type="jump",
-                label=ui_text("palette.jump.commit_snapshot", app_language=app_language, fallback_text="Open latest commit snapshot"),
+                label=beginner_ui_text("palette.jump.commit_snapshot", beginner_text_key="palette.jump.commit_snapshot.beginner", sources=(source, execution_record), app_language=app_language, fallback_text="Open latest commit snapshot"),
                 target_ref=f"commit_snapshot:{storage_view.commit_snapshot_card.commit_id}",
                 preferred_workspace_id="visual_editor",
                 preferred_panel_id="storage",
@@ -132,7 +132,7 @@ def _storage_entries(storage_view: StoragePanelViewModel | None, *, app_language
             CommandPaletteEntryView(
                 entry_id="jump:storage:execution_record",
                 entry_type="jump",
-                label=ui_text("palette.jump.execution_record", app_language=app_language, fallback_text="Open latest execution record"),
+                label=beginner_ui_text("palette.jump.execution_record", beginner_text_key="palette.jump.execution_record.beginner", sources=(source, execution_record), app_language=app_language, fallback_text="Open latest execution record"),
                 target_ref=f"execution_record:{storage_view.execution_record_card.run_id}",
                 preferred_workspace_id="runtime_monitoring",
                 preferred_panel_id="execution",
@@ -304,7 +304,7 @@ def read_command_palette_view_model(
         *_action_entries(action_schema),
         *_node_entries(graph_view),
         *_finding_entries(validation_view, app_language=app_language),
-        *_storage_entries(storage_view, app_language=app_language),
+        *_storage_entries(storage_view, app_language=app_language, source=source_unwrapped, execution_record=execution_record),
         *_execution_entries(execution_view, app_language=app_language),
         *_trace_entries(trace_view, app_language=app_language),
         *_artifact_entries(artifact_view, app_language=app_language),
@@ -341,7 +341,7 @@ def read_command_palette_view_model(
     return CommandPaletteViewModel(
         palette_status=palette_status,
         source_role=source_role,
-        placeholder=ui_text("palette.placeholder", app_language=app_language, fallback_text="Search nodes, findings, runs, actions"),
+        placeholder=beginner_ui_text("palette.placeholder", beginner_text_key="palette.placeholder.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text="Search nodes, findings, runs, actions"),
         entries=entries,
         enabled_entry_count=enabled_entry_count,
         jump_entry_count=jump_entry_count,

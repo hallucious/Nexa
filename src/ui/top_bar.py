@@ -10,7 +10,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, read_builder_action_schema
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
 
@@ -119,8 +119,14 @@ def _role_severity(role: str) -> str:
     }.get(role, "neutral")
 
 
-def _role_label(role: str, *, app_language: str) -> str:
-    return ui_text(f"storage.role.{role}", app_language=app_language, fallback_text=role.replace("_", " "))
+def _role_label(role: str, *, app_language: str, source=None, execution_record=None) -> str:
+    return beginner_ui_text(
+        f"storage.role.{role}",
+        beginner_text_key=f"storage.role.beginner.{role}",
+        sources=(source, execution_record),
+        app_language=app_language,
+        fallback_text=role.replace("_", " "),
+    )
 
 
 def _execution_label(execution_status: str, *, app_language: str) -> str:
@@ -237,7 +243,7 @@ def read_builder_top_bar_view_model(
         ),
         storage_badge=StorageRoleBadgeView(
             storage_role=role,
-            label=_role_label(role, app_language=app_language),
+            label=_role_label(role, app_language=app_language, source=source_unwrapped, execution_record=execution_record),
             severity=_role_severity(role),
         ),
         global_status=GlobalStatusSummaryView(
@@ -251,7 +257,7 @@ def read_builder_top_bar_view_model(
         ),
         primary_actions=primary_actions,
         mode_options=_mode_options(role=role, execution_view=execution_view, approval_flow=approval_flow, app_language=app_language),
-        quick_jump_placeholder=ui_text("palette.placeholder", app_language=app_language, fallback_text="Search nodes, findings, runs, actions"),
+        quick_jump_placeholder=beginner_ui_text("palette.placeholder", beginner_text_key="palette.placeholder.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text="Search nodes, findings, runs, actions"),
         explanation=explanation,
     )
 

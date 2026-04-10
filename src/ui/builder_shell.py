@@ -21,7 +21,7 @@ from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
 from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
@@ -364,7 +364,7 @@ def read_builder_shell_view_model(
         shell_mode=shell_mode,
         shell_mode_label=ui_text(f"shell.mode.{shell_mode}", app_language=app_language, fallback_text=shell_mode.replace("_", " ")),
         active_workspace_id=active_workspace_id,
-        active_workspace_label=ui_text(f"workspace.{active_workspace_id}.name", app_language=app_language, fallback_text=active_workspace_id.replace("_", " ")),
+        active_workspace_label=beginner_ui_text(f"workspace.{active_workspace_id}.name", beginner_text_key=(f"workspace.{active_workspace_id}.name.beginner" if active_workspace_id == "node_configuration" else None), sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text=active_workspace_id.replace("_", " ")),
         top_bar=top_bar_vm,
         command_palette=command_palette_vm,
         coordination=coordination_vm,

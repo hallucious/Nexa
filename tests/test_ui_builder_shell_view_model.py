@@ -332,3 +332,19 @@ def test_builder_shell_projects_beginner_empty_workspace_state() -> None:
     assert vm.diagnostics.advanced_surfaces_unlocked is False
     assert vm.designer is not None
     assert vm.designer.request_state.input_placeholder == "What would you like to build? Describe your goal."
+
+
+def test_builder_shell_uses_beginner_workspace_labels_before_first_success() -> None:
+    beginner = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner", name="Starter"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+    )
+    vm = read_builder_shell_view_model(beginner)
+
+    assert vm.top_bar.storage_badge.label == "저장되지 않음"
+    assert vm.command_palette.placeholder == "단계, 문제, 실행, 액션 검색"
+    assert vm.active_workspace_label == "비주얼 에디터"
