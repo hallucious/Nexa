@@ -136,6 +136,8 @@ def read_interaction_lifecycle_closure_view_model(
 
     if not stages:
         closure_status = "empty"
+    elif terminal_completion_ready and source_role == "execution_record":
+        closure_status = "terminal"
     elif open_requirement_count and not next_stage_ready:
         closure_status = "blocked"
     elif open_requirement_count:

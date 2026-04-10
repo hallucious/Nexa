@@ -72,3 +72,12 @@ def test_interaction_lifecycle_closure_accepts_role_aware_history_flows_for_exec
     assert vm.source_role == "execution_record"
     assert history_stage.recommended_flow_id in {"flow:open_trace", "flow:open_artifacts", "flow:compare_runs", "flow:open_latest_run"}
     assert history_stage.open_requirement in {None, "open_trace", "open_artifacts", "compare_runs", "open_latest_run"}
+
+
+
+def test_interaction_lifecycle_closure_marks_execution_record_terminal() -> None:
+    vm = read_interaction_lifecycle_closure_view_model(_execution_record())
+
+    assert vm.source_role == "execution_record"
+    assert vm.terminal_completion_ready is True
+    assert vm.closure_status == "terminal"

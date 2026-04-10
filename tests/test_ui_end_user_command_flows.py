@@ -37,3 +37,26 @@ def test_end_user_command_flows_localize_step_labels_for_korean_app_language() -
     review_flow = next(flow for flow in vm.flows if flow.action_id == "review_draft")
 
     assert review_flow.steps[0].label == "의도 생성"
+
+
+
+def _execution_record() -> ExecutionRecordModel:
+    return ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-10T00:00:00Z", started_at="2026-04-10T00:00:00Z", status="completed"),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(event_count=3),
+        node_results=NodeResultsModel(),
+        outputs=ExecutionOutputModel(output_summary="done"),
+        artifacts=ExecutionArtifactsModel(artifact_count=0, artifact_summary=""),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+
+def test_end_user_command_flows_mark_execution_record_history_flows_as_terminal() -> None:
+    vm = read_end_user_command_flow_view_model(_execution_record())
+
+    assert vm.source_role == "execution_record"
+    assert vm.flow_status == "terminal"
+    assert any(flow.flow_status == "terminal" and flow.target_stage_id == "history" for flow in vm.flows)

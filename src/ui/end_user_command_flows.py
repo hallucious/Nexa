@@ -88,9 +88,11 @@ def _label_for(action_id: str, *, app_language: str) -> str:
     return ui_text(f"builder.action.{action_id}", app_language=app_language, fallback_text=mapping.get(action_id, action_id.replace("_", " ").title()))
 
 
-def _flow_status(*, execute_allowed: bool, requires_confirmation: bool, closure_ready: bool) -> str:
+def _flow_status(*, source_role: str, execute_allowed: bool, requires_confirmation: bool, closure_ready: bool, target_stage_id: str) -> str:
     if not execute_allowed:
         return "blocked"
+    if source_role == "execution_record" and target_stage_id == "history":
+        return "terminal"
     if requires_confirmation:
         return "confirmation_required"
     if closure_ready:
@@ -137,9 +139,11 @@ def read_end_user_command_flow_view_model(
                 action_id=action_id,
                 user_label=route.label or _label_for(action_id, app_language=app_language),
                 flow_status=_flow_status(
+                    source_role=source_role,
                     execute_allowed=adapter.execute_allowed,
                     requires_confirmation=route.requires_confirmation,
                     closure_ready=closure_ready,
+                    target_stage_id=state_change.target_stage_id,
                 ),
                 current_stage_id=state_change.current_stage_id,
                 target_stage_id=state_change.target_stage_id,
@@ -156,8 +160,11 @@ def read_end_user_command_flow_view_model(
 
     enabled_flow_count = sum(1 for item in flows if item.execute_allowed)
     blocked_flow_count = len(flows) - enabled_flow_count
+    terminal_flow_count = sum(1 for item in flows if item.flow_status == "terminal")
     if not flows:
         status = "empty"
+    elif source_role == "execution_record" and enabled_flow_count and terminal_flow_count == enabled_flow_count:
+        status = "terminal"
     elif blocked_flow_count == len(flows):
         status = "blocked"
     elif blocked_flow_count:
