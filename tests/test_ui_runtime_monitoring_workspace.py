@@ -78,3 +78,23 @@ def test_runtime_monitoring_workspace_marks_commit_snapshot_as_launch_ready_when
     assert vm.workspace_status == "launch_ready"
     assert vm.health.launch_available is True
     assert vm.workspace_status_label == "Launch ready"
+
+
+def test_runtime_monitoring_workspace_marks_execution_record_as_terminal_review_when_not_live() -> None:
+    run = _run_running()
+    run = ExecutionRecordModel(
+        meta=ExecutionMetaModel(**{**run.meta.__dict__, "status": "completed", "finished_at": "2026-04-07T00:00:05Z"}),
+        source=run.source,
+        input=run.input,
+        timeline=run.timeline,
+        node_results=run.node_results,
+        outputs=run.outputs,
+        artifacts=run.artifacts,
+        diagnostics=run.diagnostics,
+        observability=run.observability,
+    )
+    vm = read_runtime_monitoring_workspace_view_model(run)
+
+    assert vm.storage_role == "execution_record"
+    assert vm.workspace_status == "terminal_review"
+    assert vm.workspace_status_label == "Terminal history review"

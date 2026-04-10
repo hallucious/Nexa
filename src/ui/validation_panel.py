@@ -489,25 +489,44 @@ def read_validation_panel_view_model(
         affected_output_count=sum(1 for item in related_targets if item.target_type == "output"),
         affected_group_count=sum(1 for item in related_targets if item.target_type == "group"),
         top_issue_label=(all_findings[0].title if all_findings else None),
-        can_commit=overall_status in {"pass", "pass_with_warnings"},
-        can_execute=source_mode != "designer_precheck" and not blocking_findings,
+        can_commit=source_mode not in {"execution_guard"} and overall_status in {"pass", "pass_with_warnings"},
+        can_execute=source_mode not in {"designer_precheck", "execution_guard"} and not blocking_findings,
         requires_user_confirmation=bool(confirmation_findings),
     )
-    suggested_actions = [
-        ValidationActionHint("focus_top_issue", ui_text("validation.action.focus_top_issue", app_language=app_language), bool(all_findings), None if all_findings else ui_text("validation.reason.no_findings", app_language=app_language)),
-        ValidationActionHint(
-            "request_revision",
-            ui_text("validation.action.request_revision", app_language=app_language),
-            overall_status in {"blocked", "confirmation_required", "pass_with_warnings"},
-            None if overall_status in {"blocked", "confirmation_required", "pass_with_warnings"} else ui_text("validation.reason.no_revision_required", app_language=app_language),
-        ),
-        ValidationActionHint(
-            "proceed_to_approval",
-            ui_text("validation.action.proceed_to_approval", app_language=app_language),
-            overall_status in {"pass", "pass_with_warnings"} and not blocking_findings,
-            None if overall_status in {"pass", "pass_with_warnings"} and not blocking_findings else ui_text("validation.reason.blocking_issues_remain", app_language=app_language),
-        ),
-    ]
+    if source_mode == "execution_guard":
+        trace_available = bool(execution_record is not None and (execution_record.timeline.trace_ref or execution_record.timeline.event_stream_ref or (execution_record.timeline.event_count or 0) > 0))
+        artifact_available = bool(execution_record is not None and ((execution_record.artifacts.artifact_count or 0) > 0 or len(execution_record.artifacts.artifact_refs) > 0))
+        suggested_actions = [
+            ValidationActionHint("focus_top_issue", ui_text("validation.action.focus_top_issue", app_language=app_language), bool(all_findings), None if all_findings else ui_text("validation.reason.no_findings", app_language=app_language)),
+            ValidationActionHint(
+                "open_trace",
+                ui_text("validation.action.open_trace", app_language=app_language),
+                trace_available,
+                None if trace_available else ui_text("validation.reason.no_trace", app_language=app_language),
+            ),
+            ValidationActionHint(
+                "open_artifacts",
+                ui_text("validation.action.open_artifacts", app_language=app_language),
+                artifact_available,
+                None if artifact_available else ui_text("validation.reason.no_artifacts", app_language=app_language),
+            ),
+        ]
+    else:
+        suggested_actions = [
+            ValidationActionHint("focus_top_issue", ui_text("validation.action.focus_top_issue", app_language=app_language), bool(all_findings), None if all_findings else ui_text("validation.reason.no_findings", app_language=app_language)),
+            ValidationActionHint(
+                "request_revision",
+                ui_text("validation.action.request_revision", app_language=app_language),
+                overall_status in {"blocked", "confirmation_required", "pass_with_warnings"},
+                None if overall_status in {"blocked", "confirmation_required", "pass_with_warnings"} else ui_text("validation.reason.no_revision_required", app_language=app_language),
+            ),
+            ValidationActionHint(
+                "proceed_to_approval",
+                ui_text("validation.action.proceed_to_approval", app_language=app_language),
+                overall_status in {"pass", "pass_with_warnings"} and not blocking_findings,
+                None if overall_status in {"pass", "pass_with_warnings"} and not blocking_findings else ui_text("validation.reason.blocking_issues_remain", app_language=app_language),
+            ),
+        ]
     return ValidationPanelViewModel(
         source_mode=source_mode,
         storage_role=storage_role,

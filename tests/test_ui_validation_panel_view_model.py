@@ -98,3 +98,14 @@ def test_read_validation_panel_view_model_projects_execution_guard() -> None:
     assert vm.source_mode == "execution_guard"
     assert vm.overall_status == "blocked"
     assert vm.blocking_findings[0].code == "RUNTIME_ERROR"
+
+
+def test_validation_panel_projects_execution_guard_as_history_review_actions() -> None:
+    vm = read_validation_panel_view_model(_working_save(), execution_record=_execution_record())
+
+    assert vm.source_mode == "execution_guard"
+    assert vm.summary.can_commit is False
+    assert vm.summary.can_execute is False
+    assert [action.action_type for action in vm.suggested_actions] == ["focus_top_issue", "open_trace", "open_artifacts"]
+    assert vm.suggested_actions[1].enabled is False
+    assert vm.suggested_actions[2].enabled is False

@@ -129,7 +129,7 @@ def test_read_storage_view_model_projects_execution_focus_without_blurring_truth
 
     assert vm.active_storage_role == "execution_record"
     assert vm.panel_mode == "execution_focus"
-    assert vm.lifecycle_summary.current_stage == "executed"
+    assert vm.lifecycle_summary.current_stage == "history_review"
     assert vm.execution_record_card is not None
     assert vm.execution_record_card.trace_available is True
     assert vm.execution_record_card.can_open_artifacts is True
@@ -182,7 +182,7 @@ def test_read_storage_view_model_projects_execution_only_state_as_history_first_
 
     assert vm.active_storage_role == "execution_record"
     assert vm.panel_mode == "execution_focus"
-    assert vm.lifecycle_summary.current_stage == "executed"
+    assert vm.lifecycle_summary.current_stage == "history_review"
     assert vm.working_save_card is None
     assert vm.commit_snapshot_card is None
     assert vm.execution_record_card is not None
@@ -324,3 +324,11 @@ def test_storage_view_enables_trace_action_when_execution_record_has_event_count
     assert vm.execution_record_card.trace_available is True
     trace_action = next(action for action in vm.available_actions if action.action_type == "open_trace")
     assert trace_action.enabled is True
+
+
+def test_storage_view_marks_execution_record_as_history_review_stage() -> None:
+    vm = read_storage_view_model(_execution(), latest_working_save=None, latest_commit_snapshot=None)
+
+    assert vm.active_storage_role == "execution_record"
+    assert vm.lifecycle_summary.current_stage == "history_review"
+    assert vm.lifecycle_summary.summary_label == "Execution history review"

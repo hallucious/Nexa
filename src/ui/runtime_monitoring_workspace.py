@@ -147,6 +147,8 @@ def read_runtime_monitoring_workspace_view_model(
         workspace_status = "empty"
     elif execution_vm.execution_status in {"running", "queued"}:
         workspace_status = "live_monitoring"
+    elif storage_role == "execution_record":
+        workspace_status = "terminal_review"
     elif storage_role == "commit_snapshot" and launch_available:
         workspace_status = "launch_ready"
     elif health.blocking_issue_count:

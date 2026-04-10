@@ -362,10 +362,8 @@ def _current_stage(
         status = execution_record.meta.status
         if status == "running":
             return "executing"
-        if status == "completed":
-            return "executed"
-        if status in {"failed", "cancelled", "partial"}:
-            return "failed_execution"
+        if status in {"completed", "failed", "cancelled", "partial"}:
+            return "history_review"
     if active_role == "commit_snapshot" and commit_snapshot is not None:
         return "approved"
     if working_save is not None:
@@ -390,6 +388,7 @@ def _summary_label(stage: str, *, app_language: str) -> str:
         "approved": ui_text("storage.lifecycle.approved", app_language=app_language),
         "executing": ui_text("storage.lifecycle.executing", app_language=app_language),
         "executed": ui_text("storage.lifecycle.executed", app_language=app_language),
+        "history_review": ui_text("storage.lifecycle.history_review", app_language=app_language),
         "failed_execution": ui_text("storage.lifecycle.failed_execution", app_language=app_language),
         "unknown": ui_text("storage.lifecycle.unknown", app_language=app_language),
     }.get(stage, ui_text("storage.lifecycle.unknown", app_language=app_language))
