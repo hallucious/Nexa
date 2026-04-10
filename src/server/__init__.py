@@ -6,6 +6,22 @@ from src.server.adapters import (
     TraceEventAdapter,
     ValidationFindingAdapter,
 )
+from src.server.auth_adapter import (
+    AuthorizationGate,
+    ClerkAuthAdapter,
+    RequestAuthResolver,
+    build_engine_auth_context_refs,
+    describe_request_auth_context,
+)
+from src.server.auth_models import (
+    AuthenticatedIdentity,
+    AuthorizationDecision,
+    AuthorizationInput,
+    RequestAuthContext,
+    RunAuthorizationContext,
+    SessionContext,
+    WorkspaceAuthorizationContext,
+)
 from src.server.boundary_models import (
     EngineArtifactReference,
     EngineCorrelationContext,
@@ -26,6 +42,11 @@ from src.server.boundary_models import (
 
 __all__ = [
     "ArtifactReferenceAdapter",
+    "AuthenticatedIdentity",
+    "AuthorizationDecision",
+    "AuthorizationGate",
+    "AuthorizationInput",
+    "ClerkAuthAdapter",
     "EngineArtifactReference",
     "EngineCorrelationContext",
     "EngineExecutionBinding",
@@ -44,6 +65,13 @@ __all__ = [
     "EngineValidationEnvelope",
     "EngineValidationFinding",
     "ExecutionRecordResultAdapter",
+    "RequestAuthContext",
+    "RequestAuthResolver",
+    "RunAuthorizationContext",
+    "SessionContext",
     "TraceEventAdapter",
     "ValidationFindingAdapter",
+    "WorkspaceAuthorizationContext",
+    "build_engine_auth_context_refs",
+    "describe_request_auth_context",
 ]
