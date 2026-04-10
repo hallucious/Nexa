@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import Iterable, Any
 
 from src.contracts.nex_contract import ValidationFinding, ValidationReport
 from src.designer.models.validation_precheck import ValidationPrecheck, PrecheckFinding
@@ -11,6 +11,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.contracts.status_taxonomy import lookup_reason_code_record
 from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
+from src.ui.friendly_error_messages import FriendlyErrorView, friendly_error_from_candidates
 
 
 @dataclass(frozen=True)
@@ -99,6 +100,7 @@ class ValidationPanelViewModel:
     source_mode: str
     storage_role: str
     overall_status: str
+    friendly_error: FriendlyErrorView = field(default_factory=FriendlyErrorView)
     beginner_mode: bool = False
     summary: ValidationSummaryView = field(default_factory=ValidationSummaryView)
     blocking_findings: list[ValidationFindingView] = field(default_factory=list)
@@ -460,6 +462,54 @@ def _target_summaries(all_findings: list[ValidationFindingView], *, app_language
     return sorted(summaries, key=lambda item: (-item.blocking_count, -item.finding_count, item.label or ""))
 
 
+
+
+def _friendly_error_for_validation(
+    *,
+    validation_report: ValidationReport | None,
+    precheck: ValidationPrecheck | None,
+    execution_record: ExecutionRecordModel | None,
+    governance_summary: dict[str, Any],
+    app_language: str,
+) -> FriendlyErrorView:
+    candidates: list[dict[str, Any]] = []
+
+    if validation_report is not None:
+        for finding in validation_report.findings:
+            candidates.append({
+                "source_kind": "validation",
+                "issue_code": finding.code,
+                "message": finding.message,
+            })
+
+    if precheck is not None:
+        for group in (precheck.blocking_findings, precheck.warning_findings, precheck.confirmation_findings):
+            for finding in group:
+                candidates.append({
+                    "source_kind": "precheck",
+                    "issue_code": finding.issue_code,
+                    "message": finding.message,
+                })
+
+    if execution_record is not None:
+        for issue in [*execution_record.diagnostics.errors, *execution_record.diagnostics.warnings]:
+            candidates.append({
+                "source_kind": issue.category,
+                "issue_code": issue.issue_code,
+                "message": issue.message or issue.reason or issue.fix_hint,
+            })
+
+    for family_prefix in ("launch", "safety", "quota", "delivery", "streaming"):
+        reason_key = f"{family_prefix}_reason_code"
+        status_key = f"{family_prefix}_status"
+        if isinstance(governance_summary.get(reason_key), str):
+            candidates.append({
+                "source_kind": family_prefix,
+                "reason_code": governance_summary.get(reason_key),
+                "issue_code": governance_summary.get(status_key),
+            })
+
+    return friendly_error_from_candidates(app_language=app_language, candidates=candidates)
 def read_validation_panel_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -533,6 +583,13 @@ def read_validation_panel_view_model(
     beginner_mode = beginner_language_enabled(source, execution_record)
     all_findings = [*blocking_findings, *warning_findings, *confirmation_findings, *informational_findings]
     related_targets = _target_summaries(all_findings, app_language=app_language)
+    friendly_error = _friendly_error_for_validation(
+        validation_report=validation_report,
+        precheck=precheck,
+        execution_record=execution_record,
+        governance_summary=governance_summary,
+        app_language=app_language,
+    )
     summary = ValidationSummaryView(
         blocking_count=len(blocking_findings),
         warning_count=len(warning_findings),
@@ -585,6 +642,7 @@ def read_validation_panel_view_model(
         source_mode=source_mode,
         storage_role=storage_role,
         overall_status=overall_status,
+        friendly_error=friendly_error,
         beginner_mode=beginner_mode,
         summary=summary,
         blocking_findings=blocking_findings,

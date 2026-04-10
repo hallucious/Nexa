@@ -10,6 +10,7 @@ from src.storage.models.working_save_model import WorkingSaveModel
 from src.engine.execution_event import ExecutionEvent
 from src.contracts.status_taxonomy import lookup_reason_code_record
 from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.friendly_error_messages import FriendlyErrorView, friendly_error_from_candidates
 
 
 @dataclass(frozen=True)
@@ -141,6 +142,7 @@ class ExecutionPanelViewModel:
     source_mode: str
     storage_role: str
     execution_status: str
+    friendly_error: FriendlyErrorView = field(default_factory=FriendlyErrorView)
     run_identity: RunIdentityView = field(default_factory=RunIdentityView)
     progress: ExecutionProgressView = field(default_factory=ExecutionProgressView)
     active_context: ActiveExecutionContextView = field(default_factory=ActiveExecutionContextView)
@@ -613,6 +615,54 @@ def _governance_views(summary: Mapping[str, Any]) -> tuple[list[GovernanceSignal
     return signals, delivery_outcome
 
 
+
+
+def _friendly_error_for_execution(
+    source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
+    execution_record: ExecutionRecordModel | None,
+    governance_summary: Mapping[str, Any],
+    *,
+    app_language: str,
+) -> FriendlyErrorView:
+    candidates: list[dict[str, Any]] = []
+
+    for family_prefix in ("launch", "safety", "quota", "delivery", "streaming"):
+        reason_key = f"{family_prefix}_reason_code"
+        status_key = f"{family_prefix}_status"
+        if isinstance(governance_summary.get(reason_key), str):
+            candidates.append({
+                "source_kind": family_prefix,
+                "reason_code": governance_summary.get(reason_key),
+                "issue_code": governance_summary.get(status_key),
+                "message": governance_summary.get("summary_message") if isinstance(governance_summary.get("summary_message"), str) else None,
+            })
+
+    if execution_record is not None:
+        for issue in [*execution_record.diagnostics.errors, *execution_record.diagnostics.warnings]:
+            candidates.append({
+                "source_kind": issue.category,
+                "issue_code": issue.issue_code,
+                "message": issue.message or issue.reason or issue.fix_hint,
+            })
+        if execution_record.diagnostics.termination_reason:
+            candidates.append({
+                "source_kind": "termination",
+                "message": execution_record.diagnostics.termination_reason,
+            })
+
+    if isinstance(source, WorkingSaveModel):
+        for error in source.runtime.errors:
+            if isinstance(error, Mapping):
+                candidates.append({
+                    "source_kind": "runtime",
+                    "issue_code": error.get("issue_code") if isinstance(error.get("issue_code"), str) else None,
+                    "reason_code": error.get("reason_code") if isinstance(error.get("reason_code"), str) else None,
+                    "message": error.get("message") if isinstance(error.get("message"), str) else str(error),
+                })
+            else:
+                candidates.append({"source_kind": "runtime", "message": str(error)})
+
+    return friendly_error_from_candidates(app_language=app_language, candidates=candidates)
 def read_execution_panel_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -635,6 +685,7 @@ def read_execution_panel_view_model(
 
     governance_summary = _governance_summary_from_sources(source, execution_record)
     governance_signals, delivery_outcome = _governance_views(governance_summary)
+    friendly_error = _friendly_error_for_execution(source, execution_record, governance_summary, app_language=app_language)
 
     if execution_record is not None:
         recent_events = _event_views_from_live_events(live_events, app_language=app_language) if live_events else _event_views_from_record(execution_record, app_language=app_language)
@@ -644,6 +695,7 @@ def read_execution_panel_view_model(
             source_mode=source_mode,
             storage_role=storage_role,
             execution_status=execution_status,
+            friendly_error=friendly_error,
             run_identity=_run_identity_for_record(execution_record),
             progress=progress,
             active_context=active_context,
@@ -668,6 +720,7 @@ def read_execution_panel_view_model(
         source_mode=source_mode,
         storage_role=storage_role,
         execution_status=execution_status,
+        friendly_error=friendly_error,
         run_identity=_run_identity_for_idle_source(source),
         progress=ExecutionProgressView(progress_mode="indeterminate", indeterminate_message=ui_text("execution.panel.no_execution_record", app_language=app_language)),
         active_context=ActiveExecutionContextView(status_message=ui_text("execution.panel.no_active_execution", app_language=app_language)),
