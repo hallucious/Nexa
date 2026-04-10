@@ -7,6 +7,7 @@ from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.models.designer_intent import ConstraintSet, DesignerIntent, ObjectiveSpec, TargetScope
 from src.designer.models.designer_session_state_card import AvailableResources, ConversationContext, CurrentSelectionState, DesignerSessionStateCard, SessionTargetScope, WorkingSaveReality
 from src.designer.models.validation_precheck import AmbiguityAssessmentReport, CostAssessmentReport, EvaluatedScope, ResolutionReport, ValidationPrecheck, ValidityReport
+from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel, NodeTimingCard, OutputResultCard
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
@@ -34,6 +35,19 @@ def _validation_report() -> ValidationReport:
         result="passed_with_findings",
     )
 
+
+
+
+def _commit() -> CommitSnapshotModel:
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
 
 def _run_running() -> ExecutionRecordModel:
     return ExecutionRecordModel(
@@ -247,3 +261,21 @@ def test_product_flow_shell_exposes_runbook_and_prefers_runbook_action_when_revi
     assert vm.focus.recommended_action_id == "commit_snapshot"
     assert vm.transition.next_action_id == "commit_snapshot"
     assert vm.focus.focus_reason == "handoff_primary"
+
+
+def test_product_flow_shell_prioritizes_run_stage_for_commit_snapshot_launch_anchor() -> None:
+    vm = read_product_flow_shell_view_model(_commit())
+
+    assert vm.storage_role == "commit_snapshot"
+    assert vm.stage.stage_id == "run"
+    assert vm.focus.active_workspace_id == "runtime_monitoring"
+    assert vm.focus.recommended_action_id == "run_from_commit"
+
+
+def test_product_flow_shell_treats_execution_record_as_runtime_monitoring_source() -> None:
+    vm = read_product_flow_shell_view_model(_run_completed())
+
+    assert vm.storage_role == "execution_record"
+    assert vm.stage.stage_id == "run"
+    assert vm.focus.active_workspace_id == "runtime_monitoring"
+    assert vm.focus.active_right_panel_id in {"artifact", "trace_timeline", "execution"}

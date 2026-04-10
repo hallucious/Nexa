@@ -397,6 +397,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "workspace.runtime.status.empty": "Monitoring workspace empty",
         "workspace.runtime.status.live_monitoring": "Live monitoring",
         "workspace.runtime.status.failed_review": "Run requires review",
+        "workspace.runtime.status.launch_ready": "Launch ready",
         "workspace.runtime.status.historical_review": "Historical run review",
 
         "workspace.configuration.status.awaiting_selection": "Select an object to configure",
@@ -815,6 +816,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "workspace.runtime.status.empty": "모니터링 작업공간이 비어 있습니다",
         "workspace.runtime.status.live_monitoring": "실시간 모니터링",
         "workspace.runtime.status.failed_review": "실행 결과 검토 필요",
+        "workspace.runtime.status.launch_ready": "실행 준비 완료",
         "workspace.runtime.status.historical_review": "과거 실행 검토",
 
         "workspace.configuration.status.awaiting_selection": "구성할 대상을 선택하세요",

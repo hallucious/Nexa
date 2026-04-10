@@ -69,3 +69,12 @@ def test_runtime_monitoring_workspace_projects_phase5_monitoring_surface() -> No
     assert vm.health.cancel_available is True
     assert vm.health.execution_status == "running"
     assert vm.workspace_status_label == "실시간 모니터링"
+
+
+def test_runtime_monitoring_workspace_marks_commit_snapshot_as_launch_ready_when_execution_can_start() -> None:
+    vm = read_runtime_monitoring_workspace_view_model(_commit())
+
+    assert vm.storage_role == "commit_snapshot"
+    assert vm.workspace_status == "launch_ready"
+    assert vm.health.launch_available is True
+    assert vm.workspace_status_label == "Launch ready"

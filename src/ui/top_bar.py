@@ -149,11 +149,11 @@ def _overall_status(*, validation_view: ValidationPanelViewModel | None, executi
     return "ready", blocking_count, warning_count, pending_approval_count
 
 
-def _action_emphasis(action: BuilderActionView) -> str:
-    if action.action_id in {"run_current", "approve_for_commit", "commit_snapshot"}:
-        return "primary"
+def _action_emphasis(action: BuilderActionView, *, is_primary_slot: bool) -> str:
     if action.destructive:
         return "destructive"
+    if is_primary_slot:
+        return "primary"
     return "secondary"
 
 
@@ -207,7 +207,7 @@ def read_builder_top_bar_view_model(
         PrimaryActionButtonView(
             action_id=action.action_id,
             label=action.label,
-            emphasis=_action_emphasis(action),
+            emphasis=_action_emphasis(action, is_primary_slot=True),
             enabled=action.enabled,
             reason_disabled=action.reason_disabled,
             requires_confirmation=action.requires_confirmation,

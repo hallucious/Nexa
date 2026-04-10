@@ -269,7 +269,7 @@ def read_builder_shell_view_model(
     elif diagnostics.panel_coordination_warning or warning_count > 0:
         shell_status = "partial"
 
-    if shell_mode == "runtime_monitoring":
+    if shell_mode in {"runtime_monitoring", "run_review"}:
         active_workspace_id = "runtime_monitoring"
     elif shell_mode == "designer_review":
         active_workspace_id = "node_configuration"

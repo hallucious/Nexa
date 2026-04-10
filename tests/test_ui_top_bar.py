@@ -103,3 +103,19 @@ def test_top_bar_prioritizes_execution_record_inspection_actions() -> None:
     action_ids = [button.action_id for button in vm.primary_actions]
     assert "open_latest_run" in action_ids
     assert vm.source_role == "execution_record"
+
+
+def test_top_bar_marks_commit_snapshot_primary_actions_as_primary_emphasis() -> None:
+    vm = read_builder_top_bar_view_model(_commit())
+
+    emphasis_by_action = {button.action_id: button.emphasis for button in vm.primary_actions}
+    assert emphasis_by_action["run_from_commit"] == "primary"
+    assert emphasis_by_action["open_latest_commit"] == "primary"
+
+
+def test_top_bar_marks_execution_record_primary_actions_as_primary_emphasis() -> None:
+    vm = read_builder_top_bar_view_model(_run(status="completed"))
+
+    emphasis_by_action = {button.action_id: button.emphasis for button in vm.primary_actions}
+    assert emphasis_by_action["open_latest_run"] == "primary"
+    assert emphasis_by_action["open_trace"] == "primary"

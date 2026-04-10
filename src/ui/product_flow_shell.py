@@ -132,13 +132,17 @@ def _badge_count(shell_vm: BuilderShellViewModel, panel_id: str) -> int:
 
 
 def _stage_id(shell_vm: BuilderShellViewModel | None, workflow_hub: BuilderWorkflowHubViewModel | None) -> str:
-    if shell_vm is not None and shell_vm.shell_mode == "runtime_monitoring":
+    if shell_vm is not None and shell_vm.shell_mode in {"runtime_monitoring", "run_review"}:
         return "run"
     if shell_vm is not None and shell_vm.shell_mode == "designer_review":
         return "review"
     if workflow_hub is not None and workflow_hub.active_workflow_id == "execution_launch":
         return "run"
     if workflow_hub is not None and workflow_hub.active_workflow_id == "proposal_commit":
+        return "review"
+    if shell_vm is not None and shell_vm.shell_mode == "snapshot_review":
+        if shell_vm.storage is not None and shell_vm.storage.commit_snapshot_card is not None and shell_vm.storage.commit_snapshot_card.can_execute:
+            return "run"
         return "review"
     return "build"
 

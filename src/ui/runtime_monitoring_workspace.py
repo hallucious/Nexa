@@ -31,6 +31,7 @@ class MonitoringHealthView:
     blocking_issue_count: int = 0
     warning_issue_count: int = 0
     replay_available: bool = False
+    launch_available: bool = False
     cancel_available: bool = False
     partial_surface_count: int = 0
 
@@ -127,12 +128,16 @@ def read_runtime_monitoring_workspace_view_model(
         visible_event_count=len(trace_vm.events) if trace_vm is not None else 0,
         visible_artifact_count=len(artifact_vm.artifact_list) if artifact_vm is not None else 0,
     )
+    actions = [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions]
+    replay_available = any(action.action_id in {"replay_latest", "open_latest_run"} and action.enabled for action in actions)
+    launch_available = any(action.action_id in {"run_current", "run_from_commit"} and action.enabled for action in actions)
     health = MonitoringHealthView(
         execution_status=execution_vm.execution_status if execution_vm is not None else "unknown",
         blocking_issue_count=validation_vm.summary.blocking_count if validation_vm is not None else 0,
         warning_issue_count=validation_vm.summary.warning_count if validation_vm is not None else 0,
-        replay_available=any(action.action_id == "replay_latest" and action.enabled for action in [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions]),
-        cancel_available=any(action.action_id == "cancel_run" and action.enabled for action in [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions]),
+        replay_available=replay_available,
+        launch_available=launch_available,
+        cancel_available=any(action.action_id == "cancel_run" and action.enabled for action in actions),
         partial_surface_count=partial_surface_count,
     )
 
@@ -140,6 +145,8 @@ def read_runtime_monitoring_workspace_view_model(
         workspace_status = "empty"
     elif execution_vm.execution_status in {"running", "queued"}:
         workspace_status = "live_monitoring"
+    elif storage_role == "commit_snapshot" and launch_available:
+        workspace_status = "launch_ready"
     elif health.blocking_issue_count:
         workspace_status = "failed_review"
     else:

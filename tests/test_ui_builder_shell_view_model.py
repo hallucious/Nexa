@@ -224,3 +224,13 @@ def test_builder_shell_marks_blocked_shell_status_when_validation_is_blocked() -
     assert vm.validation.overall_status == "blocked"
     assert vm.shell_status == "blocked"
     assert vm.shell_status_label == "셸 차단 상태"
+
+
+def test_builder_shell_uses_runtime_monitoring_workspace_for_execution_record_sources() -> None:
+    vm = read_builder_shell_view_model(_run())
+
+    assert vm.storage_role == "execution_record"
+    assert vm.shell_mode == "run_review"
+    assert vm.active_workspace_id == "runtime_monitoring"
+    assert vm.runtime_monitoring is not None
+    assert vm.visual_editor is None

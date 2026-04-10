@@ -145,11 +145,17 @@ def read_interaction_lifecycle_view_model(
     interaction_hub = interaction_hub or read_builder_interaction_hub_view_model(source_unwrapped)
     dispatch_contract = dispatch_contract or read_command_dispatch_contract_view_model(source_unwrapped, interaction_hub=interaction_hub)
 
+    proposal_commit = interaction_hub.workflow_hub.proposal_commit if interaction_hub.workflow_hub is not None else None
+    execution_launch = interaction_hub.workflow_hub.execution_launch if interaction_hub.workflow_hub is not None else None
+    proposal_blocking_count = proposal_commit.summary.blocking_count if proposal_commit is not None else 0
+    proposal_pending_decisions = proposal_commit.summary.pending_decision_count if proposal_commit is not None else 0
+    execution_blocking_count = execution_launch.summary.blocking_count if execution_launch is not None else 0
+
     stages = [
-        InteractionLifecycleStageView("drafting", ui_text("interaction.stage.drafting", app_language=app_language, fallback_text="Drafting"), _status_for("drafting", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", _entry_action_for("drafting", source_role=source_role), interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
-        InteractionLifecycleStageView("review", ui_text("interaction.stage.review", app_language=app_language, fallback_text="Review & Approval"), _status_for("review", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "node_configuration", _entry_action_for("review", source_role=source_role), interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
-        InteractionLifecycleStageView("commit", ui_text("interaction.stage.commit", app_language=app_language, fallback_text="Commit"), _status_for("commit", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", _entry_action_for("commit", source_role=source_role), interaction_hub.workflow_hub.proposal_commit.summary.pending_decision_count),
-        InteractionLifecycleStageView("execution", ui_text("interaction.stage.execution", app_language=app_language, fallback_text="Execution"), _status_for("execution", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", _entry_action_for("execution", source_role=source_role), interaction_hub.workflow_hub.execution_launch.summary.blocking_count),
+        InteractionLifecycleStageView("drafting", ui_text("interaction.stage.drafting", app_language=app_language, fallback_text="Drafting"), _status_for("drafting", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", _entry_action_for("drafting", source_role=source_role), proposal_blocking_count),
+        InteractionLifecycleStageView("review", ui_text("interaction.stage.review", app_language=app_language, fallback_text="Review & Approval"), _status_for("review", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "node_configuration", _entry_action_for("review", source_role=source_role), proposal_blocking_count),
+        InteractionLifecycleStageView("commit", ui_text("interaction.stage.commit", app_language=app_language, fallback_text="Commit"), _status_for("commit", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", _entry_action_for("commit", source_role=source_role), proposal_pending_decisions),
+        InteractionLifecycleStageView("execution", ui_text("interaction.stage.execution", app_language=app_language, fallback_text="Execution"), _status_for("execution", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", _entry_action_for("execution", source_role=source_role), execution_blocking_count),
         InteractionLifecycleStageView("history", ui_text("interaction.stage.history", app_language=app_language, fallback_text="History & Replay"), _status_for("history", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", _entry_action_for("history", source_role=source_role), 0),
     ]
 
