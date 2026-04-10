@@ -7,7 +7,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
 
 StorageRole = str
 PanelMode = str
@@ -154,6 +154,12 @@ def _run_ref(execution_record: ExecutionRecordModel | None) -> str | None:
     if execution_record is None:
         return None
     return f"execution_record:{execution_record.meta.run_id}"
+
+
+def _storage_action_label(action_key: str, *, app_language: str, beginner_mode: bool) -> str:
+    if beginner_mode:
+        return ui_text(f"storage.action.{action_key}.beginner", app_language=app_language, fallback_text=ui_text(f"storage.action.{action_key}", app_language=app_language))
+    return ui_text(f"storage.action.{action_key}", app_language=app_language)
 
 
 
@@ -522,15 +528,16 @@ def _available_actions(
     execution_record: ExecutionRecordModel | None,
     recent_entries: StorageRecentEntriesView,
     app_language: str,
+    beginner_mode: bool = False,
 ) -> list[StorageActionHint]:
     actions: list[StorageActionHint] = []
     if working_save is not None:
-        actions.append(StorageActionHint("save_working_save", ui_text("storage.action.save_working_save", app_language=app_language), True, target_ref=_working_save_ref(working_save)))
+        actions.append(StorageActionHint("save_working_save", _storage_action_label("save_working_save", app_language=app_language, beginner_mode=beginner_mode), True, target_ref=_working_save_ref(working_save)))
         can_review = _working_status(working_save) != "validation_failed"
         actions.append(
             StorageActionHint(
                 "submit_for_review",
-                ui_text("storage.action.submit_for_review", app_language=app_language),
+                _storage_action_label("submit_for_review", app_language=app_language, beginner_mode=beginner_mode),
                 can_review,
                 None if can_review else ui_text("storage.reason.blocking_findings", app_language=app_language),
                 _working_save_ref(working_save),
@@ -546,11 +553,11 @@ def _available_actions(
             )
         )
     if commit_snapshot is not None:
-        actions.append(StorageActionHint("open_latest_commit", ui_text("storage.action.open_latest_commit", app_language=app_language), True, target_ref=_commit_ref(commit_snapshot)))
+        actions.append(StorageActionHint("open_latest_commit", _storage_action_label("open_latest_commit", app_language=app_language, beginner_mode=beginner_mode), True, target_ref=_commit_ref(commit_snapshot)))
         actions.append(
             StorageActionHint(
                 "run_from_commit",
-                ui_text("storage.action.run_from_commit", app_language=app_language),
+                _storage_action_label("run_from_commit", app_language=app_language, beginner_mode=beginner_mode),
                 commit_snapshot.approval.approval_completed,
                 None if commit_snapshot.approval.approval_completed else ui_text("storage.reason.commit_not_approved", app_language=app_language),
                 _commit_ref(commit_snapshot),
@@ -563,7 +570,7 @@ def _available_actions(
         actions.append(
             StorageActionHint(
                 "open_latest_run",
-                ui_text("storage.action.open_latest_run", app_language=app_language),
+                _storage_action_label("open_latest_run", app_language=app_language, beginner_mode=beginner_mode),
                 True,
                 target_ref=_run_ref(execution_record),
             )
@@ -591,6 +598,9 @@ def _available_actions(
     if lifecycle_summary.has_latest_execution_record and execution_record is not None:
         can_compare_runs = len(recent_entries.recent_run_refs) >= 2
         actions.append(StorageActionHint("compare_runs", ui_text("storage.action.compare_runs", app_language=app_language), can_compare_runs, None if can_compare_runs else ui_text("storage.reason.second_execution_required", app_language=app_language), target_ref=_run_ref(execution_record)))
+    if beginner_mode:
+        hidden_actions = {"compare_draft_to_commit", "select_rollback_target", "compare_runs", "open_trace", "open_artifacts"}
+        actions = [action for action in actions if action.action_type not in hidden_actions]
     return actions
 
 
@@ -632,6 +642,8 @@ def read_storage_view_model(
         execution_record = latest_execution_record
         active_role = "none"
 
+    beginner_mode = beginner_language_enabled(active_source, latest_working_save, latest_execution_record)
+
     lifecycle_summary = _lifecycle_summary(
         active_role=active_role,
         working_save=working_save,
@@ -671,6 +683,7 @@ def read_storage_view_model(
             execution_record=execution_record,
             recent_entries=recent_entries,
             app_language=app_language,
+            beginner_mode=beginner_mode,
         ),
         diagnostics=diagnostics,
         explanation=explanation,

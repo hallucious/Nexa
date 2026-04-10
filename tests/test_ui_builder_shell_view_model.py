@@ -348,3 +348,47 @@ def test_builder_shell_uses_beginner_workspace_labels_before_first_success() -> 
     assert vm.top_bar.storage_badge.label == "저장되지 않음"
     assert vm.command_palette.placeholder == "단계, 문제, 실행, 액션 검색"
     assert vm.active_workspace_label == "비주얼 에디터"
+
+
+def test_builder_shell_projects_beginner_onboarding_hint_for_empty_workspace() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty-hint", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_builder_shell_view_model(source)
+
+    assert vm.beginner_onboarding.visible is True
+    assert vm.beginner_onboarding.title == "Start with your goal"
+    assert vm.beginner_onboarding.primary_action_label == "Open Designer"
+    assert vm.beginner_onboarding.primary_action_target == "designer"
+
+
+def test_builder_shell_projects_beginner_onboarding_hint_for_blocked_validation() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-blocked", name="Blocked Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+    report = ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="BLOCK", category="structural", severity="high", blocking=True, location="node:n1", message="Choose an AI model for step 1")],
+        blocking_count=1,
+        warning_count=0,
+        result="blocked",
+    )
+
+    vm = read_builder_shell_view_model(source, validation_report=report)
+
+    assert vm.beginner_onboarding.visible is True
+    assert vm.beginner_onboarding.title == "Fix this before running"
+    assert vm.beginner_onboarding.summary == "Choose an AI model for step 1"
+    assert vm.beginner_onboarding.primary_action_label == "Fix this step"
+    assert vm.beginner_onboarding.primary_action_target == "validation"

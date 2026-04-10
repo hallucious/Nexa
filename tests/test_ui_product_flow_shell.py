@@ -307,3 +307,17 @@ def test_product_flow_shell_marks_execution_record_run_review_as_terminal() -> N
     assert vm.shell_status == "terminal"
     assert vm.shell_status_label == "History focus"
 
+
+
+def test_product_flow_shell_hides_advanced_targets_before_first_success() -> None:
+    source = _working_save()
+    vm = read_product_flow_shell_view_model(source, validation_report=_validation_report())
+
+    right_ids = {target.target_id for target in vm.right_stack_targets}
+    bottom_ids = {target.target_id for target in vm.bottom_dock_targets}
+
+    assert "trace_timeline" not in right_ids
+    assert "artifact" not in right_ids
+    assert "trace_timeline" not in bottom_ids
+    assert "artifact" not in bottom_ids
+    assert "diff" not in bottom_ids

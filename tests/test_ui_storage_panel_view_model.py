@@ -26,10 +26,16 @@ from src.storage.models.working_save_model import DesignerDraftModel, RuntimeMod
 from src.ui.storage_panel import read_storage_view_model
 
 
-def _working_save(*, source_commit_id: str | None = None) -> WorkingSaveModel:
+def _working_save(*, source_commit_id: str | None = None, beginner: bool = False, completed_last_run: bool = True) -> WorkingSaveModel:
     validation_summary = {"blocking_count": 0}
     if source_commit_id is not None:
         validation_summary["source_commit_id"] = source_commit_id
+    last_run = {
+        "run_id": "run-001",
+        "status": "completed",
+        "commit_id": "commit-001",
+        "artifact_ids": ["artifact::output::out"],
+    } if completed_last_run else {}
     return WorkingSaveModel(
         meta=WorkingSaveMeta(
             format_version="1.0.0",
@@ -44,15 +50,10 @@ def _working_save(*, source_commit_id: str | None = None) -> WorkingSaveModel:
         runtime=RuntimeModel(
             status="validated",
             validation_summary=validation_summary,
-            last_run={
-                "run_id": "run-001",
-                "status": "completed",
-                "commit_id": "commit-001",
-                "artifact_ids": ["artifact::output::out"],
-            },
+            last_run=last_run,
             errors=[],
         ),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata=({"app_language": "en-US"} if beginner else {})),
         designer=DesignerDraftModel(data={"pending": True}),
     )
 
@@ -332,3 +333,25 @@ def test_storage_view_marks_execution_record_as_history_review_stage() -> None:
     assert vm.active_storage_role == "execution_record"
     assert vm.lifecycle_summary.current_stage == "history_review"
     assert vm.lifecycle_summary.summary_label == "Execution history review"
+
+
+def test_read_storage_view_model_simplifies_beginner_actions_before_first_success() -> None:
+    vm = read_storage_view_model(_working_save(beginner=True, completed_last_run=False), latest_commit_snapshot=_commit(), latest_execution_record=None)
+
+    labels = {action.action_type: action.label for action in vm.available_actions}
+    action_ids = {action.action_type for action in vm.available_actions}
+
+    assert labels["save_working_save"] == "Save draft"
+    assert labels["submit_for_review"] == "Review workflow"
+    assert "compare_draft_to_commit" not in action_ids
+
+
+def test_read_storage_view_model_hides_advanced_beginner_storage_actions_for_commit_focus() -> None:
+    vm = read_storage_view_model(_commit(), latest_working_save=_working_save(beginner=True, completed_last_run=False), latest_execution_record=None)
+
+    labels = {action.action_type: action.label for action in vm.available_actions}
+    action_ids = {action.action_type for action in vm.available_actions}
+
+    assert labels["open_latest_commit"] == "Open saved version"
+    assert labels["run_from_commit"] == "Run saved workflow"
+    assert "select_rollback_target" not in action_ids

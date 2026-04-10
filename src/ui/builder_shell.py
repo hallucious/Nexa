@@ -57,6 +57,15 @@ class BuilderShellDiagnosticsView:
 
 
 @dataclass(frozen=True)
+class BeginnerOnboardingHintView:
+    visible: bool = False
+    title: str | None = None
+    summary: str | None = None
+    primary_action_label: str | None = None
+    primary_action_target: str | None = None
+
+
+@dataclass(frozen=True)
 class BuilderShellViewModel:
     shell_status: str = "ready"
     shell_status_label: str | None = None
@@ -83,6 +92,7 @@ class BuilderShellViewModel:
     node_configuration: NodeConfigurationWorkspaceViewModel | None = None
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
+    beginner_onboarding: BeginnerOnboardingHintView = field(default_factory=BeginnerOnboardingHintView)
     explanation: str | None = None
 
 
@@ -135,6 +145,57 @@ def _advanced_surfaces_unlocked(metadata: dict[str, Any], *, execution_vm: Execu
     if str(metadata.get("user_mode") or "").lower() == "advanced":
         return True
     return _beginner_first_success_achieved(metadata, execution_vm=execution_vm)
+
+
+def _beginner_onboarding_hint(
+    *,
+    beginner_mode: bool,
+    empty_workspace_mode: bool,
+    validation_vm: ValidationPanelViewModel | None,
+    designer_vm: DesignerPanelViewModel | None,
+    execution_vm: ExecutionPanelViewModel | None,
+    app_language: str,
+) -> BeginnerOnboardingHintView:
+    if not beginner_mode:
+        return BeginnerOnboardingHintView()
+
+    if empty_workspace_mode:
+        return BeginnerOnboardingHintView(
+            visible=True,
+            title=ui_text("beginner.onboarding.start.title", app_language=app_language),
+            summary=ui_text("beginner.onboarding.start.summary", app_language=app_language),
+            primary_action_label=ui_text("beginner.onboarding.start.action", app_language=app_language),
+            primary_action_target="designer",
+        )
+
+    if validation_vm is not None and validation_vm.beginner_summary.status_signal is not None:
+        summary = validation_vm.beginner_summary
+        if validation_vm.overall_status == "blocked":
+            return BeginnerOnboardingHintView(
+                visible=True,
+                title=ui_text("beginner.onboarding.fix.title", app_language=app_language),
+                summary=summary.cause,
+                primary_action_label=summary.next_action_label,
+                primary_action_target="validation",
+            )
+        if validation_vm.overall_status in {"pass", "pass_with_warnings", "confirmation_required"} and designer_vm is not None and (designer_vm.approval_state.current_stage not in {None, "idle", "not_started", "completed"} or designer_vm.preview_state.preview_status == "ready"):
+            return BeginnerOnboardingHintView(
+                visible=True,
+                title=ui_text("beginner.onboarding.review.title", app_language=app_language),
+                summary=designer_vm.preview_state.one_sentence_summary or ui_text("proposal.beginner.prompt", app_language=app_language),
+                primary_action_label=ui_text("beginner.onboarding.review.action", app_language=app_language),
+                primary_action_target="designer",
+            )
+        if validation_vm.overall_status in {"pass", "pass_with_warnings", "confirmation_required"} and execution_vm is not None:
+            return BeginnerOnboardingHintView(
+                visible=True,
+                title=ui_text("beginner.onboarding.run.title", app_language=app_language),
+                summary=summary.cause or ui_text("beginner.onboarding.run.summary", app_language=app_language),
+                primary_action_label=summary.next_action_label or ui_text("beginner.onboarding.run.action", app_language=app_language),
+                primary_action_target="execution",
+            )
+
+    return BeginnerOnboardingHintView()
 
 
 def _selected_ref_from_graph(graph_view: GraphWorkspaceViewModel | None) -> str | None:
@@ -357,6 +418,15 @@ def read_builder_shell_view_model(
         approval_flow=approval_flow,
     )
 
+    beginner_onboarding = _beginner_onboarding_hint(
+        beginner_mode=beginner_mode,
+        empty_workspace_mode=empty_workspace_mode,
+        validation_vm=validation_vm,
+        designer_vm=designer_vm,
+        execution_vm=execution_vm,
+        app_language=app_language,
+    )
+
     return BuilderShellViewModel(
         shell_status=shell_status,
         shell_status_label=ui_text(f"shell.status.{shell_status}", app_language=app_language, fallback_text=shell_status.replace("_", " ")),
@@ -383,6 +453,7 @@ def read_builder_shell_view_model(
         node_configuration=node_configuration_vm,
         layout=layout_vm,
         diagnostics=diagnostics,
+        beginner_onboarding=beginner_onboarding,
         explanation=explanation,
     )
 
@@ -390,6 +461,7 @@ def read_builder_shell_view_model(
 __all__ = [
     "BuilderShellLayoutView",
     "BuilderShellDiagnosticsView",
+    "BeginnerOnboardingHintView",
     "BuilderShellViewModel",
     "read_builder_shell_view_model",
 ]

@@ -266,6 +266,9 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
 
     right_stack_ids = ["inspector", "designer", "validation", "execution", "trace_timeline", "artifact"]
     bottom_dock_ids = ["validation", "storage", "execution", "trace_timeline", "artifact", "diff"]
+    hidden_in_beginner = set()
+    if shell_vm.diagnostics.beginner_mode and not shell_vm.diagnostics.advanced_surfaces_unlocked and shell_vm.shell_mode not in {"runtime_monitoring", "run_review"}:
+        hidden_in_beginner = {"trace_timeline", "artifact", "diff"}
 
     status_by_panel = {
         "inspector": "ready" if shell_vm.inspector is not None else "empty",
@@ -299,7 +302,7 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
             status=status_by_panel[panel_id],
         )
         for panel_id in right_stack_ids
-        if status_by_panel[panel_id] != "empty" or panel_id in {"inspector", "designer", "validation"}
+        if panel_id not in hidden_in_beginner and (status_by_panel[panel_id] != "empty" or panel_id in {"inspector", "designer", "validation"})
     ]
     bottom_dock = [
         ProductFlowSurfaceTargetView(
@@ -312,7 +315,7 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
             status=status_by_panel[panel_id],
         )
         for panel_id in bottom_dock_ids
-        if status_by_panel[panel_id] not in {"empty", "hidden"} or panel_id in {"validation", "storage"}
+        if panel_id not in hidden_in_beginner and (status_by_panel[panel_id] not in {"empty", "hidden"} or panel_id in {"validation", "storage"})
     ]
     return right_stack, bottom_dock
 
