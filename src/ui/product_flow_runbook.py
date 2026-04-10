@@ -352,6 +352,8 @@ def read_product_flow_runbook_view_model(
         runbook_status = "empty"
     elif journey is not None and journey.journey_status == "live":
         runbook_status = "live"
+    elif source_role == "execution_record":
+        runbook_status = "terminal_review"
     elif blocked_entry_count and enabled_entry_count == 0:
         runbook_status = "blocked"
     elif completed_entry_count == len(entries):

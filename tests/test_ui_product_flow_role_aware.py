@@ -64,8 +64,17 @@ def test_product_flow_gateway_accepts_execution_record_source_without_proposal_c
     assert vm.current_gateway_id in {"followthrough", "run"}
 
 
+def test_product_flow_journey_marks_execution_record_as_terminal_review_and_focuses_results() -> None:
+    vm = read_product_flow_journey_view_model(_run("completed"))
+
+    assert vm.source_role == "execution_record"
+    assert vm.journey_status == "terminal_review"
+    assert vm.current_step_id == "observe_results"
+
+
 def test_product_flow_handoff_prefers_followthrough_for_execution_record_source() -> None:
     vm = read_product_flow_handoff_view_model(_run("completed"))
     assert vm.source_role == "execution_record"
+    assert vm.handoff_status == "terminal_review"
     assert vm.primary_entry_id in {"inspect_trace", "inspect_artifacts", "compare_results", "run_current"}
     assert vm.primary_entry_id != "review_proposal"

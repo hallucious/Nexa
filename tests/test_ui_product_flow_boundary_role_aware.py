@@ -36,6 +36,9 @@ def test_product_flow_runbook_exposes_trace_and_artifact_actions_for_execution_r
     trace_entry = next(entry for entry in vm.entries if entry.entry_id == "inspect_trace")
     artifact_entry = next(entry for entry in vm.entries if entry.entry_id == "inspect_artifacts")
 
+    assert vm.runbook_status == "terminal_review"
+    assert vm.current_entry_id == "inspect_trace"
+    assert vm.recommended_entry_id == "inspect_trace"
     assert trace_entry.enabled is True
     assert trace_entry.action_id == "open_trace"
     assert artifact_entry.enabled is True

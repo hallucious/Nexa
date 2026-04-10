@@ -290,12 +290,37 @@ def read_product_flow_journey_view_model(
         if current_step is None:
             current_step = next((step for step in steps if step.step_id == "observe_results"), None)
     if current_step is None:
+        steps_by_id = {step.step_id: step for step in steps}
+        preferred_ids: tuple[str, ...] = ()
         if source_role == "commit_snapshot":
             preferred_ids = ("run_current", "observe_results", "commit_snapshot")
-            current_step = next((step for step in steps if step.step_id in preferred_ids and (step.step_status == "active" or step.actionable or not step.complete)), None)
+            current_step = next(
+                (
+                    steps_by_id[step_id]
+                    for step_id in preferred_ids
+                    if step_id in steps_by_id and (
+                        steps_by_id[step_id].step_status == "active"
+                        or steps_by_id[step_id].actionable
+                        or not steps_by_id[step_id].complete
+                    )
+                ),
+                None,
+            )
         elif source_role == "execution_record":
             preferred_ids = ("observe_results", "run_current", "commit_snapshot")
-            current_step = next((step for step in steps if step.step_id in preferred_ids and (step.step_status == "active" or step.actionable or step.complete or not step.complete)), None)
+            current_step = next(
+                (
+                    steps_by_id[step_id]
+                    for step_id in preferred_ids
+                    if step_id in steps_by_id and (
+                        steps_by_id[step_id].step_status == "active"
+                        or steps_by_id[step_id].actionable
+                        or steps_by_id[step_id].complete
+                        or not steps_by_id[step_id].complete
+                    )
+                ),
+                None,
+            )
         if current_step is None:
             current_step = next((step for step in steps if not step.complete), steps[-1] if steps else None)
 
@@ -303,6 +328,8 @@ def read_product_flow_journey_view_model(
         journey_status = "empty"
     elif live_run:
         journey_status = "live"
+    elif source_role == "execution_record":
+        journey_status = "terminal_review"
     elif blocked_step_count:
         journey_status = "blocked"
     elif completed_step_count == len(steps):
@@ -310,7 +337,7 @@ def read_product_flow_journey_view_model(
     else:
         journey_status = "ready"
 
-    if journey_status == "complete" and not (prefer_active_workflow_focus and workflow_hub is not None and workflow_hub.active_workflow_id == "proposal_commit"):
+    if journey_status in {"complete", "terminal_review"} and not (prefer_active_workflow_focus and workflow_hub is not None and workflow_hub.active_workflow_id == "proposal_commit"):
         current_step = next((step for step in steps if step.step_id == "observe_results"), current_step)
 
     return ProductFlowJourneyViewModel(

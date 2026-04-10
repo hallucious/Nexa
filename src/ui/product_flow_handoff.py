@@ -206,6 +206,8 @@ def read_product_flow_handoff_view_model(
 
     if primary is None:
         handoff_status = "empty"
+    elif source_role == "execution_record" and (primary.enabled or primary.complete):
+        handoff_status = "terminal_review"
     elif primary.complete and followthrough is not None and (followthrough.enabled or followthrough.complete):
         handoff_status = "followthrough"
     elif primary.enabled and primary.requires_confirmation:
