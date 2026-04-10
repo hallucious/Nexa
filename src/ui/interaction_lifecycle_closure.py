@@ -60,6 +60,32 @@ def _find_flow(flows: EndUserCommandFlowViewModel, action_id: str):
     return next((item for item in flows.flows if item.action_id == action_id), None)
 
 
+def _stage_requirements_for(*, source_role: str) -> dict[str, str]:
+    if source_role == "commit_snapshot":
+        return {
+            "drafting": "open_latest_commit",
+            "review": "open_latest_commit",
+            "commit": "open_latest_commit",
+            "execution": "run_from_commit",
+            "history": "open_latest_run",
+        }
+    if source_role == "execution_record":
+        return {
+            "drafting": "open_latest_run",
+            "review": "open_latest_run",
+            "commit": "open_latest_run",
+            "execution": "open_latest_run",
+            "history": "open_trace",
+        }
+    return {
+        "drafting": "review_draft",
+        "review": "approve_for_commit",
+        "commit": "commit_snapshot",
+        "execution": "run_current",
+        "history": "replay_latest",
+    }
+
+
 def read_interaction_lifecycle_closure_view_model(
     source: SourceLike,
     *,
@@ -76,13 +102,7 @@ def read_interaction_lifecycle_closure_view_model(
     lifecycle = execution_adapter_hub.dispatch_hub.lifecycle if execution_adapter_hub.dispatch_hub is not None else None
     current_stage_id = lifecycle.current_stage_id if lifecycle is not None else "drafting"
 
-    stage_requirements = {
-        "drafting": "review_draft",
-        "review": "approve_for_commit",
-        "commit": "commit_snapshot",
-        "execution": "run_current",
-        "history": "replay_latest",
-    }
+    stage_requirements = _stage_requirements_for(source_role=source_role)
 
     stages: list[LifecycleClosureStageView] = []
     for stage in lifecycle.stages if lifecycle is not None else []:

@@ -62,12 +62,12 @@ def read_builder_end_user_flow_hub_view_model(
         end_user_flows=end_user_flows,
     )
 
-    if end_user_flows.flow_status == "blocked" or lifecycle_closure.closure_status == "blocked":
+    if lifecycle_closure.terminal_completion_ready:
+        hub_status = "terminal"
+    elif end_user_flows.flow_status == "blocked" or lifecycle_closure.closure_status == "blocked":
         hub_status = "blocked"
     elif end_user_flows.flow_status == "attention" or lifecycle_closure.closure_status == "attention":
         hub_status = "attention"
-    elif lifecycle_closure.terminal_completion_ready:
-        hub_status = "terminal"
     else:
         hub_status = "ready"
 

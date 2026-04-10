@@ -73,10 +73,17 @@ def _label_for(action_id: str, *, app_language: str) -> str:
         "approve_for_commit": "Approve proposal",
         "request_revision": "Request revision",
         "commit_snapshot": "Commit snapshot",
+        "open_latest_commit": "Open latest commit",
+        "select_rollback_target": "Select rollback target",
         "run_current": "Run current",
+        "run_from_commit": "Run from commit",
         "cancel_run": "Cancel run",
         "replay_latest": "Replay latest",
+        "open_latest_run": "Open latest run",
+        "open_trace": "Open trace",
+        "open_artifacts": "Open artifacts",
         "open_diff": "Open diff",
+        "compare_runs": "Compare runs",
     }
     return ui_text(f"builder.action.{action_id}", app_language=app_language, fallback_text=mapping.get(action_id, action_id.replace("_", " ").title()))
 

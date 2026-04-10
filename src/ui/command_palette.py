@@ -225,13 +225,20 @@ def _diff_entries(
 def _action_entries(action_schema: BuilderActionSchemaView) -> list[CommandPaletteEntryView]:
     workspace_map = {
         "run_current": ("runtime_monitoring", "execution"),
+        "run_from_commit": ("runtime_monitoring", "execution"),
         "cancel_run": ("runtime_monitoring", "execution"),
         "replay_latest": ("runtime_monitoring", "trace_timeline"),
+        "open_latest_run": ("runtime_monitoring", "execution"),
+        "open_trace": ("runtime_monitoring", "trace_timeline"),
+        "open_artifacts": ("runtime_monitoring", "artifact"),
         "approve_for_commit": ("node_configuration", "designer"),
         "request_revision": ("node_configuration", "designer"),
         "review_draft": ("node_configuration", "validation"),
         "commit_snapshot": ("node_configuration", "designer"),
+        "open_latest_commit": ("visual_editor", "storage"),
+        "select_rollback_target": ("visual_editor", "storage"),
         "open_diff": ("visual_editor", "diff"),
+        "compare_runs": ("visual_editor", "diff"),
     }
     entries: list[CommandPaletteEntryView] = []
     for action in [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions]:

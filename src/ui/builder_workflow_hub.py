@@ -89,7 +89,7 @@ def read_builder_workflow_hub_view_model(
         precheck=precheck,
         preview=preview,
         approval_flow=approval_flow,
-    ) if source_unwrapped is not None else None
+    ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
 
     execution_launch_vm = read_execution_launch_workflow_view_model(
         source_unwrapped if source_unwrapped is not None else execution_record,

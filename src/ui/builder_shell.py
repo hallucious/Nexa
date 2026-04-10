@@ -151,16 +151,16 @@ def read_builder_shell_view_model(
         validation_report=validation_report,
         execution_record=execution_record,
         preview_overlay=preview_overlay,
-    ) if source is not None else None
+    ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
     resolved_selected_ref = selected_ref or _selected_ref_from_graph(graph_vm)
 
     storage_vm = read_storage_view_model(source_unwrapped) if source_unwrapped is not None else None
     execution_vm = read_execution_panel_view_model(source_unwrapped, execution_record=execution_record, live_events=live_events) if source_unwrapped is not None else None
     trace_vm = read_trace_timeline_view_model(source_unwrapped if isinstance(source_unwrapped, ExecutionRecordModel) else source_unwrapped, execution_record=execution_record, live_events=live_events) if (source_unwrapped is not None or execution_record is not None) else None
     artifact_vm = read_artifact_viewer_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record, selected_artifact_id=selected_artifact_id) if (source_unwrapped is not None or execution_record is not None) else None
-    inspector_vm = read_selected_object_view_model(source_unwrapped, selected_ref=resolved_selected_ref, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay) if source_unwrapped is not None else None
+    inspector_vm = read_selected_object_view_model(source_unwrapped, selected_ref=resolved_selected_ref, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
     validation_vm = read_validation_panel_view_model(source_unwrapped, validation_report=validation_report, precheck=precheck, execution_record=execution_record) if source_unwrapped is not None else None
-    designer_vm = read_designer_panel_view_model(source_unwrapped, session_state_card=session_state_card, intent=intent, patch_plan=patch_plan, precheck=precheck, preview=preview, approval_flow=approval_flow) if source_unwrapped is not None else None
+    designer_vm = read_designer_panel_view_model(source_unwrapped, session_state_card=session_state_card, intent=intent, patch_plan=patch_plan, precheck=precheck, preview=preview, approval_flow=approval_flow) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
 
     diff_vm = None
     if diff_mode and diff_source is not None and diff_target is not None:
@@ -229,7 +229,7 @@ def read_builder_shell_view_model(
         diff_mode=diff_mode,
         diff_source=diff_source,
         diff_target=diff_target,
-    ) if source_unwrapped is not None else None
+    ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
 
     runtime_monitoring_vm = read_runtime_monitoring_workspace_view_model(
         source_unwrapped if source_unwrapped is not None else execution_record,
@@ -251,7 +251,7 @@ def read_builder_shell_view_model(
         precheck=precheck,
         preview=preview,
         approval_flow=approval_flow,
-    ) if source_unwrapped is not None else None
+    ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
 
     diagnostics = BuilderShellDiagnosticsView(
         warning_count=warning_count,

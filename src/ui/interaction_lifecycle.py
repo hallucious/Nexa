@@ -52,31 +52,83 @@ def _storage_role(source) -> str:
     return "none"
 
 
+def _entry_action_for(stage_id: str, *, source_role: str) -> str | None:
+    if source_role == "commit_snapshot":
+        mapping = {
+            "drafting": "open_latest_commit",
+            "review": "open_latest_commit",
+            "commit": "open_latest_commit",
+            "execution": "run_from_commit",
+            "history": "open_latest_run",
+        }
+        return mapping.get(stage_id)
+    if source_role == "execution_record":
+        mapping = {
+            "drafting": "open_latest_run",
+            "review": "open_latest_run",
+            "commit": "open_latest_run",
+            "execution": "open_latest_run",
+            "history": "open_trace",
+        }
+        return mapping.get(stage_id)
+    mapping = {
+        "drafting": "save_working_save",
+        "review": "review_draft",
+        "commit": "commit_snapshot",
+        "execution": "run_current",
+        "history": "replay_latest",
+    }
+    return mapping.get(stage_id)
+
+
 def _status_for(stage_id: str, *, interaction_hub: BuilderInteractionHubViewModel, dispatch_contract: CommandDispatchContractViewModel) -> str:
+    source_role = interaction_hub.source_role
+    proposal = interaction_hub.workflow_hub.proposal_commit
+    execution_workflow = interaction_hub.workflow_hub.execution_launch
+    if source_role == "execution_record":
+        if stage_id in {"drafting", "review", "commit"}:
+            return "completed"
+        if stage_id == "execution":
+            return "active" if execution_workflow.workflow_status == "live_monitoring" else "completed"
+        if stage_id == "history":
+            return "active"
+        return "waiting"
+    if source_role == "commit_snapshot":
+        if stage_id in {"drafting", "review", "commit"}:
+            return "completed"
+        if stage_id == "execution":
+            if execution_workflow.workflow_status == "blocked":
+                return "blocked"
+            return "active" if execution_workflow.workflow_status == "live_monitoring" else ("available" if interaction_hub.workflow_hub.execution_launch.can_launch else "waiting")
+        if stage_id == "history":
+            return "active" if execution_workflow.can_replay else "waiting"
+        return "waiting"
     if stage_id == "drafting":
-        return "active" if interaction_hub.workflow_hub.active_workflow_id == "proposal_commit" and interaction_hub.workflow_hub.proposal_commit.workflow_status in {"idle", "review_ready", "proposal_in_progress"} else "completed"
+        return "active" if interaction_hub.workflow_hub.active_workflow_id == "proposal_commit" and proposal.workflow_status in {"idle", "review_ready", "proposal_in_progress"} else "completed"
     if stage_id == "review":
-        if interaction_hub.workflow_hub.proposal_commit.workflow_status == "blocked":
+        if proposal.workflow_status == "blocked":
             return "blocked"
-        if interaction_hub.workflow_hub.proposal_commit.workflow_status in {"preview_ready", "awaiting_approval", "commit_ready"}:
+        if proposal.workflow_status in {"preview_ready", "awaiting_approval", "commit_ready"}:
             return "active"
         return "available"
     if stage_id == "commit":
         commit_dispatch = next((item for item in dispatch_contract.contracts if item.action_id == "commit_snapshot"), None)
         if commit_dispatch is not None and commit_dispatch.dispatch_allowed:
             return "available"
-        if interaction_hub.workflow_hub.proposal_commit.workflow_status == "committed_context":
+        if proposal.workflow_status == "committed_context":
             return "completed"
         return "waiting"
     if stage_id == "execution":
-        execution_workflow = interaction_hub.workflow_hub.execution_launch
-        if execution_workflow.workflow_status in {"live_monitoring", "completed_run", "historical_run"}:
+        if execution_workflow.workflow_status == "blocked":
+            return "blocked"
+        if execution_workflow.workflow_status == "live_monitoring":
             return "active"
-        if execution_workflow.can_launch:
+        run_dispatch = next((item for item in dispatch_contract.contracts if item.action_id in {"run_current", "run_from_commit"} and item.dispatch_allowed), None)
+        if run_dispatch is not None:
             return "available"
         return "waiting"
     if stage_id == "history":
-        return "active" if interaction_hub.workflow_hub.execution_launch.can_replay or interaction_hub.source_role == "execution_record" else "waiting"
+        return "active" if execution_workflow.can_replay or interaction_hub.source_role == "execution_record" else "waiting"
     return "waiting"
 
 
@@ -94,11 +146,11 @@ def read_interaction_lifecycle_view_model(
     dispatch_contract = dispatch_contract or read_command_dispatch_contract_view_model(source_unwrapped, interaction_hub=interaction_hub)
 
     stages = [
-        InteractionLifecycleStageView("drafting", ui_text("interaction.stage.drafting", app_language=app_language, fallback_text="Drafting"), _status_for("drafting", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", "save_working_save", interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
-        InteractionLifecycleStageView("review", ui_text("interaction.stage.review", app_language=app_language, fallback_text="Review & Approval"), _status_for("review", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "node_configuration", "review_draft", interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
-        InteractionLifecycleStageView("commit", ui_text("interaction.stage.commit", app_language=app_language, fallback_text="Commit"), _status_for("commit", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", "commit_snapshot", interaction_hub.workflow_hub.proposal_commit.summary.pending_decision_count),
-        InteractionLifecycleStageView("execution", ui_text("interaction.stage.execution", app_language=app_language, fallback_text="Execution"), _status_for("execution", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", "run_current", interaction_hub.workflow_hub.execution_launch.summary.blocking_count),
-        InteractionLifecycleStageView("history", ui_text("interaction.stage.history", app_language=app_language, fallback_text="History & Replay"), _status_for("history", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", "replay_latest", 0),
+        InteractionLifecycleStageView("drafting", ui_text("interaction.stage.drafting", app_language=app_language, fallback_text="Drafting"), _status_for("drafting", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", _entry_action_for("drafting", source_role=source_role), interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
+        InteractionLifecycleStageView("review", ui_text("interaction.stage.review", app_language=app_language, fallback_text="Review & Approval"), _status_for("review", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "node_configuration", _entry_action_for("review", source_role=source_role), interaction_hub.workflow_hub.proposal_commit.summary.blocking_count),
+        InteractionLifecycleStageView("commit", ui_text("interaction.stage.commit", app_language=app_language, fallback_text="Commit"), _status_for("commit", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "visual_editor", _entry_action_for("commit", source_role=source_role), interaction_hub.workflow_hub.proposal_commit.summary.pending_decision_count),
+        InteractionLifecycleStageView("execution", ui_text("interaction.stage.execution", app_language=app_language, fallback_text="Execution"), _status_for("execution", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", _entry_action_for("execution", source_role=source_role), interaction_hub.workflow_hub.execution_launch.summary.blocking_count),
+        InteractionLifecycleStageView("history", ui_text("interaction.stage.history", app_language=app_language, fallback_text="History & Replay"), _status_for("history", interaction_hub=interaction_hub, dispatch_contract=dispatch_contract), "runtime_monitoring", _entry_action_for("history", source_role=source_role), 0),
     ]
 
     current_stage = next((stage.stage_id for stage in stages if stage.status == "active"), None)
@@ -111,7 +163,7 @@ def read_interaction_lifecycle_view_model(
         if stage.status in {"available", "active"}:
             next_stage = stage.stage_id
             break
-    terminal = source_role == "execution_record" and interaction_hub.workflow_hub.execution_launch.workflow_status == "historical_run"
+    terminal = source_role == "execution_record"
     can_advance = any(stage.status == "available" for stage in stages if stage.stage_id != current_stage)
     lifecycle_status = "terminal" if terminal else ("attention" if any(stage.status == "blocked" for stage in stages) else "ready")
 
