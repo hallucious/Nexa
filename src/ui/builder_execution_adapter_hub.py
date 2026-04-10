@@ -58,12 +58,12 @@ def read_builder_execution_adapter_hub_view_model(
     execution_adapters = read_command_execution_adapter_view_model(source_unwrapped, dispatch_hub=dispatch_hub)
     state_changes = read_interaction_state_change_view_model(source_unwrapped, dispatch_hub=dispatch_hub, execution_adapters=execution_adapters)
 
-    if execution_adapters.adapter_status == "blocked":
+    if dispatch_hub.lifecycle is not None and dispatch_hub.lifecycle.terminal:
+        hub_status = "terminal"
+    elif execution_adapters.adapter_status == "blocked":
         hub_status = "blocked"
     elif execution_adapters.adapter_status == "attention" or state_changes.state_change_status == "attention":
         hub_status = "attention"
-    elif dispatch_hub.lifecycle is not None and dispatch_hub.lifecycle.terminal:
-        hub_status = "terminal"
     else:
         hub_status = "ready"
 

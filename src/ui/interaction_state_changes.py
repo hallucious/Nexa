@@ -68,9 +68,16 @@ def _target_stage(action_id: str, current_stage_id: str) -> str:
         "approve_for_commit": "review",
         "request_revision": "drafting",
         "commit_snapshot": "commit",
+        "open_latest_commit": "commit",
+        "select_rollback_target": "commit",
         "run_current": "execution",
+        "run_from_commit": "execution",
         "cancel_run": "execution",
         "replay_latest": "history",
+        "open_latest_run": "history",
+        "open_trace": "history",
+        "open_artifacts": "history",
+        "compare_runs": "history",
         "open_diff": current_stage_id,
     }
     return mapping.get(action_id, current_stage_id)
