@@ -117,6 +117,8 @@ def read_builder_workflow_hub_view_model(
 
     if execution_launch_vm is not None and execution_launch_vm.workflow_status == "live_monitoring":
         recommended = "execution_launch"
+    elif storage_role == "commit_snapshot" and execution_launch_vm is not None and execution_launch_vm.workflow_status in {"launch_ready", "replay_ready"}:
+        recommended = "execution_launch"
     elif proposal_commit_vm is not None and proposal_commit_vm.workflow_status in {"commit_ready", "awaiting_approval", "preview_ready", "proposal_in_progress"}:
         recommended = "proposal_commit"
     elif storage_role == "execution_record":

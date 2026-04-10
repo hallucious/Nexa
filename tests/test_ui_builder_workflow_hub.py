@@ -7,11 +7,13 @@ from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.models.designer_intent import ConstraintSet, DesignerIntent, ObjectiveSpec, TargetScope
 from src.designer.models.designer_session_state_card import AvailableResources, ConversationContext, CurrentSelectionState, DesignerSessionStateCard, SessionTargetScope, WorkingSaveReality
 from src.designer.models.validation_precheck import AmbiguityAssessmentReport, CostAssessmentReport, EvaluatedScope, ResolutionReport, ValidationPrecheck, ValidityReport
+from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.builder_workflow_hub import read_builder_workflow_hub_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
+
 
 
 def _working_save(active_panel: str = "designer") -> WorkingSaveModel:
@@ -24,6 +26,17 @@ def _working_save(active_panel: str = "designer") -> WorkingSaveModel:
         ui=UIModel(layout={}, metadata={"selected_node_ids": ["n1"], "active_panel": active_panel, "app_language": "ko-KR"}),
     )
 
+
+def _commit() -> CommitSnapshotModel:
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
 
 def _run(status: str = "completed") -> ExecutionRecordModel:
     return ExecutionRecordModel(
@@ -154,4 +167,10 @@ def test_builder_workflow_hub_recommends_execution_launch_when_run_is_live() -> 
     vm = read_builder_workflow_hub_view_model(_working_save("execution"), validation_report=_validation_report(), execution_record=_run("running"))
     assert vm.recommended_workflow_id == "execution_launch"
     assert vm.active_workflow_id == "execution_launch"
+    assert vm.execution_launch is not None
+
+
+def test_builder_workflow_hub_recommends_execution_launch_for_approved_commit_snapshot() -> None:
+    vm = read_builder_workflow_hub_view_model(_commit(), execution_record=_run())
+    assert vm.recommended_workflow_id == "execution_launch"
     assert vm.execution_launch is not None

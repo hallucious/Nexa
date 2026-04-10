@@ -111,10 +111,10 @@ def read_execution_launch_workflow_view_model(
         execution_view=monitoring_vm.execution if monitoring_vm is not None else None,
     )
 
-    run_action = _find_action(action_schema, "run_current")
+    run_action = _find_action(action_schema, "run_current") or _find_action(action_schema, "run_from_commit")
     cancel_action = _find_action(action_schema, "cancel_run")
-    replay_action = _find_action(action_schema, "replay_latest")
-    compare_action = _find_action(action_schema, "open_diff")
+    replay_action = _find_action(action_schema, "replay_latest") or _find_action(action_schema, "open_latest_run")
+    compare_action = _find_action(action_schema, "open_diff") or _find_action(action_schema, "compare_runs")
 
     run_identity = monitoring_vm.execution.run_identity if monitoring_vm is not None and monitoring_vm.execution is not None else None
     execution_status = monitoring_vm.health.execution_status if monitoring_vm is not None else "unknown"

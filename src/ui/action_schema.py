@@ -64,6 +64,16 @@ def _action(action_id: str, label: str, action_kind: str, enabled: bool, *, reas
     )
 
 
+def _storage_action_view(action) -> BuilderActionView:
+    return BuilderActionView(
+        action_id=action.action_type,
+        label=action.label,
+        action_kind="storage",
+        enabled=action.enabled,
+        reason_disabled=action.reason_disabled,
+    )
+
+
 def read_builder_action_schema(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -88,7 +98,7 @@ def read_builder_action_schema(
     elif isinstance(source, ExecutionRecordModel):
         has_execution_record = True
 
-    primary_actions = [
+    working_primary_actions = [
         _action(
             "save_working_save",
             ui_text("builder.action.save_working_save", app_language=app_language),
@@ -137,7 +147,7 @@ def read_builder_action_schema(
         ),
     ]
 
-    secondary_actions = [
+    generic_secondary_actions = [
         _action(
             "replay_latest",
             ui_text("builder.action.replay_latest", app_language=app_language),
@@ -163,6 +173,40 @@ def read_builder_action_schema(
             ),
         ),
     ]
+
+    primary_actions = list(working_primary_actions)
+    secondary_actions = list(generic_secondary_actions)
+
+    if source_role == "commit_snapshot" and storage_view is not None:
+        primary_actions = [
+            _storage_action_view(action)
+            for action in storage_view.available_actions
+            if action.action_type in {"open_latest_commit", "run_from_commit", "select_rollback_target"}
+        ]
+        secondary_actions = [
+            _storage_action_view(action)
+            for action in storage_view.available_actions
+            if action.action_type not in {"open_latest_commit", "run_from_commit", "select_rollback_target"}
+        ] + generic_secondary_actions
+    elif source_role == "execution_record" and storage_view is not None:
+        primary_actions = [
+            _storage_action_view(action)
+            for action in storage_view.available_actions
+            if action.action_type in {"open_latest_run", "open_trace", "open_artifacts", "compare_runs"}
+        ]
+        secondary_actions = [
+            _storage_action_view(action)
+            for action in storage_view.available_actions
+            if action.action_type not in {"open_latest_run", "open_trace", "open_artifacts", "compare_runs"}
+        ] + [
+            _action(
+                "replay_latest",
+                ui_text("builder.action.replay_latest", app_language=app_language),
+                "execution",
+                has_execution_record,
+                reason_disabled=None if has_execution_record else ui_text("builder.reason.replay_requires_execution_record", app_language=app_language),
+            )
+        ]
 
     contextual_actions: list[BuilderActionView] = []
     if designer_view is not None:

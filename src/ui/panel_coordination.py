@@ -148,10 +148,16 @@ def read_panel_coordination_state(
 
     active_panel = str(metadata.get("active_panel")) if metadata.get("active_panel") else ""
     if not active_panel:
-        if execution_view is not None and execution_view.execution_status in {"running", "queued"}:
+        if selection.selected_storage_ref is not None:
+            active_panel = "storage"
+        elif execution_view is not None and execution_view.execution_status in {"running", "queued"}:
+            active_panel = "execution"
+        elif role == "execution_record":
             active_panel = "execution"
         elif validation_view is not None and validation_view.overall_status == "blocked":
             active_panel = "validation"
+        elif role == "commit_snapshot":
+            active_panel = "storage"
         elif designer_view is not None and designer_view.request_state.request_status in {"submitted", "editing"}:
             active_panel = "designer"
         elif selection.primary_ref is not None and role in {"working_save", "commit_snapshot"}:

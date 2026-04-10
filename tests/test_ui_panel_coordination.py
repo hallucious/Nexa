@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.contracts.nex_contract import ValidationFinding, ValidationReport
 from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
+from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
 from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultsModel
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
@@ -29,6 +30,19 @@ def _working_save() -> WorkingSaveModel:
         }),
     )
 
+
+
+
+def _commit() -> CommitSnapshotModel:
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
 
 def _run(status: str = "running") -> ExecutionRecordModel:
     return ExecutionRecordModel(
@@ -86,3 +100,13 @@ def test_panel_coordination_defaults_to_inspector_when_graph_selection_exists_an
 
     assert vm.active_panel == "inspector"
     assert vm.selection.primary_ref == "node:n1"
+
+
+def test_panel_coordination_defaults_commit_snapshot_to_storage_when_no_explicit_panel_is_set() -> None:
+    vm = read_panel_coordination_state(_commit())
+    assert vm.active_panel == "storage"
+
+
+def test_panel_coordination_defaults_execution_record_to_execution_when_no_explicit_panel_is_set() -> None:
+    vm = read_panel_coordination_state(_run())
+    assert vm.active_panel == "execution"

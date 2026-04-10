@@ -88,3 +88,28 @@ def test_action_schema_enables_cancel_only_for_running_execution() -> None:
     vm = read_builder_action_schema(_working_save(), execution_view=execution)
     actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
     assert actions["cancel_run"].enabled is True
+
+
+def test_action_schema_prioritizes_commit_snapshot_runtime_actions_for_approved_snapshot() -> None:
+    storage = read_storage_view_model(_commit())
+    validation = read_validation_panel_view_model(_commit())
+    vm = read_builder_action_schema(_commit(), storage_view=storage, validation_view=validation)
+
+    primary_ids = [a.action_id for a in vm.primary_actions]
+    assert "run_from_commit" in primary_ids
+    assert "open_latest_commit" in primary_ids
+    assert "save_working_save" not in primary_ids
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["run_from_commit"].enabled is True
+
+
+def test_action_schema_prioritizes_execution_record_inspection_actions_for_history_role() -> None:
+    storage = read_storage_view_model(_run())
+    execution = read_execution_panel_view_model(_run(), execution_record=_run())
+    vm = read_builder_action_schema(_run(), storage_view=storage, execution_view=execution)
+
+    primary_ids = [a.action_id for a in vm.primary_actions]
+    assert "open_latest_run" in primary_ids
+    assert "replay_latest" not in primary_ids
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["open_latest_run"].enabled is True
