@@ -9,7 +9,8 @@ description = "Nexa workflow engine"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-  "PyYAML>=6.0"
+  "PyYAML>=6.0",
+  "fastapi>=0.111"
 ]
 
 [project.scripts]

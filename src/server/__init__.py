@@ -71,6 +71,15 @@ from src.server.framework_binding_models import (
     FrameworkRouteDefinition,
 )
 from src.server.framework_binding import FrameworkRouteBindings
+try:
+    from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
+    from src.server.fastapi_binding import FastApiRouteBindings, create_fastapi_app
+    _FASTAPI_BINDING_AVAILABLE = True
+except ModuleNotFoundError as exc:
+    if exc.name != "fastapi":
+        raise
+    _FASTAPI_BINDING_AVAILABLE = False
+
 from src.server.run_read_models import (
     ProductArtifactRefView,
     ProductEngineSignalView,
@@ -229,3 +238,11 @@ __all__ = [
     "TableSpec",
     "validate_schema_families",
 ]
+
+if _FASTAPI_BINDING_AVAILABLE:
+    __all__.extend([
+        "FastApiBindingConfig",
+        "FastApiRouteBindings",
+        "FastApiRouteDependencies",
+        "create_fastapi_app",
+    ])
