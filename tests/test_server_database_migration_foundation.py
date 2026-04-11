@@ -64,14 +64,19 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
     assert [family.family_name for family in families] == [
         "workspace_registry",
         "run_history",
+        "provider_credentials",
         "append_only_outputs",
     ]
-    assert summary["family_count"] == 3
+    assert summary["family_count"] == 4
 
-    workspace_family, run_family, append_only_family = families
+    workspace_family, run_family, provider_family, append_only_family = families
     assert workspace_family.persistence_mode == "mutable_projection"
     assert run_family.persistence_mode == "mutable_projection"
+    assert provider_family.persistence_mode == "mutable_projection"
     assert append_only_family.persistence_mode == "append_only"
+
+    provider_tables = {table.name for table in provider_family.tables}
+    assert provider_tables == {"managed_provider_bindings"}
 
     append_only_tables = {table.name for table in append_only_family.tables}
     assert append_only_tables == {"artifact_index", "trace_event_index", "artifact_lineage_links"}
@@ -89,6 +94,7 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
     assert any("CREATE TABLE IF NOT EXISTS workspace_registry" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS run_records" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS onboarding_state" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS managed_provider_bindings" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS artifact_index" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS trace_event_index" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS artifact_lineage_links" in statement for statement in statements)

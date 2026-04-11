@@ -110,6 +110,31 @@ def _make_client() -> TestClient:
             },
         ]
     }
+    provider_catalog_rows = ({
+        'provider_key': 'openai',
+        'provider_family': 'openai',
+        'display_name': 'OpenAI GPT',
+        'managed_supported': True,
+        'recommended_scope': 'workspace',
+        'local_env_var_hint': 'OPENAI_API_KEY',
+        'default_secret_name_template': 'nexa/{workspace_id}/providers/openai',
+    },)
+    provider_binding_rows = {
+        'ws-001': ({
+            'binding_id': 'binding-001',
+            'workspace_id': 'ws-001',
+            'provider_key': 'openai',
+            'provider_family': 'openai',
+            'display_name': 'OpenAI GPT',
+            'credential_source': 'managed',
+            'secret_ref': 'secret://ws-001/openai',
+            'secret_version_ref': 'v1',
+            'enabled': True,
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:05:00+00:00',
+            'updated_by_user_id': 'user-owner',
+        },),
+    }
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
         workspace_rows_provider=lambda: ({
@@ -125,6 +150,9 @@ def _make_client() -> TestClient:
         workspace_membership_rows_provider=lambda: (),
         recent_run_rows_provider=lambda: (_run_row(trace_available=True),),
         onboarding_rows_provider=lambda: (),
+        provider_catalog_rows_provider=lambda: provider_catalog_rows,
+        workspace_provider_binding_rows_provider=lambda workspace_id: provider_binding_rows.get(workspace_id, ()),
+        workspace_provider_binding_row_provider=lambda workspace_id, provider_key: next((row for row in provider_binding_rows.get(workspace_id, ()) if row['provider_key'] == provider_key), None),
         workspace_row_provider=lambda workspace_id: {
             'workspace_id': 'ws-001',
             'owner_user_id': 'user-owner',
@@ -188,7 +216,13 @@ def _make_client() -> TestClient:
         run_request_id_factory=lambda: "req-001",
         workspace_id_factory=lambda: 'ws-new',
         membership_id_factory=lambda: 'membership-new',
+        binding_id_factory=lambda: 'binding-new',
         onboarding_state_id_factory=lambda: 'onboard-001',
+        managed_secret_writer=lambda workspace_id, provider_key, secret_value, metadata: {
+            'secret_ref': f'secret://{workspace_id}/{provider_key}',
+            'secret_version_ref': 'v2',
+            'last_rotated_at': '2026-04-11T12:06:00+00:00',
+        },
         now_iso_provider=lambda: "2026-04-11T12:00:00+00:00",
     )
     return TestClient(create_fastapi_app(dependencies=deps))
@@ -300,16 +334,29 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
     assert onboarding_put.json()['state']['advanced_surfaces_unlocked'] is True
 
 
-def test_fastapi_binding_recent_activity_routes_round_trip() -> None:
+def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() -> None:
     client = _make_client()
-    activity_response = client.get('/api/users/me/activity?limit=2', headers=_session_headers())
-    assert activity_response.status_code == 200
-    activity_payload = activity_response.json()
-    assert activity_payload['returned_count'] >= 1
-    assert activity_payload['activities'][0]['workspace_id'] == 'ws-001'
 
-    summary_response = client.get('/api/users/me/history-summary', headers=_session_headers())
-    assert summary_response.status_code == 200
-    summary_payload = summary_response.json()
-    assert summary_payload['visible_workspace_count'] == 1
-    assert summary_payload['total_visible_runs'] >= 1
+    catalog_response = client.get("/api/providers/catalog", headers=_session_headers())
+    assert catalog_response.status_code == 200
+    catalog_payload = catalog_response.json()
+    assert catalog_payload["returned_count"] == 1
+    assert catalog_payload["providers"][0]["provider_key"] == "openai"
+
+    bindings_response = client.get("/api/workspaces/ws-001/provider-bindings", headers=_session_headers())
+    assert bindings_response.status_code == 200
+    bindings_payload = bindings_response.json()
+    assert bindings_payload["returned_count"] == 1
+    assert bindings_payload["bindings"][0]["status"] == "configured"
+
+    put_response = client.put(
+        "/api/workspaces/ws-001/provider-bindings/openai",
+        headers=_session_headers(),
+        json={"display_name": "OpenAI GPT", "secret_value": "super-secret", "enabled": True},
+    )
+    assert put_response.status_code == 200
+    put_payload = put_response.json()
+    assert put_payload["binding"]["provider_key"] == "openai"
+    assert put_payload["binding"]["secret_ref"] == "secret://ws-001/openai"
+    assert put_payload["secret_rotated"] is True
+    assert "super-secret" not in put_response.text

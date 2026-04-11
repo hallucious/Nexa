@@ -86,6 +86,9 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "list_workspaces",
         "get_workspace",
         "create_workspace",
+        "get_provider_catalog",
+        "list_workspace_provider_bindings",
+        "put_workspace_provider_binding",
         "get_onboarding",
         "put_onboarding",
         "list_workspace_runs",
@@ -253,43 +256,81 @@ def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None
     assert onboarding_payload["state"]["advanced_surfaces_unlocked"] is True
 
 
-def test_framework_binding_handles_recent_activity_round_trip() -> None:
-    activity_response = FrameworkRouteBindings.handle_recent_activity(
-        request=_request(method="GET", path="/api/users/me/activity", query_params={"limit": 2}),
-        workspace_rows=({
-            "workspace_id": "ws-001",
-            "owner_user_id": "user-owner",
-            "title": "Primary Workspace",
-            "description": "Main",
-            "created_at": "2026-04-11T12:00:00+00:00",
-            "updated_at": "2026-04-11T12:05:00+00:00",
-            "continuity_source": "server",
-            "archived": False,
+def test_framework_binding_handles_provider_catalog_and_workspace_provider_bindings_round_trip() -> None:
+    catalog_response = FrameworkRouteBindings.handle_list_provider_catalog(
+        request=_request(method="GET", path="/api/providers/catalog"),
+        provider_catalog_rows=({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+            "local_env_var_hint": "OPENAI_API_KEY",
+            "default_secret_name_template": "nexa/{workspace_id}/providers/openai",
         },),
-        membership_rows=(),
-        run_rows=({**_run_row(status="completed", status_family="terminal_success"), "updated_at": "2026-04-11T12:06:00+00:00"},),
     )
-    activity_payload = json.loads(activity_response.body_text)
-    assert activity_response.status_code == 200
-    assert activity_payload["returned_count"] == 2
-    assert activity_payload["activities"][0]["activity_type"] == "run_completed"
+    catalog_payload = json.loads(catalog_response.body_text)
+    assert catalog_response.status_code == 200
+    assert catalog_payload["returned_count"] == 1
+    assert catalog_payload["providers"][0]["provider_key"] == "openai"
 
-    summary_response = FrameworkRouteBindings.handle_history_summary(
-        request=_request(method="GET", path="/api/users/me/history-summary"),
-        workspace_rows=({
+    list_response = FrameworkRouteBindings.handle_list_workspace_provider_bindings(
+        request=_request(method="GET", path="/api/workspaces/ws-001/provider-bindings", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        binding_rows=({
+            "binding_id": "binding-001",
             "workspace_id": "ws-001",
-            "owner_user_id": "user-owner",
-            "title": "Primary Workspace",
-            "description": "Main",
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "credential_source": "managed",
+            "secret_ref": "secret://ws-001/openai",
+            "secret_version_ref": "v1",
+            "enabled": True,
             "created_at": "2026-04-11T12:00:00+00:00",
             "updated_at": "2026-04-11T12:05:00+00:00",
-            "continuity_source": "server",
-            "archived": False,
+            "updated_by_user_id": "user-owner",
         },),
-        membership_rows=(),
-        run_rows=({**_run_row(status="completed", status_family="terminal_success"), "updated_at": "2026-04-11T12:06:00+00:00"},),
+        provider_catalog_rows=({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+        },),
     )
-    summary_payload = json.loads(summary_response.body_text)
-    assert summary_response.status_code == 200
-    assert summary_payload["total_visible_runs"] == 1
-    assert summary_payload["terminal_success_runs"] == 1
+    list_payload = json.loads(list_response.body_text)
+    assert list_response.status_code == 200
+    assert list_payload["returned_count"] == 1
+    assert list_payload["bindings"][0]["status"] == "configured"
+
+    put_response = FrameworkRouteBindings.handle_put_workspace_provider_binding(
+        request=_request(
+            method="PUT",
+            path="/api/workspaces/ws-001/provider-bindings/openai",
+            path_params={"workspace_id": "ws-001", "provider_key": "openai"},
+            json_body={"display_name": "OpenAI GPT", "secret_value": "super-secret", "enabled": True},
+        ),
+        workspace_context=_workspace(),
+        existing_binding_row=None,
+        provider_catalog_rows=({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+        },),
+        binding_id_factory=lambda: "binding-001",
+        secret_writer=lambda workspace_id, provider_key, secret_value, metadata: {
+            "secret_ref": f"secret://{workspace_id}/{provider_key}",
+            "secret_version_ref": "v2",
+            "last_rotated_at": "2026-04-11T12:06:00+00:00",
+        },
+        now_iso="2026-04-11T12:06:00+00:00",
+    )
+    put_payload = json.loads(put_response.body_text)
+    assert put_response.status_code == 200
+    assert put_payload["binding"]["provider_key"] == "openai"
+    assert put_payload["binding"]["secret_ref"] == "secret://ws-001/openai"
+    assert put_payload["secret_rotated"] is True
+    assert "super-secret" not in put_response.body_text

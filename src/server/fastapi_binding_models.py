@@ -43,6 +43,10 @@ WorkspaceRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 WorkspaceMembershipRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 RecentRunRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 OnboardingRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+ProviderCatalogRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+WorkspaceProviderBindingRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
+WorkspaceProviderBindingRowProvider = Callable[[str, str], Optional[Mapping[str, Any]]]
+ManagedSecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
 WorkspaceRowProvider = Callable[[str], Optional[Mapping[str, Any]]]
 EngineStatusProvider = Callable[[str], Optional[EngineRunStatusSnapshot]]
 EngineResultProvider = Callable[[str], Optional[EngineResultEnvelope]]
@@ -79,6 +83,22 @@ def _empty_result_rows(_: str) -> Mapping[str, Mapping[str, Any]]:
     return {}
 
 
+def _empty_provider_binding_rows(_: str) -> Sequence[Mapping[str, Any]]:
+    return ()
+
+
+def _none_provider_binding_row(_: str, __: str) -> Optional[Mapping[str, Any]]:
+    return None
+
+
+def _default_secret_writer(workspace_id: str, provider_key: str, secret_value: str, metadata: Mapping[str, Any]) -> Mapping[str, Any]:
+    return {
+        "secret_ref": f"secret://{workspace_id}/{provider_key}",
+        "secret_version_ref": "v1",
+        "last_rotated_at": str(metadata.get("now_iso") or metadata.get("updated_at") or "").strip() or None,
+    }
+
+
 def _none_workspace_row(_: str) -> Optional[Mapping[str, Any]]:
     return None
 
@@ -107,6 +127,10 @@ class FastApiRouteDependencies:
     workspace_membership_rows_provider: WorkspaceMembershipRowsProvider = _empty_noarg_rows
     recent_run_rows_provider: RecentRunRowsProvider = _empty_noarg_rows
     onboarding_rows_provider: OnboardingRowsProvider = _empty_noarg_rows
+    provider_catalog_rows_provider: ProviderCatalogRowsProvider = _empty_noarg_rows
+    workspace_provider_binding_rows_provider: WorkspaceProviderBindingRowsProvider = _empty_provider_binding_rows
+    workspace_provider_binding_row_provider: WorkspaceProviderBindingRowProvider = _none_provider_binding_row
+    managed_secret_writer: ManagedSecretWriter = _default_secret_writer
     workspace_row_provider: WorkspaceRowProvider = _none_workspace_row
     engine_status_provider: EngineStatusProvider = _none_status
     engine_result_provider: EngineResultProvider = _none_result
@@ -116,6 +140,7 @@ class FastApiRouteDependencies:
     run_request_id_factory: Optional[IdentifierFactory] = None
     workspace_id_factory: Optional[IdentifierFactory] = None
     membership_id_factory: Optional[IdentifierFactory] = None
+    binding_id_factory: Optional[IdentifierFactory] = None
     onboarding_state_id_factory: Optional[IdentifierFactory] = None
     now_iso_provider: Optional[NowIsoProvider] = None
     session_claims_resolver: Optional[SessionClaimsResolver] = None

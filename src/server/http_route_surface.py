@@ -22,6 +22,8 @@ from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadSer
 from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
 from src.server.workspace_onboarding_models import ProductOnboardingWriteRequest, ProductWorkspaceCreateRequest
 from src.server.recent_activity_api import RecentActivityService
+from src.server.provider_secret_api import ProviderSecretIntegrationService
+from src.server.provider_secret_models import ProductProviderBindingWriteRequest
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -80,6 +82,27 @@ class RunHttpRouteSurface:
             input_payload=body.get("input_payload"),
             launch_options=ProductLaunchOptions(**dict(body.get("launch_options") or {})),
             client_context=ProductClientContext(**dict(body.get("client_context") or {})),
+        )
+
+    @staticmethod
+    def _parse_provider_binding_write_request(http_request: HttpRouteRequest) -> ProductProviderBindingWriteRequest:
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            raise ValueError("provider_binding_write.request_body_invalid")
+        allowed_model_refs_raw = body.get("allowed_model_refs") or ()
+        if isinstance(allowed_model_refs_raw, str):
+            allowed_model_refs = (allowed_model_refs_raw.strip(),) if allowed_model_refs_raw.strip() else ()
+        else:
+            allowed_model_refs = tuple(str(item).strip() for item in allowed_model_refs_raw if str(item).strip())
+        return ProductProviderBindingWriteRequest(
+            display_name=str(body.get("display_name") or "").strip() or None,
+            enabled=bool(body.get("enabled", True)),
+            credential_source=str(body.get("credential_source") or "managed").strip() or "managed",
+            secret_value=str(body.get("secret_value") or "").strip() or None,
+            secret_ref_hint=str(body.get("secret_ref_hint") or "").strip() or None,
+            default_model_ref=str(body.get("default_model_ref") or "").strip() or None,
+            allowed_model_refs=allowed_model_refs,
+            notes=str(body.get("notes") or "").strip() or None,
         )
 
     @classmethod
@@ -482,6 +505,105 @@ class RunHttpRouteSurface:
         if outcome.ok:
             assert outcome.response is not None
             return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_list_provider_catalog(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Provider catalog route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/providers/catalog":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        outcome = ProviderSecretIntegrationService.list_provider_catalog(
+            request_auth=_request_auth(http_request),
+            provider_catalog_rows=provider_catalog_rows,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_list_workspace_provider_bindings(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace provider bindings route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/provider-bindings"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        outcome = ProviderSecretIntegrationService.list_workspace_provider_bindings(
+            request_auth=_request_auth(http_request),
+            workspace_context=workspace_context,
+            binding_rows=binding_rows,
+            provider_catalog_rows=provider_catalog_rows,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_put_workspace_provider_binding(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        existing_binding_row: Optional[Mapping[str, Any]],
+        provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        binding_id_factory: Callable[[], str],
+        secret_writer,
+        now_iso: str,
+    ) -> HttpRouteResponse:
+        if http_request.method != "PUT":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace provider binding route only supports PUT."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        provider_key = str(http_request.path_params.get("provider_key") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        if not provider_key:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.provider_key_missing", "message": "Provider key path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/provider-bindings/{provider_key}"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        try:
+            write_request = cls._parse_provider_binding_write_request(http_request)
+        except Exception as exc:  # noqa: BLE001
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "product_write_failure",
+                "reason_code": getattr(exc, "args", ["provider_binding_write.invalid_request"])[0] or "provider_binding_write.invalid_request",
+                "message": "Provider binding request payload is invalid.",
+            })
+        outcome = ProviderSecretIntegrationService.upsert_workspace_provider_binding(
+            request_auth=_request_auth(http_request),
+            workspace_context=workspace_context,
+            provider_key=provider_key,
+            request=write_request,
+            existing_binding_row=existing_binding_row,
+            provider_catalog_rows=provider_catalog_rows,
+            binding_id_factory=binding_id_factory,
+            secret_writer=secret_writer,
+            now_iso=now_iso,
+        )
+        if outcome.ok:
+            assert outcome.accepted is not None
+            return _route_response(200, asdict(outcome.accepted))
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 

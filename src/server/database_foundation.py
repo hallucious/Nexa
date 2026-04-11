@@ -228,6 +228,42 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
+    provider_credentials = SchemaFamily(
+        family_name="provider_credentials",
+        purpose="Managed provider binding metadata and canonical secret authority references.",
+        persistence_mode="mutable_projection",
+        tables=(
+            TableSpec(
+                name="managed_provider_bindings",
+                persistence_mode="mutable_projection",
+                description="Workspace-scoped managed provider binding metadata without raw secret values.",
+                columns=(
+                    ColumnSpec("binding_id", "TEXT", is_primary_key=True),
+                    ColumnSpec("workspace_id", "TEXT", reference_table="workspace_registry", reference_column="workspace_id"),
+                    ColumnSpec("provider_key", "TEXT"),
+                    ColumnSpec("provider_family", "TEXT"),
+                    ColumnSpec("display_name", "TEXT", nullable=True),
+                    ColumnSpec("credential_source", "TEXT", default_sql="'managed'"),
+                    ColumnSpec("secret_ref", "TEXT", nullable=True),
+                    ColumnSpec("secret_version_ref", "TEXT", nullable=True),
+                    ColumnSpec("enabled", "BOOLEAN", default_sql="TRUE"),
+                    ColumnSpec("default_model_ref", "TEXT", nullable=True),
+                    ColumnSpec("allowed_model_refs", "JSONB", nullable=True),
+                    ColumnSpec("notes", "TEXT", nullable=True),
+                    ColumnSpec("created_by_user_id", "TEXT", nullable=True),
+                    ColumnSpec("updated_by_user_id", "TEXT", nullable=True),
+                    ColumnSpec("created_at", "TIMESTAMPTZ"),
+                    ColumnSpec("updated_at", "TIMESTAMPTZ"),
+                    ColumnSpec("last_rotated_at", "TIMESTAMPTZ", nullable=True),
+                ),
+                indexes=(
+                    IndexSpec("idx_managed_provider_bindings_workspace_id", ("workspace_id",)),
+                    IndexSpec("uq_managed_provider_bindings_workspace_provider", ("workspace_id", "provider_key"), unique=True),
+                    IndexSpec("idx_managed_provider_bindings_secret_ref", ("secret_ref",)),
+                ),
+            ),
+        ),
+    )
     append_only_outputs = SchemaFamily(
         family_name="append_only_outputs",
         purpose="Append-only output and lineage index tables that preserve artifact and trace meaning.",
@@ -295,7 +331,7 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
-    return workspace_registry, run_history, append_only_outputs
+    return workspace_registry, run_history, provider_credentials, append_only_outputs
 
 
 def build_server_schema_summary() -> dict[str, object]:

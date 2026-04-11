@@ -100,6 +100,50 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/providers/catalog")
+        async def get_provider_catalog(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_list_provider_catalog(
+                request=inbound,
+                provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/workspaces/{workspace_id}/provider-bindings")
+        async def list_workspace_provider_bindings(request: Request, workspace_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id})
+            outbound = FrameworkRouteBindings.handle_list_workspace_provider_bindings(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
+        @router.put("/api/workspaces/{workspace_id}/provider-bindings/{provider_key}")
+        async def put_workspace_provider_binding(
+            request: Request,
+            workspace_id: str,
+            provider_key: str,
+            payload: dict[str, Any] | None = Body(default=None),
+        ) -> Response:
+            inbound = self._inbound_request(
+                request=request,
+                json_body=payload,
+                path_params={"workspace_id": workspace_id, "provider_key": provider_key},
+            )
+            now_iso = self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else ''
+            outbound = FrameworkRouteBindings.handle_put_workspace_provider_binding(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                existing_binding_row=self.dependencies.workspace_provider_binding_row_provider(workspace_id, provider_key),
+                provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
+                binding_id_factory=self.dependencies.binding_id_factory or (lambda: 'binding-missing-id-factory'),
+                secret_writer=lambda w, p, s, metadata: self.dependencies.managed_secret_writer(w, p, s, {**dict(metadata), 'now_iso': now_iso}),
+                now_iso=now_iso,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/users/me/onboarding")
         async def get_onboarding(request: Request, workspace_id: str | None = None) -> Response:
             workspace_context = self.dependencies.workspace_context_provider(workspace_id) if workspace_id else None

@@ -66,6 +66,7 @@ from src.server.run_list_api import RunListReadService
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
 from src.server.recent_activity_api import RecentActivityService
+from src.server.provider_secret_api import ProviderSecretIntegrationService
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
 from src.server.http_route_surface import RunHttpRouteSurface
 from src.server.framework_binding_models import (
@@ -104,14 +105,6 @@ from src.server.workspace_onboarding_models import (
     WorkspaceReadOutcome,
     WorkspaceWriteOutcome,
 )
-from src.server.run_list_models import (
-    ProductRunListAppliedFilters,
-    ProductRunListItemView,
-    ProductRunListLinks,
-    ProductRunListRejectedResponse,
-    ProductWorkspaceRunListResponse,
-    RunListReadOutcome,
-)
 from src.server.recent_activity_models import (
     HistorySummaryReadOutcome,
     ProductHistorySummaryResponse,
@@ -121,6 +114,28 @@ from src.server.recent_activity_models import (
     ProductRecentActivityRejectedResponse,
     ProductRecentActivityResponse,
     RecentActivityReadOutcome,
+)
+from src.server.provider_secret_models import (
+    ProviderBindingListOutcome,
+    ProviderBindingWriteOutcome,
+    ProviderCatalogReadOutcome,
+    ProductProviderBindingLinks,
+    ProductProviderBindingWriteAcceptedResponse,
+    ProductProviderBindingWriteRequest,
+    ProductProviderCatalogEntryView,
+    ProductProviderCatalogResponse,
+    ProductProviderSecretReadRejectedResponse,
+    ProductProviderSecretWriteRejectedResponse,
+    ProductWorkspaceProviderBindingsResponse,
+    ProductWorkspaceProviderBindingView,
+)
+from src.server.run_list_models import (
+    ProductRunListAppliedFilters,
+    ProductRunListItemView,
+    ProductRunListLinks,
+    ProductRunListRejectedResponse,
+    ProductWorkspaceRunListResponse,
+    RunListReadOutcome,
 )
 from src.server.run_read_models import (
     ProductArtifactRefView,
@@ -230,6 +245,7 @@ __all__ = [
     "WorkspaceRegistryService",
     "RecentActivityService",
     "OnboardingContinuityService",
+    "ProviderSecretIntegrationService",
     "ProductWorkspaceCreateRequest",
     "ProductWorkspaceDetailResponse",
     "ProductWorkspaceLinks",
@@ -242,6 +258,18 @@ __all__ = [
     "WorkspaceReadOutcome",
     "WorkspaceWriteOutcome",
     "ProductOnboardingLinks",
+    "ProviderBindingListOutcome",
+    "ProviderBindingWriteOutcome",
+    "ProviderCatalogReadOutcome",
+    "ProductProviderBindingLinks",
+    "ProductProviderBindingWriteAcceptedResponse",
+    "ProductProviderBindingWriteRequest",
+    "ProductProviderCatalogEntryView",
+    "ProductProviderCatalogResponse",
+    "ProductProviderSecretReadRejectedResponse",
+    "ProductProviderSecretWriteRejectedResponse",
+    "ProductWorkspaceProviderBindingsResponse",
+    "ProductWorkspaceProviderBindingView",
     "ProductOnboardingReadResponse",
     "ProductOnboardingRejectedResponse",
     "ProductOnboardingStateView",
@@ -249,7 +277,6 @@ __all__ = [
     "ProductOnboardingWriteRequest",
     "OnboardingReadOutcome",
     "OnboardingWriteOutcome",
-    "ProductRunListAppliedFilters",
     "ProductRecentActivityAppliedFilters",
     "ProductRecentActivityItemView",
     "ProductRecentActivityLinks",
@@ -258,6 +285,7 @@ __all__ = [
     "ProductHistorySummaryResponse",
     "RecentActivityReadOutcome",
     "HistorySummaryReadOutcome",
+    "ProductRunListAppliedFilters",
     "ProductRunListItemView",
     "ProductRunListLinks",
     "ProductRunListRejectedResponse",

@@ -44,6 +44,24 @@ class FrameworkRouteBindings:
             summary="Create a new workspace continuity record.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_provider_catalog",
+            method="GET",
+            path_template="/api/providers/catalog",
+            summary="List managed provider options.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="list_workspace_provider_bindings",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/provider-bindings",
+            summary="List workspace managed provider bindings.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="put_workspace_provider_binding",
+            method="PUT",
+            path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}",
+            summary="Create or update a workspace managed provider binding.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_onboarding",
             method="GET",
             path_template="/api/users/me/onboarding",
@@ -214,6 +232,59 @@ class FrameworkRouteBindings:
             http_request=cls.to_http_route_request(request),
             workspace_id_factory=workspace_id_factory,
             membership_id_factory=membership_id_factory,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_list_provider_catalog(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_provider_catalog(
+            http_request=cls.to_http_route_request(request),
+            provider_catalog_rows=provider_catalog_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_list_workspace_provider_bindings(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        binding_rows: Sequence[Mapping[str, Any]] = (),
+        provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_workspace_provider_bindings(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            binding_rows=binding_rows,
+            provider_catalog_rows=provider_catalog_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_put_workspace_provider_binding(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        existing_binding_row: Optional[Mapping[str, Any]],
+        provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
+        binding_id_factory=None,
+        secret_writer=None,
+        now_iso: str,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_put_workspace_provider_binding(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            existing_binding_row=existing_binding_row,
+            provider_catalog_rows=provider_catalog_rows,
+            binding_id_factory=binding_id_factory,
+            secret_writer=secret_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
