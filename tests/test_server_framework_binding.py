@@ -81,6 +81,7 @@ def _request(*, method: str, path: str, path_params: dict | None = None, query_p
 def test_framework_binding_exposes_expected_route_definitions() -> None:
     definitions = FrameworkRouteBindings.route_definitions()
     assert [d.route_name for d in definitions] == [
+        "list_workspace_runs",
         "launch_run",
         "get_run_status",
         "get_run_result",
@@ -88,7 +89,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_artifact_detail",
         "get_run_trace",
     ]
-    assert definitions[0].path_template == "/api/runs"
+    assert definitions[0].path_template == "/api/workspaces/{workspace_id}/runs"
     assert definitions[-1].path_template == "/api/runs/{run_id}/trace"
 
 
@@ -182,3 +183,26 @@ def test_framework_binding_handles_result_route_round_trip() -> None:
     assert parsed["result_state"] == "ready_success"
     assert parsed["final_output"]["output_key"] == "answer"
     assert parsed["final_output"]["value_preview"] == "ok"
+
+
+def test_framework_binding_handles_workspace_run_list_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_workspace_runs(
+        request=_request(
+            method="GET",
+            path="/api/workspaces/ws-001/runs",
+            path_params={"workspace_id": "ws-001"},
+            query_params={"limit": 2},
+        ),
+        workspace_context=_workspace(),
+        run_rows=(
+            _run_row(status="completed", status_family="terminal_success"),
+            {**_run_row(), "run_id": "run-002", "created_at": "2026-04-11T12:01:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
+        ),
+        result_rows_by_run_id={"run-001": {"final_status": "completed", "result_state": "ready_success", "result_summary": "Success."}},
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed["workspace_id"] == "ws-001"
+    assert parsed["returned_count"] == 2
+    assert parsed["runs"][0]["run_id"] == "run-002"

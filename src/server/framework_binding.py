@@ -15,6 +15,12 @@ from src.server.run_admission_models import ExecutionTargetCatalogEntry, Product
 class FrameworkRouteBindings:
     _ROUTE_DEFINITIONS: tuple[FrameworkRouteDefinition, ...] = (
         FrameworkRouteDefinition(
+            route_name="list_workspace_runs",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/runs",
+            summary="List workspace runs with pagination.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_run",
             method="POST",
             path_template="/api/runs",
@@ -83,6 +89,23 @@ class FrameworkRouteBindings:
             body_text=json.dumps(dict(response.body), ensure_ascii=False, sort_keys=True),
             media_type=headers.get("content-type", "application/json"),
         )
+
+    @classmethod
+    def handle_list_workspace_runs(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        run_rows: Sequence[Mapping[str, Any]] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_workspace_runs(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            run_rows=run_rows,
+            result_rows_by_run_id=result_rows_by_run_id,
+        )
+        return cls.to_framework_response(response)
 
     @classmethod
     def handle_launch(

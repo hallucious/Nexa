@@ -123,6 +123,20 @@ def _make_client() -> TestClient:
         } if workspace_id == "ws-001" else {},
         run_record_provider=lambda run_id: _run_row(trace_available=True) if run_id == "run-001" else None,
         artifact_rows_provider=lambda run_id: artifact_rows.get(run_id, ()),
+        workspace_run_rows_provider=lambda workspace_id: (
+            _run_row(trace_available=True),
+            {**_run_row(status="completed", trace_available=True), "run_id": "run-002", "created_at": "2026-04-11T12:01:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
+        ) if workspace_id == "ws-001" else (),
+        workspace_result_rows_provider=lambda workspace_id: {
+            "run-002": {
+                "run_id": "run-002",
+                "workspace_id": "ws-001",
+                "result_state": "ready_success",
+                "final_status": "completed",
+                "result_summary": "Success.",
+                "updated_at": "2026-04-11T12:01:05+00:00",
+            }
+        } if workspace_id == "ws-001" else {},
         artifact_row_provider=lambda artifact_id: artifact_rows["run-001"][0] if artifact_id == "artifact-1" else None,
         trace_rows_provider=lambda run_id: trace_rows.get(run_id, ()),
         engine_status_provider=lambda run_id: EngineRunStatusSnapshot(
@@ -217,3 +231,14 @@ def test_fastapi_binding_returns_auth_failure_without_session_claims() -> None:
     assert response.status_code == 401
     payload = response.json()
     assert payload["reason_code"] == "status.authentication_required"
+
+
+def test_fastapi_binding_workspace_run_list_route_round_trip() -> None:
+    client = _make_client()
+    response = client.get("/api/workspaces/ws-001/runs?limit=2", headers=_session_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["workspace_id"] == "ws-001"
+    assert payload["returned_count"] == 2
+    assert payload["runs"][0]["run_id"] == "run-002"

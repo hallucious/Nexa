@@ -35,6 +35,8 @@ TargetCatalogProvider = Callable[[str], Mapping[str, ExecutionTargetCatalogEntry
 RunRecordProvider = Callable[[str], Optional[Mapping[str, Any]]]
 ResultRowProvider = Callable[[str], Optional[Mapping[str, Any]]]
 ArtifactRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
+WorkspaceRunRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
+WorkspaceResultRowsProvider = Callable[[str], Mapping[str, Mapping[str, Any]]]
 ArtifactRowProvider = Callable[[str], Optional[Mapping[str, Any]]]
 TraceRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
 EngineStatusProvider = Callable[[str], Optional[EngineRunStatusSnapshot]]
@@ -64,6 +66,10 @@ def _empty_rows(_: str) -> Sequence[Mapping[str, Any]]:
     return ()
 
 
+def _empty_result_rows(_: str) -> Mapping[str, Mapping[str, Any]]:
+    return {}
+
+
 def _none_status(_: str) -> Optional[EngineRunStatusSnapshot]:
     return None
 
@@ -80,6 +86,8 @@ class FastApiRouteDependencies:
     run_record_provider: RunRecordProvider = _none_row
     result_row_provider: ResultRowProvider = _none_row
     artifact_rows_provider: ArtifactRowsProvider = _empty_rows
+    workspace_run_rows_provider: WorkspaceRunRowsProvider = _empty_rows
+    workspace_result_rows_provider: WorkspaceResultRowsProvider = _empty_result_rows
     artifact_row_provider: ArtifactRowProvider = _none_row
     trace_rows_provider: TraceRowsProvider = _empty_rows
     engine_status_provider: EngineStatusProvider = _none_status

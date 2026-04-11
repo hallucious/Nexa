@@ -37,6 +37,34 @@ class FastApiRouteBindings:
     def build_router(self) -> APIRouter:
         router = APIRouter()
 
+        @router.get("/api/workspaces/{workspace_id}/runs")
+        async def list_workspace_runs(
+            workspace_id: str,
+            request: Request,
+            limit: int = 20,
+            cursor: str | None = None,
+            status_family: str | None = None,
+            requested_by_user_id: str | None = None,
+        ) -> Response:
+            workspace_context = self.dependencies.workspace_context_provider(workspace_id)
+            inbound = self._inbound_request(
+                request=request,
+                path_params={"workspace_id": workspace_id},
+                query_params={
+                    "limit": limit,
+                    "cursor": cursor,
+                    "status_family": status_family,
+                    "requested_by_user_id": requested_by_user_id,
+                },
+            )
+            outbound = FrameworkRouteBindings.handle_list_workspace_runs(
+                request=inbound,
+                workspace_context=workspace_context,
+                run_rows=self.dependencies.workspace_run_rows_provider(workspace_id),
+                result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
+            )
+            return self._framework_response(outbound)
+
         @router.post("/api/runs")
         async def launch_run(request: Request, payload: dict[str, Any] | None = Body(default=None)) -> Response:
             workspace_id = str((payload or {}).get("workspace_id") or "").strip()

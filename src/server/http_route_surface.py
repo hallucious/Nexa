@@ -17,6 +17,7 @@ from src.server.run_admission_models import (
     ProductRunLaunchRequest,
 )
 from src.server.run_read_api import RunResultReadService, RunStatusReadService
+from src.server.run_list_api import RunListReadService
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 
 
@@ -244,6 +245,46 @@ class RunHttpRouteSurface:
             trace_rows=trace_rows,
             cursor=str(cursor) if cursor is not None else None,
             limit=int(limit),
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+
+    @classmethod
+    def handle_list_workspace_runs(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        result_rows_by_run_id: Optional[Mapping[str, Mapping[str, Any]]] = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace run list route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/runs"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        query_params = dict(http_request.query_params or {})
+        limit = int(query_params.get("limit", 20))
+        cursor = query_params.get("cursor")
+        status_family = query_params.get("status_family")
+        requested_by_user_id = query_params.get("requested_by_user_id")
+        outcome = RunListReadService.list_workspace_runs(
+            request_auth=_request_auth(http_request),
+            workspace_context=workspace_context,
+            run_rows=run_rows,
+            result_rows_by_run_id=result_rows_by_run_id,
+            cursor=str(cursor) if cursor is not None else None,
+            limit=limit,
+            status_family=str(status_family) if status_family is not None else None,
+            requested_by_user_id=str(requested_by_user_id) if requested_by_user_id is not None else None,
         )
         if outcome.ok:
             assert outcome.response is not None
