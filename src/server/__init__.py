@@ -52,6 +52,15 @@ from src.server.run_admission_models import (
     RunAdmissionOutcome,
     RunRecordProjection,
 )
+from src.server.worker_queue_models import (
+    QueueJobProjection,
+    QueueSubmission,
+    WorkerClaim,
+    WorkerLeasePolicy,
+    WorkerOrphanReview,
+    WorkerProjectionBundle,
+)
+from src.server.worker_queue_orchestration import WorkerQueueOrchestrationService
 from src.server.migration_foundation import (
     build_initial_server_migration,
     build_migration_file_text,
@@ -122,6 +131,13 @@ __all__ = [
     "RunAdmissionOutcome",
     "RunAdmissionService",
     "RunRecordProjection",
+    "QueueJobProjection",
+    "QueueSubmission",
+    "WorkerClaim",
+    "WorkerLeasePolicy",
+    "WorkerOrphanReview",
+    "WorkerProjectionBundle",
+    "WorkerQueueOrchestrationService",
     "build_engine_auth_context_refs",
     "build_initial_server_migration",
     "build_migration_file_text",
