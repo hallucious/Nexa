@@ -301,6 +301,7 @@ class FrameworkRouteBindings:
         provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
         binding_id_factory=None,
         secret_writer=None,
+        binding_writer=None,
         now_iso: str,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_put_workspace_provider_binding(
@@ -310,6 +311,7 @@ class FrameworkRouteBindings:
             provider_catalog_rows=provider_catalog_rows,
             binding_id_factory=binding_id_factory,
             secret_writer=secret_writer,
+            binding_writer=binding_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)

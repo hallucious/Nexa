@@ -746,6 +746,7 @@ class RunHttpRouteSurface:
         provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         binding_id_factory: Callable[[], str],
         secret_writer,
+        binding_writer=None,
         now_iso: str,
     ) -> HttpRouteResponse:
         if http_request.method != "PUT":
@@ -781,6 +782,8 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.accepted is not None
+            if binding_writer is not None and outcome.created_or_updated_binding_row is not None:
+                binding_writer(dict(outcome.created_or_updated_binding_row))
             return _route_response(200, asdict(outcome.accepted))
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))

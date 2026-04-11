@@ -4,6 +4,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
+from src.server.provider_binding_store import InMemoryProviderBindingStore, bind_provider_binding_store
 from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore, bind_probe_history_store
 from fastapi.testclient import TestClient
 
@@ -427,6 +428,80 @@ def test_fastapi_binding_recent_activity_includes_provider_probe_event() -> None
     payload = response.json()
     assert payload['activities'][0]['activity_type'] == 'provider_probe_reachable'
     assert payload['activities'][0]['links']['provider_probe_history'].endswith('/probe-history')
+
+
+
+
+def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() -> None:
+    probe_store = InMemoryProviderProbeHistoryStore()
+    binding_store = InMemoryProviderBindingStore()
+
+    def _probe_runner(probe_input):
+        return {
+            "probe_status": "reachable",
+            "connectivity_state": "ok",
+            "message": "Provider connectivity probe succeeded.",
+            "effective_model_ref": probe_input.requested_model_ref or probe_input.default_model_ref,
+            "round_trip_latency_ms": 144,
+        }
+
+    deps = FastApiRouteDependencies(
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        provider_catalog_rows_provider=lambda: ({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+            "local_env_var_hint": "OPENAI_API_KEY",
+            "default_secret_name_template": "nexa/{workspace_id}/providers/openai",
+        },),
+        managed_secret_writer=lambda workspace_id, provider_key, secret_value, metadata: {
+            'secret_ref': f'secret://{workspace_id}/{provider_key}',
+            'secret_version_ref': 'v1',
+            'last_rotated_at': '2026-04-11T12:06:00+00:00',
+        },
+        provider_probe_runner=_probe_runner,
+        binding_id_factory=lambda: 'binding-created',
+        probe_event_id_factory=lambda: 'probe-created',
+        now_iso_provider=lambda: '2026-04-11T12:10:00+00:00',
+    )
+    deps = bind_provider_binding_store(dependencies=deps, store=binding_store)
+    deps = bind_probe_history_store(dependencies=deps, store=probe_store)
+    client = TestClient(create_fastapi_app(dependencies=deps))
+
+    put_response = client.put(
+        '/api/workspaces/ws-001/provider-bindings/openai',
+        headers=_session_headers(),
+        json={'display_name': 'OpenAI GPT', 'secret_value': 'very-secret', 'enabled': True, 'default_model_ref': 'gpt-4.1'},
+    )
+    assert put_response.status_code == 200
+    assert put_response.json()['binding']['binding_id'] == 'binding-created'
+
+    list_response = client.get('/api/workspaces/ws-001/provider-bindings', headers=_session_headers())
+    assert list_response.status_code == 200
+    assert list_response.json()['returned_count'] == 1
+    assert list_response.json()['bindings'][0]['provider_key'] == 'openai'
+
+    health_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/health', headers=_session_headers())
+    assert health_response.status_code == 200
+    assert health_response.json()['provider_key'] == 'openai'
+    assert 'health_status' in health_response.json()
+
+    probe_response = client.post(
+        '/api/workspaces/ws-001/provider-bindings/openai/probe',
+        headers=_session_headers(),
+        json={'requested_model_ref': 'gpt-4.1'},
+    )
+    assert probe_response.status_code == 200
+    probe_payload = probe_response.json()
+    assert probe_payload['probe_status'] == 'reachable'
+
+    history_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/probe-history', headers=_session_headers())
+    assert history_response.status_code == 200
+    assert history_response.json()['returned_count'] == 1
+    assert history_response.json()['items'][0]['probe_event_id'] == 'probe-created'
+    assert history_response.json()['items'][0]['provider_key'] == 'openai'
 
 
 def test_fastapi_binding_provider_probe_history_round_trip() -> None:

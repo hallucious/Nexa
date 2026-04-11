@@ -152,6 +152,7 @@ class FastApiRouteBindings:
                 provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
                 binding_id_factory=self.dependencies.binding_id_factory or (lambda: 'binding-missing-id-factory'),
                 secret_writer=self._resolve_managed_secret_writer(now_iso),
+                binding_writer=self.dependencies.provider_binding_writer,
                 now_iso=now_iso,
             )
             return self._framework_response(outbound)
@@ -174,7 +175,6 @@ class FastApiRouteBindings:
             outbound = FrameworkRouteBindings.handle_get_workspace_provider_health(
                 request=inbound,
                 workspace_context=self.dependencies.workspace_context_provider(workspace_id),
-                provider_key=provider_key,
                 binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
                 provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
                 secret_metadata_reader=self._resolve_managed_secret_metadata_reader(),

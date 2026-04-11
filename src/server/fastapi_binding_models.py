@@ -50,6 +50,7 @@ WorkspaceProviderBindingRowProvider = Callable[[str, str], Optional[Mapping[str,
 WorkspaceProviderProbeRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
 RecentProviderProbeRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 ProviderProbeHistoryWriter = Callable[[Mapping[str, Any]], Any]
+ProviderBindingWriter = Callable[[Mapping[str, Any]], Any]
 ManagedSecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
 ManagedSecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 AwsSecretsManagerClientProvider = Callable[[], Any]
@@ -109,6 +110,10 @@ def _noop_probe_history_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return dict(row)
 
 
+def _noop_provider_binding_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    return dict(row)
+
+
 def _none_workspace_row(_: str) -> Optional[Mapping[str, Any]]:
     return None
 
@@ -142,6 +147,7 @@ class FastApiRouteDependencies:
     workspace_provider_binding_row_provider: WorkspaceProviderBindingRowProvider = _none_provider_binding_row
     workspace_provider_probe_rows_provider: WorkspaceProviderProbeRowsProvider = _empty_provider_binding_rows
     recent_provider_probe_rows_provider: RecentProviderProbeRowsProvider = _empty_noarg_rows
+    provider_binding_writer: ProviderBindingWriter = _noop_provider_binding_writer
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
     managed_secret_metadata_reader: Optional[ManagedSecretMetadataReader] = None
