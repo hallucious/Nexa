@@ -329,6 +329,7 @@ class WorkerQueueOrchestrationService:
             queue_job_row=queue_row,
             result_row={
                 "run_id": result_envelope.run_id,
+                "workspace_id": claim.run_record_row["workspace_id"],
                 "final_status": result_envelope.final_status,
                 "result_state": result_envelope.result_state,
                 "result_summary": result_envelope.result_summary,
@@ -337,6 +338,7 @@ class WorkerQueueOrchestrationService:
                 "failure_info": asdict(result_envelope.failure_info) if result_envelope.failure_info is not None else None,
                 "final_output": asdict(result_envelope.final_output) if result_envelope.final_output is not None else None,
                 "metrics": deepcopy(result_envelope.metrics),
+                "updated_at": now_value,
             },
             artifact_rows=artifact_rows,
             trace_rows=tuple(projected_trace_rows),
@@ -371,6 +373,7 @@ class WorkerQueueOrchestrationService:
             queue_job_row=queue_row,
             result_row={
                 "run_id": claim.queue_job.run_id,
+                "workspace_id": claim.run_record_row["workspace_id"],
                 "final_status": "failed",
                 "result_state": "ready_failure",
                 "result_summary": message,
@@ -379,6 +382,7 @@ class WorkerQueueOrchestrationService:
                 "failure_info": {"code": reason_code, "message": message, "location": None},
                 "final_output": None,
                 "metrics": {},
+                "updated_at": now_value,
             },
             failure_family="worker_infrastructure_failure",
         )

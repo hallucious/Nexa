@@ -156,6 +156,28 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
                 ),
             ),
             TableSpec(
+                name="run_result_index",
+                persistence_mode="mutable_projection",
+                description="Canonical product-facing run result query rows linked to terminal run state.",
+                columns=(
+                    ColumnSpec("run_id", "TEXT", is_primary_key=True, reference_table="run_records", reference_column="run_id"),
+                    ColumnSpec("workspace_id", "TEXT", reference_table="workspace_registry", reference_column="workspace_id"),
+                    ColumnSpec("result_state", "TEXT"),
+                    ColumnSpec("final_status", "TEXT", nullable=True),
+                    ColumnSpec("result_summary", "TEXT", nullable=True),
+                    ColumnSpec("trace_ref", "TEXT", nullable=True),
+                    ColumnSpec("artifact_count", "INTEGER", default_sql="0"),
+                    ColumnSpec("failure_info", "JSONB", nullable=True),
+                    ColumnSpec("final_output", "JSONB", nullable=True),
+                    ColumnSpec("metrics", "JSONB", nullable=True),
+                    ColumnSpec("updated_at", "TIMESTAMPTZ"),
+                ),
+                indexes=(
+                    IndexSpec("idx_run_result_index_workspace_id_updated_at", ("workspace_id", "updated_at")),
+                    IndexSpec("idx_run_result_index_result_state", ("result_state",)),
+                ),
+            ),
+            TableSpec(
                 name="queue_jobs",
                 persistence_mode="mutable_projection",
                 description="Queue-backed worker orchestration rows for admitted runs.",
