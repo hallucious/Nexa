@@ -12,6 +12,9 @@ _ALLOWED_ACTIVITY_TYPES = {
     "run_completed",
     "run_failed",
     "run_updated",
+    "provider_probe_reachable",
+    "provider_probe_warning",
+    "provider_probe_failed",
 }
 _ALLOWED_HISTORY_SUMMARY_SCOPES = {"account", "workspace"}
 
@@ -21,6 +24,9 @@ class ProductRecentActivityLinks:
     workspace: Optional[str] = None
     run_status: Optional[str] = None
     run_result: Optional[str] = None
+    provider_binding: Optional[str] = None
+    provider_health: Optional[str] = None
+    provider_probe_history: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -88,8 +94,11 @@ class ProductHistorySummaryResponse:
     active_runs: int = 0
     terminal_success_runs: int = 0
     terminal_failure_runs: int = 0
+    recent_probe_count: int = 0
+    failed_probe_count: int = 0
     latest_activity_at: Optional[str] = None
     latest_run_id: Optional[str] = None
+    latest_probe_event_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.scope not in _ALLOWED_HISTORY_SUMMARY_SCOPES:
@@ -101,6 +110,8 @@ class ProductHistorySummaryResponse:
             'active_runs',
             'terminal_success_runs',
             'terminal_failure_runs',
+            'recent_probe_count',
+            'failed_probe_count',
         ):
             if getattr(self, field_name) < 0:
                 raise ValueError(f'ProductHistorySummaryResponse.{field_name} must be >= 0')

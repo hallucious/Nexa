@@ -53,6 +53,15 @@ def _run_activity_type(row: Mapping[str, Any]) -> str:
     return 'run_updated'
 
 
+def _probe_activity_type(row: Mapping[str, Any]) -> str:
+    probe_status = str(row.get('probe_status') or '').strip().lower()
+    if probe_status == 'reachable':
+        return 'provider_probe_reachable'
+    if probe_status == 'warning':
+        return 'provider_probe_warning'
+    return 'provider_probe_failed'
+
+
 class RecentActivityService:
     @classmethod
     def list_recent_activity(
@@ -62,6 +71,7 @@ class RecentActivityService:
         workspace_rows: Sequence[Mapping[str, Any]] = (),
         membership_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         workspace_id: Optional[str] = None,
         limit: int = 20,
         cursor: Optional[str] = None,
@@ -150,6 +160,38 @@ class RecentActivityService:
                     ),
                 )
             )
+        for row in provider_probe_rows:
+            row_workspace_id = str(row.get('workspace_id') or '').strip()
+            if row_workspace_id not in visible_ids:
+                continue
+            if workspace_id is not None and row_workspace_id != workspace_id:
+                continue
+            probe_event_id = str(row.get('probe_event_id') or row.get('probe_id') or '').strip()
+            occurred_at = str(row.get('occurred_at') or row.get('updated_at') or row.get('created_at') or '').strip()
+            provider_key = str(row.get('provider_key') or '').strip().lower()
+            if not probe_event_id or not occurred_at or not provider_key:
+                continue
+            workspace_title = titles.get(row_workspace_id, row_workspace_id)
+            display_name = str(row.get('display_name') or provider_key).strip() or provider_key
+            probe_status = str(row.get('probe_status') or '').strip() or None
+            activities.append(
+                ProductRecentActivityItemView(
+                    activity_id=f'probe:{probe_event_id}:{occurred_at}',
+                    activity_type=_probe_activity_type(row),
+                    occurred_at=occurred_at,
+                    workspace_id=row_workspace_id,
+                    workspace_title=workspace_title,
+                    status=probe_status,
+                    summary=f'Provider probe for {display_name} is {probe_status or "updated"}.',
+                    actor_user_id=str(row.get('requested_by_user_id') or '').strip() or None,
+                    links=ProductRecentActivityLinks(
+                        workspace=f'/api/workspaces/{row_workspace_id}',
+                        provider_binding=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}',
+                        provider_health=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}/health',
+                        provider_probe_history=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}/probe-history',
+                    ),
+                )
+            )
         activities.sort(key=lambda item: (item.occurred_at, item.activity_id), reverse=True)
         total_visible_count = len(activities)
         start_index = 0
@@ -188,6 +230,7 @@ class RecentActivityService:
         workspace_rows: Sequence[Mapping[str, Any]] = (),
         membership_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         workspace_id: Optional[str] = None,
     ) -> HistorySummaryReadOutcome:
         if not request_auth.is_authenticated:
@@ -226,10 +269,26 @@ class RecentActivityService:
             filtered_runs.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('run_id') or '')), reverse=True)
             latest_run = filtered_runs[0]
             latest_activity_at = str(latest_run.get('updated_at') or latest_run.get('created_at') or '').strip() or None
+        filtered_probe_rows = [
+            row for row in provider_probe_rows
+            if str(row.get('workspace_id') or '').strip() in visible_ids
+            and (workspace_id is None or str(row.get('workspace_id') or '').strip() == workspace_id)
+        ]
+        latest_probe = None
+        if filtered_probe_rows:
+            filtered_probe_rows.sort(key=lambda row: (str(row.get('occurred_at') or row.get('updated_at') or row.get('created_at') or ''), str(row.get('probe_event_id') or row.get('probe_id') or '')), reverse=True)
+            latest_probe = filtered_probe_rows[0]
+        candidate_times = [value for value in (
+            latest_activity_at,
+            str(latest_probe.get('occurred_at') or latest_probe.get('updated_at') or latest_probe.get('created_at') or '').strip() if latest_probe is not None else None,
+        ) if value]
+        latest_activity_at = max(candidate_times) if candidate_times else None
         pending_runs = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'pending')
         active_runs = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'active')
         terminal_success_runs = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'terminal_success')
         terminal_failure_runs = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'terminal_failure')
+        recent_probe_count = len(filtered_probe_rows)
+        failed_probe_count = sum(1 for row in filtered_probe_rows if str(row.get('probe_status') or '').strip().lower() not in {'reachable', 'warning'})
         return HistorySummaryReadOutcome(
             response=ProductHistorySummaryResponse(
                 scope='workspace' if workspace_id is not None else 'account',
@@ -240,7 +299,10 @@ class RecentActivityService:
                 active_runs=active_runs,
                 terminal_success_runs=terminal_success_runs,
                 terminal_failure_runs=terminal_failure_runs,
+                recent_probe_count=recent_probe_count,
+                failed_probe_count=failed_probe_count,
                 latest_activity_at=latest_activity_at,
                 latest_run_id=str(latest_run.get('run_id') or '').strip() or None if latest_run is not None else None,
+                latest_probe_event_id=str(latest_probe.get('probe_event_id') or latest_probe.get('probe_id') or '').strip() or None if latest_probe is not None else None,
             )
         )

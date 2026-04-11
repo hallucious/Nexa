@@ -58,6 +58,7 @@ class FastApiRouteBindings:
                 workspace_rows=self.dependencies.workspace_rows_provider(),
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
                 run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -72,6 +73,7 @@ class FastApiRouteBindings:
                 workspace_rows=self.dependencies.workspace_rows_provider(),
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
                 run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -179,27 +181,24 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
-        @router.post("/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe")
-        async def probe_workspace_provider(
+        @router.get("/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe-history")
+        async def list_provider_probe_history(
             request: Request,
             workspace_id: str,
             provider_key: str,
-            payload: dict[str, Any] | None = Body(default=None),
+            limit: int = 20,
+            cursor: str | None = None,
         ) -> Response:
             inbound = self._inbound_request(
                 request=request,
-                json_body=payload,
                 path_params={"workspace_id": workspace_id, "provider_key": provider_key},
+                query_params={"limit": limit, "cursor": cursor},
             )
-            outbound = FrameworkRouteBindings.handle_probe_workspace_provider(
+            outbound = FrameworkRouteBindings.handle_list_provider_probe_history(
                 request=inbound,
                 workspace_context=self.dependencies.workspace_context_provider(workspace_id),
                 provider_key=provider_key,
-                binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
-                provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
-                secret_metadata_reader=self._resolve_managed_secret_metadata_reader(),
-                probe_runner=self.dependencies.managed_provider_probe_runner,
-                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+                probe_history_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
             )
             return self._framework_response(outbound)
 

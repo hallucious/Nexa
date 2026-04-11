@@ -52,6 +52,25 @@ def _run_row(run_id: str, created_at: str, *, status: str = 'running', status_fa
     }
 
 
+
+
+def _probe_row(probe_event_id: str, occurred_at: str, *, probe_status: str = 'reachable', workspace_id: str = 'ws-001', provider_key: str = 'openai') -> dict:
+    return {
+        'probe_event_id': probe_event_id,
+        'workspace_id': workspace_id,
+        'provider_key': provider_key,
+        'provider_family': provider_key,
+        'display_name': 'OpenAI GPT',
+        'probe_status': probe_status,
+        'connectivity_state': 'ok' if probe_status == 'reachable' else 'provider_error',
+        'secret_resolution_status': 'resolved',
+        'requested_model_ref': 'gpt-4.1',
+        'effective_model_ref': 'gpt-4.1',
+        'occurred_at': occurred_at,
+        'requested_by_user_id': 'user-collab',
+        'message': 'Probe completed.',
+    }
+
 def _headers(user_id: str = 'user-owner') -> dict[str, str]:
     return {
         'Authorization': 'Bearer token',
@@ -68,13 +87,16 @@ def test_recent_activity_service_returns_sorted_paginated_feed() -> None:
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
         ),
+        provider_probe_rows=(
+            _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
+        ),
         limit=2,
     )
     assert outcome.ok is True
     assert outcome.response is not None
-    assert [item.activity_type for item in outcome.response.activities] == ['run_queued', 'run_completed']
+    assert [item.activity_type for item in outcome.response.activities] == ['provider_probe_reachable', 'run_queued']
     assert outcome.response.next_cursor == outcome.response.activities[-1].activity_id
-    assert outcome.response.total_visible_count == 3
+    assert outcome.response.total_visible_count == 4
 
 
 def test_recent_activity_summary_filters_to_visible_workspace() -> None:
@@ -86,6 +108,9 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='failed', status_family='terminal_failure', workspace_id='ws-002'),
         ),
+        provider_probe_rows=(
+            _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
+        ),
     )
     assert outcome.ok is True
     assert outcome.response is not None
@@ -93,6 +118,10 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
     assert outcome.response.total_visible_runs == 1
     assert outcome.response.terminal_success_runs == 1
     assert outcome.response.terminal_failure_runs == 0
+    assert outcome.response.recent_probe_count == 1
+    assert outcome.response.failed_probe_count == 0
+    assert outcome.response.latest_probe_event_id == 'probe-001'
+    assert outcome.response.latest_activity_at == '2026-04-11T12:08:00+00:00'
 
 
 def test_recent_activity_route_family_round_trip() -> None:
@@ -110,10 +139,14 @@ def test_recent_activity_route_family_round_trip() -> None:
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
         ),
+        provider_probe_rows=(
+            _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
+        ),
     )
     assert activity_response.status_code == 200
     assert activity_response.body['returned_count'] == 2
-    assert activity_response.body['activities'][0]['activity_type'] == 'run_queued'
+    assert activity_response.body['activities'][0]['activity_type'] == 'provider_probe_reachable'
+    assert activity_response.body['activities'][0]['links']['provider_probe_history'].endswith('/probe-history')
 
     summary_response = RunHttpRouteSurface.handle_history_summary(
         http_request=HttpRouteRequest(
@@ -128,7 +161,12 @@ def test_recent_activity_route_family_round_trip() -> None:
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
         ),
+        provider_probe_rows=(
+            _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
+        ),
     )
     assert summary_response.status_code == 200
     assert summary_response.body['total_visible_runs'] == 2
     assert summary_response.body['pending_runs'] == 1
+    assert summary_response.body['recent_probe_count'] == 1
+    assert summary_response.body['latest_probe_event_id'] == 'probe-001'

@@ -15,7 +15,6 @@ from src.server import (
     EngineSignal,
     ExecutionTargetCatalogEntry,
     FastApiRouteDependencies,
-    ProviderProbeExecutionInput,
     RunAuthorizationContext,
     WorkspaceAuthorizationContext,
     create_fastapi_app,
@@ -148,6 +147,23 @@ def _make_client() -> TestClient:
             'updated_by_user_id': 'user-owner',
         },),
     }
+    provider_probe_rows = {
+        'ws-001': ({
+            'probe_event_id': 'probe-001',
+            'workspace_id': 'ws-001',
+            'provider_key': 'openai',
+            'provider_family': 'openai',
+            'display_name': 'OpenAI GPT',
+            'probe_status': 'reachable',
+            'connectivity_state': 'ok',
+            'secret_resolution_status': 'resolved',
+            'requested_model_ref': 'gpt-4.1',
+            'effective_model_ref': 'gpt-4.1',
+            'occurred_at': '2026-04-11T12:08:00+00:00',
+            'requested_by_user_id': 'user-owner',
+            'message': 'Probe completed.',
+        },),
+    }
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
         workspace_rows_provider=lambda: ({
@@ -166,6 +182,8 @@ def _make_client() -> TestClient:
         provider_catalog_rows_provider=lambda: provider_catalog_rows,
         workspace_provider_binding_rows_provider=lambda workspace_id: provider_binding_rows.get(workspace_id, ()),
         workspace_provider_binding_row_provider=lambda workspace_id, provider_key: next((row for row in provider_binding_rows.get(workspace_id, ()) if row['provider_key'] == provider_key), None),
+        workspace_provider_probe_rows_provider=lambda workspace_id: provider_probe_rows.get(workspace_id, ()),
+        recent_provider_probe_rows_provider=lambda: provider_probe_rows.get('ws-001', ()),
         workspace_row_provider=lambda workspace_id: {
             'workspace_id': 'ws-001',
             'owner_user_id': 'user-owner',
@@ -237,13 +255,6 @@ def _make_client() -> TestClient:
             'last_rotated_at': '2026-04-11T12:06:00+00:00',
         },
         aws_secrets_manager_client_provider=lambda: _FakeSecretsClient(),
-        managed_provider_probe_runner=lambda probe_input: {
-            'probe_status': 'reachable',
-            'connectivity_state': 'ok',
-            'message': 'Provider connectivity probe succeeded.',
-            'effective_model_ref': probe_input.requested_model_ref or probe_input.default_model_ref,
-            'round_trip_latency_ms': 111,
-        },
         aws_secrets_manager_config=AwsSecretsManagerBindingConfig(),
         now_iso_provider=lambda: "2026-04-11T12:00:00+00:00",
     )
@@ -384,16 +395,19 @@ def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() ->
     assert "super-secret" not in put_response.text
 
 
-def test_fastapi_binding_provider_probe_round_trip() -> None:
+def test_fastapi_binding_recent_activity_includes_provider_probe_event() -> None:
     client = _make_client()
-    response = client.post(
-        "/api/workspaces/ws-001/provider-bindings/openai/probe",
-        headers=_session_headers(),
-        json={"model_ref": "gpt-4.1"},
-    )
-
+    response = client.get('/api/users/me/activity?limit=1', headers=_session_headers())
     assert response.status_code == 200
     payload = response.json()
-    assert payload["probe_status"] == "reachable"
-    assert payload["connectivity_state"] == "ok"
-    assert payload["effective_model_ref"] == "gpt-4.1"
+    assert payload['activities'][0]['activity_type'] == 'provider_probe_reachable'
+    assert payload['activities'][0]['links']['provider_probe_history'].endswith('/probe-history')
+
+
+def test_fastapi_binding_provider_probe_history_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/api/workspaces/ws-001/provider-bindings/openai/probe-history?limit=1', headers=_session_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['returned_count'] == 1
+    assert payload['items'][0]['probe_event_id'] == 'probe-001'

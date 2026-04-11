@@ -4,7 +4,6 @@ import json
 from typing import Any, Mapping, Optional, Sequence
 
 from src.server.provider_health_api import SecretMetadataReader
-from src.server.provider_probe_api import ProviderProbeRunner
 
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchRequest, EngineRunLaunchResponse, EngineRunStatusSnapshot
@@ -77,10 +76,10 @@ class FrameworkRouteBindings:
             summary="Read provider health detail for a workspace binding.",
         ),
         FrameworkRouteDefinition(
-            route_name="probe_workspace_provider",
-            method="POST",
-            path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe",
-            summary="Probe managed provider connectivity for a workspace binding.",
+            route_name="list_provider_probe_history",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe-history",
+            summary="List provider probe history for a workspace binding.",
         ),
         FrameworkRouteDefinition(
             route_name="get_onboarding",
@@ -178,12 +177,14 @@ class FrameworkRouteBindings:
         workspace_rows: Sequence[Mapping[str, Any]] = (),
         membership_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_recent_activity(
             http_request=cls.to_http_route_request(request),
             workspace_rows=workspace_rows,
             membership_rows=membership_rows,
             run_rows=run_rows,
+            provider_probe_rows=provider_probe_rows,
         )
         return cls.to_framework_response(response)
 
@@ -195,12 +196,14 @@ class FrameworkRouteBindings:
         workspace_rows: Sequence[Mapping[str, Any]] = (),
         membership_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_history_summary(
             http_request=cls.to_http_route_request(request),
             workspace_rows=workspace_rows,
             membership_rows=membership_rows,
             run_rows=run_rows,
+            provider_probe_rows=provider_probe_rows,
         )
         return cls.to_framework_response(response)
 
@@ -350,30 +353,21 @@ class FrameworkRouteBindings:
         return cls.to_framework_response(response)
 
     @classmethod
-    def handle_probe_workspace_provider(
+    def handle_list_provider_probe_history(
         cls,
         *,
         request: FrameworkInboundRequest,
         workspace_context: Optional[WorkspaceAuthorizationContext],
         provider_key: str,
-        binding_rows: Sequence[Mapping[str, Any]] = (),
-        provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
-        secret_metadata_reader: Optional[SecretMetadataReader] = None,
-        probe_runner: Optional[ProviderProbeRunner] = None,
-        now_iso: Optional[str] = None,
+        probe_history_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
-        response = RunHttpRouteSurface.handle_probe_workspace_provider(
+        response = RunHttpRouteSurface.handle_list_provider_probe_history(
             http_request=cls.to_http_route_request(request),
             workspace_context=workspace_context,
             provider_key=provider_key,
-            binding_rows=tuple(binding_rows),
-            provider_catalog_rows=tuple(provider_catalog_rows),
-            secret_metadata_reader=secret_metadata_reader,
-            probe_runner=probe_runner,
-            now_iso=now_iso,
+            probe_history_rows=tuple(probe_history_rows),
         )
         return cls.to_framework_response(response)
-
 
     @classmethod
     def handle_get_onboarding(

@@ -66,6 +66,24 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
     }
 
 
+def _probe_row(*, probe_event_id: str = "probe-001", occurred_at: str = "2026-04-11T12:00:20+00:00", probe_status: str = "reachable") -> dict:
+    return {
+        "probe_event_id": probe_event_id,
+        "workspace_id": "ws-001",
+        "provider_key": "openai",
+        "provider_family": "openai",
+        "display_name": "OpenAI GPT",
+        "probe_status": probe_status,
+        "connectivity_state": "ok" if probe_status == "reachable" else "provider_error",
+        "secret_resolution_status": "resolved",
+        "requested_model_ref": "gpt-4.1",
+        "effective_model_ref": "gpt-4.1",
+        "occurred_at": occurred_at,
+        "requested_by_user_id": "user-owner",
+        "message": "Probe completed.",
+    }
+
+
 def _request(*, method: str, path: str, path_params: dict | None = None, query_params: dict | None = None, json_body=None, user_id: str = "user-owner") -> FrameworkInboundRequest:
     return FrameworkInboundRequest(
         method=method,
@@ -91,7 +109,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "put_workspace_provider_binding",
         "list_workspace_provider_health",
         "get_workspace_provider_health",
-        "probe_workspace_provider",
+        "list_provider_probe_history",
         "get_onboarding",
         "put_onboarding",
         "list_workspace_runs",
@@ -377,3 +395,25 @@ def test_framework_binding_handles_provider_catalog_and_workspace_provider_bindi
     assert put_payload["binding"]["secret_ref"] == "secret://ws-001/openai"
     assert put_payload["secret_rotated"] is True
     assert "super-secret" not in put_response.body_text
+
+
+def test_framework_binding_handles_provider_probe_history_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_provider_probe_history(
+        request=_request(
+            method="GET",
+            path="/api/workspaces/ws-001/provider-bindings/openai/probe-history",
+            path_params={"workspace_id": "ws-001", "provider_key": "openai"},
+            query_params={"limit": 1},
+        ),
+        workspace_context=_workspace(),
+        provider_key="openai",
+        probe_history_rows=(
+            _probe_row(probe_event_id="probe-001", occurred_at="2026-04-11T12:00:20+00:00"),
+            _probe_row(probe_event_id="probe-002", occurred_at="2026-04-11T12:01:20+00:00"),
+        ),
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed["returned_count"] == 1
+    assert parsed["items"][0]["probe_event_id"] == "probe-002"

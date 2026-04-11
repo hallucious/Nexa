@@ -69,6 +69,7 @@ from src.server.recent_activity_api import RecentActivityService
 from src.server.provider_secret_api import ProviderSecretIntegrationService
 from src.server.provider_health_api import ProviderHealthService
 from src.server.provider_probe_api import ProviderProbeRunner, ProviderProbeService
+from src.server.provider_probe_history_api import ProviderProbeHistoryService
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig, AwsSecretWriteReceipt
 from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthority, create_boto3_secrets_manager_client
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
@@ -125,6 +126,14 @@ from src.server.recent_activity_models import (
     ProductRecentActivityRejectedResponse,
     ProductRecentActivityResponse,
     RecentActivityReadOutcome,
+)
+from src.server.provider_probe_history_models import (
+    ProductProviderProbeHistoryAppliedFilters,
+    ProductProviderProbeHistoryItemView,
+    ProductProviderProbeHistoryLinks,
+    ProductProviderProbeHistoryRejectedResponse,
+    ProductProviderProbeHistoryResponse,
+    ProviderProbeHistoryReadOutcome,
 )
 from src.server.provider_health_models import (
     ProductProviderBindingHealthView,
@@ -302,17 +311,17 @@ __all__ = [
     "ProductProviderHealthRejectedResponse",
     "ProductWorkspaceProviderHealthResponse",
     "ProviderHealthDetailOutcome",
-    "ProviderProbeExecutionInput",
-    "ProviderProbeExecutionResult",
-    "ProviderProbeOutcome",
+    "ProviderHealthListOutcome",
     "ProductProviderProbeFindingView",
     "ProductProviderProbeLinks",
     "ProductProviderProbeRejectedResponse",
     "ProductProviderProbeRequest",
     "ProductProviderProbeResponse",
+    "ProviderProbeExecutionInput",
+    "ProviderProbeExecutionResult",
+    "ProviderProbeOutcome",
     "ProviderProbeRunner",
     "ProviderProbeService",
-    "ProviderHealthListOutcome",
     "ProductProviderBindingLinks",
     "ProductProviderBindingWriteAcceptedResponse",
     "ProductProviderBindingWriteRequest",
@@ -396,6 +405,13 @@ __all__ = [
     "SchemaFamily",
     "TableSpec",
     "validate_schema_families",
+    "ProviderProbeHistoryService",
+    "ProductProviderProbeHistoryAppliedFilters",
+    "ProductProviderProbeHistoryItemView",
+    "ProductProviderProbeHistoryLinks",
+    "ProductProviderProbeHistoryRejectedResponse",
+    "ProductProviderProbeHistoryResponse",
+    "ProviderProbeHistoryReadOutcome",
 ]
 
 if _FASTAPI_BINDING_AVAILABLE:
