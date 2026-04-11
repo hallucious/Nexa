@@ -89,6 +89,25 @@ class ProviderProbeHistoryRecord:
             message=str(row.get("message") or "").strip() or None,
         )
 
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "probe_event_id": self.probe_event_id,
+            "workspace_id": self.workspace_id,
+            "binding_id": self.binding_id,
+            "provider_key": self.provider_key,
+            "provider_family": self.provider_family,
+            "display_name": self.display_name,
+            "probe_status": self.probe_status,
+            "connectivity_state": self.connectivity_state,
+            "secret_resolution_status": self.secret_resolution_status,
+            "requested_model_ref": self.requested_model_ref,
+            "effective_model_ref": self.effective_model_ref,
+            "round_trip_latency_ms": self.round_trip_latency_ms,
+            "requested_by_user_id": self.requested_by_user_id,
+            "occurred_at": self.occurred_at,
+            "message": self.message,
+        }
+
 
 @dataclass(frozen=True)
 class ProductProviderProbeHistoryItemView:

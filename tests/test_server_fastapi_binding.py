@@ -4,6 +4,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
+from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore, bind_probe_history_store
 from fastapi.testclient import TestClient
 
 from src.server import (
@@ -164,7 +165,7 @@ def _make_client() -> TestClient:
             'message': 'Probe completed.',
         },),
     }
-    probe_writes: list[dict[str, object]] = []
+    probe_store = InMemoryProviderProbeHistoryStore.from_rows(provider_probe_rows['ws-001'])
 
     def _probe_runner(probe_input):
         return {
@@ -192,9 +193,6 @@ def _make_client() -> TestClient:
         provider_catalog_rows_provider=lambda: provider_catalog_rows,
         workspace_provider_binding_rows_provider=lambda workspace_id: provider_binding_rows.get(workspace_id, ()),
         workspace_provider_binding_row_provider=lambda workspace_id, provider_key: next((row for row in provider_binding_rows.get(workspace_id, ()) if row['provider_key'] == provider_key), None),
-        workspace_provider_probe_rows_provider=lambda workspace_id: provider_probe_rows.get(workspace_id, ()),
-        recent_provider_probe_rows_provider=lambda: provider_probe_rows.get('ws-001', ()),
-        provider_probe_history_writer=lambda row: probe_writes.append(dict(row)),
         workspace_row_provider=lambda workspace_id: {
             'workspace_id': 'ws-001',
             'owner_user_id': 'user-owner',
@@ -269,8 +267,9 @@ def _make_client() -> TestClient:
         aws_secrets_manager_config=AwsSecretsManagerBindingConfig(),
         provider_probe_runner=_probe_runner,
         probe_event_id_factory=lambda: 'probe-new',
-        now_iso_provider=lambda: "2026-04-11T12:00:00+00:00",
+        now_iso_provider=lambda: "2026-04-11T12:09:00+00:00",
     )
+    deps = bind_probe_history_store(dependencies=deps, store=probe_store)
     return TestClient(create_fastapi_app(dependencies=deps))
 
 
@@ -437,3 +436,28 @@ def test_fastapi_binding_provider_probe_history_round_trip() -> None:
     payload = response.json()
     assert payload['returned_count'] == 1
     assert payload['items'][0]['probe_event_id'] == 'probe-001'
+
+
+def test_fastapi_binding_provider_probe_write_is_visible_in_history_and_recent_activity() -> None:
+    client = _make_client()
+
+    probe_response = client.post(
+        '/api/workspaces/ws-001/provider-bindings/openai/probe',
+        headers=_session_headers(),
+        json={'model_ref': 'gpt-4o'},
+    )
+    assert probe_response.status_code == 200
+    probe_payload = probe_response.json()
+    assert probe_payload['effective_model_ref'] == 'gpt-4o'
+
+    history_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/probe-history?limit=1', headers=_session_headers())
+    assert history_response.status_code == 200
+    history_payload = history_response.json()
+    assert history_payload['items'][0]['probe_event_id'] == 'probe-new'
+    assert history_payload['items'][0]['requested_model_ref'] == 'gpt-4o'
+
+    recent_response = client.get('/api/users/me/activity?limit=1', headers=_session_headers())
+    assert recent_response.status_code == 200
+    recent_payload = recent_response.json()
+    assert recent_payload['activities'][0]['activity_id'].startswith('probe:probe-new:')
+    assert recent_payload['activities'][0]['activity_type'] == 'provider_probe_reachable'
