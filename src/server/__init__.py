@@ -22,6 +22,27 @@ from src.server.auth_models import (
     SessionContext,
     WorkspaceAuthorizationContext,
 )
+from src.server.database_foundation import (
+    build_postgres_connection_url,
+    build_server_schema_summary,
+    get_server_schema_families,
+    load_postgres_connection_settings_from_env,
+)
+from src.server.database_models import (
+    ColumnSpec,
+    IndexSpec,
+    MigrationScript,
+    MigrationStep,
+    PostgresConnectionSettings,
+    SchemaFamily,
+    TableSpec,
+)
+from src.server.migration_foundation import (
+    build_initial_server_migration,
+    build_migration_file_text,
+    render_postgres_schema_statements,
+    validate_schema_families,
+)
 from src.server.boundary_models import (
     EngineArtifactReference,
     EngineCorrelationContext,
@@ -73,5 +94,20 @@ __all__ = [
     "ValidationFindingAdapter",
     "WorkspaceAuthorizationContext",
     "build_engine_auth_context_refs",
+    "build_initial_server_migration",
+    "build_migration_file_text",
+    "build_postgres_connection_url",
+    "build_server_schema_summary",
+    "ColumnSpec",
     "describe_request_auth_context",
+    "get_server_schema_families",
+    "IndexSpec",
+    "load_postgres_connection_settings_from_env",
+    "MigrationScript",
+    "MigrationStep",
+    "PostgresConnectionSettings",
+    "render_postgres_schema_statements",
+    "SchemaFamily",
+    "TableSpec",
+    "validate_schema_families",
 ]
