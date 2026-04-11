@@ -164,6 +164,16 @@ def _make_client() -> TestClient:
             'message': 'Probe completed.',
         },),
     }
+    probe_writes: list[dict[str, object]] = []
+
+    def _probe_runner(probe_input):
+        return {
+            'probe_status': 'reachable',
+            'connectivity_state': 'ok',
+            'message': 'Provider connectivity probe succeeded.',
+            'effective_model_ref': probe_input.requested_model_ref or probe_input.default_model_ref,
+            'round_trip_latency_ms': 187,
+        }
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
         workspace_rows_provider=lambda: ({
@@ -184,6 +194,7 @@ def _make_client() -> TestClient:
         workspace_provider_binding_row_provider=lambda workspace_id, provider_key: next((row for row in provider_binding_rows.get(workspace_id, ()) if row['provider_key'] == provider_key), None),
         workspace_provider_probe_rows_provider=lambda workspace_id: provider_probe_rows.get(workspace_id, ()),
         recent_provider_probe_rows_provider=lambda: provider_probe_rows.get('ws-001', ()),
+        provider_probe_history_writer=lambda row: probe_writes.append(dict(row)),
         workspace_row_provider=lambda workspace_id: {
             'workspace_id': 'ws-001',
             'owner_user_id': 'user-owner',
@@ -256,6 +267,8 @@ def _make_client() -> TestClient:
         },
         aws_secrets_manager_client_provider=lambda: _FakeSecretsClient(),
         aws_secrets_manager_config=AwsSecretsManagerBindingConfig(),
+        provider_probe_runner=_probe_runner,
+        probe_event_id_factory=lambda: 'probe-new',
         now_iso_provider=lambda: "2026-04-11T12:00:00+00:00",
     )
     return TestClient(create_fastapi_app(dependencies=deps))
@@ -393,6 +406,19 @@ def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() ->
     assert put_payload["binding"]["secret_ref"] == "aws-secretsmanager://nexa/ws-001/providers/openai"
     assert put_payload["secret_rotated"] is True
     assert "super-secret" not in put_response.text
+
+
+def test_fastapi_binding_provider_probe_round_trip() -> None:
+    client = _make_client()
+    response = client.post(
+        '/api/workspaces/ws-001/provider-bindings/openai/probe',
+        headers=_session_headers(),
+        json={'model_ref': 'gpt-4.1'},
+    )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['probe_status'] == 'reachable'
+    assert payload['effective_model_ref'] == 'gpt-4.1'
 
 
 def test_fastapi_binding_recent_activity_includes_provider_probe_event() -> None:

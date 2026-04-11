@@ -326,6 +326,8 @@ class FrameworkRouteBindings:
         provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
         secret_metadata_reader: Optional[SecretMetadataReader] = None,
         probe_runner: Optional[ProviderProbeRunner] = None,
+        probe_event_id_factory=None,
+        probe_history_writer=None,
         now_iso: Optional[str] = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_probe_workspace_provider(
@@ -336,6 +338,8 @@ class FrameworkRouteBindings:
             provider_catalog_rows=provider_catalog_rows,
             secret_metadata_reader=secret_metadata_reader,
             probe_runner=probe_runner,
+            probe_event_id_factory=probe_event_id_factory,
+            probe_history_writer=probe_history_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)

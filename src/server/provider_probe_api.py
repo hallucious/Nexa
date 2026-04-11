@@ -2,17 +2,19 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone
 from typing import Any, Callable, Optional
+from uuid import uuid4
 
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
+from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.provider_probe_models import (
     ProductProviderProbeFindingView,
     ProductProviderProbeLinks,
     ProductProviderProbeRejectedResponse,
     ProductProviderProbeRequest,
     ProductProviderProbeResponse,
-    ProviderConnectivityState,
     ProviderProbeExecutionInput,
     ProviderProbeExecutionResult,
     ProviderProbeOutcome,
@@ -20,6 +22,7 @@ from src.server.provider_probe_models import (
 
 SecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 ProviderProbeRunner = Callable[[ProviderProbeExecutionInput], ProviderProbeExecutionResult | Mapping[str, Any]]
+ProviderProbeHistoryWriter = Callable[[Mapping[str, Any]], Any]
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:
@@ -101,6 +104,52 @@ def _normalize_execution_result(value: ProviderProbeExecutionResult | Mapping[st
     )
 
 
+def _resolved_now_iso(now_iso: Optional[str]) -> str:
+    normalized = str(now_iso or "").strip()
+    if normalized:
+        return normalized
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _build_probe_history_row(*, workspace_id: str, provider_key: str, provider_family: str, display_name: str, binding_row: Mapping[str, Any], requested_by_user_id: Optional[str], requested_model_ref: Optional[str], secret_resolution_status: str, execution: ProviderProbeExecutionResult, occurred_at: str, probe_event_id_factory: Optional[Callable[[], str]] = None) -> dict[str, Any]:
+    probe_event_id_factory = probe_event_id_factory or (lambda: f"probe_{uuid4().hex}")
+    effective_model_ref = execution.effective_model_ref or requested_model_ref or (str(binding_row.get("default_model_ref") or "").strip() or None)
+    record = ProviderProbeHistoryRecord(
+        probe_event_id=str(probe_event_id_factory()).strip(),
+        workspace_id=workspace_id,
+        binding_id=str(binding_row.get("binding_id") or "").strip() or None,
+        provider_key=provider_key,
+        provider_family=provider_family,
+        display_name=display_name,
+        probe_status=execution.probe_status,
+        connectivity_state=execution.connectivity_state,
+        secret_resolution_status=secret_resolution_status,
+        requested_model_ref=requested_model_ref,
+        effective_model_ref=effective_model_ref,
+        round_trip_latency_ms=execution.round_trip_latency_ms,
+        requested_by_user_id=requested_by_user_id,
+        occurred_at=occurred_at,
+        message=execution.message,
+    )
+    return {
+        "probe_event_id": record.probe_event_id,
+        "workspace_id": record.workspace_id,
+        "binding_id": record.binding_id,
+        "provider_key": record.provider_key,
+        "provider_family": record.provider_family,
+        "display_name": record.display_name,
+        "probe_status": record.probe_status,
+        "connectivity_state": record.connectivity_state,
+        "secret_resolution_status": record.secret_resolution_status,
+        "requested_model_ref": record.requested_model_ref,
+        "effective_model_ref": record.effective_model_ref,
+        "round_trip_latency_ms": record.round_trip_latency_ms,
+        "requested_by_user_id": record.requested_by_user_id,
+        "occurred_at": record.occurred_at,
+        "message": record.message,
+    }
+
+
 class ProviderProbeService:
     @classmethod
     def _authorize(
@@ -150,6 +199,8 @@ class ProviderProbeService:
         provider_catalog_rows: Sequence[Mapping[str, Any]] | None = None,
         secret_metadata_reader: Optional[SecretMetadataReader] = None,
         probe_runner: Optional[ProviderProbeRunner] = None,
+        probe_event_id_factory: Optional[Callable[[], str]] = None,
+        probe_history_writer: Optional[ProviderProbeHistoryWriter] = None,
         now_iso: Optional[str] = None,
     ) -> ProviderProbeOutcome:
         provider_key = str(provider_key or "").strip().lower()
@@ -241,11 +292,13 @@ class ProviderProbeService:
                 provider_key=provider_key,
             ))
 
+        provider_family = str(catalog_row.get("provider_family") or provider_key).strip()
+        display_name = str(catalog_row.get("display_name") or provider_key).strip()
         probe_input = ProviderProbeExecutionInput(
             workspace_id=workspace_context.workspace_id,
             provider_key=provider_key,
-            provider_family=str(catalog_row.get("provider_family") or provider_key).strip(),
-            display_name=str(catalog_row.get("display_name") or provider_key).strip(),
+            provider_family=provider_family,
+            display_name=display_name,
             secret_ref=secret_ref,
             secret_authority=_infer_secret_authority(secret_ref, binding_row),
             default_model_ref=default_model_ref,
@@ -273,4 +326,28 @@ class ProviderProbeService:
             findings=execution.findings,
             links=_probe_links(workspace_context.workspace_id, provider_key),
         )
-        return ProviderProbeOutcome(response=response)
+        persisted_probe_row = _build_probe_history_row(
+            workspace_id=workspace_context.workspace_id,
+            provider_key=provider_key,
+            provider_family=provider_family,
+            display_name=display_name,
+            binding_row=binding_row,
+            requested_by_user_id=request_auth.requested_by_user_ref,
+            requested_model_ref=requested_model_ref,
+            secret_resolution_status=secret_resolution_status,
+            execution=execution,
+            occurred_at=_resolved_now_iso(now_iso),
+            probe_event_id_factory=probe_event_id_factory,
+        )
+        if probe_history_writer is not None:
+            try:
+                probe_history_writer(dict(persisted_probe_row))
+            except Exception:
+                return ProviderProbeOutcome(rejected=ProductProviderProbeRejectedResponse(
+                    failure_family="product_probe_failure",
+                    reason_code="provider_probe.persistence_write_failed",
+                    message="Provider probe completed but probe history could not be persisted.",
+                    workspace_id=workspace_context.workspace_id,
+                    provider_key=provider_key,
+                ))
+        return ProviderProbeOutcome(response=response, persisted_probe_row=persisted_probe_row)

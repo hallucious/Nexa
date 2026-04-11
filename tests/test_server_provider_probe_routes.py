@@ -151,3 +151,62 @@ def test_provider_probe_framework_round_trip() -> None:
         now_iso="2026-04-11T12:07:00+00:00",
     )
     assert response.status_code == 200
+
+
+def test_provider_probe_service_builds_persistable_probe_history_row() -> None:
+    reader = AwsSecretsManagerSecretAuthority.build_secret_metadata_reader(
+        client=_FakeSecretsClient(),
+        config=AwsSecretsManagerBindingConfig(),
+    )
+    written_rows: list[dict] = []
+
+    outcome = ProviderProbeService.probe_workspace_provider(
+        request_auth=_auth(),
+        workspace_context=_workspace(),
+        provider_key="openai",
+        request=ProductProviderProbeRequest(model_ref="gpt-4.1"),
+        binding_rows=_binding_rows(),
+        provider_catalog_rows=_catalog_rows(),
+        secret_metadata_reader=reader,
+        probe_runner=_probe_runner,
+        probe_event_id_factory=lambda: "probe-123",
+        probe_history_writer=lambda row: written_rows.append(dict(row)),
+        now_iso="2026-04-11T12:07:00+00:00",
+    )
+
+    assert outcome.ok is True
+    assert outcome.persisted_probe_row is not None
+    assert outcome.persisted_probe_row["probe_event_id"] == "probe-123"
+    assert outcome.persisted_probe_row["workspace_id"] == "ws-001"
+    assert outcome.persisted_probe_row["provider_key"] == "openai"
+    assert outcome.persisted_probe_row["probe_status"] == "reachable"
+    assert written_rows == [outcome.persisted_probe_row]
+
+
+def test_provider_probe_route_returns_conflict_when_probe_history_persistence_fails() -> None:
+    reader = AwsSecretsManagerSecretAuthority.build_secret_metadata_reader(
+        client=_FakeSecretsClient(),
+        config=AwsSecretsManagerBindingConfig(),
+    )
+
+    route_response = RunHttpRouteSurface.handle_probe_workspace_provider(
+        http_request=HttpRouteRequest(
+            method="POST",
+            path="/api/workspaces/ws-001/provider-bindings/openai/probe",
+            headers={"Authorization": "Bearer token"},
+            session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["admin"]},
+            path_params={"workspace_id": "ws-001", "provider_key": "openai"},
+            json_body={"model_ref": "gpt-4.1"},
+        ),
+        workspace_context=_workspace(),
+        provider_key="openai",
+        binding_rows=_binding_rows(),
+        provider_catalog_rows=_catalog_rows(),
+        secret_metadata_reader=reader,
+        probe_runner=_probe_runner,
+        probe_event_id_factory=lambda: "probe-err",
+        probe_history_writer=lambda row: (_ for _ in ()).throw(RuntimeError("write failed")),
+        now_iso="2026-04-11T12:07:00+00:00",
+    )
+    assert route_response.status_code == 409
+    assert route_response.body["reason_code"] == "provider_probe.persistence_write_failed"

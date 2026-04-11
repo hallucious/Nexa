@@ -181,6 +181,33 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.post("/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe")
+        async def probe_workspace_provider(
+            request: Request,
+            workspace_id: str,
+            provider_key: str,
+            payload: dict[str, Any] | None = Body(default=None),
+        ) -> Response:
+            inbound = self._inbound_request(
+                request=request,
+                json_body=payload,
+                path_params={"workspace_id": workspace_id, "provider_key": provider_key},
+            )
+            now_iso = self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else ''
+            outbound = FrameworkRouteBindings.handle_probe_workspace_provider(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                provider_key=provider_key,
+                binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
+                secret_metadata_reader=self._resolve_managed_secret_metadata_reader(),
+                probe_runner=self.dependencies.provider_probe_runner,
+                probe_event_id_factory=self.dependencies.probe_event_id_factory,
+                probe_history_writer=self.dependencies.provider_probe_history_writer,
+                now_iso=now_iso,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe-history")
         async def list_provider_probe_history(
             request: Request,

@@ -157,6 +157,7 @@ class ProductProviderProbeRejectedResponse:
 class ProviderProbeOutcome:
     response: Optional[ProductProviderProbeResponse] = None
     rejected: Optional[ProductProviderProbeRejectedResponse] = None
+    persisted_probe_row: Optional[dict[str, Any]] = None
 
     @property
     def ok(self) -> bool:

@@ -49,6 +49,7 @@ WorkspaceProviderBindingRowsProvider = Callable[[str], Sequence[Mapping[str, Any
 WorkspaceProviderBindingRowProvider = Callable[[str, str], Optional[Mapping[str, Any]]]
 WorkspaceProviderProbeRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
 RecentProviderProbeRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+ProviderProbeHistoryWriter = Callable[[Mapping[str, Any]], Any]
 ManagedSecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
 ManagedSecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 AwsSecretsManagerClientProvider = Callable[[], Any]
@@ -104,6 +105,10 @@ def _default_secret_writer(workspace_id: str, provider_key: str, secret_value: s
     }
 
 
+def _noop_probe_history_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    return dict(row)
+
+
 def _none_workspace_row(_: str) -> Optional[Mapping[str, Any]]:
     return None
 
@@ -137,10 +142,12 @@ class FastApiRouteDependencies:
     workspace_provider_binding_row_provider: WorkspaceProviderBindingRowProvider = _none_provider_binding_row
     workspace_provider_probe_rows_provider: WorkspaceProviderProbeRowsProvider = _empty_provider_binding_rows
     recent_provider_probe_rows_provider: RecentProviderProbeRowsProvider = _empty_noarg_rows
+    provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
     managed_secret_metadata_reader: Optional[ManagedSecretMetadataReader] = None
     aws_secrets_manager_client_provider: Optional[AwsSecretsManagerClientProvider] = None
     aws_secrets_manager_config: Optional[AwsSecretsManagerBindingConfig] = None
+    provider_probe_runner: Optional[Callable[..., Any]] = None
     workspace_row_provider: WorkspaceRowProvider = _none_workspace_row
     engine_status_provider: EngineStatusProvider = _none_status
     engine_result_provider: EngineResultProvider = _none_result
@@ -151,6 +158,7 @@ class FastApiRouteDependencies:
     workspace_id_factory: Optional[IdentifierFactory] = None
     membership_id_factory: Optional[IdentifierFactory] = None
     binding_id_factory: Optional[IdentifierFactory] = None
+    probe_event_id_factory: Optional[IdentifierFactory] = None
     onboarding_state_id_factory: Optional[IdentifierFactory] = None
     now_iso_provider: Optional[NowIsoProvider] = None
     session_claims_resolver: Optional[SessionClaimsResolver] = None

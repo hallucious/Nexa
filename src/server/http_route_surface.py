@@ -541,6 +541,8 @@ class RunHttpRouteSurface:
         provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         secret_metadata_reader: Optional[SecretMetadataReader] = None,
         probe_runner: Optional[ProviderProbeRunner] = None,
+        probe_event_id_factory: Optional[Callable[[], str]] = None,
+        probe_history_writer = None,
         now_iso: Optional[str] = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -572,6 +574,8 @@ class RunHttpRouteSurface:
             provider_catalog_rows=provider_catalog_rows,
             secret_metadata_reader=secret_metadata_reader,
             probe_runner=probe_runner,
+            probe_event_id_factory=probe_event_id_factory,
+            probe_history_writer=probe_history_writer,
             now_iso=now_iso,
         )
         if outcome.ok:
