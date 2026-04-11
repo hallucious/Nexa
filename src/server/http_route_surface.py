@@ -23,6 +23,7 @@ from src.server.workspace_onboarding_api import OnboardingContinuityService, Wor
 from src.server.workspace_onboarding_models import ProductOnboardingWriteRequest, ProductWorkspaceCreateRequest
 from src.server.recent_activity_api import RecentActivityService
 from src.server.provider_secret_api import ProviderSecretIntegrationService
+from src.server.provider_health_api import ProviderHealthService, SecretMetadataReader
 from src.server.provider_secret_models import ProductProviderBindingWriteRequest
 
 
@@ -501,6 +502,72 @@ class RunHttpRouteSurface:
             membership_rows=membership_rows,
             run_rows=run_rows,
             workspace_id=workspace_id,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_list_workspace_provider_health(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        secret_metadata_reader: Optional[SecretMetadataReader] = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace provider health route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/provider-bindings/health"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        outcome = ProviderHealthService.list_workspace_provider_health(
+            request_auth=_request_auth(http_request),
+            workspace_context=workspace_context,
+            binding_rows=binding_rows,
+            provider_catalog_rows=provider_catalog_rows,
+            secret_metadata_reader=secret_metadata_reader,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_get_workspace_provider_health(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        secret_metadata_reader: Optional[SecretMetadataReader] = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Provider health detail route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        provider_key = str(http_request.path_params.get("provider_key") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        if not provider_key:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.provider_key_missing", "message": "Provider key path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/health"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        outcome = ProviderHealthService.read_workspace_provider_health(
+            request_auth=_request_auth(http_request),
+            workspace_context=workspace_context,
+            provider_key=provider_key,
+            binding_rows=binding_rows,
+            provider_catalog_rows=provider_catalog_rows,
+            secret_metadata_reader=secret_metadata_reader,
         )
         if outcome.ok:
             assert outcome.response is not None

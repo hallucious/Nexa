@@ -15,6 +15,18 @@ def create_boto3_secrets_manager_client(config: AwsSecretsManagerBindingConfig) 
 
 class AwsSecretsManagerSecretAuthority:
     @staticmethod
+    def secret_name_from_ref(secret_ref: str, config: AwsSecretsManagerBindingConfig | None = None) -> str:
+        resolved = config or AwsSecretsManagerBindingConfig()
+        prefix = f"{resolved.ref_scheme}://"
+        normalized = str(secret_ref or "").strip()
+        if not normalized.startswith(prefix):
+            raise ValueError("aws_secret.secret_ref_invalid")
+        secret_name = normalized[len(prefix):].strip()
+        if not secret_name:
+            raise ValueError("aws_secret.secret_name_missing")
+        return secret_name
+
+    @staticmethod
     def build_secret_name(
         workspace_id: str,
         provider_key: str,
@@ -98,6 +110,52 @@ class AwsSecretsManagerSecretAuthority:
             last_rotated_at=last_rotated_at,
             was_created=was_created,
         )
+
+    @classmethod
+    def read_secret_metadata(
+        cls,
+        *,
+        client: Any,
+        secret_ref: Optional[str] = None,
+        secret_name: Optional[str] = None,
+        config: AwsSecretsManagerBindingConfig | None = None,
+    ) -> Optional[Mapping[str, Any]]:
+        resolved = config or AwsSecretsManagerBindingConfig()
+        resolved_secret_name = str(secret_name or "").strip()
+        if not resolved_secret_name and secret_ref is not None:
+            resolved_secret_name = cls.secret_name_from_ref(secret_ref, resolved)
+        if not resolved_secret_name:
+            raise ValueError("aws_secret.secret_name_missing")
+        try:
+            described = client.describe_secret(SecretId=resolved_secret_name)
+        except Exception as exc:  # pragma: no cover - exercised via fake client
+            if cls._is_not_found_error(exc):
+                return None
+            raise
+        last_rotated = described.get("LastRotatedDate") or described.get("LastChangedDate")
+        if hasattr(last_rotated, "isoformat"):
+            last_rotated = last_rotated.isoformat()
+        return {
+            "secret_name": resolved_secret_name,
+            "secret_arn": str(described.get("ARN") or "").strip() or None,
+            "secret_ref": f"{resolved.ref_scheme}://{resolved_secret_name}",
+            "last_rotated_at": str(last_rotated or "").strip() or None,
+            "secret_authority": "aws_secrets_manager",
+        }
+
+    @classmethod
+    def build_secret_metadata_reader(
+        cls,
+        *,
+        client: Any,
+        config: AwsSecretsManagerBindingConfig | None = None,
+    ) -> Callable[[str], Optional[Mapping[str, Any]]]:
+        resolved = config or AwsSecretsManagerBindingConfig()
+
+        def _reader(secret_ref: str) -> Optional[Mapping[str, Any]]:
+            return cls.read_secret_metadata(client=client, secret_ref=secret_ref, config=resolved)
+
+        return _reader
 
     @classmethod
     def build_secret_writer(

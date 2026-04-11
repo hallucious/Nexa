@@ -89,6 +89,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_provider_catalog",
         "list_workspace_provider_bindings",
         "put_workspace_provider_binding",
+        "list_workspace_provider_health",
+        "get_workspace_provider_health",
         "get_onboarding",
         "put_onboarding",
         "list_workspace_runs",
@@ -254,6 +256,46 @@ def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None
     assert onboarding_response.status_code == 200
     assert onboarding_payload["state"]["first_success_achieved"] is True
     assert onboarding_payload["state"]["advanced_surfaces_unlocked"] is True
+
+
+def test_framework_binding_handles_workspace_provider_health_round_trip() -> None:
+    from src.server import AwsSecretsManagerBindingConfig, AwsSecretsManagerSecretAuthority
+
+    class _FakeSecretsClient:
+        def describe_secret(self, SecretId: str):
+            return {"ARN": "arn:aws:secretsmanager:region:acct:secret:" + SecretId, "LastChangedDate": "2026-04-11T12:06:00+00:00"}
+
+    response = FrameworkRouteBindings.handle_get_workspace_provider_health(
+        request=_request(method="GET", path="/api/workspaces/ws-001/provider-bindings/openai/health", path_params={"workspace_id": "ws-001", "provider_key": "openai"}),
+        workspace_context=_workspace(),
+        binding_rows=({
+            "binding_id": "binding-001",
+            "workspace_id": "ws-001",
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "credential_source": "managed",
+            "secret_ref": "aws-secretsmanager://nexa/ws-001/providers/openai",
+            "enabled": True,
+            "default_model_ref": "gpt-4.1",
+            "allowed_model_refs": ("gpt-4.1",),
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+        },),
+        provider_catalog_rows=({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+        },),
+        secret_metadata_reader=AwsSecretsManagerSecretAuthority.build_secret_metadata_reader(client=_FakeSecretsClient(), config=AwsSecretsManagerBindingConfig()),
+    )
+
+    payload = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert payload["health_status"] == "healthy"
+    assert payload["secret_resolution_status"] == "resolved"
 
 
 def test_framework_binding_handles_provider_catalog_and_workspace_provider_bindings_round_trip() -> None:

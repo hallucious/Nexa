@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping, Optional, Sequence
 
+from src.server.provider_health_api import SecretMetadataReader
+
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchRequest, EngineRunLaunchResponse, EngineRunStatusSnapshot
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse, FrameworkRouteDefinition
@@ -60,6 +62,18 @@ class FrameworkRouteBindings:
             method="PUT",
             path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}",
             summary="Create or update a workspace managed provider binding.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="list_workspace_provider_health",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/provider-bindings/health",
+            summary="List provider health for a workspace.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_workspace_provider_health",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/health",
+            summary="Read provider health detail for a workspace binding.",
         ),
         FrameworkRouteDefinition(
             route_name="get_onboarding",
@@ -286,6 +300,45 @@ class FrameworkRouteBindings:
             binding_id_factory=binding_id_factory,
             secret_writer=secret_writer,
             now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+
+    @classmethod
+    def handle_list_workspace_provider_health(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        binding_rows: Sequence[Mapping[str, Any]] = (),
+        provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
+        secret_metadata_reader: Optional[SecretMetadataReader] = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_workspace_provider_health(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            binding_rows=tuple(binding_rows),
+            provider_catalog_rows=tuple(provider_catalog_rows),
+            secret_metadata_reader=secret_metadata_reader,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_workspace_provider_health(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        binding_rows: Sequence[Mapping[str, Any]] = (),
+        provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
+        secret_metadata_reader: Optional[SecretMetadataReader] = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_workspace_provider_health(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            binding_rows=tuple(binding_rows),
+            provider_catalog_rows=tuple(provider_catalog_rows),
+            secret_metadata_reader=secret_metadata_reader,
         )
         return cls.to_framework_response(response)
 

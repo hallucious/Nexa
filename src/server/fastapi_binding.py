@@ -154,6 +154,31 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/workspaces/{workspace_id}/provider-bindings/health")
+        async def list_workspace_provider_health(request: Request, workspace_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id})
+            outbound = FrameworkRouteBindings.handle_list_workspace_provider_health(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
+                secret_metadata_reader=self._resolve_managed_secret_metadata_reader(),
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/health")
+        async def get_workspace_provider_health(request: Request, workspace_id: str, provider_key: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id, "provider_key": provider_key})
+            outbound = FrameworkRouteBindings.handle_get_workspace_provider_health(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                provider_key=provider_key,
+                binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
+                secret_metadata_reader=self._resolve_managed_secret_metadata_reader(),
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/users/me/onboarding")
         async def get_onboarding(request: Request, workspace_id: str | None = None) -> Response:
             workspace_context = self.dependencies.workspace_context_provider(workspace_id) if workspace_id else None
@@ -292,6 +317,15 @@ class FastApiRouteBindings:
         app = FastAPI(title=self.config.title, version=self.config.version)
         app.include_router(self.build_router())
         return app
+
+    def _resolve_managed_secret_metadata_reader(self):
+        if self.dependencies.managed_secret_metadata_reader is not None:
+            return self.dependencies.managed_secret_metadata_reader
+        if self.dependencies.aws_secrets_manager_client_provider is not None:
+            client = self.dependencies.aws_secrets_manager_client_provider()
+            config = self.dependencies.aws_secrets_manager_config or AwsSecretsManagerBindingConfig()
+            return AwsSecretsManagerSecretAuthority.build_secret_metadata_reader(client=client, config=config)
+        return None
 
     def _resolve_session_claims(self, request: Request) -> Optional[Mapping[str, Any]]:
         if self.dependencies.session_claims_resolver is not None:

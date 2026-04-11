@@ -7,6 +7,7 @@ pytest.importorskip("httpx")
 from fastapi.testclient import TestClient
 
 from src.server import (
+    AwsSecretsManagerBindingConfig,
     EngineArtifactReference,
     EngineFinalOutput,
     EngineResultEnvelope,
@@ -71,6 +72,17 @@ def _session_headers(user_id: str = "user-owner") -> dict[str, str]:
         "Authorization": "Bearer token",
         "X-Nexa-Session-Claims": '{"sub": "%s", "sid": "sess-001", "exp": 4102444800, "roles": ["editor"]}' % user_id,
     }
+
+
+class _FakeSecretsClient:
+    def describe_secret(self, SecretId: str):
+        return {"ARN": "arn:aws:secretsmanager:region:acct:secret:" + SecretId, "LastChangedDate": "2026-04-11T12:06:00+00:00"}
+
+    def put_secret_value(self, SecretId: str, SecretString: str):
+        return {"ARN": "arn:aws:secretsmanager:region:acct:secret:" + SecretId, "VersionId": "v2"}
+
+    def create_secret(self, Name: str, SecretString: str, Description: str, Tags, **kwargs):
+        return {"ARN": "arn:aws:secretsmanager:region:acct:secret:" + Name, "VersionId": "v1"}
 
 
 def _make_client() -> TestClient:
@@ -223,6 +235,8 @@ def _make_client() -> TestClient:
             'secret_version_ref': 'v2',
             'last_rotated_at': '2026-04-11T12:06:00+00:00',
         },
+        aws_secrets_manager_client_provider=lambda: _FakeSecretsClient(),
+        aws_secrets_manager_config=AwsSecretsManagerBindingConfig(),
         now_iso_provider=lambda: "2026-04-11T12:00:00+00:00",
     )
     return TestClient(create_fastapi_app(dependencies=deps))
@@ -357,6 +371,6 @@ def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() ->
     assert put_response.status_code == 200
     put_payload = put_response.json()
     assert put_payload["binding"]["provider_key"] == "openai"
-    assert put_payload["binding"]["secret_ref"] == "secret://ws-001/openai"
+    assert put_payload["binding"]["secret_ref"] == "aws-secretsmanager://nexa/ws-001/providers/openai"
     assert put_payload["secret_rotated"] is True
     assert "super-secret" not in put_response.text

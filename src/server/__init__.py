@@ -67,6 +67,7 @@ from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadSer
 from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
 from src.server.recent_activity_api import RecentActivityService
 from src.server.provider_secret_api import ProviderSecretIntegrationService
+from src.server.provider_health_api import ProviderHealthService
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig, AwsSecretWriteReceipt
 from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthority, create_boto3_secrets_manager_client
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
@@ -123,6 +124,15 @@ from src.server.recent_activity_models import (
     ProductRecentActivityRejectedResponse,
     ProductRecentActivityResponse,
     RecentActivityReadOutcome,
+)
+from src.server.provider_health_models import (
+    ProductProviderBindingHealthView,
+    ProductProviderHealthFindingView,
+    ProductProviderHealthLinks,
+    ProductProviderHealthRejectedResponse,
+    ProductWorkspaceProviderHealthResponse,
+    ProviderHealthDetailOutcome,
+    ProviderHealthListOutcome,
 )
 from src.server.provider_secret_models import (
     ProviderBindingListOutcome,
@@ -255,6 +265,7 @@ __all__ = [
     "RecentActivityService",
     "OnboardingContinuityService",
     "ProviderSecretIntegrationService",
+    "ProviderHealthService",
     "AwsSecretsManagerBindingConfig",
     "AwsSecretWriteReceipt",
     "AwsSecretsManagerSecretAuthority",
@@ -274,6 +285,13 @@ __all__ = [
     "ProviderBindingListOutcome",
     "ProviderBindingWriteOutcome",
     "ProviderCatalogReadOutcome",
+    "ProductProviderBindingHealthView",
+    "ProductProviderHealthFindingView",
+    "ProductProviderHealthLinks",
+    "ProductProviderHealthRejectedResponse",
+    "ProductWorkspaceProviderHealthResponse",
+    "ProviderHealthDetailOutcome",
+    "ProviderHealthListOutcome",
     "ProductProviderBindingLinks",
     "ProductProviderBindingWriteAcceptedResponse",
     "ProductProviderBindingWriteRequest",
