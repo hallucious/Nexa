@@ -64,6 +64,7 @@ from src.server.worker_queue_orchestration import WorkerQueueOrchestrationServic
 from src.server.run_read_api import RunResultReadService, RunStatusReadService
 from src.server.run_list_api import RunListReadService
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
+from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
 from src.server.http_route_surface import RunHttpRouteSurface
 from src.server.framework_binding_models import (
@@ -81,6 +82,27 @@ except ModuleNotFoundError as exc:
         raise
     _FASTAPI_BINDING_AVAILABLE = False
 
+from src.server.workspace_onboarding_models import (
+    OnboardingReadOutcome,
+    OnboardingWriteOutcome,
+    ProductOnboardingLinks,
+    ProductOnboardingReadResponse,
+    ProductOnboardingRejectedResponse,
+    ProductOnboardingStateView,
+    ProductOnboardingWriteAcceptedResponse,
+    ProductOnboardingWriteRequest,
+    ProductWorkspaceCreateRequest,
+    ProductWorkspaceDetailResponse,
+    ProductWorkspaceLinks,
+    ProductWorkspaceListResponse,
+    ProductWorkspaceReadRejectedResponse,
+    ProductWorkspaceSummaryView,
+    ProductWorkspaceWriteAcceptedResponse,
+    ProductWorkspaceWriteRejectedResponse,
+    WorkspaceListOutcome,
+    WorkspaceReadOutcome,
+    WorkspaceWriteOutcome,
+)
 from src.server.run_list_models import (
     ProductRunListAppliedFilters,
     ProductRunListItemView,
@@ -194,6 +216,27 @@ __all__ = [
     "WorkerOrphanReview",
     "WorkerProjectionBundle",
     "WorkerQueueOrchestrationService",
+    "WorkspaceRegistryService",
+    "OnboardingContinuityService",
+    "ProductWorkspaceCreateRequest",
+    "ProductWorkspaceDetailResponse",
+    "ProductWorkspaceLinks",
+    "ProductWorkspaceListResponse",
+    "ProductWorkspaceReadRejectedResponse",
+    "ProductWorkspaceSummaryView",
+    "ProductWorkspaceWriteAcceptedResponse",
+    "ProductWorkspaceWriteRejectedResponse",
+    "WorkspaceListOutcome",
+    "WorkspaceReadOutcome",
+    "WorkspaceWriteOutcome",
+    "ProductOnboardingLinks",
+    "ProductOnboardingReadResponse",
+    "ProductOnboardingRejectedResponse",
+    "ProductOnboardingStateView",
+    "ProductOnboardingWriteAcceptedResponse",
+    "ProductOnboardingWriteRequest",
+    "OnboardingReadOutcome",
+    "OnboardingWriteOutcome",
     "ProductRunListAppliedFilters",
     "ProductRunListItemView",
     "ProductRunListLinks",

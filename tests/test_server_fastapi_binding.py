@@ -112,6 +112,29 @@ def _make_client() -> TestClient:
     }
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_rows_provider=lambda: ({
+            'workspace_id': 'ws-001',
+            'owner_user_id': 'user-owner',
+            'title': 'Primary Workspace',
+            'description': 'Main',
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:05:00+00:00',
+            'continuity_source': 'server',
+            'archived': False,
+        },),
+        workspace_membership_rows_provider=lambda: (),
+        recent_run_rows_provider=lambda: (_run_row(trace_available=True),),
+        onboarding_rows_provider=lambda: (),
+        workspace_row_provider=lambda workspace_id: {
+            'workspace_id': 'ws-001',
+            'owner_user_id': 'user-owner',
+            'title': 'Primary Workspace',
+            'description': 'Main',
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:05:00+00:00',
+            'continuity_source': 'server',
+            'archived': False,
+        } if workspace_id == 'ws-001' else None,
         run_context_provider=lambda run_id: _run_context() if run_id == "run-001" else None,
         target_catalog_provider=lambda workspace_id: {
             "snap-001": ExecutionTargetCatalogEntry(
@@ -163,6 +186,9 @@ def _make_client() -> TestClient:
         ) if run_id == "run-001" else None,
         run_id_factory=lambda: "run-001",
         run_request_id_factory=lambda: "req-001",
+        workspace_id_factory=lambda: 'ws-new',
+        membership_id_factory=lambda: 'membership-new',
+        onboarding_state_id_factory=lambda: 'onboard-001',
         now_iso_provider=lambda: "2026-04-11T12:00:00+00:00",
     )
     return TestClient(create_fastapi_app(dependencies=deps))
@@ -242,3 +268,33 @@ def test_fastapi_binding_workspace_run_list_route_round_trip() -> None:
     assert payload["workspace_id"] == "ws-001"
     assert payload["returned_count"] == 2
     assert payload["runs"][0]["run_id"] == "run-002"
+
+
+def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
+    client = _make_client()
+
+    workspace_list = client.get('/api/workspaces', headers=_session_headers())
+    assert workspace_list.status_code == 200
+    workspace_payload = workspace_list.json()
+    assert workspace_payload['returned_count'] == 1
+    assert workspace_payload['workspaces'][0]['workspace_id'] == 'ws-001'
+
+    workspace_detail = client.get('/api/workspaces/ws-001', headers=_session_headers())
+    assert workspace_detail.status_code == 200
+    assert workspace_detail.json()['workspace_id'] == 'ws-001'
+
+    workspace_create = client.post('/api/workspaces', headers=_session_headers(), json={'title': 'Created Workspace'})
+    assert workspace_create.status_code == 201
+    assert workspace_create.json()['workspace']['workspace_id'] == 'ws-new'
+
+    onboarding_get = client.get('/api/users/me/onboarding', headers=_session_headers())
+    assert onboarding_get.status_code == 200
+    assert onboarding_get.json()['state']['first_success_achieved'] is False
+
+    onboarding_put = client.put(
+        '/api/users/me/onboarding',
+        headers=_session_headers(),
+        json={'first_success_achieved': True, 'advanced_surfaces_unlocked': True},
+    )
+    assert onboarding_put.status_code == 200
+    assert onboarding_put.json()['state']['advanced_surfaces_unlocked'] is True

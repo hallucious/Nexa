@@ -37,6 +37,66 @@ class FastApiRouteBindings:
     def build_router(self) -> APIRouter:
         router = APIRouter()
 
+        @router.get("/api/workspaces")
+        async def list_workspaces(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_list_workspaces(
+                request=inbound,
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/workspaces/{workspace_id}")
+        async def get_workspace(request: Request, workspace_id: str) -> Response:
+            workspace_context = self.dependencies.workspace_context_provider(workspace_id)
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id})
+            outbound = FrameworkRouteBindings.handle_get_workspace(
+                request=inbound,
+                workspace_context=workspace_context,
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
+        @router.post("/api/workspaces")
+        async def create_workspace(request: Request, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_create_workspace(
+                request=inbound,
+                workspace_id_factory=self.dependencies.workspace_id_factory or (lambda: 'workspace-missing-id-factory'),
+                membership_id_factory=self.dependencies.membership_id_factory or (lambda: 'membership-missing-id-factory'),
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else '',
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/users/me/onboarding")
+        async def get_onboarding(request: Request, workspace_id: str | None = None) -> Response:
+            workspace_context = self.dependencies.workspace_context_provider(workspace_id) if workspace_id else None
+            inbound = self._inbound_request(request=request, query_params={"workspace_id": workspace_id} if workspace_id is not None else {})
+            outbound = FrameworkRouteBindings.handle_get_onboarding(
+                request=inbound,
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                workspace_context=workspace_context,
+            )
+            return self._framework_response(outbound)
+
+        @router.put("/api/users/me/onboarding")
+        async def put_onboarding(request: Request, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            workspace_id = str((payload or {}).get('workspace_id') or '').strip() or None
+            workspace_context = self.dependencies.workspace_context_provider(workspace_id) if workspace_id else None
+            inbound = self._inbound_request(request=request, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_put_onboarding(
+                request=inbound,
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                workspace_context=workspace_context,
+                onboarding_state_id_factory=self.dependencies.onboarding_state_id_factory or (lambda: 'onboarding-missing-id-factory'),
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else '',
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/workspaces/{workspace_id}/runs")
         async def list_workspace_runs(
             workspace_id: str,

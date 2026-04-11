@@ -81,6 +81,11 @@ def _request(*, method: str, path: str, path_params: dict | None = None, query_p
 def test_framework_binding_exposes_expected_route_definitions() -> None:
     definitions = FrameworkRouteBindings.route_definitions()
     assert [d.route_name for d in definitions] == [
+        "list_workspaces",
+        "get_workspace",
+        "create_workspace",
+        "get_onboarding",
+        "put_onboarding",
         "list_workspace_runs",
         "launch_run",
         "get_run_status",
@@ -89,7 +94,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_artifact_detail",
         "get_run_trace",
     ]
-    assert definitions[0].path_template == "/api/workspaces/{workspace_id}/runs"
+    assert definitions[0].path_template == "/api/workspaces"
     assert definitions[-1].path_template == "/api/runs/{run_id}/trace"
 
 
@@ -206,3 +211,41 @@ def test_framework_binding_handles_workspace_run_list_round_trip() -> None:
     assert parsed["workspace_id"] == "ws-001"
     assert parsed["returned_count"] == 2
     assert parsed["runs"][0]["run_id"] == "run-002"
+
+
+def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None:
+    workspace_response = FrameworkRouteBindings.handle_list_workspaces(
+        request=_request(method="GET", path="/api/workspaces"),
+        workspace_rows=({
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "continuity_source": "server",
+            "archived": False,
+        },),
+        membership_rows=(),
+        recent_run_rows=(),
+    )
+    workspace_payload = json.loads(workspace_response.body_text)
+    assert workspace_response.status_code == 200
+    assert workspace_payload["returned_count"] == 1
+    assert workspace_payload["workspaces"][0]["workspace_id"] == "ws-001"
+
+    onboarding_response = FrameworkRouteBindings.handle_put_onboarding(
+        request=_request(
+            method="PUT",
+            path="/api/users/me/onboarding",
+            json_body={"first_success_achieved": True, "advanced_surfaces_unlocked": True},
+        ),
+        onboarding_rows=(),
+        workspace_context=None,
+        onboarding_state_id_factory=lambda: "onboard-001",
+        now_iso="2026-04-11T12:10:00+00:00",
+    )
+    onboarding_payload = json.loads(onboarding_response.body_text)
+    assert onboarding_response.status_code == 200
+    assert onboarding_payload["state"]["first_success_achieved"] is True
+    assert onboarding_payload["state"]["advanced_surfaces_unlocked"] is True

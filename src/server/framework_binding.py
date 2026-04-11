@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from typing import Any, Mapping, Optional, Sequence
 
-from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchRequest, EngineRunLaunchResponse, EngineRunStatusSnapshot
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse, FrameworkRouteDefinition
@@ -14,6 +13,36 @@ from src.server.run_admission_models import ExecutionTargetCatalogEntry, Product
 
 class FrameworkRouteBindings:
     _ROUTE_DEFINITIONS: tuple[FrameworkRouteDefinition, ...] = (
+        FrameworkRouteDefinition(
+            route_name="list_workspaces",
+            method="GET",
+            path_template="/api/workspaces",
+            summary="List accessible workspaces.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_workspace",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}",
+            summary="Read workspace detail.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="create_workspace",
+            method="POST",
+            path_template="/api/workspaces",
+            summary="Create a new workspace continuity record.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_onboarding",
+            method="GET",
+            path_template="/api/users/me/onboarding",
+            summary="Read canonical onboarding continuity.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="put_onboarding",
+            method="PUT",
+            path_template="/api/users/me/onboarding",
+            summary="Update canonical onboarding continuity.",
+        ),
         FrameworkRouteDefinition(
             route_name="list_workspace_runs",
             method="GET",
@@ -89,6 +118,93 @@ class FrameworkRouteBindings:
             body_text=json.dumps(dict(response.body), ensure_ascii=False, sort_keys=True),
             media_type=headers.get("content-type", "application/json"),
         )
+
+    @classmethod
+    def handle_list_workspaces(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_workspaces(
+            http_request=cls.to_http_route_request(request),
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_workspace(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_workspace(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_create_workspace(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_id_factory,
+        membership_id_factory,
+        now_iso: str,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_create_workspace(
+            http_request=cls.to_http_route_request(request),
+            workspace_id_factory=workspace_id_factory,
+            membership_id_factory=membership_id_factory,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_onboarding(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        workspace_context: Optional[WorkspaceAuthorizationContext] = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_onboarding(
+            http_request=cls.to_http_route_request(request),
+            onboarding_rows=onboarding_rows,
+            workspace_context=workspace_context,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_put_onboarding(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        workspace_context: Optional[WorkspaceAuthorizationContext] = None,
+        onboarding_state_id_factory=None,
+        now_iso: str,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_put_onboarding(
+            http_request=cls.to_http_route_request(request),
+            onboarding_rows=onboarding_rows,
+            workspace_context=workspace_context,
+            onboarding_state_id_factory=onboarding_state_id_factory,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
 
     @classmethod
     def handle_list_workspace_runs(

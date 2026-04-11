@@ -39,6 +39,11 @@ WorkspaceRunRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
 WorkspaceResultRowsProvider = Callable[[str], Mapping[str, Mapping[str, Any]]]
 ArtifactRowProvider = Callable[[str], Optional[Mapping[str, Any]]]
 TraceRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
+WorkspaceRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+WorkspaceMembershipRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+RecentRunRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+OnboardingRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+WorkspaceRowProvider = Callable[[str], Optional[Mapping[str, Any]]]
 EngineStatusProvider = Callable[[str], Optional[EngineRunStatusSnapshot]]
 EngineResultProvider = Callable[[str], Optional[EngineResultEnvelope]]
 EngineLaunchDecider = Callable[..., EngineRunLaunchResponse]
@@ -66,8 +71,16 @@ def _empty_rows(_: str) -> Sequence[Mapping[str, Any]]:
     return ()
 
 
+def _empty_noarg_rows() -> Sequence[Mapping[str, Any]]:
+    return ()
+
+
 def _empty_result_rows(_: str) -> Mapping[str, Mapping[str, Any]]:
     return {}
+
+
+def _none_workspace_row(_: str) -> Optional[Mapping[str, Any]]:
+    return None
 
 
 def _none_status(_: str) -> Optional[EngineRunStatusSnapshot]:
@@ -90,11 +103,19 @@ class FastApiRouteDependencies:
     workspace_result_rows_provider: WorkspaceResultRowsProvider = _empty_result_rows
     artifact_row_provider: ArtifactRowProvider = _none_row
     trace_rows_provider: TraceRowsProvider = _empty_rows
+    workspace_rows_provider: WorkspaceRowsProvider = _empty_noarg_rows
+    workspace_membership_rows_provider: WorkspaceMembershipRowsProvider = _empty_noarg_rows
+    recent_run_rows_provider: RecentRunRowsProvider = _empty_noarg_rows
+    onboarding_rows_provider: OnboardingRowsProvider = _empty_noarg_rows
+    workspace_row_provider: WorkspaceRowProvider = _none_workspace_row
     engine_status_provider: EngineStatusProvider = _none_status
     engine_result_provider: EngineResultProvider = _none_result
     admission_policy: ProductAdmissionPolicy = field(default_factory=ProductAdmissionPolicy)
     engine_launch_decider: Optional[EngineLaunchDecider] = None
     run_id_factory: Optional[IdentifierFactory] = None
     run_request_id_factory: Optional[IdentifierFactory] = None
+    workspace_id_factory: Optional[IdentifierFactory] = None
+    membership_id_factory: Optional[IdentifierFactory] = None
+    onboarding_state_id_factory: Optional[IdentifierFactory] = None
     now_iso_provider: Optional[NowIsoProvider] = None
     session_claims_resolver: Optional[SessionClaimsResolver] = None

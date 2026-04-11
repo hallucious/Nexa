@@ -19,6 +19,8 @@ from src.server.run_admission_models import (
 from src.server.run_read_api import RunResultReadService, RunStatusReadService
 from src.server.run_list_api import RunListReadService
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
+from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
+from src.server.workspace_onboarding_models import ProductOnboardingWriteRequest, ProductWorkspaceCreateRequest
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -252,6 +254,175 @@ class RunHttpRouteSurface:
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
+
+    @classmethod
+    def handle_list_workspaces(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        membership_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace list route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/workspaces":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        outcome = WorkspaceRegistryService.list_workspaces(
+            request_auth=_request_auth(http_request),
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_get_workspace(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        membership_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace detail route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        outcome = WorkspaceRegistryService.read_workspace(
+            request_auth=_request_auth(http_request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_create_workspace(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_id_factory: Callable[[], str],
+        membership_id_factory: Callable[[], str],
+        now_iso: str,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace create route only supports POST."})
+        if http_request.path.rstrip("/") != "/api/workspaces":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        try:
+            body = http_request.json_body
+            if not isinstance(body, Mapping):
+                raise ValueError('workspace_write.request_body_invalid')
+            create_request = ProductWorkspaceCreateRequest(
+                title=str(body.get('title') or ''),
+                description=str(body.get('description') or '').strip() or None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _route_response(400, {
+                'status': 'rejected',
+                'error_family': 'product_write_failure',
+                'reason_code': getattr(exc, 'args', ['workspace_write.invalid_request'])[0] or 'workspace_write.invalid_request',
+                'message': 'Workspace create request payload is invalid.',
+            })
+        outcome = WorkspaceRegistryService.create_workspace(
+            request_auth=_request_auth(http_request),
+            request=create_request,
+            workspace_id_factory=workspace_id_factory,
+            membership_id_factory=membership_id_factory,
+            now_iso=now_iso,
+        )
+        if outcome.ok:
+            assert outcome.accepted is not None
+            return _route_response(201, asdict(outcome.accepted))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_get_onboarding(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        workspace_context: Optional[WorkspaceAuthorizationContext] = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Onboarding route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/users/me/onboarding":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        query_params = dict(http_request.query_params or {})
+        workspace_id = str(query_params.get('workspace_id') or '').strip() or None
+        outcome = OnboardingContinuityService.read_onboarding_state(
+            request_auth=_request_auth(http_request),
+            onboarding_rows=onboarding_rows,
+            workspace_context=workspace_context,
+            workspace_id=workspace_id,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_put_onboarding(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        workspace_context: Optional[WorkspaceAuthorizationContext] = None,
+        onboarding_state_id_factory: Callable[[], str],
+        now_iso: str,
+    ) -> HttpRouteResponse:
+        if http_request.method != "PUT":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Onboarding write route only supports PUT."})
+        if http_request.path.rstrip("/") != "/api/users/me/onboarding":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        try:
+            body = http_request.json_body
+            if not isinstance(body, Mapping):
+                raise ValueError('onboarding_write.request_body_invalid')
+            write_request = ProductOnboardingWriteRequest(
+                workspace_id=str(body.get('workspace_id') or '').strip() or None,
+                first_success_achieved=body.get('first_success_achieved'),
+                advanced_surfaces_unlocked=body.get('advanced_surfaces_unlocked'),
+                dismissed_guidance_state=dict(body.get('dismissed_guidance_state')) if body.get('dismissed_guidance_state') is not None else None,
+                current_step=str(body.get('current_step') or '').strip() or None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return _route_response(400, {
+                'status': 'rejected',
+                'error_family': 'product_write_failure',
+                'reason_code': getattr(exc, 'args', ['onboarding_write.invalid_request'])[0] or 'onboarding_write.invalid_request',
+                'message': 'Onboarding continuity request payload is invalid.',
+            })
+        outcome = OnboardingContinuityService.upsert_onboarding_state(
+            request_auth=_request_auth(http_request),
+            request=write_request,
+            onboarding_rows=onboarding_rows,
+            workspace_context=workspace_context,
+            onboarding_state_id_factory=onboarding_state_id_factory,
+            now_iso=now_iso,
+        )
+        if outcome.ok:
+            assert outcome.accepted is not None
+            return _route_response(200, asdict(outcome.accepted))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
     @classmethod
     def handle_list_workspace_runs(
