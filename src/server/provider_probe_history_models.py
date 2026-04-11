@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 ProviderProbeHistoryFailureFamily = Literal["product_read_failure", "workspace_not_found"]
 ProviderProbeHistoryStatus = Literal["reachable", "warning", "failed", "blocked", "disabled", "missing"]
@@ -22,6 +23,71 @@ class ProductProviderProbeHistoryLinks:
         for field_name in ("binding", "health", "probe"):
             if not getattr(self, field_name):
                 raise ValueError(f"ProductProviderProbeHistoryLinks.{field_name} must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProviderProbeHistoryRecord:
+    probe_event_id: str
+    workspace_id: str
+    provider_key: str
+    provider_family: str
+    display_name: str
+    probe_status: str
+    connectivity_state: str
+    occurred_at: str
+    binding_id: Optional[str] = None
+    secret_resolution_status: Optional[str] = None
+    requested_model_ref: Optional[str] = None
+    effective_model_ref: Optional[str] = None
+    round_trip_latency_ms: Optional[int] = None
+    requested_by_user_id: Optional[str] = None
+    message: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "probe_event_id",
+            "workspace_id",
+            "provider_key",
+            "provider_family",
+            "display_name",
+            "occurred_at",
+        ):
+            if not str(getattr(self, field_name) or "").strip():
+                raise ValueError(f"ProviderProbeHistoryRecord.{field_name} must be non-empty")
+        if self.probe_status not in _ALLOWED_PROBE_STATUSES:
+            raise ValueError(f"Unsupported ProviderProbeHistoryRecord.probe_status: {self.probe_status}")
+        if self.connectivity_state not in _ALLOWED_CONNECTIVITY_STATES:
+            raise ValueError(f"Unsupported ProviderProbeHistoryRecord.connectivity_state: {self.connectivity_state}")
+        if self.round_trip_latency_ms is not None and self.round_trip_latency_ms < 0:
+            raise ValueError("ProviderProbeHistoryRecord.round_trip_latency_ms must be >= 0 when provided")
+
+    @classmethod
+    def from_mapping(cls, row: Mapping[str, Any]) -> Optional["ProviderProbeHistoryRecord"]:
+        probe_event_id = str(row.get("probe_event_id") or row.get("probe_id") or "").strip()
+        workspace_id = str(row.get("workspace_id") or "").strip()
+        provider_key = str(row.get("provider_key") or "").strip().lower()
+        occurred_at = str(row.get("occurred_at") or row.get("updated_at") or row.get("created_at") or "").strip()
+        if not probe_event_id or not workspace_id or not provider_key or not occurred_at:
+            return None
+        raw_latency = row.get("round_trip_latency_ms")
+        round_trip_latency_ms = int(raw_latency) if raw_latency is not None else None
+        return cls(
+            probe_event_id=probe_event_id,
+            workspace_id=workspace_id,
+            binding_id=str(row.get("binding_id") or "").strip() or None,
+            provider_key=provider_key,
+            provider_family=str(row.get("provider_family") or provider_key).strip() or provider_key,
+            display_name=str(row.get("display_name") or provider_key).strip() or provider_key,
+            probe_status=str(row.get("probe_status") or "failed").strip(),
+            connectivity_state=str(row.get("connectivity_state") or "unknown").strip(),
+            secret_resolution_status=str(row.get("secret_resolution_status") or "").strip() or None,
+            requested_model_ref=str(row.get("requested_model_ref") or "").strip() or None,
+            effective_model_ref=str(row.get("effective_model_ref") or "").strip() or None,
+            round_trip_latency_ms=round_trip_latency_ms,
+            requested_by_user_id=str(row.get("requested_by_user_id") or "").strip() or None,
+            occurred_at=occurred_at,
+            message=str(row.get("message") or "").strip() or None,
+        )
 
 
 @dataclass(frozen=True)

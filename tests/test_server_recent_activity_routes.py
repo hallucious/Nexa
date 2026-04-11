@@ -170,3 +170,28 @@ def test_recent_activity_route_family_round_trip() -> None:
     assert summary_response.body['pending_runs'] == 1
     assert summary_response.body['recent_probe_count'] == 1
     assert summary_response.body['latest_probe_event_id'] == 'probe-001'
+
+
+def test_recent_activity_accepts_provider_probe_projection_aliases() -> None:
+    outcome = RecentActivityService.list_recent_activity(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(_membership(),),
+        run_rows=(),
+        provider_probe_rows=({
+            'probe_id': 'probe-002',
+            'workspace_id': 'ws-001',
+            'binding_id': 'binding-001',
+            'provider_key': 'openai',
+            'provider_family': 'openai',
+            'display_name': 'OpenAI GPT',
+            'probe_status': 'warning',
+            'connectivity_state': 'provider_error',
+            'created_at': '2026-04-11T12:09:00+00:00',
+        },),
+        limit=5,
+    )
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.activities[0].activity_type == 'provider_probe_warning'
+    assert outcome.response.activities[0].links.provider_probe_history is not None

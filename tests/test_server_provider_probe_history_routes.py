@@ -30,6 +30,7 @@ def _workspace() -> WorkspaceAuthorizationContext:
 def _probe_row(probe_event_id: str, occurred_at: str, *, probe_status: str = 'reachable', provider_key: str = 'openai') -> dict:
     return {
         'probe_event_id': probe_event_id,
+        'binding_id': 'binding-001',
         'workspace_id': 'ws-001',
         'provider_key': provider_key,
         'provider_family': provider_key,
@@ -105,3 +106,26 @@ def test_provider_probe_history_framework_round_trip() -> None:
     )
     assert response.status_code == 200
     assert 'probe-002' in response.body_text
+
+
+def test_provider_probe_history_service_accepts_canonical_projection_row_aliases() -> None:
+    outcome = ProviderProbeHistoryService.list_workspace_provider_probe_history(
+        request_auth=_auth(),
+        workspace_context=_workspace(),
+        provider_key='openai',
+        probe_history_rows=({
+            'probe_id': 'probe-003',
+            'workspace_id': 'ws-001',
+            'binding_id': 'binding-001',
+            'provider_key': 'openai',
+            'provider_family': 'openai',
+            'display_name': 'OpenAI GPT',
+            'probe_status': 'reachable',
+            'connectivity_state': 'ok',
+            'created_at': '2026-04-11T12:08:00+00:00',
+        },),
+    )
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.items[0].probe_event_id == 'probe-003'
+    assert outcome.response.items[0].occurred_at == '2026-04-11T12:08:00+00:00'

@@ -12,6 +12,7 @@ from src.server.provider_probe_history_models import (
     ProductProviderProbeHistoryRejectedResponse,
     ProductProviderProbeHistoryResponse,
     ProviderProbeHistoryReadOutcome,
+    ProviderProbeHistoryRecord,
 )
 
 
@@ -83,38 +84,19 @@ class ProviderProbeHistoryService:
                     provider_key=provider_key,
                 )
             )
-        items: list[ProductProviderProbeHistoryItemView] = []
+        records: list[ProviderProbeHistoryRecord] = []
         for row in probe_history_rows:
-            row_workspace_id = str(row.get('workspace_id') or '').strip()
-            row_provider_key = str(row.get('provider_key') or '').strip().lower()
-            if row_workspace_id != workspace_context.workspace_id or row_provider_key != provider_key:
+            record = ProviderProbeHistoryRecord.from_mapping(row)
+            if record is None:
                 continue
-            probe_event_id = str(row.get('probe_event_id') or row.get('probe_id') or '').strip()
-            occurred_at = str(row.get('occurred_at') or row.get('updated_at') or row.get('created_at') or '').strip()
-            if not probe_event_id or not occurred_at:
+            if record.workspace_id != workspace_context.workspace_id or record.provider_key != provider_key:
                 continue
-            items.append(ProductProviderProbeHistoryItemView(
-                probe_event_id=probe_event_id,
-                occurred_at=occurred_at,
-                workspace_id=row_workspace_id,
-                provider_key=row_provider_key,
-                provider_family=str(row.get('provider_family') or row_provider_key).strip() or row_provider_key,
-                display_name=str(row.get('display_name') or row_provider_key).strip() or row_provider_key,
-                probe_status=str(row.get('probe_status') or 'failed').strip(),
-                connectivity_state=str(row.get('connectivity_state') or 'unknown').strip(),
-                secret_resolution_status=str(row.get('secret_resolution_status') or '').strip() or None,
-                requested_model_ref=str(row.get('requested_model_ref') or '').strip() or None,
-                effective_model_ref=str(row.get('effective_model_ref') or '').strip() or None,
-                round_trip_latency_ms=int(row.get('round_trip_latency_ms')) if row.get('round_trip_latency_ms') is not None else None,
-                requested_by_user_id=str(row.get('requested_by_user_id') or '').strip() or None,
-                message=str(row.get('message') or '').strip() or None,
-                links=_probe_links(row_workspace_id, row_provider_key),
-            ))
-        items.sort(key=lambda item: (item.occurred_at, item.probe_event_id), reverse=True)
-        total_visible_count = len(items)
+            records.append(record)
+        records.sort(key=lambda item: (item.occurred_at, item.probe_event_id), reverse=True)
+        total_visible_count = len(records)
         start_index = 0
         if cursor is not None:
-            matching_index = next((index for index, item in enumerate(items) if item.probe_event_id == cursor), None)
+            matching_index = next((index for index, item in enumerate(records) if item.probe_event_id == cursor), None)
             if matching_index is None:
                 return ProviderProbeHistoryReadOutcome(
                     rejected=ProductProviderProbeHistoryRejectedResponse(
@@ -126,9 +108,29 @@ class ProviderProbeHistoryService:
                     )
                 )
             start_index = matching_index + 1
-        page = tuple(items[start_index:start_index + limit])
+        page_records = tuple(records[start_index:start_index + limit])
+        page = tuple(
+            ProductProviderProbeHistoryItemView(
+                probe_event_id=record.probe_event_id,
+                occurred_at=record.occurred_at,
+                workspace_id=record.workspace_id,
+                provider_key=record.provider_key,
+                provider_family=record.provider_family,
+                display_name=record.display_name,
+                probe_status=record.probe_status,
+                connectivity_state=record.connectivity_state,
+                secret_resolution_status=record.secret_resolution_status,
+                requested_model_ref=record.requested_model_ref,
+                effective_model_ref=record.effective_model_ref,
+                round_trip_latency_ms=record.round_trip_latency_ms,
+                requested_by_user_id=record.requested_by_user_id,
+                message=record.message,
+                links=_probe_links(record.workspace_id, record.provider_key),
+            )
+            for record in page_records
+        )
         next_cursor = page[-1].probe_event_id if len(page) == limit and (start_index + limit) < total_visible_count else None
-        latest_probe_at = items[0].occurred_at if items else None
+        latest_probe_at = records[0].occurred_at if records else None
         return ProviderProbeHistoryReadOutcome(
             response=ProductProviderProbeHistoryResponse(
                 workspace_id=workspace_context.workspace_id,
@@ -139,6 +141,6 @@ class ProviderProbeHistoryService:
                 applied_filters=ProductProviderProbeHistoryAppliedFilters(limit=limit, cursor=cursor),
                 next_cursor=next_cursor,
                 latest_probe_at=latest_probe_at,
-                message='No provider probe history is available yet.' if not items else None,
+                message='No provider probe history is available yet.' if not records else None,
             )
         )

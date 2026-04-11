@@ -264,6 +264,42 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
+    provider_probe_history = SchemaFamily(
+        family_name="provider_probe_history",
+        purpose="Workspace-scoped provider connectivity probe projections separate from credential bindings and engine run history.",
+        persistence_mode="mutable_projection",
+        tables=(
+            TableSpec(
+                name="provider_probe_events",
+                persistence_mode="mutable_projection",
+                description="Canonical server-side provider probe history rows for connectivity review, recent activity, and continuity queries.",
+                columns=(
+                    ColumnSpec("probe_event_id", "TEXT", is_primary_key=True),
+                    ColumnSpec("workspace_id", "TEXT", reference_table="workspace_registry", reference_column="workspace_id"),
+                    ColumnSpec("binding_id", "TEXT", nullable=True, reference_table="managed_provider_bindings", reference_column="binding_id"),
+                    ColumnSpec("provider_key", "TEXT"),
+                    ColumnSpec("provider_family", "TEXT"),
+                    ColumnSpec("display_name", "TEXT"),
+                    ColumnSpec("probe_status", "TEXT"),
+                    ColumnSpec("connectivity_state", "TEXT"),
+                    ColumnSpec("secret_resolution_status", "TEXT", nullable=True),
+                    ColumnSpec("requested_model_ref", "TEXT", nullable=True),
+                    ColumnSpec("effective_model_ref", "TEXT", nullable=True),
+                    ColumnSpec("round_trip_latency_ms", "INTEGER", nullable=True),
+                    ColumnSpec("requested_by_user_id", "TEXT", nullable=True),
+                    ColumnSpec("message", "TEXT", nullable=True),
+                    ColumnSpec("occurred_at", "TIMESTAMPTZ"),
+                ),
+                indexes=(
+                    IndexSpec("idx_provider_probe_events_workspace_provider_occurred_at", ("workspace_id", "provider_key", "occurred_at")),
+                    IndexSpec("idx_provider_probe_events_workspace_occurred_at", ("workspace_id", "occurred_at")),
+                    IndexSpec("idx_provider_probe_events_binding_id", ("binding_id",)),
+                    IndexSpec("idx_provider_probe_events_workspace_probe_status", ("workspace_id", "probe_status")),
+                    IndexSpec("idx_provider_probe_events_workspace_connectivity_state", ("workspace_id", "connectivity_state")),
+                ),
+            ),
+        ),
+    )
     append_only_outputs = SchemaFamily(
         family_name="append_only_outputs",
         purpose="Append-only output and lineage index tables that preserve artifact and trace meaning.",
@@ -331,7 +367,7 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
-    return workspace_registry, run_history, provider_credentials, append_only_outputs
+    return workspace_registry, run_history, provider_credentials, provider_probe_history, append_only_outputs
 
 
 def build_server_schema_summary() -> dict[str, object]:
