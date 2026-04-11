@@ -65,6 +65,12 @@ from src.server.run_read_api import RunResultReadService, RunStatusReadService
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
 from src.server.http_route_surface import RunHttpRouteSurface
+from src.server.framework_binding_models import (
+    FrameworkInboundRequest,
+    FrameworkOutboundResponse,
+    FrameworkRouteDefinition,
+)
+from src.server.framework_binding import FrameworkRouteBindings
 from src.server.run_read_models import (
     ProductArtifactRefView,
     ProductEngineSignalView,
@@ -201,6 +207,10 @@ __all__ = [
     "HttpRouteRequest",
     "HttpRouteResponse",
     "RunHttpRouteSurface",
+    "FrameworkInboundRequest",
+    "FrameworkOutboundResponse",
+    "FrameworkRouteBindings",
+    "FrameworkRouteDefinition",
     "build_engine_auth_context_refs",
     "build_initial_server_migration",
     "build_migration_file_text",

@@ -1,0 +1,195 @@
+from __future__ import annotations
+
+import json
+from typing import Any, Mapping, Optional, Sequence
+
+from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
+from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
+from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchRequest, EngineRunLaunchResponse, EngineRunStatusSnapshot
+from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse, FrameworkRouteDefinition
+from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
+from src.server.http_route_surface import RunHttpRouteSurface
+from src.server.run_admission_models import ExecutionTargetCatalogEntry, ProductAdmissionPolicy
+
+
+class FrameworkRouteBindings:
+    _ROUTE_DEFINITIONS: tuple[FrameworkRouteDefinition, ...] = (
+        FrameworkRouteDefinition(
+            route_name="launch_run",
+            method="POST",
+            path_template="/api/runs",
+            summary="Launch a new admitted run.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_run_status",
+            method="GET",
+            path_template="/api/runs/{run_id}",
+            summary="Read normalized run status.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_run_result",
+            method="GET",
+            path_template="/api/runs/{run_id}/result",
+            summary="Read normalized run result.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="list_run_artifacts",
+            method="GET",
+            path_template="/api/runs/{run_id}/artifacts",
+            summary="List artifacts produced by a run.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_artifact_detail",
+            method="GET",
+            path_template="/api/artifacts/{artifact_id}",
+            summary="Read artifact detail.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_run_trace",
+            method="GET",
+            path_template="/api/runs/{run_id}/trace",
+            summary="Read ordered trace events for a run.",
+        ),
+    )
+
+    @classmethod
+    def route_definitions(cls) -> tuple[FrameworkRouteDefinition, ...]:
+        return cls._ROUTE_DEFINITIONS
+
+    @staticmethod
+    def to_http_route_request(request: FrameworkInboundRequest) -> HttpRouteRequest:
+        headers = {str(key): str(value) for key, value in dict(request.headers or {}).items()}
+        path_params = {str(key): value for key, value in dict(request.path_params or {}).items()}
+        query_params = {str(key): value for key, value in dict(request.query_params or {}).items()}
+        session_claims = dict(request.session_claims) if request.session_claims is not None else None
+        return HttpRouteRequest(
+            method=request.method,
+            path=request.path,
+            headers=headers,
+            json_body=request.json_body,
+            path_params=path_params,
+            query_params=query_params,
+            session_claims=session_claims,
+        )
+
+    @staticmethod
+    def to_framework_response(response: HttpRouteResponse) -> FrameworkOutboundResponse:
+        headers = {str(key): str(value) for key, value in dict(response.headers).items()}
+        if "content-type" not in {key.lower() for key in headers}:
+            headers["content-type"] = "application/json"
+        return FrameworkOutboundResponse(
+            status_code=response.status_code,
+            headers=headers,
+            body_text=json.dumps(dict(response.body), ensure_ascii=False, sort_keys=True),
+            media_type=headers.get("content-type", "application/json"),
+        )
+
+    @classmethod
+    def handle_launch(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: WorkspaceAuthorizationContext,
+        target_catalog: Mapping[str, ExecutionTargetCatalogEntry],
+        policy: ProductAdmissionPolicy = ProductAdmissionPolicy(),
+        engine_launch_decider: Optional[callable] = None,
+        run_id_factory: Optional[callable] = None,
+        run_request_id_factory: Optional[callable] = None,
+        now_iso: Optional[str] = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_launch(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            target_catalog=target_catalog,
+            policy=policy,
+            engine_launch_decider=engine_launch_decider,
+            run_id_factory=run_id_factory,
+            run_request_id_factory=run_request_id_factory,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_run_status(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        run_context: Optional[RunAuthorizationContext],
+        run_record_row: Optional[Mapping[str, Any]],
+        engine_status: Optional[EngineRunStatusSnapshot] = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_run_status(
+            http_request=cls.to_http_route_request(request),
+            run_context=run_context,
+            run_record_row=run_record_row,
+            engine_status=engine_status,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_run_result(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        run_context: Optional[RunAuthorizationContext],
+        run_record_row: Optional[Mapping[str, Any]],
+        result_row: Optional[Mapping[str, Any]] = None,
+        artifact_rows: Sequence[Mapping[str, Any]] = (),
+        engine_result: Optional[EngineResultEnvelope] = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_run_result(
+            http_request=cls.to_http_route_request(request),
+            run_context=run_context,
+            run_record_row=run_record_row,
+            result_row=result_row,
+            artifact_rows=artifact_rows,
+            engine_result=engine_result,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_run_artifacts(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        run_context: Optional[RunAuthorizationContext],
+        artifact_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_run_artifacts(
+            http_request=cls.to_http_route_request(request),
+            run_context=run_context,
+            artifact_rows=artifact_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_artifact_detail(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        artifact_row: Optional[Mapping[str, Any]],
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_artifact_detail(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            artifact_row=artifact_row,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_run_trace(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        run_context: Optional[RunAuthorizationContext],
+        run_record_row: Optional[Mapping[str, Any]],
+        trace_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_run_trace(
+            http_request=cls.to_http_route_request(request),
+            run_context=run_context,
+            run_record_row=run_record_row,
+            trace_rows=trace_rows,
+        )
+        return cls.to_framework_response(response)
