@@ -17,6 +17,7 @@ from src.server.run_admission_models import (
     ProductRunLaunchRequest,
 )
 from src.server.run_read_api import RunResultReadService, RunStatusReadService
+from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -153,6 +154,96 @@ class RunHttpRouteSurface:
             run_context=run_context,
             run_record_row=run_record_row,
             engine_status=engine_status,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_run_artifacts(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        run_context: Optional[RunAuthorizationContext],
+        artifact_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Run artifacts route only supports GET."})
+        run_id = str(http_request.path_params.get("run_id") or "").strip() if http_request.path_params else ""
+        if not run_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.run_id_missing", "message": "Run id path parameter is required."})
+        expected_path = f"/api/runs/{run_id}/artifacts"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        outcome = ArtifactReadService.list_run_artifacts(
+            request_auth=_request_auth(http_request),
+            run_context=run_context,
+            artifact_rows=artifact_rows,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_artifact_detail(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        artifact_row: Optional[Mapping[str, Any]],
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Artifact detail route only supports GET."})
+        artifact_id = str(http_request.path_params.get("artifact_id") or "").strip() if http_request.path_params else ""
+        if not artifact_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.artifact_id_missing", "message": "Artifact id path parameter is required."})
+        expected_path = f"/api/artifacts/{artifact_id}"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        outcome = ArtifactReadService.read_artifact(
+            request_auth=_request_auth(http_request),
+            workspace_context=workspace_context,
+            artifact_row=artifact_row,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_run_trace(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        run_context: Optional[RunAuthorizationContext],
+        run_record_row: Optional[Mapping[str, Any]],
+        trace_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Run trace route only supports GET."})
+        run_id = str(http_request.path_params.get("run_id") or "").strip() if http_request.path_params else ""
+        if not run_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.run_id_missing", "message": "Run id path parameter is required."})
+        expected_path = f"/api/runs/{run_id}/trace"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        limit = http_request.query_params.get("limit", 100) if http_request.query_params else 100
+        cursor = http_request.query_params.get("cursor") if http_request.query_params else None
+        outcome = TraceReadService.read_run_trace(
+            request_auth=_request_auth(http_request),
+            run_context=run_context,
+            run_record_row=run_record_row,
+            trace_rows=trace_rows,
+            cursor=str(cursor) if cursor is not None else None,
+            limit=int(limit),
         )
         if outcome.ok:
             assert outcome.response is not None

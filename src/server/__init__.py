@@ -62,6 +62,7 @@ from src.server.worker_queue_models import (
 )
 from src.server.worker_queue_orchestration import WorkerQueueOrchestrationService
 from src.server.run_read_api import RunResultReadService, RunStatusReadService
+from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
 from src.server.http_route_surface import RunHttpRouteSurface
 from src.server.run_read_models import (
@@ -78,6 +79,19 @@ from src.server.run_read_models import (
     ProductTraceRefView,
     RunResultReadOutcome,
     RunStatusReadOutcome,
+)
+from src.server.artifact_trace_read_models import (
+    ArtifactDetailReadOutcome,
+    ArtifactListReadOutcome,
+    ProductArtifactDetailResponse,
+    ProductArtifactPayloadAccess,
+    ProductArtifactSummary,
+    ProductArtifactTraceReadRejectedResponse,
+    ProductRunArtifactsResponse,
+    ProductRunTraceResponse,
+    ProductTraceEventView,
+    ProductTraceFocusView,
+    TraceReadOutcome,
 )
 from src.server.migration_foundation import (
     build_initial_server_migration,
@@ -171,6 +185,19 @@ __all__ = [
     "RunResultReadService",
     "RunStatusReadOutcome",
     "RunStatusReadService",
+    "ArtifactDetailReadOutcome",
+    "ArtifactListReadOutcome",
+    "ArtifactReadService",
+    "ProductArtifactDetailResponse",
+    "ProductArtifactPayloadAccess",
+    "ProductArtifactSummary",
+    "ProductArtifactTraceReadRejectedResponse",
+    "ProductRunArtifactsResponse",
+    "ProductRunTraceResponse",
+    "ProductTraceEventView",
+    "ProductTraceFocusView",
+    "TraceReadOutcome",
+    "TraceReadService",
     "HttpRouteRequest",
     "HttpRouteResponse",
     "RunHttpRouteSurface",

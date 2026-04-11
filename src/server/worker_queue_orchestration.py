@@ -291,6 +291,7 @@ class WorkerQueueOrchestrationService:
                     "workspace_id": claim.run_record_row["workspace_id"],
                     "run_id": execution_record.meta.run_id,
                     "event_type": projected.event_type,
+                    "sequence_number": projected.sequence,
                     "node_id": projected.node_id,
                     "severity": projected.severity,
                     "message_preview": projected.message,
