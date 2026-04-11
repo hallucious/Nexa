@@ -4,6 +4,7 @@ import json
 from typing import Any, Mapping, Optional, Sequence
 
 from src.server.provider_health_api import SecretMetadataReader
+from src.server.provider_probe_api import ProviderProbeRunner
 
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchRequest, EngineRunLaunchResponse, EngineRunStatusSnapshot
@@ -74,6 +75,12 @@ class FrameworkRouteBindings:
             method="GET",
             path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/health",
             summary="Read provider health detail for a workspace binding.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="probe_workspace_provider",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe",
+            summary="Probe managed provider connectivity for a workspace binding.",
         ),
         FrameworkRouteDefinition(
             route_name="get_onboarding",
@@ -341,6 +348,32 @@ class FrameworkRouteBindings:
             secret_metadata_reader=secret_metadata_reader,
         )
         return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_probe_workspace_provider(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        provider_key: str,
+        binding_rows: Sequence[Mapping[str, Any]] = (),
+        provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
+        secret_metadata_reader: Optional[SecretMetadataReader] = None,
+        probe_runner: Optional[ProviderProbeRunner] = None,
+        now_iso: Optional[str] = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_probe_workspace_provider(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            provider_key=provider_key,
+            binding_rows=tuple(binding_rows),
+            provider_catalog_rows=tuple(provider_catalog_rows),
+            secret_metadata_reader=secret_metadata_reader,
+            probe_runner=probe_runner,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
 
     @classmethod
     def handle_get_onboarding(

@@ -15,6 +15,7 @@ from src.server import (
     EngineSignal,
     ExecutionTargetCatalogEntry,
     FastApiRouteDependencies,
+    ProviderProbeExecutionInput,
     RunAuthorizationContext,
     WorkspaceAuthorizationContext,
     create_fastapi_app,
@@ -236,6 +237,13 @@ def _make_client() -> TestClient:
             'last_rotated_at': '2026-04-11T12:06:00+00:00',
         },
         aws_secrets_manager_client_provider=lambda: _FakeSecretsClient(),
+        managed_provider_probe_runner=lambda probe_input: {
+            'probe_status': 'reachable',
+            'connectivity_state': 'ok',
+            'message': 'Provider connectivity probe succeeded.',
+            'effective_model_ref': probe_input.requested_model_ref or probe_input.default_model_ref,
+            'round_trip_latency_ms': 111,
+        },
         aws_secrets_manager_config=AwsSecretsManagerBindingConfig(),
         now_iso_provider=lambda: "2026-04-11T12:00:00+00:00",
     )
@@ -374,3 +382,18 @@ def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() ->
     assert put_payload["binding"]["secret_ref"] == "aws-secretsmanager://nexa/ws-001/providers/openai"
     assert put_payload["secret_rotated"] is True
     assert "super-secret" not in put_response.text
+
+
+def test_fastapi_binding_provider_probe_round_trip() -> None:
+    client = _make_client()
+    response = client.post(
+        "/api/workspaces/ws-001/provider-bindings/openai/probe",
+        headers=_session_headers(),
+        json={"model_ref": "gpt-4.1"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["probe_status"] == "reachable"
+    assert payload["connectivity_state"] == "ok"
+    assert payload["effective_model_ref"] == "gpt-4.1"

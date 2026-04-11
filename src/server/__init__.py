@@ -68,6 +68,7 @@ from src.server.workspace_onboarding_api import OnboardingContinuityService, Wor
 from src.server.recent_activity_api import RecentActivityService
 from src.server.provider_secret_api import ProviderSecretIntegrationService
 from src.server.provider_health_api import ProviderHealthService
+from src.server.provider_probe_api import ProviderProbeRunner, ProviderProbeService
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig, AwsSecretWriteReceipt
 from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthority, create_boto3_secrets_manager_client
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
@@ -133,6 +134,16 @@ from src.server.provider_health_models import (
     ProductWorkspaceProviderHealthResponse,
     ProviderHealthDetailOutcome,
     ProviderHealthListOutcome,
+)
+from src.server.provider_probe_models import (
+    ProductProviderProbeFindingView,
+    ProductProviderProbeLinks,
+    ProductProviderProbeRejectedResponse,
+    ProductProviderProbeRequest,
+    ProductProviderProbeResponse,
+    ProviderProbeExecutionInput,
+    ProviderProbeExecutionResult,
+    ProviderProbeOutcome,
 )
 from src.server.provider_secret_models import (
     ProviderBindingListOutcome,
@@ -291,6 +302,16 @@ __all__ = [
     "ProductProviderHealthRejectedResponse",
     "ProductWorkspaceProviderHealthResponse",
     "ProviderHealthDetailOutcome",
+    "ProviderProbeExecutionInput",
+    "ProviderProbeExecutionResult",
+    "ProviderProbeOutcome",
+    "ProductProviderProbeFindingView",
+    "ProductProviderProbeLinks",
+    "ProductProviderProbeRejectedResponse",
+    "ProductProviderProbeRequest",
+    "ProductProviderProbeResponse",
+    "ProviderProbeRunner",
+    "ProviderProbeService",
     "ProviderHealthListOutcome",
     "ProductProviderBindingLinks",
     "ProductProviderBindingWriteAcceptedResponse",

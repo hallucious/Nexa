@@ -12,6 +12,7 @@ from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizati
 from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchResponse, EngineRunStatusSnapshot
 from src.server.run_admission_models import ExecutionTargetCatalogEntry, ProductAdmissionPolicy
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
+from src.server.provider_probe_api import ProviderProbeRunner
 
 
 @dataclass(frozen=True)
@@ -135,6 +136,7 @@ class FastApiRouteDependencies:
     workspace_provider_binding_row_provider: WorkspaceProviderBindingRowProvider = _none_provider_binding_row
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
     managed_secret_metadata_reader: Optional[ManagedSecretMetadataReader] = None
+    managed_provider_probe_runner: Optional[ProviderProbeRunner] = None
     aws_secrets_manager_client_provider: Optional[AwsSecretsManagerClientProvider] = None
     aws_secrets_manager_config: Optional[AwsSecretsManagerBindingConfig] = None
     workspace_row_provider: WorkspaceRowProvider = _none_workspace_row

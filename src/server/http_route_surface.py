@@ -24,7 +24,9 @@ from src.server.workspace_onboarding_models import ProductOnboardingWriteRequest
 from src.server.recent_activity_api import RecentActivityService
 from src.server.provider_secret_api import ProviderSecretIntegrationService
 from src.server.provider_health_api import ProviderHealthService, SecretMetadataReader
+from src.server.provider_probe_api import ProviderProbeRunner, ProviderProbeService
 from src.server.provider_secret_models import ProductProviderBindingWriteRequest
+from src.server.provider_probe_models import ProductProviderProbeRequest
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -104,6 +106,19 @@ class RunHttpRouteSurface:
             default_model_ref=str(body.get("default_model_ref") or "").strip() or None,
             allowed_model_refs=allowed_model_refs,
             notes=str(body.get("notes") or "").strip() or None,
+        )
+
+    @staticmethod
+    def _parse_provider_probe_request(http_request: HttpRouteRequest) -> ProductProviderProbeRequest:
+        body = http_request.json_body
+        if body is None:
+            body = {}
+        if not isinstance(body, Mapping):
+            raise ValueError("provider_probe.request_body_invalid")
+        return ProductProviderProbeRequest(
+            model_ref=str(body.get("model_ref") or "").strip() or None,
+            probe_message=str(body.get("probe_message") or "").strip() or None,
+            timeout_ms=int(body.get("timeout_ms")) if body.get("timeout_ms") is not None else None,
         )
 
     @classmethod
@@ -574,6 +589,56 @@ class RunHttpRouteSurface:
             return _route_response(200, asdict(outcome.response))
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_probe_workspace_provider(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        provider_key: str,
+        binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        secret_metadata_reader: Optional[SecretMetadataReader] = None,
+        probe_runner: Optional[ProviderProbeRunner] = None,
+        now_iso: Optional[str] = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Provider probe route only supports POST."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        if not provider_key:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.provider_key_missing", "message": "Provider key path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        try:
+            probe_request = cls._parse_provider_probe_request(http_request)
+        except Exception as exc:  # noqa: BLE001
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "product_probe_failure",
+                "reason_code": getattr(exc, "args", ["provider_probe.invalid_request"])[0] or "provider_probe.invalid_request",
+                "message": "Provider probe request payload is invalid.",
+            })
+        outcome = ProviderProbeService.probe_workspace_provider(
+            request_auth=_request_auth(http_request),
+            workspace_context=workspace_context,
+            provider_key=provider_key,
+            request=probe_request,
+            binding_rows=binding_rows,
+            provider_catalog_rows=provider_catalog_rows,
+            secret_metadata_reader=secret_metadata_reader,
+            probe_runner=probe_runner,
+            now_iso=now_iso,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
 
     @classmethod
     def handle_list_provider_catalog(
