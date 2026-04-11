@@ -298,3 +298,18 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
     )
     assert onboarding_put.status_code == 200
     assert onboarding_put.json()['state']['advanced_surfaces_unlocked'] is True
+
+
+def test_fastapi_binding_recent_activity_routes_round_trip() -> None:
+    client = _make_client()
+    activity_response = client.get('/api/users/me/activity?limit=2', headers=_session_headers())
+    assert activity_response.status_code == 200
+    activity_payload = activity_response.json()
+    assert activity_payload['returned_count'] >= 1
+    assert activity_payload['activities'][0]['workspace_id'] == 'ws-001'
+
+    summary_response = client.get('/api/users/me/history-summary', headers=_session_headers())
+    assert summary_response.status_code == 200
+    summary_payload = summary_response.json()
+    assert summary_payload['visible_workspace_count'] == 1
+    assert summary_payload['total_visible_runs'] >= 1

@@ -14,6 +14,18 @@ from src.server.run_admission_models import ExecutionTargetCatalogEntry, Product
 class FrameworkRouteBindings:
     _ROUTE_DEFINITIONS: tuple[FrameworkRouteDefinition, ...] = (
         FrameworkRouteDefinition(
+            route_name="get_recent_activity",
+            method="GET",
+            path_template="/api/users/me/activity",
+            summary="List recent continuity activity for the current user.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_history_summary",
+            method="GET",
+            path_template="/api/users/me/history-summary",
+            summary="Read aggregate history summary for the current user.",
+        ),
+        FrameworkRouteDefinition(
             route_name="list_workspaces",
             method="GET",
             path_template="/api/workspaces",
@@ -118,6 +130,40 @@ class FrameworkRouteBindings:
             body_text=json.dumps(dict(response.body), ensure_ascii=False, sort_keys=True),
             media_type=headers.get("content-type", "application/json"),
         )
+
+    @classmethod
+    def handle_recent_activity(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        run_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_recent_activity(
+            http_request=cls.to_http_route_request(request),
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            run_rows=run_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_history_summary(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        run_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_history_summary(
+            http_request=cls.to_http_route_request(request),
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            run_rows=run_rows,
+        )
+        return cls.to_framework_response(response)
 
     @classmethod
     def handle_list_workspaces(

@@ -21,6 +21,7 @@ from src.server.run_list_api import RunListReadService
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
 from src.server.workspace_onboarding_models import ProductOnboardingWriteRequest, ProductWorkspaceCreateRequest
+from src.server.recent_activity_api import RecentActivityService
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -421,6 +422,66 @@ class RunHttpRouteSurface:
         if outcome.ok:
             assert outcome.accepted is not None
             return _route_response(200, asdict(outcome.accepted))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_recent_activity(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        membership_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Recent activity route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/users/me/activity":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        query_params = dict(http_request.query_params or {})
+        workspace_id = str(query_params.get('workspace_id') or '').strip() or None
+        limit = int(query_params.get('limit', 20))
+        cursor = str(query_params.get('cursor') or '').strip() or None
+        outcome = RecentActivityService.list_recent_activity(
+            request_auth=_request_auth(http_request),
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            run_rows=run_rows,
+            workspace_id=workspace_id,
+            limit=limit,
+            cursor=cursor,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_history_summary(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        membership_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "History summary route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/users/me/history-summary":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        query_params = dict(http_request.query_params or {})
+        workspace_id = str(query_params.get('workspace_id') or '').strip() or None
+        outcome = RecentActivityService.read_history_summary(
+            request_auth=_request_auth(http_request),
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            run_rows=run_rows,
+            workspace_id=workspace_id,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 

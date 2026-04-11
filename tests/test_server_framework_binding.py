@@ -81,6 +81,8 @@ def _request(*, method: str, path: str, path_params: dict | None = None, query_p
 def test_framework_binding_exposes_expected_route_definitions() -> None:
     definitions = FrameworkRouteBindings.route_definitions()
     assert [d.route_name for d in definitions] == [
+        "get_recent_activity",
+        "get_history_summary",
         "list_workspaces",
         "get_workspace",
         "create_workspace",
@@ -94,7 +96,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_artifact_detail",
         "get_run_trace",
     ]
-    assert definitions[0].path_template == "/api/workspaces"
+    assert definitions[0].path_template == "/api/users/me/activity"
     assert definitions[-1].path_template == "/api/runs/{run_id}/trace"
 
 
@@ -249,3 +251,45 @@ def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None
     assert onboarding_response.status_code == 200
     assert onboarding_payload["state"]["first_success_achieved"] is True
     assert onboarding_payload["state"]["advanced_surfaces_unlocked"] is True
+
+
+def test_framework_binding_handles_recent_activity_round_trip() -> None:
+    activity_response = FrameworkRouteBindings.handle_recent_activity(
+        request=_request(method="GET", path="/api/users/me/activity", query_params={"limit": 2}),
+        workspace_rows=({
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "continuity_source": "server",
+            "archived": False,
+        },),
+        membership_rows=(),
+        run_rows=({**_run_row(status="completed", status_family="terminal_success"), "updated_at": "2026-04-11T12:06:00+00:00"},),
+    )
+    activity_payload = json.loads(activity_response.body_text)
+    assert activity_response.status_code == 200
+    assert activity_payload["returned_count"] == 2
+    assert activity_payload["activities"][0]["activity_type"] == "run_completed"
+
+    summary_response = FrameworkRouteBindings.handle_history_summary(
+        request=_request(method="GET", path="/api/users/me/history-summary"),
+        workspace_rows=({
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "continuity_source": "server",
+            "archived": False,
+        },),
+        membership_rows=(),
+        run_rows=({**_run_row(status="completed", status_family="terminal_success"), "updated_at": "2026-04-11T12:06:00+00:00"},),
+    )
+    summary_payload = json.loads(summary_response.body_text)
+    assert summary_response.status_code == 200
+    assert summary_payload["total_visible_runs"] == 1
+    assert summary_payload["terminal_success_runs"] == 1

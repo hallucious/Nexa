@@ -37,6 +37,34 @@ class FastApiRouteBindings:
     def build_router(self) -> APIRouter:
         router = APIRouter()
 
+        @router.get("/api/users/me/activity")
+        async def get_recent_activity(request: Request, workspace_id: str | None = None, limit: int = 20, cursor: str | None = None) -> Response:
+            inbound = self._inbound_request(
+                request=request,
+                query_params={"workspace_id": workspace_id, "limit": limit, "cursor": cursor} if workspace_id is not None or cursor is not None else {"limit": limit},
+            )
+            outbound = FrameworkRouteBindings.handle_recent_activity(
+                request=inbound,
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                run_rows=self.dependencies.recent_run_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/users/me/history-summary")
+        async def get_history_summary(request: Request, workspace_id: str | None = None) -> Response:
+            inbound = self._inbound_request(
+                request=request,
+                query_params={"workspace_id": workspace_id} if workspace_id is not None else {},
+            )
+            outbound = FrameworkRouteBindings.handle_history_summary(
+                request=inbound,
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                run_rows=self.dependencies.recent_run_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/workspaces")
         async def list_workspaces(request: Request) -> Response:
             inbound = self._inbound_request(request=request)

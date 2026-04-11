@@ -65,6 +65,7 @@ from src.server.run_read_api import RunResultReadService, RunStatusReadService
 from src.server.run_list_api import RunListReadService
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
+from src.server.recent_activity_api import RecentActivityService
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
 from src.server.http_route_surface import RunHttpRouteSurface
 from src.server.framework_binding_models import (
@@ -110,6 +111,16 @@ from src.server.run_list_models import (
     ProductRunListRejectedResponse,
     ProductWorkspaceRunListResponse,
     RunListReadOutcome,
+)
+from src.server.recent_activity_models import (
+    HistorySummaryReadOutcome,
+    ProductHistorySummaryResponse,
+    ProductRecentActivityAppliedFilters,
+    ProductRecentActivityItemView,
+    ProductRecentActivityLinks,
+    ProductRecentActivityRejectedResponse,
+    ProductRecentActivityResponse,
+    RecentActivityReadOutcome,
 )
 from src.server.run_read_models import (
     ProductArtifactRefView,
@@ -217,6 +228,7 @@ __all__ = [
     "WorkerProjectionBundle",
     "WorkerQueueOrchestrationService",
     "WorkspaceRegistryService",
+    "RecentActivityService",
     "OnboardingContinuityService",
     "ProductWorkspaceCreateRequest",
     "ProductWorkspaceDetailResponse",
@@ -238,6 +250,14 @@ __all__ = [
     "OnboardingReadOutcome",
     "OnboardingWriteOutcome",
     "ProductRunListAppliedFilters",
+    "ProductRecentActivityAppliedFilters",
+    "ProductRecentActivityItemView",
+    "ProductRecentActivityLinks",
+    "ProductRecentActivityRejectedResponse",
+    "ProductRecentActivityResponse",
+    "ProductHistorySummaryResponse",
+    "RecentActivityReadOutcome",
+    "HistorySummaryReadOutcome",
     "ProductRunListItemView",
     "ProductRunListLinks",
     "ProductRunListRejectedResponse",
