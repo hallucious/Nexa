@@ -7,6 +7,8 @@ from fastapi import APIRouter, Body, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 
 from src.server.framework_binding import FrameworkRouteBindings
+from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthority
+from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
 
@@ -33,6 +35,14 @@ class FastApiRouteBindings:
     def __init__(self, *, dependencies: FastApiRouteDependencies, config: FastApiBindingConfig | None = None) -> None:
         self.dependencies = dependencies
         self.config = config or FastApiBindingConfig()
+
+    def _resolve_managed_secret_writer(self, now_iso: str):
+        if self.dependencies.aws_secrets_manager_client_provider is not None:
+            client = self.dependencies.aws_secrets_manager_client_provider()
+            config = self.dependencies.aws_secrets_manager_config or AwsSecretsManagerBindingConfig()
+            writer = AwsSecretsManagerSecretAuthority.build_secret_writer(client=client, config=config)
+            return lambda w, p, s, metadata: writer(w, p, s, {**dict(metadata), "now_iso": now_iso})
+        return lambda w, p, s, metadata: self.dependencies.managed_secret_writer(w, p, s, {**dict(metadata), "now_iso": now_iso})
 
     def build_router(self) -> APIRouter:
         router = APIRouter()
@@ -139,7 +149,7 @@ class FastApiRouteBindings:
                 existing_binding_row=self.dependencies.workspace_provider_binding_row_provider(workspace_id, provider_key),
                 provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
                 binding_id_factory=self.dependencies.binding_id_factory or (lambda: 'binding-missing-id-factory'),
-                secret_writer=lambda w, p, s, metadata: self.dependencies.managed_secret_writer(w, p, s, {**dict(metadata), 'now_iso': now_iso}),
+                secret_writer=self._resolve_managed_secret_writer(now_iso),
                 now_iso=now_iso,
             )
             return self._framework_response(outbound)

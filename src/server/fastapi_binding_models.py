@@ -11,6 +11,7 @@ else:
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchResponse, EngineRunStatusSnapshot
 from src.server.run_admission_models import ExecutionTargetCatalogEntry, ProductAdmissionPolicy
+from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,7 @@ ProviderCatalogRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 WorkspaceProviderBindingRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
 WorkspaceProviderBindingRowProvider = Callable[[str, str], Optional[Mapping[str, Any]]]
 ManagedSecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
+AwsSecretsManagerClientProvider = Callable[[], Any]
 WorkspaceRowProvider = Callable[[str], Optional[Mapping[str, Any]]]
 EngineStatusProvider = Callable[[str], Optional[EngineRunStatusSnapshot]]
 EngineResultProvider = Callable[[str], Optional[EngineResultEnvelope]]
@@ -131,6 +133,8 @@ class FastApiRouteDependencies:
     workspace_provider_binding_rows_provider: WorkspaceProviderBindingRowsProvider = _empty_provider_binding_rows
     workspace_provider_binding_row_provider: WorkspaceProviderBindingRowProvider = _none_provider_binding_row
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
+    aws_secrets_manager_client_provider: Optional[AwsSecretsManagerClientProvider] = None
+    aws_secrets_manager_config: Optional[AwsSecretsManagerBindingConfig] = None
     workspace_row_provider: WorkspaceRowProvider = _none_workspace_row
     engine_status_provider: EngineStatusProvider = _none_status
     engine_result_provider: EngineResultProvider = _none_result

@@ -67,6 +67,8 @@ from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadSer
 from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
 from src.server.recent_activity_api import RecentActivityService
 from src.server.provider_secret_api import ProviderSecretIntegrationService
+from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig, AwsSecretWriteReceipt
+from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthority, create_boto3_secrets_manager_client
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
 from src.server.http_route_surface import RunHttpRouteSurface
 from src.server.framework_binding_models import (
@@ -75,14 +77,21 @@ from src.server.framework_binding_models import (
     FrameworkRouteDefinition,
 )
 from src.server.framework_binding import FrameworkRouteBindings
+from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
 try:
-    from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
     from src.server.fastapi_binding import FastApiRouteBindings, create_fastapi_app
     _FASTAPI_BINDING_AVAILABLE = True
 except ModuleNotFoundError as exc:
     if exc.name != "fastapi":
         raise
     _FASTAPI_BINDING_AVAILABLE = False
+
+    class FastApiRouteBindings:  # type: ignore[no-redef]
+        def __init__(self, *args, **kwargs):
+            raise ModuleNotFoundError("fastapi is required to use FastApiRouteBindings")
+
+    def create_fastapi_app(*args, **kwargs):  # type: ignore[no-redef]
+        raise ModuleNotFoundError("fastapi is required to use create_fastapi_app")
 
 from src.server.workspace_onboarding_models import (
     OnboardingReadOutcome,
@@ -246,6 +255,10 @@ __all__ = [
     "RecentActivityService",
     "OnboardingContinuityService",
     "ProviderSecretIntegrationService",
+    "AwsSecretsManagerBindingConfig",
+    "AwsSecretWriteReceipt",
+    "AwsSecretsManagerSecretAuthority",
+    "create_boto3_secrets_manager_client",
     "ProductWorkspaceCreateRequest",
     "ProductWorkspaceDetailResponse",
     "ProductWorkspaceLinks",
