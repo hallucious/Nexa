@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional
 
-from src.server.workspace_onboarding_api import WorkspaceRegistryService, _continuity_projection_for_workspace
+from src.server.workspace_onboarding_api import WorkspaceRegistryService, _continuity_projection_for_workspace, _continuity_projection_for_workspace_ids
 from src.server.workspace_onboarding_models import ProductWorkspaceSummaryView
 from src.server.auth_models import RequestAuthContext
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
@@ -49,6 +49,43 @@ def _workspace_row_by_id(workspace_rows: Sequence[Mapping[str, Any]], workspace_
         if str(row.get('workspace_id') or '').strip() == normalized:
             return row
     return None
+
+
+def _response_continuity_projection(
+    *,
+    request_auth: RequestAuthContext,
+    workspace_rows: Sequence[Mapping[str, Any]],
+    visible_workspace_ids: Sequence[str],
+    workspace_id: Optional[str],
+    onboarding_rows: Sequence[Mapping[str, Any]],
+    run_rows: Sequence[Mapping[str, Any]],
+    provider_probe_rows: Sequence[Mapping[str, Any]],
+    provider_binding_rows: Sequence[Mapping[str, Any]],
+    managed_secret_rows: Sequence[Mapping[str, Any]],
+) -> tuple[Optional[ProductProviderContinuitySummary], Optional[ProductActivityContinuitySummary]]:
+    normalized_workspace_id = str(workspace_id or '').strip() or None
+    if normalized_workspace_id is not None:
+        workspace_row = _workspace_row_by_id(workspace_rows, normalized_workspace_id)
+        _, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            normalized_workspace_id,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        return provider_continuity, activity_continuity
+    return _continuity_projection_for_workspace_ids(
+        tuple(visible_workspace_ids),
+        user_id=request_auth.requested_by_user_ref or '',
+        recent_run_rows=run_rows,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+        onboarding_rows=onboarding_rows,
+    )
 
 
 def _run_activity_type(row: Mapping[str, Any]) -> str:
@@ -351,6 +388,17 @@ class RecentActivityService:
         page = tuple(activities[start_index : start_index + limit])
         next_cursor = page[-1].activity_id if len(page) == limit and (start_index + limit) < total_visible_count else None
         latest_activity_at = activities[0].occurred_at if activities else None
+        provider_continuity, activity_continuity = _response_continuity_projection(
+            request_auth=request_auth,
+            workspace_rows=workspace_rows,
+            visible_workspace_ids=tuple(visible_ids),
+            workspace_id=workspace_id,
+            onboarding_rows=onboarding_rows,
+            run_rows=run_rows,
+            provider_probe_rows=provider_probe_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+        )
         return RecentActivityReadOutcome(
             response=ProductRecentActivityResponse(
                 returned_count=len(page),
@@ -359,6 +407,8 @@ class RecentActivityService:
                 applied_filters=ProductRecentActivityAppliedFilters(workspace_id=workspace_id, cursor=cursor, limit=limit),
                 next_cursor=next_cursor,
                 latest_activity_at=latest_activity_at,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 message='No recent activity is available yet.' if not activities else None,
             )
         )
@@ -499,11 +549,24 @@ class RecentActivityService:
         recent_provider_binding_count = len(filtered_binding_rows)
         recent_managed_secret_count = len(filtered_secret_rows)
         recent_onboarding_count = len(filtered_onboarding_rows)
+        provider_continuity, activity_continuity = _response_continuity_projection(
+            request_auth=request_auth,
+            workspace_rows=workspace_rows,
+            visible_workspace_ids=tuple(visible_ids),
+            workspace_id=workspace_id,
+            onboarding_rows=onboarding_rows,
+            run_rows=run_rows,
+            provider_probe_rows=provider_probe_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+        )
         return HistorySummaryReadOutcome(
             response=ProductHistorySummaryResponse(
                 scope='workspace' if workspace_id is not None else 'account',
                 workspace_id=workspace_id,
                 visible_workspace_count=sum(1 for item in visible_workspaces if workspace_id is None or item.workspace_id == workspace_id),
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 total_visible_runs=len(filtered_runs),
                 pending_runs=pending_runs,
                 active_runs=active_runs,

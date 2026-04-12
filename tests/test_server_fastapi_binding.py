@@ -473,6 +473,8 @@ def test_fastapi_binding_recent_activity_includes_provider_probe_event() -> None
     payload = response.json()
     assert payload['activities'][0]['activity_type'] == 'provider_probe_reachable'
     assert payload['activities'][0]['links']['provider_probe_history'].endswith('/probe-history')
+    assert payload['provider_continuity']['provider_binding_count'] == 1
+    assert payload['activity_continuity']['recent_run_count'] == 1
 
 
 
@@ -813,6 +815,8 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
     summary_response = client.get('/api/users/me/history-summary', headers=_session_headers())
     assert summary_response.status_code == 200
     summary_payload = summary_response.json()
+    assert summary_payload['provider_continuity']['provider_binding_count'] == 1
+    assert summary_payload['activity_continuity']['recent_run_count'] == 0
     assert summary_payload['recent_provider_binding_count'] == 1
     assert summary_payload['recent_managed_secret_count'] == 1
     assert summary_payload['latest_provider_binding_id'] == 'binding-secret-roundtrip'
@@ -863,10 +867,14 @@ def test_fastapi_binding_workspace_create_and_onboarding_round_trip() -> None:
     recent_payload = recent_response.json()
     assert recent_payload['activities'][0]['activity_type'] == 'workspace_created'
     assert recent_payload['activities'][0]['workspace_id'] == 'ws-roundtrip'
+    assert recent_payload['provider_continuity'] is None
+    assert recent_payload['activity_continuity'] is None
 
     summary_response = client.get('/api/users/me/history-summary', headers=_session_headers())
     assert summary_response.status_code == 200
     summary_payload = summary_response.json()
+    assert summary_payload['provider_continuity'] is None
+    assert summary_payload['activity_continuity'] is None
     assert summary_payload['visible_workspace_count'] == 1
     assert summary_payload['recent_workspace_count'] == 1
     assert summary_payload['latest_workspace_id'] == 'ws-roundtrip'

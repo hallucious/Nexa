@@ -83,6 +83,8 @@ class ProductRecentActivityResponse:
     applied_filters: ProductRecentActivityAppliedFilters = field(default_factory=ProductRecentActivityAppliedFilters)
     next_cursor: Optional[str] = None
     latest_activity_at: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     message: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -97,6 +99,8 @@ class ProductHistorySummaryResponse:
     scope: str
     workspace_id: Optional[str] = None
     visible_workspace_count: int = 0
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     total_visible_runs: int = 0
     pending_runs: int = 0
     active_runs: int = 0
