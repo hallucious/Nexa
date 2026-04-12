@@ -394,6 +394,7 @@ class WorkspaceRegistryService:
                     reason_code='workspace_read.authentication_required',
                     message='Workspace detail requires an authenticated session.',
                     workspace_id=workspace_context.workspace_id if workspace_context else None,
+                    workspace_title=str((workspace_row or {}).get('title') or '').strip() or None,
                 )
             )
         if workspace_context is None or workspace_row is None:
@@ -403,6 +404,7 @@ class WorkspaceRegistryService:
                     reason_code='workspace_read.workspace_not_found',
                     message='Requested workspace was not found.',
                     workspace_id=workspace_context.workspace_id if workspace_context else None,
+                    workspace_title=str((workspace_row or {}).get('title') or '').strip() or None,
                 )
             )
         auth_input = AuthorizationInput(
@@ -413,12 +415,25 @@ class WorkspaceRegistryService:
         )
         decision = AuthorizationGate.authorize_workspace_scope(auth_input, workspace_context)
         if not decision.allowed:
+            workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+                workspace_context.workspace_id,
+                workspace_row=workspace_row,
+                user_id=request_auth.requested_by_user_ref or '',
+                recent_run_rows=recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=onboarding_rows,
+            )
             return WorkspaceReadOutcome(
                 rejected=ProductWorkspaceReadRejectedResponse(
                     failure_family='product_read_failure',
                     reason_code=f'workspace_read.{decision.reason_code}',
                     message='Current user is not allowed to read the requested workspace.',
                     workspace_id=workspace_context.workspace_id,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         detail = _detail_from_workspace_row(
@@ -558,12 +573,25 @@ class OnboardingContinuityService:
             )
             decision = AuthorizationGate.authorize_workspace_scope(auth_input, workspace_context)
             if not decision.allowed:
+                workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+                    normalized_workspace_id or '',
+                    workspace_row=None,
+                    user_id=request_auth.requested_by_user_ref or '',
+                    recent_run_rows=recent_run_rows,
+                    provider_binding_rows=provider_binding_rows,
+                    managed_secret_rows=managed_secret_rows,
+                    provider_probe_rows=provider_probe_rows,
+                    onboarding_rows=onboarding_rows,
+                )
                 return OnboardingReadOutcome(
                     rejected=ProductOnboardingRejectedResponse(
                         failure_family='product_read_failure',
                         reason_code=f'onboarding.{decision.reason_code}',
                         message='Current user is not allowed to read onboarding continuity for this workspace.',
                         workspace_id=normalized_workspace_id,
+                        workspace_title=workspace_title,
+                        provider_continuity=provider_continuity,
+                        activity_continuity=activity_continuity,
                     )
                 )
         row = cls._resolve_state_row(request_auth=request_auth, onboarding_rows=onboarding_rows, workspace_id=normalized_workspace_id)
@@ -646,12 +674,25 @@ class OnboardingContinuityService:
             )
             decision = AuthorizationGate.authorize_workspace_scope(auth_input, workspace_context)
             if not decision.allowed:
+                workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+                    normalized_workspace_id or '',
+                    workspace_row=None,
+                    user_id=request_auth.requested_by_user_ref or '',
+                    recent_run_rows=recent_run_rows,
+                    provider_binding_rows=provider_binding_rows,
+                    managed_secret_rows=managed_secret_rows,
+                    provider_probe_rows=provider_probe_rows,
+                    onboarding_rows=onboarding_rows,
+                )
                 return OnboardingWriteOutcome(
                     rejected=ProductOnboardingRejectedResponse(
                         failure_family='product_write_failure',
                         reason_code=f'onboarding_write.{decision.reason_code}',
                         message='Current user is not allowed to update onboarding continuity for this workspace.',
                         workspace_id=normalized_workspace_id,
+                        workspace_title=workspace_title,
+                        provider_continuity=provider_continuity,
+                        activity_continuity=activity_continuity,
                     )
                 )
         existing = cls._resolve_state_row(request_auth=request_auth, onboarding_rows=onboarding_rows, workspace_id=normalized_workspace_id)

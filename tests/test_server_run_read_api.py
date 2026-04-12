@@ -243,3 +243,8 @@ def test_result_read_rejects_forbidden_caller_before_returning_result_shape() ->
     assert outcome.rejected is not None
     assert outcome.rejected.failure_family == "product_read_failure"
     assert outcome.rejected.reason_code in {"authorization.workspace_forbidden", "authorization.role_insufficient"}
+    assert outcome.rejected.workspace_title == "Primary Workspace"
+    assert outcome.rejected.provider_continuity is not None
+    assert outcome.rejected.provider_continuity.provider_binding_count == 1
+    assert outcome.rejected.activity_continuity is not None
+    assert outcome.rejected.activity_continuity.recent_probe_count == 1

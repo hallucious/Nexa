@@ -7,7 +7,7 @@ from typing import Any, Optional
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, RunAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunStatusSnapshot
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 from src.server.run_read_models import (
     ProductArtifactRefView,
     ProductEngineSignalView,
@@ -90,13 +90,16 @@ def _result_summary_from_value(value: str | None, final_status: str | None) -> P
 
 class RunStatusReadService:
     @staticmethod
-    def _reject(*, run_id: str | None, family: str, code: str, message: str) -> RunStatusReadOutcome:
+    def _reject(*, run_id: str | None, family: str, code: str, message: str, workspace_title: str | None = None, provider_continuity=None, activity_continuity=None) -> RunStatusReadOutcome:
         return RunStatusReadOutcome(
             rejected=ProductRunReadRejectedResponse(
                 failure_family=family,  # type: ignore[arg-type]
                 reason_code=code,
                 message=message,
                 run_id=run_id,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         )
 
@@ -120,10 +123,21 @@ class RunStatusReadService:
             run_id = str(run_record_row.get('run_id') or '') or None
         elif run_context is not None:
             run_id = run_context.run_id
+        workspace_id = run_context.workspace_context.workspace_id if run_context is not None else str((run_record_row or {}).get('workspace_id') or '').strip()
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_id,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated or request_auth.requested_by_user_ref is None:
-            return cls._reject(run_id=run_id, family='product_read_failure', code='status.authentication_required', message='Authentication is required to read run status.')
+            return cls._reject(run_id=run_id, family='product_read_failure', code='status.authentication_required', message='Authentication is required to read run status.', workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity)
         if run_context is None or run_record_row is None:
-            return cls._reject(run_id=run_id, family='run_not_found', code='status.run_not_found', message='The requested run could not be found in the server continuity scope.')
+            return cls._reject(run_id=run_id, family='run_not_found', code='status.run_not_found', message='The requested run could not be found in the server continuity scope.', workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity)
 
         decision = AuthorizationGate.authorize_run_scope(
             AuthorizationInput(
@@ -136,7 +150,7 @@ class RunStatusReadService:
             run_context,
         )
         if not decision.allowed:
-            return cls._reject(run_id=run_context.run_id, family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this run status.')
+            return cls._reject(run_id=run_context.run_id, family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this run status.', workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity)
 
         status = _status_value(run_record_row, engine_status)
         status_family = str(run_record_row.get('status_family') or _status_family_for_status(status))
@@ -241,13 +255,16 @@ class RunStatusReadService:
 
 class RunResultReadService:
     @staticmethod
-    def _reject(*, run_id: str | None, family: str, code: str, message: str) -> RunResultReadOutcome:
+    def _reject(*, run_id: str | None, family: str, code: str, message: str, workspace_title: str | None = None, provider_continuity=None, activity_continuity=None) -> RunResultReadOutcome:
         return RunResultReadOutcome(
             rejected=ProductRunReadRejectedResponse(
                 failure_family=family,  # type: ignore[arg-type]
                 reason_code=code,
                 message=message,
                 run_id=run_id,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         )
 
@@ -359,10 +376,21 @@ class RunResultReadService:
             run_id = str(run_record_row.get('run_id') or '') or None
         elif run_context is not None:
             run_id = run_context.run_id
+        workspace_id = run_context.workspace_context.workspace_id if run_context is not None else str((run_record_row or {}).get('workspace_id') or '').strip()
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_id,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated or request_auth.requested_by_user_ref is None:
-            return cls._reject(run_id=run_id, family='product_read_failure', code='result.authentication_required', message='Authentication is required to read run results.')
+            return cls._reject(run_id=run_id, family='product_read_failure', code='result.authentication_required', message='Authentication is required to read run results.', workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity)
         if run_context is None or run_record_row is None:
-            return cls._reject(run_id=run_id, family='run_not_found', code='result.run_not_found', message='The requested run could not be found in the server continuity scope.')
+            return cls._reject(run_id=run_id, family='run_not_found', code='result.run_not_found', message='The requested run could not be found in the server continuity scope.', workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity)
 
         decision = AuthorizationGate.authorize_run_scope(
             AuthorizationInput(
@@ -375,7 +403,7 @@ class RunResultReadService:
             run_context,
         )
         if not decision.allowed:
-            return cls._reject(run_id=run_context.run_id, family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this run result.')
+            return cls._reject(run_id=run_context.run_id, family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this run result.', workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity)
 
         updated_at = str(run_record_row.get('updated_at') or '') or None
         workspace_title = str((workspace_row or {}).get('title') or '').strip() or None

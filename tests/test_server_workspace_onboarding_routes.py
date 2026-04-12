@@ -17,6 +17,13 @@ def _auth(user_id: str = 'user-owner'):
     )
 
 
+def _forbidden_auth(user_id: str = 'user-stranger'):
+    return RequestAuthResolver.resolve(
+        headers={'Authorization': 'Bearer token'},
+        session_claims={'sub': user_id, 'sid': 'sess-001', 'exp': 4102444800, 'roles': []},
+    )
+
+
 def _workspace_row(workspace_id: str = 'ws-001', *, owner_user_id: str = 'user-owner', title: str = 'Primary Workspace') -> dict:
     return {
         'workspace_id': workspace_id,
@@ -224,3 +231,109 @@ def test_onboarding_continuity_reads_default_and_updates_workspace_scope() -> No
     assert write_outcome.accepted.activity_continuity.latest_onboarding_state_id == 'onboard-001'
     assert write_outcome.persisted_onboarding_row is not None
     assert write_outcome.persisted_onboarding_row['onboarding_state_id'] == 'onboard-001'
+
+
+
+def test_workspace_read_rejected_response_includes_continuity_projection() -> None:
+    provider_binding_rows = ({
+        'binding_id': 'binding-001',
+        'workspace_id': 'ws-001',
+        'provider_key': 'openai',
+        'provider_family': 'openai',
+        'display_name': 'OpenAI GPT',
+        'updated_at': '2026-04-11T12:06:00+00:00',
+        'created_at': '2026-04-11T12:01:00+00:00',
+    },)
+    managed_secret_rows = ({
+        'workspace_id': 'ws-001',
+        'provider_key': 'openai',
+        'secret_ref': 'secret://ws-001/openai',
+        'last_rotated_at': '2026-04-11T12:06:30+00:00',
+    },)
+    provider_probe_rows = ({
+        'probe_event_id': 'probe-001',
+        'workspace_id': 'ws-001',
+        'provider_key': 'openai',
+        'provider_family': 'openai',
+        'display_name': 'OpenAI GPT',
+        'probe_status': 'reachable',
+        'connectivity_state': 'ok',
+        'secret_resolution_status': 'resolved',
+        'requested_model_ref': 'gpt-4.1',
+        'effective_model_ref': 'gpt-4.1',
+        'occurred_at': '2026-04-11T12:08:00+00:00',
+        'requested_by_user_id': 'user-owner',
+        'message': 'Probe completed.',
+    },)
+    forbidden_auth = _forbidden_auth('user-stranger')
+    outcome = WorkspaceRegistryService.read_workspace(
+        request_auth=forbidden_auth,
+        workspace_context=_workspace_context(),
+        workspace_row=_workspace_row(),
+        membership_rows=(_membership(),),
+        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed', 'status_family': 'terminal_success'},),
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+        onboarding_rows=({'workspace_id': 'ws-001', 'user_id': 'user-owner', 'onboarding_state_id': 'onboard-001', 'updated_at': '2026-04-11T12:09:00+00:00'},),
+    )
+    assert outcome.ok is False
+    assert outcome.rejected is not None
+    assert outcome.rejected.workspace_title == 'Primary Workspace'
+    assert outcome.rejected.provider_continuity is not None
+    assert outcome.rejected.provider_continuity.provider_binding_count == 1
+    assert outcome.rejected.activity_continuity is not None
+    assert outcome.rejected.activity_continuity.recent_probe_count == 1
+
+
+def test_onboarding_write_rejected_response_includes_continuity_projection() -> None:
+    provider_binding_rows = ({
+        'binding_id': 'binding-001',
+        'workspace_id': 'ws-001',
+        'provider_key': 'openai',
+        'provider_family': 'openai',
+        'display_name': 'OpenAI GPT',
+        'updated_at': '2026-04-11T12:06:00+00:00',
+        'created_at': '2026-04-11T12:01:00+00:00',
+    },)
+    managed_secret_rows = ({
+        'workspace_id': 'ws-001',
+        'provider_key': 'openai',
+        'secret_ref': 'secret://ws-001/openai',
+        'last_rotated_at': '2026-04-11T12:06:30+00:00',
+    },)
+    provider_probe_rows = ({
+        'probe_event_id': 'probe-001',
+        'workspace_id': 'ws-001',
+        'provider_key': 'openai',
+        'provider_family': 'openai',
+        'display_name': 'OpenAI GPT',
+        'probe_status': 'reachable',
+        'connectivity_state': 'ok',
+        'secret_resolution_status': 'resolved',
+        'requested_model_ref': 'gpt-4.1',
+        'effective_model_ref': 'gpt-4.1',
+        'occurred_at': '2026-04-11T12:08:00+00:00',
+        'requested_by_user_id': 'user-owner',
+        'message': 'Probe completed.',
+    },)
+    forbidden_auth = _forbidden_auth('user-stranger')
+    outcome = OnboardingContinuityService.upsert_onboarding_state(
+        request_auth=forbidden_auth,
+        request=ProductOnboardingWriteRequest(workspace_id='ws-001', current_step='history-ready'),
+        onboarding_rows=(),
+        workspace_context=_workspace_context(),
+        onboarding_state_id_factory=lambda: 'onboard-001',
+        now_iso='2026-04-11T14:00:00+00:00',
+        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed', 'status_family': 'terminal_success'},),
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+    )
+    assert outcome.ok is False
+    assert outcome.rejected is not None
+    assert outcome.rejected.workspace_id == 'ws-001'
+    assert outcome.rejected.provider_continuity is not None
+    assert outcome.rejected.provider_continuity.latest_probe_event_id == 'probe-001'
+    assert outcome.rejected.activity_continuity is not None
+    assert outcome.rejected.activity_continuity.recent_run_count == 1

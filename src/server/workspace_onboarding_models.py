@@ -182,6 +182,9 @@ class ProductWorkspaceReadRejectedResponse:
     reason_code: str
     message: str
     workspace_id: Optional[str] = None
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_WORKSPACE_READ_FAILURE_FAMILIES:
@@ -198,6 +201,9 @@ class ProductWorkspaceWriteRejectedResponse:
     reason_code: str
     message: str
     workspace_id: Optional[str] = None
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_WORKSPACE_WRITE_FAILURE_FAMILIES:
@@ -329,6 +335,9 @@ class ProductOnboardingRejectedResponse:
     reason_code: str
     message: str
     workspace_id: Optional[str] = None
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_ONBOARDING_FAILURE_FAMILIES:

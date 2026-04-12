@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional
 
-from src.server.workspace_onboarding_api import WorkspaceRegistryService
+from src.server.workspace_onboarding_api import WorkspaceRegistryService, _continuity_projection_for_workspace
 from src.server.workspace_onboarding_models import ProductWorkspaceSummaryView
 from src.server.auth_models import RequestAuthContext
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
@@ -39,6 +39,16 @@ def _visible_workspaces(
 
 def _workspace_title_map(workspaces: Sequence[ProductWorkspaceSummaryView]) -> dict[str, str]:
     return {item.workspace_id: item.title for item in workspaces}
+
+
+def _workspace_row_by_id(workspace_rows: Sequence[Mapping[str, Any]], workspace_id: str | None) -> Mapping[str, Any] | None:
+    normalized = str(workspace_id or '').strip()
+    if not normalized:
+        return None
+    for row in workspace_rows:
+        if str(row.get('workspace_id') or '').strip() == normalized:
+            return row
+    return None
 
 
 def _run_activity_type(row: Mapping[str, Any]) -> str:
@@ -91,21 +101,37 @@ class RecentActivityService:
         cursor: Optional[str] = None,
     ) -> RecentActivityReadOutcome:
         if not request_auth.is_authenticated:
+            workspace_title = str((_workspace_row_by_id(workspace_rows, workspace_id) or {}).get('title') or '').strip() or None
             return RecentActivityReadOutcome(
                 rejected=ProductRecentActivityRejectedResponse(
                     failure_family='product_read_failure',
                     reason_code='recent_activity.authentication_required',
                     message='Recent activity requires an authenticated session.',
                     workspace_id=workspace_id,
+                    workspace_title=workspace_title,
                 )
             )
         if limit <= 0:
+            workspace_row = _workspace_row_by_id(workspace_rows, workspace_id)
+            workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+                str(workspace_id or ''),
+                workspace_row=workspace_row,
+                user_id=request_auth.requested_by_user_ref or '',
+                recent_run_rows=run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=onboarding_rows,
+            )
             return RecentActivityReadOutcome(
                 rejected=ProductRecentActivityRejectedResponse(
                     failure_family='product_read_failure',
                     reason_code='recent_activity.limit_invalid',
                     message='Recent activity limit must be greater than zero.',
                     workspace_id=workspace_id,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         visible_workspaces = _visible_workspaces(
@@ -116,12 +142,14 @@ class RecentActivityService:
         )
         visible_ids = {item.workspace_id for item in visible_workspaces}
         if workspace_id is not None and workspace_id not in visible_ids:
+            workspace_title = str((_workspace_row_by_id(workspace_rows, workspace_id) or {}).get('title') or '').strip() or None
             return RecentActivityReadOutcome(
                 rejected=ProductRecentActivityRejectedResponse(
                     failure_family='product_read_failure',
                     reason_code='recent_activity.workspace_forbidden',
                     message='Current user is not allowed to read recent activity for the requested workspace.',
                     workspace_id=workspace_id,
+                    workspace_title=workspace_title,
                 )
             )
         titles = _workspace_title_map(visible_workspaces)
@@ -350,12 +378,14 @@ class RecentActivityService:
         workspace_id: Optional[str] = None,
     ) -> HistorySummaryReadOutcome:
         if not request_auth.is_authenticated:
+            workspace_title = str((_workspace_row_by_id(workspace_rows, workspace_id) or {}).get('title') or '').strip() or None
             return HistorySummaryReadOutcome(
                 rejected=ProductRecentActivityRejectedResponse(
                     failure_family='product_read_failure',
                     reason_code='history_summary.authentication_required',
                     message='History summary requires an authenticated session.',
                     workspace_id=workspace_id,
+                    workspace_title=workspace_title,
                 )
             )
         visible_workspaces = _visible_workspaces(
@@ -366,12 +396,14 @@ class RecentActivityService:
         )
         visible_ids = {item.workspace_id for item in visible_workspaces}
         if workspace_id is not None and workspace_id not in visible_ids:
+            workspace_title = str((_workspace_row_by_id(workspace_rows, workspace_id) or {}).get('title') or '').strip() or None
             return HistorySummaryReadOutcome(
                 rejected=ProductRecentActivityRejectedResponse(
                     failure_family='product_read_failure',
                     reason_code='history_summary.workspace_forbidden',
                     message='Current user is not allowed to read aggregate history for the requested workspace.',
                     workspace_id=workspace_id,
+                    workspace_title=workspace_title,
                 )
             )
         filtered_workspaces = [

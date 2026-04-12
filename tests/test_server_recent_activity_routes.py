@@ -297,3 +297,30 @@ def test_recent_activity_accepts_provider_probe_projection_aliases() -> None:
     assert outcome.response is not None
     assert outcome.response.activities[0].activity_type == 'provider_probe_warning'
     assert outcome.response.activities[0].links.provider_probe_history is not None
+
+
+def test_recent_activity_rejected_response_includes_workspace_continuity_projection() -> None:
+    outcome = RecentActivityService.list_recent_activity(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(_membership(),),
+        onboarding_rows=(_onboarding_row('onboard-001', '2026-04-11T12:12:00+00:00'),),
+        run_rows=(_run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),),
+        provider_probe_rows=(_probe_row('probe-001', '2026-04-11T12:08:00+00:00'),),
+        provider_binding_rows=(_binding_row('binding-001', '2026-04-11T12:09:00+00:00'),),
+        managed_secret_rows=({
+            'workspace_id': 'ws-001',
+            'provider_key': 'openai',
+            'secret_ref': 'secret://ws-001/openai',
+            'last_rotated_at': '2026-04-11T12:10:00+00:00',
+        },),
+        workspace_id='ws-001',
+        limit=0,
+    )
+    assert outcome.ok is False
+    assert outcome.rejected is not None
+    assert outcome.rejected.workspace_title == 'Primary Workspace'
+    assert outcome.rejected.provider_continuity is not None
+    assert outcome.rejected.provider_continuity.provider_binding_count == 1
+    assert outcome.rejected.activity_continuity is not None
+    assert outcome.rejected.activity_continuity.recent_run_count == 1

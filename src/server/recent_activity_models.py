@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+
 RecentActivityFailureFamily = Literal["product_read_failure"]
 _ALLOWED_RECENT_ACTIVITY_FAILURE_FAMILIES = {"product_read_failure"}
 _ALLOWED_ACTIVITY_TYPES = {
@@ -141,6 +143,9 @@ class ProductRecentActivityRejectedResponse:
     reason_code: str
     message: str
     workspace_id: Optional[str] = None
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_RECENT_ACTIVITY_FAILURE_FAMILIES:
