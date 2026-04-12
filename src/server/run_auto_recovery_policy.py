@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 import uuid
 
@@ -11,6 +11,8 @@ QueueJobIdFactory = Callable[[], str]
 
 SYSTEM_AUTO_RECOVERY_ACTOR = "system:auto-recovery"
 DEFAULT_AUTO_RETRY_LIMIT = 2
+DEFAULT_AUTO_RETRY_BASE_BACKOFF_SECONDS = 300
+MAX_AUTO_RETRY_BACKOFF_SECONDS = 3600
 _INFRA_FAILURE_FAMILY = "worker_infrastructure_failure"
 _ACTIVE_STATUSES = {"starting", "running"}
 
@@ -88,6 +90,20 @@ def _append_action_log(updated_row: dict[str, Any], *, action: str, timestamp: s
     updated_row["action_log"] = entries
 
 
+def _current_backoff_seconds(run_record_row: Mapping[str, Any]) -> int:
+    base = max(1, _coerce_int(run_record_row.get("auto_retry_base_backoff_seconds"), DEFAULT_AUTO_RETRY_BASE_BACKOFF_SECONDS))
+    retry_count = max(0, _coerce_int(run_record_row.get("auto_retry_count"), 0))
+    backoff = base * (2 ** retry_count)
+    return min(backoff, MAX_AUTO_RETRY_BACKOFF_SECONDS)
+
+
+def _backoff_ready(run_record_row: Mapping[str, Any], now_dt: datetime) -> bool:
+    last_attempt_at = _parse_iso(run_record_row.get("last_auto_recovery_at"))
+    if last_attempt_at is None:
+        return True
+    return now_dt >= (last_attempt_at + timedelta(seconds=_current_backoff_seconds(run_record_row)))
+
+
 def apply_auto_recovery(
     run_record_row: Mapping[str, Any],
     *,
@@ -109,16 +125,19 @@ def apply_auto_recovery(
 
     is_stuck = bool(claimed_by_worker_ref and lease_expires_at is not None and lease_expires_at < now_dt and status in _ACTIVE_STATUSES)
     is_infra_failure = latest_error_family == _INFRA_FAILURE_FAMILY
-    can_auto_retry = is_infra_failure and auto_retry_count < auto_retry_limit and (status == "failed" or is_stuck)
+    backoff_ready = _backoff_ready(run_record_row, now_dt)
+    can_auto_retry = is_infra_failure and auto_retry_count < auto_retry_limit and backoff_ready and (status == "failed" or is_stuck)
     should_escalate_review = is_infra_failure and auto_retry_count >= auto_retry_limit and not orphan_review_required and (status == "failed" or is_stuck)
 
     if not can_auto_retry and not should_escalate_review:
-        return AutoRecoveryOutcome(applied=False, reason="no_auto_recovery_needed")
+        return AutoRecoveryOutcome(applied=False, reason="no_auto_recovery_needed" if backoff_ready else "backoff_active")
 
     updated_row = deepcopy(dict(run_record_row))
     updated_row["updated_at"] = now_iso
     updated_row["auto_retry_count"] = auto_retry_count
     updated_row["auto_retry_limit"] = auto_retry_limit
+    updated_row["auto_retry_base_backoff_seconds"] = max(1, _coerce_int(updated_row.get("auto_retry_base_backoff_seconds"), DEFAULT_AUTO_RETRY_BASE_BACKOFF_SECONDS))
+    updated_row["last_auto_recovery_at"] = now_iso
 
     if can_auto_retry:
         new_queue_job_id = queue_job_id_factory() if queue_job_id_factory is not None else f"job_{uuid.uuid4().hex}"

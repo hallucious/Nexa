@@ -49,15 +49,15 @@ class AutoRecoveryScheduler:
         run_record_writer: Optional[RunRecordWriter] = None,
         queue_job_id_factory: Optional[QueueJobIdFactory] = None,
         batch_limit: int = 50,
+        max_applied_per_batch: Optional[int] = None,
     ) -> AutoRecoverySchedulerOutcome:
         if batch_limit < 0:
             raise ValueError("batch_limit must be non-negative")
+        if max_applied_per_batch is not None and max_applied_per_batch < 0:
+            raise ValueError("max_applied_per_batch must be non-negative")
 
         rows = cls._is_sequence_of_rows(run_rows)
-        if batch_limit == 0:
-            rows = ()
-        else:
-            rows = rows[:batch_limit]
+        rows = () if batch_limit == 0 else rows[:batch_limit]
 
         applied_updates: list[AutoRecoveryScheduledUpdate] = []
         eligible_count = 0
@@ -65,6 +65,8 @@ class AutoRecoveryScheduler:
         auto_mark_review_required_count = 0
 
         for row in rows:
+            if max_applied_per_batch is not None and len(applied_updates) >= max_applied_per_batch:
+                break
             outcome: AutoRecoveryOutcome = apply_auto_recovery(
                 row,
                 now_iso=now_iso,
@@ -80,13 +82,11 @@ class AutoRecoveryScheduler:
                 auto_retry_count += 1
             elif outcome.action == "auto_mark_review_required":
                 auto_mark_review_required_count += 1
-            applied_updates.append(
-                AutoRecoveryScheduledUpdate(
-                    run_id=str(updated_row.get("run_id") or ""),
-                    action=outcome.action,
-                    updated_run_record=updated_row,
-                )
-            )
+            applied_updates.append(AutoRecoveryScheduledUpdate(
+                run_id=str(updated_row.get("run_id") or ""),
+                action=outcome.action,
+                updated_run_record=updated_row,
+            ))
 
         applied_count = len(applied_updates)
         scanned_count = len(rows)
