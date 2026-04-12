@@ -5,11 +5,13 @@ from typing import Any, Optional
 
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
+from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.workspace_onboarding_models import (
     OnboardingReadOutcome,
     OnboardingWriteOutcome,
     ProductOnboardingLinks,
     ProductOnboardingReadResponse,
+    ProductProviderContinuitySummary,
     ProductOnboardingRejectedResponse,
     ProductOnboardingStateView,
     ProductOnboardingWriteAcceptedResponse,
@@ -73,12 +75,70 @@ def _latest_run_for_workspace(workspace_id: str, run_rows: Sequence[Mapping[str,
     return sorted(candidates, key=lambda row: (str(row.get('created_at') or ''), str(row.get('run_id') or '')), reverse=True)[0]
 
 
+def _provider_continuity_summary_for_workspace(
+    workspace_id: str,
+    *,
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+) -> Optional[ProductProviderContinuitySummary]:
+    normalized_workspace_id = str(workspace_id or '').strip()
+    if not normalized_workspace_id:
+        return None
+    filtered_binding_rows = [
+        row for row in provider_binding_rows
+        if str(row.get('workspace_id') or '').strip() == normalized_workspace_id
+    ]
+    filtered_secret_rows = [
+        row for row in managed_secret_rows
+        if str(row.get('workspace_id') or '').strip() == normalized_workspace_id
+    ]
+    filtered_probe_rows = [
+        record for record in (ProviderProbeHistoryRecord.from_mapping(row) for row in provider_probe_rows)
+        if record is not None and record.workspace_id == normalized_workspace_id
+    ]
+    if not filtered_binding_rows and not filtered_secret_rows and not filtered_probe_rows:
+        return None
+    latest_binding_at = None
+    latest_binding_id = None
+    if filtered_binding_rows:
+        filtered_binding_rows.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('binding_id') or '')), reverse=True)
+        latest_binding_at = str(filtered_binding_rows[0].get('updated_at') or filtered_binding_rows[0].get('created_at') or '').strip() or None
+        latest_binding_id = str(filtered_binding_rows[0].get('binding_id') or '').strip() or None
+    latest_secret_at = None
+    latest_secret_ref = None
+    if filtered_secret_rows:
+        filtered_secret_rows.sort(key=lambda row: (str(row.get('last_rotated_at') or ''), str(row.get('secret_ref') or '')), reverse=True)
+        latest_secret_at = str(filtered_secret_rows[0].get('last_rotated_at') or '').strip() or None
+        latest_secret_ref = str(filtered_secret_rows[0].get('secret_ref') or '').strip() or None
+    latest_probe = None
+    if filtered_probe_rows:
+        filtered_probe_rows.sort(key=lambda record: (record.occurred_at, record.probe_event_id), reverse=True)
+        latest_probe = filtered_probe_rows[0]
+    latest_provider_activity_at = max(
+        [value for value in (latest_binding_at, latest_secret_at, latest_probe.occurred_at if latest_probe is not None else None) if value],
+        default=None,
+    )
+    return ProductProviderContinuitySummary(
+        provider_binding_count=len(filtered_binding_rows),
+        managed_secret_count=len(filtered_secret_rows),
+        recent_probe_count=len(filtered_probe_rows),
+        latest_provider_binding_id=latest_binding_id,
+        latest_managed_secret_ref=latest_secret_ref,
+        latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
+        latest_provider_activity_at=latest_provider_activity_at,
+    )
+
+
 def _detail_from_workspace_row(
     workspace_row: Mapping[str, Any],
     *,
     role: str,
     membership_rows: Sequence[Mapping[str, Any]] = (),
     recent_run_rows: Sequence[Mapping[str, Any]] = (),
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
 ) -> ProductWorkspaceDetailResponse:
     workspace_id = str(workspace_row.get('workspace_id') or '').strip()
     latest_run = _latest_run_for_workspace(workspace_id, recent_run_rows)
@@ -89,6 +149,12 @@ def _detail_from_workspace_row(
         for row in membership_rows
         if str(row.get('workspace_id') or '').strip() == workspace_id and str(row.get('user_id') or '').strip()
     }
+    provider_continuity = _provider_continuity_summary_for_workspace(
+        workspace_id,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+    )
     return ProductWorkspaceDetailResponse(
         workspace_id=workspace_id,
         title=str(workspace_row.get('title') or '').strip() or workspace_id,
@@ -100,6 +166,7 @@ def _detail_from_workspace_row(
         last_result_status=last_result_status,
         continuity_source=str(workspace_row.get('continuity_source') or '').strip() or None,
         archived=bool(workspace_row.get('archived')),
+        provider_continuity=provider_continuity,
         created_at=str(workspace_row.get('created_at') or '').strip() or None,
         updated_at=str(workspace_row.get('updated_at') or '').strip() or (str(latest_run.get('updated_at') or '').strip() if latest_run else ''),
         links=_workspace_links(workspace_id),
@@ -115,6 +182,9 @@ class WorkspaceRegistryService:
         workspace_rows: Sequence[Mapping[str, Any]] = (),
         membership_rows: Sequence[Mapping[str, Any]] = (),
         recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> WorkspaceListOutcome:
         if not request_auth.is_authenticated:
             return WorkspaceListOutcome(
@@ -130,7 +200,7 @@ class WorkspaceRegistryService:
             role = _resolved_workspace_role(user_id, row, membership_rows)
             if role is None:
                 continue
-            detail = _detail_from_workspace_row(row, role=role, membership_rows=membership_rows, recent_run_rows=recent_run_rows)
+            detail = _detail_from_workspace_row(row, role=role, membership_rows=membership_rows, recent_run_rows=recent_run_rows, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows)
             visible.append(
                 ProductWorkspaceSummaryView(
                     workspace_id=detail.workspace_id,
@@ -141,6 +211,7 @@ class WorkspaceRegistryService:
                     last_run_id=detail.last_run_id,
                     last_result_status=detail.last_result_status,
                     archived=detail.archived,
+                    provider_continuity=detail.provider_continuity,
                     links=detail.links,
                 )
             )
@@ -156,6 +227,9 @@ class WorkspaceRegistryService:
         workspace_row: Optional[Mapping[str, Any]],
         membership_rows: Sequence[Mapping[str, Any]] = (),
         recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> WorkspaceReadOutcome:
         if not request_auth.is_authenticated:
             return WorkspaceReadOutcome(
@@ -196,6 +270,9 @@ class WorkspaceRegistryService:
             role=decision.resolved_role or 'viewer',
             membership_rows=membership_rows,
             recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
         )
         return WorkspaceReadOutcome(response=detail)
 
@@ -290,6 +367,9 @@ class OnboardingContinuityService:
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         workspace_context: Optional[WorkspaceAuthorizationContext] = None,
         workspace_id: Optional[str] = None,
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> OnboardingReadOutcome:
         if not request_auth.is_authenticated:
             return OnboardingReadOutcome(
@@ -338,10 +418,17 @@ class OnboardingContinuityService:
             current_step=str(row.get('current_step') or '').strip() or None if row else None,
             updated_at=str(row.get('updated_at') or '').strip() or None if row else None,
         )
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            normalized_workspace_id or '',
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        ) if normalized_workspace_id is not None else None
         return OnboardingReadOutcome(
             response=ProductOnboardingReadResponse(
                 continuity_scope=cls._scope(normalized_workspace_id),
                 state=state,
+                provider_continuity=provider_continuity,
                 links=cls._links(normalized_workspace_id),
                 message=None if row else 'No canonical onboarding continuity has been recorded yet.',
             )
@@ -357,6 +444,9 @@ class OnboardingContinuityService:
         workspace_context: Optional[WorkspaceAuthorizationContext] = None,
         onboarding_state_id_factory,
         now_iso: str,
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> OnboardingWriteOutcome:
         if not request_auth.is_authenticated:
             return OnboardingWriteOutcome(
@@ -418,11 +508,18 @@ class OnboardingContinuityService:
             current_step=persisted['current_step'],
             updated_at=now_iso,
         )
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            normalized_workspace_id or '',
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        ) if normalized_workspace_id is not None else None
         return OnboardingWriteOutcome(
             accepted=ProductOnboardingWriteAcceptedResponse(
                 status='accepted',
                 continuity_scope=cls._scope(normalized_workspace_id),
                 state=state,
+                provider_continuity=provider_continuity,
                 links=cls._links(normalized_workspace_id),
                 was_created=existing is None,
                 message='Onboarding continuity has been stored as canonical server state.',

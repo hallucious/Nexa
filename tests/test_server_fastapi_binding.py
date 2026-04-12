@@ -359,10 +359,12 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
     workspace_payload = workspace_list.json()
     assert workspace_payload['returned_count'] == 1
     assert workspace_payload['workspaces'][0]['workspace_id'] == 'ws-001'
+    assert workspace_payload['workspaces'][0]['provider_continuity']['recent_probe_count'] == 1
 
     workspace_detail = client.get('/api/workspaces/ws-001', headers=_session_headers())
     assert workspace_detail.status_code == 200
     assert workspace_detail.json()['workspace_id'] == 'ws-001'
+    assert workspace_detail.json()['provider_continuity']['latest_probe_event_id'] == 'probe-001'
 
     workspace_create = client.post('/api/workspaces', headers=_session_headers(), json={'title': 'Created Workspace'})
     assert workspace_create.status_code == 201
@@ -371,6 +373,7 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
     onboarding_get = client.get('/api/users/me/onboarding', headers=_session_headers())
     assert onboarding_get.status_code == 200
     assert onboarding_get.json()['state']['first_success_achieved'] is False
+    assert onboarding_get.json()['provider_continuity'] is None
 
     onboarding_put = client.put(
         '/api/users/me/onboarding',
@@ -379,6 +382,7 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
     )
     assert onboarding_put.status_code == 200
     assert onboarding_put.json()['state']['advanced_surfaces_unlocked'] is True
+    assert onboarding_put.json()['provider_continuity'] is None
 
 
 def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() -> None:
@@ -554,6 +558,114 @@ def test_fastapi_binding_provider_probe_write_is_visible_in_history_and_recent_a
     recent_payload = recent_response.json()
     assert recent_payload['activities'][0]['activity_id'].startswith('probe:probe-new:')
     assert recent_payload['activities'][0]['activity_type'] == 'provider_probe_reachable'
+
+
+def test_fastapi_binding_workspace_and_onboarding_provider_continuity_round_trip() -> None:
+    probe_store = InMemoryProviderProbeHistoryStore()
+    binding_store = InMemoryProviderBindingStore()
+    secret_store = InMemoryManagedSecretMetadataStore()
+
+    def _probe_runner(probe_input):
+        return {
+            "probe_status": "reachable",
+            "connectivity_state": "ok",
+            "message": "Provider connectivity probe succeeded.",
+            "effective_model_ref": probe_input.requested_model_ref or probe_input.default_model_ref,
+            "round_trip_latency_ms": 155,
+        }
+
+    deps = FastApiRouteDependencies(
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_rows_provider=lambda: ({
+            'workspace_id': 'ws-001',
+            'owner_user_id': 'user-owner',
+            'title': 'Primary Workspace',
+            'description': 'Main',
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:00:30+00:00',
+            'continuity_source': 'server',
+            'archived': False,
+        },),
+        workspace_row_provider=lambda workspace_id: {
+            'workspace_id': 'ws-001',
+            'owner_user_id': 'user-owner',
+            'title': 'Primary Workspace',
+            'description': 'Main',
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:00:30+00:00',
+            'continuity_source': 'server',
+            'archived': False,
+        } if workspace_id == 'ws-001' else None,
+        provider_catalog_rows_provider=lambda: ({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+            "local_env_var_hint": "OPENAI_API_KEY",
+            "default_secret_name_template": "nexa/{workspace_id}/providers/openai",
+        },),
+        managed_secret_writer=lambda workspace_id, provider_key, secret_value, metadata: {
+            'secret_ref': f'secret://{workspace_id}/{provider_key}',
+            'secret_version_ref': 'v9',
+            'last_rotated_at': str(metadata.get('now_iso') or '2026-04-11T12:11:00+00:00'),
+        },
+        provider_probe_runner=_probe_runner,
+        binding_id_factory=lambda: 'binding-workspace-continuity',
+        probe_event_id_factory=lambda: 'probe-workspace-continuity',
+        onboarding_state_id_factory=lambda: 'onboard-workspace-continuity',
+        now_iso_provider=lambda: '2026-04-11T12:11:00+00:00',
+    )
+    deps = bind_managed_secret_metadata_store(dependencies=deps, store=secret_store)
+    deps = bind_provider_binding_store(dependencies=deps, store=binding_store)
+    deps = bind_probe_history_store(dependencies=deps, store=probe_store)
+    client = TestClient(create_fastapi_app(dependencies=deps))
+
+    put_response = client.put(
+        '/api/workspaces/ws-001/provider-bindings/openai',
+        headers=_session_headers(),
+        json={'display_name': 'OpenAI GPT', 'secret_value': 'workspace-secret', 'enabled': True, 'default_model_ref': 'gpt-4.1'},
+    )
+    assert put_response.status_code == 200
+
+    probe_response = client.post(
+        '/api/workspaces/ws-001/provider-bindings/openai/probe',
+        headers=_session_headers(),
+        json={'requested_model_ref': 'gpt-4.1'},
+    )
+    assert probe_response.status_code == 200
+
+    workspace_list = client.get('/api/workspaces', headers=_session_headers())
+    assert workspace_list.status_code == 200
+    list_payload = workspace_list.json()
+    assert list_payload['workspaces'][0]['provider_continuity']['provider_binding_count'] == 1
+    assert list_payload['workspaces'][0]['provider_continuity']['managed_secret_count'] == 1
+    assert list_payload['workspaces'][0]['provider_continuity']['recent_probe_count'] == 1
+
+    workspace_detail = client.get('/api/workspaces/ws-001', headers=_session_headers())
+    assert workspace_detail.status_code == 200
+    detail_payload = workspace_detail.json()
+    assert detail_payload['provider_continuity']['latest_provider_binding_id'] == 'binding-workspace-continuity'
+    assert detail_payload['provider_continuity']['latest_managed_secret_ref'] == 'secret://ws-001/openai'
+    assert detail_payload['provider_continuity']['latest_probe_event_id'] == 'probe-workspace-continuity'
+
+    onboarding_get = client.get('/api/users/me/onboarding?workspace_id=ws-001', headers=_session_headers())
+    assert onboarding_get.status_code == 200
+    onboarding_payload = onboarding_get.json()
+    assert onboarding_payload['provider_continuity']['provider_binding_count'] == 1
+    assert onboarding_payload['provider_continuity']['managed_secret_count'] == 1
+    assert onboarding_payload['provider_continuity']['recent_probe_count'] == 1
+
+    onboarding_put = client.put(
+        '/api/users/me/onboarding',
+        headers=_session_headers(),
+        json={'workspace_id': 'ws-001', 'first_success_achieved': True, 'advanced_surfaces_unlocked': True},
+    )
+    assert onboarding_put.status_code == 200
+    onboarding_put_payload = onboarding_put.json()
+    assert onboarding_put_payload['provider_continuity']['latest_provider_binding_id'] == 'binding-workspace-continuity'
+    assert onboarding_put_payload['provider_continuity']['latest_managed_secret_ref'] == 'secret://ws-001/openai'
+    assert onboarding_put_payload['provider_continuity']['latest_probe_event_id'] == 'probe-workspace-continuity'
 
 
 def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_resolution() -> None:

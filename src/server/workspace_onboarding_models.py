@@ -26,6 +26,22 @@ class ProductWorkspaceLinks:
 
 
 @dataclass(frozen=True)
+class ProductProviderContinuitySummary:
+    provider_binding_count: int = 0
+    managed_secret_count: int = 0
+    recent_probe_count: int = 0
+    latest_provider_binding_id: Optional[str] = None
+    latest_managed_secret_ref: Optional[str] = None
+    latest_probe_event_id: Optional[str] = None
+    latest_provider_activity_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for field_name in ("provider_binding_count", "managed_secret_count", "recent_probe_count"):
+            if getattr(self, field_name) < 0:
+                raise ValueError(f"ProductProviderContinuitySummary.{field_name} must be >= 0")
+
+
+@dataclass(frozen=True)
 class ProductWorkspaceSummaryView:
     workspace_id: str
     title: str
@@ -35,6 +51,7 @@ class ProductWorkspaceSummaryView:
     last_run_id: Optional[str] = None
     last_result_status: Optional[str] = None
     archived: bool = False
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
     links: ProductWorkspaceLinks = field(default_factory=lambda: ProductWorkspaceLinks(
         detail='/placeholder/workspace',
         runs='/placeholder/runs',
@@ -66,6 +83,7 @@ class ProductWorkspaceDetailResponse:
     last_result_status: Optional[str] = None
     continuity_source: Optional[str] = None
     archived: bool = False
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
     links: ProductWorkspaceLinks = field(default_factory=lambda: ProductWorkspaceLinks(
         detail='/placeholder/workspace',
         runs='/placeholder/runs',
@@ -216,6 +234,7 @@ class ProductOnboardingLinks:
 class ProductOnboardingReadResponse:
     continuity_scope: str
     state: ProductOnboardingStateView
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
     links: ProductOnboardingLinks = field(default_factory=lambda: ProductOnboardingLinks('/placeholder/onboarding'))
     message: Optional[str] = None
 
@@ -252,6 +271,7 @@ class ProductOnboardingWriteAcceptedResponse:
     status: str
     continuity_scope: str
     state: ProductOnboardingStateView
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
     links: ProductOnboardingLinks = field(default_factory=lambda: ProductOnboardingLinks('/placeholder/onboarding'))
     was_created: bool = False
     message: Optional[str] = None

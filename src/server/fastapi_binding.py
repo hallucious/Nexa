@@ -89,6 +89,9 @@ class FastApiRouteBindings:
                 workspace_rows=self.dependencies.workspace_rows_provider(),
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
                 recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -102,6 +105,9 @@ class FastApiRouteBindings:
                 workspace_row=self.dependencies.workspace_row_provider(workspace_id),
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
                 recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -241,6 +247,9 @@ class FastApiRouteBindings:
                 request=inbound,
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 workspace_context=workspace_context,
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -255,6 +264,9 @@ class FastApiRouteBindings:
                 workspace_context=workspace_context,
                 onboarding_state_id_factory=self.dependencies.onboarding_state_id_factory or (lambda: 'onboarding-missing-id-factory'),
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else '',
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
             )
             return self._framework_response(outbound)
 
