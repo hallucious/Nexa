@@ -203,6 +203,7 @@ class FrameworkRouteBindings:
         run_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_history_summary(
             http_request=cls.to_http_route_request(request),
@@ -210,6 +211,8 @@ class FrameworkRouteBindings:
             membership_rows=membership_rows,
             run_rows=run_rows,
             provider_probe_rows=provider_probe_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
         )
         return cls.to_framework_response(response)
 

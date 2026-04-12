@@ -159,6 +159,10 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
     assert outcome.response.recent_probe_count == 1
     assert outcome.response.failed_probe_count == 0
     assert outcome.response.latest_probe_event_id == 'probe-001'
+    assert outcome.response.recent_provider_binding_count == 1
+    assert outcome.response.recent_managed_secret_count == 1
+    assert outcome.response.latest_provider_binding_id == 'binding-001'
+    assert outcome.response.latest_managed_secret_ref == 'secret://ws-001/openai'
     assert outcome.response.latest_activity_at == '2026-04-11T12:10:00+00:00'
 
 
@@ -213,12 +217,27 @@ def test_recent_activity_route_family_round_trip() -> None:
         provider_probe_rows=(
             _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
         ),
+        provider_binding_rows=(
+            _binding_row('binding-001', '2026-04-11T12:09:00+00:00'),
+        ),
+        managed_secret_rows=(
+            {
+                'workspace_id': 'ws-001',
+                'provider_key': 'openai',
+                'secret_ref': 'secret://ws-001/openai',
+                'last_rotated_at': '2026-04-11T12:10:00+00:00',
+            },
+        ),
     )
     assert summary_response.status_code == 200
     assert summary_response.body['total_visible_runs'] == 2
     assert summary_response.body['pending_runs'] == 1
     assert summary_response.body['recent_probe_count'] == 1
+    assert summary_response.body['recent_provider_binding_count'] == 1
+    assert summary_response.body['recent_managed_secret_count'] == 1
     assert summary_response.body['latest_probe_event_id'] == 'probe-001'
+    assert summary_response.body['latest_provider_binding_id'] == 'binding-001'
+    assert summary_response.body['latest_managed_secret_ref'] == 'secret://ws-001/openai'
 
 
 def test_recent_activity_accepts_provider_probe_projection_aliases() -> None:

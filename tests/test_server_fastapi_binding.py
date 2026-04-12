@@ -521,6 +521,7 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
     assert history_response.json()['items'][0]['provider_key'] == 'openai'
 
 
+
 def test_fastapi_binding_provider_probe_history_round_trip() -> None:
     client = _make_client()
     response = client.get('/api/workspaces/ws-001/provider-bindings/openai/probe-history?limit=1', headers=_session_headers())
@@ -571,6 +572,16 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
 
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_rows_provider=lambda: ({
+            'workspace_id': 'ws-001',
+            'owner_user_id': 'user-owner',
+            'title': 'Primary Workspace',
+            'description': 'Main',
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:00:30+00:00',
+            'continuity_source': 'server',
+            'archived': False,
+        },),
         provider_catalog_rows_provider=lambda: ({
             "provider_key": "openai",
             "provider_family": "openai",
@@ -622,3 +633,12 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
     history_payload = history_response.json()
     assert history_payload['items'][0]['probe_event_id'] == 'probe-secret-roundtrip'
     assert history_payload['items'][0]['secret_resolution_status'] == 'resolved'
+
+    summary_response = client.get('/api/users/me/history-summary', headers=_session_headers())
+    assert summary_response.status_code == 200
+    summary_payload = summary_response.json()
+    assert summary_payload['recent_provider_binding_count'] == 1
+    assert summary_payload['recent_managed_secret_count'] == 1
+    assert summary_payload['latest_provider_binding_id'] == 'binding-secret-roundtrip'
+    assert summary_payload['latest_managed_secret_ref'] == 'secret://ws-001/openai'
+    assert summary_payload['latest_activity_at'] == '2026-04-11T12:11:00+00:00'

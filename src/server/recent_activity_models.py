@@ -99,9 +99,13 @@ class ProductHistorySummaryResponse:
     terminal_failure_runs: int = 0
     recent_probe_count: int = 0
     failed_probe_count: int = 0
+    recent_provider_binding_count: int = 0
+    recent_managed_secret_count: int = 0
     latest_activity_at: Optional[str] = None
     latest_run_id: Optional[str] = None
     latest_probe_event_id: Optional[str] = None
+    latest_provider_binding_id: Optional[str] = None
+    latest_managed_secret_ref: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.scope not in _ALLOWED_HISTORY_SUMMARY_SCOPES:
@@ -115,6 +119,8 @@ class ProductHistorySummaryResponse:
             'terminal_failure_runs',
             'recent_probe_count',
             'failed_probe_count',
+            'recent_provider_binding_count',
+            'recent_managed_secret_count',
         ):
             if getattr(self, field_name) < 0:
                 raise ValueError(f'ProductHistorySummaryResponse.{field_name} must be >= 0')

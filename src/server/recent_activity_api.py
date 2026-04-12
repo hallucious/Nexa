@@ -356,6 +356,7 @@ class RecentActivityService:
             filtered_probe_rows.sort(key=lambda record: (record.occurred_at, record.probe_event_id), reverse=True)
             latest_probe = filtered_probe_rows[0]
         latest_binding_at = None
+        latest_binding_id = None
         filtered_binding_rows = [
             row for row in provider_binding_rows
             if str(row.get('workspace_id') or '').strip() in visible_ids
@@ -365,7 +366,9 @@ class RecentActivityService:
         if filtered_binding_rows:
             filtered_binding_rows.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('binding_id') or '')), reverse=True)
             latest_binding_at = str(filtered_binding_rows[0].get('updated_at') or filtered_binding_rows[0].get('created_at') or '').strip() or None
+            latest_binding_id = str(filtered_binding_rows[0].get('binding_id') or '').strip() or None
         latest_secret_at = None
+        latest_secret_ref = None
         filtered_secret_rows = [
             row for row in managed_secret_rows
             if str(row.get('workspace_id') or '').strip() in visible_ids
@@ -375,6 +378,7 @@ class RecentActivityService:
         if filtered_secret_rows:
             filtered_secret_rows.sort(key=lambda row: (str(row.get('last_rotated_at') or ''), str(row.get('secret_ref') or '')), reverse=True)
             latest_secret_at = str(filtered_secret_rows[0].get('last_rotated_at') or '').strip() or None
+            latest_secret_ref = str(filtered_secret_rows[0].get('secret_ref') or '').strip() or None
         candidate_times = [value for value in (
             latest_activity_at,
             latest_binding_at,
@@ -388,6 +392,8 @@ class RecentActivityService:
         terminal_failure_runs = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'terminal_failure')
         recent_probe_count = len(filtered_probe_rows)
         failed_probe_count = sum(1 for record in filtered_probe_rows if record.probe_status.lower() not in {'reachable', 'warning'})
+        recent_provider_binding_count = len(filtered_binding_rows)
+        recent_managed_secret_count = len(filtered_secret_rows)
         return HistorySummaryReadOutcome(
             response=ProductHistorySummaryResponse(
                 scope='workspace' if workspace_id is not None else 'account',
@@ -400,8 +406,12 @@ class RecentActivityService:
                 terminal_failure_runs=terminal_failure_runs,
                 recent_probe_count=recent_probe_count,
                 failed_probe_count=failed_probe_count,
+                recent_provider_binding_count=recent_provider_binding_count,
+                recent_managed_secret_count=recent_managed_secret_count,
                 latest_activity_at=latest_activity_at,
                 latest_run_id=str(latest_run.get('run_id') or '').strip() or None if latest_run is not None else None,
                 latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
+                latest_provider_binding_id=latest_binding_id,
+                latest_managed_secret_ref=latest_secret_ref,
             )
         )
