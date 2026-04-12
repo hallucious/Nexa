@@ -821,3 +821,17 @@ def test_fastapi_binding_workspace_create_and_onboarding_round_trip() -> None:
     assert onboarding_get_payload['state']['onboarding_state_id'] == 'onboard-roundtrip'
     assert onboarding_get_payload['state']['advanced_surfaces_unlocked'] is True
     assert onboarding_get_payload['state']['current_step'] == 'workspace-ready'
+
+    recent_after_onboarding = client.get('/api/users/me/activity?workspace_id=ws-roundtrip&limit=5', headers=_session_headers())
+    assert recent_after_onboarding.status_code == 200
+    recent_after_onboarding_payload = recent_after_onboarding.json()
+    onboarding_items = [item for item in recent_after_onboarding_payload['activities'] if item['activity_type'] == 'onboarding_updated']
+    assert len(onboarding_items) == 1
+    assert onboarding_items[0]['links']['onboarding'] == '/api/users/me/onboarding?workspace_id=ws-roundtrip'
+
+    summary_after_onboarding = client.get('/api/users/me/history-summary?workspace_id=ws-roundtrip', headers=_session_headers())
+    assert summary_after_onboarding.status_code == 200
+    summary_after_onboarding_payload = summary_after_onboarding.json()
+    assert summary_after_onboarding_payload['recent_onboarding_count'] == 1
+    assert summary_after_onboarding_payload['latest_onboarding_state_id'] == 'onboard-roundtrip'
+    assert summary_after_onboarding_payload['latest_activity_at'] == '2026-04-12T10:30:00+00:00'

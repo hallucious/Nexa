@@ -87,6 +87,20 @@ def _binding_row(binding_id: str, updated_at: str, *, workspace_id: str = 'ws-00
         'updated_by_user_id': 'user-owner',
     }
 
+
+
+def _onboarding_row(onboarding_state_id: str, updated_at: str, *, user_id: str = "user-collab", workspace_id: str = "ws-001", current_step: str = "workspace-ready") -> dict:
+    return {
+        'onboarding_state_id': onboarding_state_id,
+        'user_id': user_id,
+        'workspace_id': workspace_id,
+        'first_success_achieved': True,
+        'advanced_surfaces_unlocked': True,
+        'dismissed_guidance_state': {},
+        'current_step': current_step,
+        'updated_at': updated_at,
+    }
+
 def _headers(user_id: str = 'user-owner') -> dict[str, str]:
     return {
         'Authorization': 'Bearer token',
@@ -99,6 +113,9 @@ def test_recent_activity_service_returns_sorted_paginated_feed() -> None:
         request_auth=_auth('user-collab'),
         workspace_rows=(_workspace_row(),),
         membership_rows=(_membership(),),
+        onboarding_rows=(
+            _onboarding_row('onboard-001', '2026-04-11T12:12:00+00:00'),
+        ),
         run_rows=(
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
@@ -121,9 +138,9 @@ def test_recent_activity_service_returns_sorted_paginated_feed() -> None:
     )
     assert outcome.ok is True
     assert outcome.response is not None
-    assert [item.activity_type for item in outcome.response.activities] == ['managed_secret_updated', 'provider_binding_updated']
+    assert [item.activity_type for item in outcome.response.activities] == ['onboarding_updated', 'managed_secret_updated']
     assert outcome.response.next_cursor == outcome.response.activities[-1].activity_id
-    assert outcome.response.total_visible_count == 6
+    assert outcome.response.total_visible_count == 7
 
 
 def test_recent_activity_summary_filters_to_visible_workspace() -> None:
@@ -131,6 +148,9 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
         request_auth=_auth('user-collab'),
         workspace_rows=(_workspace_row(), _workspace_row('ws-002', owner_user_id='user-other', title='Other Workspace')),
         membership_rows=(_membership(),),
+        onboarding_rows=(
+            _onboarding_row('onboard-001', '2026-04-11T12:11:00+00:00'),
+        ),
         run_rows=(
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='failed', status_family='terminal_failure', workspace_id='ws-002'),
@@ -163,7 +183,9 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
     assert outcome.response.recent_managed_secret_count == 1
     assert outcome.response.latest_provider_binding_id == 'binding-001'
     assert outcome.response.latest_managed_secret_ref == 'secret://ws-001/openai'
-    assert outcome.response.latest_activity_at == '2026-04-11T12:10:00+00:00'
+    assert outcome.response.recent_onboarding_count == 1
+    assert outcome.response.latest_onboarding_state_id == 'onboard-001'
+    assert outcome.response.latest_activity_at == '2026-04-11T12:11:00+00:00'
 
 
 def test_recent_activity_route_family_round_trip() -> None:
@@ -177,6 +199,9 @@ def test_recent_activity_route_family_round_trip() -> None:
         ),
         workspace_rows=(_workspace_row(),),
         membership_rows=(_membership(),),
+        onboarding_rows=(
+            _onboarding_row('onboard-001', '2026-04-11T12:12:00+00:00'),
+        ),
         run_rows=(
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
@@ -198,8 +223,8 @@ def test_recent_activity_route_family_round_trip() -> None:
     )
     assert activity_response.status_code == 200
     assert activity_response.body['returned_count'] == 2
-    assert activity_response.body['activities'][0]['activity_type'] == 'managed_secret_updated'
-    assert activity_response.body['activities'][0]['links']['managed_secret'] == 'secret://ws-001/openai'
+    assert activity_response.body['activities'][0]['activity_type'] == 'onboarding_updated'
+    assert activity_response.body['activities'][0]['links']['onboarding'] == '/api/users/me/onboarding?workspace_id=ws-001'
 
     summary_response = RunHttpRouteSurface.handle_history_summary(
         http_request=HttpRouteRequest(
@@ -210,6 +235,9 @@ def test_recent_activity_route_family_round_trip() -> None:
         ),
         workspace_rows=(_workspace_row(),),
         membership_rows=(_membership(),),
+        onboarding_rows=(
+            _onboarding_row('onboard-001', '2026-04-11T12:12:00+00:00'),
+        ),
         run_rows=(
             _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
             _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
@@ -238,6 +266,8 @@ def test_recent_activity_route_family_round_trip() -> None:
     assert summary_response.body['latest_probe_event_id'] == 'probe-001'
     assert summary_response.body['latest_provider_binding_id'] == 'binding-001'
     assert summary_response.body['latest_managed_secret_ref'] == 'secret://ws-001/openai'
+    assert summary_response.body['recent_onboarding_count'] == 1
+    assert summary_response.body['latest_onboarding_state_id'] == 'onboard-001'
 
 
 def test_recent_activity_accepts_provider_probe_projection_aliases() -> None:

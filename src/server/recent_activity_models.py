@@ -7,6 +7,7 @@ RecentActivityFailureFamily = Literal["product_read_failure"]
 _ALLOWED_RECENT_ACTIVITY_FAILURE_FAMILIES = {"product_read_failure"}
 _ALLOWED_ACTIVITY_TYPES = {
     "workspace_updated",
+    "onboarding_updated",
     "run_queued",
     "run_running",
     "run_completed",
@@ -24,6 +25,7 @@ _ALLOWED_HISTORY_SUMMARY_SCOPES = {"account", "workspace"}
 @dataclass(frozen=True)
 class ProductRecentActivityLinks:
     workspace: Optional[str] = None
+    onboarding: Optional[str] = None
     run_status: Optional[str] = None
     run_result: Optional[str] = None
     provider_binding: Optional[str] = None
@@ -101,11 +103,13 @@ class ProductHistorySummaryResponse:
     failed_probe_count: int = 0
     recent_provider_binding_count: int = 0
     recent_managed_secret_count: int = 0
+    recent_onboarding_count: int = 0
     latest_activity_at: Optional[str] = None
     latest_run_id: Optional[str] = None
     latest_probe_event_id: Optional[str] = None
     latest_provider_binding_id: Optional[str] = None
     latest_managed_secret_ref: Optional[str] = None
+    latest_onboarding_state_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         if self.scope not in _ALLOWED_HISTORY_SUMMARY_SCOPES:
@@ -121,6 +125,7 @@ class ProductHistorySummaryResponse:
             'failed_probe_count',
             'recent_provider_binding_count',
             'recent_managed_secret_count',
+            'recent_onboarding_count',
         ):
             if getattr(self, field_name) < 0:
                 raise ValueError(f'ProductHistorySummaryResponse.{field_name} must be >= 0')

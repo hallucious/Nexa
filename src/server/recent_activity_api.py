@@ -81,6 +81,7 @@ class RecentActivityService:
         request_auth: RequestAuthContext,
         workspace_rows: Sequence[Mapping[str, Any]] = (),
         membership_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
@@ -137,6 +138,37 @@ class RecentActivityService:
                     workspace_title=item.title,
                     summary=f'Workspace "{item.title}" was updated.',
                     links=ProductRecentActivityLinks(workspace=item.links.detail),
+                )
+            )
+        user_id = request_auth.requested_by_user_ref or ''
+        for row in onboarding_rows:
+            row_user_id = str(row.get('user_id') or '').strip()
+            row_workspace_id = str(row.get('workspace_id') or '').strip()
+            if row_user_id != user_id or not row_workspace_id:
+                continue
+            if row_workspace_id not in visible_ids:
+                continue
+            if workspace_id is not None and row_workspace_id != workspace_id:
+                continue
+            onboarding_state_id = str(row.get('onboarding_state_id') or '').strip()
+            occurred_at = str(row.get('updated_at') or '').strip()
+            if not onboarding_state_id or not occurred_at:
+                continue
+            workspace_title = titles.get(row_workspace_id, row_workspace_id)
+            current_step = str(row.get('current_step') or '').strip() or 'updated'
+            activities.append(
+                ProductRecentActivityItemView(
+                    activity_id=f'onboarding:{onboarding_state_id}:{occurred_at}',
+                    activity_type='onboarding_updated',
+                    occurred_at=occurred_at,
+                    workspace_id=row_workspace_id,
+                    workspace_title=workspace_title,
+                    summary=f'Onboarding state moved to {current_step}.',
+                    actor_user_id=row_user_id or None,
+                    links=ProductRecentActivityLinks(
+                        workspace=f'/api/workspaces/{row_workspace_id}',
+                        onboarding=f'/api/users/me/onboarding?workspace_id={row_workspace_id}',
+                    ),
                 )
             )
         for row in run_rows:
@@ -303,6 +335,7 @@ class RecentActivityService:
         request_auth: RequestAuthContext,
         workspace_rows: Sequence[Mapping[str, Any]] = (),
         membership_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
@@ -367,6 +400,21 @@ class RecentActivityService:
             filtered_binding_rows.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('binding_id') or '')), reverse=True)
             latest_binding_at = str(filtered_binding_rows[0].get('updated_at') or filtered_binding_rows[0].get('created_at') or '').strip() or None
             latest_binding_id = str(filtered_binding_rows[0].get('binding_id') or '').strip() or None
+        user_id = request_auth.requested_by_user_ref or ''
+        latest_onboarding_at = None
+        latest_onboarding_state_id = None
+        filtered_onboarding_rows = [
+            row for row in onboarding_rows
+            if str(row.get('user_id') or '').strip() == user_id
+            and str(row.get('workspace_id') or '').strip() in visible_ids
+            and (workspace_id is None or str(row.get('workspace_id') or '').strip() == workspace_id)
+            and str(row.get('updated_at') or '').strip()
+        ]
+        if filtered_onboarding_rows:
+            filtered_onboarding_rows.sort(key=lambda row: (str(row.get('updated_at') or ''), str(row.get('onboarding_state_id') or '')), reverse=True)
+            latest_onboarding_at = str(filtered_onboarding_rows[0].get('updated_at') or '').strip() or None
+            latest_onboarding_state_id = str(filtered_onboarding_rows[0].get('onboarding_state_id') or '').strip() or None
+
         latest_secret_at = None
         latest_secret_ref = None
         filtered_secret_rows = [
@@ -383,6 +431,7 @@ class RecentActivityService:
             latest_activity_at,
             latest_binding_at,
             latest_secret_at,
+            latest_onboarding_at,
             latest_probe.occurred_at if latest_probe is not None else None,
         ) if value]
         latest_activity_at = max(candidate_times) if candidate_times else None
@@ -394,6 +443,7 @@ class RecentActivityService:
         failed_probe_count = sum(1 for record in filtered_probe_rows if record.probe_status.lower() not in {'reachable', 'warning'})
         recent_provider_binding_count = len(filtered_binding_rows)
         recent_managed_secret_count = len(filtered_secret_rows)
+        recent_onboarding_count = len(filtered_onboarding_rows)
         return HistorySummaryReadOutcome(
             response=ProductHistorySummaryResponse(
                 scope='workspace' if workspace_id is not None else 'account',
@@ -408,10 +458,12 @@ class RecentActivityService:
                 failed_probe_count=failed_probe_count,
                 recent_provider_binding_count=recent_provider_binding_count,
                 recent_managed_secret_count=recent_managed_secret_count,
+                recent_onboarding_count=recent_onboarding_count,
                 latest_activity_at=latest_activity_at,
                 latest_run_id=str(latest_run.get('run_id') or '').strip() or None if latest_run is not None else None,
                 latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
                 latest_provider_binding_id=latest_binding_id,
                 latest_managed_secret_ref=latest_secret_ref,
+                latest_onboarding_state_id=latest_onboarding_state_id,
             )
         )
