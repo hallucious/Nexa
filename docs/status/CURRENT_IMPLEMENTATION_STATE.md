@@ -1,51 +1,56 @@
 # CURRENT_IMPLEMENTATION_STATE
 
-Version: 1.1.0
+Version: 1.2.0
 
 ## Purpose
 
-This document is the short-form implementation truth sheet for the current repository state.
+This document is the short-form implementation truth sheet for the current uploaded repository baseline.
 
 It exists to answer four practical questions quickly:
 
 1. What is already implemented in code?
 2. What is only partially converged?
 3. What should not be reopened casually?
-4. What is still genuinely open after the recent product-flow shell convergence work?
+4. What is still genuinely open after the repository moved into a broad server/product continuity line?
 
 This document is intentionally implementation-first.
-It is not a replacement for the detailed architecture/spec documents.
+It is not a replacement for BLUEPRINT or the detailed spec documents.
 
 ## Authoritative Snapshot
 
-- authoritative implementation baseline commit: `c869806`
-- authoritative verified baseline: `1848 passed, 9 skipped`
-- status source: latest repository snapshot after product-flow E2E proof projection
+- authoritative implementation baseline commit: `d468795`
+- latest explicitly confirmed verified baseline: `2087 passed, 13 skipped`
+- status source: uploaded `Nexa_d468795.zip` plus the matching session handoff baseline
 
 ## One-Line Position
 
-Nexa is **not** in a "UI not started" state.
-It is in a **runtime/storage foundation complete, UI foundation implemented, product-flow shell largely converged, final live E2E proof now reflected in the shell/workflow evidence layer** state.
+Nexa is **not** in a “UI not started” state,
+and it is also no longer accurately described as only a late shell/product-flow convergence repository.
+
+It is in an **engine/storage/designer/UI foundation complete enough, broad Phase 4.5 server/product continuity already present** state.
 
 ## Sector Matrix
 
 | Sector | Status | Practical meaning |
 |---|---|---|
-| UI adapter / view-model layer | Complete baseline | Core UI projections exist and are test-backed across panel/workspace/hub surfaces |
+| execution engine core | Complete baseline | dependency-based runtime, savefile execution, provider/plugin runtime, and observability foundations are present |
+| storage / savefile lifecycle | Complete baseline | role-aware `.nex` lifecycle and savefile/state semantics are present |
+| UI adapter / view-model layer | Complete baseline | Core UI projections exist across panel/workspace/shell surfaces |
 | UI persistence / storage boundary | Complete baseline | Working Save may carry UI continuity; Commit Snapshot must not carry canonical `ui` |
-| i18n foundation | Complete baseline | translation lookup, EN fallback, KO/EN resources, UI language persistence boundary all exist |
-| i18n major retrofit | Complete baseline | main panel / workflow / workspace / shell / hub surfaces are localized; residual cleanup is minor rather than architectural |
-| live execution / trace / artifact / diff shell surface | Implemented shell-linked baseline | Python-side projections exist and are linked into product-flow shell composition |
-| Designer proposal flow projection | Implemented shell-linked baseline | intent / patch / precheck / preview / approval data is projected into UI surfaces |
-| product-flow shell integration | Implemented convergence baseline | shell/workspace/hub composition plus journey / runbook / handoff / readiness / E2E path / closure / transition / gateway / E2E proof projections are present |
-| Subcircuit | Implemented foundation | schema/model/validator/runtime/example coverage exists; broader future work should be code-first, not theory-first |
-| E2E user flow closure | Converged shell proof baseline | scenario-level shell/workflow evidence now includes the final proof projection for review / commit / run / follow-through closure |
+| UI i18n foundation | Complete baseline | EN fallback plus KO/EN UI resource support and persistence boundary are present |
+| Designer proposal/control foundation | Implemented baseline | session-state / proposal / precheck / preview / approval surfaces are code-backed |
+| shell / workflow / product-flow projection | Implemented baseline | builder/workflow/shell/workspace/product-flow hubs and projections are present |
+| server continuity/API layer | Broad implemented surface | workspace/onboarding/run/provider/artifact-trace/activity continuity APIs and stores already exist |
+| framework/FastAPI route binding layer | Implemented but audit-sensitive | HTTP route surface, framework bindings, and FastAPI bindings are present and now require parity discipline |
+| database/migration foundation | Implemented baseline | schema-family modeling and migration foundation exist for server continuity sectors |
+| productized frontend shell | Not fully closed | Python-side UI shell/projections are substantial, but this is not yet a finished end-user frontend product |
+| formal Phase 4.5 gate closure | Not fully closed | the code surface exists, but production-grade gate decisions still require explicit closure |
 
 ## Stable Enough To Stop Reopening
 
 The following should now be treated as closed baseline decisions unless a real contradiction is found.
 
-### 1. UI truth ownership
+### 1. Engine/UI truth ownership
 - engine owns structural truth
 - engine owns approval truth
 - engine owns execution truth
@@ -56,33 +61,34 @@ The following should now be treated as closed baseline decisions unless a real c
 - canonical snapshot-side `ui` is not allowed
 - Working Save -> Commit Snapshot must strip or reject canonical `ui`
 
-### 3. i18n direction
-- Nexa UI is structurally multilingual now
-- English fallback is mandatory
-- Korean and English are the initial supported UI languages
-- localized display must not leak into engine-owned truth
+### 3. Designer governance direction
+- Designer remains proposal-first
+- Designer may not silently mutate committed truth
+- explicit approval/revision continuity remains required
 
-### 4. Shell architecture
-- UI remains a replaceable shell above the engine
-- adapter/view-model boundary remains mandatory
-- panel/workspace/hub composition must not bypass the adapter boundary
+### 4. Server continuity existence
+- the `src/server/` continuity layer is already real code and tests
+- future work may refine it, but it should not be described as missing
 
-### 5. Product-flow shell projection stack
-- journey / runbook / handoff / readiness / E2E path / closure / transition / gateway / E2E proof are now part of the implemented shell-level convergence baseline
-- future work should tighten real boundary behavior rather than reopen whether these projection families should exist
+### 5. Macro-roadmap distinction
+- the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
+- current code reality being deep in Phase 4.5 does not erase that roadmap authority
 
 ## Must Remain Open
 
 The following are still open and should not be falsely marked complete.
 
-### 1. Final live commit/run/follow-through proof
-The shell now projects the relevant gates and boundaries, but live boundary proof still needs final convergence against real workflow behavior.
+### 1. Formal Phase 4.5 implementation-gate closure
+The decision set exists, but production-grade closure still depends on explicit confirmation of hosting/auth/database/secret/API/session choices.
 
-### 2. Final integrated Designer control-plane proof
-The proposal-flow surfaces and gates exist, but end-to-end review/approval/revision behavior still needs final proof at the workflow boundary level.
+### 2. Route / binding / export parity
+The current server line has enough surface area that drift between route definitions, framework bindings, and FastAPI bindings is now a real implementation risk.
 
 ### 3. Broader end-user frontend productization
-The Python-side UI shell and product-flow control-plane models are substantially implemented, but they are not yet the same thing as a finished user-facing frontend product.
+The Python-side UI shell and workflow/product-flow projections are substantial, but they are not yet the same thing as a finished user-facing frontend product.
+
+### 4. Macro-roadmap reconciliation
+The project still needs an explicit choice about whether the next large push continues deeper server continuity or returns to roadmap-sequenced beginner/productization work.
 
 ## Reopen-Prohibited Topics
 
@@ -90,22 +96,29 @@ Do not casually reopen the following:
 
 - whether UI is above the engine
 - whether `.nex.ui` may become canonical snapshot truth
-- whether UI i18n should be postponed until later
 - whether Designer may silently mutate committed truth
-- whether storage-role visibility matters in the shell
-- whether product-flow shell convergence should be replaced by another theory-only document cycle
+- whether the server continuity/API line already exists in the repository
+- whether the macro roadmap still matters once current code reality moved into Phase 4.5
 
 ## Keep-Open Topics
 
 Continue treating the following as active implementation topics:
 
-- final live E2E workflow proof
-- real commit/run/follow-through convergence
-- broader product-facing realization beyond the now-implemented shell proof baseline
-- broader frontend/product shell realization beyond Python-side projection models
+- formal Phase 4.5 implementation-gate closure
+- route / binding / export parity across the server surface
+- server continuity consolidation
+- broader frontend/product realization beyond the Python-side shell
+- roadmap reconciliation after truthful top-level status synchronization
 
 ## Recommended Immediate Next Batch
 
 The most rational immediate next batch is:
 
-**perform one last technical convergence pass only if a real live E2E gap is found; otherwise treat top-level documentation as synchronized and move toward the next product-facing implementation line.**
+**consolidate the existing Phase 4.5 server continuity line before adding another broad implementation family.**
+
+Practical meaning:
+
+1. audit `http_route_surface`, `framework_binding`, and `fastapi_binding` for parity
+2. audit server stores/schema families/tests against the Phase 4.5 decision documents
+3. decide whether the current server line is still pre-gate convergence work or whether the gate is now formally satisfied
+4. only then choose whether to continue deeper server implementation or pivot back to roadmap-sequenced beginner/productization work

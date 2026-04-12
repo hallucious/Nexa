@@ -109,6 +109,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "put_workspace_provider_binding",
         "list_workspace_provider_health",
         "get_workspace_provider_health",
+        "probe_workspace_provider",
         "list_provider_probe_history",
         "get_onboarding",
         "put_onboarding",

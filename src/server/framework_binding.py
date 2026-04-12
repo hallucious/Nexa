@@ -77,6 +77,12 @@ class FrameworkRouteBindings:
             summary="Read provider health detail for a workspace binding.",
         ),
         FrameworkRouteDefinition(
+            route_name="probe_workspace_provider",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe",
+            summary="Run a provider connectivity probe for a workspace binding.",
+        ),
+        FrameworkRouteDefinition(
             route_name="list_provider_probe_history",
             method="GET",
             path_template="/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe-history",

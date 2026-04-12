@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.12.0
+Version: 1.13.0
 
 ────────────────
 Architecture Constitution
@@ -203,30 +203,40 @@ Engine
 
 Current implementation baseline:
 
-* authoritative implementation baseline commit: `c869806`
-* authoritative verified baseline: `1848 passed, 9 skipped`
-* broad precision foundations are now present in the existing engine / contract / designer sectors rather than in a separate precision namespace
-* confidence, budget-aware routing, and safety-gate semantics are now wired into the real provider runtime boundary and projected into execution-record-facing observability summaries
-* execution-record node cards and observability summaries can now surface routing / safety / confidence precision data when runtime trace includes it
-* UI adapter / view-model foundation is now broadly implemented across panel, workspace, shell, and hub surfaces
-* UI-owned storage persistence and commit-boundary stripping are now code-backed and regression-backed rather than doc-only direction
-* UI i18n foundation is present, and major user-facing surfaces now resolve through the shared localization layer for English/Korean
-* product-flow shell convergence is now present across journey, runbook, handoff, readiness, E2E path, closure, transition, gateway, and E2E proof projection layers
-* the shell-side projection stack now extends through final E2E proof; remaining work should be treated as broader product realization rather than missing proof-layer convergence
-* the precision documentation set has been merged back into existing best-fit architectural / contract / storage documents; a standalone precision sector is no longer the intended long-term documentation shape
-* verifier follow-up branch candidates are now projected as bounded branch records and surfaced into execution-record observability rather than remaining an unused contract surface
+* authoritative implementation baseline commit: `d468795`
+* latest explicitly confirmed verified baseline: `2087 passed, 13 skipped`
+* the uploaded repository is no longer accurately described by the earlier `c869806` shell/product-flow-only status picture
+* the codebase now contains a broad Phase 4.5 server/product continuity surface under `src/server/`
+* that server surface already spans workspace continuity, onboarding continuity, run admission/list/read, artifact/trace reads, provider binding/secret/health/probe/probe-history APIs, recent activity aggregation, worker-queue orchestration, framework/FastAPI bindings, and database/migration foundations
+* canonical continuity stores already exist for:
+  * `workspace_registry`
+  * `onboarding_state`
+  * `provider_binding`
+  * `managed_secret_metadata`
+  * `provider_probe_history`
+* substantial UI / Designer / storage foundations remain present, but the practical near-term implementation emphasis is now the server/API continuity layer above the engine core
+* the macro implementation roadmap is still governed by `nexa_implementation_order_final_v2_2.md`; practical code reality being deep in Phase 4.5 does **not** replace that roadmap authority
+* the most important recent correction is that the earlier top-level truth documents had fallen behind the actual codebase; they must now be interpreted only after synchronization to the `d468795` baseline
 
-* outcome memory now participates as a bounded runtime hint / post-run learning store at the node execution boundary
-* execution record now projects a trace-intelligence summary when node-level trace evidence is available
-* designer proposal precheck now consumes the designer constraint lint / auto-critique system instead of leaving it as an isolated helper
-* review-gate resume now supports explicit human decision recording: actor-tagged resume decisions can be appended into the human decision registry and surfaced through runtime events / execution-record observability summaries
-* review-gate resume may now turn explicit human merge choices into bounded merge-result declarations, emitted as runtime events and projected into execution-record observability without introducing free-form merge execution semantics
-* precision closeout status: all originally introduced precision-era foundations now have at least one bounded real downstream consumer; remaining work is simplification / cleanup rather than new precision subsystem growth
+Repository shape at this baseline (directly inspectable from the uploaded archive):
+
+* `src/server/`: 43 top-level files
+* `tests/test_server_*.py`: 22 files
+* major source sectors present simultaneously:
+  * `engine`
+  * `storage`
+  * `designer`
+  * `ui`
+  * `server`
+  * `providers`
+  * `contracts`
+  * `platform`
 
 Interpretation rule:
 
-* do not reopen Subcircuit Batch 1 unless a concrete regression is found
-* do not treat Designer Session State Card as future-only design work
+* do not treat Nexa as “UI not started”
+* do not treat Nexa as only a late shell/product-flow proof repository
+* do not describe the server continuity line as merely future Phase 4.5 planning work
 * do not skip the explicit proposal boundary:
   Intent -> Patch -> Precheck -> Preview -> Approval -> Commit
 
