@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+from src.server.run_action_log_models import ProductRunLastActionView
 
 ReadFailureFamily = Literal["product_read_failure", "run_not_found"]
 ResultReadState = Literal["not_ready", "ready_success", "ready_partial", "ready_failure"]
@@ -128,6 +129,7 @@ class ProductRunStatusResponse:
     latest_engine_signal: Optional[ProductEngineSignalView] = None
     recovery: Optional[ProductRunRecoveryView] = None
     actions: Optional[ProductRunControlActionsView] = None
+    last_action: Optional[ProductRunLastActionView] = None
     links: ProductRunLinks = field(default_factory=lambda: ProductRunLinks(result="/placeholder/result", trace="/placeholder/trace", artifacts="/placeholder/artifacts"))
     message: Optional[str] = None
 
@@ -211,6 +213,7 @@ class ProductRunResultResponse:
     trace_ref: Optional[ProductTraceRefView] = None
     recovery: Optional[ProductRunRecoveryView] = None
     actions: Optional[ProductRunControlActionsView] = None
+    last_action: Optional[ProductRunLastActionView] = None
     metrics: dict[str, Any] = field(default_factory=dict)
     updated_at: Optional[str] = None
     message: Optional[str] = None

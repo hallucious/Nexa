@@ -17,6 +17,7 @@ from src.server.run_read_models import ProductExecutionTargetView, ProductResult
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 from src.server.run_read_api import _recovery_view_from_run_row
 from src.server.run_control_api import build_run_control_actions
+from src.server.run_action_log_api import latest_action_from_run_record
 
 
 _ALLOWED_WORKSPACE_LIST_ROLES = ("owner", "admin", "collaborator", "reviewer", "viewer")
@@ -226,6 +227,7 @@ class RunListReadService:
                         ),
                         run_record_row=row,
                     ),
+                    last_action=latest_action_from_run_record(row),
                     links=_build_links(run_id),
                 )
             )

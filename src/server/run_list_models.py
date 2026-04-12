@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Literal
 
 from src.server.run_read_models import ProductExecutionTargetView, ProductResultSummaryView, ProductRunControlActionsView, ProductRunRecoveryView
+from src.server.run_action_log_models import ProductRunLastActionView
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
 
 RunListReadFailureFamily = Literal["product_read_failure", "workspace_not_found", "invalid_cursor"]
@@ -50,6 +51,7 @@ class ProductRunListItemView:
     result_summary: Optional[ProductResultSummaryView] = None
     recovery: Optional[ProductRunRecoveryView] = None
     actions: Optional[ProductRunControlActionsView] = None
+    last_action: Optional[ProductRunLastActionView] = None
     links: ProductRunListLinks = field(default_factory=lambda: ProductRunListLinks(
         status="/placeholder/status",
         result="/placeholder/result",

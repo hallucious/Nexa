@@ -29,6 +29,7 @@ from src.server.provider_probe_api import ProviderProbeRunner, ProviderProbeServ
 from src.server.provider_probe_models import ProductProviderProbeRequest
 from src.server.provider_secret_models import ProductProviderBindingWriteRequest
 from src.server.run_control_api import RunControlService
+from src.server.run_action_log_api import RunActionLogReadService
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -89,6 +90,7 @@ class RunHttpRouteSurface:
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
+        ("get_run_actions", "GET", "/api/runs/{run_id}/actions"),
         ("retry_run", "POST", "/api/runs/{run_id}/retry"),
         ("force_reset_run", "POST", "/api/runs/{run_id}/force-reset"),
         ("mark_run_reviewed", "POST", "/api/runs/{run_id}/mark-reviewed"),
@@ -1113,6 +1115,46 @@ class RunHttpRouteSurface:
         if outcome.ok:
             assert outcome.accepted is not None
             return _route_response(200, asdict(outcome.accepted))
+        assert outcome.rejected is not None
+        return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+
+    @classmethod
+    def handle_run_actions(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        run_context: Optional[RunAuthorizationContext],
+        run_record_row: Optional[Mapping[str, Any]],
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Run actions route only supports GET."})
+        run_id = str(http_request.path_params.get("run_id") or "").strip() if http_request.path_params else ""
+        if not run_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.run_id_missing", "message": "Run id path parameter is required."})
+        expected_path = f"/api/runs/{run_id}/actions"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        outcome = RunActionLogReadService.read_actions(
+            request_auth=_request_auth(http_request),
+            run_context=run_context,
+            run_record_row=run_record_row,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        if outcome.ok:
+            assert outcome.response is not None
+            return _route_response(200, asdict(outcome.response))
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 

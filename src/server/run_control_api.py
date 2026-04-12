@@ -15,6 +15,7 @@ from src.server.run_control_models import (
 from src.server.run_read_models import ProductRunControlActionsView, ProductRunRecoveryView
 from src.server.run_recovery_projection import recovery_projection_from_run_row
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
+from src.server.run_action_log_api import latest_action_from_run_record
 
 RunRecordWriter = Callable[[Mapping[str, Any]], Any]
 NowIsoFactory = Callable[[], str]
@@ -54,6 +55,34 @@ def _recovery_view_from_run_row(run_record_row: Mapping[str, Any]) -> ProductRun
 
 def _is_worker_infra_failure(run_record_row: Mapping[str, Any]) -> bool:
     return str(run_record_row.get("latest_error_family") or "").strip() == "worker_infrastructure_failure"
+
+
+def _append_action_log(updated_row: dict[str, Any], *, action: str, actor_user_id: str, timestamp: str | None, before_row: Mapping[str, Any], after_row: Mapping[str, Any]) -> None:
+    existing = updated_row.get("action_log")
+    entries = list(existing) if isinstance(existing, Sequence) and not isinstance(existing, (str, bytes, bytearray)) else []
+    entries.append({
+        "event_id": f"act_{uuid.uuid4().hex}",
+        "action": action,
+        "actor_user_id": actor_user_id,
+        "timestamp": timestamp or "",
+        "before_state": {
+            "status": str(before_row.get("status") or ""),
+            "status_family": str(before_row.get("status_family") or ""),
+            "queue_job_id": before_row.get("queue_job_id"),
+            "worker_attempt_number": int(before_row.get("worker_attempt_number") or 0),
+            "orphan_review_required": bool(before_row.get("orphan_review_required")),
+            "latest_error_family": before_row.get("latest_error_family"),
+        },
+        "after_state": {
+            "status": str(after_row.get("status") or ""),
+            "status_family": str(after_row.get("status_family") or ""),
+            "queue_job_id": after_row.get("queue_job_id"),
+            "worker_attempt_number": int(after_row.get("worker_attempt_number") or 0),
+            "orphan_review_required": bool(after_row.get("orphan_review_required")),
+            "latest_error_family": after_row.get("latest_error_family"),
+        },
+    })
+    updated_row["action_log"] = entries
 
 
 def build_run_control_actions(*, request_auth: RequestAuthContext, run_context: Optional[RunAuthorizationContext], run_record_row: Optional[Mapping[str, Any]]) -> ProductRunControlActionsView | None:
@@ -205,6 +234,7 @@ class RunControlService:
 
         if now_iso is not None:
             updated_row["updated_at"] = now_iso
+        _append_action_log(updated_row, action=action, actor_user_id=request_auth.requested_by_user_ref, timestamp=now_iso, before_row=run_record_row, after_row=updated_row)
         if run_record_writer is not None:
             run_record_writer(updated_row)
 

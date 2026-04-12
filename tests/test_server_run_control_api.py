@@ -91,6 +91,8 @@ def test_run_control_service_retry_requeues_and_increments_attempt() -> None:
     assert outcome.accepted.actions.can_retry is True
     assert written["queue_job_id"] == "job-002"
     assert written["worker_attempt_number"] == 2
+    assert len(written["action_log"]) == 1
+    assert written["action_log"][0]["action"] == "retry"
 
 
 def test_run_control_service_force_reset_requires_leased_run() -> None:
@@ -189,3 +191,63 @@ def test_fastapi_binding_exposes_run_control_routes() -> None:
     assert response.status_code == 200
     assert response.json()["queue_job_id"] is not None
     assert rows["run-001"]["status"] == "queued"
+
+
+def test_run_control_service_records_last_action_on_mark_reviewed() -> None:
+    written = {}
+
+    def writer(row):
+        written.update(row)
+        return row
+
+    outcome = RunControlService.apply_action(
+        action="mark_reviewed",
+        request_auth=_auth(user_id="user-reviewer", roles=("reviewer",)),
+        run_context=RunAuthorizationContext(run_id="run-001", workspace_context=_workspace_context(), run_owner_user_ref="user-owner"),
+        run_record_row=_run_row(status="queued", status_family="pending", orphan_review_required=True),
+        run_record_writer=writer,
+        now_iso_factory=lambda: "2026-04-13T01:00:00+00:00",
+    )
+
+    assert outcome.ok is True
+    assert written["action_log"][-1]["action"] == "mark_reviewed"
+    assert written["action_log"][-1]["actor_user_id"] == "user-reviewer"
+
+
+def test_fastapi_binding_exposes_run_actions_route() -> None:
+    rows = {
+        "run-001": _run_row(
+            action_log=[
+                {
+                    "event_id": "act-001",
+                    "action": "retry",
+                    "actor_user_id": "user-owner",
+                    "timestamp": "2026-04-13T01:00:00+00:00",
+                    "before_state": {"status": "failed"},
+                    "after_state": {"status": "queued"},
+                }
+            ]
+        )
+    }
+
+    app = FastApiRouteBindings(
+        config=FastApiBindingConfig(),
+        dependencies=FastApiRouteDependencies(
+            run_context_provider=lambda run_id: _run_context() if run_id == "run-001" else None,
+            run_record_provider=lambda run_id: rows.get(run_id),
+            workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "title": "Primary Workspace"},
+            now_iso_provider=lambda: "2026-04-13T01:00:00+00:00",
+        ),
+    ).build_app()
+
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app)
+    response = client.get(
+        "/api/runs/run-001/actions",
+        headers={"Authorization": "Bearer token", "X-Nexa-Session-Claims": '{"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["admin"]}'},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["returned_count"] == 1
+    assert body["actions"][0]["action"] == "retry"
