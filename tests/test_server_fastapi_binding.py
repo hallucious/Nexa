@@ -431,6 +431,8 @@ def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() ->
     catalog_payload = catalog_response.json()
     assert catalog_payload["returned_count"] == 1
     assert catalog_payload["providers"][0]["provider_key"] == "openai"
+    assert catalog_payload["provider_continuity"]["provider_binding_count"] >= 1
+    assert catalog_payload["activity_continuity"]["recent_run_count"] >= 1
 
     bindings_response = client.get("/api/workspaces/ws-001/provider-bindings", headers=_session_headers())
     assert bindings_response.status_code == 200
@@ -841,6 +843,8 @@ def test_fastapi_binding_workspace_create_and_onboarding_round_trip() -> None:
     create_payload = create_response.json()
     assert create_payload['workspace']['workspace_id'] == 'ws-roundtrip'
     assert create_payload['owner_membership_id'] == 'membership-roundtrip'
+    assert create_payload['provider_continuity'] is None
+    assert create_payload['activity_continuity'] is None
 
     list_response = client.get('/api/workspaces', headers=_session_headers())
     assert list_response.status_code == 200

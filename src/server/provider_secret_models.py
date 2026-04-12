@@ -47,6 +47,8 @@ class ProductProviderCatalogEntryView:
 class ProductProviderCatalogResponse:
     returned_count: int
     providers: tuple[ProductProviderCatalogEntryView, ...] = ()
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     message: Optional[str] = None
 
     def __post_init__(self) -> None:

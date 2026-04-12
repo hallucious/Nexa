@@ -278,6 +278,13 @@ class FrameworkRouteBindings:
         workspace_id_factory,
         membership_id_factory,
         now_iso: str,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
         workspace_registry_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_create_workspace(
@@ -285,6 +292,13 @@ class FrameworkRouteBindings:
             workspace_id_factory=workspace_id_factory,
             membership_id_factory=membership_id_factory,
             now_iso=now_iso,
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
             workspace_registry_writer=workspace_registry_writer,
         )
         return cls.to_framework_response(response)
@@ -295,10 +309,24 @@ class FrameworkRouteBindings:
         *,
         request: FrameworkInboundRequest,
         provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_list_provider_catalog(
             http_request=cls.to_http_route_request(request),
             provider_catalog_rows=provider_catalog_rows,
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         return cls.to_framework_response(response)
 

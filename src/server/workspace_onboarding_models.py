@@ -169,6 +169,8 @@ class ProductWorkspaceWriteAcceptedResponse:
     status: str
     workspace: ProductWorkspaceDetailResponse
     owner_membership_id: str
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     message: Optional[str] = None
 
     def __post_init__(self) -> None:

@@ -421,6 +421,13 @@ class RunHttpRouteSurface:
         workspace_id_factory: Callable[[], str],
         membership_id_factory: Callable[[], str],
         now_iso: str,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
         workspace_registry_writer: Callable[[Mapping[str, Any], Mapping[str, Any]], Any] | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -448,6 +455,13 @@ class RunHttpRouteSurface:
             workspace_id_factory=workspace_id_factory,
             membership_id_factory=membership_id_factory,
             now_iso=now_iso,
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         if outcome.ok:
             assert outcome.accepted is not None
@@ -848,6 +862,13 @@ class RunHttpRouteSurface:
         *,
         http_request: HttpRouteRequest,
         provider_catalog_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Provider catalog route only supports GET."})
@@ -856,6 +877,13 @@ class RunHttpRouteSurface:
         outcome = ProviderSecretIntegrationService.list_provider_catalog(
             request_auth=_request_auth(http_request),
             provider_catalog_rows=provider_catalog_rows,
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         if outcome.ok:
             assert outcome.response is not None

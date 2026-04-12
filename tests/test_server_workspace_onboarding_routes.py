@@ -145,11 +145,22 @@ def test_workspace_create_returns_persistence_ready_rows() -> None:
         workspace_id_factory=lambda: 'ws-new',
         membership_id_factory=lambda: 'membership-new',
         now_iso='2026-04-11T13:00:00+00:00',
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(_membership(role='owner', user_id='user-owner'),),
+        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed', 'status_family': 'terminal_success'},),
+        provider_binding_rows=({'binding_id': 'binding-001', 'workspace_id': 'ws-001', 'provider_key': 'openai', 'provider_family': 'openai', 'display_name': 'OpenAI GPT', 'created_at': '2026-04-11T12:01:00+00:00', 'updated_at': '2026-04-11T12:06:00+00:00'},),
+        managed_secret_rows=({'workspace_id': 'ws-001', 'provider_key': 'openai', 'secret_ref': 'secret://ws-001/openai', 'last_rotated_at': '2026-04-11T12:06:30+00:00'},),
+        provider_probe_rows=({'probe_event_id': 'probe-001', 'workspace_id': 'ws-001', 'provider_key': 'openai', 'provider_family': 'openai', 'display_name': 'OpenAI GPT', 'probe_status': 'reachable', 'connectivity_state': 'ok', 'secret_resolution_status': 'resolved', 'requested_model_ref': 'gpt-4.1', 'effective_model_ref': 'gpt-4.1', 'occurred_at': '2026-04-11T12:08:00+00:00', 'requested_by_user_id': 'user-owner', 'message': 'Probe completed.'},),
+        onboarding_rows=({'onboarding_state_id': 'onboard-001', 'user_id': 'user-owner', 'workspace_id': 'ws-001', 'updated_at': '2026-04-11T12:09:00+00:00'},),
     )
     assert outcome.ok is True
     assert outcome.accepted is not None
     assert outcome.accepted.workspace.workspace_id == 'ws-new'
     assert outcome.accepted.owner_membership_id == 'membership-new'
+    assert outcome.accepted.provider_continuity is not None
+    assert outcome.accepted.provider_continuity.provider_binding_count == 1
+    assert outcome.accepted.activity_continuity is not None
+    assert outcome.accepted.activity_continuity.latest_run_id == 'run-001'
     assert outcome.created_workspace_row is not None
     assert outcome.created_workspace_row['owner_user_id'] == 'user-owner'
     assert outcome.created_membership_row is not None

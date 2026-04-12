@@ -69,6 +69,19 @@ def _resolved_workspace_role(user_id: str, workspace_row: Mapping[str, Any], mem
     return None
 
 
+def _visible_workspace_ids_for_user(
+    user_id: str,
+    workspace_rows: Sequence[Mapping[str, Any]],
+    membership_rows: Sequence[Mapping[str, Any]],
+) -> list[str]:
+    normalized_user_id = str(user_id or '').strip()
+    return [
+        str(row.get('workspace_id') or '').strip()
+        for row in workspace_rows
+        if _resolved_workspace_role(normalized_user_id, row, membership_rows) is not None
+    ]
+
+
 def _latest_run_for_workspace(workspace_id: str, run_rows: Sequence[Mapping[str, Any]]) -> Optional[Mapping[str, Any]]:
     candidates = [row for row in run_rows if str(row.get('workspace_id') or '').strip() == workspace_id]
     if not candidates:
@@ -657,6 +670,13 @@ class WorkspaceRegistryService:
         workspace_id_factory,
         membership_id_factory,
         now_iso: str,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> WorkspaceWriteOutcome:
         if not request_auth.is_authenticated:
             return WorkspaceWriteOutcome(
@@ -688,12 +708,36 @@ class WorkspaceRegistryService:
             'created_at': now_iso,
             'updated_at': now_iso,
         }
-        detail = _detail_from_workspace_row(workspace_row, role='owner', current_user_id=owner_user_id, membership_rows=(membership_row,), recent_run_rows=(), onboarding_rows=())
+        combined_workspace_rows = tuple(workspace_rows) + (workspace_row,)
+        combined_membership_rows = tuple(membership_rows) + (membership_row,)
+        detail = _detail_from_workspace_row(
+            workspace_row,
+            role='owner',
+            current_user_id=owner_user_id,
+            membership_rows=combined_membership_rows,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        visible_workspace_ids = _visible_workspace_ids_for_user(owner_user_id, combined_workspace_rows, combined_membership_rows)
+        provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
+            visible_workspace_ids,
+            user_id=owner_user_id,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return WorkspaceWriteOutcome(
             accepted=ProductWorkspaceWriteAcceptedResponse(
                 status='accepted',
                 workspace=detail,
                 owner_membership_id=str(membership_row['membership_id']),
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 message='Workspace continuity has been initialized on the server.',
             ),
             created_workspace_row=workspace_row,
@@ -823,11 +867,11 @@ class OnboardingContinuityService:
                 onboarding_rows=onboarding_rows,
             )
         else:
-            visible_workspace_ids = [
-                str(row.get('workspace_id') or '').strip()
-                for row in workspace_rows
-                if _resolved_workspace_role(request_auth.requested_by_user_ref or '', row, membership_rows) is not None
-            ]
+            visible_workspace_ids = _visible_workspace_ids_for_user(
+                request_auth.requested_by_user_ref or '',
+                workspace_rows,
+                membership_rows,
+            )
             provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
                 visible_workspace_ids,
                 user_id=request_auth.requested_by_user_ref or '',
@@ -956,11 +1000,11 @@ class OnboardingContinuityService:
                 onboarding_rows=activity_rows,
             )
         else:
-            visible_workspace_ids = [
-                str(row.get('workspace_id') or '').strip()
-                for row in workspace_rows
-                if _resolved_workspace_role(request_auth.requested_by_user_ref or '', row, membership_rows) is not None
-            ]
+            visible_workspace_ids = _visible_workspace_ids_for_user(
+                request_auth.requested_by_user_ref or '',
+                workspace_rows,
+                membership_rows,
+            )
             provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
                 visible_workspace_ids,
                 user_id=request_auth.requested_by_user_ref or '',

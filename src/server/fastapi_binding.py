@@ -122,6 +122,13 @@ class FastApiRouteBindings:
                 workspace_id_factory=self.dependencies.workspace_id_factory or (lambda: 'workspace-missing-id-factory'),
                 membership_id_factory=self.dependencies.membership_id_factory or (lambda: 'membership-missing-id-factory'),
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else '',
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 workspace_registry_writer=self.dependencies.workspace_registry_writer,
             )
             return self._framework_response(outbound)
@@ -132,6 +139,13 @@ class FastApiRouteBindings:
             outbound = FrameworkRouteBindings.handle_list_provider_catalog(
                 request=inbound,
                 provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
             )
             return self._framework_response(outbound)
 

@@ -21,7 +21,7 @@ from src.server.provider_secret_models import (
     ProductWorkspaceProviderBindingsResponse,
 )
 
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace, _continuity_projection_for_workspace_ids, _visible_workspace_ids_for_user
 
 SecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
 
@@ -119,6 +119,13 @@ class ProviderSecretIntegrationService:
         *,
         request_auth: RequestAuthContext,
         provider_catalog_rows: Sequence[Mapping[str, Any]] | None = None,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderCatalogReadOutcome:
         if not request_auth.is_authenticated:
             return ProviderCatalogReadOutcome(
@@ -140,8 +147,27 @@ class ProviderSecretIntegrationService:
             )
             for row in _provider_catalog_rows(provider_catalog_rows)
         )
+        visible_workspace_ids = _visible_workspace_ids_for_user(
+            request_auth.requested_by_user_ref or '',
+            workspace_rows,
+            membership_rows,
+        )
+        provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
+            visible_workspace_ids,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return ProviderCatalogReadOutcome(
-            response=ProductProviderCatalogResponse(returned_count=len(providers), providers=providers)
+            response=ProductProviderCatalogResponse(
+                returned_count=len(providers),
+                providers=providers,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
+            )
         )
 
     @classmethod
