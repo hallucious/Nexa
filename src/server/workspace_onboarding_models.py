@@ -86,6 +86,10 @@ class ProductWorkspaceSummaryView:
     created_at: Optional[str] = None
     last_run_id: Optional[str] = None
     last_result_status: Optional[str] = None
+    recovery_state: Optional[str] = None
+    latest_error_family: Optional[str] = None
+    orphan_review_required: bool = False
+    worker_attempt_number: int = 0
     archived: bool = False
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
@@ -104,6 +108,8 @@ class ProductWorkspaceSummaryView:
             raise ValueError(f'Unsupported ProductWorkspaceSummaryView.role: {self.role}')
         if not self.updated_at:
             raise ValueError('ProductWorkspaceSummaryView.updated_at must be non-empty')
+        if self.worker_attempt_number < 0:
+            raise ValueError('ProductWorkspaceSummaryView.worker_attempt_number must be >= 0')
 
 
 @dataclass(frozen=True)
@@ -118,6 +124,10 @@ class ProductWorkspaceDetailResponse:
     collaborator_count: int = 0
     last_run_id: Optional[str] = None
     last_result_status: Optional[str] = None
+    recovery_state: Optional[str] = None
+    latest_error_family: Optional[str] = None
+    orphan_review_required: bool = False
+    worker_attempt_number: int = 0
     continuity_source: Optional[str] = None
     archived: bool = False
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
@@ -139,6 +149,8 @@ class ProductWorkspaceDetailResponse:
             raise ValueError('ProductWorkspaceDetailResponse.collaborator_count must be >= 0')
         if not self.updated_at:
             raise ValueError('ProductWorkspaceDetailResponse.updated_at must be non-empty')
+        if self.worker_attempt_number < 0:
+            raise ValueError('ProductWorkspaceDetailResponse.worker_attempt_number must be >= 0')
 
 
 @dataclass(frozen=True)

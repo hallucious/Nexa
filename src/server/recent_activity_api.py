@@ -7,6 +7,7 @@ from src.server.workspace_onboarding_api import WorkspaceRegistryService, _conti
 from src.server.workspace_onboarding_models import ProductWorkspaceSummaryView
 from src.server.auth_models import RequestAuthContext
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
+from src.server.run_recovery_projection import recovery_projection_from_run_row
 from src.server.recent_activity_models import (
     HistorySummaryReadOutcome,
     ProductHistorySummaryResponse,
@@ -257,6 +258,7 @@ class RecentActivityService:
             status = str(row.get('status') or '').strip() or None
             status_family = str(row.get('status_family') or '').strip() or None
             workspace_title = titles.get(row_workspace_id, row_workspace_id)
+            recovery = recovery_projection_from_run_row(row, include_healthy_without_signal=True)
             summary = f'Run {run_id} is {status or "updated"}.'
             activities.append(
                 ProductRecentActivityItemView(
@@ -270,6 +272,10 @@ class RecentActivityService:
                     status_family=status_family,
                     summary=summary,
                     actor_user_id=str(row.get('requested_by_user_id') or '').strip() or None,
+                    recovery_state=recovery.recovery_state if recovery is not None else None,
+                    latest_error_family=recovery.latest_error_family if recovery is not None else None,
+                    orphan_review_required=recovery.orphan_review_required if recovery is not None else False,
+                    worker_attempt_number=recovery.worker_attempt_number if recovery is not None else 0,
                     links=ProductRecentActivityLinks(
                         workspace=f'/api/workspaces/{row_workspace_id}',
                         run_status=f'/api/runs/{run_id}',

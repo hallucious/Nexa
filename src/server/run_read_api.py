@@ -8,6 +8,7 @@ from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, RunAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunStatusSnapshot
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
+from src.server.run_recovery_projection import recovery_projection_from_run_row
 from src.server.run_read_models import (
     ProductArtifactRefView,
     ProductEngineSignalView,
@@ -48,43 +49,18 @@ def _status_value(run_record_row: Mapping[str, Any], engine_status: EngineRunSta
 
 
 def _recovery_view_from_run_row(run_record_row: Mapping[str, Any]) -> ProductRunRecoveryView | None:
-    queue_job_id = str(run_record_row.get('queue_job_id') or '').strip() or None
-    claimed_by_worker_ref = str(run_record_row.get('claimed_by_worker_ref') or '').strip() or None
-    lease_expires_at = str(run_record_row.get('lease_expires_at') or '').strip() or None
-    latest_error_family = str(run_record_row.get('latest_error_family') or '').strip() or None
-    worker_attempt_number = int(run_record_row.get('worker_attempt_number') or 0)
-    orphan_review_required = bool(run_record_row.get('orphan_review_required'))
-    status = str(run_record_row.get('status') or '').strip().lower()
-
-    has_recovery_signal = any((queue_job_id, claimed_by_worker_ref, lease_expires_at, latest_error_family, orphan_review_required, worker_attempt_number > 0))
-    if not has_recovery_signal:
+    projection = recovery_projection_from_run_row(run_record_row)
+    if projection is None:
         return None
-
-    if orphan_review_required:
-        recovery_state = 'manual_review_required'
-        summary = 'Run continuity requires orphan review before the latest worker state can be trusted.'
-    elif latest_error_family == 'worker_infrastructure_failure' and status in {'queued', 'starting', 'running'}:
-        recovery_state = 'retry_pending'
-        summary = 'Run continuity detected infrastructure failure and is waiting for another worker attempt.'
-    elif latest_error_family == 'worker_infrastructure_failure':
-        recovery_state = 'failed'
-        summary = 'Run continuity failed because the worker infrastructure did not complete the run safely.'
-    elif claimed_by_worker_ref and lease_expires_at and status in {'starting', 'running'}:
-        recovery_state = 'leased'
-        summary = 'Run is currently leased to a worker and the lease window is being tracked.'
-    else:
-        recovery_state = 'healthy'
-        summary = 'Run continuity metadata is present and currently healthy.'
-
     return ProductRunRecoveryView(
-        recovery_state=recovery_state,
-        worker_attempt_number=worker_attempt_number,
-        queue_job_id=queue_job_id,
-        claimed_by_worker_ref=claimed_by_worker_ref,
-        lease_expires_at=lease_expires_at,
-        orphan_review_required=orphan_review_required,
-        latest_error_family=latest_error_family,
-        summary=summary,
+        recovery_state=projection.recovery_state,
+        worker_attempt_number=projection.worker_attempt_number,
+        queue_job_id=projection.queue_job_id,
+        claimed_by_worker_ref=projection.claimed_by_worker_ref,
+        lease_expires_at=projection.lease_expires_at,
+        orphan_review_required=projection.orphan_review_required,
+        latest_error_family=projection.latest_error_family,
+        summary=projection.summary,
     )
 
 

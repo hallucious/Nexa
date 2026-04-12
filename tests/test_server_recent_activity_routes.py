@@ -36,7 +36,7 @@ def _membership(workspace_id: str = 'ws-001', *, user_id: str = 'user-collab', r
     }
 
 
-def _run_row(run_id: str, created_at: str, *, status: str = 'running', status_family: str = 'active', workspace_id: str = 'ws-001', requested_by_user_id: str = 'user-owner') -> dict:
+def _run_row(run_id: str, created_at: str, *, status: str = 'running', status_family: str = 'active', workspace_id: str = 'ws-001', requested_by_user_id: str = 'user-owner', latest_error_family: str | None = None, orphan_review_required: bool = False, worker_attempt_number: int = 0, claimed_by_worker_ref: str | None = None, lease_expires_at: str | None = None, queue_job_id: str | None = None) -> dict:
     return {
         'run_id': run_id,
         'workspace_id': workspace_id,
@@ -49,6 +49,12 @@ def _run_row(run_id: str, created_at: str, *, status: str = 'running', status_fa
         'requested_by_user_id': requested_by_user_id,
         'trace_available': status_family != 'pending',
         'artifact_count': 1,
+        'latest_error_family': latest_error_family,
+        'orphan_review_required': orphan_review_required,
+        'worker_attempt_number': worker_attempt_number,
+        'claimed_by_worker_ref': claimed_by_worker_ref,
+        'lease_expires_at': lease_expires_at,
+        'queue_job_id': queue_job_id,
     }
 
 
@@ -324,3 +330,29 @@ def test_recent_activity_rejected_response_includes_workspace_continuity_project
     assert outcome.rejected.provider_continuity.provider_binding_count == 1
     assert outcome.rejected.activity_continuity is not None
     assert outcome.rejected.activity_continuity.recent_run_count == 1
+
+
+def test_recent_activity_run_items_include_recovery_projection() -> None:
+    outcome = RecentActivityService.list_recent_activity(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(_membership(),),
+        run_rows=(
+            _run_row(
+                'run-002',
+                '2026-04-11T12:07:00+00:00',
+                status='running',
+                status_family='active',
+                latest_error_family='worker_infrastructure_failure',
+                worker_attempt_number=2,
+                queue_job_id='job-002',
+            ),
+        ),
+    )
+    assert outcome.ok is True
+    assert outcome.response is not None
+    run_item = next(item for item in outcome.response.activities if item.activity_type.startswith('run_'))
+    assert run_item.recovery_state == 'retry_pending'
+    assert run_item.latest_error_family == 'worker_infrastructure_failure'
+    assert run_item.worker_attempt_number == 2
+    assert run_item.orphan_review_required is False

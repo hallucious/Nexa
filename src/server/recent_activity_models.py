@@ -49,6 +49,10 @@ class ProductRecentActivityItemView:
     status_family: Optional[str] = None
     summary: Optional[str] = None
     actor_user_id: Optional[str] = None
+    recovery_state: Optional[str] = None
+    latest_error_family: Optional[str] = None
+    orphan_review_required: bool = False
+    worker_attempt_number: int = 0
     links: ProductRecentActivityLinks = field(default_factory=ProductRecentActivityLinks)
 
     def __post_init__(self) -> None:
@@ -62,6 +66,8 @@ class ProductRecentActivityItemView:
             raise ValueError('ProductRecentActivityItemView.workspace_id must be non-empty')
         if not self.workspace_title:
             raise ValueError('ProductRecentActivityItemView.workspace_title must be non-empty')
+        if self.worker_attempt_number < 0:
+            raise ValueError('ProductRecentActivityItemView.worker_attempt_number must be >= 0')
 
 
 @dataclass(frozen=True)

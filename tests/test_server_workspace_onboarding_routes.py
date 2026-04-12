@@ -50,6 +50,24 @@ def _membership(workspace_id: str = 'ws-001', *, user_id: str = 'user-collab', r
     }
 
 
+
+
+def _run_row(run_id: str, created_at: str, *, workspace_id: str = 'ws-001', status: str = 'completed', status_family: str = 'terminal_success', latest_error_family: str | None = None, orphan_review_required: bool = False, worker_attempt_number: int = 0, claimed_by_worker_ref: str | None = None, lease_expires_at: str | None = None, queue_job_id: str | None = None) -> dict:
+    return {
+        'workspace_id': workspace_id,
+        'run_id': run_id,
+        'created_at': created_at,
+        'updated_at': created_at,
+        'status': status,
+        'status_family': status_family,
+        'latest_error_family': latest_error_family,
+        'orphan_review_required': orphan_review_required,
+        'worker_attempt_number': worker_attempt_number,
+        'claimed_by_worker_ref': claimed_by_worker_ref,
+        'lease_expires_at': lease_expires_at,
+        'queue_job_id': queue_job_id,
+    }
+
 def _workspace_context() -> WorkspaceAuthorizationContext:
     return WorkspaceAuthorizationContext(
         workspace_id='ws-001',
@@ -356,3 +374,37 @@ def test_onboarding_write_rejected_response_includes_continuity_projection() -> 
     assert outcome.rejected.provider_continuity.latest_probe_event_id == 'probe-001'
     assert outcome.rejected.activity_continuity is not None
     assert outcome.rejected.activity_continuity.recent_run_count == 1
+
+
+def test_workspace_registry_projects_aggregated_recovery_state() -> None:
+    list_outcome = WorkspaceRegistryService.list_workspaces(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(_membership(),),
+        recent_run_rows=(
+            _run_row('run-001', '2026-04-11T12:07:00+00:00', status='failed', status_family='terminal_failure', latest_error_family='worker_infrastructure_failure', worker_attempt_number=1),
+            _run_row('run-002', '2026-04-11T12:08:00+00:00', status='running', status_family='active', orphan_review_required=True, worker_attempt_number=3),
+        ),
+    )
+    assert list_outcome.ok is True
+    assert list_outcome.response is not None
+    workspace = list_outcome.response.workspaces[0]
+    assert workspace.recovery_state == 'manual_review_required'
+    assert workspace.orphan_review_required is True
+    assert workspace.worker_attempt_number == 3
+
+    read_outcome = WorkspaceRegistryService.read_workspace(
+        request_auth=_auth('user-collab'),
+        workspace_context=_workspace_context(),
+        workspace_row=_workspace_row(),
+        membership_rows=(_membership(),),
+        recent_run_rows=(
+            _run_row('run-001', '2026-04-11T12:07:00+00:00', status='failed', status_family='terminal_failure', latest_error_family='worker_infrastructure_failure', worker_attempt_number=1),
+            _run_row('run-002', '2026-04-11T12:08:00+00:00', status='running', status_family='active', orphan_review_required=True, worker_attempt_number=3),
+        ),
+    )
+    assert read_outcome.ok is True
+    assert read_outcome.response is not None
+    assert read_outcome.response.recovery_state == 'manual_review_required'
+    assert read_outcome.response.orphan_review_required is True
+    assert read_outcome.response.worker_attempt_number == 3

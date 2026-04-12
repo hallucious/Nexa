@@ -6,6 +6,7 @@ from typing import Any, Optional
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
+from src.server.run_recovery_projection import aggregate_recovery_projection_for_runs
 from src.server.workspace_onboarding_models import (
     OnboardingReadOutcome,
     OnboardingWriteOutcome,
@@ -437,6 +438,11 @@ def _detail_from_workspace_row(
 ) -> ProductWorkspaceDetailResponse:
     workspace_id = str(workspace_row.get('workspace_id') or '').strip()
     latest_run = _latest_run_for_workspace(workspace_id, recent_run_rows)
+    workspace_run_rows = [
+        row for row in recent_run_rows
+        if str(row.get('workspace_id') or '').strip() == workspace_id
+    ]
+    recovery_projection = aggregate_recovery_projection_for_runs(workspace_run_rows)
     last_run_id = str(workspace_row.get('last_run_id') or '').strip() or (str(latest_run.get('run_id') or '').strip() if latest_run else None)
     last_result_status = str(workspace_row.get('last_result_status') or '').strip() or (str(latest_run.get('status') or '').strip() if latest_run else None)
     collaborator_ids = {
@@ -468,6 +474,10 @@ def _detail_from_workspace_row(
         collaborator_count=len(collaborator_ids),
         last_run_id=last_run_id,
         last_result_status=last_result_status,
+        recovery_state=recovery_projection.recovery_state if recovery_projection is not None else None,
+        latest_error_family=recovery_projection.latest_error_family if recovery_projection is not None else None,
+        orphan_review_required=recovery_projection.orphan_review_required if recovery_projection is not None else False,
+        worker_attempt_number=recovery_projection.worker_attempt_number if recovery_projection is not None else 0,
         continuity_source=str(workspace_row.get('continuity_source') or '').strip() or None,
         archived=bool(workspace_row.get('archived')),
         provider_continuity=provider_continuity,
@@ -559,6 +569,10 @@ class WorkspaceRegistryService:
                     created_at=detail.created_at,
                     last_run_id=detail.last_run_id,
                     last_result_status=detail.last_result_status,
+                    recovery_state=detail.recovery_state,
+                    latest_error_family=detail.latest_error_family,
+                    orphan_review_required=detail.orphan_review_required,
+                    worker_attempt_number=detail.worker_attempt_number,
                     archived=detail.archived,
                     provider_continuity=detail.provider_continuity,
                     activity_continuity=detail.activity_continuity,
