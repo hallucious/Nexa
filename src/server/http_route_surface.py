@@ -121,6 +121,12 @@ class RunHttpRouteSurface:
         run_id_factory: Optional[Callable[[], str]] = None,
         run_request_id_factory: Optional[Callable[[], str]] = None,
         now_iso: Optional[str] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Launch route only supports POST."})
@@ -149,6 +155,12 @@ class RunHttpRouteSurface:
             run_id_factory=run_id_factory,
             run_request_id_factory=run_request_id_factory,
             now_iso=now_iso,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         if outcome.accepted:
             assert outcome.accepted_response is not None

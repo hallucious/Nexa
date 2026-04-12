@@ -293,6 +293,10 @@ def test_fastapi_binding_launch_endpoint_round_trip() -> None:
     payload = response.json()
     assert payload["status"] == "accepted"
     assert payload["run_id"] == "run-001"
+    assert payload["workspace_title"] == "Primary Workspace"
+    assert payload["provider_continuity"]["provider_binding_count"] == 1
+    assert payload["activity_continuity"]["recent_run_count"] == 2
+    assert payload["activity_continuity"]["latest_run_id"] == "run-001"
 
 
 def test_fastapi_binding_status_endpoint_round_trip() -> None:

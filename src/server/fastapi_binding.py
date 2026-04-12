@@ -356,6 +356,12 @@ class FastApiRouteBindings:
                 run_id_factory=self.dependencies.run_id_factory,
                 run_request_id_factory=self.dependencies.run_request_id_factory,
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
             )
             return self._framework_response(outbound)
 

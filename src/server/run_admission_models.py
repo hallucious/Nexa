@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+
 
 ProductLaunchStatus = Literal["accepted", "rejected"]
 ProductFailureFamily = Literal["product_rejection", "engine_rejection"]
@@ -202,6 +204,9 @@ class ProductRunLaunchAcceptedResponse:
     execution_target: ProductExecutionTarget
     initial_run_status: str
     links: ProductRunLaunchLinks
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
 
     def __post_init__(self) -> None:
         if self.status != "accepted":

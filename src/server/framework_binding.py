@@ -569,6 +569,12 @@ class FrameworkRouteBindings:
         run_id_factory: Optional[callable] = None,
         run_request_id_factory: Optional[callable] = None,
         now_iso: Optional[str] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_launch(
             http_request=cls.to_http_route_request(request),
@@ -579,6 +585,12 @@ class FrameworkRouteBindings:
             run_id_factory=run_id_factory,
             run_request_id_factory=run_request_id_factory,
             now_iso=now_iso,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         return cls.to_framework_response(response)
 

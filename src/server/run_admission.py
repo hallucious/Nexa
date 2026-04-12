@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import datetime, timezone
-from typing import Any, Callable, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 
 from src.server.adapters import EngineLaunchAdapter
 from src.server.auth_adapter import AuthorizationGate, build_engine_auth_context_refs
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineRunLaunchRequest, EngineRunLaunchResponse
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
 from src.server.run_admission_models import (
     ExecutionTargetCatalogEntry,
     ProductAdmissionPolicy,
@@ -250,6 +251,12 @@ class RunAdmissionService:
         run_id_factory: Optional[Callable[[], str]] = None,
         run_request_id_factory: Optional[Callable[[], str]] = None,
         now_iso: Optional[str] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> RunAdmissionOutcome:
         if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
             return cls._reject(
@@ -359,6 +366,7 @@ class RunAdmissionService:
             finished_at=None,
             updated_at=now_value,
         )
+        launch_recent_run_rows = tuple(recent_run_rows) + (record.to_row(),)
         accepted = ProductRunLaunchAcceptedResponse(
             status="accepted",
             run_id=record.run_id,
@@ -371,6 +379,22 @@ class RunAdmissionService:
             links=ProductRunLaunchLinks(
                 run_status=f"/api/runs/{record.run_id}",
                 run_result=f"/api/runs/{record.run_id}/result",
+            ),
+            workspace_title=str((workspace_row or {}).get("title") or "").strip() or None,
+            provider_continuity=_provider_continuity_summary_for_workspace(
+                request.workspace_id,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+            ),
+            activity_continuity=_activity_continuity_summary_for_workspace(
+                request.workspace_id,
+                user_id=request_auth.requested_by_user_ref or "",
+                recent_run_rows=launch_recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=onboarding_rows,
             ),
         )
         return RunAdmissionOutcome(

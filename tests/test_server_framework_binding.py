@@ -189,6 +189,7 @@ def test_framework_binding_handles_launch_round_trip() -> None:
     assert response.status_code == 202
     assert parsed["status"] == "accepted"
     assert parsed["run_id"] == "run-001"
+    assert parsed["workspace_title"] is None
 
 
 def test_framework_binding_handles_result_route_round_trip() -> None:
