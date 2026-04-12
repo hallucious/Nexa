@@ -69,6 +69,34 @@ def _request_auth(request: HttpRouteRequest):
 
 
 class RunHttpRouteSurface:
+    _ROUTE_DEFINITIONS: tuple[tuple[str, str, str], ...] = (
+        ("get_recent_activity", "GET", "/api/users/me/activity"),
+        ("get_history_summary", "GET", "/api/users/me/history-summary"),
+        ("list_workspaces", "GET", "/api/workspaces"),
+        ("get_workspace", "GET", "/api/workspaces/{workspace_id}"),
+        ("create_workspace", "POST", "/api/workspaces"),
+        ("get_provider_catalog", "GET", "/api/providers/catalog"),
+        ("list_workspace_provider_bindings", "GET", "/api/workspaces/{workspace_id}/provider-bindings"),
+        ("put_workspace_provider_binding", "PUT", "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}"),
+        ("list_workspace_provider_health", "GET", "/api/workspaces/{workspace_id}/provider-bindings/health"),
+        ("get_workspace_provider_health", "GET", "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/health"),
+        ("probe_workspace_provider", "POST", "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe"),
+        ("list_provider_probe_history", "GET", "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe-history"),
+        ("get_onboarding", "GET", "/api/users/me/onboarding"),
+        ("put_onboarding", "PUT", "/api/users/me/onboarding"),
+        ("list_workspace_runs", "GET", "/api/workspaces/{workspace_id}/runs"),
+        ("launch_run", "POST", "/api/runs"),
+        ("get_run_status", "GET", "/api/runs/{run_id}"),
+        ("get_run_result", "GET", "/api/runs/{run_id}/result"),
+        ("list_run_artifacts", "GET", "/api/runs/{run_id}/artifacts"),
+        ("get_artifact_detail", "GET", "/api/artifacts/{artifact_id}"),
+        ("get_run_trace", "GET", "/api/runs/{run_id}/trace"),
+    )
+
+    @classmethod
+    def route_definitions(cls) -> tuple[tuple[str, str, str], ...]:
+        return cls._ROUTE_DEFINITIONS
+
     @staticmethod
     def _parse_launch_request(http_request: HttpRouteRequest) -> ProductRunLaunchRequest:
         body = http_request.json_body

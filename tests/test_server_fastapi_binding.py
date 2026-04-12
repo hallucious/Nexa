@@ -22,6 +22,7 @@ from src.server import (
     FastApiRouteDependencies,
     FrameworkRouteBindings,
     RunAuthorizationContext,
+    RunHttpRouteSurface,
     WorkspaceAuthorizationContext,
     create_fastapi_app,
 )
@@ -91,7 +92,7 @@ class _FakeSecretsClient:
         return {"ARN": "arn:aws:secretsmanager:region:acct:secret:" + Name, "VersionId": "v1"}
 
 
-def test_fastapi_binding_matches_framework_route_definitions() -> None:
+def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     app = _make_client().app
     fastapi_routes = {
         (route.name, method, route.path)
@@ -103,8 +104,9 @@ def test_fastapi_binding_matches_framework_route_definitions() -> None:
         (definition.route_name, definition.method, definition.path_template)
         for definition in FrameworkRouteBindings.route_definitions()
     }
+    http_surface_routes = set(RunHttpRouteSurface.route_definitions())
 
-    assert fastapi_routes == framework_routes
+    assert fastapi_routes == framework_routes == http_surface_routes
 
 
 def _make_client() -> TestClient:
