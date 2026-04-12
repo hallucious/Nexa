@@ -230,6 +230,9 @@ class ProductRunLaunchRejectedResponse:
     engine_error_code: Optional[str] = None
     engine_message: Optional[str] = None
 
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     def __post_init__(self) -> None:
         if self.status != "rejected":
             raise ValueError("ProductRunLaunchRejectedResponse.status must be 'rejected'")
@@ -239,7 +242,6 @@ class ProductRunLaunchRejectedResponse:
             raise ValueError("ProductRunLaunchRejectedResponse.reason_code must be non-empty")
         if not self.message:
             raise ValueError("ProductRunLaunchRejectedResponse.message must be non-empty")
-
 
 @dataclass(frozen=True)
 class RunAdmissionOutcome:

@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping, Optional
 
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+
 ProviderProbeFailureFamily = Literal["product_probe_failure", "workspace_not_found", "provider_not_supported"]
 ProviderProbeSeverity = Literal["blocked", "warning", "info"]
 ProviderProbeStatus = Literal["reachable", "warning", "failed", "blocked", "disabled", "missing"]
@@ -147,6 +149,9 @@ class ProductProviderProbeRejectedResponse:
     workspace_id: Optional[str] = None
     provider_key: Optional[str] = None
 
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_FAILURE_FAMILIES:
             raise ValueError(f"Unsupported ProductProviderProbeRejectedResponse.failure_family: {self.failure_family}")
@@ -154,7 +159,6 @@ class ProductProviderProbeRejectedResponse:
             raise ValueError("ProductProviderProbeRejectedResponse.reason_code must be non-empty")
         if not self.message:
             raise ValueError("ProductProviderProbeRejectedResponse.message must be non-empty")
-
 
 @dataclass(frozen=True)
 class ProviderProbeOutcome:

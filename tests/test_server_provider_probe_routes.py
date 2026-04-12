@@ -204,6 +204,10 @@ def test_provider_probe_route_returns_conflict_when_probe_history_persistence_fa
         provider_key="openai",
         binding_rows=_binding_rows(),
         provider_catalog_rows=_catalog_rows(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=({"workspace_id": "ws-001", "run_id": "run-001", "created_at": "2026-04-11T12:00:00+00:00", "updated_at": "2026-04-11T12:00:00+00:00", "status_family": "pending"},),
+        managed_secret_rows=({"workspace_id": "ws-001", "secret_ref": "secret://ws-001/openai", "last_rotated_at": "2026-04-11T12:04:00+00:00"},),
+        onboarding_rows=({"workspace_id": "ws-001", "user_id": "user-owner", "onboarding_state_id": "onboard-001", "updated_at": "2026-04-11T12:06:00+00:00"},),
         secret_metadata_reader=reader,
         probe_runner=_probe_runner,
         probe_event_id_factory=lambda: "probe-err",
@@ -212,3 +216,6 @@ def test_provider_probe_route_returns_conflict_when_probe_history_persistence_fa
     )
     assert route_response.status_code == 409
     assert route_response.body["reason_code"] == "provider_probe.persistence_write_failed"
+    assert route_response.body["workspace_title"] == "Primary Workspace"
+    assert route_response.body["provider_continuity"] is not None
+    assert route_response.body["activity_continuity"] is not None

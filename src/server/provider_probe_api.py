@@ -19,7 +19,7 @@ from src.server.provider_probe_models import (
     ProviderProbeExecutionResult,
     ProviderProbeOutcome,
 )
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, is_dataclass
@@ -241,6 +241,16 @@ class ProviderProbeService:
             )
             return ProviderProbeOutcome(rejected=rejected)
         assert workspace_context is not None
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_context.workspace_id,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or "",
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         catalog = _catalog_by_key(provider_catalog_rows)
         catalog_row = catalog.get(provider_key)
         if catalog_row is None:
@@ -250,6 +260,9 @@ class ProviderProbeService:
                 message="Provider is not part of the managed provider catalog.",
                 workspace_id=workspace_context.workspace_id,
                 provider_key=provider_key,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             ))
         binding_row = _binding_by_key(workspace_context.workspace_id, binding_rows).get(provider_key)
         if binding_row is None:
@@ -259,6 +272,9 @@ class ProviderProbeService:
                 message="Provider binding must exist before connectivity can be probed.",
                 workspace_id=workspace_context.workspace_id,
                 provider_key=provider_key,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             ))
         if not bool(binding_row.get("enabled", True)):
             return ProviderProbeOutcome(rejected=ProductProviderProbeRejectedResponse(
@@ -267,6 +283,9 @@ class ProviderProbeService:
                 message="Provider binding is disabled and cannot be probed.",
                 workspace_id=workspace_context.workspace_id,
                 provider_key=provider_key,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             ))
         secret_ref = str(binding_row.get("secret_ref") or "").strip()
         if not secret_ref:
@@ -276,6 +295,9 @@ class ProviderProbeService:
                 message="Provider binding does not have a managed secret reference.",
                 workspace_id=workspace_context.workspace_id,
                 provider_key=provider_key,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             ))
 
         secret_resolution_status = "not_checked"
@@ -294,6 +316,9 @@ class ProviderProbeService:
                     message="Managed secret reference could not be resolved for this provider binding.",
                     workspace_id=workspace_context.workspace_id,
                     provider_key=provider_key,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 ))
         if probe_runner is None:
             return ProviderProbeOutcome(rejected=ProductProviderProbeRejectedResponse(
@@ -302,6 +327,9 @@ class ProviderProbeService:
                 message="Provider connectivity probe is not configured for this server.",
                 workspace_id=workspace_context.workspace_id,
                 provider_key=provider_key,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             ))
 
         default_model_ref = str(binding_row.get("default_model_ref") or "").strip() or None
@@ -316,6 +344,9 @@ class ProviderProbeService:
                 message="Requested probe model is not part of the allowed model set.",
                 workspace_id=workspace_context.workspace_id,
                 provider_key=provider_key,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             ))
 
         provider_family = str(catalog_row.get("provider_family") or provider_key).strip()
@@ -395,5 +426,8 @@ class ProviderProbeService:
                     message="Provider probe completed but probe history could not be persisted.",
                     workspace_id=workspace_context.workspace_id,
                     provider_key=provider_key,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 ))
         return ProviderProbeOutcome(response=response, persisted_probe_row=persisted_probe_row)

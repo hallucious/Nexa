@@ -118,11 +118,19 @@ def test_run_list_rejects_invalid_cursor_and_missing_auth() -> None:
         request_auth=_auth(),
         workspace_context=_workspace(),
         run_rows=(_run_row("run-001", "2026-04-11T12:00:00+00:00"),),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        provider_binding_rows=({"workspace_id": "ws-001", "binding_id": "binding-001", "updated_at": "2026-04-11T12:03:00+00:00"},),
+        managed_secret_rows=({"workspace_id": "ws-001", "secret_ref": "secret://ws-001/openai", "last_rotated_at": "2026-04-11T12:04:00+00:00"},),
+        provider_probe_rows=({"workspace_id": "ws-001", "probe_event_id": "probe-001", "provider_key": "openai", "provider_family": "openai", "display_name": "OpenAI", "probe_status": "reachable", "connectivity_state": "ok", "occurred_at": "2026-04-11T12:05:00+00:00"},),
+        onboarding_rows=({"workspace_id": "ws-001", "user_id": "user-owner", "onboarding_state_id": "onboard-001", "updated_at": "2026-04-11T12:06:00+00:00"},),
         cursor="run-999",
     )
     assert invalid_cursor.ok is False
     assert invalid_cursor.rejected is not None
     assert invalid_cursor.rejected.reason_code == "run_list.cursor_invalid"
+    assert invalid_cursor.rejected.workspace_title == "Primary Workspace"
+    assert invalid_cursor.rejected.provider_continuity is not None
+    assert invalid_cursor.rejected.activity_continuity is not None
 
     anonymous = RequestAuthResolver.resolve(headers={}, session_claims=None)
     auth_required = RunListReadService.list_workspace_runs(

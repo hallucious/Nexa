@@ -14,7 +14,7 @@ from src.server.run_list_models import (
     RunListReadOutcome,
 )
 from src.server.run_read_models import ProductExecutionTargetView, ProductResultSummaryView
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 
 
 _ALLOWED_WORKSPACE_LIST_ROLES = ("owner", "admin", "collaborator", "reviewer", "viewer")
@@ -89,6 +89,18 @@ class RunListReadService:
         status_family: Optional[str] = None,
         requested_by_user_id: Optional[str] = None,
     ) -> RunListReadOutcome:
+        workspace_title, provider_continuity, activity_continuity = (None, None, None)
+        if workspace_context is not None:
+            workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+                workspace_context.workspace_id,
+                workspace_row=workspace_row,
+                user_id=request_auth.requested_by_user_ref or "",
+                recent_run_rows=recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=onboarding_rows,
+            )
         if not request_auth.is_authenticated:
             return RunListReadOutcome(
                 rejected=ProductRunListRejectedResponse(
@@ -96,6 +108,9 @@ class RunListReadService:
                     reason_code="run_list.authentication_required",
                     message="Workspace run list requires an authenticated session.",
                     workspace_id=workspace_context.workspace_id if workspace_context else None,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         if workspace_context is None:
@@ -113,6 +128,9 @@ class RunListReadService:
                     reason_code="run_list.limit_invalid",
                     message="Run list limit must be between 1 and 100.",
                     workspace_id=workspace_context.workspace_id,
+                                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         auth_input = AuthorizationInput(
@@ -129,6 +147,9 @@ class RunListReadService:
                     reason_code=f"run_list.{decision.reason_code}",
                     message="Current user is not allowed to read workspace runs.",
                     workspace_id=workspace_context.workspace_id,
+                                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
 
@@ -156,7 +177,10 @@ class RunListReadService:
                         reason_code="run_list.cursor_invalid",
                         message="Run list cursor is invalid for the current filter set.",
                         workspace_id=workspace_context.workspace_id,
-                    )
+                                        workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
+                )
                 )
             start_index = run_ids.index(normalized_cursor) + 1
 

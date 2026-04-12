@@ -132,11 +132,13 @@ def test_run_admission_blocks_working_save_execution_when_policy_disables_it() -
         workspace_context=_workspace(),
         target_catalog={"ws-save-001": ExecutionTargetCatalogEntry(workspace_id="ws-001", target_ref="ws-save-001", source=_working_save("ws-save-001"))},
         policy=ProductAdmissionPolicy(allow_working_save_execution=False),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
     )
 
     assert outcome.accepted is False
     assert outcome.rejected_response is not None
     assert outcome.rejected_response.reason_code == "launch.working_save_execution_disabled"
+    assert outcome.rejected_response.workspace_title == "Primary Workspace"
 
 
 def test_run_admission_preserves_engine_rejection_separately_from_product_rejection() -> None:

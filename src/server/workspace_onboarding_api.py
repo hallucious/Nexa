@@ -282,6 +282,39 @@ def _detail_from_workspace_row(
         links=_workspace_links(workspace_id),
     )
 
+def _continuity_projection_for_workspace(
+    workspace_id: str,
+    *,
+    workspace_row: Mapping[str, Any] | None = None,
+    user_id: str,
+    recent_run_rows: Sequence[Mapping[str, Any]] = (),
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+    onboarding_rows: Sequence[Mapping[str, Any]] = (),
+) -> tuple[Optional[str], Optional[ProductProviderContinuitySummary], Optional[ProductActivityContinuitySummary]]:
+    normalized_workspace_id = str(workspace_id or '').strip()
+    if not normalized_workspace_id:
+        return None, None, None
+    workspace_title = str((workspace_row or {}).get('title') or '').strip() or None
+    provider_continuity = _provider_continuity_summary_for_workspace(
+        normalized_workspace_id,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+    )
+    activity_continuity = _activity_continuity_summary_for_workspace(
+        normalized_workspace_id,
+        user_id=user_id,
+        recent_run_rows=recent_run_rows,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+        onboarding_rows=onboarding_rows,
+    )
+    return workspace_title, provider_continuity, activity_continuity
+
+
 
 class WorkspaceRegistryService:
     @classmethod

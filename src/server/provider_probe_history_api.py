@@ -15,7 +15,7 @@ from src.server.provider_probe_history_models import (
     ProviderProbeHistoryRecord,
 )
 
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 
 
 def _probe_links(workspace_id: str, provider_key: str) -> ProductProviderProbeHistoryLinks:
@@ -91,6 +91,16 @@ class ProviderProbeHistoryService:
                     provider_key=provider_key,
                 )
             )
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_context.workspace_id,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=probe_history_rows,
+            onboarding_rows=onboarding_rows,
+        )
         records: list[ProviderProbeHistoryRecord] = []
         for row in probe_history_rows:
             record = ProviderProbeHistoryRecord.from_mapping(row)
@@ -112,6 +122,9 @@ class ProviderProbeHistoryService:
                         message='Provider probe history cursor is invalid.',
                         workspace_id=workspace_context.workspace_id,
                         provider_key=provider_key,
+                        workspace_title=workspace_title,
+                        provider_continuity=provider_continuity,
+                        activity_continuity=activity_continuity,
                     )
                 )
             start_index = matching_index + 1

@@ -185,6 +185,9 @@ class ProductProviderProbeHistoryRejectedResponse:
     workspace_id: Optional[str] = None
     provider_key: Optional[str] = None
 
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_FAILURE_FAMILIES:
             raise ValueError(f"Unsupported ProductProviderProbeHistoryRejectedResponse.failure_family: {self.failure_family}")
@@ -192,7 +195,6 @@ class ProductProviderProbeHistoryRejectedResponse:
             raise ValueError("ProductProviderProbeHistoryRejectedResponse.reason_code must be non-empty")
         if not self.message:
             raise ValueError("ProductProviderProbeHistoryRejectedResponse.message must be non-empty")
-
 
 @dataclass(frozen=True)
 class ProviderProbeHistoryReadOutcome:

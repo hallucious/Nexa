@@ -9,7 +9,7 @@ from src.server.adapters import EngineLaunchAdapter
 from src.server.auth_adapter import AuthorizationGate, build_engine_auth_context_refs
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineRunLaunchRequest, EngineRunLaunchResponse
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 from src.server.run_admission_models import (
     ExecutionTargetCatalogEntry,
     ProductAdmissionPolicy,
@@ -227,7 +227,7 @@ class ExecutionTargetResolver:
 
 class RunAdmissionService:
     @staticmethod
-    def _reject(*, workspace_id: Optional[str], reason_code: str, message: str) -> RunAdmissionOutcome:
+    def _reject(*, workspace_id: Optional[str], reason_code: str, message: str, workspace_title: Optional[str] = None, provider_continuity=None, activity_continuity=None) -> RunAdmissionOutcome:
         return RunAdmissionOutcome(
             rejected_response=ProductRunLaunchRejectedResponse(
                 status="rejected",
@@ -235,6 +235,9 @@ class RunAdmissionService:
                 reason_code=reason_code,
                 message=message,
                 workspace_id=workspace_id,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         )
 
@@ -258,23 +261,42 @@ class RunAdmissionService:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> RunAdmissionOutcome:
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            request.workspace_id,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or "",
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
             return cls._reject(
                 workspace_id=request.workspace_id,
                 reason_code="launch.authentication_required",
                 message="Authenticated product launch is required before asking the engine to run.",
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         if not policy.workspace_launch_enabled or policy.workspace_suspended:
             return cls._reject(
                 workspace_id=request.workspace_id,
                 reason_code="launch.workspace_blocked",
                 message="Workspace launch is currently blocked by product policy.",
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         if not policy.quota_available:
             return cls._reject(
                 workspace_id=request.workspace_id,
                 reason_code="launch.quota_blocked",
                 message="Product-level quota blocked this run before engine admission.",
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
 
         authorization = AuthorizationGate.authorize_workspace_scope(
@@ -291,6 +313,9 @@ class RunAdmissionService:
                 workspace_id=request.workspace_id,
                 reason_code=authorization.reason_code,
                 message="Workspace authorization did not allow run launch for this caller.",
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
 
         resolved_target, target_rejection = ExecutionTargetResolver.resolve(
@@ -299,7 +324,21 @@ class RunAdmissionService:
             policy=policy,
         )
         if target_rejection is not None:
-            return RunAdmissionOutcome(rejected_response=target_rejection)
+            return RunAdmissionOutcome(
+                rejected_response=ProductRunLaunchRejectedResponse(
+                    status=target_rejection.status,
+                    failure_family=target_rejection.failure_family,
+                    reason_code=target_rejection.reason_code,
+                    message=target_rejection.message,
+                    workspace_id=target_rejection.workspace_id,
+                    blocking_findings=list(target_rejection.blocking_findings),
+                    engine_error_code=target_rejection.engine_error_code,
+                    engine_message=target_rejection.engine_message,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
+                )
+            )
         assert resolved_target is not None
 
         run_request_id_factory = run_request_id_factory or (lambda: f"req_{uuid4().hex}")
@@ -339,6 +378,9 @@ class RunAdmissionService:
                     blocking_findings=[asdict(item) for item in engine_response.blocking_findings],
                     engine_error_code=engine_response.engine_error_code,
                     engine_message=engine_response.engine_message,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 ),
                 engine_request=engine_request,
                 engine_response=engine_response,
