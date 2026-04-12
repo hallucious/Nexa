@@ -16,6 +16,7 @@ _ALLOWED_ACTIVITY_TYPES = {
     "provider_probe_warning",
     "provider_probe_failed",
     "provider_binding_updated",
+    "managed_secret_updated",
 }
 _ALLOWED_HISTORY_SUMMARY_SCOPES = {"account", "workspace"}
 
@@ -28,6 +29,7 @@ class ProductRecentActivityLinks:
     provider_binding: Optional[str] = None
     provider_health: Optional[str] = None
     provider_probe_history: Optional[str] = None
+    managed_secret: Optional[str] = None
 
 
 @dataclass(frozen=True)

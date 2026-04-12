@@ -109,13 +109,21 @@ def test_recent_activity_service_returns_sorted_paginated_feed() -> None:
         provider_binding_rows=(
             _binding_row('binding-001', '2026-04-11T12:09:00+00:00'),
         ),
+        managed_secret_rows=(
+            {
+                'workspace_id': 'ws-001',
+                'provider_key': 'openai',
+                'secret_ref': 'secret://ws-001/openai',
+                'last_rotated_at': '2026-04-11T12:11:00+00:00',
+            },
+        ),
         limit=2,
     )
     assert outcome.ok is True
     assert outcome.response is not None
-    assert [item.activity_type for item in outcome.response.activities] == ['provider_binding_updated', 'provider_probe_reachable']
+    assert [item.activity_type for item in outcome.response.activities] == ['managed_secret_updated', 'provider_binding_updated']
     assert outcome.response.next_cursor == outcome.response.activities[-1].activity_id
-    assert outcome.response.total_visible_count == 5
+    assert outcome.response.total_visible_count == 6
 
 
 def test_recent_activity_summary_filters_to_visible_workspace() -> None:
@@ -133,6 +141,14 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
         provider_binding_rows=(
             _binding_row('binding-001', '2026-04-11T12:09:00+00:00'),
         ),
+        managed_secret_rows=(
+            {
+                'workspace_id': 'ws-001',
+                'provider_key': 'openai',
+                'secret_ref': 'secret://ws-001/openai',
+                'last_rotated_at': '2026-04-11T12:10:00+00:00',
+            },
+        ),
     )
     assert outcome.ok is True
     assert outcome.response is not None
@@ -143,7 +159,7 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
     assert outcome.response.recent_probe_count == 1
     assert outcome.response.failed_probe_count == 0
     assert outcome.response.latest_probe_event_id == 'probe-001'
-    assert outcome.response.latest_activity_at == '2026-04-11T12:08:00+00:00'
+    assert outcome.response.latest_activity_at == '2026-04-11T12:10:00+00:00'
 
 
 def test_recent_activity_route_family_round_trip() -> None:
@@ -167,11 +183,19 @@ def test_recent_activity_route_family_round_trip() -> None:
         provider_binding_rows=(
             _binding_row('binding-001', '2026-04-11T12:09:00+00:00'),
         ),
+        managed_secret_rows=(
+            {
+                'workspace_id': 'ws-001',
+                'provider_key': 'openai',
+                'secret_ref': 'secret://ws-001/openai',
+                'last_rotated_at': '2026-04-11T12:10:00+00:00',
+            },
+        ),
     )
     assert activity_response.status_code == 200
     assert activity_response.body['returned_count'] == 2
-    assert activity_response.body['activities'][0]['activity_type'] == 'provider_binding_updated'
-    assert activity_response.body['activities'][0]['links']['provider_binding'].endswith('/provider-bindings/openai')
+    assert activity_response.body['activities'][0]['activity_type'] == 'managed_secret_updated'
+    assert activity_response.body['activities'][0]['links']['managed_secret'] == 'secret://ws-001/openai'
 
     summary_response = RunHttpRouteSurface.handle_history_summary(
         http_request=HttpRouteRequest(

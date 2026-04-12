@@ -48,3 +48,27 @@ def test_bind_managed_secret_metadata_store_wires_writer_and_reader_dependencies
     assert metadata is not None
     assert metadata["secret_version_ref"] == "v7"
     assert metadata["last_rotated_at"] == "2026-04-11T12:09:00+00:00"
+
+
+
+def test_managed_secret_metadata_store_lists_rows_in_reverse_chronological_order() -> None:
+    store = InMemoryManagedSecretMetadataStore()
+    store.write_receipt({
+        'secret_ref': 'secret://workspace-alpha/openai',
+        'secret_version_ref': 'v1',
+        'last_rotated_at': '2026-04-12T10:00:00+00:00',
+        'workspace_id': 'workspace-alpha',
+        'provider_key': 'openai',
+    })
+    store.write_receipt({
+        'secret_ref': 'secret://workspace-alpha/anthropic',
+        'secret_version_ref': 'v2',
+        'last_rotated_at': '2026-04-12T11:00:00+00:00',
+        'workspace_id': 'workspace-alpha',
+        'provider_key': 'anthropic',
+    })
+
+    rows = store.list_all_rows()
+
+    assert [row['provider_key'] for row in rows] == ['anthropic', 'openai']
+    assert rows[0]['workspace_id'] == 'workspace-alpha'

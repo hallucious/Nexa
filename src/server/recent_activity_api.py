@@ -84,6 +84,7 @@ class RecentActivityService:
         run_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         workspace_id: Optional[str] = None,
         limit: int = 20,
         cursor: Optional[str] = None,
@@ -203,6 +204,40 @@ class RecentActivityService:
                     ),
                 )
             )
+        for row in managed_secret_rows:
+            row_workspace_id = str(row.get('workspace_id') or '').strip()
+            if row_workspace_id not in visible_ids:
+                continue
+            if workspace_id is not None and row_workspace_id != workspace_id:
+                continue
+            provider_key = str(row.get('provider_key') or '').strip().lower()
+            secret_ref = str(row.get('secret_ref') or '').strip()
+            occurred_at = str(row.get('last_rotated_at') or '').strip()
+            if not row_workspace_id or not provider_key or not secret_ref or not occurred_at:
+                continue
+            workspace_title = titles.get(row_workspace_id, row_workspace_id)
+            display_name = provider_key
+            binding_match = next((binding for binding in provider_binding_rows if str(binding.get('workspace_id') or '').strip() == row_workspace_id and str(binding.get('provider_key') or '').strip().lower() == provider_key), None)
+            if binding_match is not None:
+                display_name = str(binding_match.get('display_name') or provider_key).strip() or provider_key
+            activities.append(
+                ProductRecentActivityItemView(
+                    activity_id=f'secret:{provider_key}:{secret_ref}:{occurred_at}',
+                    activity_type='managed_secret_updated',
+                    occurred_at=occurred_at,
+                    workspace_id=row_workspace_id,
+                    workspace_title=workspace_title,
+                    status='resolved',
+                    summary=f'Managed secret for {display_name} was updated.',
+                    links=ProductRecentActivityLinks(
+                        workspace=f'/api/workspaces/{row_workspace_id}',
+                        provider_binding=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}',
+                        provider_health=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}/health',
+                        managed_secret=secret_ref,
+                    ),
+                )
+            )
+
         for row in provider_probe_rows:
             record = ProviderProbeHistoryRecord.from_mapping(row)
             if record is None:
@@ -271,6 +306,7 @@ class RecentActivityService:
         run_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         workspace_id: Optional[str] = None,
     ) -> HistorySummaryReadOutcome:
         if not request_auth.is_authenticated:
@@ -319,8 +355,30 @@ class RecentActivityService:
         if filtered_probe_rows:
             filtered_probe_rows.sort(key=lambda record: (record.occurred_at, record.probe_event_id), reverse=True)
             latest_probe = filtered_probe_rows[0]
+        latest_binding_at = None
+        filtered_binding_rows = [
+            row for row in provider_binding_rows
+            if str(row.get('workspace_id') or '').strip() in visible_ids
+            and (workspace_id is None or str(row.get('workspace_id') or '').strip() == workspace_id)
+            and str(row.get('updated_at') or row.get('created_at') or '').strip()
+        ]
+        if filtered_binding_rows:
+            filtered_binding_rows.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('binding_id') or '')), reverse=True)
+            latest_binding_at = str(filtered_binding_rows[0].get('updated_at') or filtered_binding_rows[0].get('created_at') or '').strip() or None
+        latest_secret_at = None
+        filtered_secret_rows = [
+            row for row in managed_secret_rows
+            if str(row.get('workspace_id') or '').strip() in visible_ids
+            and (workspace_id is None or str(row.get('workspace_id') or '').strip() == workspace_id)
+            and str(row.get('last_rotated_at') or '').strip()
+        ]
+        if filtered_secret_rows:
+            filtered_secret_rows.sort(key=lambda row: (str(row.get('last_rotated_at') or ''), str(row.get('secret_ref') or '')), reverse=True)
+            latest_secret_at = str(filtered_secret_rows[0].get('last_rotated_at') or '').strip() or None
         candidate_times = [value for value in (
             latest_activity_at,
+            latest_binding_at,
+            latest_secret_at,
             latest_probe.occurred_at if latest_probe is not None else None,
         ) if value]
         latest_activity_at = max(candidate_times) if candidate_times else None
