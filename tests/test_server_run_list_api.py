@@ -141,3 +141,25 @@ def test_run_list_rejects_invalid_cursor_and_missing_auth() -> None:
     assert auth_required.ok is False
     assert auth_required.rejected is not None
     assert auth_required.rejected.reason_code == "run_list.authentication_required"
+
+
+def test_run_list_exposes_recovery_projection_for_retrying_run() -> None:
+    retrying = _run_row("run-004", "2026-04-11T12:03:00+00:00", status="queued", status_family="pending")
+    retrying.update({
+        "queue_job_id": "job-004",
+        "worker_attempt_number": 2,
+        "orphan_review_required": False,
+        "latest_error_family": "worker_infrastructure_failure",
+    })
+
+    outcome = RunListReadService.list_workspace_runs(
+        request_auth=_auth(),
+        workspace_context=_workspace(),
+        run_rows=(retrying,),
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.runs[0].recovery is not None
+    assert outcome.response.runs[0].recovery.recovery_state == "retry_pending"
+    assert outcome.response.runs[0].recovery.queue_job_id == "job-004"

@@ -248,3 +248,80 @@ def test_result_read_rejects_forbidden_caller_before_returning_result_shape() ->
     assert outcome.rejected.provider_continuity.provider_binding_count == 1
     assert outcome.rejected.activity_continuity is not None
     assert outcome.rejected.activity_continuity.recent_probe_count == 1
+
+
+def test_status_read_exposes_worker_recovery_projection_for_active_claim() -> None:
+    row = _run_row(status="running", status_family="active")
+    row.update({
+        "queue_job_id": "job-001",
+        "claimed_by_worker_ref": "worker-a",
+        "lease_expires_at": "2026-04-11T12:02:00+00:00",
+        "worker_attempt_number": 1,
+        "orphan_review_required": False,
+        "latest_error_family": None,
+    })
+
+    outcome = RunStatusReadService.read_status(
+        request_auth=_auth_context(),
+        run_context=_run_context(),
+        run_record_row=row,
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.recovery is not None
+    assert outcome.response.recovery.recovery_state == "leased"
+    assert outcome.response.recovery.queue_job_id == "job-001"
+    assert outcome.response.recovery.worker_attempt_number == 1
+
+
+def test_result_read_exposes_retry_pending_recovery_when_result_not_ready() -> None:
+    row = _run_row(status="queued", status_family="pending")
+    row.update({
+        "queue_job_id": "job-002",
+        "worker_attempt_number": 2,
+        "orphan_review_required": False,
+        "latest_error_family": "worker_infrastructure_failure",
+    })
+
+    outcome = RunResultReadService.read_result(
+        request_auth=_auth_context(),
+        run_context=_run_context(),
+        run_record_row=row,
+        result_row=None,
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.recovery is not None
+    assert outcome.response.recovery.recovery_state == "retry_pending"
+    assert outcome.response.recovery.worker_attempt_number == 2
+
+
+def test_result_read_keeps_recovery_projection_on_ready_result_rows() -> None:
+    row = _run_row(status="failed", status_family="terminal_failure")
+    row.update({
+        "queue_job_id": "job-003",
+        "worker_attempt_number": 3,
+        "orphan_review_required": True,
+        "latest_error_family": "worker_infrastructure_failure",
+    })
+
+    outcome = RunResultReadService.read_result(
+        request_auth=_auth_context(),
+        run_context=_run_context(),
+        run_record_row=row,
+        result_row={
+            "run_id": "run-001",
+            "workspace_id": "ws-001",
+            "result_state": "ready_failure",
+            "final_status": "failed",
+            "result_summary": "Worker infrastructure failed after retry exhaustion.",
+        },
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.recovery is not None
+    assert outcome.response.recovery.recovery_state == "manual_review_required"
+    assert outcome.response.recovery.orphan_review_required is True

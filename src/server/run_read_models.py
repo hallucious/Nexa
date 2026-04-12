@@ -18,6 +18,11 @@ StatusFamily = Literal[
 
 _ALLOWED_READ_FAILURE_FAMILIES = {"product_read_failure", "run_not_found"}
 _ALLOWED_RESULT_READ_STATES = {"not_ready", "ready_success", "ready_partial", "ready_failure"}
+
+RecoveryState = Literal["healthy", "leased", "retry_pending", "manual_review_required", "failed"]
+
+_ALLOWED_RECOVERY_STATES = {"healthy", "leased", "retry_pending", "manual_review_required", "failed"}
+
 _ALLOWED_STATUS_FAMILIES = {
     "pending",
     "active",
@@ -80,6 +85,24 @@ class ProductRunLinks:
 
 
 @dataclass(frozen=True)
+class ProductRunRecoveryView:
+    recovery_state: RecoveryState
+    worker_attempt_number: int = 0
+    queue_job_id: Optional[str] = None
+    claimed_by_worker_ref: Optional[str] = None
+    lease_expires_at: Optional[str] = None
+    orphan_review_required: bool = False
+    latest_error_family: Optional[str] = None
+    summary: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.recovery_state not in _ALLOWED_RECOVERY_STATES:
+            raise ValueError(f"Unsupported ProductRunRecoveryView.recovery_state: {self.recovery_state}")
+        if self.worker_attempt_number < 0:
+            raise ValueError("ProductRunRecoveryView.worker_attempt_number must be >= 0")
+
+
+@dataclass(frozen=True)
 class ProductRunStatusResponse:
     run_id: str
     workspace_id: str
@@ -95,6 +118,7 @@ class ProductRunStatusResponse:
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
     progress: Optional[ProductRunProgressView] = None
     latest_engine_signal: Optional[ProductEngineSignalView] = None
+    recovery: Optional[ProductRunRecoveryView] = None
     links: ProductRunLinks = field(default_factory=lambda: ProductRunLinks(result="/placeholder/result", trace="/placeholder/trace", artifacts="/placeholder/artifacts"))
     message: Optional[str] = None
 
@@ -176,6 +200,7 @@ class ProductRunResultResponse:
     final_output: Optional[ProductFinalOutputView] = None
     artifact_refs: tuple[ProductArtifactRefView, ...] = ()
     trace_ref: Optional[ProductTraceRefView] = None
+    recovery: Optional[ProductRunRecoveryView] = None
     metrics: dict[str, Any] = field(default_factory=dict)
     updated_at: Optional[str] = None
     message: Optional[str] = None

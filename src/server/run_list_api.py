@@ -15,6 +15,7 @@ from src.server.run_list_models import (
 )
 from src.server.run_read_models import ProductExecutionTargetView, ProductResultSummaryView
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
+from src.server.run_read_api import _recovery_view_from_run_row
 
 
 _ALLOWED_WORKSPACE_LIST_ROLES = ("owner", "admin", "collaborator", "reviewer", "viewer")
@@ -214,6 +215,7 @@ class RunListReadService:
                     trace_available=bool(row.get("trace_available")),
                     artifact_count=int(row.get("artifact_count") or 0),
                     result_summary=_summary_from_result_row(result_row),
+                    recovery=_recovery_view_from_run_row(row),
                     links=_build_links(run_id),
                 )
             )

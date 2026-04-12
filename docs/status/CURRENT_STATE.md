@@ -6,45 +6,56 @@ Version: 1.2.0
 
 ## Purpose
 
-This document is the current truth snapshot for the repository state at the latest synchronized convergence point.
+This document is the current truth snapshot for the repository state at the latest verified convergence point.
 
-It exists to reduce ambiguity about:
-
-* what is already implemented
-* what is only partially closed
-* what mental models are now outdated
-* what should happen next from the truthful `d468795` baseline
+It exists to reduce ambiguity about what is already implemented, what is only partially closed, and what should happen next.
 
 This document is intentionally status-oriented.
-It does not replace BLUEPRINT, TRACKER, or the canonical spec set.
+It does not replace the canonical architecture or contract documents.
 
 ---
 
 ## Authoritative Snapshot
 
 * authoritative implementation baseline commit: `d468795`
-* latest explicitly confirmed verified baseline: `2087 passed, 13 skipped`
-* status source: uploaded `Nexa_d468795.zip` plus the matching handoff baseline
+* authoritative verified baseline: `2087 passed, 13 skipped`
+* status source: latest repository snapshot aligned to the current handoff baseline (`Nexa_d468795.zip`)
+* canonical roadmap reference: `nexa_implementation_order_final_v2_2.md`
 
 ---
 
 ## Current Position Summary
 
-The current repository is no longer accurately described by the older `c869806` shell/product-flow-only status picture.
+The current repository should now be understood in two layers at once.
 
-The uploaded codebase now combines three large realities at once:
+### 1. Canonical roadmap layer
 
-1. **engine / storage foundation** is already substantial
-2. **Designer / UI shell foundation** is already substantial
-3. **server/product continuity infrastructure** is already substantial
+The macro dependency order still comes from `nexa_implementation_order_final_v2_2.md`:
+
+* beginner/productization priorities remain real
+* Phase 4.5 still has its own macro gate and infrastructure-decision framing
+* later phases such as observability linkage, execution-anxiety reduction, return-use loop, accessibility/localization completion, and product expansion still remain part of the long-term plan
+
+### 2. Practical code-state layer
+
+The actual `d468795` codebase is already deep inside Phase 4.5 server/product continuity work.
+
+The source now already contains:
+
+* server-side workspace continuity foundations
+* onboarding continuity foundations
+* run admission / list / status / result continuity foundations
+* artifact / trace continuity foundations
+* provider secret / health / probe / probe-history continuity foundations
+* aggregate recent-activity / history-summary continuity foundations
+* route surface / framework binding / FastAPI binding layers for the product/API surface
+* database schema families and in-memory continuity stores supporting that server line
 
 The practical meaning is:
 
-* engine-owned truth remains canonical
-* UI-owned state remains bounded
-* Working Save / Commit Snapshot / Execution Record separation remains preserved
-* Designer remains proposal-first rather than mutation-first
-* the repository already contains a broad server/API continuity surface above the engine core
+* the repository is no longer mainly waiting for a first provider-probe-persistence seam
+* the biggest immediate weakness was top-level documentation lag, not absence of server continuity code
+* future planning must keep the roadmap layer and the practical code-state layer visible together
 
 ---
 
@@ -52,92 +63,78 @@ The practical meaning is:
 
 | Sector | Status | Notes |
 |---|---|---|
-| execution engine core | Complete baseline | dependency-based runtime, provider/plugin execution, observability foundations present |
+| execution engine core | Complete baseline | dependency-based runtime, savefile execution, provider/plugin runtime, observability foundations present |
 | storage role split (`working_save` / `commit_snapshot`) | Complete baseline | role-aware `.nex` loading/validation/model split present |
-| Designer / UI foundation | Complete baseline | adapter boundary, panel/workspace/shell projections, and bounded proposal/control surfaces exist |
-| UI persistence boundary | Complete baseline | `.nex.ui` Working Save continuity plus commit-boundary stripping are reflected in code/tests |
-| UI i18n foundation | Complete baseline | EN fallback, KO/EN resources, and persistence boundary are present |
-| server continuity/API layer | Broad implemented surface | workspace, onboarding, run, artifact/trace, provider, activity, queue, and binding layers are already present |
-| server persistence foundation | Implemented baseline | database/schema/migration foundations plus continuity stores exist |
-| route/binding stack | Implemented but audit-sensitive | HTTP route surface, framework bindings, and FastAPI bindings all exist and require parity discipline |
-| productized frontend shell | Not fully closed | Python-side shell/projection layers are strong, but they are not yet a finished end-user frontend application |
-| formal Phase 4.5 production gate | Not fully closed | production-grade expansion still depends on explicit gate closure across infra decisions |
-
----
-
-## Important Corrections To Earlier Mental Models
-
-### 1. The project is not “about to start UI”
-
-That model is incorrect.
-The repository already contains substantial UI-sector code under `src/ui/`.
-
-### 2. The project is not only in a late shell-proof cycle anymore
-
-That model is also incomplete.
-The repository already contains a broad server/product continuity implementation under `src/server/`.
-
-### 3. Phase 4.5 is not merely a future design topic
-
-That model is incorrect.
-The codebase already contains significant Phase 4.5-style continuity infrastructure and API surface.
-
-### 4. The macro roadmap was not replaced by current code reality
-
-That model is also incorrect.
-The canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`.
-Current code reality being deep in Phase 4.5 does not erase roadmap authority.
+| UI adapter / view-model layer | Complete baseline | adapter boundary and module view-models exist across panel/workspace/hub surfaces |
+| UI persistence boundary | Complete baseline | `.nex.ui` and commit-boundary stripping rules are implemented |
+| UI i18n foundation | Complete baseline | language resolution, fallback, localized message lookup, persistence boundary present |
+| Designer proposal-flow UI surface | Implemented baseline | proposal / precheck / preview / approval projection exists |
+| Subcircuit support | Implemented baseline | loader, validator, runtime path, savefile roundtrip, and official example coverage exist |
+| Phase 4.5 database foundation | Implemented baseline | schema families for workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index are present |
+| Phase 4.5 server continuity surfaces | Implemented baseline | workspace / onboarding / run / artifact-trace / provider operational / aggregate surfaces are already broad |
+| continuity support stores | Implemented baseline | provider binding, managed secret metadata, provider probe history, workspace registry, and onboarding state stores exist |
+| route / binding / FastAPI surface | Implemented baseline | HTTP route surface, framework binding, and FastAPI binding are already wired |
+| general-user product shell | Not yet the dominant implementation truth | roadmap priority remains real, but current code has advanced further on server continuity than on beginner/product closure |
+| remaining edge / exception continuity coverage | Not fully inventoried | likely residual low-frequency surfaces still need explicit mapping |
 
 ---
 
 ## What Is Closed Enough To Treat As Stable
 
-### 1. Engine/UI truth ownership
+### 1. The codebase is already beyond the old `c869806` status world
 
-The following should be treated as stable enough not to reopen casually:
+That older status line is now historical.
+It must not continue to anchor top-level truth.
 
-* UI sits above engine truth through the adapter/view-model boundary
-* UI-owned state does not redefine structural truth, approval truth, execution truth, or storage lifecycle truth
-* `.nex.ui` is UI continuity state, not approved canonical truth
-* canonical Commit Snapshot must not carry canonical UI state
+### 2. The server continuity family is real
 
-### 2. Designer governance direction
+The current repository already contains a broad server/product continuity layer.
+Future work should treat that as existing baseline reality, not as a hypothetical design target.
 
-The following should now be treated as stable baseline behavior:
+### 3. The UI/storage/designer foundations remain valid
 
-* Designer is proposal-first
-* Designer must not silently mutate committed truth
-* approval/revision continuity remains explicit rather than implicit
+The older UI-sector convergence work is still real and implemented.
+The newer server continuity line sits on top of that reality rather than replacing it.
 
-### 3. Server continuity existence
+### 4. Macro roadmap and practical code-state must stay separated conceptually
 
-The following is now part of the stable repository truth:
+The roadmap still defines desired dependency order.
+The code snapshot tells us what is already in source.
+One must not erase the other.
 
-* workspace continuity APIs/stores exist
-* onboarding continuity APIs/stores exist
-* run admission/list/read APIs exist
-* artifact/trace read APIs exist
-* provider binding/secret/health/probe/probe-history APIs exist
-* framework/FastAPI binding layers exist
-* database/migration foundations exist
+---
+
+## Important Corrections To Earlier Mental Models
+
+### 1. The project is not currently “waiting to start Phase 4.5 server continuity”
+
+That model is incorrect for `d468795`.
+The code is already materially inside that sector.
+
+### 2. The immediate bottleneck was not missing server foundation code
+
+The immediate bottleneck was that top-level truth documents still described an older world.
+
+### 3. The next step is not “invent another adjacent continuity seam by habit”
+
+The next step after this truth sync is to identify the real remaining gaps and choose one bounded next seam deliberately.
 
 ---
 
 ## What Still Remains Open
 
-The following items are still open and should not be overclaimed.
+### 1. Remaining edge / exception / admin / collaboration continuity coverage
 
-### 1. Formal Phase 4.5 implementation-gate closure
-The architecture decision set exists, but production-grade closure still depends on explicit confirmation of infra decisions.
+The current broad continuity family still needs an explicit remaining-gap inventory.
+Some lower-frequency surfaces may remain outside the normalized projection family.
 
-### 2. Route / binding / export parity
-The expanded server surface now makes parity drift a real risk that still needs explicit auditing.
+### 2. Route/binding/export integrity under future changes
 
-### 3. Finished frontend product shell
-The Python-side UI shell/product-flow control plane is strong enough to guide further implementation, but it is not yet a finished end-user frontend application.
+Every new surface still risks drift across the route surface, framework binding, FastAPI binding, and package export layers.
 
-### 4. Next major implementation direction
-The project still needs an explicit choice about whether the next major push continues deeper server continuity or returns to roadmap-sequenced beginner/productization work.
+### 3. General-user productization closure
+
+Beginner shell enforcement, first-success blocker removal, return-use loop closure, and later accessibility/mobile/localization completion remain real open product work.
 
 ---
 
@@ -145,4 +142,4 @@ The project still needs an explicit choice about whether the next major push con
 
 The project should now be interpreted as:
 
-**engine/storage/designer/UI foundations substantially implemented, broad server/product continuity already implemented, and top-level truth documents now synchronized to that `d468795` reality.**
+**engine/storage/UI foundations implemented, broad Phase 4.5 server/product continuity already present in code, top-level truth synchronized to `d468795`, and the next responsible move being a narrow remaining-gap inventory rather than another blind expansion pass.**

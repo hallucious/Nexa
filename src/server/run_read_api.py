@@ -17,6 +17,7 @@ from src.server.run_read_models import (
     ProductRunLinks,
     ProductRunProgressView,
     ProductRunReadRejectedResponse,
+    ProductRunRecoveryView,
     ProductRunResultResponse,
     ProductRunStatusResponse,
     ProductTraceRefView,
@@ -44,6 +45,47 @@ def _status_value(run_record_row: Mapping[str, Any], engine_status: EngineRunSta
     if engine_status is not None:
         return engine_status.status
     return str(run_record_row.get('status') or '').strip().lower() or 'unknown'
+
+
+def _recovery_view_from_run_row(run_record_row: Mapping[str, Any]) -> ProductRunRecoveryView | None:
+    queue_job_id = str(run_record_row.get('queue_job_id') or '').strip() or None
+    claimed_by_worker_ref = str(run_record_row.get('claimed_by_worker_ref') or '').strip() or None
+    lease_expires_at = str(run_record_row.get('lease_expires_at') or '').strip() or None
+    latest_error_family = str(run_record_row.get('latest_error_family') or '').strip() or None
+    worker_attempt_number = int(run_record_row.get('worker_attempt_number') or 0)
+    orphan_review_required = bool(run_record_row.get('orphan_review_required'))
+    status = str(run_record_row.get('status') or '').strip().lower()
+
+    has_recovery_signal = any((queue_job_id, claimed_by_worker_ref, lease_expires_at, latest_error_family, orphan_review_required, worker_attempt_number > 0))
+    if not has_recovery_signal:
+        return None
+
+    if orphan_review_required:
+        recovery_state = 'manual_review_required'
+        summary = 'Run continuity requires orphan review before the latest worker state can be trusted.'
+    elif latest_error_family == 'worker_infrastructure_failure' and status in {'queued', 'starting', 'running'}:
+        recovery_state = 'retry_pending'
+        summary = 'Run continuity detected infrastructure failure and is waiting for another worker attempt.'
+    elif latest_error_family == 'worker_infrastructure_failure':
+        recovery_state = 'failed'
+        summary = 'Run continuity failed because the worker infrastructure did not complete the run safely.'
+    elif claimed_by_worker_ref and lease_expires_at and status in {'starting', 'running'}:
+        recovery_state = 'leased'
+        summary = 'Run is currently leased to a worker and the lease window is being tracked.'
+    else:
+        recovery_state = 'healthy'
+        summary = 'Run continuity metadata is present and currently healthy.'
+
+    return ProductRunRecoveryView(
+        recovery_state=recovery_state,
+        worker_attempt_number=worker_attempt_number,
+        queue_job_id=queue_job_id,
+        claimed_by_worker_ref=claimed_by_worker_ref,
+        lease_expires_at=lease_expires_at,
+        orphan_review_required=orphan_review_required,
+        latest_error_family=latest_error_family,
+        summary=summary,
+    )
 
 
 def _build_links(run_id: str) -> ProductRunLinks:
@@ -200,6 +242,7 @@ class RunStatusReadService:
                         provider_probe_rows=provider_probe_rows,
                         onboarding_rows=onboarding_rows,
                     ),
+                    recovery=_recovery_view_from_run_row(run_record_row),
                     links=_build_links(run_context.run_id),
                     message='Run exists, but current status is temporarily unavailable.',
                 )
@@ -248,6 +291,7 @@ class RunStatusReadService:
                 activity_continuity=activity_continuity,
                 progress=progress,
                 latest_engine_signal=latest_signal,
+                recovery=_recovery_view_from_run_row(run_record_row),
                 links=_build_links(run_context.run_id),
             )
         )
@@ -309,6 +353,7 @@ class RunResultReadService:
             final_output=final_output,
             artifact_refs=artifact_refs,
             trace_ref=trace_ref,
+            recovery=None,
             metrics=deepcopy(envelope.metrics),
             updated_at=updated_at,
         )
@@ -325,6 +370,7 @@ class RunResultReadService:
         workspace_title: Optional[str] = None,
         provider_continuity=None,
         activity_continuity=None,
+        recovery: ProductRunRecoveryView | None = None,
     ) -> ProductRunResultResponse:
         final_output = None
         final_output_row = result_row.get('final_output') if isinstance(result_row.get('final_output'), Mapping) else None
@@ -350,6 +396,7 @@ class RunResultReadService:
             final_output=final_output,
             artifact_refs=_artifact_refs_from_rows(artifact_rows),
             trace_ref=trace_ref,
+            recovery=recovery,
             metrics=deepcopy(result_row.get('metrics')) if isinstance(result_row.get('metrics'), dict) else {},
             updated_at=updated_at,
         )
@@ -435,6 +482,7 @@ class RunResultReadService:
                     workspace_title=workspace_title,
                     provider_continuity=provider_continuity,
                     activity_continuity=activity_continuity,
+                    recovery=_recovery_view_from_run_row(run_record_row),
                 )
             )
         return RunResultReadOutcome(
@@ -446,6 +494,7 @@ class RunResultReadService:
                 workspace_title=workspace_title,
                 provider_continuity=provider_continuity,
                 activity_continuity=activity_continuity,
+                recovery=_recovery_view_from_run_row(run_record_row),
                 updated_at=updated_at,
                 message='The run result is not available yet.',
             )

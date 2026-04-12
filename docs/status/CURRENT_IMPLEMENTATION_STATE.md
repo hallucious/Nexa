@@ -4,121 +4,122 @@ Version: 1.2.0
 
 ## Purpose
 
-This document is the short-form implementation truth sheet for the current uploaded repository baseline.
+This document is the short-form implementation truth sheet for the current repository state.
 
 It exists to answer four practical questions quickly:
 
 1. What is already implemented in code?
 2. What is only partially converged?
 3. What should not be reopened casually?
-4. What is still genuinely open after the repository moved into a broad server/product continuity line?
+4. What should happen next after the `d468795` truth sync?
 
 This document is intentionally implementation-first.
-It is not a replacement for BLUEPRINT or the detailed spec documents.
+It is not a replacement for the detailed architecture/spec documents.
 
 ## Authoritative Snapshot
 
 - authoritative implementation baseline commit: `d468795`
-- latest explicitly confirmed verified baseline: `2087 passed, 13 skipped`
-- status source: uploaded `Nexa_d468795.zip` plus the matching session handoff baseline
+- authoritative verified baseline: `2087 passed, 13 skipped`
+- status source: latest repository snapshot used in the current handoff baseline (`Nexa_d468795.zip`)
+- canonical macro roadmap reference: `nexa_implementation_order_final_v2_2.md`
+- practical phase interpretation: **Phase 4.5 server/product continuity build-out already broadly present in code**
 
 ## One-Line Position
 
-Nexa is **not** in a “UI not started” state,
-and it is also no longer accurately described as only a late shell/product-flow convergence repository.
-
-It is in an **engine/storage/designer/UI foundation complete enough, broad Phase 4.5 server/product continuity already present** state.
+Nexa at `d468795` is no longer mainly a “provider probe persistence not yet closed” repository; it is already a broad Phase 4.5 server/product continuity codebase whose top-level status documents previously lagged behind the actual source.
 
 ## Sector Matrix
 
-| Sector | Status | Practical meaning |
+| Sector | Status | Notes |
 |---|---|---|
-| execution engine core | Complete baseline | dependency-based runtime, savefile execution, provider/plugin runtime, and observability foundations are present |
-| storage / savefile lifecycle | Complete baseline | role-aware `.nex` lifecycle and savefile/state semantics are present |
-| UI adapter / view-model layer | Complete baseline | Core UI projections exist across panel/workspace/shell surfaces |
+| execution engine core | Complete baseline | dependency-based runtime, provider/plugin execution, observability, savefile execution, and artifact/trace foundations remain in place |
+| storage role split (`working_save` / `commit_snapshot`) | Complete baseline | role-aware `.nex` loading/validation/model split remains implemented |
+| UI adapter / view-model layer | Complete baseline | Core 5 + expanded shell/view-model surfaces remain present |
 | UI persistence / storage boundary | Complete baseline | Working Save may carry UI continuity; Commit Snapshot must not carry canonical `ui` |
-| UI i18n foundation | Complete baseline | EN fallback plus KO/EN UI resource support and persistence boundary are present |
-| Designer proposal/control foundation | Implemented baseline | session-state / proposal / precheck / preview / approval surfaces are code-backed |
-| shell / workflow / product-flow projection | Implemented baseline | builder/workflow/shell/workspace/product-flow hubs and projections are present |
-| server continuity/API layer | Broad implemented surface | workspace/onboarding/run/provider/artifact-trace/activity continuity APIs and stores already exist |
-| framework/FastAPI route binding layer | Implemented but audit-sensitive | HTTP route surface, framework bindings, and FastAPI bindings are present and now require parity discipline |
-| database/migration foundation | Implemented baseline | schema-family modeling and migration foundation exist for server continuity sectors |
-| productized frontend shell | Not fully closed | Python-side UI shell/projections are substantial, but this is not yet a finished end-user frontend product |
-| formal Phase 4.5 gate closure | Not fully closed | the code surface exists, but production-grade gate decisions still require explicit closure |
+| UI i18n foundation | Complete baseline | localized lookup, fallback, EN/KO resources, and persistence boundary remain implemented |
+| Designer proposal-flow projection | Implemented baseline | session-state / proposal / preview / approval projection remains present |
+| Subcircuit foundation | Implemented baseline | parser / validator / runtime / roundtrip / example coverage remain present |
+| server database / migration foundation | Implemented baseline | canonical Phase 4.5 schema families now exist in `src/server/database_foundation.py` |
+| workspace / onboarding continuity API | Implemented baseline | workspace registry and onboarding continuity families are already wired into server services/models/routes |
+| run admission / run read / run list continuity API | Implemented baseline | launch + list + status/result surfaces exist and carry continuity summaries |
+| artifact / trace continuity API | Implemented baseline | run artifact detail/list and trace read surfaces exist |
+| provider operational continuity API | Implemented baseline | provider catalog / binding / secret / health / probe / probe-history surfaces exist |
+| aggregate continuity projection | Implemented baseline | recent activity / history summary and multiple adjacent surfaces already expose normalized continuity views |
+| route / framework / FastAPI bindings | Implemented baseline | route surface, framework binding, and FastAPI binding already expose the current server family |
+| managed secret authority integration | Implemented baseline | AWS Secrets Manager binding exists for managed-secret authority integration |
+| general-user productization | Not active implementation truth | canonical roadmap still prioritizes beginner-shell / first-success / return-use, but this code baseline is more advanced in server continuity than in product closure |
 
 ## Stable Enough To Stop Reopening
 
-The following should now be treated as closed baseline decisions unless a real contradiction is found.
+The following should now be treated as closed-enough baseline decisions unless a real contradiction is found in source.
 
-### 1. Engine/UI truth ownership
-- engine owns structural truth
-- engine owns approval truth
-- engine owns execution truth
-- UI may project and coordinate, but must not redefine those truths
+### 1. Provider probe persistence foundation
 
-### 2. UI continuity boundary
-- `WorkingSaveModel.ui` is allowed
-- canonical snapshot-side `ui` is not allowed
-- Working Save -> Commit Snapshot must strip or reject canonical `ui`
+- `provider_probe_events` is already part of the database foundation
+- provider probe execution and provider probe history surfaces both already exist
+- further work should not pretend the project is still at the “invent probe persistence” stage
 
-### 3. Designer governance direction
-- Designer remains proposal-first
-- Designer may not silently mutate committed truth
-- explicit approval/revision continuity remains required
+### 2. Broad continuity projection family
 
-### 4. Server continuity existence
-- the `src/server/` continuity layer is already real code and tests
-- future work may refine it, but it should not be described as missing
+- continuity is already projected across workspace, onboarding, run, artifact/trace, provider, aggregate, user-scope, and setup-entry-adjacent server surfaces
+- accepted/read/rejected responses are increasingly symmetrical around shared continuity summaries
+- future work should inventory remaining edge cases rather than reopen the existence of the continuity family itself
 
-### 5. Macro-roadmap distinction
-- the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
-- current code reality being deep in Phase 4.5 does not erase that roadmap authority
+### 3. Macro roadmap vs practical code-state distinction
+
+- `nexa_implementation_order_final_v2_2.md` remains the canonical dependency roadmap
+- the actual code at `d468795` is already deep inside the Phase 4.5 continuity track
+- both statements must remain visible simultaneously
+
+### 4. UI/storage/designer foundations
+
+- the older UI-sector convergence work remains real and implemented
+- the newer server continuity work does not invalidate those foundations
+- future status documents must keep both lines visible instead of replacing one with the other
 
 ## Must Remain Open
 
-The following are still open and should not be falsely marked complete.
+The following are still open and should not be overclaimed.
 
-### 1. Formal Phase 4.5 implementation-gate closure
-The decision set exists, but production-grade closure still depends on explicit confirmation of hosting/auth/database/secret/API/session choices.
+### 1. Remaining edge / exception continuity gaps
 
-### 2. Route / binding / export parity
-The current server line has enough surface area that drift between route definitions, framework bindings, and FastAPI bindings is now a real implementation risk.
+Some lower-frequency rejection, exception, admin, collaboration, or non-happy-path surfaces may still fall outside the normalized continuity family.
+These should be found explicitly, not guessed.
 
-### 3. Broader end-user frontend productization
-The Python-side UI shell and workflow/product-flow projections are substantial, but they are not yet the same thing as a finished user-facing frontend product.
+### 2. Route / binding / export drift risk
 
-### 4. Macro-roadmap reconciliation
-The project still needs an explicit choice about whether the next large push continues deeper server continuity or returns to roadmap-sequenced beginner/productization work.
+Every future server seam still risks missing updates in:
+
+- `src/server/http_route_surface.py`
+- `src/server/framework_binding.py`
+- `src/server/fastapi_binding.py`
+- `src/server/__init__.py`
+
+### 3. General-user productization track
+
+The product roadmap priorities for beginner-shell enforcement, first-success blockers, and return-use loop are still open work even though the current codebase is ahead on server continuity.
 
 ## Reopen-Prohibited Topics
 
 Do not casually reopen the following:
 
-- whether UI is above the engine
+- whether provider probe persistence exists yet
+- whether the server already has a broad continuity projection family
+- whether the codebase is still mainly at the old `c869806` status line
 - whether `.nex.ui` may become canonical snapshot truth
-- whether Designer may silently mutate committed truth
-- whether the server continuity/API line already exists in the repository
-- whether the macro roadmap still matters once current code reality moved into Phase 4.5
+- whether UI foundations must be re-theorized before any further server/product work
 
 ## Keep-Open Topics
 
 Continue treating the following as active implementation topics:
 
-- formal Phase 4.5 implementation-gate closure
-- route / binding / export parity across the server surface
-- server continuity consolidation
-- broader frontend/product realization beyond the Python-side shell
-- roadmap reconciliation after truthful top-level status synchronization
+- remaining-gap inventory for edge/exception server surfaces
+- narrow next seam selection after the truth sync
+- general-user productization work when it becomes the active line again
+- route/binding/export integrity for every new server-facing change
 
 ## Recommended Immediate Next Batch
 
-The most rational immediate next batch is:
+The most rational immediate next batch after this truth sync is:
 
-**consolidate the existing Phase 4.5 server continuity line before adding another broad implementation family.**
-
-Practical meaning:
-
-1. audit `http_route_surface`, `framework_binding`, and `fastapi_binding` for parity
-2. audit server stores/schema families/tests against the Phase 4.5 decision documents
-3. decide whether the current server line is still pre-gate convergence work or whether the gate is now formally satisfied
-4. only then choose whether to continue deeper server implementation or pivot back to roadmap-sequenced beginner/productization work
+**build a real remaining-gap inventory for the Phase 4.5 continuity family and choose only one clearly justified bounded seam from that inventory.**

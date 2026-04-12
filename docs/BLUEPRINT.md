@@ -204,41 +204,25 @@ Engine
 Current implementation baseline:
 
 * authoritative implementation baseline commit: `d468795`
-* latest explicitly confirmed verified baseline: `2087 passed, 13 skipped`
-* the uploaded repository is no longer accurately described by the earlier `c869806` shell/product-flow-only status picture
-* the codebase now contains a broad Phase 4.5 server/product continuity surface under `src/server/`
-* that server surface already spans workspace continuity, onboarding continuity, run admission/list/read, artifact/trace reads, provider binding/secret/health/probe/probe-history APIs, recent activity aggregation, worker-queue orchestration, framework/FastAPI bindings, and database/migration foundations
-* canonical continuity stores already exist for:
-  * `workspace_registry`
-  * `onboarding_state`
-  * `provider_binding`
-  * `managed_secret_metadata`
-  * `provider_probe_history`
-* substantial UI / Designer / storage foundations remain present, but the practical near-term implementation emphasis is now the server/API continuity layer above the engine core
-* the macro implementation roadmap is still governed by `nexa_implementation_order_final_v2_2.md`; practical code reality being deep in Phase 4.5 does **not** replace that roadmap authority
-* the most important recent correction is that the earlier top-level truth documents had fallen behind the actual codebase; they must now be interpreted only after synchronization to the `d468795` baseline
-
-Repository shape at this baseline (directly inspectable from the uploaded archive):
-
-* `src/server/`: 43 top-level files
-* `tests/test_server_*.py`: 22 files
-* major source sectors present simultaneously:
-  * `engine`
-  * `storage`
-  * `designer`
-  * `ui`
-  * `server`
-  * `providers`
-  * `contracts`
-  * `platform`
+* authoritative verified baseline: `2087 passed, 13 skipped`
+* the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
+* the practical codebase state is already deep inside **Phase 4.5 server/product continuity build-out**
+* the repository is no longer mainly a narrow provider-probe-persistence seam; it already contains a broad server-side continuity layer across workspace, onboarding, run, provider, artifact/trace, aggregate, user-scope, and setup-entry surfaces
+* `src/server/` now contains the main server foundation families required for that continuity layer: boundary/auth adapters, database/migration foundation, run admission/read/list paths, artifact/trace read paths, provider secret/health/probe/probe-history paths, recent-activity aggregation, HTTP route surface, framework binding, and FastAPI binding
+* `src/server/database_foundation.py` now defines canonical Phase 4.5 product persistence families including workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index
+* continuity support stores already exist in code for provider binding, managed secret metadata, provider probe history, workspace registry, and onboarding state
+* the route/binding surface already exposes product/API continuity reads and writes for workspace, onboarding, provider operations, run launch/status/result/list, artifact detail, trace, recent activity, and history summary
+* aggregate continuity projection is already attached to multiple response families rather than remaining isolated in one endpoint family
+* top-level project-truth documents must therefore be interpreted against the `d468795` codebase, not against the older `c869806` / `1848 passed, 9 skipped` status world
+* this practical server progress does **not** mean the macro productization sequence has been superseded: beginner-shell / first-success / return-use priorities still remain the canonical product roadmap, while the current code has simply advanced further inside the Phase 4.5 continuity track than the old top-level docs acknowledged
 
 Interpretation rule:
 
-* do not treat Nexa as “UI not started”
-* do not treat Nexa as only a late shell/product-flow proof repository
-* do not describe the server continuity line as merely future Phase 4.5 planning work
+* do not treat provider probe persistence as the next still-open main seam for this baseline
+* do not treat local `.nex.ui` continuity and server continuity as the same thing
 * do not skip the explicit proposal boundary:
   Intent -> Patch -> Precheck -> Preview -> Approval -> Commit
+* sync authoritative truth first, then choose only a clearly justified next bounded seam
 
 ---
 ## 3.1 Current Runtime Convergence Snapshot
