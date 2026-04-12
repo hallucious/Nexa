@@ -328,15 +328,25 @@ def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
     assert artifact_list_response.status_code == 200
     artifact_list_payload = artifact_list_response.json()
     assert artifact_list_payload["artifact_count"] == 1
+    assert artifact_list_payload["workspace_title"] == "Primary Workspace"
+    assert artifact_list_payload["provider_continuity"]["provider_binding_count"] == 1
+    assert artifact_list_payload["activity_continuity"]["recent_run_count"] == 1
 
     artifact_detail_response = client.get("/api/artifacts/artifact-1", headers=_session_headers())
     assert artifact_detail_response.status_code == 200
     artifact_detail_payload = artifact_detail_response.json()
     assert artifact_detail_payload["payload_access"]["mode"] == "inline"
+    assert artifact_detail_payload["workspace_title"] == "Primary Workspace"
+    assert artifact_detail_payload["provider_continuity"]["provider_binding_count"] == 1
+    assert artifact_detail_payload["activity_continuity"]["recent_run_count"] == 1
 
     trace_response = client.get("/api/runs/run-001/trace?limit=10", headers=_session_headers())
     assert trace_response.status_code == 200
     trace_payload = trace_response.json()
+    assert trace_payload["workspace_id"] == "ws-001"
+    assert trace_payload["workspace_title"] == "Primary Workspace"
+    assert trace_payload["provider_continuity"]["provider_binding_count"] == 1
+    assert trace_payload["activity_continuity"]["recent_run_count"] == 1
     assert [event["sequence"] for event in trace_payload["events"]] == [1, 2]
 
 

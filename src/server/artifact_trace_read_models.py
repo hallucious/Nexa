@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+
 ArtifactTraceReadFailureFamily = Literal["product_read_failure", "run_not_found", "artifact_not_found"]
 PayloadAccessMode = Literal["inline", "download", "signed_url", "reference_only"]
 
@@ -52,6 +54,9 @@ class ProductRunArtifactsResponse:
     run_id: str
     workspace_id: str
     artifact_count: int
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     artifacts: tuple[ProductArtifactSummary, ...] = ()
 
     def __post_init__(self) -> None:
@@ -69,6 +74,9 @@ class ProductArtifactDetailResponse:
     run_id: str
     workspace_id: str
     kind: str
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     label: Optional[str] = None
     value_type: Optional[str] = None
     preview: Optional[str] = None
@@ -117,9 +125,13 @@ class ProductTraceEventView:
 @dataclass(frozen=True)
 class ProductRunTraceResponse:
     run_id: str
+    workspace_id: str
     status: str
     latest_event_time: Optional[str]
     event_count: int
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     current_focus: Optional[ProductTraceFocusView] = None
     events: tuple[ProductTraceEventView, ...] = ()
     next_cursor: Optional[str] = None
@@ -128,6 +140,8 @@ class ProductRunTraceResponse:
     def __post_init__(self) -> None:
         if not self.run_id:
             raise ValueError("ProductRunTraceResponse.run_id must be non-empty")
+        if not self.workspace_id:
+            raise ValueError("ProductRunTraceResponse.workspace_id must be non-empty")
         if not self.status:
             raise ValueError("ProductRunTraceResponse.status must be non-empty")
         if self.event_count < 0:

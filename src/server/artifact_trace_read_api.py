@@ -18,6 +18,7 @@ from src.server.artifact_trace_read_models import (
 )
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, RunAuthorizationContext, WorkspaceAuthorizationContext
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
 
 
 def _artifact_label(row: Mapping[str, Any]) -> Optional[str]:
@@ -64,6 +65,12 @@ class ArtifactReadService:
         *,
         request_auth: RequestAuthContext,
         run_context: Optional[RunAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> ArtifactListReadOutcome:
         run_id = run_context.run_id if run_context is not None else None
@@ -96,11 +103,30 @@ class ArtifactReadService:
             )
             for row in artifact_rows
         )
+        workspace_title = str((workspace_row or {}).get('title') or '').strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            run_context.workspace_context.workspace_id,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            run_context.workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return ArtifactListReadOutcome(
             response=ProductRunArtifactsResponse(
                 run_id=run_context.run_id,
                 workspace_id=run_context.workspace_context.workspace_id,
                 artifact_count=len(artifacts),
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 artifacts=artifacts,
             )
         )
@@ -111,6 +137,12 @@ class ArtifactReadService:
         *,
         request_auth: RequestAuthContext,
         workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_row: Optional[Mapping[str, Any]],
     ) -> ArtifactDetailReadOutcome:
         artifact_id = str(artifact_row.get('artifact_id') or '') if artifact_row is not None else None
@@ -129,12 +161,31 @@ class ArtifactReadService:
         )
         if not decision.allowed:
             return ArtifactDetailReadOutcome(rejected=cls._reject(family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this artifact.', artifact_id=str(artifact_row.get('artifact_id') or '')))
+        workspace_title = str((workspace_row or {}).get('title') or '').strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return ArtifactDetailReadOutcome(
             response=ProductArtifactDetailResponse(
                 artifact_id=str(artifact_row.get('artifact_id') or ''),
                 run_id=str(artifact_row.get('run_id') or ''),
                 workspace_id=str(artifact_row.get('workspace_id') or workspace_context.workspace_id),
                 kind=str(artifact_row.get('artifact_type') or artifact_row.get('kind') or ''),
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 label=_artifact_label(artifact_row),
                 value_type=_artifact_value_type(artifact_row),
                 preview=str(artifact_row.get('payload_preview')) if artifact_row.get('payload_preview') is not None else None,
@@ -162,6 +213,12 @@ class TraceReadService:
         request_auth: RequestAuthContext,
         run_context: Optional[RunAuthorizationContext],
         run_record_row: Optional[Mapping[str, Any]],
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         trace_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         cursor: Optional[str] = None,
         limit: int = 100,
@@ -225,12 +282,32 @@ class TraceReadService:
         message = None
         if not ordered_rows and not bool(run_record_row.get('trace_available')):
             message = 'Trace is not available yet.'
+        workspace_title = str((workspace_row or {}).get('title') or '').strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            run_context.workspace_context.workspace_id,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            run_context.workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return TraceReadOutcome(
             response=ProductRunTraceResponse(
                 run_id=run_context.run_id,
+                workspace_id=run_context.workspace_context.workspace_id,
                 status=str(run_record_row.get('status') or 'unknown'),
                 latest_event_time=latest_event_time,
                 event_count=len(ordered_rows),
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 current_focus=current_focus,
                 events=events,
                 next_cursor=next_cursor,

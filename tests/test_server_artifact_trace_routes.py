@@ -49,6 +49,9 @@ def test_run_artifacts_route_returns_product_projection() -> None:
     response = RunHttpRouteSurface.handle_run_artifacts(
         http_request=_auth_request(method="GET", path="/api/runs/run-001/artifacts", path_params={"run_id": "run-001"}),
         run_context=_run_context(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=[_run_row()],
+        provider_binding_rows=[{"workspace_id": "ws-001", "binding_id": "binding-001", "provider_key": "openai", "updated_at": "2026-04-11T12:05:00+00:00"}],
         artifact_rows=[
             {
                 "artifact_id": "art-001",
@@ -64,6 +67,9 @@ def test_run_artifacts_route_returns_product_projection() -> None:
 
     assert response.status_code == 200
     assert response.body["artifact_count"] == 1
+    assert response.body["workspace_title"] == "Primary Workspace"
+    assert response.body["provider_continuity"]["provider_binding_count"] == 1
+    assert response.body["activity_continuity"]["recent_run_count"] == 1
     assert response.body["artifacts"][0]["artifact_id"] == "art-001"
 
 
@@ -71,6 +77,9 @@ def test_artifact_detail_route_returns_reference_payload_access_when_storage_ref
     response = RunHttpRouteSurface.handle_artifact_detail(
         http_request=_auth_request(method="GET", path="/api/artifacts/art-001", path_params={"artifact_id": "art-001"}),
         workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=[_run_row()],
+        provider_binding_rows=[{"workspace_id": "ws-001", "binding_id": "binding-001", "provider_key": "openai", "updated_at": "2026-04-11T12:05:00+00:00"}],
         artifact_row={
             "artifact_id": "art-001",
             "run_id": "run-001",
@@ -85,6 +94,9 @@ def test_artifact_detail_route_returns_reference_payload_access_when_storage_ref
 
     assert response.status_code == 200
     assert response.body["artifact_id"] == "art-001"
+    assert response.body["workspace_title"] == "Primary Workspace"
+    assert response.body["provider_continuity"]["provider_binding_count"] == 1
+    assert response.body["activity_continuity"]["recent_run_count"] == 1
     assert response.body["payload_access"]["mode"] == "reference_only"
     assert response.body["payload_access"]["reference"] == "blob://art-001"
 
@@ -99,6 +111,9 @@ def test_run_trace_route_preserves_sequence_and_paginates() -> None:
         ),
         run_context=_run_context(),
         run_record_row=_run_row(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=[_run_row()],
+        provider_binding_rows=[{"workspace_id": "ws-001", "binding_id": "binding-001", "provider_key": "openai", "updated_at": "2026-04-11T12:05:00+00:00"}],
         trace_rows=[
             {
                 "trace_event_ref": "evt-001",
@@ -126,6 +141,10 @@ def test_run_trace_route_preserves_sequence_and_paginates() -> None:
     )
 
     assert response.status_code == 200
+    assert response.body["workspace_id"] == "ws-001"
+    assert response.body["workspace_title"] == "Primary Workspace"
+    assert response.body["provider_continuity"]["provider_binding_count"] == 1
+    assert response.body["activity_continuity"]["recent_run_count"] == 1
     assert response.body["event_count"] == 2
     assert response.body["events"][0]["event_id"] == "evt-001"
     assert response.body["next_cursor"] == "1"
