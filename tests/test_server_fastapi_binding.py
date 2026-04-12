@@ -448,6 +448,16 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
 
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_rows_provider=lambda: ({
+            'workspace_id': 'ws-001',
+            'owner_user_id': 'user-owner',
+            'title': 'Primary Workspace',
+            'description': 'Main',
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:00:30+00:00',
+            'continuity_source': 'server',
+            'archived': False,
+        },),
         provider_catalog_rows_provider=lambda: ({
             "provider_key": "openai",
             "provider_family": "openai",
@@ -478,6 +488,12 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
     )
     assert put_response.status_code == 200
     assert put_response.json()['binding']['binding_id'] == 'binding-created'
+
+    recent_response = client.get('/api/users/me/activity?limit=1', headers=_session_headers())
+    assert recent_response.status_code == 200
+    recent_payload = recent_response.json()
+    assert recent_payload['activities'][0]['activity_type'] == 'provider_binding_updated'
+    assert recent_payload['activities'][0]['activity_id'].startswith('binding:binding-created:')
 
     list_response = client.get('/api/workspaces/ws-001/provider-bindings', headers=_session_headers())
     assert list_response.status_code == 200

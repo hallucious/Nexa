@@ -59,6 +59,7 @@ class FastApiRouteBindings:
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
                 run_rows=self.dependencies.recent_run_rows_provider(),
                 provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -74,6 +75,7 @@ class FastApiRouteBindings:
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
                 run_rows=self.dependencies.recent_run_rows_provider(),
                 provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
             )
             return self._framework_response(outbound)
 

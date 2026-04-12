@@ -71,6 +71,22 @@ def _probe_row(probe_event_id: str, occurred_at: str, *, probe_status: str = 're
         'message': 'Probe completed.',
     }
 
+
+
+def _binding_row(binding_id: str, updated_at: str, *, workspace_id: str = 'ws-001', provider_key: str = 'openai', display_name: str = 'OpenAI GPT', enabled: bool = True, secret_ref: str = 'secret://ws-001/openai') -> dict:
+    return {
+        'binding_id': binding_id,
+        'workspace_id': workspace_id,
+        'provider_key': provider_key,
+        'provider_family': provider_key,
+        'display_name': display_name,
+        'credential_source': 'managed',
+        'secret_ref': secret_ref,
+        'enabled': enabled,
+        'updated_at': updated_at,
+        'updated_by_user_id': 'user-owner',
+    }
+
 def _headers(user_id: str = 'user-owner') -> dict[str, str]:
     return {
         'Authorization': 'Bearer token',
@@ -90,13 +106,16 @@ def test_recent_activity_service_returns_sorted_paginated_feed() -> None:
         provider_probe_rows=(
             _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
         ),
+        provider_binding_rows=(
+            _binding_row('binding-001', '2026-04-11T12:09:00+00:00'),
+        ),
         limit=2,
     )
     assert outcome.ok is True
     assert outcome.response is not None
-    assert [item.activity_type for item in outcome.response.activities] == ['provider_probe_reachable', 'run_queued']
+    assert [item.activity_type for item in outcome.response.activities] == ['provider_binding_updated', 'provider_probe_reachable']
     assert outcome.response.next_cursor == outcome.response.activities[-1].activity_id
-    assert outcome.response.total_visible_count == 4
+    assert outcome.response.total_visible_count == 5
 
 
 def test_recent_activity_summary_filters_to_visible_workspace() -> None:
@@ -110,6 +129,9 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
         ),
         provider_probe_rows=(
             _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
+        ),
+        provider_binding_rows=(
+            _binding_row('binding-001', '2026-04-11T12:09:00+00:00'),
         ),
     )
     assert outcome.ok is True
@@ -142,11 +164,14 @@ def test_recent_activity_route_family_round_trip() -> None:
         provider_probe_rows=(
             _probe_row('probe-001', '2026-04-11T12:08:00+00:00'),
         ),
+        provider_binding_rows=(
+            _binding_row('binding-001', '2026-04-11T12:09:00+00:00'),
+        ),
     )
     assert activity_response.status_code == 200
     assert activity_response.body['returned_count'] == 2
-    assert activity_response.body['activities'][0]['activity_type'] == 'provider_probe_reachable'
-    assert activity_response.body['activities'][0]['links']['provider_probe_history'].endswith('/probe-history')
+    assert activity_response.body['activities'][0]['activity_type'] == 'provider_binding_updated'
+    assert activity_response.body['activities'][0]['links']['provider_binding'].endswith('/provider-bindings/openai')
 
     summary_response = RunHttpRouteSurface.handle_history_summary(
         http_request=HttpRouteRequest(

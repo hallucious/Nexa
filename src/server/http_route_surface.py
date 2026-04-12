@@ -461,6 +461,7 @@ class RunHttpRouteSurface:
         membership_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Recent activity route only supports GET."})
@@ -476,6 +477,7 @@ class RunHttpRouteSurface:
             membership_rows=membership_rows,
             run_rows=run_rows,
             provider_probe_rows=provider_probe_rows,
+            provider_binding_rows=provider_binding_rows,
             workspace_id=workspace_id,
             limit=limit,
             cursor=cursor,
@@ -495,6 +497,7 @@ class RunHttpRouteSurface:
         membership_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "History summary route only supports GET."})
@@ -508,6 +511,7 @@ class RunHttpRouteSurface:
             membership_rows=membership_rows,
             run_rows=run_rows,
             provider_probe_rows=provider_probe_rows,
+            provider_binding_rows=provider_binding_rows,
             workspace_id=workspace_id,
         )
         if outcome.ok:

@@ -57,6 +57,18 @@ class InMemoryProviderBindingStore:
         self._rows_by_workspace_provider[(workspace_id, provider_key)] = normalized
         return dict(normalized)
 
+    def list_all_rows(self) -> tuple[dict[str, Any], ...]:
+        rows = [dict(row) for row in self._rows_by_workspace_provider.values()]
+        rows.sort(
+            key=lambda item: (
+                str(item.get("updated_at") or item.get("created_at") or ""),
+                str(item.get("workspace_id") or ""),
+                str(item.get("provider_key") or ""),
+            ),
+            reverse=True,
+        )
+        return tuple(rows)
+
     def list_workspace_rows(self, workspace_id: str) -> tuple[dict[str, Any], ...]:
         normalized_workspace_id = str(workspace_id or "").strip()
         rows = [
@@ -89,5 +101,6 @@ def bind_provider_binding_store(
         dependencies,
         workspace_provider_binding_rows_provider=store.list_workspace_rows,
         workspace_provider_binding_row_provider=store.get_workspace_provider_row,
+        recent_provider_binding_rows_provider=store.list_all_rows,
         provider_binding_writer=store.write,
     )

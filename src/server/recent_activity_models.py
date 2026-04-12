@@ -15,6 +15,7 @@ _ALLOWED_ACTIVITY_TYPES = {
     "provider_probe_reachable",
     "provider_probe_warning",
     "provider_probe_failed",
+    "provider_binding_updated",
 }
 _ALLOWED_HISTORY_SUMMARY_SCOPES = {"account", "workspace"}
 

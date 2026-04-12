@@ -42,6 +42,8 @@ def test_provider_binding_store_normalizes_and_reads_rows() -> None:
 
     rows = store.list_workspace_rows("ws-001")
     assert [row["provider_key"] for row in rows] == ["anthropic", "openai"]
+    all_rows = store.list_all_rows()
+    assert [row["provider_key"] for row in all_rows] == ["anthropic", "openai"]
     assert store.get_workspace_provider_row("ws-001", "OPENAI")["provider_key"] == "openai"
 
 
@@ -68,3 +70,5 @@ def test_bind_provider_binding_store_wires_read_and_write_dependencies() -> None
     selected = deps.workspace_provider_binding_row_provider("ws-001", "gemini")
     assert selected is not None
     assert selected["provider_key"] == "gemini"
+    recent_rows = deps.recent_provider_binding_rows_provider()
+    assert recent_rows[0]["binding_id"] == "binding-003"

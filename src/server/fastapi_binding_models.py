@@ -49,6 +49,7 @@ WorkspaceProviderBindingRowsProvider = Callable[[str], Sequence[Mapping[str, Any
 WorkspaceProviderBindingRowProvider = Callable[[str, str], Optional[Mapping[str, Any]]]
 WorkspaceProviderProbeRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
 RecentProviderProbeRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+RecentProviderBindingRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 ProviderProbeHistoryWriter = Callable[[Mapping[str, Any]], Any]
 ProviderBindingWriter = Callable[[Mapping[str, Any]], Any]
 ManagedSecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
@@ -147,6 +148,7 @@ class FastApiRouteDependencies:
     workspace_provider_binding_row_provider: WorkspaceProviderBindingRowProvider = _none_provider_binding_row
     workspace_provider_probe_rows_provider: WorkspaceProviderProbeRowsProvider = _empty_provider_binding_rows
     recent_provider_probe_rows_provider: RecentProviderProbeRowsProvider = _empty_noarg_rows
+    recent_provider_binding_rows_provider: RecentProviderBindingRowsProvider = _empty_noarg_rows
     provider_binding_writer: ProviderBindingWriter = _noop_provider_binding_writer
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer

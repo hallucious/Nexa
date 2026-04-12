@@ -63,6 +63,16 @@ def _probe_activity_type(row: Mapping[str, Any]) -> str:
     return 'provider_probe_failed'
 
 
+def _binding_activity_status(row: Mapping[str, Any]) -> str:
+    enabled = bool(row.get('enabled', True))
+    secret_ref = str(row.get('secret_ref') or '').strip()
+    if not enabled:
+        return 'disabled'
+    if not secret_ref:
+        return 'missing_secret'
+    return 'configured'
+
+
 class RecentActivityService:
     @classmethod
     def list_recent_activity(
@@ -73,6 +83,7 @@ class RecentActivityService:
         membership_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         workspace_id: Optional[str] = None,
         limit: int = 20,
         cursor: Optional[str] = None,
@@ -161,6 +172,37 @@ class RecentActivityService:
                     ),
                 )
             )
+        for row in provider_binding_rows:
+            row_workspace_id = str(row.get('workspace_id') or '').strip()
+            if row_workspace_id not in visible_ids:
+                continue
+            if workspace_id is not None and row_workspace_id != workspace_id:
+                continue
+            provider_key = str(row.get('provider_key') or '').strip().lower()
+            display_name = str(row.get('display_name') or provider_key).strip() or provider_key
+            occurred_at = str(row.get('updated_at') or row.get('created_at') or '').strip()
+            binding_id = str(row.get('binding_id') or '').strip()
+            if not provider_key or not occurred_at or not binding_id:
+                continue
+            workspace_title = titles.get(row_workspace_id, row_workspace_id)
+            status = _binding_activity_status(row)
+            activities.append(
+                ProductRecentActivityItemView(
+                    activity_id=f'binding:{binding_id}:{occurred_at}',
+                    activity_type='provider_binding_updated',
+                    occurred_at=occurred_at,
+                    workspace_id=row_workspace_id,
+                    workspace_title=workspace_title,
+                    status=status,
+                    summary=f'Provider binding for {display_name} is {status}.',
+                    actor_user_id=str(row.get('updated_by_user_id') or '').strip() or None,
+                    links=ProductRecentActivityLinks(
+                        workspace=f'/api/workspaces/{row_workspace_id}',
+                        provider_binding=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}',
+                        provider_health=f'/api/workspaces/{row_workspace_id}/provider-bindings/{provider_key}/health',
+                    ),
+                )
+            )
         for row in provider_probe_rows:
             record = ProviderProbeHistoryRecord.from_mapping(row)
             if record is None:
@@ -228,6 +270,7 @@ class RecentActivityService:
         membership_rows: Sequence[Mapping[str, Any]] = (),
         run_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         workspace_id: Optional[str] = None,
     ) -> HistorySummaryReadOutcome:
         if not request_auth.is_authenticated:
