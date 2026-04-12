@@ -197,6 +197,15 @@ def _make_client() -> TestClient:
         provider_catalog_rows_provider=lambda: provider_catalog_rows,
         workspace_provider_binding_rows_provider=lambda workspace_id: provider_binding_rows.get(workspace_id, ()),
         workspace_provider_binding_row_provider=lambda workspace_id, provider_key: next((row for row in provider_binding_rows.get(workspace_id, ()) if row['provider_key'] == provider_key), None),
+        workspace_provider_probe_rows_provider=lambda workspace_id: provider_probe_rows.get(workspace_id, ()),
+        recent_provider_binding_rows_provider=lambda: provider_binding_rows.get('ws-001', ()),
+        recent_provider_probe_rows_provider=lambda: provider_probe_rows.get('ws-001', ()),
+        recent_managed_secret_rows_provider=lambda: ({
+            'workspace_id': 'ws-001',
+            'provider_key': 'openai',
+            'secret_ref': 'secret://ws-001/openai',
+            'last_rotated_at': '2026-04-11T12:06:00+00:00',
+        },),
         workspace_row_provider=lambda workspace_id: {
             'workspace_id': 'ws-001',
             'owner_user_id': 'user-owner',
@@ -397,8 +406,10 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
 
     onboarding_get = client.get('/api/users/me/onboarding', headers=_session_headers())
     assert onboarding_get.status_code == 200
-    assert onboarding_get.json()['state']['first_success_achieved'] is False
-    assert onboarding_get.json()['provider_continuity'] is None
+    onboarding_get_payload = onboarding_get.json()
+    assert onboarding_get_payload['state']['first_success_achieved'] is False
+    assert onboarding_get_payload['provider_continuity']['provider_binding_count'] == 1
+    assert onboarding_get_payload['activity_continuity']['latest_run_id'] == 'run-001'
 
     onboarding_put = client.put(
         '/api/users/me/onboarding',
@@ -406,8 +417,10 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
         json={'first_success_achieved': True, 'advanced_surfaces_unlocked': True},
     )
     assert onboarding_put.status_code == 200
-    assert onboarding_put.json()['state']['advanced_surfaces_unlocked'] is True
-    assert onboarding_put.json()['provider_continuity'] is None
+    onboarding_put_payload = onboarding_put.json()
+    assert onboarding_put_payload['state']['advanced_surfaces_unlocked'] is True
+    assert onboarding_put_payload['provider_continuity']['provider_binding_count'] == 1
+    assert onboarding_put_payload['activity_continuity']['latest_run_id'] == 'run-001'
 
 
 def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() -> None:

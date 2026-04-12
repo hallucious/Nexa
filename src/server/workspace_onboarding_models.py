@@ -145,6 +145,8 @@ class ProductWorkspaceDetailResponse:
 class ProductWorkspaceListResponse:
     returned_count: int
     workspaces: tuple[ProductWorkspaceSummaryView, ...] = ()
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     message: Optional[str] = None
 
     def __post_init__(self) -> None:

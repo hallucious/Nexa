@@ -110,6 +110,10 @@ def test_workspace_registry_list_and_read_respect_visibility() -> None:
     assert list_outcome.response.workspaces[0].activity_continuity is not None
     assert list_outcome.response.workspaces[0].activity_continuity.recent_run_count == 1
     assert list_outcome.response.workspaces[0].activity_continuity.recent_probe_count == 1
+    assert list_outcome.response.provider_continuity is not None
+    assert list_outcome.response.provider_continuity.provider_binding_count == 1
+    assert list_outcome.response.activity_continuity is not None
+    assert list_outcome.response.activity_continuity.latest_run_id == 'run-001'
 
     read_outcome = WorkspaceRegistryService.read_workspace(
         request_auth=_auth('user-collab'),
@@ -188,6 +192,8 @@ def test_onboarding_continuity_reads_default_and_updates_workspace_scope() -> No
         onboarding_rows=(),
         workspace_context=None,
         workspace_id=None,
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(),
         recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed', 'status_family': 'terminal_success'},),
         provider_binding_rows=provider_binding_rows,
         managed_secret_rows=managed_secret_rows,
@@ -196,8 +202,10 @@ def test_onboarding_continuity_reads_default_and_updates_workspace_scope() -> No
     assert read_outcome.ok is True
     assert read_outcome.response is not None
     assert read_outcome.response.state.first_success_achieved is False
-    assert read_outcome.response.provider_continuity is None
-    assert read_outcome.response.activity_continuity is None
+    assert read_outcome.response.provider_continuity is not None
+    assert read_outcome.response.provider_continuity.provider_binding_count == 1
+    assert read_outcome.response.activity_continuity is not None
+    assert read_outcome.response.activity_continuity.latest_run_id == 'run-001'
     assert read_outcome.response.message == 'No canonical onboarding continuity has been recorded yet.'
 
     write_outcome = OnboardingContinuityService.upsert_onboarding_state(

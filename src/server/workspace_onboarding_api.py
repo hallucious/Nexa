@@ -228,6 +228,188 @@ def _activity_continuity_summary_for_workspace(
     )
 
 
+
+
+def _provider_continuity_summary_for_workspace_ids(
+    workspace_ids: Sequence[str],
+    *,
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+) -> Optional[ProductProviderContinuitySummary]:
+    normalized_ids = {str(workspace_id or '').strip() for workspace_id in workspace_ids if str(workspace_id or '').strip()}
+    if not normalized_ids:
+        return None
+    filtered_binding_rows = [
+        row for row in provider_binding_rows
+        if str(row.get('workspace_id') or '').strip() in normalized_ids
+    ]
+    filtered_secret_rows = [
+        row for row in managed_secret_rows
+        if str(row.get('workspace_id') or '').strip() in normalized_ids
+    ]
+    filtered_probe_rows = [
+        record for record in (ProviderProbeHistoryRecord.from_mapping(row) for row in provider_probe_rows)
+        if record is not None and record.workspace_id in normalized_ids
+    ]
+    if not filtered_binding_rows and not filtered_secret_rows and not filtered_probe_rows:
+        return None
+    latest_binding_at = None
+    latest_binding_id = None
+    if filtered_binding_rows:
+        filtered_binding_rows.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('binding_id') or '')), reverse=True)
+        latest_binding_at = str(filtered_binding_rows[0].get('updated_at') or filtered_binding_rows[0].get('created_at') or '').strip() or None
+        latest_binding_id = str(filtered_binding_rows[0].get('binding_id') or '').strip() or None
+    latest_secret_at = None
+    latest_secret_ref = None
+    if filtered_secret_rows:
+        filtered_secret_rows.sort(key=lambda row: (str(row.get('last_rotated_at') or ''), str(row.get('secret_ref') or '')), reverse=True)
+        latest_secret_at = str(filtered_secret_rows[0].get('last_rotated_at') or '').strip() or None
+        latest_secret_ref = str(filtered_secret_rows[0].get('secret_ref') or '').strip() or None
+    latest_probe = None
+    if filtered_probe_rows:
+        filtered_probe_rows.sort(key=lambda record: (record.occurred_at, record.probe_event_id), reverse=True)
+        latest_probe = filtered_probe_rows[0]
+    latest_provider_activity_at = max(
+        [value for value in (latest_binding_at, latest_secret_at, latest_probe.occurred_at if latest_probe is not None else None) if value],
+        default=None,
+    )
+    return ProductProviderContinuitySummary(
+        provider_binding_count=len(filtered_binding_rows),
+        managed_secret_count=len(filtered_secret_rows),
+        recent_probe_count=len(filtered_probe_rows),
+        latest_provider_binding_id=latest_binding_id,
+        latest_managed_secret_ref=latest_secret_ref,
+        latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
+        latest_provider_activity_at=latest_provider_activity_at,
+    )
+
+
+def _activity_continuity_summary_for_workspace_ids(
+    workspace_ids: Sequence[str],
+    *,
+    user_id: str,
+    recent_run_rows: Sequence[Mapping[str, Any]] = (),
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+    onboarding_rows: Sequence[Mapping[str, Any]] = (),
+) -> Optional[ProductActivityContinuitySummary]:
+    normalized_ids = {str(workspace_id or '').strip() for workspace_id in workspace_ids if str(workspace_id or '').strip()}
+    normalized_user_id = str(user_id or '').strip()
+    if not normalized_ids:
+        return None
+    filtered_runs = [
+        row for row in recent_run_rows
+        if str(row.get('workspace_id') or '').strip() in normalized_ids
+    ]
+    filtered_binding_rows = [
+        row for row in provider_binding_rows
+        if str(row.get('workspace_id') or '').strip() in normalized_ids
+    ]
+    filtered_secret_rows = [
+        row for row in managed_secret_rows
+        if str(row.get('workspace_id') or '').strip() in normalized_ids
+    ]
+    filtered_probe_rows = [
+        record for record in (ProviderProbeHistoryRecord.from_mapping(row) for row in provider_probe_rows)
+        if record is not None and record.workspace_id in normalized_ids
+    ]
+    filtered_onboarding_rows = [
+        row for row in onboarding_rows
+        if str(row.get('workspace_id') or '').strip() in normalized_ids
+        and str(row.get('user_id') or '').strip() == normalized_user_id
+    ]
+    if not filtered_runs and not filtered_binding_rows and not filtered_secret_rows and not filtered_probe_rows and not filtered_onboarding_rows:
+        return None
+    latest_run_at = None
+    latest_run_id = None
+    if filtered_runs:
+        filtered_runs.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('run_id') or '')), reverse=True)
+        latest_run_at = str(filtered_runs[0].get('updated_at') or filtered_runs[0].get('created_at') or '').strip() or None
+        latest_run_id = str(filtered_runs[0].get('run_id') or '').strip() or None
+    latest_binding_at = None
+    latest_binding_id = None
+    if filtered_binding_rows:
+        filtered_binding_rows.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('binding_id') or '')), reverse=True)
+        latest_binding_at = str(filtered_binding_rows[0].get('updated_at') or filtered_binding_rows[0].get('created_at') or '').strip() or None
+        latest_binding_id = str(filtered_binding_rows[0].get('binding_id') or '').strip() or None
+    latest_secret_at = None
+    latest_secret_ref = None
+    if filtered_secret_rows:
+        filtered_secret_rows.sort(key=lambda row: (str(row.get('last_rotated_at') or ''), str(row.get('secret_ref') or '')), reverse=True)
+        latest_secret_at = str(filtered_secret_rows[0].get('last_rotated_at') or '').strip() or None
+        latest_secret_ref = str(filtered_secret_rows[0].get('secret_ref') or '').strip() or None
+    latest_probe = None
+    if filtered_probe_rows:
+        filtered_probe_rows.sort(key=lambda record: (record.occurred_at, record.probe_event_id), reverse=True)
+        latest_probe = filtered_probe_rows[0]
+    latest_onboarding_at = None
+    latest_onboarding_state_id = None
+    if filtered_onboarding_rows:
+        filtered_onboarding_rows.sort(key=lambda row: (str(row.get('updated_at') or ''), str(row.get('onboarding_state_id') or '')), reverse=True)
+        latest_onboarding_at = str(filtered_onboarding_rows[0].get('updated_at') or '').strip() or None
+        latest_onboarding_state_id = str(filtered_onboarding_rows[0].get('onboarding_state_id') or '').strip() or None
+    latest_activity_at = max([
+        value for value in (
+            latest_run_at,
+            latest_binding_at,
+            latest_secret_at,
+            latest_probe.occurred_at if latest_probe is not None else None,
+            latest_onboarding_at,
+        ) if value
+    ], default=None)
+    pending_run_count = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'pending')
+    active_run_count = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'active')
+    terminal_failure_run_count = sum(1 for row in filtered_runs if str(row.get('status_family') or '').strip() == 'terminal_failure')
+    failed_probe_count = sum(1 for record in filtered_probe_rows if record.probe_status.lower() not in {'reachable', 'warning'})
+    return ProductActivityContinuitySummary(
+        recent_run_count=len(filtered_runs),
+        pending_run_count=pending_run_count,
+        active_run_count=active_run_count,
+        terminal_failure_run_count=terminal_failure_run_count,
+        recent_probe_count=len(filtered_probe_rows),
+        failed_probe_count=failed_probe_count,
+        recent_provider_binding_count=len(filtered_binding_rows),
+        recent_managed_secret_count=len(filtered_secret_rows),
+        recent_onboarding_count=len(filtered_onboarding_rows),
+        latest_activity_at=latest_activity_at,
+        latest_run_id=latest_run_id,
+        latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
+        latest_provider_binding_id=latest_binding_id,
+        latest_managed_secret_ref=latest_secret_ref,
+        latest_onboarding_state_id=latest_onboarding_state_id,
+    )
+
+
+def _continuity_projection_for_workspace_ids(
+    workspace_ids: Sequence[str],
+    *,
+    user_id: str,
+    recent_run_rows: Sequence[Mapping[str, Any]] = (),
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+    onboarding_rows: Sequence[Mapping[str, Any]] = (),
+) -> tuple[Optional[ProductProviderContinuitySummary], Optional[ProductActivityContinuitySummary]]:
+    return (
+        _provider_continuity_summary_for_workspace_ids(
+            workspace_ids,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        ),
+        _activity_continuity_summary_for_workspace_ids(
+            workspace_ids,
+            user_id=user_id,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        ),
+    )
+
 def _detail_from_workspace_row(
     workspace_row: Mapping[str, Any],
     *,
@@ -371,7 +553,24 @@ class WorkspaceRegistryService:
                 )
             )
         visible.sort(key=lambda item: (item.updated_at, item.workspace_id), reverse=True)
-        return WorkspaceListOutcome(response=ProductWorkspaceListResponse(returned_count=len(visible), workspaces=tuple(visible)))
+        workspace_ids = tuple(item.workspace_id for item in visible)
+        provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
+            workspace_ids,
+            user_id=user_id,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        return WorkspaceListOutcome(
+            response=ProductWorkspaceListResponse(
+                returned_count=len(visible),
+                workspaces=tuple(visible),
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
+            )
+        )
 
     @classmethod
     def read_workspace(
@@ -540,6 +739,8 @@ class OnboardingContinuityService:
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         workspace_context: Optional[WorkspaceAuthorizationContext] = None,
         workspace_id: Optional[str] = None,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
         recent_run_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
@@ -605,21 +806,37 @@ class OnboardingContinuityService:
             current_step=str(row.get('current_step') or '').strip() or None if row else None,
             updated_at=str(row.get('updated_at') or '').strip() or None if row else None,
         )
-        provider_continuity = _provider_continuity_summary_for_workspace(
-            normalized_workspace_id or '',
-            provider_binding_rows=provider_binding_rows,
-            managed_secret_rows=managed_secret_rows,
-            provider_probe_rows=provider_probe_rows,
-        ) if normalized_workspace_id is not None else None
-        activity_continuity = _activity_continuity_summary_for_workspace(
-            normalized_workspace_id or '',
-            user_id=request_auth.requested_by_user_ref or '',
-            recent_run_rows=recent_run_rows,
-            provider_binding_rows=provider_binding_rows,
-            managed_secret_rows=managed_secret_rows,
-            provider_probe_rows=provider_probe_rows,
-            onboarding_rows=onboarding_rows,
-        ) if normalized_workspace_id is not None else None
+        if normalized_workspace_id is not None:
+            provider_continuity = _provider_continuity_summary_for_workspace(
+                normalized_workspace_id or '',
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+            )
+            activity_continuity = _activity_continuity_summary_for_workspace(
+                normalized_workspace_id or '',
+                user_id=request_auth.requested_by_user_ref or '',
+                recent_run_rows=recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=onboarding_rows,
+            )
+        else:
+            visible_workspace_ids = [
+                str(row.get('workspace_id') or '').strip()
+                for row in workspace_rows
+                if _resolved_workspace_role(request_auth.requested_by_user_ref or '', row, membership_rows) is not None
+            ]
+            provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
+                visible_workspace_ids,
+                user_id=request_auth.requested_by_user_ref or '',
+                recent_run_rows=recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=onboarding_rows,
+            )
         return OnboardingReadOutcome(
             response=ProductOnboardingReadResponse(
                 continuity_scope=cls._scope(normalized_workspace_id),
@@ -641,6 +858,8 @@ class OnboardingContinuityService:
         workspace_context: Optional[WorkspaceAuthorizationContext] = None,
         onboarding_state_id_factory,
         now_iso: str,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
         recent_run_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
@@ -719,22 +938,38 @@ class OnboardingContinuityService:
             current_step=persisted['current_step'],
             updated_at=now_iso,
         )
-        provider_continuity = _provider_continuity_summary_for_workspace(
-            normalized_workspace_id or '',
-            provider_binding_rows=provider_binding_rows,
-            managed_secret_rows=managed_secret_rows,
-            provider_probe_rows=provider_probe_rows,
-        ) if normalized_workspace_id is not None else None
         activity_rows = tuple(onboarding_rows) + (persisted,)
-        activity_continuity = _activity_continuity_summary_for_workspace(
-            normalized_workspace_id or '',
-            user_id=request_auth.requested_by_user_ref or '',
-            recent_run_rows=recent_run_rows,
-            provider_binding_rows=provider_binding_rows,
-            managed_secret_rows=managed_secret_rows,
-            provider_probe_rows=provider_probe_rows,
-            onboarding_rows=activity_rows,
-        ) if normalized_workspace_id is not None else None
+        if normalized_workspace_id is not None:
+            provider_continuity = _provider_continuity_summary_for_workspace(
+                normalized_workspace_id or '',
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+            )
+            activity_continuity = _activity_continuity_summary_for_workspace(
+                normalized_workspace_id or '',
+                user_id=request_auth.requested_by_user_ref or '',
+                recent_run_rows=recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=activity_rows,
+            )
+        else:
+            visible_workspace_ids = [
+                str(row.get('workspace_id') or '').strip()
+                for row in workspace_rows
+                if _resolved_workspace_role(request_auth.requested_by_user_ref or '', row, membership_rows) is not None
+            ]
+            provider_continuity, activity_continuity = _continuity_projection_for_workspace_ids(
+                visible_workspace_ids,
+                user_id=request_auth.requested_by_user_ref or '',
+                recent_run_rows=recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=activity_rows,
+            )
         return OnboardingWriteOutcome(
             accepted=ProductOnboardingWriteAcceptedResponse(
                 status='accepted',
