@@ -4,6 +4,7 @@ import pytest
 
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
+from src.server.managed_secret_metadata_store import InMemoryManagedSecretMetadataStore, bind_managed_secret_metadata_store
 from src.server.provider_binding_store import InMemoryProviderBindingStore, bind_provider_binding_store
 from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore, bind_probe_history_store
 from fastapi.testclient import TestClient
@@ -536,3 +537,72 @@ def test_fastapi_binding_provider_probe_write_is_visible_in_history_and_recent_a
     recent_payload = recent_response.json()
     assert recent_payload['activities'][0]['activity_id'].startswith('probe:probe-new:')
     assert recent_payload['activities'][0]['activity_type'] == 'provider_probe_reachable'
+
+
+def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_resolution() -> None:
+    probe_store = InMemoryProviderProbeHistoryStore()
+    binding_store = InMemoryProviderBindingStore()
+    secret_store = InMemoryManagedSecretMetadataStore()
+
+    def _probe_runner(probe_input):
+        return {
+            "probe_status": "reachable",
+            "connectivity_state": "ok",
+            "message": "Provider connectivity probe succeeded.",
+            "effective_model_ref": probe_input.requested_model_ref or probe_input.default_model_ref,
+            "round_trip_latency_ms": 155,
+        }
+
+    deps = FastApiRouteDependencies(
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        provider_catalog_rows_provider=lambda: ({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+            "local_env_var_hint": "OPENAI_API_KEY",
+            "default_secret_name_template": "nexa/{workspace_id}/providers/openai",
+        },),
+        managed_secret_writer=lambda workspace_id, provider_key, secret_value, metadata: {
+            'secret_ref': f'secret://{workspace_id}/{provider_key}',
+            'secret_version_ref': 'v9',
+            'last_rotated_at': str(metadata.get('now_iso') or '2026-04-11T12:11:00+00:00'),
+        },
+        provider_probe_runner=_probe_runner,
+        binding_id_factory=lambda: 'binding-secret-roundtrip',
+        probe_event_id_factory=lambda: 'probe-secret-roundtrip',
+        now_iso_provider=lambda: '2026-04-11T12:11:00+00:00',
+    )
+    deps = bind_managed_secret_metadata_store(dependencies=deps, store=secret_store)
+    deps = bind_provider_binding_store(dependencies=deps, store=binding_store)
+    deps = bind_probe_history_store(dependencies=deps, store=probe_store)
+    client = TestClient(create_fastapi_app(dependencies=deps))
+
+    put_response = client.put(
+        '/api/workspaces/ws-001/provider-bindings/openai',
+        headers=_session_headers(),
+        json={'display_name': 'OpenAI GPT', 'secret_value': 'roundtrip-secret', 'enabled': True, 'default_model_ref': 'gpt-4.1'},
+    )
+    assert put_response.status_code == 200
+    assert put_response.json()['binding']['secret_version_ref'] == 'v9'
+
+    health_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/health', headers=_session_headers())
+    assert health_response.status_code == 200
+    health_payload = health_response.json()
+    assert health_payload['health_status'] == 'healthy'
+    assert health_payload['secret_resolution_status'] == 'resolved'
+
+    probe_response = client.post(
+        '/api/workspaces/ws-001/provider-bindings/openai/probe',
+        headers=_session_headers(),
+        json={'requested_model_ref': 'gpt-4.1'},
+    )
+    assert probe_response.status_code == 200
+    assert probe_response.json()['probe_status'] == 'reachable'
+
+    history_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/probe-history?limit=1', headers=_session_headers())
+    assert history_response.status_code == 200
+    history_payload = history_response.json()
+    assert history_payload['items'][0]['probe_event_id'] == 'probe-secret-roundtrip'
+    assert history_payload['items'][0]['secret_resolution_status'] == 'resolved'
