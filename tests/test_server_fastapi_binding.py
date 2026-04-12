@@ -5,8 +5,10 @@ import pytest
 pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from src.server.managed_secret_metadata_store import InMemoryManagedSecretMetadataStore, bind_managed_secret_metadata_store
+from src.server.onboarding_state_store import InMemoryOnboardingStateStore, bind_onboarding_state_store
 from src.server.provider_binding_store import InMemoryProviderBindingStore, bind_provider_binding_store
 from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore, bind_probe_history_store
+from src.server.workspace_registry_store import InMemoryWorkspaceRegistryStore, bind_workspace_registry_store
 from fastapi.testclient import TestClient
 
 from src.server import (
@@ -754,3 +756,68 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
     assert summary_payload['latest_provider_binding_id'] == 'binding-secret-roundtrip'
     assert summary_payload['latest_managed_secret_ref'] == 'secret://ws-001/openai'
     assert summary_payload['latest_activity_at'] == '2026-04-11T12:11:00+00:00'
+
+
+def test_fastapi_binding_workspace_create_and_onboarding_round_trip() -> None:
+    workspace_store = InMemoryWorkspaceRegistryStore()
+    onboarding_store = InMemoryOnboardingStateStore()
+
+    deps = FastApiRouteDependencies(
+        workspace_id_factory=lambda: 'ws-roundtrip',
+        membership_id_factory=lambda: 'membership-roundtrip',
+        onboarding_state_id_factory=lambda: 'onboard-roundtrip',
+        now_iso_provider=lambda: '2026-04-12T10:30:00+00:00',
+    )
+    deps = bind_workspace_registry_store(dependencies=deps, store=workspace_store)
+    deps = bind_onboarding_state_store(dependencies=deps, store=onboarding_store)
+    client = TestClient(create_fastapi_app(dependencies=deps))
+
+    create_response = client.post(
+        '/api/workspaces',
+        headers=_session_headers(),
+        json={'title': 'Roundtrip Workspace', 'description': 'Created in-process'},
+    )
+    assert create_response.status_code == 201
+    create_payload = create_response.json()
+    assert create_payload['workspace']['workspace_id'] == 'ws-roundtrip'
+    assert create_payload['owner_membership_id'] == 'membership-roundtrip'
+
+    list_response = client.get('/api/workspaces', headers=_session_headers())
+    assert list_response.status_code == 200
+    list_payload = list_response.json()
+    assert list_payload['returned_count'] == 1
+    assert list_payload['workspaces'][0]['workspace_id'] == 'ws-roundtrip'
+
+    detail_response = client.get('/api/workspaces/ws-roundtrip', headers=_session_headers())
+    assert detail_response.status_code == 200
+    detail_payload = detail_response.json()
+    assert detail_payload['workspace_id'] == 'ws-roundtrip'
+    assert detail_payload['role'] == 'owner'
+
+    recent_response = client.get('/api/users/me/activity?limit=1', headers=_session_headers())
+    assert recent_response.status_code == 200
+    recent_payload = recent_response.json()
+    assert recent_payload['activities'][0]['activity_type'] == 'workspace_updated'
+    assert recent_payload['activities'][0]['workspace_id'] == 'ws-roundtrip'
+
+    summary_response = client.get('/api/users/me/history-summary', headers=_session_headers())
+    assert summary_response.status_code == 200
+    summary_payload = summary_response.json()
+    assert summary_payload['visible_workspace_count'] == 1
+
+    onboarding_put = client.put(
+        '/api/users/me/onboarding',
+        headers=_session_headers(),
+        json={'workspace_id': 'ws-roundtrip', 'first_success_achieved': True, 'advanced_surfaces_unlocked': True, 'current_step': 'workspace-ready'},
+    )
+    assert onboarding_put.status_code == 200
+    onboarding_put_payload = onboarding_put.json()
+    assert onboarding_put_payload['state']['workspace_id'] == 'ws-roundtrip'
+    assert onboarding_put_payload['state']['first_success_achieved'] is True
+
+    onboarding_get = client.get('/api/users/me/onboarding?workspace_id=ws-roundtrip', headers=_session_headers())
+    assert onboarding_get.status_code == 200
+    onboarding_get_payload = onboarding_get.json()
+    assert onboarding_get_payload['state']['onboarding_state_id'] == 'onboard-roundtrip'
+    assert onboarding_get_payload['state']['advanced_surfaces_unlocked'] is True
+    assert onboarding_get_payload['state']['current_step'] == 'workspace-ready'

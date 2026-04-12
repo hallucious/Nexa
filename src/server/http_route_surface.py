@@ -359,6 +359,7 @@ class RunHttpRouteSurface:
         workspace_id_factory: Callable[[], str],
         membership_id_factory: Callable[[], str],
         now_iso: str,
+        workspace_registry_writer: Callable[[Mapping[str, Any], Mapping[str, Any]], Any] | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace create route only supports POST."})
@@ -388,6 +389,8 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.accepted is not None
+            if workspace_registry_writer is not None and outcome.created_workspace_row is not None and outcome.created_membership_row is not None:
+                workspace_registry_writer(dict(outcome.created_workspace_row), dict(outcome.created_membership_row))
             return _route_response(201, asdict(outcome.accepted))
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
@@ -436,6 +439,7 @@ class RunHttpRouteSurface:
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_state_writer: Callable[[Mapping[str, Any]], Any] | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "PUT":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Onboarding write route only supports PUT."})
@@ -472,6 +476,8 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.accepted is not None
+            if onboarding_state_writer is not None and outcome.persisted_onboarding_row is not None:
+                onboarding_state_writer(dict(outcome.persisted_onboarding_row))
             return _route_response(200, asdict(outcome.accepted))
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))

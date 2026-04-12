@@ -119,6 +119,7 @@ class FastApiRouteBindings:
                 workspace_id_factory=self.dependencies.workspace_id_factory or (lambda: 'workspace-missing-id-factory'),
                 membership_id_factory=self.dependencies.membership_id_factory or (lambda: 'membership-missing-id-factory'),
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else '',
+                workspace_registry_writer=self.dependencies.workspace_registry_writer,
             )
             return self._framework_response(outbound)
 
@@ -267,6 +268,7 @@ class FastApiRouteBindings:
                 provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
                 provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_state_writer=self.dependencies.onboarding_state_writer,
             )
             return self._framework_response(outbound)
 
