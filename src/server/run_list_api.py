@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Optional
 
 from src.server.auth_adapter import AuthorizationGate
-from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
+from src.server.auth_models import AuthorizationInput, RequestAuthContext, RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.run_list_models import (
     ProductRunListAppliedFilters,
     ProductRunListItemView,
@@ -16,6 +16,7 @@ from src.server.run_list_models import (
 from src.server.run_read_models import ProductExecutionTargetView, ProductResultSummaryView
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 from src.server.run_read_api import _recovery_view_from_run_row
+from src.server.run_control_api import build_run_control_actions
 
 
 _ALLOWED_WORKSPACE_LIST_ROLES = ("owner", "admin", "collaborator", "reviewer", "viewer")
@@ -216,6 +217,15 @@ class RunListReadService:
                     artifact_count=int(row.get("artifact_count") or 0),
                     result_summary=_summary_from_result_row(result_row),
                     recovery=_recovery_view_from_run_row(row),
+                    actions=build_run_control_actions(
+                        request_auth=request_auth,
+                        run_context=RunAuthorizationContext(
+                            run_id=run_id,
+                            workspace_context=workspace_context,
+                            run_owner_user_ref=str(row.get("requested_by_user_id") or "").strip() or None,
+                        ),
+                        run_record_row=row,
+                    ),
                     links=_build_links(run_id),
                 )
             )

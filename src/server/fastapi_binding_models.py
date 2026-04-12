@@ -53,6 +53,7 @@ RecentProviderBindingRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 RecentManagedSecretRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 ProviderProbeHistoryWriter = Callable[[Mapping[str, Any]], Any]
 ProviderBindingWriter = Callable[[Mapping[str, Any]], Any]
+RunRecordWriter = Callable[[Mapping[str, Any]], Any]
 WorkspaceRegistryWriter = Callable[[Mapping[str, Any], Mapping[str, Any]], Any]
 OnboardingStateWriter = Callable[[Mapping[str, Any]], Any]
 ManagedSecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
@@ -126,6 +127,10 @@ def _noop_onboarding_state_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return dict(row)
 
 
+def _noop_run_record_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    return dict(row)
+
+
 def _none_workspace_row(_: str) -> Optional[Mapping[str, Any]]:
     return None
 
@@ -164,6 +169,7 @@ class FastApiRouteDependencies:
     provider_binding_writer: ProviderBindingWriter = _noop_provider_binding_writer
     workspace_registry_writer: WorkspaceRegistryWriter = _noop_workspace_registry_writer
     onboarding_state_writer: OnboardingStateWriter = _noop_onboarding_state_writer
+    run_record_writer: RunRecordWriter = _noop_run_record_writer
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
     managed_secret_metadata_reader: Optional[ManagedSecretMetadataReader] = None

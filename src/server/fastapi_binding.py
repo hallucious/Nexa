@@ -400,6 +400,64 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.post("/api/runs/{run_id}/retry")
+        async def retry_run(request: Request, run_id: str) -> Response:
+            run_context = self.dependencies.run_context_provider(run_id)
+            inbound = self._inbound_request(request=request, path_params={"run_id": run_id})
+            outbound = FrameworkRouteBindings.handle_retry_run(
+                request=inbound,
+                run_context=run_context,
+                run_record_row=self.dependencies.run_record_provider(run_id),
+                workspace_row=self.dependencies.workspace_row_provider(run_context.workspace_context.workspace_id) if run_context is not None else None,
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                run_record_writer=self.dependencies.run_record_writer,
+                now_iso_factory=self.dependencies.now_iso_provider,
+            )
+            return self._framework_response(outbound)
+
+        @router.post("/api/runs/{run_id}/force-reset")
+        async def force_reset_run(request: Request, run_id: str) -> Response:
+            run_context = self.dependencies.run_context_provider(run_id)
+            inbound = self._inbound_request(request=request, path_params={"run_id": run_id})
+            outbound = FrameworkRouteBindings.handle_force_reset_run(
+                request=inbound,
+                run_context=run_context,
+                run_record_row=self.dependencies.run_record_provider(run_id),
+                workspace_row=self.dependencies.workspace_row_provider(run_context.workspace_context.workspace_id) if run_context is not None else None,
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                run_record_writer=self.dependencies.run_record_writer,
+                now_iso_factory=self.dependencies.now_iso_provider,
+            )
+            return self._framework_response(outbound)
+
+        @router.post("/api/runs/{run_id}/mark-reviewed")
+        async def mark_run_reviewed(request: Request, run_id: str) -> Response:
+            run_context = self.dependencies.run_context_provider(run_id)
+            inbound = self._inbound_request(request=request, path_params={"run_id": run_id})
+            outbound = FrameworkRouteBindings.handle_mark_run_reviewed(
+                request=inbound,
+                run_context=run_context,
+                run_record_row=self.dependencies.run_record_provider(run_id),
+                workspace_row=self.dependencies.workspace_row_provider(run_context.workspace_context.workspace_id) if run_context is not None else None,
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                run_record_writer=self.dependencies.run_record_writer,
+                now_iso_factory=self.dependencies.now_iso_provider,
+            )
+            return self._framework_response(outbound)
+
+
         @router.get("/api/runs/{run_id}/result")
         async def get_run_result(request: Request, run_id: str) -> Response:
             inbound = self._inbound_request(request=request, path_params={"run_id": run_id})

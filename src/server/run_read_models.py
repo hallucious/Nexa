@@ -84,6 +84,14 @@ class ProductRunLinks:
                 raise ValueError(f"ProductRunLinks.{field_name} must be non-empty")
 
 
+
+
+@dataclass(frozen=True)
+class ProductRunControlActionsView:
+    can_retry: bool = False
+    can_force_reset: bool = False
+    can_mark_reviewed: bool = False
+
 @dataclass(frozen=True)
 class ProductRunRecoveryView:
     recovery_state: RecoveryState
@@ -119,6 +127,7 @@ class ProductRunStatusResponse:
     progress: Optional[ProductRunProgressView] = None
     latest_engine_signal: Optional[ProductEngineSignalView] = None
     recovery: Optional[ProductRunRecoveryView] = None
+    actions: Optional[ProductRunControlActionsView] = None
     links: ProductRunLinks = field(default_factory=lambda: ProductRunLinks(result="/placeholder/result", trace="/placeholder/trace", artifacts="/placeholder/artifacts"))
     message: Optional[str] = None
 
@@ -201,6 +210,7 @@ class ProductRunResultResponse:
     artifact_refs: tuple[ProductArtifactRefView, ...] = ()
     trace_ref: Optional[ProductTraceRefView] = None
     recovery: Optional[ProductRunRecoveryView] = None
+    actions: Optional[ProductRunControlActionsView] = None
     metrics: dict[str, Any] = field(default_factory=dict)
     updated_at: Optional[str] = None
     message: Optional[str] = None

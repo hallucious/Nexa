@@ -117,12 +117,18 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "launch_run",
         "get_run_status",
         "get_run_result",
+        "retry_run",
+        "force_reset_run",
+        "mark_run_reviewed",
         "list_run_artifacts",
         "get_artifact_detail",
         "get_run_trace",
     ]
     assert definitions[0].path_template == "/api/users/me/activity"
-    assert definitions[-1].path_template == "/api/runs/{run_id}/trace"
+    assert any(item.path_template == "/api/runs/{run_id}/retry" for item in definitions)
+    assert any(item.path_template == "/api/runs/{run_id}/force-reset" for item in definitions)
+    assert any(item.path_template == "/api/runs/{run_id}/mark-reviewed" for item in definitions)
+    assert any(item.path_template == "/api/runs/{run_id}/trace" for item in definitions)
 
 
 

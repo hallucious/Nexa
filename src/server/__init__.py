@@ -63,6 +63,7 @@ from src.server.worker_queue_models import (
 from src.server.worker_queue_orchestration import WorkerQueueOrchestrationService
 from src.server.run_read_api import RunResultReadService, RunStatusReadService
 from src.server.run_list_api import RunListReadService
+from src.server.run_control_api import RunControlService, build_run_control_actions
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
 from src.server.recent_activity_api import RecentActivityService
@@ -168,6 +169,11 @@ from src.server.provider_secret_models import (
     ProductWorkspaceProviderBindingsResponse,
     ProductWorkspaceProviderBindingView,
 )
+from src.server.run_control_models import (
+    ProductRunControlAcceptedResponse,
+    ProductRunControlRejectedResponse,
+    RunControlOutcome,
+)
 from src.server.run_list_models import (
     ProductRunListAppliedFilters,
     ProductRunListItemView,
@@ -183,6 +189,7 @@ from src.server.run_read_models import (
     ProductFinalOutputView,
     ProductResultSummaryView,
     ProductRunLinks,
+    ProductRunControlActionsView,
     ProductRunProgressView,
     ProductRunReadRejectedResponse,
     ProductRunRecoveryView,
@@ -256,6 +263,7 @@ __all__ = [
     "ExecutionRecordResultAdapter",
     "RequestAuthContext",
     "RequestAuthResolver",
+    "build_run_control_actions",
     "RunAuthorizationContext",
     "SessionContext",
     "TraceEventAdapter",
@@ -353,6 +361,8 @@ __all__ = [
     "ProductRunListRejectedResponse",
     "ProductWorkspaceRunListResponse",
     "RunListReadOutcome",
+    "RunControlOutcome",
+    "RunControlService",
     "RunListReadService",
     "ProductArtifactRefView",
     "ProductEngineSignalView",
@@ -360,6 +370,9 @@ __all__ = [
     "ProductFinalOutputView",
     "ProductResultSummaryView",
     "ProductRunLinks",
+    "ProductRunControlAcceptedResponse",
+    "ProductRunControlActionsView",
+    "ProductRunControlRejectedResponse",
     "ProductRunProgressView",
     "ProductRunReadRejectedResponse",
     "ProductRunRecoveryView",

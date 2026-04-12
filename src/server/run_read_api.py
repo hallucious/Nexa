@@ -9,6 +9,7 @@ from src.server.auth_models import AuthorizationInput, RequestAuthContext, RunAu
 from src.server.boundary_models import EngineResultEnvelope, EngineRunStatusSnapshot
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 from src.server.run_recovery_projection import recovery_projection_from_run_row
+from src.server.run_control_api import build_run_control_actions
 from src.server.run_read_models import (
     ProductArtifactRefView,
     ProductEngineSignalView,
@@ -219,6 +220,7 @@ class RunStatusReadService:
                         onboarding_rows=onboarding_rows,
                     ),
                     recovery=_recovery_view_from_run_row(run_record_row),
+                    actions=build_run_control_actions(request_auth=request_auth, run_context=run_context, run_record_row=run_record_row),
                     links=_build_links(run_context.run_id),
                     message='Run exists, but current status is temporarily unavailable.',
                 )
@@ -268,6 +270,7 @@ class RunStatusReadService:
                 progress=progress,
                 latest_engine_signal=latest_signal,
                 recovery=_recovery_view_from_run_row(run_record_row),
+                actions=build_run_control_actions(request_auth=request_auth, run_context=run_context, run_record_row=run_record_row),
                 links=_build_links(run_context.run_id),
             )
         )
@@ -298,6 +301,7 @@ class RunResultReadService:
         workspace_title: Optional[str] = None,
         provider_continuity=None,
         activity_continuity=None,
+        actions=None,
     ) -> ProductRunResultResponse:
         artifact_refs = tuple(
             ProductArtifactRefView(
@@ -330,6 +334,7 @@ class RunResultReadService:
             artifact_refs=artifact_refs,
             trace_ref=trace_ref,
             recovery=None,
+            actions=actions,
             metrics=deepcopy(envelope.metrics),
             updated_at=updated_at,
         )
@@ -347,6 +352,7 @@ class RunResultReadService:
         provider_continuity=None,
         activity_continuity=None,
         recovery: ProductRunRecoveryView | None = None,
+        actions=None,
     ) -> ProductRunResultResponse:
         final_output = None
         final_output_row = result_row.get('final_output') if isinstance(result_row.get('final_output'), Mapping) else None
@@ -373,6 +379,7 @@ class RunResultReadService:
             artifact_refs=_artifact_refs_from_rows(artifact_rows),
             trace_ref=trace_ref,
             recovery=recovery,
+            actions=actions,
             metrics=deepcopy(result_row.get('metrics')) if isinstance(result_row.get('metrics'), dict) else {},
             updated_at=updated_at,
         )
@@ -445,8 +452,9 @@ class RunResultReadService:
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
         )
+        actions = build_run_control_actions(request_auth=request_auth, run_context=run_context, run_record_row=run_record_row)
         if engine_result is not None:
-            return RunResultReadOutcome(response=cls._response_from_engine_envelope(workspace_id=run_context.workspace_context.workspace_id, updated_at=updated_at, envelope=engine_result, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
+            return RunResultReadOutcome(response=cls._response_from_engine_envelope(workspace_id=run_context.workspace_context.workspace_id, updated_at=updated_at, envelope=engine_result, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity, actions=actions))
         if result_row is not None:
             return RunResultReadOutcome(
                 response=cls._response_from_rows(
@@ -459,6 +467,7 @@ class RunResultReadService:
                     provider_continuity=provider_continuity,
                     activity_continuity=activity_continuity,
                     recovery=_recovery_view_from_run_row(run_record_row),
+                    actions=actions,
                 )
             )
         return RunResultReadOutcome(
@@ -471,6 +480,7 @@ class RunResultReadService:
                 provider_continuity=provider_continuity,
                 activity_continuity=activity_continuity,
                 recovery=_recovery_view_from_run_row(run_record_row),
+                actions=actions,
                 updated_at=updated_at,
                 message='The run result is not available yet.',
             )

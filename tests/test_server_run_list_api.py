@@ -163,3 +163,5 @@ def test_run_list_exposes_recovery_projection_for_retrying_run() -> None:
     assert outcome.response.runs[0].recovery is not None
     assert outcome.response.runs[0].recovery.recovery_state == "retry_pending"
     assert outcome.response.runs[0].recovery.queue_job_id == "job-004"
+    assert outcome.response.runs[0].actions is not None
+    assert outcome.response.runs[0].actions.can_retry is True
