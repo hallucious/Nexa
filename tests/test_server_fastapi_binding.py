@@ -797,13 +797,15 @@ def test_fastapi_binding_workspace_create_and_onboarding_round_trip() -> None:
     recent_response = client.get('/api/users/me/activity?limit=1', headers=_session_headers())
     assert recent_response.status_code == 200
     recent_payload = recent_response.json()
-    assert recent_payload['activities'][0]['activity_type'] == 'workspace_updated'
+    assert recent_payload['activities'][0]['activity_type'] == 'workspace_created'
     assert recent_payload['activities'][0]['workspace_id'] == 'ws-roundtrip'
 
     summary_response = client.get('/api/users/me/history-summary', headers=_session_headers())
     assert summary_response.status_code == 200
     summary_payload = summary_response.json()
     assert summary_payload['visible_workspace_count'] == 1
+    assert summary_payload['recent_workspace_count'] == 1
+    assert summary_payload['latest_workspace_id'] == 'ws-roundtrip'
 
     onboarding_put = client.put(
         '/api/users/me/onboarding',

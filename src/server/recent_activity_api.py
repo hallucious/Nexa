@@ -129,14 +129,21 @@ class RecentActivityService:
         for item in visible_workspaces:
             if workspace_id is not None and item.workspace_id != workspace_id:
                 continue
+            activity_type = 'workspace_updated'
+            summary = f'Workspace \"{item.title}\" was updated.'
+            occurred_at = item.updated_at
+            if item.created_at and item.created_at == item.updated_at:
+                activity_type = 'workspace_created'
+                summary = f'Workspace \"{item.title}\" was created.'
+                occurred_at = item.created_at
             activities.append(
                 ProductRecentActivityItemView(
-                    activity_id=f'workspace:{item.workspace_id}:{item.updated_at}',
-                    activity_type='workspace_updated',
-                    occurred_at=item.updated_at,
+                    activity_id=f'workspace:{item.workspace_id}:{occurred_at}',
+                    activity_type=activity_type,
+                    occurred_at=occurred_at,
                     workspace_id=item.workspace_id,
                     workspace_title=item.title,
-                    summary=f'Workspace "{item.title}" was updated.',
+                    summary=summary,
                     links=ProductRecentActivityLinks(workspace=item.links.detail),
                 )
             )
@@ -367,13 +374,28 @@ class RecentActivityService:
                     workspace_id=workspace_id,
                 )
             )
+        filtered_workspaces = [
+            item for item in visible_workspaces
+            if workspace_id is None or item.workspace_id == workspace_id
+        ]
+        latest_workspace_at = None
+        latest_workspace_id = None
+        if filtered_workspaces:
+            filtered_workspaces = sorted(
+                filtered_workspaces,
+                key=lambda item: (item.updated_at or item.created_at or '', item.workspace_id),
+                reverse=True,
+            )
+            latest_workspace = filtered_workspaces[0]
+            latest_workspace_at = latest_workspace.updated_at or latest_workspace.created_at or None
+            latest_workspace_id = latest_workspace.workspace_id
         filtered_runs = [
             row for row in run_rows
             if str(row.get('workspace_id') or '').strip() in visible_ids
             and (workspace_id is None or str(row.get('workspace_id') or '').strip() == workspace_id)
         ]
         latest_run = None
-        latest_activity_at = None
+        latest_activity_at = latest_workspace_at
         if filtered_runs:
             filtered_runs.sort(key=lambda row: (str(row.get('updated_at') or row.get('created_at') or ''), str(row.get('run_id') or '')), reverse=True)
             latest_run = filtered_runs[0]
@@ -429,6 +451,7 @@ class RecentActivityService:
             latest_secret_ref = str(filtered_secret_rows[0].get('secret_ref') or '').strip() or None
         candidate_times = [value for value in (
             latest_activity_at,
+            latest_workspace_at,
             latest_binding_at,
             latest_secret_at,
             latest_onboarding_at,
@@ -454,12 +477,14 @@ class RecentActivityService:
                 active_runs=active_runs,
                 terminal_success_runs=terminal_success_runs,
                 terminal_failure_runs=terminal_failure_runs,
+                recent_workspace_count=len(filtered_workspaces),
                 recent_probe_count=recent_probe_count,
                 failed_probe_count=failed_probe_count,
                 recent_provider_binding_count=recent_provider_binding_count,
                 recent_managed_secret_count=recent_managed_secret_count,
                 recent_onboarding_count=recent_onboarding_count,
                 latest_activity_at=latest_activity_at,
+                latest_workspace_id=latest_workspace_id,
                 latest_run_id=str(latest_run.get('run_id') or '').strip() or None if latest_run is not None else None,
                 latest_probe_event_id=latest_probe.probe_event_id if latest_probe is not None else None,
                 latest_provider_binding_id=latest_binding_id,

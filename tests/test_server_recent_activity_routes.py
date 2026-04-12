@@ -173,6 +173,8 @@ def test_recent_activity_summary_filters_to_visible_workspace() -> None:
     assert outcome.ok is True
     assert outcome.response is not None
     assert outcome.response.visible_workspace_count == 1
+    assert outcome.response.recent_workspace_count == 1
+    assert outcome.response.latest_workspace_id == 'ws-001'
     assert outcome.response.total_visible_runs == 1
     assert outcome.response.terminal_success_runs == 1
     assert outcome.response.terminal_failure_runs == 0
@@ -258,6 +260,8 @@ def test_recent_activity_route_family_round_trip() -> None:
         ),
     )
     assert summary_response.status_code == 200
+    assert summary_response.body['recent_workspace_count'] == 1
+    assert summary_response.body['latest_workspace_id'] == 'ws-001'
     assert summary_response.body['total_visible_runs'] == 2
     assert summary_response.body['pending_runs'] == 1
     assert summary_response.body['recent_probe_count'] == 1

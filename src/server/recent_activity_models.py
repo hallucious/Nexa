@@ -6,6 +6,7 @@ from typing import Literal, Optional
 RecentActivityFailureFamily = Literal["product_read_failure"]
 _ALLOWED_RECENT_ACTIVITY_FAILURE_FAMILIES = {"product_read_failure"}
 _ALLOWED_ACTIVITY_TYPES = {
+    "workspace_created",
     "workspace_updated",
     "onboarding_updated",
     "run_queued",
@@ -99,12 +100,14 @@ class ProductHistorySummaryResponse:
     active_runs: int = 0
     terminal_success_runs: int = 0
     terminal_failure_runs: int = 0
+    recent_workspace_count: int = 0
     recent_probe_count: int = 0
     failed_probe_count: int = 0
     recent_provider_binding_count: int = 0
     recent_managed_secret_count: int = 0
     recent_onboarding_count: int = 0
     latest_activity_at: Optional[str] = None
+    latest_workspace_id: Optional[str] = None
     latest_run_id: Optional[str] = None
     latest_probe_event_id: Optional[str] = None
     latest_provider_binding_id: Optional[str] = None
@@ -121,6 +124,7 @@ class ProductHistorySummaryResponse:
             'active_runs',
             'terminal_success_runs',
             'terminal_failure_runs',
+            'recent_workspace_count',
             'recent_probe_count',
             'failed_probe_count',
             'recent_provider_binding_count',
