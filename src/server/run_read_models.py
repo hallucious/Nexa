@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+
 ReadFailureFamily = Literal["product_read_failure", "run_not_found"]
 ResultReadState = Literal["not_ready", "ready_success", "ready_partial", "ready_failure"]
 StatusFamily = Literal[
@@ -88,6 +90,9 @@ class ProductRunStatusResponse:
     started_at: Optional[str]
     updated_at: str
     completed_at: Optional[str] = None
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     progress: Optional[ProductRunProgressView] = None
     latest_engine_signal: Optional[ProductEngineSignalView] = None
     links: ProductRunLinks = field(default_factory=lambda: ProductRunLinks(result="/placeholder/result", trace="/placeholder/trace", artifacts="/placeholder/artifacts"))
@@ -164,6 +169,9 @@ class ProductRunResultResponse:
     workspace_id: str
     result_state: ResultReadState
     final_status: Optional[str]
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     result_summary: Optional[ProductResultSummaryView] = None
     final_output: Optional[ProductFinalOutputView] = None
     artifact_refs: tuple[ProductArtifactRefView, ...] = ()

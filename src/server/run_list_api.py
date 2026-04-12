@@ -14,6 +14,7 @@ from src.server.run_list_models import (
     RunListReadOutcome,
 )
 from src.server.run_read_models import ProductExecutionTargetView, ProductResultSummaryView
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
 
 
 _ALLOWED_WORKSPACE_LIST_ROLES = ("owner", "admin", "collaborator", "reviewer", "viewer")
@@ -77,6 +78,12 @@ class RunListReadService:
         workspace_context: Optional[WorkspaceAuthorizationContext],
         run_rows: Sequence[Mapping[str, Any]] = (),
         result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
         cursor: Optional[str] = None,
         limit: int = 20,
         status_family: Optional[str] = None,
@@ -191,6 +198,22 @@ class RunListReadService:
             workspace_id=workspace_context.workspace_id,
             returned_count=len(items),
             total_visible_count=len(ordered),
+            workspace_title=str((workspace_row or {}).get("title") or "").strip() or None,
+            provider_continuity=_provider_continuity_summary_for_workspace(
+                workspace_context.workspace_id,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+            ),
+            activity_continuity=_activity_continuity_summary_for_workspace(
+                workspace_context.workspace_id,
+                user_id=request_auth.requested_by_user_ref or '',
+                recent_run_rows=recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=onboarding_rows,
+            ),
             runs=tuple(items),
             next_cursor=next_cursor,
             applied_filters=ProductRunListAppliedFilters(

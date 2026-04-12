@@ -7,6 +7,7 @@ from typing import Any, Optional
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, RunAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunStatusSnapshot
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
 from src.server.run_read_models import (
     ProductArtifactRefView,
     ProductEngineSignalView,
@@ -106,6 +107,12 @@ class RunStatusReadService:
         request_auth: RequestAuthContext,
         run_context: Optional[RunAuthorizationContext],
         run_record_row: Optional[Mapping[str, Any]],
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
+        provider_binding_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
+        managed_secret_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
+        provider_probe_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
+        onboarding_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
         engine_status: Optional[EngineRunStatusSnapshot] = None,
     ) -> RunStatusReadOutcome:
         run_id = None
@@ -133,6 +140,22 @@ class RunStatusReadService:
 
         status = _status_value(run_record_row, engine_status)
         status_family = str(run_record_row.get('status_family') or _status_family_for_status(status))
+        workspace_title = str((workspace_row or {}).get('title') or '').strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            run_context.workspace_context.workspace_id,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            run_context.workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if status == 'unknown' and not run_record_row.get('status') and engine_status is None:
             return RunStatusReadOutcome(
                 response=ProductRunStatusResponse(
@@ -147,6 +170,22 @@ class RunStatusReadService:
                     created_at=str(run_record_row.get('created_at') or run_record_row.get('updated_at') or ''),
                     started_at=run_record_row.get('started_at'),
                     updated_at=str(run_record_row.get('updated_at') or ''),
+                    workspace_title=str((workspace_row or {}).get('title') or '').strip() or None,
+                    provider_continuity=_provider_continuity_summary_for_workspace(
+                        run_context.workspace_context.workspace_id,
+                        provider_binding_rows=provider_binding_rows,
+                        managed_secret_rows=managed_secret_rows,
+                        provider_probe_rows=provider_probe_rows,
+                    ),
+                    activity_continuity=_activity_continuity_summary_for_workspace(
+                        run_context.workspace_context.workspace_id,
+                        user_id=request_auth.requested_by_user_ref or '',
+                        recent_run_rows=recent_run_rows,
+                        provider_binding_rows=provider_binding_rows,
+                        managed_secret_rows=managed_secret_rows,
+                        provider_probe_rows=provider_probe_rows,
+                        onboarding_rows=onboarding_rows,
+                    ),
                     links=_build_links(run_context.run_id),
                     message='Run exists, but current status is temporarily unavailable.',
                 )
@@ -190,6 +229,9 @@ class RunStatusReadService:
                 started_at=run_record_row.get('started_at'),
                 updated_at=str(run_record_row.get('updated_at') or ''),
                 completed_at=run_record_row.get('finished_at'),
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 progress=progress,
                 latest_engine_signal=latest_signal,
                 links=_build_links(run_context.run_id),
@@ -216,6 +258,9 @@ class RunResultReadService:
         workspace_id: str,
         updated_at: Optional[str],
         envelope: EngineResultEnvelope,
+        workspace_title: Optional[str] = None,
+        provider_continuity=None,
+        activity_continuity=None,
     ) -> ProductRunResultResponse:
         artifact_refs = tuple(
             ProductArtifactRefView(
@@ -240,6 +285,9 @@ class RunResultReadService:
             workspace_id=workspace_id,
             result_state=envelope.result_state,  # type: ignore[arg-type]
             final_status=envelope.final_status,
+            workspace_title=workspace_title,
+            provider_continuity=provider_continuity,
+            activity_continuity=activity_continuity,
             result_summary=_result_summary_from_value(envelope.result_summary, envelope.final_status),
             final_output=final_output,
             artifact_refs=artifact_refs,
@@ -257,6 +305,9 @@ class RunResultReadService:
         result_row: Mapping[str, Any],
         artifact_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...],
         updated_at: Optional[str],
+        workspace_title: Optional[str] = None,
+        provider_continuity=None,
+        activity_continuity=None,
     ) -> ProductRunResultResponse:
         final_output = None
         final_output_row = result_row.get('final_output') if isinstance(result_row.get('final_output'), Mapping) else None
@@ -275,6 +326,9 @@ class RunResultReadService:
             workspace_id=workspace_id,
             result_state=str(result_row.get('result_state') or 'not_ready'),  # type: ignore[arg-type]
             final_status=final_status,
+            workspace_title=workspace_title,
+            provider_continuity=provider_continuity,
+            activity_continuity=activity_continuity,
             result_summary=_result_summary_from_value(str(result_row.get('result_summary') or ''), final_status),
             final_output=final_output,
             artifact_refs=_artifact_refs_from_rows(artifact_rows),
@@ -292,6 +346,12 @@ class RunResultReadService:
         run_record_row: Optional[Mapping[str, Any]],
         result_row: Optional[Mapping[str, Any]] = None,
         artifact_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
+        provider_binding_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
+        managed_secret_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
+        provider_probe_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
+        onboarding_rows: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] = (),
         engine_result: Optional[EngineResultEnvelope] = None,
     ) -> RunResultReadOutcome:
         run_id = None
@@ -318,8 +378,24 @@ class RunResultReadService:
             return cls._reject(run_id=run_context.run_id, family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this run result.')
 
         updated_at = str(run_record_row.get('updated_at') or '') or None
+        workspace_title = str((workspace_row or {}).get('title') or '').strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            run_context.workspace_context.workspace_id,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            run_context.workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or '',
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if engine_result is not None:
-            return RunResultReadOutcome(response=cls._response_from_engine_envelope(workspace_id=run_context.workspace_context.workspace_id, updated_at=updated_at, envelope=engine_result))
+            return RunResultReadOutcome(response=cls._response_from_engine_envelope(workspace_id=run_context.workspace_context.workspace_id, updated_at=updated_at, envelope=engine_result, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         if result_row is not None:
             return RunResultReadOutcome(
                 response=cls._response_from_rows(
@@ -328,6 +404,9 @@ class RunResultReadService:
                     result_row=result_row,
                     artifact_rows=artifact_rows,
                     updated_at=updated_at,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         return RunResultReadOutcome(
@@ -336,6 +415,9 @@ class RunResultReadService:
                 workspace_id=run_context.workspace_context.workspace_id,
                 result_state='not_ready',
                 final_status=None,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 updated_at=updated_at,
                 message='The run result is not available yet.',
             )

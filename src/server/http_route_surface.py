@@ -169,6 +169,12 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         run_context: Optional[RunAuthorizationContext],
         run_record_row: Optional[Mapping[str, Any]],
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         engine_status: Optional[EngineRunStatusSnapshot] = None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
@@ -184,6 +190,12 @@ class RunHttpRouteSurface:
             request_auth=_request_auth(http_request),
             run_context=run_context,
             run_record_row=run_record_row,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
             engine_status=engine_status,
         )
         if outcome.ok:
@@ -844,6 +856,12 @@ class RunHttpRouteSurface:
         workspace_context: Optional[WorkspaceAuthorizationContext],
         run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         result_rows_by_run_id: Optional[Mapping[str, Mapping[str, Any]]] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace run list route only supports GET."})
@@ -864,6 +882,12 @@ class RunHttpRouteSurface:
             workspace_context=workspace_context,
             run_rows=run_rows,
             result_rows_by_run_id=result_rows_by_run_id,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
             cursor=str(cursor) if cursor is not None else None,
             limit=limit,
             status_family=str(status_family) if status_family is not None else None,
@@ -884,6 +908,12 @@ class RunHttpRouteSurface:
         run_record_row: Optional[Mapping[str, Any]],
         result_row: Optional[Mapping[str, Any]] = None,
         artifact_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         engine_result: Optional[EngineResultEnvelope] = None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
@@ -901,6 +931,12 @@ class RunHttpRouteSurface:
             run_record_row=run_record_row,
             result_row=result_row,
             artifact_rows=artifact_rows,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
             engine_result=engine_result,
         )
         if outcome.ok:

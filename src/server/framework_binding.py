@@ -489,12 +489,24 @@ class FrameworkRouteBindings:
         workspace_context: Optional[WorkspaceAuthorizationContext],
         run_rows: Sequence[Mapping[str, Any]] = (),
         result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_list_workspace_runs(
             http_request=cls.to_http_route_request(request),
             workspace_context=workspace_context,
             run_rows=run_rows,
             result_rows_by_run_id=result_rows_by_run_id,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         return cls.to_framework_response(response)
 
@@ -530,12 +542,24 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         run_context: Optional[RunAuthorizationContext],
         run_record_row: Optional[Mapping[str, Any]],
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
         engine_status: Optional[EngineRunStatusSnapshot] = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_run_status(
             http_request=cls.to_http_route_request(request),
             run_context=run_context,
             run_record_row=run_record_row,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
             engine_status=engine_status,
         )
         return cls.to_framework_response(response)
@@ -549,6 +573,12 @@ class FrameworkRouteBindings:
         run_record_row: Optional[Mapping[str, Any]],
         result_row: Optional[Mapping[str, Any]] = None,
         artifact_rows: Sequence[Mapping[str, Any]] = (),
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
         engine_result: Optional[EngineResultEnvelope] = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_run_result(
@@ -557,6 +587,12 @@ class FrameworkRouteBindings:
             run_record_row=run_record_row,
             result_row=result_row,
             artifact_rows=artifact_rows,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
             engine_result=engine_result,
         )
         return cls.to_framework_response(response)

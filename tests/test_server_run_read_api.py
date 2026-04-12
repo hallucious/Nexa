@@ -73,6 +73,12 @@ def test_status_read_uses_engine_snapshot_without_fabricating_progress() -> None
         request_auth=_auth_context(),
         run_context=_run_context(),
         run_record_row=_run_row(status="running", status_family="active"),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=(_run_row(status="running", status_family="active"),),
+        provider_binding_rows=({"workspace_id": "ws-001", "binding_id": "binding-001", "updated_at": "2026-04-11T12:03:00+00:00"},),
+        managed_secret_rows=({"workspace_id": "ws-001", "secret_ref": "secret://ws-001/openai", "last_rotated_at": "2026-04-11T12:04:00+00:00"},),
+        provider_probe_rows=({"workspace_id": "ws-001", "probe_event_id": "probe-001", "provider_key": "openai", "provider_family": "openai", "display_name": "OpenAI", "probe_status": "reachable", "connectivity_state": "ok", "occurred_at": "2026-04-11T12:05:00+00:00"},),
+        onboarding_rows=({"workspace_id": "ws-001", "user_id": "user-owner", "onboarding_state_id": "onboard-001", "updated_at": "2026-04-11T12:06:00+00:00"},),
         engine_status=EngineRunStatusSnapshot(
             run_id="run-001",
             status="running",
@@ -89,6 +95,11 @@ def test_status_read_uses_engine_snapshot_without_fabricating_progress() -> None
     assert outcome.ok is True
     assert outcome.response is not None
     assert outcome.response.status == "running"
+    assert outcome.response.workspace_title == "Primary Workspace"
+    assert outcome.response.provider_continuity is not None
+    assert outcome.response.provider_continuity.provider_binding_count == 1
+    assert outcome.response.activity_continuity is not None
+    assert outcome.response.activity_continuity.recent_onboarding_count == 1
     assert outcome.response.status_family == "active"
     assert outcome.response.progress is not None
     assert outcome.response.progress.percent == 42
@@ -132,6 +143,12 @@ def test_result_read_returns_ready_success_projection_from_rows() -> None:
         request_auth=_auth_context(),
         run_context=_run_context(),
         run_record_row=_run_row(status="completed", status_family="terminal_success"),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=(_run_row(status="completed", status_family="terminal_success"),),
+        provider_binding_rows=({"workspace_id": "ws-001", "binding_id": "binding-001", "updated_at": "2026-04-11T12:03:00+00:00"},),
+        managed_secret_rows=({"workspace_id": "ws-001", "secret_ref": "secret://ws-001/openai", "last_rotated_at": "2026-04-11T12:04:00+00:00"},),
+        provider_probe_rows=({"workspace_id": "ws-001", "probe_event_id": "probe-001", "provider_key": "openai", "provider_family": "openai", "display_name": "OpenAI", "probe_status": "reachable", "connectivity_state": "ok", "occurred_at": "2026-04-11T12:05:00+00:00"},),
+        onboarding_rows=({"workspace_id": "ws-001", "user_id": "user-owner", "onboarding_state_id": "onboard-001", "updated_at": "2026-04-11T12:06:00+00:00"},),
         result_row={
             "run_id": "run-001",
             "workspace_id": "ws-001",
@@ -158,6 +175,11 @@ def test_result_read_returns_ready_success_projection_from_rows() -> None:
     assert outcome.ok is True
     assert outcome.response is not None
     assert outcome.response.result_state == "ready_success"
+    assert outcome.response.workspace_title == "Primary Workspace"
+    assert outcome.response.provider_continuity is not None
+    assert outcome.response.provider_continuity.latest_managed_secret_ref == "secret://ws-001/openai"
+    assert outcome.response.activity_continuity is not None
+    assert outcome.response.activity_continuity.latest_onboarding_state_id == "onboard-001"
     assert outcome.response.final_status == "completed"
     assert outcome.response.result_summary is not None
     assert outcome.response.result_summary.title == "Run completed"
@@ -202,6 +224,12 @@ def test_result_read_rejects_forbidden_caller_before_returning_result_shape() ->
         request_auth=forbidden_auth,
         run_context=_run_context(owner="user-owner"),
         run_record_row=_run_row(status="completed", status_family="terminal_success"),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=(_run_row(status="completed", status_family="terminal_success"),),
+        provider_binding_rows=({"workspace_id": "ws-001", "binding_id": "binding-001", "updated_at": "2026-04-11T12:03:00+00:00"},),
+        managed_secret_rows=({"workspace_id": "ws-001", "secret_ref": "secret://ws-001/openai", "last_rotated_at": "2026-04-11T12:04:00+00:00"},),
+        provider_probe_rows=({"workspace_id": "ws-001", "probe_event_id": "probe-001", "provider_key": "openai", "provider_family": "openai", "display_name": "OpenAI", "probe_status": "reachable", "connectivity_state": "ok", "occurred_at": "2026-04-11T12:05:00+00:00"},),
+        onboarding_rows=({"workspace_id": "ws-001", "user_id": "user-owner", "onboarding_state_id": "onboard-001", "updated_at": "2026-04-11T12:06:00+00:00"},),
         result_row={
             "run_id": "run-001",
             "workspace_id": "ws-001",

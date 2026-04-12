@@ -302,6 +302,12 @@ class FastApiRouteBindings:
                 workspace_context=workspace_context,
                 run_rows=self.dependencies.workspace_run_rows_provider(workspace_id),
                 result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -329,6 +335,12 @@ class FastApiRouteBindings:
                 request=inbound,
                 run_context=self.dependencies.run_context_provider(run_id),
                 run_record_row=self.dependencies.run_record_provider(run_id),
+                workspace_row=self.dependencies.workspace_row_provider(str((self.dependencies.run_record_provider(run_id) or {}).get('workspace_id') or '')),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(str((self.dependencies.run_record_provider(run_id) or {}).get('workspace_id') or '')),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(str((self.dependencies.run_record_provider(run_id) or {}).get('workspace_id') or '')),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 engine_status=self.dependencies.engine_status_provider(run_id),
             )
             return self._framework_response(outbound)
@@ -342,6 +354,12 @@ class FastApiRouteBindings:
                 run_record_row=self.dependencies.run_record_provider(run_id),
                 result_row=self.dependencies.result_row_provider(run_id),
                 artifact_rows=self.dependencies.artifact_rows_provider(run_id),
+                workspace_row=self.dependencies.workspace_row_provider(str((self.dependencies.run_record_provider(run_id) or {}).get('workspace_id') or '')),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(str((self.dependencies.run_record_provider(run_id) or {}).get('workspace_id') or '')),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(str((self.dependencies.run_record_provider(run_id) or {}).get('workspace_id') or '')),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 engine_result=self.dependencies.engine_result_provider(run_id),
             )
             return self._framework_response(outbound)

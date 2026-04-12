@@ -302,6 +302,9 @@ def test_fastapi_binding_status_endpoint_round_trip() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["status"] == "running"
+    assert payload["workspace_title"] == "Primary Workspace"
+    assert payload["provider_continuity"]["provider_binding_count"] == 1
+    assert payload["activity_continuity"]["recent_run_count"] == 1
     assert payload["progress"]["percent"] == 25
 
 
@@ -312,6 +315,9 @@ def test_fastapi_binding_result_endpoint_round_trip() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["result_state"] == "ready_success"
+    assert payload["workspace_title"] == "Primary Workspace"
+    assert payload["provider_continuity"]["provider_binding_count"] == 1
+    assert payload["activity_continuity"]["recent_run_count"] == 1
     assert payload["final_output"]["output_key"] == "answer"
 
 
@@ -349,6 +355,9 @@ def test_fastapi_binding_workspace_run_list_route_round_trip() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload["workspace_id"] == "ws-001"
+    assert payload["workspace_title"] == "Primary Workspace"
+    assert payload["provider_continuity"]["provider_binding_count"] == 1
+    assert payload["activity_continuity"]["recent_run_count"] == 1
     assert payload["returned_count"] == 2
     assert payload["runs"][0]["run_id"] == "run-002"
 

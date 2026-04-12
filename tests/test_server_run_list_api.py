@@ -51,6 +51,14 @@ def test_run_list_returns_sorted_paginated_workspace_runs() -> None:
             _run_row("run-003", "2026-04-11T12:02:00+00:00", status="queued", status_family="pending"),
         ),
         result_rows_by_run_id={"run-002": {"final_status": "completed", "result_state": "ready_success", "result_summary": "Success."}},
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=(
+            _run_row("run-003", "2026-04-11T12:02:00+00:00", status="queued", status_family="pending"),
+        ),
+        provider_binding_rows=({"workspace_id": "ws-001", "binding_id": "binding-001", "updated_at": "2026-04-11T12:03:00+00:00"},),
+        managed_secret_rows=({"workspace_id": "ws-001", "secret_ref": "secret://ws-001/openai", "last_rotated_at": "2026-04-11T12:04:00+00:00"},),
+        provider_probe_rows=({"workspace_id": "ws-001", "probe_event_id": "probe-001", "provider_key": "openai", "provider_family": "openai", "display_name": "OpenAI", "probe_status": "reachable", "connectivity_state": "ok", "occurred_at": "2026-04-11T12:05:00+00:00"},),
+        onboarding_rows=({"workspace_id": "ws-001", "user_id": "user-owner", "onboarding_state_id": "onboard-001", "updated_at": "2026-04-11T12:06:00+00:00"},),
         limit=2,
     )
 
@@ -60,6 +68,12 @@ def test_run_list_returns_sorted_paginated_workspace_runs() -> None:
     assert [item.run_id for item in response.runs] == ["run-003", "run-002"]
     assert response.next_cursor == "run-002"
     assert response.total_visible_count == 3
+    assert response.workspace_title == "Primary Workspace"
+    assert response.provider_continuity is not None
+    assert response.provider_continuity.provider_binding_count == 1
+    assert response.provider_continuity.managed_secret_count == 1
+    assert response.activity_continuity is not None
+    assert response.activity_continuity.recent_onboarding_count == 1
     assert response.runs[1].result_state == "ready_success"
     assert response.runs[1].result_summary is not None
     assert response.runs[1].links.status == "/api/runs/run-002"

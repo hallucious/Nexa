@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Literal
 
 from src.server.run_read_models import ProductExecutionTargetView, ProductResultSummaryView
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
 
 RunListReadFailureFamily = Literal["product_read_failure", "workspace_not_found", "invalid_cursor"]
 _ALLOWED_FAILURE_FAMILIES = {"product_read_failure", "workspace_not_found", "invalid_cursor"}
@@ -88,6 +89,9 @@ class ProductWorkspaceRunListResponse:
     workspace_id: str
     returned_count: int
     total_visible_count: int
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     runs: tuple[ProductRunListItemView, ...] = ()
     next_cursor: Optional[str] = None
     applied_filters: ProductRunListAppliedFilters = field(default_factory=ProductRunListAppliedFilters)
