@@ -125,6 +125,17 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
     assert definitions[-1].path_template == "/api/runs/{run_id}/trace"
 
 
+
+
+def test_framework_route_definitions_are_unique() -> None:
+    definitions = FrameworkRouteBindings.route_definitions()
+    route_names = [definition.route_name for definition in definitions]
+    route_identities = [(definition.route_name, definition.method, definition.path_template) for definition in definitions]
+
+    assert len(route_names) == len(set(route_names))
+    assert len(route_identities) == len(set(route_identities))
+
+
 def test_framework_binding_normalizes_request_to_http_route_request() -> None:
     http_request = FrameworkRouteBindings.to_http_route_request(
         _request(method="GET", path="/api/runs/run-001", path_params={"run_id": "run-001"}, query_params={"limit": 5})

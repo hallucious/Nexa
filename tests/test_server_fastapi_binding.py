@@ -94,18 +94,27 @@ class _FakeSecretsClient:
 
 def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     app = _make_client().app
-    fastapi_routes = {
+    fastapi_route_identities = [
         (route.name, method, route.path)
         for route in app.routes
         if getattr(route, "path", "").startswith("/api")
-        for method in (getattr(route, "methods", set()) - {"HEAD", "OPTIONS"})
-    }
-    framework_routes = {
+        for method in sorted(getattr(route, "methods", set()) - {"HEAD", "OPTIONS"})
+    ]
+    framework_route_identities = [
         (definition.route_name, definition.method, definition.path_template)
         for definition in FrameworkRouteBindings.route_definitions()
-    }
-    http_surface_routes = set(RunHttpRouteSurface.route_definitions())
+    ]
+    http_surface_route_identities = list(RunHttpRouteSurface.route_definitions())
 
+    assert len(fastapi_route_identities) == len(set(fastapi_route_identities))
+    assert len(framework_route_identities) == len(set(framework_route_identities))
+    assert len(http_surface_route_identities) == len(set(http_surface_route_identities))
+
+    fastapi_routes = set(fastapi_route_identities)
+    framework_routes = set(framework_route_identities)
+    http_surface_routes = set(http_surface_route_identities)
+
+    assert len(fastapi_route_identities) == len(framework_route_identities) == len(http_surface_route_identities)
     assert fastapi_routes == framework_routes == http_surface_routes
 
 

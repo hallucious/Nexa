@@ -76,6 +76,16 @@ def _auth_request(*, method: str, path: str, path_params: dict | None = None, js
     )
 
 
+
+
+def test_http_route_definitions_are_unique() -> None:
+    definitions = RunHttpRouteSurface.route_definitions()
+    route_names = [route_name for route_name, _method, _path in definitions]
+
+    assert len(route_names) == len(set(route_names))
+    assert len(definitions) == len(set(definitions))
+
+
 def test_launch_route_returns_accepted_http_response() -> None:
     response = RunHttpRouteSurface.handle_launch(
         http_request=_auth_request(
