@@ -4,6 +4,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+
 ProviderProbeHistoryFailureFamily = Literal["product_read_failure", "workspace_not_found"]
 ProviderProbeHistoryStatus = Literal["reachable", "warning", "failed", "blocked", "disabled", "missing"]
 ProviderProbeHistoryConnectivityState = Literal["ok", "provider_error", "auth_failed", "transport_error", "timeout", "unknown", "not_checked"]
@@ -156,6 +158,9 @@ class ProductProviderProbeHistoryResponse:
     returned_count: int
     total_visible_count: int
     items: tuple[ProductProviderProbeHistoryItemView, ...] = ()
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     applied_filters: ProductProviderProbeHistoryAppliedFilters = field(default_factory=ProductProviderProbeHistoryAppliedFilters)
     next_cursor: Optional[str] = None
     latest_probe_at: Optional[str] = None

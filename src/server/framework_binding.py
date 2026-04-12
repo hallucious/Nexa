@@ -310,12 +310,22 @@ class FrameworkRouteBindings:
         workspace_context: Optional[WorkspaceAuthorizationContext],
         binding_rows: Sequence[Mapping[str, Any]] = (),
         provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_list_workspace_provider_bindings(
             http_request=cls.to_http_route_request(request),
             workspace_context=workspace_context,
             binding_rows=binding_rows,
             provider_catalog_rows=provider_catalog_rows,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         return cls.to_framework_response(response)
 
@@ -331,6 +341,12 @@ class FrameworkRouteBindings:
         secret_writer=None,
         binding_writer=None,
         now_iso: str,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        binding_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_put_workspace_provider_binding(
             http_request=cls.to_http_route_request(request),
@@ -341,6 +357,12 @@ class FrameworkRouteBindings:
             secret_writer=secret_writer,
             binding_writer=binding_writer,
             now_iso=now_iso,
+            workspace_row=workspace_row,
+            binding_rows=binding_rows,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         return cls.to_framework_response(response)
 
@@ -359,6 +381,11 @@ class FrameworkRouteBindings:
         probe_event_id_factory=None,
         probe_history_writer=None,
         now_iso: Optional[str] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_probe_workspace_provider(
             http_request=cls.to_http_route_request(request),
@@ -371,6 +398,11 @@ class FrameworkRouteBindings:
             probe_event_id_factory=probe_event_id_factory,
             probe_history_writer=probe_history_writer,
             now_iso=now_iso,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         return cls.to_framework_response(response)
 
@@ -402,6 +434,11 @@ class FrameworkRouteBindings:
         binding_rows: Sequence[Mapping[str, Any]] = (),
         provider_catalog_rows: Sequence[Mapping[str, Any]] = (),
         secret_metadata_reader: Optional[SecretMetadataReader] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_get_workspace_provider_health(
             http_request=cls.to_http_route_request(request),
@@ -409,6 +446,11 @@ class FrameworkRouteBindings:
             binding_rows=tuple(binding_rows),
             provider_catalog_rows=tuple(provider_catalog_rows),
             secret_metadata_reader=secret_metadata_reader,
+            workspace_row=workspace_row,
+            recent_run_rows=tuple(recent_run_rows),
+            managed_secret_rows=tuple(managed_secret_rows),
+            provider_probe_rows=tuple(provider_probe_rows),
+            onboarding_rows=tuple(onboarding_rows),
         )
         return cls.to_framework_response(response)
 
@@ -420,6 +462,11 @@ class FrameworkRouteBindings:
         workspace_context: Optional[WorkspaceAuthorizationContext],
         provider_key: str,
         probe_history_rows: Sequence[Mapping[str, Any]] = (),
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_list_provider_probe_history(
             http_request=cls.to_http_route_request(request),

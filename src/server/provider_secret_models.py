@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+
 ProviderSecretReadFailureFamily = Literal[
     "product_read_failure",
     "workspace_not_found",
@@ -110,6 +112,9 @@ class ProductWorkspaceProviderBindingsResponse:
     workspace_id: str
     returned_count: int
     bindings: tuple[ProductWorkspaceProviderBindingView, ...] = ()
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     message: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -145,6 +150,9 @@ class ProductProviderBindingWriteRequest:
 class ProductProviderBindingWriteAcceptedResponse:
     status: str
     binding: ProductWorkspaceProviderBindingView
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     was_created: bool = False
     secret_rotated: bool = False
     message: Optional[str] = None

@@ -85,6 +85,7 @@ def test_provider_probe_history_route_round_trip() -> None:
     assert response.status_code == 200
     assert response.body['returned_count'] == 2
     assert response.body['items'][0]['probe_event_id'] == 'probe-002'
+    assert response.body['provider_continuity'] is None or response.body['provider_continuity']['recent_probe_count'] >= 1
 
 
 def test_provider_probe_history_framework_round_trip() -> None:

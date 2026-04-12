@@ -69,6 +69,8 @@ def test_provider_catalog_and_workspace_binding_list_round_trip() -> None:
     assert list_outcome.ok is True
     assert list_outcome.response is not None
     assert list_outcome.response.bindings[0].status == 'configured'
+    assert list_outcome.response.provider_continuity is not None
+    assert list_outcome.response.provider_continuity.provider_binding_count == 1
 
 
 def test_provider_binding_upsert_requires_manage_scope_and_never_echoes_secret() -> None:
@@ -140,6 +142,7 @@ def test_provider_secret_http_routes_round_trip() -> None:
     )
     assert list_response.status_code == 200
     assert list_response.body['workspace_id'] == 'ws-001'
+    assert list_response.body['provider_continuity'] is None
 
     put_response = RunHttpRouteSurface.handle_put_workspace_provider_binding(
         http_request=HttpRouteRequest(
@@ -163,5 +166,6 @@ def test_provider_secret_http_routes_round_trip() -> None:
     )
     assert put_response.status_code == 200
     assert put_response.body['binding']['provider_key'] == 'openai'
+    assert put_response.body['provider_continuity'] is not None
     assert put_response.body['binding']['secret_ref'] == 'secret://ws-001/openai'
     assert 'very-secret' not in str(put_response.body)

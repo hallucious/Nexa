@@ -523,12 +523,16 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
     list_response = client.get('/api/workspaces/ws-001/provider-bindings', headers=_session_headers())
     assert list_response.status_code == 200
     assert list_response.json()['returned_count'] == 1
-    assert list_response.json()['bindings'][0]['provider_key'] == 'openai'
+    list_payload = list_response.json()
+    assert list_payload['bindings'][0]['provider_key'] == 'openai'
+    assert list_payload['provider_continuity']['provider_binding_count'] >= 1
 
     health_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/health', headers=_session_headers())
     assert health_response.status_code == 200
     assert health_response.json()['provider_key'] == 'openai'
-    assert 'health_status' in health_response.json()
+    assert health_response.json()['health']['provider_key'] == 'openai'
+    assert health_response.json()['health']['health_status'] in {'healthy', 'warning', 'blocked', 'disabled', 'missing'}
+    assert health_response.json()['provider_continuity']['provider_binding_count'] >= 1
 
     probe_response = client.post(
         '/api/workspaces/ws-001/provider-bindings/openai/probe',
@@ -538,12 +542,15 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
     assert probe_response.status_code == 200
     probe_payload = probe_response.json()
     assert probe_payload['probe_status'] == 'reachable'
+    assert probe_payload['provider_continuity']['provider_binding_count'] >= 1
 
     history_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/probe-history', headers=_session_headers())
     assert history_response.status_code == 200
     assert history_response.json()['returned_count'] == 1
     assert history_response.json()['items'][0]['probe_event_id'] == 'probe-created'
-    assert history_response.json()['items'][0]['provider_key'] == 'openai'
+    history_payload = history_response.json()
+    assert history_payload['items'][0]['provider_key'] == 'openai'
+    assert history_payload['provider_continuity']['recent_probe_count'] >= 1
 
 
 
@@ -766,8 +773,9 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
     health_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/health', headers=_session_headers())
     assert health_response.status_code == 200
     health_payload = health_response.json()
-    assert health_payload['health_status'] == 'healthy'
-    assert health_payload['secret_resolution_status'] == 'resolved'
+    assert health_payload['health']['health_status'] == 'healthy'
+    assert health_payload['health']['secret_resolution_status'] == 'resolved'
+    assert health_payload['provider_continuity']['provider_binding_count'] == 1
 
     probe_response = client.post(
         '/api/workspaces/ws-001/provider-bindings/openai/probe',

@@ -103,7 +103,8 @@ def test_provider_health_service_and_route_round_trip() -> None:
     )
     assert route_response.status_code == 200
     assert route_response.body["provider_key"] == "openai"
-    assert route_response.body["secret_resolution_status"] == "resolved"
+    assert route_response.body["health"]["provider_key"] == "openai"
+    assert route_response.body["health"]["secret_resolution_status"] == "resolved"
 
 
 def test_provider_health_list_round_trip_in_framework_binding() -> None:

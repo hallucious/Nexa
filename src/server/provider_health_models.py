@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 
+from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+
 ProviderHealthReadFailureFamily = Literal["product_read_failure", "workspace_not_found", "provider_not_supported"]
 ProviderHealthSeverity = Literal["blocked", "warning", "info"]
 ProviderBindingHealthStatus = Literal["healthy", "warning", "blocked", "disabled", "missing"]
@@ -92,6 +94,9 @@ class ProductWorkspaceProviderHealthResponse:
     workspace_id: str
     returned_count: int
     providers: tuple[ProductProviderBindingHealthView, ...] = ()
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     message: Optional[str] = None
 
     def __post_init__(self) -> None:
@@ -99,6 +104,22 @@ class ProductWorkspaceProviderHealthResponse:
             raise ValueError("ProductWorkspaceProviderHealthResponse.workspace_id must be non-empty")
         if self.returned_count < 0:
             raise ValueError("ProductWorkspaceProviderHealthResponse.returned_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductProviderHealthDetailResponse:
+    workspace_id: str
+    health: ProductProviderBindingHealthView
+    workspace_title: Optional[str] = None
+    provider_key: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
+
+    def __post_init__(self) -> None:
+        if not self.workspace_id:
+            raise ValueError("ProductProviderHealthDetailResponse.workspace_id must be non-empty")
+        if self.provider_key is not None and not str(self.provider_key).strip():
+            raise ValueError("ProductProviderHealthDetailResponse.provider_key must be non-empty when provided")
 
 
 @dataclass(frozen=True)
@@ -130,7 +151,7 @@ class ProviderHealthListOutcome:
 
 @dataclass(frozen=True)
 class ProviderHealthDetailOutcome:
-    response: Optional[ProductProviderBindingHealthView] = None
+    response: Optional[ProductProviderHealthDetailResponse] = None
     rejected: Optional[ProductProviderHealthRejectedResponse] = None
 
     @property

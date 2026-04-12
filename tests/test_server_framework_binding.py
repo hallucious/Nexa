@@ -313,8 +313,9 @@ def test_framework_binding_handles_workspace_provider_health_round_trip() -> Non
 
     payload = json.loads(response.body_text)
     assert response.status_code == 200
-    assert payload["health_status"] == "healthy"
-    assert payload["secret_resolution_status"] == "resolved"
+    assert payload['health']['health_status'] == 'healthy'
+    assert payload['provider_continuity'] is None or payload['provider_continuity']['provider_binding_count'] >= 1
+    assert payload['health']['secret_resolution_status'] == 'resolved'
 
 
 def test_framework_binding_handles_provider_catalog_and_workspace_provider_bindings_round_trip() -> None:

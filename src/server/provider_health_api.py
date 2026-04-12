@@ -11,9 +11,12 @@ from src.server.provider_health_models import (
     ProductProviderHealthLinks,
     ProductProviderHealthRejectedResponse,
     ProductWorkspaceProviderHealthResponse,
+    ProductProviderHealthDetailResponse,
     ProviderHealthDetailOutcome,
     ProviderHealthListOutcome,
 )
+
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
 
 SecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 
@@ -238,6 +241,11 @@ class ProviderHealthService:
         binding_rows: Sequence[Mapping[str, Any]] = (),
         provider_catalog_rows: Sequence[Mapping[str, Any]] | None = None,
         secret_metadata_reader: Optional[SecretMetadataReader] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderHealthListOutcome:
         rejected = cls._authorize(request_auth=request_auth, workspace_context=workspace_context)
         if rejected is not None:
@@ -256,11 +264,30 @@ class ProviderHealthService:
             )
             for provider_key in provider_keys
         )
+        workspace_title = str((workspace_row or {}).get("title") or "").strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or "",
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return ProviderHealthListOutcome(
             response=ProductWorkspaceProviderHealthResponse(
                 workspace_id=workspace_context.workspace_id,
                 returned_count=len(views),
                 providers=views,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         )
 
@@ -274,6 +301,11 @@ class ProviderHealthService:
         binding_rows: Sequence[Mapping[str, Any]] = (),
         provider_catalog_rows: Sequence[Mapping[str, Any]] | None = None,
         secret_metadata_reader: Optional[SecretMetadataReader] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderHealthDetailOutcome:
         normalized_provider_key = str(provider_key or "").strip().lower()
         rejected = cls._authorize(request_auth=request_auth, workspace_context=workspace_context)
@@ -292,12 +324,36 @@ class ProviderHealthService:
                     provider_key=normalized_provider_key or None,
                 )
             )
+        health_view = cls._build_view(
+            workspace_id=workspace_context.workspace_id,
+            provider_key=normalized_provider_key,
+            catalog_row=catalog.get(normalized_provider_key),
+            binding_row=bindings.get(normalized_provider_key),
+            secret_metadata_reader=secret_metadata_reader,
+        )
+        workspace_title = str((workspace_row or {}).get("title") or "").strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or "",
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return ProviderHealthDetailOutcome(
-            response=cls._build_view(
+            response=ProductProviderHealthDetailResponse(
                 workspace_id=workspace_context.workspace_id,
+                workspace_title=workspace_title,
                 provider_key=normalized_provider_key,
-                catalog_row=catalog.get(normalized_provider_key),
-                binding_row=bindings.get(normalized_provider_key),
-                secret_metadata_reader=secret_metadata_reader,
+                health=health_view,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         )

@@ -105,6 +105,7 @@ def test_provider_probe_service_and_route_round_trip() -> None:
     assert outcome.response.probe_status == "reachable"
     assert outcome.response.connectivity_state == "ok"
     assert outcome.response.secret_resolution_status == "resolved"
+    assert outcome.response.provider_continuity is not None
 
     route_response = RunHttpRouteSurface.handle_probe_workspace_provider(
         http_request=HttpRouteRequest(
@@ -125,7 +126,8 @@ def test_provider_probe_service_and_route_round_trip() -> None:
     )
     assert route_response.status_code == 200
     assert route_response.body["probe_status"] == "reachable"
-    assert route_response.body["effective_model_ref"] == "gpt-4.1"
+    assert route_response.body['effective_model_ref'] == 'gpt-4.1'
+    assert route_response.body['provider_continuity'] is not None
 
 
 def test_provider_probe_framework_round_trip() -> None:

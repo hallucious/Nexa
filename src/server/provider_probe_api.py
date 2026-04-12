@@ -19,6 +19,27 @@ from src.server.provider_probe_models import (
     ProviderProbeExecutionResult,
     ProviderProbeOutcome,
 )
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+
+from collections.abc import Mapping, Sequence
+from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone
+from typing import Any, Callable, Optional
+from uuid import uuid4
+
+from src.server.auth_adapter import AuthorizationGate
+from src.server.auth_models import AuthorizationInput, RequestAuthContext, WorkspaceAuthorizationContext
+from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
+from src.server.provider_probe_models import (
+    ProductProviderProbeFindingView,
+    ProductProviderProbeLinks,
+    ProductProviderProbeRejectedResponse,
+    ProductProviderProbeRequest,
+    ProductProviderProbeResponse,
+    ProviderProbeExecutionInput,
+    ProviderProbeExecutionResult,
+    ProviderProbeOutcome,
+)
 
 SecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 ProviderProbeRunner = Callable[[ProviderProbeExecutionInput], ProviderProbeExecutionResult | Mapping[str, Any]]
@@ -202,6 +223,11 @@ class ProviderProbeService:
         probe_event_id_factory: Optional[Callable[[], str]] = None,
         probe_history_writer: Optional[ProviderProbeHistoryWriter] = None,
         now_iso: Optional[str] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderProbeOutcome:
         provider_key = str(provider_key or "").strip().lower()
         rejected = cls._authorize(request_auth=request_auth, workspace_context=workspace_context)
@@ -309,23 +335,6 @@ class ProviderProbeService:
             now_iso=str(now_iso or "").strip() or None,
         )
         execution = _normalize_execution_result(probe_runner(probe_input))
-        response = ProductProviderProbeResponse(
-            workspace_id=workspace_context.workspace_id,
-            provider_key=provider_key,
-            provider_family=probe_input.provider_family,
-            display_name=probe_input.display_name,
-            probe_status=execution.probe_status,
-            connectivity_state=execution.connectivity_state,
-            credential_source=str(binding_row.get("credential_source") or "").strip() or None,
-            secret_authority=probe_input.secret_authority,
-            secret_resolution_status=secret_resolution_status,
-            effective_model_ref=execution.effective_model_ref or requested_model_ref or default_model_ref,
-            provider_account_ref=execution.provider_account_ref,
-            round_trip_latency_ms=execution.round_trip_latency_ms,
-            message=execution.message,
-            findings=execution.findings,
-            links=_probe_links(workspace_context.workspace_id, provider_key),
-        )
         persisted_probe_row = _build_probe_history_row(
             workspace_id=workspace_context.workspace_id,
             provider_key=provider_key,
@@ -338,6 +347,43 @@ class ProviderProbeService:
             execution=execution,
             occurred_at=_resolved_now_iso(now_iso),
             probe_event_id_factory=probe_event_id_factory,
+        )
+        effective_probe_rows = list(provider_probe_rows) + [persisted_probe_row]
+        workspace_title = str((workspace_row or {}).get("title") or "").strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=effective_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or "",
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=effective_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        response = ProductProviderProbeResponse(
+            workspace_id=workspace_context.workspace_id,
+            provider_key=provider_key,
+            provider_family=probe_input.provider_family,
+            display_name=probe_input.display_name,
+            workspace_title=workspace_title,
+            provider_continuity=provider_continuity,
+            activity_continuity=activity_continuity,
+            probe_status=execution.probe_status,
+            connectivity_state=execution.connectivity_state,
+            credential_source=str(binding_row.get("credential_source") or "").strip() or None,
+            secret_authority=probe_input.secret_authority,
+            secret_resolution_status=secret_resolution_status,
+            effective_model_ref=execution.effective_model_ref or requested_model_ref or default_model_ref,
+            provider_account_ref=execution.provider_account_ref,
+            round_trip_latency_ms=execution.round_trip_latency_ms,
+            message=execution.message,
+            findings=execution.findings,
+            links=_probe_links(workspace_context.workspace_id, provider_key),
         )
         if probe_history_writer is not None:
             try:

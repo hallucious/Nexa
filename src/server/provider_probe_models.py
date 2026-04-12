@@ -108,6 +108,9 @@ class ProductProviderProbeResponse:
     display_name: str
     probe_status: str
     connectivity_state: str
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     credential_source: Optional[str] = None
     secret_authority: Optional[str] = None
     secret_resolution_status: str = "not_checked"

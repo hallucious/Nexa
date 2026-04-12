@@ -15,6 +15,8 @@ from src.server.provider_probe_history_models import (
     ProviderProbeHistoryRecord,
 )
 
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+
 
 def _probe_links(workspace_id: str, provider_key: str) -> ProductProviderProbeHistoryLinks:
     base = f"/api/workspaces/{workspace_id}/provider-bindings/{provider_key}"
@@ -36,6 +38,11 @@ class ProviderProbeHistoryService:
         probe_history_rows: Sequence[Mapping[str, Any]] = (),
         limit: int = 20,
         cursor: Optional[str] = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderProbeHistoryReadOutcome:
         provider_key = str(provider_key or '').strip().lower()
         if not request_auth.is_authenticated:
@@ -131,6 +138,22 @@ class ProviderProbeHistoryService:
         )
         next_cursor = page[-1].probe_event_id if len(page) == limit and (start_index + limit) < total_visible_count else None
         latest_probe_at = records[0].occurred_at if records else None
+        workspace_title = str((workspace_row or {}).get("title") or "").strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=probe_history_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or "",
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=probe_history_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return ProviderProbeHistoryReadOutcome(
             response=ProductProviderProbeHistoryResponse(
                 workspace_id=workspace_context.workspace_id,
@@ -138,6 +161,9 @@ class ProviderProbeHistoryService:
                 returned_count=len(page),
                 total_visible_count=total_visible_count,
                 items=page,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 applied_filters=ProductProviderProbeHistoryAppliedFilters(limit=limit, cursor=cursor),
                 next_cursor=next_cursor,
                 latest_probe_at=latest_probe_at,

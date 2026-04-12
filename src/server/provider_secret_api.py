@@ -21,6 +21,8 @@ from src.server.provider_secret_models import (
     ProductWorkspaceProviderBindingsResponse,
 )
 
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+
 SecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
 
 _DEFAULT_PROVIDER_CATALOG_ROWS: tuple[dict[str, Any], ...] = (
@@ -150,6 +152,11 @@ class ProviderSecretIntegrationService:
         workspace_context: Optional[WorkspaceAuthorizationContext],
         binding_rows: Sequence[Mapping[str, Any]] = (),
         provider_catalog_rows: Sequence[Mapping[str, Any]] | None = None,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderBindingListOutcome:
         if not request_auth.is_authenticated:
             return ProviderBindingListOutcome(
@@ -214,11 +221,30 @@ class ProviderSecretIntegrationService:
             )
             views.append(view)
         views.sort(key=lambda item: ((item.updated_at or ""), item.provider_key), reverse=True)
+        workspace_title = str((workspace_row or {}).get("title") or "").strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or "",
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return ProviderBindingListOutcome(
             response=ProductWorkspaceProviderBindingsResponse(
                 workspace_id=workspace_context.workspace_id,
                 returned_count=len(views),
                 bindings=tuple(views),
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         )
 
@@ -235,6 +261,12 @@ class ProviderSecretIntegrationService:
         binding_id_factory: Callable[[], str],
         secret_writer: SecretWriter,
         now_iso: str,
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        binding_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderBindingWriteOutcome:
         provider_key = str(provider_key or "").strip().lower()
         if not request_auth.is_authenticated:
@@ -290,6 +322,7 @@ class ProviderSecretIntegrationService:
         secret_version_ref = str(existing.get("secret_version_ref") or "").strip() or None
         last_rotated_at = str(existing.get("last_rotated_at") or "").strip() or None
         secret_rotated = False
+        secret_receipt = None
         if request.secret_value is not None:
             secret_receipt = secret_writer(
                 workspace_context.workspace_id,
@@ -364,10 +397,52 @@ class ProviderSecretIntegrationService:
             updated_by_user_id=request_auth.requested_by_user_ref,
             links=_binding_links(workspace_context.workspace_id, provider_key),
         )
+        effective_binding_rows = [
+            _as_mapping(row) for row in binding_rows
+            if str(_as_mapping(row).get("provider_key") or "").strip().lower() != provider_key
+            or str(_as_mapping(row).get("workspace_id") or "").strip() != workspace_context.workspace_id
+        ]
+        effective_binding_rows.append(binding_row)
+        effective_secret_rows = [dict(_as_mapping(row)) for row in managed_secret_rows]
+        if secret_receipt is not None or secret_rotated:
+            effective_secret_rows = [
+                row for row in effective_secret_rows
+                if not (
+                    str(row.get("workspace_id") or "").strip() == workspace_context.workspace_id
+                    and str(row.get("provider_key") or "").strip().lower() == provider_key
+                )
+            ]
+            if secret_ref:
+                effective_secret_rows.append({
+                    "workspace_id": workspace_context.workspace_id,
+                    "provider_key": provider_key,
+                    "secret_ref": secret_ref,
+                    "secret_version_ref": secret_version_ref,
+                    "last_rotated_at": last_rotated_at or now_iso,
+                })
+        workspace_title = str((workspace_row or {}).get("title") or "").strip() or None
+        provider_continuity = _provider_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            provider_binding_rows=effective_binding_rows,
+            managed_secret_rows=effective_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+        )
+        activity_continuity = _activity_continuity_summary_for_workspace(
+            workspace_context.workspace_id,
+            user_id=request_auth.requested_by_user_ref or "",
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=effective_binding_rows,
+            managed_secret_rows=effective_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         return ProviderBindingWriteOutcome(
             accepted=ProductProviderBindingWriteAcceptedResponse(
                 status="updated" if existing else "created",
                 binding=binding_view,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
                 was_created=not bool(existing),
                 secret_rotated=secret_rotated,
             ),
