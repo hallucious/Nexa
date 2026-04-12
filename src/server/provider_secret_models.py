@@ -169,6 +169,9 @@ class ProductProviderSecretReadRejectedResponse:
     message: str
     workspace_id: Optional[str] = None
     provider_key: Optional[str] = None
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_READ_FAILURE_FAMILIES:
@@ -186,6 +189,9 @@ class ProductProviderSecretWriteRejectedResponse:
     message: str
     workspace_id: Optional[str] = None
     provider_key: Optional[str] = None
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_WRITE_FAILURE_FAMILIES:

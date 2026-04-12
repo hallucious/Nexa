@@ -156,8 +156,13 @@ def test_run_trace_route_requires_authentication() -> None:
         http_request=request,
         run_context=_run_context(),
         run_record_row=_run_row(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=[_run_row()],
+        provider_binding_rows=[{"workspace_id": "ws-001", "binding_id": "binding-001", "provider_key": "openai", "updated_at": "2026-04-11T12:05:00+00:00"}],
         trace_rows=[],
     )
 
     assert response.status_code == 401
     assert response.body["failure_family"] == "product_read_failure"
+    assert response.body["workspace_title"] == "Primary Workspace"
+    assert response.body["provider_continuity"]["provider_binding_count"] == 1

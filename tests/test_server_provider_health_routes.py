@@ -127,3 +127,20 @@ def test_provider_health_list_round_trip_in_framework_binding() -> None:
         secret_metadata_reader=reader,
     )
     assert response.status_code == 200
+
+
+def test_provider_health_denied_response_includes_continuity_snapshot() -> None:
+    outcome = ProviderHealthService.list_workspace_provider_health(
+        request_auth=_auth("user-viewer", ["viewer"]),
+        workspace_context=_workspace(),
+        binding_rows=_binding_rows(),
+        provider_catalog_rows=_catalog_rows(),
+        secret_metadata_reader=None,
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=({"workspace_id": "ws-001", "run_id": "run-001", "status_family": "running", "created_at": "2026-04-11T12:00:00+00:00", "updated_at": "2026-04-11T12:00:00+00:00", "started_at": "2026-04-11T12:00:01+00:00"},),
+    )
+    assert outcome.ok is False
+    assert outcome.rejected is not None
+    assert outcome.rejected.workspace_title == "Primary Workspace"
+    assert outcome.rejected.provider_continuity is not None
+    assert outcome.rejected.activity_continuity is not None

@@ -155,6 +155,9 @@ class ProductArtifactTraceReadRejectedResponse:
     message: str
     run_id: Optional[str] = None
     artifact_id: Optional[str] = None
+    workspace_title: Optional[str] = None
+    provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_FAILURE_FAMILIES:

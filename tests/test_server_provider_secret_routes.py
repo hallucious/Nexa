@@ -81,6 +81,9 @@ def test_provider_binding_upsert_requires_manage_scope_and_never_echoes_secret()
         request=ProductProviderBindingWriteRequest(secret_value='secret-1', enabled=True),
         existing_binding_row=None,
         provider_catalog_rows=(_catalog_row(),),
+        workspace_row={'workspace_id': 'ws-001', 'title': 'Primary Workspace'},
+        binding_rows=({'workspace_id': 'ws-001', 'binding_id': 'binding-000', 'provider_key': 'openai', 'updated_at': '2026-04-11T12:00:00+00:00'},),
+        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'status_family': 'running', 'created_at': '2026-04-11T12:01:00+00:00', 'updated_at': '2026-04-11T12:02:00+00:00', 'started_at': '2026-04-11T12:01:10+00:00'},),
         binding_id_factory=lambda: 'binding-001',
         secret_writer=lambda workspace_id, provider_key, secret_value, metadata: {
             'secret_ref': f'secret://{workspace_id}/{provider_key}',
@@ -92,6 +95,9 @@ def test_provider_binding_upsert_requires_manage_scope_and_never_echoes_secret()
     assert denied.ok is False
     assert denied.rejected is not None
     assert denied.rejected.reason_code.endswith('role_insufficient')
+    assert denied.rejected.workspace_title == 'Primary Workspace'
+    assert denied.rejected.provider_continuity is not None
+    assert denied.rejected.activity_continuity is not None
 
     accepted = ProviderSecretIntegrationService.upsert_workspace_provider_binding(
         request_auth=_auth(),

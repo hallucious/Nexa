@@ -21,7 +21,7 @@ from src.server.provider_secret_models import (
     ProductWorkspaceProviderBindingsResponse,
 )
 
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 
 SecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
 
@@ -158,6 +158,16 @@ class ProviderSecretIntegrationService:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderBindingListOutcome:
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_id=workspace_context.workspace_id if workspace_context is not None else None,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or "",
+            provider_binding_rows=binding_rows,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated:
             return ProviderBindingListOutcome(
                 rejected=ProductProviderSecretReadRejectedResponse(
@@ -165,6 +175,9 @@ class ProviderSecretIntegrationService:
                     reason_code="provider_bindings.authentication_required",
                     message="Provider bindings require an authenticated session.",
                     workspace_id=workspace_context.workspace_id if workspace_context else None,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         if workspace_context is None:
@@ -173,6 +186,9 @@ class ProviderSecretIntegrationService:
                     failure_family="workspace_not_found",
                     reason_code="provider_bindings.workspace_not_found",
                     message="Requested workspace was not found.",
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         auth_input = AuthorizationInput(
@@ -189,6 +205,9 @@ class ProviderSecretIntegrationService:
                     reason_code=f"provider_bindings.{decision.reason_code}",
                     message="Current user is not allowed to read workspace provider bindings.",
                     workspace_id=workspace_context.workspace_id,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         catalog = _catalog_by_key(provider_catalog_rows)
@@ -269,6 +288,16 @@ class ProviderSecretIntegrationService:
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderBindingWriteOutcome:
         provider_key = str(provider_key or "").strip().lower()
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_id=workspace_context.workspace_id if workspace_context is not None else None,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or "",
+            provider_binding_rows=binding_rows,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated:
             return ProviderBindingWriteOutcome(
                 rejected=ProductProviderSecretWriteRejectedResponse(
@@ -277,6 +306,9 @@ class ProviderSecretIntegrationService:
                     message="Provider binding write requires an authenticated session.",
                     workspace_id=workspace_context.workspace_id if workspace_context else None,
                     provider_key=provider_key or None,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         if workspace_context is None:
@@ -286,6 +318,9 @@ class ProviderSecretIntegrationService:
                     reason_code="provider_binding_write.workspace_not_found",
                     message="Requested workspace was not found.",
                     provider_key=provider_key or None,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         auth_input = AuthorizationInput(
@@ -303,6 +338,9 @@ class ProviderSecretIntegrationService:
                     message="Current user is not allowed to manage workspace provider bindings.",
                     workspace_id=workspace_context.workspace_id,
                     provider_key=provider_key or None,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         catalog = _catalog_by_key(provider_catalog_rows)
@@ -315,6 +353,9 @@ class ProviderSecretIntegrationService:
                     message="Requested provider is not supported for managed server-side credentials.",
                     workspace_id=workspace_context.workspace_id,
                     provider_key=provider_key or None,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         existing = _as_mapping(existing_binding_row) if existing_binding_row is not None else {}
@@ -352,6 +393,9 @@ class ProviderSecretIntegrationService:
                     message="Enabled managed provider bindings require a secret reference.",
                     workspace_id=workspace_context.workspace_id,
                     provider_key=provider_key,
+                    workspace_title=workspace_title,
+                    provider_continuity=provider_continuity,
+                    activity_continuity=activity_continuity,
                 )
             )
         binding_id = str(existing.get("binding_id") or "").strip() or binding_id_factory()

@@ -18,7 +18,7 @@ from src.server.artifact_trace_read_models import (
 )
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, RunAuthorizationContext, WorkspaceAuthorizationContext
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 
 
 def _artifact_label(row: Mapping[str, Any]) -> Optional[str]:
@@ -50,13 +50,16 @@ def _artifact_payload_access(row: Mapping[str, Any]) -> Optional[ProductArtifact
 
 class ArtifactReadService:
     @staticmethod
-    def _reject(*, family: str, code: str, message: str, run_id: str | None = None, artifact_id: str | None = None) -> ProductArtifactTraceReadRejectedResponse:
+    def _reject(*, family: str, code: str, message: str, run_id: str | None = None, artifact_id: str | None = None, workspace_title: str | None = None, provider_continuity=None, activity_continuity=None) -> ProductArtifactTraceReadRejectedResponse:
         return ProductArtifactTraceReadRejectedResponse(
             failure_family=family,  # type: ignore[arg-type]
             reason_code=code,
             message=message,
             run_id=run_id,
             artifact_id=artifact_id,
+            workspace_title=workspace_title,
+            provider_continuity=provider_continuity,
+            activity_continuity=activity_continuity,
         )
 
     @classmethod
@@ -74,10 +77,20 @@ class ArtifactReadService:
         artifact_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> ArtifactListReadOutcome:
         run_id = run_context.run_id if run_context is not None else None
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_id=run_context.workspace_context.workspace_id if run_context is not None else None,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or "",
+            provider_binding_rows=provider_binding_rows,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated or request_auth.requested_by_user_ref is None:
-            return ArtifactListReadOutcome(rejected=cls._reject(family='product_read_failure', code='artifacts.authentication_required', message='Authentication is required to read run artifacts.', run_id=run_id))
+            return ArtifactListReadOutcome(rejected=cls._reject(family='product_read_failure', code='artifacts.authentication_required', message='Authentication is required to read run artifacts.', run_id=run_id, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         if run_context is None:
-            return ArtifactListReadOutcome(rejected=cls._reject(family='run_not_found', code='artifacts.run_not_found', message='The requested run could not be found in the server continuity scope.', run_id=run_id))
+            return ArtifactListReadOutcome(rejected=cls._reject(family='run_not_found', code='artifacts.run_not_found', message='The requested run could not be found in the server continuity scope.', run_id=run_id, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         decision = AuthorizationGate.authorize_run_scope(
             AuthorizationInput(
                 user_id=request_auth.requested_by_user_ref,
@@ -89,7 +102,7 @@ class ArtifactReadService:
             run_context,
         )
         if not decision.allowed:
-            return ArtifactListReadOutcome(rejected=cls._reject(family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read artifacts for this run.', run_id=run_context.run_id))
+            return ArtifactListReadOutcome(rejected=cls._reject(family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read artifacts for this run.', run_id=run_context.run_id, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         artifacts = tuple(
             ProductArtifactSummary(
                 artifact_id=str(row.get('artifact_id') or ''),
@@ -146,10 +159,20 @@ class ArtifactReadService:
         artifact_row: Optional[Mapping[str, Any]],
     ) -> ArtifactDetailReadOutcome:
         artifact_id = str(artifact_row.get('artifact_id') or '') if artifact_row is not None else None
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_id=workspace_context.workspace_id if workspace_context is not None else None,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or "",
+            provider_binding_rows=provider_binding_rows,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated or request_auth.requested_by_user_ref is None:
-            return ArtifactDetailReadOutcome(rejected=cls._reject(family='product_read_failure', code='artifact.authentication_required', message='Authentication is required to read artifact details.', artifact_id=artifact_id))
+            return ArtifactDetailReadOutcome(rejected=cls._reject(family='product_read_failure', code='artifact.authentication_required', message='Authentication is required to read artifact details.', artifact_id=artifact_id, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         if artifact_row is None or workspace_context is None:
-            return ArtifactDetailReadOutcome(rejected=cls._reject(family='artifact_not_found', code='artifact.not_found', message='The requested artifact could not be found in the server continuity scope.', artifact_id=artifact_id))
+            return ArtifactDetailReadOutcome(rejected=cls._reject(family='artifact_not_found', code='artifact.not_found', message='The requested artifact could not be found in the server continuity scope.', artifact_id=artifact_id, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         decision = AuthorizationGate.authorize_workspace_scope(
             AuthorizationInput(
                 user_id=request_auth.requested_by_user_ref,
@@ -160,7 +183,7 @@ class ArtifactReadService:
             workspace_context,
         )
         if not decision.allowed:
-            return ArtifactDetailReadOutcome(rejected=cls._reject(family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this artifact.', artifact_id=str(artifact_row.get('artifact_id') or '')))
+            return ArtifactDetailReadOutcome(rejected=cls._reject(family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this artifact.', artifact_id=str(artifact_row.get('artifact_id') or ''), workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         workspace_title = str((workspace_row or {}).get('title') or '').strip() or None
         provider_continuity = _provider_continuity_summary_for_workspace(
             workspace_context.workspace_id,
@@ -198,12 +221,15 @@ class ArtifactReadService:
 
 class TraceReadService:
     @staticmethod
-    def _reject(*, family: str, code: str, message: str, run_id: str | None = None) -> ProductArtifactTraceReadRejectedResponse:
+    def _reject(*, family: str, code: str, message: str, run_id: str | None = None, workspace_title: str | None = None, provider_continuity=None, activity_continuity=None) -> ProductArtifactTraceReadRejectedResponse:
         return ProductArtifactTraceReadRejectedResponse(
             failure_family=family,  # type: ignore[arg-type]
             reason_code=code,
             message=message,
             run_id=run_id,
+            workspace_title=workspace_title,
+            provider_continuity=provider_continuity,
+            activity_continuity=activity_continuity,
         )
 
     @classmethod
@@ -224,10 +250,20 @@ class TraceReadService:
         limit: int = 100,
     ) -> TraceReadOutcome:
         run_id = run_context.run_id if run_context is not None else None
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_id=run_context.workspace_context.workspace_id if run_context is not None else None,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or "",
+            provider_binding_rows=provider_binding_rows,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated or request_auth.requested_by_user_ref is None:
-            return TraceReadOutcome(rejected=cls._reject(family='product_read_failure', code='trace.authentication_required', message='Authentication is required to read run trace.', run_id=run_id))
+            return TraceReadOutcome(rejected=cls._reject(family='product_read_failure', code='trace.authentication_required', message='Authentication is required to read run trace.', run_id=run_id, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         if run_context is None or run_record_row is None:
-            return TraceReadOutcome(rejected=cls._reject(family='run_not_found', code='trace.run_not_found', message='The requested run could not be found in the server continuity scope.', run_id=run_id))
+            return TraceReadOutcome(rejected=cls._reject(family='run_not_found', code='trace.run_not_found', message='The requested run could not be found in the server continuity scope.', run_id=run_id, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
         decision = AuthorizationGate.authorize_run_scope(
             AuthorizationInput(
                 user_id=request_auth.requested_by_user_ref,
@@ -239,7 +275,7 @@ class TraceReadService:
             run_context,
         )
         if not decision.allowed:
-            return TraceReadOutcome(rejected=cls._reject(family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this run trace.', run_id=run_context.run_id))
+            return TraceReadOutcome(rejected=cls._reject(family='product_read_failure', code=decision.reason_code, message='The caller is not allowed to read this run trace.', run_id=run_context.run_id, workspace_title=workspace_title, provider_continuity=provider_continuity, activity_continuity=activity_continuity))
 
         normalized_limit = max(1, min(int(limit), 200))
         start = 0

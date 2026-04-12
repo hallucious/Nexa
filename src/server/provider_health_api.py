@@ -16,7 +16,7 @@ from src.server.provider_health_models import (
     ProviderHealthListOutcome,
 )
 
-from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace
+from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 
 SecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 
@@ -77,19 +77,41 @@ class ProviderHealthService:
         *,
         request_auth: RequestAuthContext,
         workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> Optional[ProductProviderHealthRejectedResponse]:
+        workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
+            workspace_id=workspace_context.workspace_id if workspace_context is not None else None,
+            workspace_row=workspace_row,
+            user_id=request_auth.requested_by_user_ref or "",
+            provider_binding_rows=provider_binding_rows,
+            recent_run_rows=recent_run_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
         if not request_auth.is_authenticated:
             return ProductProviderHealthRejectedResponse(
                 failure_family="product_read_failure",
                 reason_code="provider_health.authentication_required",
                 message="Provider health requires an authenticated session.",
                 workspace_id=workspace_context.workspace_id if workspace_context else None,
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         if workspace_context is None:
             return ProductProviderHealthRejectedResponse(
                 failure_family="workspace_not_found",
                 reason_code="provider_health.workspace_not_found",
                 message="Requested workspace was not found.",
+                workspace_title=workspace_title,
+                provider_continuity=provider_continuity,
+                activity_continuity=activity_continuity,
             )
         auth_input = AuthorizationInput(
             user_id=request_auth.requested_by_user_ref or "",
@@ -105,6 +127,9 @@ class ProviderHealthService:
             reason_code=f"provider_health.{decision.reason_code}",
             message="Current user is not allowed to read provider health for this workspace.",
             workspace_id=workspace_context.workspace_id,
+            workspace_title=workspace_title,
+            provider_continuity=provider_continuity,
+            activity_continuity=activity_continuity,
         )
 
     @classmethod
@@ -247,7 +272,7 @@ class ProviderHealthService:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderHealthListOutcome:
-        rejected = cls._authorize(request_auth=request_auth, workspace_context=workspace_context)
+        rejected = cls._authorize(request_auth=request_auth, workspace_context=workspace_context, workspace_row=workspace_row, recent_run_rows=recent_run_rows, provider_binding_rows=binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, onboarding_rows=onboarding_rows)
         if rejected is not None:
             return ProviderHealthListOutcome(rejected=rejected)
         assert workspace_context is not None
@@ -308,7 +333,7 @@ class ProviderHealthService:
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> ProviderHealthDetailOutcome:
         normalized_provider_key = str(provider_key or "").strip().lower()
-        rejected = cls._authorize(request_auth=request_auth, workspace_context=workspace_context)
+        rejected = cls._authorize(request_auth=request_auth, workspace_context=workspace_context, workspace_row=workspace_row, recent_run_rows=recent_run_rows, provider_binding_rows=binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, onboarding_rows=onboarding_rows)
         if rejected is not None:
             return ProviderHealthDetailOutcome(rejected=rejected)
         assert workspace_context is not None
@@ -322,6 +347,22 @@ class ProviderHealthService:
                     message="Requested provider is not known for this workspace.",
                     workspace_id=workspace_context.workspace_id,
                     provider_key=normalized_provider_key or None,
+                    workspace_title=str((workspace_row or {}).get("title") or "").strip() or None,
+                    provider_continuity=_provider_continuity_summary_for_workspace(
+                        workspace_context.workspace_id,
+                        provider_binding_rows=binding_rows,
+                        managed_secret_rows=managed_secret_rows,
+                        provider_probe_rows=provider_probe_rows,
+                    ),
+                    activity_continuity=_activity_continuity_summary_for_workspace(
+                        workspace_context.workspace_id,
+                        user_id=request_auth.requested_by_user_ref or "",
+                        recent_run_rows=recent_run_rows,
+                        provider_binding_rows=binding_rows,
+                        managed_secret_rows=managed_secret_rows,
+                        provider_probe_rows=provider_probe_rows,
+                        onboarding_rows=onboarding_rows,
+                    ),
                 )
             )
         health_view = cls._build_view(
