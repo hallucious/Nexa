@@ -65,6 +65,12 @@ from src.server.run_read_api import RunResultReadService, RunStatusReadService
 from src.server.run_list_api import RunListReadService
 from src.server.run_control_api import RunControlService, build_run_control_actions
 from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, apply_auto_recovery
+from src.server.run_auto_recovery_scheduler import (
+    AutoRecoveryScheduledUpdate,
+    AutoRecoveryScheduler,
+    AutoRecoverySchedulerOutcome,
+    AutoRecoverySchedulerStats,
+)
 from src.server.run_action_log_api import RunActionLogReadService, latest_action_from_run_record, normalize_action_log_entries
 from src.server.artifact_trace_read_api import ArtifactReadService, TraceReadService
 from src.server.workspace_onboarding_api import OnboardingContinuityService, WorkspaceRegistryService
