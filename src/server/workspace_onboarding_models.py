@@ -41,6 +41,42 @@ class ProductProviderContinuitySummary:
                 raise ValueError(f"ProductProviderContinuitySummary.{field_name} must be >= 0")
 
 
+
+
+@dataclass(frozen=True)
+class ProductActivityContinuitySummary:
+    recent_run_count: int = 0
+    pending_run_count: int = 0
+    active_run_count: int = 0
+    terminal_failure_run_count: int = 0
+    recent_probe_count: int = 0
+    failed_probe_count: int = 0
+    recent_provider_binding_count: int = 0
+    recent_managed_secret_count: int = 0
+    recent_onboarding_count: int = 0
+    latest_activity_at: Optional[str] = None
+    latest_run_id: Optional[str] = None
+    latest_probe_event_id: Optional[str] = None
+    latest_provider_binding_id: Optional[str] = None
+    latest_managed_secret_ref: Optional[str] = None
+    latest_onboarding_state_id: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "recent_run_count",
+            "pending_run_count",
+            "active_run_count",
+            "terminal_failure_run_count",
+            "recent_probe_count",
+            "failed_probe_count",
+            "recent_provider_binding_count",
+            "recent_managed_secret_count",
+            "recent_onboarding_count",
+        ):
+            if getattr(self, field_name) < 0:
+                raise ValueError(f"ProductActivityContinuitySummary.{field_name} must be >= 0")
+
+
 @dataclass(frozen=True)
 class ProductWorkspaceSummaryView:
     workspace_id: str
@@ -52,6 +88,7 @@ class ProductWorkspaceSummaryView:
     last_result_status: Optional[str] = None
     archived: bool = False
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     links: ProductWorkspaceLinks = field(default_factory=lambda: ProductWorkspaceLinks(
         detail='/placeholder/workspace',
         runs='/placeholder/runs',
@@ -84,6 +121,7 @@ class ProductWorkspaceDetailResponse:
     continuity_source: Optional[str] = None
     archived: bool = False
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     links: ProductWorkspaceLinks = field(default_factory=lambda: ProductWorkspaceLinks(
         detail='/placeholder/workspace',
         runs='/placeholder/runs',
@@ -235,6 +273,7 @@ class ProductOnboardingReadResponse:
     continuity_scope: str
     state: ProductOnboardingStateView
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     links: ProductOnboardingLinks = field(default_factory=lambda: ProductOnboardingLinks('/placeholder/onboarding'))
     message: Optional[str] = None
 
@@ -272,6 +311,7 @@ class ProductOnboardingWriteAcceptedResponse:
     continuity_scope: str
     state: ProductOnboardingStateView
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
+    activity_continuity: Optional[ProductActivityContinuitySummary] = None
     links: ProductOnboardingLinks = field(default_factory=lambda: ProductOnboardingLinks('/placeholder/onboarding'))
     was_created: bool = False
     message: Optional[str] = None

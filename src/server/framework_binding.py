@@ -231,6 +231,7 @@ class FrameworkRouteBindings:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_list_workspaces(
             http_request=cls.to_http_route_request(request),
@@ -240,6 +241,7 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         return cls.to_framework_response(response)
 
@@ -434,6 +436,7 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         workspace_context: Optional[WorkspaceAuthorizationContext] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
@@ -442,6 +445,7 @@ class FrameworkRouteBindings:
             http_request=cls.to_http_route_request(request),
             onboarding_rows=onboarding_rows,
             workspace_context=workspace_context,
+            recent_run_rows=recent_run_rows,
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
@@ -457,6 +461,7 @@ class FrameworkRouteBindings:
         workspace_context: Optional[WorkspaceAuthorizationContext] = None,
         onboarding_state_id_factory=None,
         now_iso: str,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
@@ -468,6 +473,7 @@ class FrameworkRouteBindings:
             workspace_context=workspace_context,
             onboarding_state_id_factory=onboarding_state_id_factory,
             now_iso=now_iso,
+            recent_run_rows=recent_run_rows,
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,

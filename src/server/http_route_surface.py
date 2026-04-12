@@ -294,6 +294,7 @@ class RunHttpRouteSurface:
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace list route only supports GET."})
@@ -307,6 +308,7 @@ class RunHttpRouteSurface:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
         )
         if outcome.ok:
             assert outcome.response is not None
@@ -402,6 +404,7 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         workspace_context: Optional[WorkspaceAuthorizationContext] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
@@ -417,6 +420,7 @@ class RunHttpRouteSurface:
             onboarding_rows=onboarding_rows,
             workspace_context=workspace_context,
             workspace_id=workspace_id,
+            recent_run_rows=recent_run_rows,
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
@@ -436,6 +440,7 @@ class RunHttpRouteSurface:
         workspace_context: Optional[WorkspaceAuthorizationContext] = None,
         onboarding_state_id_factory: Callable[[], str],
         now_iso: str,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
@@ -470,6 +475,7 @@ class RunHttpRouteSurface:
             workspace_context=workspace_context,
             onboarding_state_id_factory=onboarding_state_id_factory,
             now_iso=now_iso,
+            recent_run_rows=recent_run_rows,
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,

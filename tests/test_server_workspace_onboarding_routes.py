@@ -87,7 +87,7 @@ def test_workspace_registry_list_and_read_respect_visibility() -> None:
         request_auth=_auth('user-collab'),
         workspace_rows=(_workspace_row(), _workspace_row('ws-002', owner_user_id='user-other', title='Other Workspace')),
         membership_rows=(_membership(),),
-        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed'},),
+        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed', 'status_family': 'terminal_success'},),
         provider_binding_rows=provider_binding_rows,
         managed_secret_rows=managed_secret_rows,
         provider_probe_rows=provider_probe_rows,
@@ -100,13 +100,16 @@ def test_workspace_registry_list_and_read_respect_visibility() -> None:
     assert list_outcome.response.workspaces[0].provider_continuity.provider_binding_count == 1
     assert list_outcome.response.workspaces[0].provider_continuity.managed_secret_count == 1
     assert list_outcome.response.workspaces[0].provider_continuity.recent_probe_count == 1
+    assert list_outcome.response.workspaces[0].activity_continuity is not None
+    assert list_outcome.response.workspaces[0].activity_continuity.recent_run_count == 1
+    assert list_outcome.response.workspaces[0].activity_continuity.recent_probe_count == 1
 
     read_outcome = WorkspaceRegistryService.read_workspace(
         request_auth=_auth('user-collab'),
         workspace_context=_workspace_context(),
         workspace_row=_workspace_row(),
         membership_rows=(_membership(),),
-        recent_run_rows=(),
+        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed', 'status_family': 'terminal_success'},),
         provider_binding_rows=provider_binding_rows,
         managed_secret_rows=managed_secret_rows,
         provider_probe_rows=provider_probe_rows,
@@ -119,6 +122,9 @@ def test_workspace_registry_list_and_read_respect_visibility() -> None:
     assert read_outcome.response.provider_continuity.latest_provider_binding_id == 'binding-001'
     assert read_outcome.response.provider_continuity.latest_managed_secret_ref == 'secret://ws-001/openai'
     assert read_outcome.response.provider_continuity.latest_probe_event_id == 'probe-001'
+    assert read_outcome.response.activity_continuity is not None
+    assert read_outcome.response.activity_continuity.latest_run_id == 'run-001'
+    assert read_outcome.response.activity_continuity.latest_probe_event_id == 'probe-001'
 
 
 def test_workspace_create_returns_persistence_ready_rows() -> None:
@@ -175,6 +181,7 @@ def test_onboarding_continuity_reads_default_and_updates_workspace_scope() -> No
         onboarding_rows=(),
         workspace_context=None,
         workspace_id=None,
+        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed', 'status_family': 'terminal_success'},),
         provider_binding_rows=provider_binding_rows,
         managed_secret_rows=managed_secret_rows,
         provider_probe_rows=provider_probe_rows,
@@ -183,6 +190,7 @@ def test_onboarding_continuity_reads_default_and_updates_workspace_scope() -> No
     assert read_outcome.response is not None
     assert read_outcome.response.state.first_success_achieved is False
     assert read_outcome.response.provider_continuity is None
+    assert read_outcome.response.activity_continuity is None
     assert read_outcome.response.message == 'No canonical onboarding continuity has been recorded yet.'
 
     write_outcome = OnboardingContinuityService.upsert_onboarding_state(
@@ -197,6 +205,7 @@ def test_onboarding_continuity_reads_default_and_updates_workspace_scope() -> No
         workspace_context=_workspace_context(),
         onboarding_state_id_factory=lambda: 'onboard-001',
         now_iso='2026-04-11T14:00:00+00:00',
+        recent_run_rows=({'workspace_id': 'ws-001', 'run_id': 'run-001', 'created_at': '2026-04-11T12:07:00+00:00', 'updated_at': '2026-04-11T12:07:00+00:00', 'status': 'completed', 'status_family': 'terminal_success'},),
         provider_binding_rows=provider_binding_rows,
         managed_secret_rows=managed_secret_rows,
         provider_probe_rows=provider_probe_rows,
@@ -210,5 +219,8 @@ def test_onboarding_continuity_reads_default_and_updates_workspace_scope() -> No
     assert write_outcome.accepted.provider_continuity.provider_binding_count == 1
     assert write_outcome.accepted.provider_continuity.managed_secret_count == 1
     assert write_outcome.accepted.provider_continuity.recent_probe_count == 1
+    assert write_outcome.accepted.activity_continuity is not None
+    assert write_outcome.accepted.activity_continuity.latest_run_id == 'run-001'
+    assert write_outcome.accepted.activity_continuity.latest_onboarding_state_id == 'onboard-001'
     assert write_outcome.persisted_onboarding_row is not None
     assert write_outcome.persisted_onboarding_row['onboarding_state_id'] == 'onboard-001'

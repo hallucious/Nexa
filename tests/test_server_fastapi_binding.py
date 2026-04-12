@@ -598,6 +598,14 @@ def test_fastapi_binding_workspace_and_onboarding_provider_continuity_round_trip
             'continuity_source': 'server',
             'archived': False,
         } if workspace_id == 'ws-001' else None,
+        recent_run_rows_provider=lambda: ({
+            'workspace_id': 'ws-001',
+            'run_id': 'run-workspace-continuity',
+            'created_at': '2026-04-11T12:09:00+00:00',
+            'updated_at': '2026-04-11T12:09:00+00:00',
+            'status': 'completed',
+            'status_family': 'terminal_success',
+        },),
         provider_catalog_rows_provider=lambda: ({
             "provider_key": "openai",
             "provider_family": "openai",
@@ -643,6 +651,8 @@ def test_fastapi_binding_workspace_and_onboarding_provider_continuity_round_trip
     assert list_payload['workspaces'][0]['provider_continuity']['provider_binding_count'] == 1
     assert list_payload['workspaces'][0]['provider_continuity']['managed_secret_count'] == 1
     assert list_payload['workspaces'][0]['provider_continuity']['recent_probe_count'] == 1
+    assert list_payload['workspaces'][0]['activity_continuity']['recent_run_count'] == 1
+    assert list_payload['workspaces'][0]['activity_continuity']['latest_run_id'] == 'run-workspace-continuity'
 
     workspace_detail = client.get('/api/workspaces/ws-001', headers=_session_headers())
     assert workspace_detail.status_code == 200
@@ -650,6 +660,8 @@ def test_fastapi_binding_workspace_and_onboarding_provider_continuity_round_trip
     assert detail_payload['provider_continuity']['latest_provider_binding_id'] == 'binding-workspace-continuity'
     assert detail_payload['provider_continuity']['latest_managed_secret_ref'] == 'secret://ws-001/openai'
     assert detail_payload['provider_continuity']['latest_probe_event_id'] == 'probe-workspace-continuity'
+    assert detail_payload['activity_continuity']['latest_run_id'] == 'run-workspace-continuity'
+    assert detail_payload['activity_continuity']['latest_probe_event_id'] == 'probe-workspace-continuity'
 
     onboarding_get = client.get('/api/users/me/onboarding?workspace_id=ws-001', headers=_session_headers())
     assert onboarding_get.status_code == 200
@@ -657,6 +669,8 @@ def test_fastapi_binding_workspace_and_onboarding_provider_continuity_round_trip
     assert onboarding_payload['provider_continuity']['provider_binding_count'] == 1
     assert onboarding_payload['provider_continuity']['managed_secret_count'] == 1
     assert onboarding_payload['provider_continuity']['recent_probe_count'] == 1
+    assert onboarding_payload['activity_continuity']['recent_run_count'] == 1
+    assert onboarding_payload['activity_continuity']['latest_run_id'] == 'run-workspace-continuity'
 
     onboarding_put = client.put(
         '/api/users/me/onboarding',
@@ -668,6 +682,8 @@ def test_fastapi_binding_workspace_and_onboarding_provider_continuity_round_trip
     assert onboarding_put_payload['provider_continuity']['latest_provider_binding_id'] == 'binding-workspace-continuity'
     assert onboarding_put_payload['provider_continuity']['latest_managed_secret_ref'] == 'secret://ws-001/openai'
     assert onboarding_put_payload['provider_continuity']['latest_probe_event_id'] == 'probe-workspace-continuity'
+    assert onboarding_put_payload['activity_continuity']['latest_run_id'] == 'run-workspace-continuity'
+    assert onboarding_put_payload['activity_continuity']['latest_onboarding_state_id'] == 'onboard-workspace-continuity'
 
 
 def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_resolution() -> None:
