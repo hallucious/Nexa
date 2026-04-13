@@ -405,6 +405,8 @@ def _step_state_banner(
 ) -> dict[str, Any] | None:
     shell_map = shell or {}
     mobile = shell_map.get("mobile_first_run") or {}
+    beginner_onboarding = shell_map.get("beginner_onboarding") or {}
+    contextual_help = shell_map.get("contextual_help") or {}
     steps = tuple(mobile.get("steps") or ())
     if not steps:
         return None
@@ -434,23 +436,38 @@ def _step_state_banner(
     latest_trace_count = int((latest_run_trace_preview or {}).get("event_count") or 0)
     latest_artifact_count = int((latest_run_artifacts_preview or {}).get("artifact_count") or 0)
     recommended_section = str((navigation or {}).get("default_section") or "status").strip() or "status"
+    action_label: str | None = None
+    action_target: str | None = None
+    phase = "pre_run"
 
     if latest_result_state.startswith("ready"):
         current_step_id = "read_result"
         severity = "success"
         summary = "Result is ready. Open Result next to finish the first-run path."
+        action_label = "Open Result"
+        action_target = "runtime.result"
+        phase = "post_run"
     elif latest_status in {"failed", "partial"} and latest_trace_count > 0:
         current_step_id = "run"
         severity = "warning"
         summary = "Run needs diagnosis. Open Trace next to understand what happened."
+        action_label = "Open Trace"
+        action_target = "runtime.trace"
+        phase = "post_run"
     elif latest_artifact_count > 0 and not latest_result_state.startswith("ready"):
         current_step_id = "read_result"
         severity = "info"
         summary = "A readable result is not ready yet, but artifacts are available. Open Artifacts next."
+        action_label = "Open Artifacts"
+        action_target = "runtime.artifacts"
+        phase = "post_run"
     elif latest_status in {"running", "queued", "accepted"}:
         current_step_id = "run"
         severity = "info"
         summary = "Run is in progress. Watch Status while Nexa prepares the result."
+        action_label = "Open Status"
+        action_target = "runtime.status"
+        phase = "running"
     else:
         severity = "info"
         summary_by_step = {
@@ -461,6 +478,35 @@ def _step_state_banner(
             "read_result": "Read the result to finish the first-run path.",
         }
         summary = summary_by_step.get(current_step_id, "Follow the guided first-run path one step at a time.")
+        shell_status = str(shell_map.get("shell_status") or "").strip().lower()
+        onboarding_target = str(beginner_onboarding.get("primary_action_target") or "").strip()
+        help_stage = str(contextual_help.get("stage") or "").strip().lower()
+        if shell_status == "blocked":
+            severity = "warning"
+            current_step_id = "review_preview"
+            summary = str(beginner_onboarding.get("summary") or contextual_help.get("summary") or "Resolve the blocking review issue before you run.")
+            action_label = str(beginner_onboarding.get("primary_action_label") or "Open Validation").strip() or "Open Validation"
+            action_target = onboarding_target or "validation"
+        elif onboarding_target == "designer":
+            summary = str(beginner_onboarding.get("summary") or contextual_help.get("summary") or summary)
+            action_label = str(beginner_onboarding.get("primary_action_label") or "Open Designer").strip() or "Open Designer"
+            action_target = "designer"
+        elif help_stage == "review":
+            current_step_id = "review_preview"
+            summary = str(contextual_help.get("summary") or summary)
+            action_label = "Review preview"
+            action_target = "designer"
+        elif help_stage == "wait":
+            current_step_id = "run"
+            summary = str(contextual_help.get("summary") or summary)
+            action_label = "Open Status"
+            action_target = "runtime.status"
+        elif current_step_id == "run":
+            action_label = "Run draft"
+            action_target = "execution"
+        elif current_step_id == "read_result":
+            action_label = "Open Result"
+            action_target = "runtime.result"
 
     total_steps = max(len(step_index), 1)
     fallback_step_id = str((fallback_step or {}).get("step_id") or "enter_goal").strip() or "enter_goal"
@@ -476,8 +522,11 @@ def _step_state_banner(
         "visible": True,
         "banner_id": current_step_id,
         "severity": severity,
+        "phase": phase,
         "title": f"Step {current_index} of {total_steps} — {current_label}",
         "summary": summary,
+        "action_label": action_label,
+        "action_target": action_target,
         "current_step_id": current_step_id,
         "current_step_label": current_label,
         "current_step_index": current_index,
@@ -678,6 +727,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <h2>Step state banner</h2>
       <p id="step-state-banner-title">{escape(str((payload.get('step_state_banner') or {}).get('title') or 'Step 1 of 5 — Enter goal'))}</p>
       <pre id="step-state-banner-summary">{escape(str((payload.get('step_state_banner') or {}).get('summary') or 'Describe your goal to start the first-run path.'))}</pre>
+      <p id="step-state-banner-action">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))} → <code>{escape(str((payload.get('step_state_banner') or {}).get('action_target') or 'designer'))}</code></p>
     </section>
     <div class="row">
       <section class="card">
@@ -772,11 +822,14 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const latestRunArtifactsDetailEl = document.getElementById('latest-run-artifacts-detail');
     const runtimeNavEl = document.getElementById('runtime-nav');
     const focusStateEl = document.getElementById('focus-state');
+    const focusGuidanceEl = document.getElementById('focus-guidance');
     const stepStateBannerTitleEl = document.getElementById('step-state-banner-title');
     const stepStateBannerSummaryEl = document.getElementById('step-state-banner-summary');
+    const stepStateBannerActionEl = document.getElementById('step-state-banner-action');
     let activeRunId = initialRunStatusPreview ? initialRunStatusPreview.run_id : null;
-    let focusedSectionId = (initialNavigation && initialNavigation.default_section) || 'status';
-    let focusedLevel = (initialNavigation && initialNavigation.default_level) || 'summary';
+    let currentNavigation = initialNavigation || null;
+    let focusedSectionId = (currentNavigation && currentNavigation.default_section) || 'status';
+    let focusedLevel = (currentNavigation && currentNavigation.default_level) || 'summary';
     let activeRunStatusPath = initialPayload.routes.latest_run_status || null;
     let activeRunResultPath = initialPayload.routes.latest_run_result || null;
     let activeRunTracePath = initialPayload.routes.latest_run_trace || null;
@@ -944,7 +997,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       writeStepStateBanner(derived || initialStepStateBanner);
     }}
     function sectionConfig(sectionId) {{
-      const sections = initialNavigation && Array.isArray(initialNavigation.sections) ? initialNavigation.sections : [];
+      const sections = currentNavigation && Array.isArray(currentNavigation.sections) ? currentNavigation.sections : [];
       return sections.find((section) => section && section.section_id === sectionId) || null;
     }}
     function focusTargetFor(sectionId, level) {{
@@ -953,7 +1006,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       return document.getElementById(level === 'detail' ? section.detail_target_id : section.target_id);
     }}
     function renderRuntimeNav() {{
-      const sections = initialNavigation && Array.isArray(initialNavigation.sections) ? initialNavigation.sections : [];
+      const sections = currentNavigation && Array.isArray(currentNavigation.sections) ? currentNavigation.sections : [];
       runtimeNavEl.innerHTML = '';
       for (const section of sections) {{
         const button = document.createElement('button');
@@ -1093,6 +1146,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       await refreshLatestRunArtifacts();
     }}
     renderRuntimeNav();
+    writeFocusGuidance(currentNavigation);
     writeLatestRunStatus(initialRunStatusSummary || 'No recent run is available yet.');
     writeLatestRunResult(initialRunResultSummary || 'No recent run result is available yet.');
     writeLatestRunTrace(initialRunTraceSummary || 'No recent trace is available yet.');

@@ -478,6 +478,8 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert [section['section_id'] for section in payload['navigation']['sections']] == ['status', 'result', 'trace', 'artifacts']
     assert payload['step_state_banner']['title'] == 'Step 5 of 5 — Read result'
     assert payload['step_state_banner']['recommended_section'] == 'result'
+    assert payload['step_state_banner']['action_label'] == 'Open Result'
+    assert payload['step_state_banner']['action_target'] == 'runtime.result'
     assert 'Result is ready.' in payload['step_state_banner']['summary']
 
 
@@ -525,8 +527,12 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'step-state-banner-title' in body
     assert 'step-state-banner-summary' in body
     assert 'Step 5 of 5 — Read result' in body
+    assert 'step-state-banner-action' in body
+    assert 'Open Result' in body
+    assert 'runtime.result' in body
     assert 'writeStepStateBanner' in body
     assert 'refreshStepStateBanner' in body
+    assert 'writeFocusGuidance' in body
     assert 'renderRuntimeNav' in body
     assert 'setFocusedSection' in body
     assert 'latest-run-status-card' in body

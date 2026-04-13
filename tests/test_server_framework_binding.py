@@ -509,4 +509,40 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['navigation']['guidance_label'] == 'Recommended next: Result'
     assert parsed['step_state_banner']['title'] == 'Step 5 of 5 — Read result'
     assert parsed['step_state_banner']['recommended_section'] == 'result'
+    assert parsed['step_state_banner']['action_label'] == 'Open Result'
+    assert parsed['step_state_banner']['action_target'] == 'runtime.result'
     assert 'Result is ready.' in parsed['step_state_banner']['summary']
+
+
+def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_workspace() -> None:
+    response = FrameworkRouteBindings.handle_workspace_shell(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shell", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+        },
+        recent_run_rows=(),
+        result_rows_by_run_id={},
+        artifact_rows_lookup=lambda run_id: (),
+        trace_rows_lookup=lambda run_id: (),
+        artifact_source={
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile"}},
+        },
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed['navigation']['default_section'] == 'status'
+    assert parsed['step_state_banner']['title'] == 'Step 1 of 5 — Enter goal'
+    assert parsed['step_state_banner']['phase'] == 'pre_run'
+    assert parsed['step_state_banner']['action_label'] == 'Open Designer'
+    assert parsed['step_state_banner']['action_target'] == 'designer'
+    assert 'prepare your first workflow' in parsed['step_state_banner']['summary']
