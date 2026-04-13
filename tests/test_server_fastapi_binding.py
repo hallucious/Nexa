@@ -456,6 +456,13 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_trace_preview']['latest_event_type'] == 'node.completed'
     assert payload['latest_run_artifacts_preview']['artifact_count'] == 1
     assert payload['latest_run_artifacts_preview']['first_artifact_id'] == 'artifact-2'
+    assert payload['latest_run_status_summary']['headline'] == 'Status: terminal_success'
+    assert 'Run id: run-002' in payload['latest_run_status_summary']['lines']
+    assert payload['latest_run_status_detail']['title'] == 'Status detail'
+    assert 'Status: completed' in payload['latest_run_status_detail']['items']
+    assert payload['latest_run_result_summary']['headline'] == 'Success.'
+    assert payload['latest_run_result_detail']['title'] == 'Result detail'
+    assert 'Result state: ready_success' in payload['latest_run_result_detail']['items']
     assert payload['latest_run_trace_summary']['headline'] == 'Trace events: 2'
     assert 'Latest event: node.completed' in payload['latest_run_trace_summary']['lines']
     assert payload['latest_run_trace_detail']['title'] == 'Trace detail'
@@ -479,6 +486,8 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert '/api/workspaces/ws-001/shell' in body
     assert 'Latest run status' in body
     assert 'Latest run result' in body
+    assert 'Status detail layer' in body
+    assert 'Result detail layer' in body
     assert 'Latest trace' in body
     assert 'Latest artifacts' in body
     assert 'Open latest trace' in body
@@ -494,6 +503,8 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'Artifacts detail layer' in body
     assert 'formatSummary' in body
     assert 'formatDetail' in body
+    assert 'detailFromStatusBody' in body
+    assert 'detailFromResultBody' in body
     assert 'detailFromTraceBody' in body
     assert 'detailFromArtifactsBody' in body
     assert 'summarizeTraceBody' in body
