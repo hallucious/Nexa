@@ -384,3 +384,29 @@ def test_apply_auto_recovery_normalizes_custom_scoring_policy_trace_weights() ->
     assert first["health_weight"] == 0.5
     assert first["cost_weight"] == 0.25
     assert first["priority_weight"] == 0.25
+
+
+def test_apply_auto_recovery_records_policy_validation_feedback_when_policy_invalid() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-invalid-policy",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", cost_ratio=1.1),
+        ),
+        scoring_policy={
+            "health_weight": -1.0,
+            "cost_weight": 0.0,
+            "priority_weight": 0.0,
+            "latency_weight": 0.0,
+            "reliability_weight": 0.0,
+        },
+    )
+
+    assert outcome.applied is True
+    assert outcome.updated_run_record is not None
+    feedback = outcome.updated_run_record["policy_validation"]
+    assert feedback["status"] == "invalid"
+    assert feedback["reason"] == "negative_weight"
+    assert feedback["fallback_applied"] is True

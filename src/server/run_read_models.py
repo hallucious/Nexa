@@ -94,6 +94,19 @@ class ProductRunControlActionsView:
     can_mark_reviewed: bool = False
 
 @dataclass(frozen=True)
+class ProductRunPolicyValidationView:
+    status: str
+    reason: str
+    fallback_applied: bool = False
+
+    def __post_init__(self) -> None:
+        if self.status not in {"invalid", "defaulted"}:
+            raise ValueError(f"Unsupported ProductRunPolicyValidationView.status: {self.status}")
+        if not self.reason:
+            raise ValueError("ProductRunPolicyValidationView.reason must be non-empty")
+
+
+@dataclass(frozen=True)
 class ProductRunRecoveryView:
     recovery_state: RecoveryState
     worker_attempt_number: int = 0
@@ -105,6 +118,7 @@ class ProductRunRecoveryView:
     summary: Optional[str] = None
     fallback_trace: tuple[ProductRunFallbackAuditView, ...] = field(default_factory=tuple)
     scoring_trace: tuple[ProductRunFallbackScoringAuditView, ...] = field(default_factory=tuple)
+    policy_validation: Optional[ProductRunPolicyValidationView] = None
 
     def __post_init__(self) -> None:
         if self.recovery_state not in _ALLOWED_RECOVERY_STATES:

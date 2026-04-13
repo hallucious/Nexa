@@ -21,6 +21,7 @@ from src.server.run_read_models import (
     ProductRunProgressView,
     ProductRunReadRejectedResponse,
     ProductRunRecoveryView,
+    ProductRunPolicyValidationView,
     ProductRunResultResponse,
     ProductRunStatusResponse,
     ProductTraceRefView,
@@ -65,6 +66,15 @@ def _recovery_view_from_run_row(run_record_row: Mapping[str, Any]) -> ProductRun
         summary=projection.summary,
         fallback_trace=projection.fallback_trace,
         scoring_trace=projection.scoring_trace,
+        policy_validation=(
+            ProductRunPolicyValidationView(
+                status=projection.policy_validation.status,
+                reason=projection.policy_validation.reason,
+                fallback_applied=projection.policy_validation.fallback_applied,
+            )
+            if projection.policy_validation is not None
+            else None
+        ),
     )
 
 

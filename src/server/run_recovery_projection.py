@@ -36,6 +36,29 @@ def _fallback_trace_from_run_row(run_record_row: Mapping[str, Any]) -> tuple[Pro
 
 
 
+
+
+@dataclass(frozen=True)
+class RunRecoveryPolicyValidationProjection:
+    status: str
+    reason: str
+    fallback_applied: bool = False
+
+
+def _policy_validation_from_run_row(run_record_row: Mapping[str, Any]) -> RunRecoveryPolicyValidationProjection | None:
+    raw = run_record_row.get("policy_validation")
+    if not isinstance(raw, Mapping):
+        return None
+    status = str(raw.get("status") or "").strip()
+    reason = str(raw.get("reason") or "").strip()
+    if not status or not reason:
+        return None
+    return RunRecoveryPolicyValidationProjection(
+        status=status,
+        reason=reason,
+        fallback_applied=bool(raw.get("fallback_applied")),
+    )
+
 def _scoring_trace_from_run_row(run_record_row: Mapping[str, Any]) -> tuple[ProductRunFallbackScoringAuditView, ...]:
     action_log = run_record_row.get("action_log")
     if not isinstance(action_log, Sequence) or isinstance(action_log, (str, bytes, bytearray)):
@@ -62,6 +85,7 @@ class RunRecoveryProjection:
     summary: Optional[str] = None
     fallback_trace: tuple[ProductRunFallbackAuditView, ...] = field(default_factory=tuple)
     scoring_trace: tuple[ProductRunFallbackScoringAuditView, ...] = field(default_factory=tuple)
+    policy_validation: RunRecoveryPolicyValidationProjection | None = None
 
 
 def recovery_projection_from_run_row(
@@ -78,6 +102,7 @@ def recovery_projection_from_run_row(
     status = str(run_record_row.get('status') or '').strip().lower()
     fallback_trace = _fallback_trace_from_run_row(run_record_row)
     scoring_trace = _scoring_trace_from_run_row(run_record_row)
+    policy_validation = _policy_validation_from_run_row(run_record_row)
 
     has_recovery_signal = any((
         queue_job_id,
@@ -88,6 +113,7 @@ def recovery_projection_from_run_row(
         worker_attempt_number > 0,
         bool(fallback_trace),
         bool(scoring_trace),
+        policy_validation is not None,
     ))
     if not has_recovery_signal and not include_healthy_without_signal:
         return None
@@ -119,6 +145,7 @@ def recovery_projection_from_run_row(
         summary=summary,
         fallback_trace=fallback_trace,
         scoring_trace=scoring_trace,
+        policy_validation=policy_validation,
     )
 
 

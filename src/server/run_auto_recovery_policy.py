@@ -63,6 +63,16 @@ def _coerce_scoring_policy(value: Any) -> AutoRecoveryScoringPolicy:
     return validate_scoring_policy(value).normalized_policy
 
 
+def _policy_validation_feedback(validation_result) -> dict[str, Any] | None:
+    if validation_result.is_valid:
+        return None
+    return {
+        "status": "invalid",
+        "reason": str(validation_result.reason or "invalid_policy"),
+        "fallback_applied": bool(validation_result.used_default),
+    }
+
+
 def _coerce_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
@@ -267,7 +277,8 @@ def apply_auto_recovery(
     is_stuck = bool(claimed_by_worker_ref and lease_expires_at is not None and lease_expires_at < now_dt and status in _ACTIVE_STATUSES)
     is_infra_failure = latest_error_family == _INFRA_FAILURE_FAMILY
     resolved_provider_health = provider_health or AutoRecoveryProviderHealthSignal()
-    resolved_scoring_policy = _coerce_scoring_policy(scoring_policy)
+    scoring_policy_validation = validate_scoring_policy(scoring_policy)
+    resolved_scoring_policy = scoring_policy_validation.normalized_policy
     resolved_fallback_candidate = _select_fallback_candidate(
         run_record_row,
         provider_health=resolved_provider_health,
@@ -303,6 +314,11 @@ def apply_auto_recovery(
     updated_row["auto_retry_limit"] = auto_retry_limit
     updated_row["auto_retry_base_backoff_seconds"] = max(1, _coerce_int(updated_row.get("auto_retry_base_backoff_seconds"), DEFAULT_AUTO_RETRY_BASE_BACKOFF_SECONDS))
     updated_row["last_auto_recovery_at"] = now_iso
+    feedback = _policy_validation_feedback(scoring_policy_validation)
+    if feedback is not None:
+        updated_row["policy_validation"] = feedback
+    else:
+        updated_row.pop("policy_validation", None)
 
     if can_auto_retry:
         new_queue_job_id = queue_job_id_factory() if queue_job_id_factory is not None else f"job_{uuid.uuid4().hex}"
