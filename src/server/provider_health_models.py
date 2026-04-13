@@ -9,11 +9,13 @@ ProviderHealthReadFailureFamily = Literal["product_read_failure", "workspace_not
 ProviderHealthSeverity = Literal["blocked", "warning", "info"]
 ProviderBindingHealthStatus = Literal["healthy", "warning", "blocked", "disabled", "missing"]
 ProviderSecretResolutionStatus = Literal["not_checked", "resolved", "missing", "error"]
+ProviderAutoRecoveryHealthStatus = Literal["healthy", "degraded", "down"]
 
 _ALLOWED_FAILURE_FAMILIES = {"product_read_failure", "workspace_not_found", "provider_not_supported"}
 _ALLOWED_FINDING_SEVERITIES = {"blocked", "warning", "info"}
 _ALLOWED_HEALTH_STATUSES = {"healthy", "warning", "blocked", "disabled", "missing"}
 _ALLOWED_SECRET_RESOLUTION_STATUSES = {"not_checked", "resolved", "missing", "error"}
+_ALLOWED_AUTO_RECOVERY_HEALTH_STATUSES = {"healthy", "degraded", "down"}
 
 
 @dataclass(frozen=True)
@@ -87,6 +89,41 @@ class ProductProviderBindingHealthView:
             raise ValueError("ProductProviderBindingHealthView.blocked_count must be >= 0")
         if self.warning_count < 0:
             raise ValueError("ProductProviderBindingHealthView.warning_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class AutoRecoveryProviderHealthSignal:
+    status: str = "healthy"
+    provider_key: Optional[str] = None
+    provider_family: Optional[str] = None
+    reason_code: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.status not in _ALLOWED_AUTO_RECOVERY_HEALTH_STATUSES:
+            raise ValueError(f"Unsupported AutoRecoveryProviderHealthSignal.status: {self.status}")
+        if self.provider_key is not None and not str(self.provider_key).strip():
+            raise ValueError("AutoRecoveryProviderHealthSignal.provider_key must be non-empty when provided")
+        if self.provider_family is not None and not str(self.provider_family).strip():
+            raise ValueError("AutoRecoveryProviderHealthSignal.provider_family must be non-empty when provided")
+        if self.reason_code is not None and not str(self.reason_code).strip():
+            raise ValueError("AutoRecoveryProviderHealthSignal.reason_code must be non-empty when provided")
+
+    @classmethod
+    def from_binding_health_view(cls, view: "ProductProviderBindingHealthView") -> "AutoRecoveryProviderHealthSignal":
+        status_map = {
+            "healthy": "healthy",
+            "warning": "degraded",
+            "blocked": "down",
+            "disabled": "down",
+            "missing": "down",
+        }
+        reason_code = view.findings[0].reason_code if view.findings else None
+        return cls(
+            status=status_map.get(view.health_status, "down"),
+            provider_key=view.provider_key,
+            provider_family=view.provider_family,
+            reason_code=reason_code,
+        )
 
 
 @dataclass(frozen=True)

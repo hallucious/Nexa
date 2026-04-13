@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server import apply_auto_recovery
+from src.server import AutoRecoveryProviderHealthSignal, apply_auto_recovery
 
 
 def _run_row(**overrides):
@@ -86,3 +86,50 @@ def test_apply_auto_recovery_leaves_non_infra_failure_unchanged() -> None:
     assert outcome.applied is False
     assert outcome.updated_run_record is None
     assert outcome.reason == "no_auto_recovery_needed"
+
+
+def test_apply_auto_recovery_escalates_when_provider_is_down_even_under_retry_limit() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=0, auto_retry_limit=2),
+        now_iso="2026-04-13T01:00:00+00:00",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_mark_review_required"
+    assert outcome.updated_run_record is not None
+    assert outcome.updated_run_record["status"] == "failed"
+    assert outcome.updated_run_record["orphan_review_required"] is True
+
+
+def test_apply_auto_recovery_uses_stronger_backoff_when_provider_is_degraded() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(
+            last_auto_recovery_at="2026-04-13T00:50:00+00:00",
+            auto_retry_base_backoff_seconds=300,
+        ),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-degraded",
+        provider_health=AutoRecoveryProviderHealthSignal(status="degraded", provider_key="openai"),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_retry"
+    assert outcome.updated_run_record is not None
+    assert outcome.updated_run_record["queue_job_id"] == "job-degraded"
+    assert outcome.updated_run_record["auto_retry_base_backoff_seconds"] == 600
+
+
+def test_apply_auto_recovery_keeps_existing_behavior_when_provider_is_healthy() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-healthy",
+        provider_health=AutoRecoveryProviderHealthSignal(status="healthy", provider_key="openai"),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_retry"
+    assert outcome.updated_run_record is not None
+    assert outcome.updated_run_record["queue_job_id"] == "job-healthy"
+    assert outcome.updated_run_record["auto_retry_base_backoff_seconds"] == 300

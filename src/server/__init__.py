@@ -145,6 +145,7 @@ from src.server.provider_probe_history_models import (
     ProviderProbeHistoryReadOutcome,
 )
 from src.server.provider_health_models import (
+    AutoRecoveryProviderHealthSignal,
     ProductProviderBindingHealthView,
     ProductProviderHealthFindingView,
     ProductProviderHealthLinks,
@@ -331,6 +332,7 @@ __all__ = [
     "ProviderBindingListOutcome",
     "ProviderBindingWriteOutcome",
     "ProviderCatalogReadOutcome",
+    "AutoRecoveryProviderHealthSignal",
     "ProductProviderBindingHealthView",
     "ProductProviderHealthFindingView",
     "ProductProviderHealthLinks",

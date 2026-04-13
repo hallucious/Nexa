@@ -7,6 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 import uuid
 
+from src.server.provider_health_models import AutoRecoveryProviderHealthSignal
+
 QueueJobIdFactory = Callable[[], str]
 
 SYSTEM_AUTO_RECOVERY_ACTOR = "system:auto-recovery"
@@ -15,6 +17,7 @@ DEFAULT_AUTO_RETRY_BASE_BACKOFF_SECONDS = 300
 MAX_AUTO_RETRY_BACKOFF_SECONDS = 3600
 _INFRA_FAILURE_FAMILY = "worker_infrastructure_failure"
 _ACTIVE_STATUSES = {"starting", "running"}
+_DEGRADED_PROVIDER_BACKOFF_MULTIPLIER = 2
 
 
 @dataclass(frozen=True)
@@ -90,18 +93,20 @@ def _append_action_log(updated_row: dict[str, Any], *, action: str, timestamp: s
     updated_row["action_log"] = entries
 
 
-def _current_backoff_seconds(run_record_row: Mapping[str, Any]) -> int:
+def _current_backoff_seconds(run_record_row: Mapping[str, Any], *, provider_health: AutoRecoveryProviderHealthSignal | None = None) -> int:
     base = max(1, _coerce_int(run_record_row.get("auto_retry_base_backoff_seconds"), DEFAULT_AUTO_RETRY_BASE_BACKOFF_SECONDS))
     retry_count = max(0, _coerce_int(run_record_row.get("auto_retry_count"), 0))
     backoff = base * (2 ** retry_count)
+    if provider_health is not None and provider_health.status == "degraded":
+        backoff *= _DEGRADED_PROVIDER_BACKOFF_MULTIPLIER
     return min(backoff, MAX_AUTO_RETRY_BACKOFF_SECONDS)
 
 
-def _backoff_ready(run_record_row: Mapping[str, Any], now_dt: datetime) -> bool:
+def _backoff_ready(run_record_row: Mapping[str, Any], now_dt: datetime, *, provider_health: AutoRecoveryProviderHealthSignal | None = None) -> bool:
     last_attempt_at = _parse_iso(run_record_row.get("last_auto_recovery_at"))
     if last_attempt_at is None:
         return True
-    return now_dt >= (last_attempt_at + timedelta(seconds=_current_backoff_seconds(run_record_row)))
+    return now_dt >= (last_attempt_at + timedelta(seconds=_current_backoff_seconds(run_record_row, provider_health=provider_health)))
 
 
 def apply_auto_recovery(
@@ -109,6 +114,7 @@ def apply_auto_recovery(
     *,
     now_iso: str,
     queue_job_id_factory: Optional[QueueJobIdFactory] = None,
+    provider_health: AutoRecoveryProviderHealthSignal | None = None,
 ) -> AutoRecoveryOutcome:
     now_dt = _parse_iso(now_iso)
     if now_dt is None:
@@ -125,9 +131,11 @@ def apply_auto_recovery(
 
     is_stuck = bool(claimed_by_worker_ref and lease_expires_at is not None and lease_expires_at < now_dt and status in _ACTIVE_STATUSES)
     is_infra_failure = latest_error_family == _INFRA_FAILURE_FAMILY
-    backoff_ready = _backoff_ready(run_record_row, now_dt)
-    can_auto_retry = is_infra_failure and auto_retry_count < auto_retry_limit and backoff_ready and (status == "failed" or is_stuck)
-    should_escalate_review = is_infra_failure and auto_retry_count >= auto_retry_limit and not orphan_review_required and (status == "failed" or is_stuck)
+    resolved_provider_health = provider_health or AutoRecoveryProviderHealthSignal()
+    backoff_ready = _backoff_ready(run_record_row, now_dt, provider_health=resolved_provider_health)
+    provider_is_down = resolved_provider_health.status == "down"
+    can_auto_retry = is_infra_failure and not provider_is_down and auto_retry_count < auto_retry_limit and backoff_ready and (status == "failed" or is_stuck)
+    should_escalate_review = is_infra_failure and not orphan_review_required and (status == "failed" or is_stuck) and (provider_is_down or auto_retry_count >= auto_retry_limit)
 
     if not can_auto_retry and not should_escalate_review:
         return AutoRecoveryOutcome(applied=False, reason="no_auto_recovery_needed" if backoff_ready else "backoff_active")
@@ -149,6 +157,9 @@ def apply_auto_recovery(
         updated_row["orphan_review_required"] = False
         updated_row["worker_attempt_number"] = worker_attempt_number + 1
         updated_row["auto_retry_count"] = auto_retry_count + 1
+        if resolved_provider_health.status == "degraded":
+            current_base_backoff = max(1, _coerce_int(updated_row.get("auto_retry_base_backoff_seconds"), DEFAULT_AUTO_RETRY_BASE_BACKOFF_SECONDS))
+            updated_row["auto_retry_base_backoff_seconds"] = min(current_base_backoff * _DEGRADED_PROVIDER_BACKOFF_MULTIPLIER, MAX_AUTO_RETRY_BACKOFF_SECONDS)
         _append_action_log(updated_row, action="auto_retry", timestamp=now_iso, before_row=run_record_row, after_row=updated_row)
         return AutoRecoveryOutcome(applied=True, action="auto_retry", updated_run_record=updated_row)
 

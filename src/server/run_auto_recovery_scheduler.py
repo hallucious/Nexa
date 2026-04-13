@@ -4,10 +4,12 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from src.server.provider_health_models import AutoRecoveryProviderHealthSignal
 from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, apply_auto_recovery
 
 RunRecordWriter = Callable[[Mapping[str, Any]], Any]
 QueueJobIdFactory = Callable[[], str]
+ProviderHealthResolver = Callable[[Mapping[str, Any]], AutoRecoveryProviderHealthSignal | None]
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,7 @@ class AutoRecoveryScheduler:
         now_iso: str,
         run_record_writer: Optional[RunRecordWriter] = None,
         queue_job_id_factory: Optional[QueueJobIdFactory] = None,
+        provider_health_resolver: Optional[ProviderHealthResolver] = None,
         batch_limit: int = 50,
         max_applied_per_batch: Optional[int] = None,
     ) -> AutoRecoverySchedulerOutcome:
@@ -67,10 +70,12 @@ class AutoRecoveryScheduler:
         for row in rows:
             if max_applied_per_batch is not None and len(applied_updates) >= max_applied_per_batch:
                 break
+            provider_health = provider_health_resolver(row) if provider_health_resolver is not None else None
             outcome: AutoRecoveryOutcome = apply_auto_recovery(
                 row,
                 now_iso=now_iso,
                 queue_job_id_factory=queue_job_id_factory,
+                provider_health=provider_health,
             )
             if not outcome.applied or outcome.updated_run_record is None or outcome.action is None:
                 continue

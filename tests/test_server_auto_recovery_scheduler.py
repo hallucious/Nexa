@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server import AutoRecoveryScheduler
+from src.server import AutoRecoveryProviderHealthSignal, AutoRecoveryScheduler
 
 
 def _run_row(run_id: str, **overrides):
@@ -87,3 +87,35 @@ def test_scheduler_accepts_zero_batch_limit() -> None:
     assert outcome.stats.scanned_count == 0
     assert outcome.stats.applied_count == 0
     assert outcome.applied_updates == ()
+
+
+def test_scheduler_uses_provider_health_resolver() -> None:
+    writes = {}
+
+    def writer(row):
+        writes[row["run_id"]] = dict(row)
+        return row
+
+    rows = [_run_row("run-down"), _run_row("run-degraded")]
+
+    def provider_health_resolver(row):
+        if row["run_id"] == "run-down":
+            return AutoRecoveryProviderHealthSignal(status="down", provider_key="openai")
+        return AutoRecoveryProviderHealthSignal(status="degraded", provider_key="anthropic")
+
+    outcome = AutoRecoveryScheduler.run_batch(
+        rows,
+        now_iso="2026-04-13T01:00:00+00:00",
+        run_record_writer=writer,
+        queue_job_id_factory=lambda: "job-health",
+        provider_health_resolver=provider_health_resolver,
+        batch_limit=10,
+    )
+
+    assert outcome.stats.scanned_count == 2
+    assert outcome.stats.applied_count == 2
+    assert outcome.stats.auto_retry_count == 1
+    assert outcome.stats.auto_mark_review_required_count == 1
+    assert writes["run-down"]["orphan_review_required"] is True
+    assert writes["run-degraded"]["status"] == "queued"
+    assert writes["run-degraded"]["auto_retry_base_backoff_seconds"] == 600
