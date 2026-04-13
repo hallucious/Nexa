@@ -25,6 +25,14 @@ from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
 from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
+from src.ui.execution_anxiety_reduction import (
+    ContextualHelpView,
+    MobileFirstRunView,
+    PrivacyTransparencyView,
+    read_contextual_help_view,
+    read_mobile_first_run_view,
+    read_privacy_transparency_view,
+)
 from src.ui.visual_editor_workspace import VisualEditorWorkspaceViewModel, read_visual_editor_workspace_view_model
 from src.ui.runtime_monitoring_workspace import RuntimeMonitoringWorkspaceViewModel, read_runtime_monitoring_workspace_view_model
 from src.ui.node_configuration_workspace import NodeConfigurationWorkspaceViewModel, read_node_configuration_workspace_view_model
@@ -93,6 +101,9 @@ class BuilderShellViewModel:
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
     beginner_onboarding: BeginnerOnboardingHintView = field(default_factory=BeginnerOnboardingHintView)
+    contextual_help: ContextualHelpView = field(default_factory=ContextualHelpView)
+    privacy_transparency: PrivacyTransparencyView = field(default_factory=PrivacyTransparencyView)
+    mobile_first_run: MobileFirstRunView = field(default_factory=MobileFirstRunView)
     explanation: str | None = None
 
 
@@ -452,6 +463,28 @@ def read_builder_shell_view_model(
         execution_vm=execution_vm,
         app_language=app_language,
     )
+    contextual_help = read_contextual_help_view(
+        source_unwrapped,
+        beginner_mode=beginner_mode,
+        empty_workspace_mode=empty_workspace_mode,
+        validation_view=validation_vm,
+        designer_view=designer_vm,
+        execution_view=execution_vm,
+        app_language=app_language,
+    )
+    privacy_transparency = read_privacy_transparency_view(
+        source_unwrapped,
+        designer_view=designer_vm,
+        app_language=app_language,
+    )
+    mobile_first_run = read_mobile_first_run_view(
+        source_unwrapped,
+        beginner_mode=beginner_mode,
+        empty_workspace_mode=empty_workspace_mode,
+        designer_view=designer_vm,
+        execution_view=execution_vm,
+        app_language=app_language,
+    )
 
     return BuilderShellViewModel(
         shell_status=shell_status,
@@ -480,6 +513,9 @@ def read_builder_shell_view_model(
         layout=layout_vm,
         diagnostics=diagnostics,
         beginner_onboarding=beginner_onboarding,
+        contextual_help=contextual_help,
+        privacy_transparency=privacy_transparency,
+        mobile_first_run=mobile_first_run,
         explanation=explanation,
     )
 

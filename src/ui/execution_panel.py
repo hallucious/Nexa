@@ -156,6 +156,28 @@ class DeliveryOutcomeView:
 
 
 @dataclass(frozen=True)
+class CostVisibilityView:
+    visible: bool = False
+    estimated_cost: float | None = None
+    actual_cost: float | None = None
+    budget_status: str | None = None
+    summary: str | None = None
+    cost_source: str = "none"
+    top_cost_node_id: str | None = None
+
+
+@dataclass(frozen=True)
+class WaitingStateFeedbackView:
+    visible: bool = False
+    state: str = "hidden"
+    title: str | None = None
+    summary: str | None = None
+    reassurance: str | None = None
+    next_action_label: str | None = None
+    next_action_target: str | None = None
+
+
+@dataclass(frozen=True)
 class ExecutionPanelViewModel:
     source_mode: str
     storage_role: str
@@ -175,6 +197,8 @@ class ExecutionPanelViewModel:
     delivery_outcome: DeliveryOutcomeView | None = None
     explanation: str | None = None
     confidence_summary: ConfidenceSummaryView = field(default_factory=ConfidenceSummaryView)
+    cost_visibility: CostVisibilityView = field(default_factory=CostVisibilityView)
+    waiting_feedback: WaitingStateFeedbackView = field(default_factory=WaitingStateFeedbackView)
 
 
 def _unwrap(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None):
@@ -819,6 +843,153 @@ def _governance_views(summary: Mapping[str, Any], *, app_language: str) -> tuple
 
 
 
+def _coerce_float(value: Any) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _top_cost_node_id(record: ExecutionRecordModel) -> str | None:
+    trace_summary = record.observability.trace_intelligence_summary
+    if isinstance(trace_summary, Mapping):
+        highest = trace_summary.get('highest_cost_nodes')
+        if isinstance(highest, Sequence) and not isinstance(highest, (str, bytes)):
+            for node_id in highest:
+                if isinstance(node_id, str) and node_id:
+                    return node_id
+    best_node = None
+    best_cost = None
+    for result in record.node_results.results:
+        candidate = None
+        if isinstance(result.route_summary, Mapping):
+            candidate = _coerce_float(result.route_summary.get('estimated_cost'))
+        if candidate is None and isinstance(result.metrics, Mapping):
+            candidate = _coerce_float(result.metrics.get('cost_estimate') or result.metrics.get('cost'))
+        if candidate is None:
+            continue
+        if best_cost is None or candidate > best_cost:
+            best_cost = candidate
+            best_node = result.node_id
+    return best_node
+
+
+def _cost_visibility_from_sources(
+    source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
+    execution_record: ExecutionRecordModel | None,
+    governance_summary: Mapping[str, Any],
+    *,
+    app_language: str,
+) -> CostVisibilityView:
+    estimated_cost = None
+    actual_cost = None
+    source_label = 'none'
+    if execution_record is not None:
+        metrics = execution_record.observability.metrics if isinstance(execution_record.observability.metrics, Mapping) else {}
+        estimated_cost = _coerce_float(metrics.get('cost_estimate'))
+        actual_cost = _coerce_float(metrics.get('actual_cost'))
+        if estimated_cost is not None or actual_cost is not None:
+            source_label = 'observability'
+    if estimated_cost is None and isinstance(governance_summary, Mapping):
+        estimated_cost = _coerce_float(governance_summary.get('estimated_cost'))
+        if estimated_cost is not None:
+            source_label = 'governance_summary'
+    if actual_cost is None and isinstance(governance_summary, Mapping):
+        actual_cost = _coerce_float(governance_summary.get('actual_cost'))
+        if actual_cost is not None and source_label == 'none':
+            source_label = 'governance_summary'
+    if estimated_cost is None and isinstance(source, WorkingSaveModel) and isinstance(source.runtime.last_run, Mapping):
+        estimated_cost = _coerce_float(source.runtime.last_run.get('estimated_cost'))
+        actual_cost = actual_cost if actual_cost is not None else _coerce_float(source.runtime.last_run.get('actual_cost'))
+        if estimated_cost is not None or actual_cost is not None:
+            source_label = 'working_save_last_run'
+    budget_status = str(governance_summary.get('quota_status')) if isinstance(governance_summary.get('quota_status'), str) else None
+    top_cost_node_id = _top_cost_node_id(execution_record) if execution_record is not None else None
+    if estimated_cost is None and actual_cost is None and budget_status is None and top_cost_node_id is None:
+        return CostVisibilityView()
+    parts: list[str] = []
+    if estimated_cost is not None:
+        parts.append(ui_text('phase6.cost.summary.estimated', app_language=app_language, fallback_text='Estimated cost {cost:.2f}', cost=estimated_cost))
+    if actual_cost is not None:
+        parts.append(ui_text('phase6.cost.summary.actual', app_language=app_language, fallback_text='Actual cost {cost:.2f}', cost=actual_cost))
+    if budget_status == 'near_limit':
+        parts.append(ui_text('phase6.cost.summary.near_limit', app_language=app_language, fallback_text='Approaching the workspace limit'))
+    elif budget_status == 'blocked':
+        parts.append(ui_text('phase6.cost.summary.blocked', app_language=app_language, fallback_text='Run blocked by quota limits'))
+    if top_cost_node_id:
+        parts.append(ui_text('phase6.cost.summary.top_node', app_language=app_language, fallback_text='Highest cost node: {node_id}', node_id=top_cost_node_id))
+    return CostVisibilityView(
+        visible=True,
+        estimated_cost=estimated_cost,
+        actual_cost=actual_cost,
+        budget_status=budget_status,
+        summary=' • '.join(parts) if parts else None,
+        cost_source=source_label,
+        top_cost_node_id=top_cost_node_id,
+    )
+
+
+def _waiting_feedback_from_state(
+    *,
+    execution_status: str,
+    progress: ExecutionProgressView,
+    active_context: ActiveExecutionContextView,
+    latest_outputs: Sequence[OutputSummaryView],
+    governance_summary: Mapping[str, Any],
+    live_events: Sequence[ExecutionEvent] | None,
+    app_language: str,
+) -> WaitingStateFeedbackView:
+    streaming_status = str(governance_summary.get('streaming_status') or '')
+    has_live_chunks = bool(live_events and any(evt.type == 'token_chunk' for evt in live_events))
+    if execution_status not in {'running', 'queued'}:
+        return WaitingStateFeedbackView()
+    if has_live_chunks or streaming_status == 'streaming' or any(output.streaming_in_progress for output in latest_outputs):
+        return WaitingStateFeedbackView(
+            visible=True,
+            state='streaming',
+            title=ui_text('phase6.waiting.streaming.title', app_language=app_language, fallback_text='Result is streaming'),
+            summary=ui_text('phase6.waiting.streaming.summary', app_language=app_language, fallback_text='Nexa is still producing output. You can read partial results while it runs.'),
+            reassurance=ui_text('phase6.waiting.streaming.reassurance', app_language=app_language, fallback_text='Partial output is provisional until the run finishes.'),
+            next_action_label=ui_text('phase6.waiting.streaming.action', app_language=app_language, fallback_text='Watch progress'),
+            next_action_target='execution',
+        )
+    if execution_status == 'queued':
+        return WaitingStateFeedbackView(
+            visible=True,
+            state='queued',
+            title=ui_text('phase6.waiting.queued.title', app_language=app_language, fallback_text='Preparing your run'),
+            summary=ui_text('phase6.waiting.queued.summary', app_language=app_language, fallback_text='Nexa is preparing the workflow for execution.'),
+            reassurance=ui_text('phase6.waiting.queued.reassurance', app_language=app_language, fallback_text='You do not need to restart the run.'),
+            next_action_label=ui_text('phase6.waiting.queued.action', app_language=app_language, fallback_text='Stay on this screen'),
+            next_action_target='execution',
+        )
+    if progress.percent is not None:
+        return WaitingStateFeedbackView(
+            visible=True,
+            state='running',
+            title=ui_text('phase6.waiting.running.title', app_language=app_language, fallback_text='Execution in progress'),
+            summary=ui_text('phase6.waiting.running.summary', app_language=app_language, fallback_text='Completed {completed}/{total} steps.', completed=progress.completed_units or 0, total=progress.total_units or 0),
+            reassurance=(ui_text('phase6.waiting.running.eta', app_language=app_language, fallback_text='Estimated time remaining: {eta:.0f}s', eta=progress.eta_seconds) if progress.eta_seconds is not None else ui_text('phase6.waiting.running.reassurance', app_language=app_language, fallback_text='Keep this screen open while Nexa finishes.')),
+            next_action_label=ui_text('phase6.waiting.running.action', app_language=app_language, fallback_text='Watch progress'),
+            next_action_target='execution',
+        )
+    return WaitingStateFeedbackView(
+        visible=True,
+        state='running',
+        title=ui_text('phase6.waiting.generic.title', app_language=app_language, fallback_text='Nexa is working'),
+        summary=active_context.status_message or progress.indeterminate_message or ui_text('phase6.waiting.generic.summary', app_language=app_language, fallback_text='Execution is still in progress.'),
+        reassurance=ui_text('phase6.waiting.generic.reassurance', app_language=app_language, fallback_text='You can come back to the result when the run completes.'),
+        next_action_label=ui_text('phase6.waiting.generic.action', app_language=app_language, fallback_text='Open runtime view'),
+        next_action_target='execution',
+    )
+
+
 def _friendly_error_for_execution(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
     execution_record: ExecutionRecordModel | None,
@@ -893,6 +1064,7 @@ def read_execution_panel_view_model(
         recent_events = _event_views_from_live_events(live_events, app_language=app_language) if live_events else _event_views_from_record(execution_record, app_language=app_language)
         active_context = _active_context_from_live_events(live_events, app_language=app_language) if live_events else _active_context_from_record(execution_record, app_language=app_language)
         progress = _progress_from_record(execution_record, active_context, app_language=app_language)
+        latest_outputs = _latest_outputs_from_live_events(live_events, fallback_record=execution_record, app_language=app_language) if live_events else _latest_outputs_from_record(execution_record, app_language=app_language)
         return ExecutionPanelViewModel(
             source_mode=source_mode,
             storage_role=storage_role,
@@ -902,7 +1074,7 @@ def read_execution_panel_view_model(
             progress=progress,
             active_context=active_context,
             recent_events=recent_events,
-            latest_outputs=_latest_outputs_from_live_events(live_events, fallback_record=execution_record, app_language=app_language) if live_events else _latest_outputs_from_record(execution_record, app_language=app_language),
+            latest_outputs=latest_outputs,
             diagnostics=_diagnostics_from_record(execution_record),
             timing=ExecutionTimingView(
                 started_at=execution_record.meta.started_at,
@@ -917,6 +1089,16 @@ def read_execution_panel_view_model(
             delivery_outcome=delivery_outcome,
             explanation=explanation,
             confidence_summary=_confidence_from_record(execution_record),
+            cost_visibility=_cost_visibility_from_sources(source, execution_record, governance_summary, app_language=app_language),
+            waiting_feedback=_waiting_feedback_from_state(
+                execution_status=execution_status,
+                progress=progress,
+                active_context=active_context,
+                latest_outputs=latest_outputs,
+                governance_summary=governance_summary,
+                live_events=live_events,
+                app_language=app_language,
+            ),
         )
 
     return ExecutionPanelViewModel(
@@ -932,6 +1114,16 @@ def read_execution_panel_view_model(
         governance_signals=governance_signals,
         delivery_outcome=delivery_outcome,
         explanation=explanation,
+        cost_visibility=_cost_visibility_from_sources(source, execution_record, governance_summary, app_language=app_language),
+        waiting_feedback=_waiting_feedback_from_state(
+            execution_status=execution_status,
+            progress=ExecutionProgressView(progress_mode="indeterminate", indeterminate_message=ui_text("execution.panel.no_execution_record", app_language=app_language)),
+            active_context=ActiveExecutionContextView(status_message=ui_text("execution.panel.no_active_execution", app_language=app_language)),
+            latest_outputs=(),
+            governance_summary=governance_summary,
+            live_events=live_events,
+            app_language=app_language,
+        ),
     )
 
 
