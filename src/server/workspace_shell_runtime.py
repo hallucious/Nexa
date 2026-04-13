@@ -330,15 +330,66 @@ def _latest_run_artifacts_detail(preview: Mapping[str, Any] | None) -> dict[str,
 
 
 
-def _navigation_model() -> dict[str, Any]:
+def _navigation_model(
+    shell: Mapping[str, Any] | None,
+    *,
+    latest_run_status_preview: Mapping[str, Any] | None,
+    latest_run_result_preview: Mapping[str, Any] | None,
+    latest_run_trace_preview: Mapping[str, Any] | None,
+    latest_run_artifacts_preview: Mapping[str, Any] | None,
+) -> dict[str, Any]:
     sections = (
         {"section_id": "status", "label": "Status", "target_id": "latest-run-status-card", "detail_target_id": "latest-run-status-detail-card"},
         {"section_id": "result", "label": "Result", "target_id": "latest-run-result-card", "detail_target_id": "latest-run-result-detail-card"},
         {"section_id": "trace", "label": "Trace", "target_id": "latest-run-trace-card", "detail_target_id": "latest-run-trace-detail-card"},
         {"section_id": "artifacts", "label": "Artifacts", "target_id": "latest-run-artifacts-card", "detail_target_id": "latest-run-artifacts-detail-card"},
     )
+    shell_map = shell or {}
+    mobile = shell_map.get("mobile_first_run") or {}
+    contextual_help = shell_map.get("contextual_help") or {}
+    mobile_visible = bool(mobile.get("visible"))
+    primary_action_target = str(mobile.get("primary_action_target") or "").strip()
+    help_stage = str(contextual_help.get("stage") or "").strip()
+    latest_status = str((latest_run_status_preview or {}).get("status") or "").strip().lower()
+    latest_result_state = str((latest_run_result_preview or {}).get("result_state") or "").strip().lower()
+    latest_trace_count = int((latest_run_trace_preview or {}).get("event_count") or 0)
+    latest_artifact_count = int((latest_run_artifacts_preview or {}).get("artifact_count") or 0)
+
+    default_section = "status"
+    default_level = "summary"
+    guidance_label = "Recommended next: Status"
+    guidance_summary = "Open status first to follow the current runtime state."
+
+    if mobile_visible:
+        if latest_result_state.startswith("ready") or primary_action_target == "execution.output" or help_stage == "result":
+            default_section = "result"
+            default_level = "detail"
+            guidance_label = "Recommended next: Result"
+            guidance_summary = "A readable result is ready, so the mobile first-run path should move to Result next."
+        elif latest_status in {"failed", "partial"} and latest_trace_count > 0:
+            default_section = "trace"
+            default_level = "detail"
+            guidance_label = "Recommended next: Trace"
+            guidance_summary = "The latest run needs explanation, so open Trace next in the first-run path."
+        elif latest_artifact_count > 0 and latest_result_state.startswith("missing"):
+            default_section = "artifacts"
+            default_level = "detail"
+            guidance_label = "Recommended next: Artifacts"
+            guidance_summary = "Artifacts are available before a readable result summary, so open Artifacts next."
+        elif latest_status in {"running", "queued"} or primary_action_target == "execution" or help_stage == "wait":
+            default_section = "status"
+            default_level = "summary"
+            guidance_label = "Recommended next: Status"
+            guidance_summary = "The mobile first-run path is still in progress, so follow Status first."
+        else:
+            guidance_label = "Recommended next: Status"
+            guidance_summary = "For a first-run runtime view, start with Status and then move to Result when it is ready."
+
     return {
-        "default_section": "status",
+        "default_section": default_section,
+        "default_level": default_level,
+        "guidance_label": guidance_label,
+        "guidance_summary": guidance_summary,
         "sections": [dict(item) for item in sections],
     }
 
@@ -415,7 +466,13 @@ def build_workspace_shell_runtime_payload(
         "latest_run_result_detail": _latest_run_result_detail(latest_run_result_preview),
         "latest_run_artifacts_detail": _latest_run_artifacts_detail(latest_run_artifacts_preview),
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
-        "navigation": _navigation_model(),
+        "navigation": _navigation_model(
+            asdict(shell_vm),
+            latest_run_status_preview=latest_run_status_preview,
+            latest_run_result_preview=latest_run_result_preview,
+            latest_run_trace_preview=latest_run_trace_preview,
+            latest_run_artifacts_preview=latest_run_artifacts_preview,
+        ),
         "continuity": {
             "onboarding_state": onboarding_state,
             "load_status": getattr(loaded, "load_status", "generated_default") if loaded is not None else "generated_default",
@@ -448,7 +505,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_result_detail_json = json.dumps(payload.get("latest_run_result_detail"), ensure_ascii=False)
     latest_run_artifacts_detail_json = json.dumps(payload.get("latest_run_artifacts_detail"), ensure_ascii=False)
     latest_run_trace_detail_json = json.dumps(payload.get("latest_run_trace_detail"), ensure_ascii=False)
-    navigation_json = json.dumps(payload.get("navigation"), ensure_ascii=False)
+    navigation = payload.get("navigation") or {}
+    navigation_json = json.dumps(navigation, ensure_ascii=False)
     template_items = []
     for template in (template_gallery.get("templates") or [])[:6]:
         title = escape(str(template.get("display_name") or template.get("template_id") or "Template"))
@@ -509,7 +567,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     <section class="card" style="margin-top:16px;">
       <h2>Runtime focus</h2>
       <div id="runtime-nav" class="nav"></div>
-      <pre id="focus-state">Focus: status</pre>
+      <p id="focus-guidance"><strong>{escape(str(navigation.get('guidance_label') or 'Recommended next: Status'))}</strong> — {escape(str(navigation.get('guidance_summary') or 'Open status first to follow the current runtime state.'))}</p>
+      <pre id="focus-state">Focus: {escape(str(navigation.get('default_section') or 'status'))}</pre>
     </section>
     <div class="row">
       <section class="card">
@@ -605,6 +664,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const focusStateEl = document.getElementById('focus-state');
     let activeRunId = initialRunStatusPreview ? initialRunStatusPreview.run_id : null;
     let focusedSectionId = (initialNavigation && initialNavigation.default_section) || 'status';
+    let focusedLevel = (initialNavigation && initialNavigation.default_level) || 'summary';
     let activeRunStatusPath = initialPayload.routes.latest_run_status || null;
     let activeRunResultPath = initialPayload.routes.latest_run_result || null;
     let activeRunTracePath = initialPayload.routes.latest_run_trace || null;
@@ -762,7 +822,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const section = sectionConfig(focusedSectionId);
       if (focusStateEl) {{
         const label = section && section.label ? section.label : focusedSectionId;
-        focusStateEl.textContent = 'Focus: ' + label + (level === 'detail' ? ' detail' : ' summary');
+        focusStateEl.textContent = 'Focus: ' + label + (focusedLevel === 'detail' ? ' detail' : ' summary');
       }}
       const buttons = runtimeNavEl.querySelectorAll('button[data-section-id]');
       buttons.forEach((button) => {{
@@ -883,7 +943,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeLatestRunResultDetail(initialRunResultDetail || 'Open latest run result to view the detail layer.');
     writeLatestRunTraceDetail(initialRunTraceDetail || 'Open latest trace to view the detail layer.');
     writeLatestRunArtifactsDetail(initialRunArtifactsDetail || 'Open latest artifacts to view the detail layer.');
-    setFocusedSection(focusedSectionId, 'summary');
+    setFocusedSection(focusedSectionId, focusedLevel);
     document.getElementById('refresh').addEventListener('click', async () => {{
       const response = await fetch(initialPayload.routes.workspace_shell, {{ credentials: 'same-origin' }});
       const body = await response.json();

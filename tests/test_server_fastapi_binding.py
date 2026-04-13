@@ -471,7 +471,10 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert 'First artifact id: artifact-2' in payload['latest_run_artifacts_summary']['lines']
     assert payload['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in payload['latest_run_artifacts_detail']['items']
-    assert payload['navigation']['default_section'] == 'status'
+    assert payload['navigation']['default_section'] == 'result'
+    assert payload['navigation']['default_level'] == 'detail'
+    assert payload['navigation']['guidance_label'] == 'Recommended next: Result'
+    assert 'mobile first-run path should move to Result next' in payload['navigation']['guidance_summary']
     assert [section['section_id'] for section in payload['navigation']['sections']] == ['status', 'result', 'trace', 'artifacts']
 
 
@@ -513,6 +516,8 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'summarizeArtifactsBody' in body
     assert 'Runtime focus' in body
     assert 'focus-state' in body
+    assert 'focus-guidance' in body
+    assert 'Recommended next: Result' in body
     assert 'renderRuntimeNav' in body
     assert 'setFocusedSection' in body
     assert 'latest-run-status-card' in body

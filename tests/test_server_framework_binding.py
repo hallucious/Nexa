@@ -504,3 +504,6 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert 'First artifact id: artifact-1' in parsed['latest_run_artifacts_summary']['lines']
     assert parsed['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in parsed['latest_run_artifacts_detail']['items']
+    assert parsed['navigation']['default_section'] == 'result'
+    assert parsed['navigation']['default_level'] == 'detail'
+    assert parsed['navigation']['guidance_label'] == 'Recommended next: Result'
