@@ -203,18 +203,18 @@ Engine
 
 Current implementation baseline:
 
-* authoritative implementation baseline commit: `d468795`
-* authoritative verified baseline: `2087 passed, 13 skipped`
+* authoritative implementation baseline commit: `12577dc`
+* authoritative verified baseline: `2281 passed, 14 skipped`
 * the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
-* the practical codebase state is already deep inside **Phase 4.5 server/product continuity build-out**
-* the repository is no longer mainly a narrow provider-probe-persistence seam; it already contains a broad server-side continuity layer across workspace, onboarding, run, provider, artifact/trace, aggregate, user-scope, and setup-entry surfaces
-* `src/server/` now contains the main server foundation families required for that continuity layer: boundary/auth adapters, database/migration foundation, run admission/read/list paths, artifact/trace read paths, provider secret/health/probe/probe-history paths, recent-activity aggregation, HTTP route surface, framework binding, and FastAPI binding
-* `src/server/database_foundation.py` now defines canonical Phase 4.5 product persistence families including workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index
-* continuity support stores already exist in code for provider binding, managed secret metadata, provider probe history, workspace registry, and onboarding state
-* the route/binding surface already exposes product/API continuity reads and writes for workspace, onboarding, provider operations, run launch/status/result/list, artifact detail, trace, recent activity, and history summary
-* aggregate continuity projection is already attached to multiple response families rather than remaining isolated in one endpoint family
-* top-level project-truth documents must therefore be interpreted against the `d468795` codebase, not against the older `c869806` / `1848 passed, 9 skipped` status world
-* this practical server progress does **not** mean the macro productization sequence has been superseded: beginner-shell / first-success / return-use priorities still remain the canonical product roadmap, while the current code has simply advanced further inside the Phase 4.5 continuity track than the old top-level docs acknowledged
+* the practical codebase state has now progressed through **Phase 7 return-use loop closure** on top of the earlier Phase 4.5 server/product continuity foundation
+* the repository now contains both the broad server-side continuity layer (workspace, onboarding, run, provider, artifact/trace, aggregate, user-scope, and setup-entry surfaces) and the product-facing return-use surfaces built on that continuity truth
+* `src/server/` now contains the main continuity families plus the product-facing return-use families required for Phase 7: circuit library runtime, result history runtime, feedback runtime/store, HTTP route surface, framework binding, and FastAPI binding
+* `src/server/database_foundation.py` remains the canonical persistence-family foundation for workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index
+* continuity support stores now include provider binding, managed secret metadata, provider probe history, workspace registry, onboarding state, and the Phase 7 in-product feedback store
+* the route/binding surface already exposes product/API continuity reads and writes for workspace, onboarding, provider operations, run launch/status/result/list, artifact detail, trace, recent activity, history summary, circuit library, result history, and feedback channel flows
+* aggregate continuity projection is now joined by Phase 7 return-use projection so users can reenter through library, result history, onboarding continuity, and feedback without relying on storage-internal literacy
+* top-level project-truth documents must therefore be interpreted against the `12577dc` codebase, not against the older `d468795` / `2087 passed, 13 skipped` status world
+* this practical server/product progress does **not** mean the macro productization sequence has been superseded: it means the repository has now practically closed the roadmap's Stage 3 return-use loop and should move its next official implementation focus to **Phase 8 inclusion work**
 
 Interpretation rule:
 

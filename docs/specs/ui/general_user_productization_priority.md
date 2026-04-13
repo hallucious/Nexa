@@ -498,10 +498,10 @@ These are downstream expansion systems, not immediate general-user blockers.
 | Stage 2 | In-app contextual help | Spec direction exists | State-aware in-app help exists |
 | Stage 2 | Mobile first-run support | Spec-driven only | Core first-success loop works on mobile |
 | Stage 2 | Privacy/data transparency | Largely absent | User-facing data path explanation exists |
-| Stage 3 | Circuit list / library surface | File/artifact model only | Product-facing circuit list exists |
-| Stage 3 | Beginner-facing result history | ExecutionRecord exists but advanced-facing | Simple result-history surface exists |
-| Stage 3 | Onboarding continuity | UI continuity exists, onboarding continuity weak | Return users resume beginner progress |
-| Stage 3 | User feedback channel | Absent | Product signal channel exists |
+| Stage 3 | Circuit list / library surface | Implemented server-backed library surface | Product-facing circuit list exists |
+| Stage 3 | Beginner-facing result history | Implemented beginner-facing result-history surface | Simple result-history surface exists |
+| Stage 3 | Onboarding continuity | Implemented server-backed onboarding continuity alignment | Return users resume beginner progress |
+| Stage 3 | User feedback channel | Implemented lightweight in-product feedback channel | Product signal channel exists |
 | Stage 4 | Accessibility implementation | Spec direction only | First-success path materially accessible |
 | Stage 4 | Localization completeness | Infrastructure exists, coverage incomplete | Critical beginner flows fully localized |
 | Stage 5 | User accounts/sessions | Absent | Depends on deployment decision |

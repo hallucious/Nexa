@@ -1,6 +1,6 @@
 # CURRENT_IMPLEMENTATION_STATE
 
-Version: 1.2.0
+Version: 1.3.0
 
 ## Purpose
 
@@ -11,22 +11,22 @@ It exists to answer four practical questions quickly:
 1. What is already implemented in code?
 2. What is only partially converged?
 3. What should not be reopened casually?
-4. What should happen next after the `d468795` truth sync?
+4. What should happen next after the `12577dc` Phase 7 closure audit?
 
 This document is intentionally implementation-first.
 It is not a replacement for the detailed architecture/spec documents.
 
 ## Authoritative Snapshot
 
-- authoritative implementation baseline commit: `d468795`
-- authoritative verified baseline: `2087 passed, 13 skipped`
-- status source: latest repository snapshot used in the current handoff baseline (`Nexa_d468795.zip`)
+- authoritative implementation baseline commit: `12577dc`
+- authoritative verified baseline: `2281 passed, 14 skipped`
+- status source: latest repository snapshot used in the current handoff baseline (`Nexa_12577dc.zip`)
 - canonical macro roadmap reference: `nexa_implementation_order_final_v2_2.md`
-- practical phase interpretation: **Phase 4.5 server/product continuity build-out already broadly present in code**
+- practical phase interpretation: **Phase 4.5 continuity foundation plus Phase 7 return-use loop closure now present in code**
 
 ## One-Line Position
 
-Nexa at `d468795` is no longer mainly a “provider probe persistence not yet closed” repository; it is already a broad Phase 4.5 server/product continuity codebase whose top-level status documents previously lagged behind the actual source.
+Nexa at `12577dc` is no longer mainly a Phase 4.5 continuity repository; it now also includes the practical closure of the Phase 7 return-use loop, and its top-level status documents must reflect that newer reality.
 
 ## Sector Matrix
 
@@ -47,7 +47,8 @@ Nexa at `d468795` is no longer mainly a “provider probe persistence not yet cl
 | aggregate continuity projection | Implemented baseline | recent activity / history summary and multiple adjacent surfaces already expose normalized continuity views |
 | route / framework / FastAPI bindings | Implemented baseline | route surface, framework binding, and FastAPI binding already expose the current server family |
 | managed secret authority integration | Implemented baseline | AWS Secrets Manager binding exists for managed-secret authority integration |
-| general-user productization | Not active implementation truth | canonical roadmap still prioritizes beginner-shell / first-success / return-use, but this code baseline is more advanced in server continuity than in product closure |
+| general-user productization | Partially implemented at Stage 3 closure level | return-use loop is now implemented, but broader beginner-shell / inclusion / later expansion work remains on the roadmap |
+| Phase 7 return-use loop | Complete baseline | circuit library, beginner result history, onboarding continuity alignment, and in-product feedback channel are all present and closure-audited |
 
 ## Stable Enough To Stop Reopening
 
@@ -62,13 +63,14 @@ The following should now be treated as closed-enough baseline decisions unless a
 ### 2. Broad continuity projection family
 
 - continuity is already projected across workspace, onboarding, run, artifact/trace, provider, aggregate, user-scope, and setup-entry-adjacent server surfaces
+- Phase 7 now adds product-facing continuity surfaces for circuit library, result history, and feedback on top of that continuity family
 - accepted/read/rejected responses are increasingly symmetrical around shared continuity summaries
-- future work should inventory remaining edge cases rather than reopen the existence of the continuity family itself
+- future work should not reopen the existence of the continuity family itself
 
 ### 3. Macro roadmap vs practical code-state distinction
 
 - `nexa_implementation_order_final_v2_2.md` remains the canonical dependency roadmap
-- the actual code at `d468795` is already deep inside the Phase 4.5 continuity track
+- the actual code at `12577dc` is beyond the earlier Phase 4.5-only interpretation and now closure-audits Phase 7 as complete
 - both statements must remain visible simultaneously
 
 ### 4. UI/storage/designer foundations
@@ -95,9 +97,9 @@ Every future server seam still risks missing updates in:
 - `src/server/fastapi_binding.py`
 - `src/server/__init__.py`
 
-### 3. General-user productization track
+### 3. General-user productization track beyond Phase 7
 
-The product roadmap priorities for beginner-shell enforcement, first-success blockers, and return-use loop are still open work even though the current codebase is ahead on server continuity.
+The product roadmap priorities for beginner-shell enforcement and first-success blockers still remain broader open work, but the official Stage 3 return-use loop itself is no longer open at this baseline. The next official product-facing track should move to Phase 8 inclusion work.
 
 ## Reopen-Prohibited Topics
 
@@ -115,11 +117,11 @@ Continue treating the following as active implementation topics:
 
 - remaining-gap inventory for edge/exception server surfaces
 - narrow next seam selection after the truth sync
-- general-user productization work when it becomes the active line again
+- Phase 8 inclusion work (accessibility and localization completeness)
 - route/binding/export integrity for every new server-facing change
 
 ## Recommended Immediate Next Batch
 
 The most rational immediate next batch after this truth sync is:
 
-**build a real remaining-gap inventory for the Phase 4.5 continuity family and choose only one clearly justified bounded seam from that inventory.**
+**treat Phase 7 as closed, keep the closure audit authoritative, and begin the next official implementation line from Phase 8 inclusion work.**

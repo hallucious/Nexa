@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-Version: 1.2.0
+Version: 1.3.0
 
 ---
 
@@ -17,9 +17,9 @@ It does not replace the canonical architecture or contract documents.
 
 ## Authoritative Snapshot
 
-* authoritative implementation baseline commit: `d468795`
-* authoritative verified baseline: `2087 passed, 13 skipped`
-* status source: latest repository snapshot aligned to the current handoff baseline (`Nexa_d468795.zip`)
+* authoritative implementation baseline commit: `12577dc`
+* authoritative verified baseline: `2281 passed, 14 skipped`
+* status source: latest repository snapshot aligned to the current handoff baseline (`Nexa_12577dc.zip`)
 * canonical roadmap reference: `nexa_implementation_order_final_v2_2.md`
 
 ---
@@ -34,11 +34,11 @@ The macro dependency order still comes from `nexa_implementation_order_final_v2_
 
 * beginner/productization priorities remain real
 * Phase 4.5 still has its own macro gate and infrastructure-decision framing
-* later phases such as observability linkage, execution-anxiety reduction, return-use loop, accessibility/localization completion, and product expansion still remain part of the long-term plan
+* later phases such as accessibility/localization completion and product expansion still remain part of the long-term plan, while the Phase 7 return-use loop can now be treated as closed at this baseline
 
 ### 2. Practical code-state layer
 
-The actual `d468795` codebase is already deep inside Phase 4.5 server/product continuity work.
+The actual `12577dc` codebase now includes the earlier Phase 4.5 continuity foundation plus the practical closure of the Phase 7 return-use loop.
 
 The source now already contains:
 
@@ -48,6 +48,7 @@ The source now already contains:
 * artifact / trace continuity foundations
 * provider secret / health / probe / probe-history continuity foundations
 * aggregate recent-activity / history-summary continuity foundations
+* Phase 7 return-use surfaces: circuit library, beginner-facing result history, onboarding continuity alignment, and in-product feedback channel
 * route surface / framework binding / FastAPI binding layers for the product/API surface
 * database schema families and in-memory continuity stores supporting that server line
 
@@ -81,7 +82,7 @@ The practical meaning is:
 
 ## What Is Closed Enough To Treat As Stable
 
-### 1. The codebase is already beyond the old `c869806` status world
+### 1. The codebase is already beyond the old `d468795` status world
 
 That older status line is now historical.
 It must not continue to anchor top-level truth.
@@ -108,7 +109,7 @@ One must not erase the other.
 
 ### 1. The project is not currently “waiting to start Phase 4.5 server continuity”
 
-That model is incorrect for `d468795`.
+That model is incorrect for `12577dc`.
 The code is already materially inside that sector.
 
 ### 2. The immediate bottleneck was not missing server foundation code
@@ -132,9 +133,9 @@ Some lower-frequency surfaces may remain outside the normalized projection famil
 
 Every new surface still risks drift across the route surface, framework binding, FastAPI binding, and package export layers.
 
-### 3. General-user productization closure
+### 3. General-user productization closure beyond Phase 7
 
-Beginner shell enforcement, first-success blocker removal, return-use loop closure, and later accessibility/mobile/localization completion remain real open product work.
+Beginner shell enforcement and first-success blockers still remain part of the broader roadmap, but the Stage 3 return-use loop itself is now practically closed at this baseline. The next official open product work after this point is Phase 8 inclusion work (accessibility and localization completeness).
 
 ---
 
@@ -142,4 +143,4 @@ Beginner shell enforcement, first-success blocker removal, return-use loop closu
 
 The project should now be interpreted as:
 
-**engine/storage/UI foundations implemented, broad Phase 4.5 server/product continuity already present in code, top-level truth synchronized to `d468795`, and the next responsible move being a narrow remaining-gap inventory rather than another blind expansion pass.**
+**engine/storage/UI foundations implemented, broad server/product continuity present in code, Phase 7 return-use loop practically closed at `12577dc`, and the next responsible move being to advance to Phase 8 inclusion work rather than extending Phase 7 indefinitely.**
