@@ -270,6 +270,35 @@ def _latest_run_trace_summary(preview: Mapping[str, Any] | None) -> dict[str, An
     return {"headline": headline, "lines": lines}
 
 
+def _latest_run_trace_detail(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not preview:
+        return None
+    count = int(preview.get("event_count") or 0)
+    return {
+        "title": "Trace detail",
+        "items": _summary_lines(
+            f"Event count: {count}",
+            f"Latest event type: {preview.get('latest_event_type')}" if preview.get("latest_event_type") else None,
+            f"Latest node id: {preview.get('latest_node_id')}" if preview.get("latest_node_id") else None,
+            f"Latest message: {preview.get('latest_message')}" if preview.get("latest_message") else None,
+        ),
+    }
+
+
+def _latest_run_artifacts_detail(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not preview:
+        return None
+    count = int(preview.get("artifact_count") or 0)
+    return {
+        "title": "Artifacts detail",
+        "items": _summary_lines(
+            f"Artifact count: {count}",
+            f"First artifact id: {preview.get('first_artifact_id')}" if preview.get("first_artifact_id") else None,
+            f"First artifact preview: {preview.get('first_label')}" if preview.get("first_label") else None,
+        ),
+    }
+
+
 def build_workspace_shell_runtime_payload(
     *,
     workspace_row: Mapping[str, Any] | None,
@@ -339,6 +368,8 @@ def build_workspace_shell_runtime_payload(
         "latest_run_result_summary": _latest_run_result_summary(latest_run_result_preview),
         "latest_run_artifacts_summary": _latest_run_artifacts_summary(latest_run_artifacts_preview),
         "latest_run_trace_summary": _latest_run_trace_summary(latest_run_trace_preview),
+        "latest_run_artifacts_detail": _latest_run_artifacts_detail(latest_run_artifacts_preview),
+        "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
         "continuity": {
             "onboarding_state": onboarding_state,
             "load_status": getattr(loaded, "load_status", "generated_default") if loaded is not None else "generated_default",
@@ -367,6 +398,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_result_summary_json = json.dumps(payload.get("latest_run_result_summary"), ensure_ascii=False)
     latest_run_artifacts_summary_json = json.dumps(payload.get("latest_run_artifacts_summary"), ensure_ascii=False)
     latest_run_trace_summary_json = json.dumps(payload.get("latest_run_trace_summary"), ensure_ascii=False)
+    latest_run_artifacts_detail_json = json.dumps(payload.get("latest_run_artifacts_detail"), ensure_ascii=False)
+    latest_run_trace_detail_json = json.dumps(payload.get("latest_run_trace_detail"), ensure_ascii=False)
     template_items = []
     for template in (template_gallery.get("templates") or [])[:6]:
         title = escape(str(template.get("display_name") or template.get("template_id") or "Template"))
@@ -461,6 +494,16 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <pre id="latest-run-artifacts">Waiting for artifact details.</pre>
       </section>
     </div>
+    <div class="row">
+      <section class="card">
+        <h2>Trace detail layer</h2>
+        <pre id="latest-run-trace-detail">Open latest trace to view the detail layer.</pre>
+      </section>
+      <section class="card">
+        <h2>Artifacts detail layer</h2>
+        <pre id="latest-run-artifacts-detail">Open latest artifacts to view the detail layer.</pre>
+      </section>
+    </div>
     <section class=\"card\" style=\"margin-top:16px;\">
       <h2>Last action log</h2>
       <pre id=\"browser-log\">Ready.</pre>
@@ -477,11 +520,15 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRunResultSummary = {latest_run_result_summary_json};
     const initialRunArtifactsSummary = {latest_run_artifacts_summary_json};
     const initialRunTraceSummary = {latest_run_trace_summary_json};
+    const initialRunArtifactsDetail = {latest_run_artifacts_detail_json};
+    const initialRunTraceDetail = {latest_run_trace_detail_json};
     const logEl = document.getElementById('browser-log');
     const latestRunStatusEl = document.getElementById('latest-run-status');
     const latestRunResultEl = document.getElementById('latest-run-result');
     const latestRunTraceEl = document.getElementById('latest-run-trace');
     const latestRunArtifactsEl = document.getElementById('latest-run-artifacts');
+    const latestRunTraceDetailEl = document.getElementById('latest-run-trace-detail');
+    const latestRunArtifactsDetailEl = document.getElementById('latest-run-artifacts-detail');
     let activeRunId = initialRunStatusPreview ? initialRunStatusPreview.run_id : null;
     let activeRunStatusPath = initialPayload.routes.latest_run_status || null;
     let activeRunResultPath = initialPayload.routes.latest_run_result || null;
@@ -546,6 +593,43 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         ].filter(Boolean),
       }};
     }}
+    function formatDetail(detail, fallbackMessage) {{
+      if (!detail) return fallbackMessage;
+      const title = typeof detail.title === 'string' && detail.title ? detail.title : 'Detail';
+      const items = Array.isArray(detail.items) ? detail.items.filter((item) => typeof item === 'string' && item) : [];
+      return [title, ...items.map((item) => '- ' + item)].join('\n');
+    }}
+    function detailFromTraceBody(body) {{
+      if (!body || typeof body !== 'object') return null;
+      const events = Array.isArray(body.events) ? body.events : [];
+      const latest = events.length ? events[events.length - 1] : null;
+      return {{
+        title: 'Trace detail',
+        items: [
+          'Status: ' + String(body.status || 'unknown'),
+          'Event count: ' + String(Number(body.event_count || events.length || 0)),
+          latest && latest.event_type ? ('Latest event type: ' + latest.event_type) : null,
+          latest && latest.node_id ? ('Latest node id: ' + latest.node_id) : null,
+          latest && latest.message ? ('Latest message: ' + latest.message) : null,
+          body.current_focus && body.current_focus.node_id ? ('Current focus node: ' + body.current_focus.node_id) : null,
+        ].filter(Boolean),
+      }};
+    }}
+    function detailFromArtifactsBody(body) {{
+      if (!body || typeof body !== 'object') return null;
+      const artifacts = Array.isArray(body.artifacts) ? body.artifacts : [];
+      const first = artifacts.length ? artifacts[0] : null;
+      return {{
+        title: 'Artifacts detail',
+        items: [
+          'Artifact count: ' + String(Number(body.artifact_count || artifacts.length || 0)),
+          first && first.artifact_id ? ('First artifact id: ' + first.artifact_id) : null,
+          first && first.kind ? ('First artifact kind: ' + first.kind) : null,
+          first && first.label ? ('First artifact label: ' + first.label) : null,
+          first && first.preview ? ('First artifact preview: ' + first.preview) : null,
+        ].filter(Boolean),
+      }};
+    }}
     function writeLatestRunStatus(message) {{
       latestRunStatusEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent run is available yet.');
     }}
@@ -557,6 +641,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     function writeLatestRunArtifacts(message) {{
       latestRunArtifactsEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent artifacts are available yet.');
+    }}
+    function writeLatestRunTraceDetail(message) {{
+      latestRunTraceDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, 'Open latest trace to view the detail layer.');
+    }}
+    function writeLatestRunArtifactsDetail(message) {{
+      latestRunArtifactsDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, 'Open latest artifacts to view the detail layer.');
     }}
     function setActiveRun(runId) {{
       if (!runId) return;
@@ -589,21 +679,25 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     async function refreshLatestRunTrace() {{
       if (!activeRunTracePath) {{
         writeLatestRunTrace('No recent trace is available yet.');
+        writeLatestRunTraceDetail('Open latest trace to view the detail layer.');
         return null;
       }}
       const response = await fetch(activeRunTracePath, {{ credentials: 'same-origin' }});
       const body = await response.json();
       writeLatestRunTrace(summarizeTraceBody(body));
+      writeLatestRunTraceDetail(detailFromTraceBody(body));
       return body;
     }}
     async function refreshLatestRunArtifacts() {{
       if (!activeRunArtifactsPath) {{
         writeLatestRunArtifacts('No recent artifacts are available yet.');
+        writeLatestRunArtifactsDetail('Open latest artifacts to view the detail layer.');
         return null;
       }}
       const response = await fetch(activeRunArtifactsPath, {{ credentials: 'same-origin' }});
       const body = await response.json();
       writeLatestRunArtifacts(summarizeArtifactsBody(body));
+      writeLatestRunArtifactsDetail(detailFromArtifactsBody(body));
       return body;
     }}
     async function pollLatestRunUntilSettled() {{
@@ -626,6 +720,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeLatestRunResult(initialRunResultSummary || 'No recent run result is available yet.');
     writeLatestRunTrace(initialRunTraceSummary || 'No recent trace is available yet.');
     writeLatestRunArtifacts(initialRunArtifactsSummary || 'No recent artifacts are available yet.');
+    writeLatestRunTraceDetail(initialRunTraceDetail || 'Open latest trace to view the detail layer.');
+    writeLatestRunArtifactsDetail(initialRunArtifactsDetail || 'Open latest artifacts to view the detail layer.');
     document.getElementById('refresh').addEventListener('click', async () => {{
       const response = await fetch(initialPayload.routes.workspace_shell, {{ credentials: 'same-origin' }});
       const body = await response.json();
@@ -640,8 +736,14 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       if (body.latest_run_trace_preview) {{
         writeLatestRunTrace(body.latest_run_trace_summary || summarizeTraceBody(body.latest_run_trace_preview));
       }}
+      if (body.latest_run_trace_detail) {{
+        writeLatestRunTraceDetail(body.latest_run_trace_detail);
+      }}
       if (body.latest_run_artifacts_preview) {{
         writeLatestRunArtifacts(body.latest_run_artifacts_summary || summarizeArtifactsBody(body.latest_run_artifacts_preview));
+      }}
+      if (body.latest_run_artifacts_detail) {{
+        writeLatestRunArtifactsDetail(body.latest_run_artifacts_detail);
       }}
     }});
     document.getElementById('run-draft').addEventListener('click', async () => {{
@@ -663,6 +765,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         writeLatestRunResult('Waiting for run result.');
         writeLatestRunTrace('Waiting for trace details.');
         writeLatestRunArtifacts('Waiting for artifact details.');
+        writeLatestRunTraceDetail('Open latest trace to view the detail layer.');
+        writeLatestRunArtifactsDetail('Open latest artifacts to view the detail layer.');
         await pollLatestRunUntilSettled();
       }}
     }});

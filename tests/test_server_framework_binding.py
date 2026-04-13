@@ -491,5 +491,9 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed["routes"]["latest_run_artifacts"] == "/api/runs/run-001/artifacts"
     assert parsed['latest_run_trace_summary']['headline'] == 'Trace events: 1'
     assert 'Latest event: node.completed' in parsed['latest_run_trace_summary']['lines']
+    assert parsed['latest_run_trace_detail']['title'] == 'Trace detail'
+    assert 'Event count: 1' in parsed['latest_run_trace_detail']['items']
     assert parsed['latest_run_artifacts_summary']['headline'] == 'Artifacts: 1'
     assert 'First artifact id: artifact-1' in parsed['latest_run_artifacts_summary']['lines']
+    assert parsed['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
+    assert 'Artifact count: 1' in parsed['latest_run_artifacts_detail']['items']
