@@ -518,6 +518,15 @@ def _step_state_banner(
         "trace": "Trace",
         "artifacts": "Artifacts",
     }.get(recommended_section, recommended_section.title())
+    if action_target and str(action_target).startswith("runtime."):
+        action_kind = "focus_section"
+    elif action_target == "execution":
+        action_kind = "run_draft"
+    elif action_target in {"designer", "validation"}:
+        action_kind = "focus_auxiliary"
+    else:
+        action_kind = "none"
+
     return {
         "visible": True,
         "banner_id": current_step_id,
@@ -527,6 +536,7 @@ def _step_state_banner(
         "summary": summary,
         "action_label": action_label,
         "action_target": action_target,
+        "action_kind": action_kind,
         "current_step_id": current_step_id,
         "current_step_label": current_label,
         "current_step_index": current_index,
@@ -714,6 +724,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <button id="run-draft" {'disabled' if payload.get('launch_request_template') is None else ''}>Run draft</button>
       <button id="refresh" class="secondary">Refresh shell</button>
       <button id="open-status" class="secondary" {'disabled' if not latest_run_status_path else ''}>Open latest run status</button>
+      <button id="open-result" class="secondary" {'disabled' if not routes.get('latest_run_result') else ''}>Open latest result</button>
       <button id="open-trace" class="secondary" {'disabled' if not latest_run_trace_path else ''}>Open latest trace</button>
       <button id="open-artifacts" class="secondary" {'disabled' if not latest_run_artifacts_path else ''}>Open latest artifacts</button>
     </div>
@@ -728,23 +739,24 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <p id="step-state-banner-title">{escape(str((payload.get('step_state_banner') or {}).get('title') or 'Step 1 of 5 — Enter goal'))}</p>
       <pre id="step-state-banner-summary">{escape(str((payload.get('step_state_banner') or {}).get('summary') or 'Describe your goal to start the first-run path.'))}</pre>
       <p id="step-state-banner-action">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))} → <code>{escape(str((payload.get('step_state_banner') or {}).get('action_target') or 'designer'))}</code></p>
+      <button id="step-state-banner-action-button" class="secondary">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))}</button>
     </section>
     <div class="row">
-      <section class="card">
+      <section id="contextual-help-card" tabindex="-1" class="card focus-target">
         <h2>{help_title}</h2>
         <p>{help_summary}</p>
       </section>
-      <section class="card">
+      <section id="privacy-card" tabindex="-1" class="card focus-target">
         <h2>{escape(str(privacy.get('title') or 'Privacy and data handling'))}</h2>
         <ul>{privacy_markup}</ul>
       </section>
     </div>
     <div class="row">
-      <section class="card">
+      <section id="mobile-first-run-card" tabindex="-1" class="card focus-target">
         <h2>Mobile first-run</h2>
         <ul>{mobile_markup}</ul>
       </section>
-      <section class="card">
+      <section id="starter-templates-card" tabindex="-1" class="card focus-target">
         <h2>Starter templates</h2>
         <ul>{template_markup}</ul>
       </section>
@@ -826,6 +838,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const stepStateBannerTitleEl = document.getElementById('step-state-banner-title');
     const stepStateBannerSummaryEl = document.getElementById('step-state-banner-summary');
     const stepStateBannerActionEl = document.getElementById('step-state-banner-action');
+    const stepStateBannerActionButtonEl = document.getElementById('step-state-banner-action-button');
     let activeRunId = initialRunStatusPreview ? initialRunStatusPreview.run_id : null;
     let currentNavigation = initialNavigation || null;
     let focusedSectionId = (currentNavigation && currentNavigation.default_section) || 'status';
@@ -968,6 +981,56 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         summary: banner && typeof banner.summary === 'string' && banner.summary ? banner.summary : fallbackSummary,
       }};
     }}
+    function auxiliaryFocusTargetId(actionTarget) {{
+      if (actionTarget === 'designer') return 'starter-templates-card';
+      if (actionTarget === 'validation') return 'contextual-help-card';
+      return null;
+    }}
+    async function performBannerAction(banner) {{
+      const actionTarget = banner && typeof banner.action_target === 'string' ? banner.action_target : '';
+      if (!actionTarget) {{
+        writeLog('No recommended action is available.');
+        return;
+      }}
+      if (actionTarget === 'execution') {{
+        document.getElementById('run-draft').click();
+        return;
+      }}
+      if (actionTarget === 'runtime.status') {{
+        const body = await refreshLatestRunStatus();
+        writeLog(body || 'No recent run is available yet.');
+        return;
+      }}
+      if (actionTarget === 'runtime.result') {{
+        const body = await refreshLatestRunResult();
+        writeLog(body || 'No recent run result is available yet.');
+        return;
+      }}
+      if (actionTarget === 'runtime.trace') {{
+        const body = await refreshLatestRunTrace();
+        writeLog(body || 'No recent trace is available yet.');
+        return;
+      }}
+      if (actionTarget === 'runtime.artifacts') {{
+        const body = await refreshLatestRunArtifacts();
+        writeLog(body || 'No recent artifacts are available yet.');
+        return;
+      }}
+      const auxiliaryTargetId = auxiliaryFocusTargetId(actionTarget);
+      if (auxiliaryTargetId) {{
+        const target = document.getElementById(auxiliaryTargetId);
+        if (target) {{
+          target.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+          target.focus({{ preventScroll: true }});
+          if (focusStateEl) {{
+            focusStateEl.textContent = 'Focus: ' + actionTarget;
+          }}
+          writeLog('Focused ' + actionTarget + ' guidance.');
+          return;
+        }}
+      }}
+      writeLog('Action target not yet wired: ' + actionTarget);
+    }}
     function deriveStepStateBannerFromBodies(statusBody, resultBody, traceBody, artifactsBody) {{
       const normalizedStatus = String((statusBody || {{}}).status || '').toLowerCase();
       const normalizedResultState = String((resultBody || {{}}).result_state || '').toLowerCase();
@@ -989,8 +1052,16 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     function writeStepStateBanner(banner) {{
       const formatted = formatStepStateBanner(banner, 'Step 1 of 5 — Enter goal', 'Describe your goal to start the first-run path.');
+      const actionLabel = banner && typeof banner.action_label === 'string' && banner.action_label ? banner.action_label : 'Open Designer';
+      const actionTarget = banner && typeof banner.action_target === 'string' && banner.action_target ? banner.action_target : 'designer';
       stepStateBannerTitleEl.textContent = formatted.title;
       stepStateBannerSummaryEl.textContent = formatted.summary;
+      stepStateBannerActionEl.textContent = actionLabel + ' → ' + actionTarget;
+      if (stepStateBannerActionButtonEl) {{
+        stepStateBannerActionButtonEl.textContent = actionLabel;
+        stepStateBannerActionButtonEl.disabled = !actionTarget;
+        stepStateBannerActionButtonEl.dataset.actionTarget = actionTarget;
+      }}
     }}
     function refreshStepStateBanner() {{
       const derived = deriveStepStateBannerFromBodies(latestStatusBodyState, latestResultBodyState, latestTraceBodyState, latestArtifactsBodyState);
@@ -1225,6 +1296,13 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       await refreshLatestRunResult();
       await refreshLatestRunTrace();
       await refreshLatestRunArtifacts();
+    }});
+    document.getElementById('open-result').addEventListener('click', async () => {{
+      const body = await refreshLatestRunResult();
+      writeLog(body || 'No recent run result is available yet.');
+    }});
+    document.getElementById('step-state-banner-action-button').addEventListener('click', async () => {{
+      await performBannerAction(deriveStepStateBannerFromBodies(latestStatusBodyState, latestResultBodyState, latestTraceBodyState, latestArtifactsBodyState) || initialStepStateBanner);
     }});
     document.getElementById('open-trace').addEventListener('click', async () => {{
       const body = await refreshLatestRunTrace();

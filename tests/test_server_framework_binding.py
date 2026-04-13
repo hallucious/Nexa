@@ -511,6 +511,7 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['step_state_banner']['recommended_section'] == 'result'
     assert parsed['step_state_banner']['action_label'] == 'Open Result'
     assert parsed['step_state_banner']['action_target'] == 'runtime.result'
+    assert parsed['step_state_banner']['action_kind'] == 'focus_section'
     assert 'Result is ready.' in parsed['step_state_banner']['summary']
 
 
@@ -545,4 +546,5 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['step_state_banner']['phase'] == 'pre_run'
     assert parsed['step_state_banner']['action_label'] == 'Open Designer'
     assert parsed['step_state_banner']['action_target'] == 'designer'
+    assert parsed['step_state_banner']['action_kind'] == 'focus_auxiliary'
     assert 'prepare your first workflow' in parsed['step_state_banner']['summary']
