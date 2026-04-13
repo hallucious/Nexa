@@ -296,13 +296,23 @@ def _governance_summary_from_sources(source, execution_record: ExecutionRecordMo
     if execution_record is not None:
         metrics = execution_record.observability.metrics if isinstance(execution_record.observability.metrics, dict) else {}
         governance = metrics.get("governance") if isinstance(metrics.get("governance"), dict) else None
-        if governance is not None:
-            return dict(governance)
+        recovery = metrics.get("recovery") if isinstance(metrics.get("recovery"), dict) else None
+        policy_validation = recovery.get("policy_validation") if isinstance(recovery, dict) and isinstance(recovery.get("policy_validation"), dict) else None
+        if governance is not None or policy_validation is not None:
+            projected = dict(governance) if governance is not None else {}
+            if policy_validation is not None:
+                projected["policy_validation"] = dict(policy_validation)
+            return projected
     if isinstance(source, WorkingSaveModel):
         last_run = source.runtime.last_run if isinstance(source.runtime.last_run, dict) else {}
         governance = last_run.get("governance") if isinstance(last_run.get("governance"), dict) else None
-        if governance is not None:
-            return dict(governance)
+        policy_validation = last_run.get("policy_validation") if isinstance(last_run.get("policy_validation"), dict) else None
+        if governance is not None or policy_validation is not None:
+            projected = dict(governance) if governance is not None else {}
+            if policy_validation is not None:
+                projected["policy_validation"] = dict(policy_validation)
+            if governance is not None:
+                return projected
         projected: dict[str, object] = {}
         for key in (
             "launch_status",
@@ -319,9 +329,10 @@ def _governance_summary_from_sources(source, execution_record: ExecutionRecordMo
             value = last_run.get(key)
             if value is not None and value != "" and value != []:
                 projected[key] = value
+        if policy_validation is not None:
+            projected["policy_validation"] = dict(policy_validation)
         return projected
     return {}
-
 
 def _severity_for_governance_status(status: str, *, family: str) -> str:
     lowered = status.lower()
@@ -378,8 +389,49 @@ def _governance_findings(summary: dict[str, object], *, app_language: str) -> li
             )
         )
         index += 1
-    return findings
 
+    policy_validation = summary.get("policy_validation") if isinstance(summary.get("policy_validation"), dict) else None
+    if policy_validation is not None:
+        status = str(policy_validation.get("status") or "invalid")
+        reason = str(policy_validation.get("reason") or "invalid_policy")
+        fallback_applied = bool(policy_validation.get("fallback_applied"))
+        findings.append(
+            ValidationFindingView(
+                finding_id=f"governance:{index}:policy_validation",
+                severity="warning",
+                category="governance",
+                code=reason,
+                title=ui_text(
+                    "validation.title.policy_validation",
+                    app_language=app_language,
+                    fallback_text="Policy validation",
+                ),
+                message=ui_text(
+                    "validation.message.policy_validation",
+                    app_language=app_language,
+                    fallback_text=(
+                        "Fallback scoring policy was invalid ({reason}). Safe defaults were applied."
+                        if fallback_applied
+                        else "Fallback scoring policy was invalid ({reason})."
+                    ),
+                    reason=reason,
+                ),
+                short_label=status.replace("_", " "),
+                location_ref=None,
+                target_type="graph",
+                target_id=None,
+                source_ref="governance_summary",
+                suggested_action=ui_text(
+                    "validation.action.review_policy",
+                    app_language=app_language,
+                    fallback_text="Review policy configuration",
+                ),
+                user_confirmation_allowed=False,
+                auto_resolvable=False,
+                destructive_risk=False,
+            )
+        )
+    return findings
 
 def _group_by_severity(all_findings: list[ValidationFindingView], *, app_language: str) -> list[ValidationGroupView]:
     groups: list[ValidationGroupView] = []
@@ -508,6 +560,19 @@ def _friendly_error_for_validation(
                 "reason_code": governance_summary.get(reason_key),
                 "issue_code": governance_summary.get(status_key),
             })
+
+    policy_validation = governance_summary.get("policy_validation") if isinstance(governance_summary.get("policy_validation"), dict) else None
+    if policy_validation is not None:
+        candidates.append({
+            "source_kind": "policy_validation",
+            "reason_code": policy_validation.get("reason") if isinstance(policy_validation.get("reason"), str) else None,
+            "issue_code": policy_validation.get("status") if isinstance(policy_validation.get("status"), str) else None,
+            "message": (
+                f"Fallback scoring policy was invalid ({policy_validation.get('reason')})."
+                if isinstance(policy_validation.get("reason"), str)
+                else "Fallback scoring policy was invalid."
+            ),
+        })
 
     return friendly_error_from_candidates(app_language=app_language, candidates=candidates)
 def read_validation_panel_view_model(

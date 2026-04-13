@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from src.contracts.nex_contract import ValidationFinding, ValidationReport
 from src.designer.models.validation_precheck import (
     AmbiguityAssessmentReport,
@@ -133,3 +135,42 @@ def test_validation_panel_compresses_beginner_ready_message() -> None:
     assert vm.beginner_summary.cause == "Everything needed to run is ready."
     assert vm.beginner_summary.next_action_type == "run"
     assert vm.beginner_summary.next_action_label == "Run"
+
+
+def test_validation_panel_surfaces_policy_validation_warning_from_working_save_last_run() -> None:
+    base = _working_save()
+    source = replace(base, runtime=replace(base.runtime, last_run={
+        "policy_validation": {
+            "status": "invalid",
+            "reason": "negative_weight",
+            "fallback_applied": True,
+        }
+    }))
+
+    vm = read_validation_panel_view_model(source)
+
+    assert vm.source_mode == "governance_summary"
+    policy_warning = next(finding for finding in vm.warning_findings if finding.code == "negative_weight")
+    assert policy_warning.title == "Policy validation"
+    assert "Safe defaults were applied" in policy_warning.message
+    assert policy_warning.suggested_action == "Review policy configuration"
+
+
+def test_validation_panel_surfaces_policy_validation_warning_from_execution_record_recovery_metrics() -> None:
+    base = _execution_record()
+    record = replace(base, observability=replace(base.observability, metrics={
+        "recovery": {
+            "policy_validation": {
+                "status": "invalid",
+                "reason": "zero_total_weight",
+                "fallback_applied": True,
+            }
+        }
+    }))
+
+    vm = read_validation_panel_view_model(_working_save(), execution_record=record)
+
+    assert vm.source_mode == "execution_guard"
+    policy_warning = next(finding for finding in vm.warning_findings if finding.code == "zero_total_weight")
+    assert policy_warning.title == "Policy validation"
+    assert "Safe defaults were applied" in policy_warning.message
