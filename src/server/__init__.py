@@ -183,8 +183,10 @@ from src.server.run_action_log_models import (
     ProductRunActionLogEventView,
     ProductRunActionLogRejectedResponse,
     ProductRunActionLogResponse,
+    ProductRunFallbackAuditView,
     ProductRunLastActionView,
     RunActionLogReadOutcome,
+    fallback_audit_from_action_log_event,
 )
 from src.server.run_control_models import (
     ProductRunControlAcceptedResponse,

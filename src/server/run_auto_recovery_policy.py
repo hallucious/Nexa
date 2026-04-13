@@ -221,6 +221,9 @@ def apply_auto_recovery(
                 "fallback_provider_key": resolved_fallback_candidate.provider_key,
                 "fallback_provider_status": resolved_fallback_candidate.status,
                 "fallback_reason_code": resolved_fallback_candidate.reason_code,
+                "fallback_from_provider": _resolve_current_provider_key(run_record_row, resolved_provider_health),
+                "fallback_to_provider": resolved_fallback_candidate.provider_key,
+                "fallback_reason": "provider_down" if provider_is_down else "retry_exhausted",
             },
         )
         return AutoRecoveryOutcome(

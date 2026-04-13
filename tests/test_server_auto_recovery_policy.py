@@ -184,3 +184,23 @@ def test_apply_auto_recovery_uses_fallback_after_retry_limit_when_candidate_exis
     assert outcome.updated_run_record is not None
     assert outcome.updated_run_record["queue_job_id"] == "job-fallback-limit"
     assert outcome.updated_run_record["fallback_provider_key"] == "anthropic"
+
+
+def test_apply_auto_recovery_fallback_action_log_contains_audit_fields() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(provider_key="openai", auto_retry_count=2, auto_retry_limit=2),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-020",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai", reason_code="provider.outage"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", reason_code="secondary.available"),
+        ),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_fallback_retry"
+    assert outcome.updated_run_record is not None
+    event = outcome.updated_run_record["action_log"][-1]
+    assert event["after_state"]["fallback_from_provider"] == "openai"
+    assert event["after_state"]["fallback_to_provider"] == "anthropic"
+    assert event["after_state"]["fallback_reason"] == "provider_down"

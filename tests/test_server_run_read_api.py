@@ -325,3 +325,54 @@ def test_result_read_keeps_recovery_projection_on_ready_result_rows() -> None:
     assert outcome.response.recovery is not None
     assert outcome.response.recovery.recovery_state == "manual_review_required"
     assert outcome.response.recovery.orphan_review_required is True
+
+
+def test_status_read_exposes_fallback_trace_in_recovery_view() -> None:
+    row = _run_row(status="queued", status_family="pending")
+    row.update({
+        "provider_key": "anthropic",
+        "latest_error_family": "worker_infrastructure_failure",
+        "worker_attempt_number": 2,
+        "action_log": [
+            {
+                "event_id": "act-001",
+                "action": "auto_fallback_retry",
+                "actor_user_id": "system:auto-recovery",
+                "timestamp": "2026-04-13T01:00:00+00:00",
+                "before_state": {
+                    "status": "failed",
+                    "status_family": "terminal_failure",
+                    "provider_key": "openai",
+                },
+                "after_state": {
+                    "status": "queued",
+                    "status_family": "pending",
+                    "fallback_from_provider": "openai",
+                    "fallback_to_provider": "anthropic",
+                    "fallback_reason": "provider_down",
+                },
+            }
+        ],
+    })
+
+    outcome = RunStatusReadService.read_status(
+        request_auth=_auth_context(),
+        run_context=_run_context(),
+        run_record_row=row,
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=(row,),
+        provider_binding_rows=(),
+        managed_secret_rows=(),
+        provider_probe_rows=(),
+        onboarding_rows=(),
+        engine_status=None,
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.recovery is not None
+    assert len(outcome.response.recovery.fallback_trace) == 1
+    trace = outcome.response.recovery.fallback_trace[0]
+    assert trace.from_provider_key == "openai"
+    assert trace.to_provider_key == "anthropic"
+    assert trace.reason == "provider_down"

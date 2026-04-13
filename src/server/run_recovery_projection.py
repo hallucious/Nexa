@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional
+
+from src.server.run_action_log_models import ProductRunFallbackAuditView, fallback_audit_from_action_log_event
 
 _RECOVERY_PRIORITY = {
     "manual_review_required": 4,
@@ -11,6 +13,20 @@ _RECOVERY_PRIORITY = {
     "leased": 1,
     "healthy": 0,
 }
+
+
+def _fallback_trace_from_run_row(run_record_row: Mapping[str, Any]) -> tuple[ProductRunFallbackAuditView, ...]:
+    action_log = run_record_row.get("action_log")
+    if not isinstance(action_log, Sequence) or isinstance(action_log, (str, bytes, bytearray)):
+        return ()
+    trace: list[ProductRunFallbackAuditView] = []
+    for event in action_log:
+        if not isinstance(event, Mapping):
+            continue
+        audit = fallback_audit_from_action_log_event(dict(event))
+        if audit is not None:
+            trace.append(audit)
+    return tuple(trace)
 
 
 @dataclass(frozen=True)
@@ -23,6 +39,7 @@ class RunRecoveryProjection:
     orphan_review_required: bool = False
     latest_error_family: Optional[str] = None
     summary: Optional[str] = None
+    fallback_trace: tuple[ProductRunFallbackAuditView, ...] = field(default_factory=tuple)
 
 
 def recovery_projection_from_run_row(
@@ -37,6 +54,7 @@ def recovery_projection_from_run_row(
     worker_attempt_number = int(run_record_row.get('worker_attempt_number') or 0)
     orphan_review_required = bool(run_record_row.get('orphan_review_required'))
     status = str(run_record_row.get('status') or '').strip().lower()
+    fallback_trace = _fallback_trace_from_run_row(run_record_row)
 
     has_recovery_signal = any((
         queue_job_id,
@@ -45,6 +63,7 @@ def recovery_projection_from_run_row(
         latest_error_family,
         orphan_review_required,
         worker_attempt_number > 0,
+        bool(fallback_trace),
     ))
     if not has_recovery_signal and not include_healthy_without_signal:
         return None
@@ -74,6 +93,7 @@ def recovery_projection_from_run_row(
         orphan_review_required=orphan_review_required,
         latest_error_family=latest_error_family,
         summary=summary,
+        fallback_trace=fallback_trace,
     )
 
 

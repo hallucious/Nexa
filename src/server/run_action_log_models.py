@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
 
@@ -92,3 +92,59 @@ class RunActionLogReadOutcome:
     @property
     def ok(self) -> bool:
         return self.response is not None
+
+
+@dataclass(frozen=True)
+class ProductRunFallbackAuditView:
+    timestamp: str
+    from_provider_key: str
+    to_provider_key: str
+    reason: str
+    action: str = "auto_fallback_retry"
+
+    def __post_init__(self) -> None:
+        if self.action not in _ALLOWED_ACTIONS:
+            raise ValueError(f"Unsupported ProductRunFallbackAuditView.action: {self.action}")
+        if not self.timestamp:
+            raise ValueError("ProductRunFallbackAuditView.timestamp must be non-empty")
+        if not self.from_provider_key:
+            raise ValueError("ProductRunFallbackAuditView.from_provider_key must be non-empty")
+        if not self.to_provider_key:
+            raise ValueError("ProductRunFallbackAuditView.to_provider_key must be non-empty")
+        if not self.reason:
+            raise ValueError("ProductRunFallbackAuditView.reason must be non-empty")
+
+
+def fallback_audit_from_action_log_event(event: dict[str, Any]) -> ProductRunFallbackAuditView | None:
+    if str(event.get("action") or "").strip() != "auto_fallback_retry":
+        return None
+    after_state = event.get("after_state")
+    before_state = event.get("before_state")
+    if not isinstance(after_state, dict) or not isinstance(before_state, dict):
+        return None
+    to_provider_key = str(
+        after_state.get("fallback_to_provider")
+        or after_state.get("fallback_provider_key")
+        or ""
+    ).strip()
+    from_provider_key = str(
+        after_state.get("fallback_from_provider")
+        or before_state.get("provider_key")
+        or before_state.get("fallback_from_provider")
+        or ""
+    ).strip()
+    reason = str(
+        after_state.get("fallback_reason")
+        or after_state.get("fallback_reason_code")
+        or ""
+    ).strip()
+    timestamp = str(event.get("timestamp") or "").strip()
+    if not (timestamp and from_provider_key and to_provider_key and reason):
+        return None
+    return ProductRunFallbackAuditView(
+        timestamp=timestamp,
+        from_provider_key=from_provider_key,
+        to_provider_key=to_provider_key,
+        reason=reason,
+        action="auto_fallback_retry",
+    )
