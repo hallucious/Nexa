@@ -156,3 +156,66 @@ def test_scheduler_uses_fallback_candidates_resolver_when_primary_provider_is_do
     assert writes["run-fallback"]["status"] == "queued"
     assert writes["run-fallback"]["fallback_provider_key"] == "anthropic"
     assert outcome.applied_updates[0].action == "auto_fallback_retry"
+
+
+def test_scheduler_builds_fallback_candidates_from_workspace_provider_bindings() -> None:
+    writes = {}
+
+    def writer(row):
+        writes[row["run_id"]] = dict(row)
+        return row
+
+    rows = [_run_row("run-binding-fallback", provider_key="openai")]
+
+    def provider_health_resolver(row):
+        return AutoRecoveryProviderHealthSignal(status="down", provider_key="openai")
+
+    def workspace_provider_binding_rows_resolver(row):
+        return (
+            {"workspace_id": row["workspace_id"], "binding_id": "binding-openai", "provider_key": "openai", "enabled": True},
+            {"workspace_id": row["workspace_id"], "binding_id": "binding-anthropic", "provider_key": "anthropic", "enabled": True},
+            {"workspace_id": row["workspace_id"], "binding_id": "binding-gemini", "provider_key": "gemini", "enabled": False},
+            {"workspace_id": "ws-other", "binding_id": "binding-other", "provider_key": "mistral", "enabled": True},
+        )
+
+    def workspace_provider_health_signals_resolver(row):
+        return {
+            "anthropic": AutoRecoveryProviderHealthSignal(status="healthy", provider_key="anthropic", reason_code="provider.ready"),
+            "gemini": AutoRecoveryProviderHealthSignal(status="degraded", provider_key="gemini", reason_code="provider.slow"),
+            "mistral": AutoRecoveryProviderHealthSignal(status="healthy", provider_key="mistral", reason_code="provider.ready"),
+        }
+
+    outcome = AutoRecoveryScheduler.run_batch(
+        rows,
+        now_iso="2026-04-13T01:00:00+00:00",
+        run_record_writer=writer,
+        queue_job_id_factory=lambda: "job-binding-fallback",
+        provider_health_resolver=provider_health_resolver,
+        workspace_provider_binding_rows_resolver=workspace_provider_binding_rows_resolver,
+        workspace_provider_health_signals_resolver=workspace_provider_health_signals_resolver,
+        batch_limit=10,
+    )
+
+    assert outcome.stats.auto_fallback_retry_count == 1
+    assert writes["run-binding-fallback"]["fallback_provider_key"] == "anthropic"
+
+
+def test_scheduler_does_not_fallback_when_workspace_binding_has_no_alternative_provider() -> None:
+    rows = [_run_row("run-binding-none", provider_key="openai")]
+
+    def provider_health_resolver(row):
+        return AutoRecoveryProviderHealthSignal(status="down", provider_key="openai")
+
+    def workspace_provider_binding_rows_resolver(row):
+        return ({"workspace_id": row["workspace_id"], "binding_id": "binding-openai", "provider_key": "openai", "enabled": True},)
+
+    outcome = AutoRecoveryScheduler.run_batch(
+        rows,
+        now_iso="2026-04-13T01:00:00+00:00",
+        provider_health_resolver=provider_health_resolver,
+        workspace_provider_binding_rows_resolver=workspace_provider_binding_rows_resolver,
+        batch_limit=10,
+    )
+
+    assert outcome.stats.auto_fallback_retry_count == 0
+    assert outcome.stats.auto_mark_review_required_count == 1

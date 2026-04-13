@@ -10,7 +10,77 @@ from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, apply_auto_
 RunRecordWriter = Callable[[Mapping[str, Any]], Any]
 QueueJobIdFactory = Callable[[], str]
 ProviderHealthResolver = Callable[[Mapping[str, Any]], AutoRecoveryProviderHealthSignal | None]
+WorkspaceProviderHealthSignalsResolver = Callable[[Mapping[str, Any]], Mapping[str, AutoRecoveryProviderHealthSignal] | Sequence[AutoRecoveryProviderHealthSignal] | None]
+WorkspaceProviderBindingRowsResolver = Callable[[Mapping[str, Any]], Sequence[Mapping[str, Any]] | None]
 FallbackCandidatesResolver = Callable[[Mapping[str, Any], AutoRecoveryProviderHealthSignal | None], Sequence[AutoRecoveryFallbackCandidate] | None]
+
+
+def _normalize_provider_key(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _normalize_provider_health_map(
+    value: Mapping[str, AutoRecoveryProviderHealthSignal] | Sequence[AutoRecoveryProviderHealthSignal] | None,
+) -> dict[str, AutoRecoveryProviderHealthSignal]:
+    if value is None:
+        return {}
+    if isinstance(value, Mapping):
+        result: dict[str, AutoRecoveryProviderHealthSignal] = {}
+        for provider_key, signal in value.items():
+            normalized_key = _normalize_provider_key(provider_key)
+            if normalized_key and isinstance(signal, AutoRecoveryProviderHealthSignal):
+                result[normalized_key] = signal
+        return result
+    result: dict[str, AutoRecoveryProviderHealthSignal] = {}
+    for signal in value:
+        if not isinstance(signal, AutoRecoveryProviderHealthSignal):
+            continue
+        normalized_key = _normalize_provider_key(signal.provider_key)
+        if normalized_key:
+            result[normalized_key] = signal
+    return result
+
+
+def _fallback_candidates_from_workspace_bindings(
+    run_row: Mapping[str, Any],
+    *,
+    provider_health: AutoRecoveryProviderHealthSignal | None,
+    binding_rows: Sequence[Mapping[str, Any]] | None,
+    workspace_provider_health_signals: Mapping[str, AutoRecoveryProviderHealthSignal] | Sequence[AutoRecoveryProviderHealthSignal] | None = None,
+) -> tuple[AutoRecoveryFallbackCandidate, ...] | None:
+    if not binding_rows:
+        return None
+    workspace_id = str(run_row.get("workspace_id") or "").strip()
+    current_provider_key = _normalize_provider_key((provider_health.provider_key if provider_health is not None else None) or run_row.get("provider_key"))
+    health_map = _normalize_provider_health_map(workspace_provider_health_signals)
+    candidates: list[AutoRecoveryFallbackCandidate] = []
+    seen_provider_keys: set[str] = set()
+    for row in binding_rows:
+        if not isinstance(row, Mapping):
+            continue
+        row_workspace_id = str(row.get("workspace_id") or "").strip()
+        if workspace_id and row_workspace_id and row_workspace_id != workspace_id:
+            continue
+        provider_key = _normalize_provider_key(row.get("provider_key"))
+        if not provider_key or provider_key in seen_provider_keys or provider_key == current_provider_key:
+            continue
+        enabled = row.get("enabled")
+        if enabled is False:
+            continue
+        signal = health_map.get(provider_key)
+        status = signal.status if signal is not None else "healthy"
+        reason_code = signal.reason_code if signal is not None else "workspace.binding.available"
+        provider_family = str(row.get("provider_family") or "").strip() or None
+        candidates.append(
+            AutoRecoveryFallbackCandidate(
+                provider_key=provider_key,
+                status=status,
+                provider_family=provider_family,
+                reason_code=reason_code,
+            )
+        )
+        seen_provider_keys.add(provider_key)
+    return tuple(candidates) if candidates else None
 
 
 @dataclass(frozen=True)
@@ -53,6 +123,8 @@ class AutoRecoveryScheduler:
         run_record_writer: Optional[RunRecordWriter] = None,
         queue_job_id_factory: Optional[QueueJobIdFactory] = None,
         provider_health_resolver: Optional[ProviderHealthResolver] = None,
+        workspace_provider_health_signals_resolver: Optional[WorkspaceProviderHealthSignalsResolver] = None,
+        workspace_provider_binding_rows_resolver: Optional[WorkspaceProviderBindingRowsResolver] = None,
         fallback_candidates_resolver: Optional[FallbackCandidatesResolver] = None,
         batch_limit: int = 50,
         max_applied_per_batch: Optional[int] = None,
@@ -75,7 +147,21 @@ class AutoRecoveryScheduler:
             if max_applied_per_batch is not None and len(applied_updates) >= max_applied_per_batch:
                 break
             provider_health = provider_health_resolver(row) if provider_health_resolver is not None else None
-            fallback_candidates = fallback_candidates_resolver(row, provider_health) if fallback_candidates_resolver is not None else None
+            if fallback_candidates_resolver is not None:
+                fallback_candidates = fallback_candidates_resolver(row, provider_health)
+            else:
+                binding_rows = workspace_provider_binding_rows_resolver(row) if workspace_provider_binding_rows_resolver is not None else None
+                workspace_provider_health_signals = (
+                    workspace_provider_health_signals_resolver(row)
+                    if workspace_provider_health_signals_resolver is not None
+                    else None
+                )
+                fallback_candidates = _fallback_candidates_from_workspace_bindings(
+                    row,
+                    provider_health=provider_health,
+                    binding_rows=binding_rows,
+                    workspace_provider_health_signals=workspace_provider_health_signals,
+                )
             outcome: AutoRecoveryOutcome = apply_auto_recovery(
                 row,
                 now_iso=now_iso,
