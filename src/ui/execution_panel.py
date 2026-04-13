@@ -9,6 +9,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.engine.execution_event import ExecutionEvent
 from src.contracts.status_taxonomy import lookup_reason_code_record
+from src.contracts.confidence_contract import classify_confidence
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.friendly_error_messages import FriendlyErrorView, friendly_error_from_candidates
 
@@ -101,6 +102,17 @@ class ExecutionMetricsView:
 
 
 @dataclass(frozen=True)
+class ConfidenceSummaryView:
+    """Confidence projection derived from execution results via confidence_aggregator contract."""
+    confidence_score: float | None = None
+    threshold_band: str | None = None
+    recommended_action: str | None = None
+    explanation: str | None = None
+    blocking: bool = False
+    evidence_source: str = "execution_record"
+
+
+@dataclass(frozen=True)
 class ExecutionControlActionView:
     action_id: str
     label: str
@@ -162,6 +174,7 @@ class ExecutionPanelViewModel:
     governance_signals: list[GovernanceSignalView] = field(default_factory=list)
     delivery_outcome: DeliveryOutcomeView | None = None
     explanation: str | None = None
+    confidence_summary: ConfidenceSummaryView = field(default_factory=ConfidenceSummaryView)
 
 
 def _unwrap(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None):
@@ -312,6 +325,74 @@ def _metrics_from_record(record: ExecutionRecordModel) -> ExecutionMetricsView:
         provider_call_count=provider_calls,
         plugin_call_count=plugin_calls,
     )
+
+
+def _confidence_from_record(record: ExecutionRecordModel) -> ConfidenceSummaryView:
+    """Derive a ConfidenceSummaryView from execution results via confidence_contract.
+
+    Priority order:
+    1. Use observability.confidence_summary if already populated by the engine.
+    2. Derive from node completion ratio when execution has node results.
+    3. Return empty ConfidenceSummaryView when no evidence is available.
+    """
+    # Path 1: engine already stored a confidence_summary in observability
+    raw = record.observability.confidence_summary
+    if isinstance(raw, dict) and raw.get("confidence_score") is not None:
+        try:
+            score = float(raw["confidence_score"])
+            td = classify_confidence(score)
+            return ConfidenceSummaryView(
+                confidence_score=round(score, 4),
+                threshold_band=td.threshold_band,
+                recommended_action=td.recommended_action,
+                explanation=str(raw.get("explanation", "from execution observability")),
+                blocking=td.blocking,
+                evidence_source="observability",
+            )
+        except (ValueError, TypeError):
+            pass
+
+    # Path 2: derive from node completion ratio
+    results = record.node_results.results or []
+    completed = sum(1 for r in results if getattr(r, "status", None) == "success")
+    failed = sum(1 for r in results if getattr(r, "status", None) == "failed")
+    total = completed + failed
+    if total > 0:
+        score = completed / total
+        td = classify_confidence(score)
+        return ConfidenceSummaryView(
+            confidence_score=round(score, 4),
+            threshold_band=td.threshold_band,
+            recommended_action=td.recommended_action,
+            explanation=f"{completed}/{total} nodes completed successfully",
+            blocking=td.blocking,
+            evidence_source="node_completion_ratio",
+        )
+
+    # Path 3: use execution status heuristic
+    status = (record.meta.status or "").lower()
+    if status in {"completed", "success"}:
+        td = classify_confidence(0.8)
+        return ConfidenceSummaryView(
+            confidence_score=0.8,
+            threshold_band=td.threshold_band,
+            recommended_action=td.recommended_action,
+            explanation="execution completed without node-level evidence",
+            blocking=False,
+            evidence_source="status_heuristic",
+        )
+    if status in {"failed", "error"}:
+        td = classify_confidence(0.0)
+        return ConfidenceSummaryView(
+            confidence_score=0.0,
+            threshold_band=td.threshold_band,
+            recommended_action=td.recommended_action,
+            explanation="execution failed",
+            blocking=td.blocking,
+            evidence_source="status_heuristic",
+        )
+
+    return ConfidenceSummaryView()
 
 
 def _stringify_output_value(value: Any) -> str | None:
@@ -835,6 +916,7 @@ def read_execution_panel_view_model(
             governance_signals=governance_signals,
             delivery_outcome=delivery_outcome,
             explanation=explanation,
+            confidence_summary=_confidence_from_record(execution_record),
         )
 
     return ExecutionPanelViewModel(

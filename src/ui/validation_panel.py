@@ -10,8 +10,21 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.contracts.status_taxonomy import lookup_reason_code_record
+from src.engine.policy_explainability import build_explainability, ExplainabilityResult
+from src.engine.execution_regression_policy import PolicyDecision
 from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
 from src.ui.friendly_error_messages import FriendlyErrorView, friendly_error_from_candidates
+
+
+@dataclass(frozen=True)
+class ExplainabilitySummaryView:
+    """Explainability projection derived from policy_explainability for the validation surface."""
+    status: str = "unavailable"
+    summary: str = ""
+    structural_issues: list[str] = field(default_factory=list)
+    semantic_issues: list[str] = field(default_factory=list)
+    verification_contracts: list[str] = field(default_factory=list)
+    has_explainability: bool = False
 
 
 @dataclass(frozen=True)
@@ -114,6 +127,7 @@ class ValidationPanelViewModel:
     hide_raw_findings_by_default: bool = False
     filter_state: ValidationFilterState = field(default_factory=ValidationFilterState)
     explanation: str | None = None
+    explainability: ExplainabilitySummaryView = field(default_factory=ExplainabilitySummaryView)
 
 
 def _unwrap(source):
@@ -289,6 +303,62 @@ def _from_execution_issue(issue: ExecutionIssue, severity: str, *, idx: int) -> 
         user_confirmation_allowed=False,
         auto_resolvable=False,
         destructive_risk=False,
+    )
+
+
+def _explainability_from_report(
+    validation_report: ValidationReport | None,
+    precheck: ValidationPrecheck | None,
+    execution_record: ExecutionRecordModel | None,
+) -> ExplainabilitySummaryView:
+    """Build ExplainabilitySummaryView via policy_explainability.
+
+    Constructs a synthetic PolicyDecision from available validation findings
+    and passes it through build_explainability() to produce a structured
+    explanation surface for the UI.
+    """
+    reasons: list[str] = []
+    details: dict[str, object] = {}
+
+    if validation_report is not None:
+        for f in (validation_report.findings or []):
+            rule = getattr(f, "rule_id", None) or getattr(f, "code", None) or "unknown"
+            severity = getattr(f, "severity", "warning")
+            message = getattr(f, "message", "") or str(f)
+            reasons.append(f"[{severity}] {rule}: {message}")
+
+    if precheck is not None:
+        for f in (precheck.blocking_findings or []):
+            reasons.append(f"[blocking] {getattr(f, 'rule_id', 'rule')}: {getattr(f, 'message', '')}")
+        for f in (precheck.warning_findings or []):
+            reasons.append(f"[warning] {getattr(f, 'rule_id', 'rule')}: {getattr(f, 'message', '')}")
+
+    if execution_record is not None:
+        for issue in (execution_record.diagnostics.errors or []):
+            reasons.append(f"[error] {getattr(issue, 'code', 'execution_error')}: {getattr(issue, 'message', '')}")
+
+    if not reasons and validation_report is None and precheck is None and execution_record is None:
+        return ExplainabilitySummaryView()
+
+    # Derive status from available data
+    if validation_report is not None:
+        raw_status = validation_report.result or "unknown"
+        policy_status = "PASS" if raw_status in {"passed", "pass"} else "FAIL"
+    elif precheck is not None:
+        policy_status = "PASS" if precheck.overall_status in {"pass", "pass_with_warnings"} else "FAIL"
+    else:
+        policy_status = "PASS" if not reasons else "FAIL"
+
+    decision = PolicyDecision(status=policy_status, reasons=reasons, details=details)
+    result: ExplainabilityResult = build_explainability(decision)
+
+    return ExplainabilitySummaryView(
+        status=result.status,
+        summary=result.summary,
+        structural_issues=list(result.categories.get("structural", [])),
+        semantic_issues=list(result.categories.get("semantic", [])),
+        verification_contracts=list(result.verification_contracts),
+        has_explainability=True,
     )
 
 
@@ -720,6 +790,7 @@ def read_validation_panel_view_model(
         beginner_summary=_beginner_summary(source=source, execution_record=execution_record, overall_status=overall_status, source_mode=source_mode, all_findings=all_findings, app_language=app_language),
         hide_raw_findings_by_default=beginner_mode,
         explanation=explanation,
+        explainability=_explainability_from_report(validation_report, precheck, execution_record),
     )
 
 
