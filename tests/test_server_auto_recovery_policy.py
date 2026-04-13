@@ -154,6 +154,8 @@ def test_apply_auto_recovery_falls_back_to_healthy_provider_when_primary_is_down
     assert outcome.updated_run_record["status"] == "queued"
     assert outcome.updated_run_record["queue_job_id"] == "job-fallback"
     assert outcome.updated_run_record["fallback_provider_key"] == "anthropic"
+    assert outcome.updated_run_record["action_log"][-2]["action"] == "fallback_scoring_evaluated"
+    assert outcome.updated_run_record["action_log"][-2]["after_state"]["selected_provider_key"] == "anthropic"
     assert outcome.updated_run_record["action_log"][-1]["action"] == "auto_fallback_retry"
     assert outcome.updated_run_record["action_log"][-1]["after_state"]["fallback_provider_key"] == "anthropic"
 
@@ -225,3 +227,24 @@ def test_apply_auto_recovery_selects_best_fallback_candidate_by_health_cost_and_
     assert outcome.fallback_provider_key == "mistral"
 
 
+
+
+def test_apply_auto_recovery_emits_scoring_trace_for_fallback_selection() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-score",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", cost_ratio=1.2, priority_weight=0.4),
+            AutoRecoveryFallbackCandidate(provider_key="gemini", status="degraded", cost_ratio=0.8, priority_weight=0.9),
+        ),
+    )
+
+    assert outcome.applied is True
+    scoring_event = outcome.updated_run_record["action_log"][-2]
+    assert scoring_event["action"] == "fallback_scoring_evaluated"
+    trace = scoring_event["after_state"]["scoring_trace"]
+    assert len(trace) == 2
+    assert any(item["selected"] for item in trace)
+    assert scoring_event["after_state"]["selected_provider_key"] == outcome.fallback_provider_key

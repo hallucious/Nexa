@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
-from src.server.run_action_log_models import ProductRunFallbackAuditView, ProductRunLastActionView
+from src.server.run_action_log_models import ProductRunFallbackAuditView, ProductRunFallbackScoringAuditView, ProductRunLastActionView
 
 ReadFailureFamily = Literal["product_read_failure", "run_not_found"]
 ResultReadState = Literal["not_ready", "ready_success", "ready_partial", "ready_failure"]
@@ -104,6 +104,7 @@ class ProductRunRecoveryView:
     latest_error_family: Optional[str] = None
     summary: Optional[str] = None
     fallback_trace: tuple[ProductRunFallbackAuditView, ...] = field(default_factory=tuple)
+    scoring_trace: tuple[ProductRunFallbackScoringAuditView, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if self.recovery_state not in _ALLOWED_RECOVERY_STATES:

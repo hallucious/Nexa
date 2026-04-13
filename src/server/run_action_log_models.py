@@ -7,7 +7,7 @@ from src.server.workspace_onboarding_models import ProductActivityContinuitySumm
 
 RunActionLogFailureFamily = Literal["product_read_failure", "run_not_found"]
 _ALLOWED_FAILURE_FAMILIES = {"product_read_failure", "run_not_found"}
-_ALLOWED_ACTIONS = {"retry", "force_reset", "mark_reviewed", "auto_retry", "auto_mark_review_required", "auto_fallback_retry"}
+_ALLOWED_ACTIONS = {"retry", "force_reset", "mark_reviewed", "auto_retry", "auto_mark_review_required", "auto_fallback_retry", "fallback_scoring_evaluated"}
 
 
 @dataclass(frozen=True)
@@ -93,6 +93,73 @@ class RunActionLogReadOutcome:
     def ok(self) -> bool:
         return self.response is not None
 
+
+
+
+@dataclass(frozen=True)
+class ProductRunFallbackScoringEntryView:
+    provider_key: str
+    health_score: float
+    cost_score: float
+    priority_score: float
+    final_score: float
+    selected: bool = False
+
+    def __post_init__(self) -> None:
+        if not self.provider_key:
+            raise ValueError("ProductRunFallbackScoringEntryView.provider_key must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductRunFallbackScoringAuditView:
+    timestamp: str
+    selected_provider_key: str
+    entries: tuple[ProductRunFallbackScoringEntryView, ...] = ()
+    action: str = "fallback_scoring_evaluated"
+
+    def __post_init__(self) -> None:
+        if self.action not in _ALLOWED_ACTIONS:
+            raise ValueError(f"Unsupported ProductRunFallbackScoringAuditView.action: {self.action}")
+        if not self.timestamp:
+            raise ValueError("ProductRunFallbackScoringAuditView.timestamp must be non-empty")
+        if not self.selected_provider_key:
+            raise ValueError("ProductRunFallbackScoringAuditView.selected_provider_key must be non-empty")
+
+
+def fallback_scoring_audit_from_action_log_event(event: dict[str, Any]) -> ProductRunFallbackScoringAuditView | None:
+    if str(event.get("action") or "").strip() != "fallback_scoring_evaluated":
+        return None
+    after_state = event.get("after_state")
+    if not isinstance(after_state, dict):
+        return None
+    timestamp = str(event.get("timestamp") or "").strip()
+    selected_provider_key = str(after_state.get("selected_provider_key") or "").strip()
+    raw_entries = after_state.get("scoring_trace")
+    if not (timestamp and selected_provider_key and isinstance(raw_entries, list)):
+        return None
+    entries: list[ProductRunFallbackScoringEntryView] = []
+    for item in raw_entries:
+        if not isinstance(item, dict):
+            continue
+        provider_key = str(item.get("provider") or item.get("provider_key") or "").strip()
+        if not provider_key:
+            continue
+        entries.append(ProductRunFallbackScoringEntryView(
+            provider_key=provider_key,
+            health_score=float(item.get("health_score") or 0.0),
+            cost_score=float(item.get("cost_score") or 0.0),
+            priority_score=float(item.get("priority_score") or 0.0),
+            final_score=float(item.get("final_score") or 0.0),
+            selected=bool(item.get("selected")),
+        ))
+    if not entries:
+        return None
+    return ProductRunFallbackScoringAuditView(
+        timestamp=timestamp,
+        selected_provider_key=selected_provider_key,
+        entries=tuple(entries),
+        action="fallback_scoring_evaluated",
+    )
 
 @dataclass(frozen=True)
 class ProductRunFallbackAuditView:

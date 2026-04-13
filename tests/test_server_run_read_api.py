@@ -376,3 +376,68 @@ def test_status_read_exposes_fallback_trace_in_recovery_view() -> None:
     assert trace.from_provider_key == "openai"
     assert trace.to_provider_key == "anthropic"
     assert trace.reason == "provider_down"
+
+
+def test_status_read_exposes_scoring_trace_in_recovery_view() -> None:
+    row = _run_row(status="queued", status_family="pending")
+    row.update({
+        "provider_key": "anthropic",
+        "latest_error_family": "worker_infrastructure_failure",
+        "worker_attempt_number": 2,
+        "action_log": [
+            {
+                "event_id": "act-score-001",
+                "action": "fallback_scoring_evaluated",
+                "actor_user_id": "system:auto-recovery",
+                "timestamp": "2026-04-13T01:00:00+00:00",
+                "before_state": {
+                    "status": "failed",
+                    "status_family": "terminal_failure",
+                    "provider_key": "openai",
+                },
+                "after_state": {
+                    "selected_provider_key": "anthropic",
+                    "scoring_trace": [
+                        {
+                            "provider": "anthropic",
+                            "health_score": 1.0,
+                            "cost_score": 0.8,
+                            "priority_score": 0.4,
+                            "final_score": 0.88,
+                            "selected": True,
+                        },
+                        {
+                            "provider": "gemini",
+                            "health_score": 0.5,
+                            "cost_score": 1.0,
+                            "priority_score": 0.9,
+                            "final_score": 0.69,
+                            "selected": False,
+                        },
+                    ],
+                },
+            }
+        ],
+    })
+
+    outcome = RunStatusReadService.read_status(
+        request_auth=_auth_context(),
+        run_context=_run_context(),
+        run_record_row=row,
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
+        recent_run_rows=(row,),
+        provider_binding_rows=(),
+        managed_secret_rows=(),
+        provider_probe_rows=(),
+        onboarding_rows=(),
+        engine_status=None,
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.recovery is not None
+    assert len(outcome.response.recovery.scoring_trace) == 1
+    scoring = outcome.response.recovery.scoring_trace[0]
+    assert scoring.selected_provider_key == "anthropic"
+    assert len(scoring.entries) == 2
+    assert any(entry.selected for entry in scoring.entries)

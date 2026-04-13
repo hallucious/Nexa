@@ -4,7 +4,12 @@ from dataclasses import dataclass, field
 from collections.abc import Mapping, Sequence
 from typing import Any, Optional
 
-from src.server.run_action_log_models import ProductRunFallbackAuditView, fallback_audit_from_action_log_event
+from src.server.run_action_log_models import (
+    ProductRunFallbackAuditView,
+    ProductRunFallbackScoringAuditView,
+    fallback_audit_from_action_log_event,
+    fallback_scoring_audit_from_action_log_event,
+)
 
 _RECOVERY_PRIORITY = {
     "manual_review_required": 4,
@@ -29,6 +34,22 @@ def _fallback_trace_from_run_row(run_record_row: Mapping[str, Any]) -> tuple[Pro
     return tuple(trace)
 
 
+
+
+def _scoring_trace_from_run_row(run_record_row: Mapping[str, Any]) -> tuple[ProductRunFallbackScoringAuditView, ...]:
+    action_log = run_record_row.get("action_log")
+    if not isinstance(action_log, Sequence) or isinstance(action_log, (str, bytes, bytearray)):
+        return ()
+    trace: list[ProductRunFallbackScoringAuditView] = []
+    for event in action_log:
+        if not isinstance(event, Mapping):
+            continue
+        audit = fallback_scoring_audit_from_action_log_event(dict(event))
+        if audit is not None:
+            trace.append(audit)
+    return tuple(trace)
+
+
 @dataclass(frozen=True)
 class RunRecoveryProjection:
     recovery_state: str
@@ -40,6 +61,7 @@ class RunRecoveryProjection:
     latest_error_family: Optional[str] = None
     summary: Optional[str] = None
     fallback_trace: tuple[ProductRunFallbackAuditView, ...] = field(default_factory=tuple)
+    scoring_trace: tuple[ProductRunFallbackScoringAuditView, ...] = field(default_factory=tuple)
 
 
 def recovery_projection_from_run_row(
@@ -55,6 +77,7 @@ def recovery_projection_from_run_row(
     orphan_review_required = bool(run_record_row.get('orphan_review_required'))
     status = str(run_record_row.get('status') or '').strip().lower()
     fallback_trace = _fallback_trace_from_run_row(run_record_row)
+    scoring_trace = _scoring_trace_from_run_row(run_record_row)
 
     has_recovery_signal = any((
         queue_job_id,
@@ -64,6 +87,7 @@ def recovery_projection_from_run_row(
         orphan_review_required,
         worker_attempt_number > 0,
         bool(fallback_trace),
+        bool(scoring_trace),
     ))
     if not has_recovery_signal and not include_healthy_without_signal:
         return None
@@ -94,6 +118,7 @@ def recovery_projection_from_run_row(
         latest_error_family=latest_error_family,
         summary=summary,
         fallback_trace=fallback_trace,
+        scoring_trace=scoring_trace,
     )
 
 

@@ -110,14 +110,25 @@ def _fallback_health_score(status: str) -> float:
     return 0.0
 
 
-def _fallback_candidate_score(candidate: AutoRecoveryFallbackCandidate) -> tuple[float, float, float, str]:
+def _fallback_candidate_breakdown(candidate: AutoRecoveryFallbackCandidate) -> dict[str, float | str | bool]:
     health_score = _fallback_health_score(candidate.status)
     cost_score = score_cost_ratio(candidate.cost_ratio)
     priority_score = float(candidate.priority_weight)
     final_score = (0.6 * health_score) + (0.3 * cost_score) + (0.1 * priority_score)
-    # deterministic tie-breakers: healthier > higher priority > lower cost > provider_key
+    return {
+        "provider": candidate.provider_key,
+        "health_score": health_score,
+        "cost_score": cost_score,
+        "priority_score": priority_score,
+        "final_score": final_score,
+        "selected": False,
+    }
+
+
+def _fallback_candidate_score(candidate: AutoRecoveryFallbackCandidate) -> tuple[float, float, float, str]:
+    breakdown = _fallback_candidate_breakdown(candidate)
     normalized_cost = float(candidate.cost_ratio) if candidate.cost_ratio is not None else 1.0
-    return (final_score, health_score + priority_score, -normalized_cost, candidate.provider_key)
+    return (float(breakdown["final_score"]), float(breakdown["health_score"]) + float(breakdown["priority_score"]), -normalized_cost, candidate.provider_key)
 
 
 def _select_fallback_candidate(
@@ -184,6 +195,19 @@ def apply_auto_recovery(
         provider_health=resolved_provider_health,
         fallback_candidates=fallback_candidates,
     )
+    scoring_trace = []
+    if fallback_candidates:
+        current_provider_key = _resolve_current_provider_key(run_record_row, resolved_provider_health)
+        normalized_candidates = tuple(
+            candidate
+            for candidate in fallback_candidates
+            if _fallback_health_score(candidate.status) > 0 and candidate.provider_key.strip().lower() != current_provider_key
+        )
+        for candidate in normalized_candidates:
+            breakdown = dict(_fallback_candidate_breakdown(candidate))
+            if resolved_fallback_candidate is not None and candidate.provider_key == resolved_fallback_candidate.provider_key:
+                breakdown["selected"] = True
+            scoring_trace.append(breakdown)
     backoff_ready = _backoff_ready(run_record_row, now_dt, provider_health=resolved_provider_health)
     provider_is_down = resolved_provider_health.status == "down"
     terminal_or_stuck = status == "failed" or is_stuck
@@ -228,6 +252,17 @@ def apply_auto_recovery(
         updated_row["worker_attempt_number"] = worker_attempt_number + 1
         updated_row["auto_retry_count"] = auto_retry_count + 1
         updated_row["fallback_provider_key"] = resolved_fallback_candidate.provider_key
+        _append_action_log(
+            updated_row,
+            action="fallback_scoring_evaluated",
+            timestamp=now_iso,
+            before_row=run_record_row,
+            after_row=updated_row,
+            extra_after_state={
+                "selected_provider_key": resolved_fallback_candidate.provider_key,
+                "scoring_trace": scoring_trace,
+            },
+        )
         _append_action_log(
             updated_row,
             action="auto_fallback_retry",

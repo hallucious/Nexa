@@ -64,6 +64,7 @@ def _recovery_view_from_run_row(run_record_row: Mapping[str, Any]) -> ProductRun
         latest_error_family=projection.latest_error_family,
         summary=projection.summary,
         fallback_trace=projection.fallback_trace,
+        scoring_trace=projection.scoring_trace,
     )
 
 
