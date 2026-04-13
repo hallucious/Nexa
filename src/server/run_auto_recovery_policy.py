@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 import uuid
 
-from src.server.provider_health_models import AutoRecoveryProviderHealthSignal
+from src.server.provider_health_models import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal
 
 QueueJobIdFactory = Callable[[], str]
 
@@ -26,6 +26,7 @@ class AutoRecoveryOutcome:
     action: Optional[str] = None
     updated_run_record: Optional[dict[str, Any]] = None
     reason: Optional[str] = None
+    fallback_provider_key: Optional[str] = None
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
@@ -63,7 +64,7 @@ def _status_family_for_status(status: str | None) -> str:
     return 'unknown'
 
 
-def _append_action_log(updated_row: dict[str, Any], *, action: str, timestamp: str | None, before_row: Mapping[str, Any], after_row: Mapping[str, Any], actor_user_id: str = SYSTEM_AUTO_RECOVERY_ACTOR) -> None:
+def _append_action_log(updated_row: dict[str, Any], *, action: str, timestamp: str | None, before_row: Mapping[str, Any], after_row: Mapping[str, Any], actor_user_id: str = SYSTEM_AUTO_RECOVERY_ACTOR, extra_after_state: Mapping[str, Any] | None = None) -> None:
     existing = updated_row.get("action_log")
     entries = list(existing) if isinstance(existing, Sequence) and not isinstance(existing, (str, bytes, bytearray)) else []
     entries.append({
@@ -88,9 +89,37 @@ def _append_action_log(updated_row: dict[str, Any], *, action: str, timestamp: s
             "auto_retry_count": _coerce_int(after_row.get("auto_retry_count") or 0),
             "orphan_review_required": bool(after_row.get("orphan_review_required")),
             "latest_error_family": after_row.get("latest_error_family"),
+            **dict(extra_after_state or {}),
         },
     })
     updated_row["action_log"] = entries
+
+
+def _resolve_current_provider_key(run_record_row: Mapping[str, Any], provider_health: AutoRecoveryProviderHealthSignal | None) -> str | None:
+    provider_key = str((provider_health.provider_key if provider_health is not None else None) or run_record_row.get("provider_key") or "").strip().lower()
+    return provider_key or None
+
+
+def _select_fallback_candidate(
+    run_record_row: Mapping[str, Any],
+    *,
+    provider_health: AutoRecoveryProviderHealthSignal | None = None,
+    fallback_candidates: Sequence[AutoRecoveryFallbackCandidate] | None = None,
+) -> AutoRecoveryFallbackCandidate | None:
+    current_provider_key = _resolve_current_provider_key(run_record_row, provider_health)
+    if not fallback_candidates:
+        return None
+    preferred_statuses = ("healthy", "degraded")
+    normalized_candidates = tuple(
+        candidate
+        for candidate in fallback_candidates
+        if candidate.status in preferred_statuses and candidate.provider_key.strip().lower() != current_provider_key
+    )
+    for preferred_status in preferred_statuses:
+        for candidate in normalized_candidates:
+            if candidate.status == preferred_status:
+                return candidate
+    return None
 
 
 def _current_backoff_seconds(run_record_row: Mapping[str, Any], *, provider_health: AutoRecoveryProviderHealthSignal | None = None) -> int:
@@ -115,6 +144,7 @@ def apply_auto_recovery(
     now_iso: str,
     queue_job_id_factory: Optional[QueueJobIdFactory] = None,
     provider_health: AutoRecoveryProviderHealthSignal | None = None,
+    fallback_candidates: Sequence[AutoRecoveryFallbackCandidate] | None = None,
 ) -> AutoRecoveryOutcome:
     now_dt = _parse_iso(now_iso)
     if now_dt is None:
@@ -132,12 +162,19 @@ def apply_auto_recovery(
     is_stuck = bool(claimed_by_worker_ref and lease_expires_at is not None and lease_expires_at < now_dt and status in _ACTIVE_STATUSES)
     is_infra_failure = latest_error_family == _INFRA_FAILURE_FAMILY
     resolved_provider_health = provider_health or AutoRecoveryProviderHealthSignal()
+    resolved_fallback_candidate = _select_fallback_candidate(
+        run_record_row,
+        provider_health=resolved_provider_health,
+        fallback_candidates=fallback_candidates,
+    )
     backoff_ready = _backoff_ready(run_record_row, now_dt, provider_health=resolved_provider_health)
     provider_is_down = resolved_provider_health.status == "down"
-    can_auto_retry = is_infra_failure and not provider_is_down and auto_retry_count < auto_retry_limit and backoff_ready and (status == "failed" or is_stuck)
-    should_escalate_review = is_infra_failure and not orphan_review_required and (status == "failed" or is_stuck) and (provider_is_down or auto_retry_count >= auto_retry_limit)
+    terminal_or_stuck = status == "failed" or is_stuck
+    can_auto_retry = is_infra_failure and not provider_is_down and auto_retry_count < auto_retry_limit and backoff_ready and terminal_or_stuck
+    can_auto_fallback = is_infra_failure and not orphan_review_required and terminal_or_stuck and resolved_fallback_candidate is not None and (provider_is_down or auto_retry_count >= auto_retry_limit)
+    should_escalate_review = is_infra_failure and not orphan_review_required and terminal_or_stuck and not can_auto_fallback and (provider_is_down or auto_retry_count >= auto_retry_limit)
 
-    if not can_auto_retry and not should_escalate_review:
+    if not can_auto_retry and not can_auto_fallback and not should_escalate_review:
         return AutoRecoveryOutcome(applied=False, reason="no_auto_recovery_needed" if backoff_ready else "backoff_active")
 
     updated_row = deepcopy(dict(run_record_row))
@@ -162,6 +199,36 @@ def apply_auto_recovery(
             updated_row["auto_retry_base_backoff_seconds"] = min(current_base_backoff * _DEGRADED_PROVIDER_BACKOFF_MULTIPLIER, MAX_AUTO_RETRY_BACKOFF_SECONDS)
         _append_action_log(updated_row, action="auto_retry", timestamp=now_iso, before_row=run_record_row, after_row=updated_row)
         return AutoRecoveryOutcome(applied=True, action="auto_retry", updated_run_record=updated_row)
+
+    if can_auto_fallback and resolved_fallback_candidate is not None:
+        new_queue_job_id = queue_job_id_factory() if queue_job_id_factory is not None else f"job_{uuid.uuid4().hex}"
+        updated_row["status"] = "queued"
+        updated_row["status_family"] = _status_family_for_status("queued")
+        updated_row["queue_job_id"] = new_queue_job_id
+        updated_row["claimed_by_worker_ref"] = None
+        updated_row["lease_expires_at"] = None
+        updated_row["orphan_review_required"] = False
+        updated_row["worker_attempt_number"] = worker_attempt_number + 1
+        updated_row["auto_retry_count"] = auto_retry_count + 1
+        updated_row["fallback_provider_key"] = resolved_fallback_candidate.provider_key
+        _append_action_log(
+            updated_row,
+            action="auto_fallback_retry",
+            timestamp=now_iso,
+            before_row=run_record_row,
+            after_row=updated_row,
+            extra_after_state={
+                "fallback_provider_key": resolved_fallback_candidate.provider_key,
+                "fallback_provider_status": resolved_fallback_candidate.status,
+                "fallback_reason_code": resolved_fallback_candidate.reason_code,
+            },
+        )
+        return AutoRecoveryOutcome(
+            applied=True,
+            action="auto_fallback_retry",
+            updated_run_record=updated_row,
+            fallback_provider_key=resolved_fallback_candidate.provider_key,
+        )
 
     updated_row["status"] = "failed"
     updated_row["status_family"] = _status_family_for_status("failed")

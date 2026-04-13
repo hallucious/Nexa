@@ -92,6 +92,24 @@ class ProductProviderBindingHealthView:
 
 
 @dataclass(frozen=True)
+class AutoRecoveryFallbackCandidate:
+    provider_key: str
+    status: str = "healthy"
+    provider_family: Optional[str] = None
+    reason_code: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not str(self.provider_key).strip():
+            raise ValueError("AutoRecoveryFallbackCandidate.provider_key must be non-empty")
+        if self.status not in _ALLOWED_AUTO_RECOVERY_HEALTH_STATUSES:
+            raise ValueError(f"Unsupported AutoRecoveryFallbackCandidate.status: {self.status}")
+        if self.provider_family is not None and not str(self.provider_family).strip():
+            raise ValueError("AutoRecoveryFallbackCandidate.provider_family must be non-empty when provided")
+        if self.reason_code is not None and not str(self.reason_code).strip():
+            raise ValueError("AutoRecoveryFallbackCandidate.reason_code must be non-empty when provided")
+
+
+@dataclass(frozen=True)
 class AutoRecoveryProviderHealthSignal:
     status: str = "healthy"
     provider_key: Optional[str] = None

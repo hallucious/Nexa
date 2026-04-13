@@ -7,7 +7,7 @@ from src.server.workspace_onboarding_models import ProductActivityContinuitySumm
 
 RunActionLogFailureFamily = Literal["product_read_failure", "run_not_found"]
 _ALLOWED_FAILURE_FAMILIES = {"product_read_failure", "run_not_found"}
-_ALLOWED_ACTIONS = {"retry", "force_reset", "mark_reviewed", "auto_retry", "auto_mark_review_required"}
+_ALLOWED_ACTIONS = {"retry", "force_reset", "mark_reviewed", "auto_retry", "auto_mark_review_required", "auto_fallback_retry"}
 
 
 @dataclass(frozen=True)

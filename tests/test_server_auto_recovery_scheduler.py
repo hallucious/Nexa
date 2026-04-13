@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server import AutoRecoveryProviderHealthSignal, AutoRecoveryScheduler
+from src.server import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal, AutoRecoveryScheduler
 
 
 def _run_row(run_id: str, **overrides):
@@ -119,3 +119,40 @@ def test_scheduler_uses_provider_health_resolver() -> None:
     assert writes["run-down"]["orphan_review_required"] is True
     assert writes["run-degraded"]["status"] == "queued"
     assert writes["run-degraded"]["auto_retry_base_backoff_seconds"] == 600
+
+
+def test_scheduler_uses_fallback_candidates_resolver_when_primary_provider_is_down() -> None:
+    writes = {}
+
+    def writer(row):
+        writes[row["run_id"]] = dict(row)
+        return row
+
+    rows = [_run_row("run-fallback", provider_key="openai")]
+
+    def provider_health_resolver(row):
+        return AutoRecoveryProviderHealthSignal(status="down", provider_key=str(row.get("provider_key") or "openai"))
+
+    def fallback_candidates_resolver(row, provider_health):
+        assert provider_health is not None
+        return (
+            AutoRecoveryFallbackCandidate(provider_key="openai", status="down"),
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", reason_code="secondary.available"),
+        )
+
+    outcome = AutoRecoveryScheduler.run_batch(
+        rows,
+        now_iso="2026-04-13T01:00:00+00:00",
+        run_record_writer=writer,
+        queue_job_id_factory=lambda: "job-fallback",
+        provider_health_resolver=provider_health_resolver,
+        fallback_candidates_resolver=fallback_candidates_resolver,
+        batch_limit=10,
+    )
+
+    assert outcome.stats.scanned_count == 1
+    assert outcome.stats.applied_count == 1
+    assert outcome.stats.auto_fallback_retry_count == 1
+    assert writes["run-fallback"]["status"] == "queued"
+    assert writes["run-fallback"]["fallback_provider_key"] == "anthropic"
+    assert outcome.applied_updates[0].action == "auto_fallback_retry"

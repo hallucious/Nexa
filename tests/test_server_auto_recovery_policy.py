@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server import AutoRecoveryProviderHealthSignal, apply_auto_recovery
+from src.server import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal, apply_auto_recovery
 
 
 def _run_row(**overrides):
@@ -133,3 +133,54 @@ def test_apply_auto_recovery_keeps_existing_behavior_when_provider_is_healthy() 
     assert outcome.updated_run_record is not None
     assert outcome.updated_run_record["queue_job_id"] == "job-healthy"
     assert outcome.updated_run_record["auto_retry_base_backoff_seconds"] == 300
+
+
+def test_apply_auto_recovery_falls_back_to_healthy_provider_when_primary_is_down() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=0, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-fallback",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="openai", status="healthy"),
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", reason_code="secondary.available"),
+        ),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_fallback_retry"
+    assert outcome.fallback_provider_key == "anthropic"
+    assert outcome.updated_run_record is not None
+    assert outcome.updated_run_record["status"] == "queued"
+    assert outcome.updated_run_record["queue_job_id"] == "job-fallback"
+    assert outcome.updated_run_record["fallback_provider_key"] == "anthropic"
+    assert outcome.updated_run_record["action_log"][-1]["action"] == "auto_fallback_retry"
+    assert outcome.updated_run_record["action_log"][-1]["after_state"]["fallback_provider_key"] == "anthropic"
+
+
+def test_apply_auto_recovery_escalates_when_primary_is_down_and_no_fallback_exists() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=0, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(AutoRecoveryFallbackCandidate(provider_key="openai", status="healthy"),),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_mark_review_required"
+
+
+def test_apply_auto_recovery_uses_fallback_after_retry_limit_when_candidate_exists() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-fallback-limit",
+        provider_health=AutoRecoveryProviderHealthSignal(status="healthy", provider_key="openai"),
+        fallback_candidates=(AutoRecoveryFallbackCandidate(provider_key="anthropic", status="degraded"),),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_fallback_retry"
+    assert outcome.updated_run_record is not None
+    assert outcome.updated_run_record["queue_job_id"] == "job-fallback-limit"
+    assert outcome.updated_run_record["fallback_provider_key"] == "anthropic"

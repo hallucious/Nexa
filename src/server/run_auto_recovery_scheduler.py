@@ -4,12 +4,13 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Optional
 
-from src.server.provider_health_models import AutoRecoveryProviderHealthSignal
+from src.server.provider_health_models import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal
 from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, apply_auto_recovery
 
 RunRecordWriter = Callable[[Mapping[str, Any]], Any]
 QueueJobIdFactory = Callable[[], str]
 ProviderHealthResolver = Callable[[Mapping[str, Any]], AutoRecoveryProviderHealthSignal | None]
+FallbackCandidatesResolver = Callable[[Mapping[str, Any], AutoRecoveryProviderHealthSignal | None], Sequence[AutoRecoveryFallbackCandidate] | None]
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class AutoRecoverySchedulerStats:
     applied_count: int
     auto_retry_count: int
     auto_mark_review_required_count: int
+    auto_fallback_retry_count: int
     skipped_count: int
 
 
@@ -51,6 +53,7 @@ class AutoRecoveryScheduler:
         run_record_writer: Optional[RunRecordWriter] = None,
         queue_job_id_factory: Optional[QueueJobIdFactory] = None,
         provider_health_resolver: Optional[ProviderHealthResolver] = None,
+        fallback_candidates_resolver: Optional[FallbackCandidatesResolver] = None,
         batch_limit: int = 50,
         max_applied_per_batch: Optional[int] = None,
     ) -> AutoRecoverySchedulerOutcome:
@@ -66,16 +69,19 @@ class AutoRecoveryScheduler:
         eligible_count = 0
         auto_retry_count = 0
         auto_mark_review_required_count = 0
+        auto_fallback_retry_count = 0
 
         for row in rows:
             if max_applied_per_batch is not None and len(applied_updates) >= max_applied_per_batch:
                 break
             provider_health = provider_health_resolver(row) if provider_health_resolver is not None else None
+            fallback_candidates = fallback_candidates_resolver(row, provider_health) if fallback_candidates_resolver is not None else None
             outcome: AutoRecoveryOutcome = apply_auto_recovery(
                 row,
                 now_iso=now_iso,
                 queue_job_id_factory=queue_job_id_factory,
                 provider_health=provider_health,
+                fallback_candidates=fallback_candidates,
             )
             if not outcome.applied or outcome.updated_run_record is None or outcome.action is None:
                 continue
@@ -87,6 +93,8 @@ class AutoRecoveryScheduler:
                 auto_retry_count += 1
             elif outcome.action == "auto_mark_review_required":
                 auto_mark_review_required_count += 1
+            elif outcome.action == "auto_fallback_retry":
+                auto_fallback_retry_count += 1
             applied_updates.append(AutoRecoveryScheduledUpdate(
                 run_id=str(updated_row.get("run_id") or ""),
                 action=outcome.action,
@@ -103,6 +111,7 @@ class AutoRecoveryScheduler:
                 applied_count=applied_count,
                 auto_retry_count=auto_retry_count,
                 auto_mark_review_required_count=auto_mark_review_required_count,
+                auto_fallback_retry_count=auto_fallback_retry_count,
                 skipped_count=skipped_count,
             ),
             applied_updates=tuple(applied_updates),

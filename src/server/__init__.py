@@ -145,6 +145,7 @@ from src.server.provider_probe_history_models import (
     ProviderProbeHistoryReadOutcome,
 )
 from src.server.provider_health_models import (
+    AutoRecoveryFallbackCandidate,
     AutoRecoveryProviderHealthSignal,
     ProductProviderBindingHealthView,
     ProductProviderHealthFindingView,
