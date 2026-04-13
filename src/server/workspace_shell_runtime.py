@@ -328,6 +328,20 @@ def _latest_run_artifacts_detail(preview: Mapping[str, Any] | None) -> dict[str,
     }
 
 
+
+
+def _navigation_model() -> dict[str, Any]:
+    sections = (
+        {"section_id": "status", "label": "Status", "target_id": "latest-run-status-card", "detail_target_id": "latest-run-status-detail-card"},
+        {"section_id": "result", "label": "Result", "target_id": "latest-run-result-card", "detail_target_id": "latest-run-result-detail-card"},
+        {"section_id": "trace", "label": "Trace", "target_id": "latest-run-trace-card", "detail_target_id": "latest-run-trace-detail-card"},
+        {"section_id": "artifacts", "label": "Artifacts", "target_id": "latest-run-artifacts-card", "detail_target_id": "latest-run-artifacts-detail-card"},
+    )
+    return {
+        "default_section": "status",
+        "sections": [dict(item) for item in sections],
+    }
+
 def build_workspace_shell_runtime_payload(
     *,
     workspace_row: Mapping[str, Any] | None,
@@ -401,6 +415,7 @@ def build_workspace_shell_runtime_payload(
         "latest_run_result_detail": _latest_run_result_detail(latest_run_result_preview),
         "latest_run_artifacts_detail": _latest_run_artifacts_detail(latest_run_artifacts_preview),
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
+        "navigation": _navigation_model(),
         "continuity": {
             "onboarding_state": onboarding_state,
             "load_status": getattr(loaded, "load_status", "generated_default") if loaded is not None else "generated_default",
@@ -433,6 +448,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_result_detail_json = json.dumps(payload.get("latest_run_result_detail"), ensure_ascii=False)
     latest_run_artifacts_detail_json = json.dumps(payload.get("latest_run_artifacts_detail"), ensure_ascii=False)
     latest_run_trace_detail_json = json.dumps(payload.get("latest_run_trace_detail"), ensure_ascii=False)
+    navigation_json = json.dumps(payload.get("navigation"), ensure_ascii=False)
     template_items = []
     for template in (template_gallery.get("templates") or [])[:6]:
         title = escape(str(template.get("display_name") or template.get("template_id") or "Template"))
@@ -473,6 +489,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }}
     pre {{ white-space: pre-wrap; word-break: break-word; background: #f9fafb; padding: 12px; border-radius: 10px; border: 1px solid #e5e7eb; }}
     .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
+    .nav {{ display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }}
+    .nav button[aria-pressed="true"] {{ background: #2563eb; }}
+    .focus-target:focus {{ outline: 3px solid #2563eb; outline-offset: 2px; }}
   </style>
 </head>
 <body>
@@ -487,6 +506,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <button id="open-trace" class="secondary" {'disabled' if not latest_run_trace_path else ''}>Open latest trace</button>
       <button id="open-artifacts" class="secondary" {'disabled' if not latest_run_artifacts_path else ''}>Open latest artifacts</button>
     </div>
+    <section class="card" style="margin-top:16px;">
+      <h2>Runtime focus</h2>
+      <div id="runtime-nav" class="nav"></div>
+      <pre id="focus-state">Focus: status</pre>
+    </section>
     <div class="row">
       <section class="card">
         <h2>{help_title}</h2>
@@ -508,41 +532,41 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       </section>
     </div>
     <div class="row">
-      <section class="card">
+      <section id="latest-run-status-card" tabindex="-1" class="card focus-target">
         <h2>Latest run status</h2>
         <pre id="latest-run-status">Waiting for run status.</pre>
       </section>
-      <section class="card">
+      <section id="latest-run-result-card" tabindex="-1" class="card focus-target">
         <h2>Latest run result</h2>
         <pre id="latest-run-result">Waiting for run result.</pre>
       </section>
     </div>
     <div class="row">
-      <section class="card">
+      <section id="latest-run-status-detail-card" tabindex="-1" class="card focus-target">
         <h2>Status detail layer</h2>
         <pre id="latest-run-status-detail">Open latest run status to view the detail layer.</pre>
       </section>
-      <section class="card">
+      <section id="latest-run-result-detail-card" tabindex="-1" class="card focus-target">
         <h2>Result detail layer</h2>
         <pre id="latest-run-result-detail">Open latest run result to view the detail layer.</pre>
       </section>
     </div>
     <div class="row">
-      <section class="card">
+      <section id="latest-run-trace-card" tabindex="-1" class="card focus-target">
         <h2>Latest trace</h2>
         <pre id="latest-run-trace">Waiting for trace details.</pre>
       </section>
-      <section class="card">
+      <section id="latest-run-artifacts-card" tabindex="-1" class="card focus-target">
         <h2>Latest artifacts</h2>
         <pre id="latest-run-artifacts">Waiting for artifact details.</pre>
       </section>
     </div>
     <div class="row">
-      <section class="card">
+      <section id="latest-run-trace-detail-card" tabindex="-1" class="card focus-target">
         <h2>Trace detail layer</h2>
         <pre id="latest-run-trace-detail">Open latest trace to view the detail layer.</pre>
       </section>
-      <section class="card">
+      <section id="latest-run-artifacts-detail-card" tabindex="-1" class="card focus-target">
         <h2>Artifacts detail layer</h2>
         <pre id="latest-run-artifacts-detail">Open latest artifacts to view the detail layer.</pre>
       </section>
@@ -567,6 +591,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRunResultDetail = {latest_run_result_detail_json};
     const initialRunArtifactsDetail = {latest_run_artifacts_detail_json};
     const initialRunTraceDetail = {latest_run_trace_detail_json};
+    const initialNavigation = {navigation_json};
     const logEl = document.getElementById('browser-log');
     const latestRunStatusEl = document.getElementById('latest-run-status');
     const latestRunResultEl = document.getElementById('latest-run-result');
@@ -576,7 +601,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const latestRunResultDetailEl = document.getElementById('latest-run-result-detail');
     const latestRunTraceDetailEl = document.getElementById('latest-run-trace-detail');
     const latestRunArtifactsDetailEl = document.getElementById('latest-run-artifacts-detail');
+    const runtimeNavEl = document.getElementById('runtime-nav');
+    const focusStateEl = document.getElementById('focus-state');
     let activeRunId = initialRunStatusPreview ? initialRunStatusPreview.run_id : null;
+    let focusedSectionId = (initialNavigation && initialNavigation.default_section) || 'status';
     let activeRunStatusPath = initialPayload.routes.latest_run_status || null;
     let activeRunResultPath = initialPayload.routes.latest_run_result || null;
     let activeRunTracePath = initialPayload.routes.latest_run_trace || null;
@@ -705,6 +733,47 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         ].filter(Boolean),
       }};
     }}
+    function sectionConfig(sectionId) {{
+      const sections = initialNavigation && Array.isArray(initialNavigation.sections) ? initialNavigation.sections : [];
+      return sections.find((section) => section && section.section_id === sectionId) || null;
+    }}
+    function focusTargetFor(sectionId, level) {{
+      const section = sectionConfig(sectionId);
+      if (!section) return null;
+      return document.getElementById(level === 'detail' ? section.detail_target_id : section.target_id);
+    }}
+    function renderRuntimeNav() {{
+      const sections = initialNavigation && Array.isArray(initialNavigation.sections) ? initialNavigation.sections : [];
+      runtimeNavEl.innerHTML = '';
+      for (const section of sections) {{
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'secondary';
+        button.textContent = section.label || section.section_id;
+        button.dataset.sectionId = section.section_id;
+        button.setAttribute('aria-pressed', section.section_id === focusedSectionId ? 'true' : 'false');
+        button.addEventListener('click', () => setFocusedSection(section.section_id, 'summary'));
+        runtimeNavEl.appendChild(button);
+      }}
+    }}
+    function setFocusedSection(sectionId, level) {{
+      focusedSectionId = sectionId || focusedSectionId || 'status';
+      const target = focusTargetFor(focusedSectionId, level === 'detail' ? 'detail' : 'summary');
+      const section = sectionConfig(focusedSectionId);
+      if (focusStateEl) {{
+        const label = section && section.label ? section.label : focusedSectionId;
+        focusStateEl.textContent = 'Focus: ' + label + (level === 'detail' ? ' detail' : ' summary');
+      }}
+      const buttons = runtimeNavEl.querySelectorAll('button[data-section-id]');
+      buttons.forEach((button) => {{
+        button.setAttribute('aria-pressed', button.dataset.sectionId === focusedSectionId ? 'true' : 'false');
+      }});
+      if (target) {{
+        target.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+        target.focus({{ preventScroll: true }});
+      }}
+    }}
+
     function writeLatestRunStatus(message) {{
       latestRunStatusEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent run is available yet.');
     }}
@@ -747,6 +816,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const body = await response.json();
       writeLatestRunStatus(summarizeStatusBody(body));
       writeLatestRunStatusDetail(detailFromStatusBody(body));
+      setFocusedSection('status', 'detail');
       return body;
     }}
     async function refreshLatestRunResult() {{
@@ -759,6 +829,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const body = await response.json();
       writeLatestRunResult(summarizeResultBody(body));
       writeLatestRunResultDetail(detailFromResultBody(body));
+      setFocusedSection('result', 'detail');
       return body;
     }}
     async function refreshLatestRunTrace() {{
@@ -771,6 +842,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const body = await response.json();
       writeLatestRunTrace(summarizeTraceBody(body));
       writeLatestRunTraceDetail(detailFromTraceBody(body));
+      setFocusedSection('trace', 'detail');
       return body;
     }}
     async function refreshLatestRunArtifacts() {{
@@ -783,6 +855,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const body = await response.json();
       writeLatestRunArtifacts(summarizeArtifactsBody(body));
       writeLatestRunArtifactsDetail(detailFromArtifactsBody(body));
+      setFocusedSection('artifacts', 'detail');
       return body;
     }}
     async function pollLatestRunUntilSettled() {{
@@ -801,6 +874,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       await refreshLatestRunTrace();
       await refreshLatestRunArtifacts();
     }}
+    renderRuntimeNav();
     writeLatestRunStatus(initialRunStatusSummary || 'No recent run is available yet.');
     writeLatestRunResult(initialRunResultSummary || 'No recent run result is available yet.');
     writeLatestRunTrace(initialRunTraceSummary || 'No recent trace is available yet.');
@@ -809,6 +883,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeLatestRunResultDetail(initialRunResultDetail || 'Open latest run result to view the detail layer.');
     writeLatestRunTraceDetail(initialRunTraceDetail || 'Open latest trace to view the detail layer.');
     writeLatestRunArtifactsDetail(initialRunArtifactsDetail || 'Open latest artifacts to view the detail layer.');
+    setFocusedSection(focusedSectionId, 'summary');
     document.getElementById('refresh').addEventListener('click', async () => {{
       const response = await fetch(initialPayload.routes.workspace_shell, {{ credentials: 'same-origin' }});
       const body = await response.json();
@@ -856,6 +931,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         setActiveRun(body.run_id);
         writeLatestRunStatus({{ headline: 'Status: accepted', lines: ['Run id: ' + body.run_id, 'Summary: Launch accepted.'] }});
         writeLatestRunStatusDetail({{ title: 'Status detail', items: ['Run id: ' + body.run_id, 'Status: accepted', 'Summary: Launch accepted.'] }});
+        setFocusedSection('status', 'detail');
         writeLatestRunResult('Waiting for run result.');
         writeLatestRunResultDetail('Open latest run result to view the detail layer.');
         writeLatestRunTrace('Waiting for trace details.');

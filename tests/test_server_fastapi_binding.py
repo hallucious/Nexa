@@ -471,6 +471,8 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert 'First artifact id: artifact-2' in payload['latest_run_artifacts_summary']['lines']
     assert payload['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in payload['latest_run_artifacts_detail']['items']
+    assert payload['navigation']['default_section'] == 'status'
+    assert [section['section_id'] for section in payload['navigation']['sections']] == ['status', 'result', 'trace', 'artifacts']
 
 
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
@@ -509,6 +511,12 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'detailFromArtifactsBody' in body
     assert 'summarizeTraceBody' in body
     assert 'summarizeArtifactsBody' in body
+    assert 'Runtime focus' in body
+    assert 'focus-state' in body
+    assert 'renderRuntimeNav' in body
+    assert 'setFocusedSection' in body
+    assert 'latest-run-status-card' in body
+    assert 'latest-run-trace-detail-card' in body
 
 
 def test_fastapi_binding_returns_auth_failure_without_session_claims() -> None:
