@@ -186,3 +186,74 @@ def test_read_execution_panel_view_model_projects_list_outputs_and_artifact_link
     assert vm.latest_outputs[0].item_count == 3
     assert vm.latest_outputs[0].artifact_ref == "artifact://result"
     assert vm.latest_outputs[0].open_artifact_action_label == "Open artifact"
+
+
+def test_execution_panel_surfaces_policy_validation_warning_from_working_save_last_run() -> None:
+    working_save = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "draft"}], edges=[], entry="draft", outputs=[{"name": "out", "source": "draft"}]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(
+            status="draft",
+            validation_summary={},
+            last_run={
+                "policy_validation": {
+                    "status": "invalid",
+                    "reason": "negative_weight",
+                    "fallback_applied": True,
+                }
+            },
+            errors=[],
+        ),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_execution_panel_view_model(working_save)
+
+    signal = next(signal for signal in vm.governance_signals if signal.family == "policy_validation")
+    assert signal.status == "invalid"
+    assert signal.reason_code == "negative_weight"
+    assert signal.severity == "warning"
+    assert signal.label == "Policy validation"
+    assert "Safe defaults were applied" in (signal.summary or "")
+
+
+def test_execution_panel_surfaces_policy_validation_warning_from_execution_record_recovery_metrics() -> None:
+    record = ExecutionRecordModel(
+        meta=ExecutionMetaModel(
+            run_id="run-001",
+            record_format_version="1.0.0",
+            created_at="2026-04-07T00:00:00Z",
+            started_at="2026-04-07T00:00:00Z",
+            finished_at="2026-04-07T00:00:05Z",
+            status="completed",
+            title="Demo Run",
+        ),
+        source=ExecutionSourceModel(commit_id="commit-001", working_save_id="ws-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(total_duration_ms=5000, event_count=4, node_order=["draft", "judge"]),
+        node_results=NodeResultsModel(results=[NodeResultCard(node_id="draft", status="success", output_summary="draft ready")]),
+        outputs=ExecutionOutputModel(final_outputs=[OutputResultCard(output_ref="final", source_node="draft", value_summary="done", value_type="text")], output_summary="done"),
+        artifacts=ExecutionArtifactsModel(artifact_count=0),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(
+            metrics={
+                "recovery": {
+                    "policy_validation": {
+                        "status": "invalid",
+                        "reason": "zero_total_weight",
+                        "fallback_applied": True,
+                    }
+                }
+            },
+            provider_usage_summary={"openai": 1},
+            plugin_usage_summary={"normalize": 2},
+        ),
+    )
+
+    vm = read_execution_panel_view_model(record)
+
+    signal = next(signal for signal in vm.governance_signals if signal.family == "policy_validation")
+    assert signal.reason_code == "zero_total_weight"
+    assert signal.severity == "warning"

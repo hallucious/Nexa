@@ -638,13 +638,22 @@ def _governance_summary_from_sources(source: WorkingSaveModel | CommitSnapshotMo
     if execution_record is not None:
         metrics = execution_record.observability.metrics if isinstance(execution_record.observability.metrics, dict) else {}
         governance = metrics.get("governance") if isinstance(metrics.get("governance"), Mapping) else None
-        if governance is not None:
-            return dict(governance)
+        recovery = metrics.get("recovery") if isinstance(metrics.get("recovery"), Mapping) else None
+        policy_validation = recovery.get("policy_validation") if isinstance(recovery, Mapping) and isinstance(recovery.get("policy_validation"), Mapping) else None
+        if governance is not None or policy_validation is not None:
+            projected = dict(governance) if governance is not None else {}
+            if policy_validation is not None:
+                projected["policy_validation"] = dict(policy_validation)
+            return projected
     if isinstance(source, WorkingSaveModel):
         last_run = source.runtime.last_run if isinstance(source.runtime.last_run, dict) else {}
         governance = last_run.get("governance") if isinstance(last_run.get("governance"), Mapping) else None
         if governance is not None:
-            return dict(governance)
+            projected = dict(governance)
+            policy_validation = last_run.get("policy_validation") if isinstance(last_run.get("policy_validation"), Mapping) else None
+            if policy_validation is not None:
+                projected["policy_validation"] = dict(policy_validation)
+            return projected
         projected: dict[str, Any] = {}
         for key in (
             "launch_status",
@@ -661,11 +670,14 @@ def _governance_summary_from_sources(source: WorkingSaveModel | CommitSnapshotMo
             value = last_run.get(key)
             if value is not None and value != "" and value != []:
                 projected[key] = value
+        policy_validation = last_run.get("policy_validation") if isinstance(last_run.get("policy_validation"), Mapping) else None
+        if policy_validation is not None:
+            projected["policy_validation"] = dict(policy_validation)
         return projected
     return {}
 
 
-def _governance_views(summary: Mapping[str, Any]) -> tuple[list[GovernanceSignalView], DeliveryOutcomeView | None]:
+def _governance_views(summary: Mapping[str, Any], *, app_language: str) -> tuple[list[GovernanceSignalView], DeliveryOutcomeView | None]:
     signals: list[GovernanceSignalView] = []
     delivery_outcome: DeliveryOutcomeView | None = None
     for family in ("launch_status", "safety_status", "quota_status", "streaming_status", "delivery_status"):
@@ -692,6 +704,35 @@ def _governance_views(summary: Mapping[str, Any]) -> tuple[list[GovernanceSignal
                 reason_code=reason_code,
                 summary=(record.human_summary if record is not None else None),
             )
+    policy_validation = summary.get("policy_validation") if isinstance(summary.get("policy_validation"), Mapping) else None
+    if policy_validation is not None:
+        status = str(policy_validation.get("status") or "invalid")
+        reason = str(policy_validation.get("reason") or "invalid_policy")
+        fallback_applied = bool(policy_validation.get("fallback_applied"))
+        summary_text = ui_text(
+            "execution.governance.policy_validation_invalid",
+            app_language=app_language,
+            fallback_text=(
+                "Fallback scoring policy was invalid ({reason}). Safe defaults were applied."
+                if fallback_applied
+                else "Fallback scoring policy was invalid ({reason})."
+            ),
+            reason=reason,
+        )
+        signals.append(
+            GovernanceSignalView(
+                family="policy_validation",
+                status=status,
+                reason_code=reason,
+                severity="warning",
+                label=ui_text(
+                    "execution.governance.policy_validation_label",
+                    app_language=app_language,
+                    fallback_text="Policy validation",
+                ),
+                summary=summary_text,
+            )
+        )
     return signals, delivery_outcome
 
 
@@ -764,7 +805,7 @@ def read_execution_panel_view_model(
             execution_status = "running"
 
     governance_summary = _governance_summary_from_sources(source, execution_record)
-    governance_signals, delivery_outcome = _governance_views(governance_summary)
+    governance_signals, delivery_outcome = _governance_views(governance_summary, app_language=app_language)
     friendly_error = _friendly_error_for_execution(source, execution_record, governance_summary, app_language=app_language)
 
     if execution_record is not None:
