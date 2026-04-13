@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from src.server.provider_health_models import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal
+from src.server.provider_runtime_metrics import AutoRecoveryProviderRuntimeMetrics
 from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, AutoRecoveryScoringPolicy, apply_auto_recovery
 
 RunRecordWriter = Callable[[Mapping[str, Any]], Any]
@@ -14,6 +15,7 @@ WorkspaceProviderHealthSignalsResolver = Callable[[Mapping[str, Any]], Mapping[s
 WorkspaceProviderBindingRowsResolver = Callable[[Mapping[str, Any]], Sequence[Mapping[str, Any]] | None]
 FallbackCandidatesResolver = Callable[[Mapping[str, Any], AutoRecoveryProviderHealthSignal | None], Sequence[AutoRecoveryFallbackCandidate] | None]
 WorkspaceScoringPolicyResolver = Callable[[Mapping[str, Any]], Mapping[str, Any] | AutoRecoveryScoringPolicy | None]
+WorkspaceProviderRuntimeMetricsResolver = Callable[[Mapping[str, Any]], Mapping[str, AutoRecoveryProviderRuntimeMetrics] | Sequence[AutoRecoveryProviderRuntimeMetrics] | None]
 
 
 def _normalize_provider_key(value: Any) -> str:
@@ -42,18 +44,42 @@ def _normalize_provider_health_map(
     return result
 
 
+def _normalize_provider_runtime_metrics_map(
+    value: Mapping[str, AutoRecoveryProviderRuntimeMetrics] | Sequence[AutoRecoveryProviderRuntimeMetrics] | None,
+) -> dict[str, AutoRecoveryProviderRuntimeMetrics]:
+    if value is None:
+        return {}
+    if isinstance(value, Mapping):
+        result: dict[str, AutoRecoveryProviderRuntimeMetrics] = {}
+        for provider_key, metrics in value.items():
+            normalized_key = _normalize_provider_key(provider_key)
+            if normalized_key and isinstance(metrics, AutoRecoveryProviderRuntimeMetrics):
+                result[normalized_key] = metrics
+        return result
+    result: dict[str, AutoRecoveryProviderRuntimeMetrics] = {}
+    for metrics in value:
+        if not isinstance(metrics, AutoRecoveryProviderRuntimeMetrics):
+            continue
+        normalized_key = _normalize_provider_key(metrics.provider_key)
+        if normalized_key:
+            result[normalized_key] = metrics
+    return result
+
+
 def _fallback_candidates_from_workspace_bindings(
     run_row: Mapping[str, Any],
     *,
     provider_health: AutoRecoveryProviderHealthSignal | None,
     binding_rows: Sequence[Mapping[str, Any]] | None,
     workspace_provider_health_signals: Mapping[str, AutoRecoveryProviderHealthSignal] | Sequence[AutoRecoveryProviderHealthSignal] | None = None,
+    workspace_provider_runtime_metrics: Mapping[str, AutoRecoveryProviderRuntimeMetrics] | Sequence[AutoRecoveryProviderRuntimeMetrics] | None = None,
 ) -> tuple[AutoRecoveryFallbackCandidate, ...] | None:
     if not binding_rows:
         return None
     workspace_id = str(run_row.get("workspace_id") or "").strip()
     current_provider_key = _normalize_provider_key((provider_health.provider_key if provider_health is not None else None) or run_row.get("provider_key"))
     health_map = _normalize_provider_health_map(workspace_provider_health_signals)
+    runtime_metrics_map = _normalize_provider_runtime_metrics_map(workspace_provider_runtime_metrics)
     candidates: list[AutoRecoveryFallbackCandidate] = []
     seen_provider_keys: set[str] = set()
     for row in binding_rows:
@@ -69,6 +95,7 @@ def _fallback_candidates_from_workspace_bindings(
         if enabled is False:
             continue
         signal = health_map.get(provider_key)
+        metrics = runtime_metrics_map.get(provider_key)
         status = signal.status if signal is not None else "healthy"
         reason_code = signal.reason_code if signal is not None else "workspace.binding.available"
         provider_family = str(row.get("provider_family") or "").strip() or None
@@ -90,6 +117,8 @@ def _fallback_candidates_from_workspace_bindings(
                 reason_code=reason_code,
                 cost_ratio=cost_ratio,
                 priority_weight=priority_weight,
+                latency_ms=(metrics.latency_ms if metrics is not None else row.get("latency_ms")),
+                success_rate=(metrics.success_rate if metrics is not None else row.get("success_rate")),
             )
         )
         seen_provider_keys.add(provider_key)
@@ -138,6 +167,7 @@ class AutoRecoveryScheduler:
         provider_health_resolver: Optional[ProviderHealthResolver] = None,
         workspace_provider_health_signals_resolver: Optional[WorkspaceProviderHealthSignalsResolver] = None,
         workspace_provider_binding_rows_resolver: Optional[WorkspaceProviderBindingRowsResolver] = None,
+        workspace_provider_runtime_metrics_resolver: Optional[WorkspaceProviderRuntimeMetricsResolver] = None,
         fallback_candidates_resolver: Optional[FallbackCandidatesResolver] = None,
         workspace_scoring_policy_resolver: Optional[WorkspaceScoringPolicyResolver] = None,
         batch_limit: int = 50,
@@ -170,11 +200,17 @@ class AutoRecoveryScheduler:
                     if workspace_provider_health_signals_resolver is not None
                     else None
                 )
+                workspace_provider_runtime_metrics = (
+                    workspace_provider_runtime_metrics_resolver(row)
+                    if workspace_provider_runtime_metrics_resolver is not None
+                    else None
+                )
                 fallback_candidates = _fallback_candidates_from_workspace_bindings(
                     row,
                     provider_health=provider_health,
                     binding_rows=binding_rows,
                     workspace_provider_health_signals=workspace_provider_health_signals,
+                    workspace_provider_runtime_metrics=workspace_provider_runtime_metrics,
                 )
             scoring_policy = workspace_scoring_policy_resolver(row) if workspace_scoring_policy_resolver is not None else None
             outcome: AutoRecoveryOutcome = apply_auto_recovery(

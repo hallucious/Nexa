@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal, AutoRecoveryScoringPolicy, AutoRecoveryScheduler
+from src.server import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal, AutoRecoveryProviderRuntimeMetrics, AutoRecoveryScoringPolicy, AutoRecoveryScheduler
 
 
 def _run_row(run_id: str, **overrides):
@@ -304,3 +304,53 @@ def test_scheduler_uses_workspace_scoring_policy_resolver() -> None:
 
     assert outcome.stats.auto_fallback_retry_count == 1
     assert writes["run-policy-fallback"]["fallback_provider_key"] == "mistral"
+
+
+def test_scheduler_uses_workspace_runtime_metrics_in_scored_selection() -> None:
+    writes = {}
+
+    def writer(row):
+        writes[row["run_id"]] = dict(row)
+        return row
+
+    rows = [_run_row("run-metrics-fallback", provider_key="openai")]
+
+    def provider_health_resolver(row):
+        return AutoRecoveryProviderHealthSignal(status="down", provider_key="openai")
+
+    def workspace_provider_binding_rows_resolver(row):
+        return (
+            {"workspace_id": row["workspace_id"], "provider_key": "anthropic", "enabled": True, "cost_ratio": 1.0, "priority_weight": 0.0},
+            {"workspace_id": row["workspace_id"], "provider_key": "gemini", "enabled": True, "cost_ratio": 1.0, "priority_weight": 0.0},
+        )
+
+    def workspace_provider_health_signals_resolver(row):
+        return {
+            "anthropic": AutoRecoveryProviderHealthSignal(status="healthy", provider_key="anthropic"),
+            "gemini": AutoRecoveryProviderHealthSignal(status="healthy", provider_key="gemini"),
+        }
+
+    def workspace_provider_runtime_metrics_resolver(row):
+        return {
+            "anthropic": AutoRecoveryProviderRuntimeMetrics(provider_key="anthropic", latency_ms=600, success_rate=0.99),
+            "gemini": AutoRecoveryProviderRuntimeMetrics(provider_key="gemini", latency_ms=100, success_rate=0.80),
+        }
+
+    def workspace_scoring_policy_resolver(row):
+        return AutoRecoveryScoringPolicy(health_weight=0.0, cost_weight=0.0, priority_weight=0.0, latency_weight=0.8, reliability_weight=0.2)
+
+    outcome = AutoRecoveryScheduler.run_batch(
+        rows,
+        now_iso="2026-04-13T01:00:00+00:00",
+        run_record_writer=writer,
+        queue_job_id_factory=lambda: "job-metrics-fallback",
+        provider_health_resolver=provider_health_resolver,
+        workspace_provider_binding_rows_resolver=workspace_provider_binding_rows_resolver,
+        workspace_provider_health_signals_resolver=workspace_provider_health_signals_resolver,
+        workspace_provider_runtime_metrics_resolver=workspace_provider_runtime_metrics_resolver,
+        workspace_scoring_policy_resolver=workspace_scoring_policy_resolver,
+        batch_limit=10,
+    )
+
+    assert outcome.stats.auto_fallback_retry_count == 1
+    assert writes["run-metrics-fallback"]["fallback_provider_key"] == "gemini"

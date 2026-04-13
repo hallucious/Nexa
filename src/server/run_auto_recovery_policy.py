@@ -35,9 +35,17 @@ class AutoRecoveryScoringPolicy:
     health_weight: float = 0.6
     cost_weight: float = 0.3
     priority_weight: float = 0.1
+    latency_weight: float = 0.0
+    reliability_weight: float = 0.0
 
     def normalized(self) -> "AutoRecoveryScoringPolicy":
-        weights = [max(0.0, float(self.health_weight)), max(0.0, float(self.cost_weight)), max(0.0, float(self.priority_weight))]
+        weights = [
+            max(0.0, float(self.health_weight)),
+            max(0.0, float(self.cost_weight)),
+            max(0.0, float(self.priority_weight)),
+            max(0.0, float(self.latency_weight)),
+            max(0.0, float(self.reliability_weight)),
+        ]
         total = sum(weights)
         if total <= 0:
             return AutoRecoveryScoringPolicy()
@@ -45,6 +53,8 @@ class AutoRecoveryScoringPolicy:
             health_weight=weights[0] / total,
             cost_weight=weights[1] / total,
             priority_weight=weights[2] / total,
+            latency_weight=weights[3] / total,
+            reliability_weight=weights[4] / total,
         )
 
 
@@ -62,6 +72,8 @@ def _coerce_scoring_policy(value: Any) -> AutoRecoveryScoringPolicy:
             health_weight=_weight("health_weight", 0.6),
             cost_weight=_weight("cost_weight", 0.3),
             priority_weight=_weight("priority_weight", 0.1),
+            latency_weight=_weight("latency_weight", 0.0),
+            reliability_weight=_weight("reliability_weight", 0.0),
         ).normalized()
     return AutoRecoveryScoringPolicy()
 
@@ -146,28 +158,66 @@ def _fallback_health_score(status: str) -> float:
     return 0.0
 
 
+def _fallback_latency_score(latency_ms: float | None) -> float:
+    if latency_ms is None:
+        return 1.0
+    value = float(latency_ms)
+    if value <= 0:
+        return 0.0
+    return 1000.0 / (1000.0 + value)
+
+
+def _fallback_reliability_score(success_rate: float | None) -> float:
+    if success_rate is None:
+        return 1.0
+    value = float(success_rate)
+    if value < 0:
+        return 0.0
+    if value > 1:
+        return 1.0
+    return value
+
+
 def _fallback_candidate_breakdown(candidate: AutoRecoveryFallbackCandidate, *, scoring_policy: AutoRecoveryScoringPolicy) -> dict[str, float | str | bool]:
     health_score = _fallback_health_score(candidate.status)
     cost_score = score_cost_ratio(candidate.cost_ratio)
     priority_score = float(candidate.priority_weight)
-    final_score = (scoring_policy.health_weight * health_score) + (scoring_policy.cost_weight * cost_score) + (scoring_policy.priority_weight * priority_score)
+    latency_score = _fallback_latency_score(candidate.latency_ms)
+    reliability_score = _fallback_reliability_score(candidate.success_rate)
+    final_score = (
+        (scoring_policy.health_weight * health_score)
+        + (scoring_policy.cost_weight * cost_score)
+        + (scoring_policy.priority_weight * priority_score)
+        + (scoring_policy.latency_weight * latency_score)
+        + (scoring_policy.reliability_weight * reliability_score)
+    )
     return {
         "provider": candidate.provider_key,
         "health_score": health_score,
         "cost_score": cost_score,
         "priority_score": priority_score,
+        "latency_score": latency_score,
+        "reliability_score": reliability_score,
         "final_score": final_score,
         "selected": False,
         "health_weight": scoring_policy.health_weight,
         "cost_weight": scoring_policy.cost_weight,
         "priority_weight": scoring_policy.priority_weight,
+        "latency_weight": scoring_policy.latency_weight,
+        "reliability_weight": scoring_policy.reliability_weight,
     }
 
 
 def _fallback_candidate_score(candidate: AutoRecoveryFallbackCandidate, *, scoring_policy: AutoRecoveryScoringPolicy) -> tuple[float, float, float, str]:
     breakdown = _fallback_candidate_breakdown(candidate, scoring_policy=scoring_policy)
     normalized_cost = float(candidate.cost_ratio) if candidate.cost_ratio is not None else 1.0
-    return (float(breakdown["final_score"]), float(breakdown["health_score"]) + float(breakdown["priority_score"]), -normalized_cost, candidate.provider_key)
+    return (
+        float(breakdown["final_score"]),
+        float(breakdown["reliability_score"]) + float(breakdown["health_score"]) + float(breakdown["priority_score"]),
+        float(breakdown["latency_score"]),
+        -normalized_cost,
+        candidate.provider_key,
+    )
 
 
 def _select_fallback_candidate(

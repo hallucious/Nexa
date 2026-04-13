@@ -99,6 +99,8 @@ class AutoRecoveryFallbackCandidate:
     reason_code: Optional[str] = None
     cost_ratio: Optional[float] = None
     priority_weight: float = 0.0
+    latency_ms: Optional[float] = None
+    success_rate: Optional[float] = None
 
     def __post_init__(self) -> None:
         if not str(self.provider_key).strip():
@@ -111,6 +113,12 @@ class AutoRecoveryFallbackCandidate:
             raise ValueError("AutoRecoveryFallbackCandidate.reason_code must be non-empty when provided")
         if self.cost_ratio is not None and float(self.cost_ratio) <= 0:
             raise ValueError("AutoRecoveryFallbackCandidate.cost_ratio must be > 0 when provided")
+        if self.latency_ms is not None and float(self.latency_ms) <= 0:
+            raise ValueError("AutoRecoveryFallbackCandidate.latency_ms must be > 0 when provided")
+        if self.success_rate is not None:
+            value = float(self.success_rate)
+            if value < 0 or value > 1:
+                raise ValueError("AutoRecoveryFallbackCandidate.success_rate must be between 0 and 1")
 
 
 @dataclass(frozen=True)

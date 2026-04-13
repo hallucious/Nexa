@@ -250,6 +250,48 @@ def test_apply_auto_recovery_emits_scoring_trace_for_fallback_selection() -> Non
     assert scoring_event["after_state"]["selected_provider_key"] == outcome.fallback_provider_key
 
 
+def test_apply_auto_recovery_prefers_lower_latency_when_latency_weight_is_high() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-latency",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", latency_ms=900, success_rate=0.99),
+            AutoRecoveryFallbackCandidate(provider_key="gemini", status="healthy", latency_ms=120, success_rate=0.80),
+        ),
+        scoring_policy=AutoRecoveryScoringPolicy(health_weight=0.1, cost_weight=0.0, priority_weight=0.0, latency_weight=0.8, reliability_weight=0.1),
+    )
+
+    assert outcome.applied is True
+    assert outcome.fallback_provider_key == "gemini"
+    trace = outcome.updated_run_record["action_log"][-2]["after_state"]["scoring_trace"]
+    selected = [entry for entry in trace if entry["selected"]]
+    assert selected and selected[0]["provider"] == "gemini"
+    assert all("latency_score" in entry for entry in trace)
+
+
+def test_apply_auto_recovery_prefers_higher_reliability_when_reliability_weight_is_high() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-reliability",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", latency_ms=120, success_rate=0.70),
+            AutoRecoveryFallbackCandidate(provider_key="gemini", status="healthy", latency_ms=300, success_rate=0.98),
+        ),
+        scoring_policy=AutoRecoveryScoringPolicy(health_weight=0.0, cost_weight=0.0, priority_weight=0.0, latency_weight=0.2, reliability_weight=0.8),
+    )
+
+    assert outcome.applied is True
+    assert outcome.fallback_provider_key == "gemini"
+    trace = outcome.updated_run_record["action_log"][-2]["after_state"]["scoring_trace"]
+    selected = [entry for entry in trace if entry["selected"]]
+    assert selected and selected[0]["provider"] == "gemini"
+    assert all("reliability_score" in entry for entry in trace)
+
+
 def test_apply_auto_recovery_uses_workspace_scoring_policy_weights() -> None:
     outcome = apply_auto_recovery(
         _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
