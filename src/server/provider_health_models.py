@@ -97,6 +97,8 @@ class AutoRecoveryFallbackCandidate:
     status: str = "healthy"
     provider_family: Optional[str] = None
     reason_code: Optional[str] = None
+    cost_ratio: Optional[float] = None
+    priority_weight: float = 0.0
 
     def __post_init__(self) -> None:
         if not str(self.provider_key).strip():
@@ -107,6 +109,8 @@ class AutoRecoveryFallbackCandidate:
             raise ValueError("AutoRecoveryFallbackCandidate.provider_family must be non-empty when provided")
         if self.reason_code is not None and not str(self.reason_code).strip():
             raise ValueError("AutoRecoveryFallbackCandidate.reason_code must be non-empty when provided")
+        if self.cost_ratio is not None and float(self.cost_ratio) <= 0:
+            raise ValueError("AutoRecoveryFallbackCandidate.cost_ratio must be > 0 when provided")
 
 
 @dataclass(frozen=True)

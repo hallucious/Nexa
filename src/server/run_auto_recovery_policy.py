@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Optional
 import uuid
 
+from src.server.pricing_resolver import score_cost_ratio
 from src.server.provider_health_models import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal
 
 QueueJobIdFactory = Callable[[], str]
@@ -100,6 +101,25 @@ def _resolve_current_provider_key(run_record_row: Mapping[str, Any], provider_he
     return provider_key or None
 
 
+def _fallback_health_score(status: str) -> float:
+    normalized = str(status or "").strip().lower()
+    if normalized == "healthy":
+        return 1.0
+    if normalized == "degraded":
+        return 0.5
+    return 0.0
+
+
+def _fallback_candidate_score(candidate: AutoRecoveryFallbackCandidate) -> tuple[float, float, float, str]:
+    health_score = _fallback_health_score(candidate.status)
+    cost_score = score_cost_ratio(candidate.cost_ratio)
+    priority_score = float(candidate.priority_weight)
+    final_score = (0.6 * health_score) + (0.3 * cost_score) + (0.1 * priority_score)
+    # deterministic tie-breakers: healthier > higher priority > lower cost > provider_key
+    normalized_cost = float(candidate.cost_ratio) if candidate.cost_ratio is not None else 1.0
+    return (final_score, health_score + priority_score, -normalized_cost, candidate.provider_key)
+
+
 def _select_fallback_candidate(
     run_record_row: Mapping[str, Any],
     *,
@@ -109,17 +129,14 @@ def _select_fallback_candidate(
     current_provider_key = _resolve_current_provider_key(run_record_row, provider_health)
     if not fallback_candidates:
         return None
-    preferred_statuses = ("healthy", "degraded")
     normalized_candidates = tuple(
         candidate
         for candidate in fallback_candidates
-        if candidate.status in preferred_statuses and candidate.provider_key.strip().lower() != current_provider_key
+        if _fallback_health_score(candidate.status) > 0 and candidate.provider_key.strip().lower() != current_provider_key
     )
-    for preferred_status in preferred_statuses:
-        for candidate in normalized_candidates:
-            if candidate.status == preferred_status:
-                return candidate
-    return None
+    if not normalized_candidates:
+        return None
+    return max(normalized_candidates, key=_fallback_candidate_score)
 
 
 def _current_backoff_seconds(run_record_row: Mapping[str, Any], *, provider_health: AutoRecoveryProviderHealthSignal | None = None) -> int:

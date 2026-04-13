@@ -219,3 +219,45 @@ def test_scheduler_does_not_fallback_when_workspace_binding_has_no_alternative_p
 
     assert outcome.stats.auto_fallback_retry_count == 0
     assert outcome.stats.auto_mark_review_required_count == 1
+
+
+
+def test_scheduler_prefers_highest_scoring_workspace_binding_candidate() -> None:
+    writes = {}
+
+    def writer(row):
+        writes[row["run_id"]] = dict(row)
+        return row
+
+    rows = [_run_row("run-scored-fallback", provider_key="openai")]
+
+    def provider_health_resolver(row):
+        return AutoRecoveryProviderHealthSignal(status="down", provider_key="openai")
+
+    def workspace_provider_binding_rows_resolver(row):
+        return (
+            {"workspace_id": row["workspace_id"], "provider_key": "anthropic", "enabled": True, "cost_ratio": 1.5, "priority_weight": 0.0},
+            {"workspace_id": row["workspace_id"], "provider_key": "gemini", "enabled": True, "cost_ratio": 1.0, "priority_weight": 0.2},
+            {"workspace_id": row["workspace_id"], "provider_key": "mistral", "enabled": True, "cost_ratio": 1.1, "priority_weight": 0.8},
+        )
+
+    def workspace_provider_health_signals_resolver(row):
+        return {
+            "anthropic": AutoRecoveryProviderHealthSignal(status="healthy", provider_key="anthropic"),
+            "gemini": AutoRecoveryProviderHealthSignal(status="degraded", provider_key="gemini"),
+            "mistral": AutoRecoveryProviderHealthSignal(status="healthy", provider_key="mistral"),
+        }
+
+    outcome = AutoRecoveryScheduler.run_batch(
+        rows,
+        now_iso="2026-04-13T01:00:00+00:00",
+        run_record_writer=writer,
+        queue_job_id_factory=lambda: "job-scored-fallback",
+        provider_health_resolver=provider_health_resolver,
+        workspace_provider_binding_rows_resolver=workspace_provider_binding_rows_resolver,
+        workspace_provider_health_signals_resolver=workspace_provider_health_signals_resolver,
+        batch_limit=10,
+    )
+
+    assert outcome.stats.auto_fallback_retry_count == 1
+    assert writes["run-scored-fallback"]["fallback_provider_key"] == "mistral"

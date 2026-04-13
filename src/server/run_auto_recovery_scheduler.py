@@ -71,12 +71,24 @@ def _fallback_candidates_from_workspace_bindings(
         status = signal.status if signal is not None else "healthy"
         reason_code = signal.reason_code if signal is not None else "workspace.binding.available"
         provider_family = str(row.get("provider_family") or "").strip() or None
+        raw_priority_weight = row.get("fallback_priority_weight", row.get("priority_weight", 0.0))
+        try:
+            priority_weight = float(raw_priority_weight)
+        except (TypeError, ValueError):
+            priority_weight = 0.0
+        raw_cost_ratio = row.get("fallback_cost_ratio", row.get("cost_ratio", row.get("provider_cost_ratio")))
+        try:
+            cost_ratio = float(raw_cost_ratio) if raw_cost_ratio is not None else None
+        except (TypeError, ValueError):
+            cost_ratio = None
         candidates.append(
             AutoRecoveryFallbackCandidate(
                 provider_key=provider_key,
                 status=status,
                 provider_family=provider_family,
                 reason_code=reason_code,
+                cost_ratio=cost_ratio,
+                priority_weight=priority_weight,
             )
         )
         seen_provider_keys.add(provider_key)

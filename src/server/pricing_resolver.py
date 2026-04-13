@@ -41,3 +41,13 @@ class PricingResolver:
             )
 
         return None
+
+
+
+def score_cost_ratio(cost_ratio: float | None) -> float:
+    if cost_ratio is None:
+        return 1.0
+    value = float(cost_ratio)
+    if value <= 0:
+        return 0.0
+    return 1.0 / value

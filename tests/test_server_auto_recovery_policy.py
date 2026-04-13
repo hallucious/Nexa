@@ -204,3 +204,24 @@ def test_apply_auto_recovery_fallback_action_log_contains_audit_fields() -> None
     assert event["after_state"]["fallback_from_provider"] == "openai"
     assert event["after_state"]["fallback_to_provider"] == "anthropic"
     assert event["after_state"]["fallback_reason"] == "provider_down"
+
+
+
+def test_apply_auto_recovery_selects_best_fallback_candidate_by_health_cost_and_priority() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-best",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", cost_ratio=1.5, priority_weight=0.0),
+            AutoRecoveryFallbackCandidate(provider_key="gemini", status="degraded", cost_ratio=0.8, priority_weight=1.0),
+            AutoRecoveryFallbackCandidate(provider_key="mistral", status="healthy", cost_ratio=1.1, priority_weight=0.6),
+        ),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_fallback_retry"
+    assert outcome.fallback_provider_key == "mistral"
+
+
