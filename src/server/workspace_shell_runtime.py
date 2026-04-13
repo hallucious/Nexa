@@ -796,6 +796,11 @@ def build_workspace_shell_runtime_payload(
             "load_status": getattr(loaded, "load_status", "generated_default") if loaded is not None else "generated_default",
             "load_finding_count": len(getattr(loaded, "findings", ()) or ()) if loaded is not None else 0,
         },
+        "client_continuity": {
+            "enabled": True,
+            "storage_key": f"nexa.runtime_shell.{workspace_id}",
+            "version": "phase6-batch15",
+        },
     }
     return payload
 
@@ -828,6 +833,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     step_state_banner_json = json.dumps(payload.get("step_state_banner"), ensure_ascii=False)
     navigation = payload.get("navigation") or {}
     navigation_json = json.dumps(navigation, ensure_ascii=False)
+    client_continuity_json = json.dumps(payload.get("client_continuity"), ensure_ascii=False)
     template_items = []
     for template in (template_gallery.get("templates") or [])[:6]:
         title = escape(str(template.get("display_name") or template.get("template_id") or "Template"))
@@ -1005,6 +1011,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialValidationSection = {validation_section_json};
     const initialStepStateBanner = {step_state_banner_json};
     const initialNavigation = {navigation_json};
+    const initialClientContinuity = {client_continuity_json};
     const logEl = document.getElementById('browser-log');
     const latestRunStatusEl = document.getElementById('latest-run-status');
     const latestRunResultEl = document.getElementById('latest-run-result');
@@ -1042,8 +1049,67 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentDesignerSection = initialDesignerSection || null;
     let currentValidationSection = initialValidationSection || null;
     let currentStepStateBanner = initialStepStateBanner || null;
+    let continuityHydrating = true;
     function writeLog(message) {{
       logEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
+    }}
+    function continuityStorageKey() {{
+      return initialClientContinuity && initialClientContinuity.enabled && typeof initialClientContinuity.storage_key === 'string'
+        ? initialClientContinuity.storage_key
+        : null;
+    }}
+    function readShellContinuity() {{
+      const key = continuityStorageKey();
+      if (!key || !window.sessionStorage) return null;
+      try {{
+        const raw = window.sessionStorage.getItem(key);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+      }} catch (error) {{
+        writeLog('Failed to read shell continuity: ' + String(error));
+        return null;
+      }}
+    }}
+    function captureShellContinuity() {{
+      return {{
+        focusedSectionId,
+        focusedLevel,
+        designerSection: currentDesignerSection,
+        validationSection: currentValidationSection,
+        stepStateBanner: currentStepStateBanner,
+      }};
+    }}
+    function writeShellContinuity(snapshot) {{
+      if (continuityHydrating) return;
+      const key = continuityStorageKey();
+      if (!key || !window.sessionStorage) return;
+      try {{
+        window.sessionStorage.setItem(key, JSON.stringify(snapshot));
+      }} catch (error) {{
+        writeLog('Failed to persist shell continuity: ' + String(error));
+      }}
+    }}
+    function applyShellContinuity(snapshot) {{
+      if (!snapshot || typeof snapshot !== 'object') return;
+      if (snapshot.designerSection) {{
+        currentDesignerSection = snapshot.designerSection;
+        writeDesignerSection(snapshot.designerSection);
+      }}
+      if (snapshot.validationSection) {{
+        currentValidationSection = snapshot.validationSection;
+        writeValidationSection(snapshot.validationSection);
+      }}
+      if (snapshot.stepStateBanner) {{
+        currentStepStateBanner = snapshot.stepStateBanner;
+        writeStepStateBanner(snapshot.stepStateBanner);
+      }}
+      if (typeof snapshot.focusedSectionId === 'string' && snapshot.focusedSectionId) {{
+        focusedSectionId = snapshot.focusedSectionId;
+      }}
+      if (typeof snapshot.focusedLevel === 'string' && snapshot.focusedLevel) {{
+        focusedLevel = snapshot.focusedLevel;
+      }}
     }}
     function formatSummary(summary, fallbackMessage) {{
       if (!summary) return fallbackMessage;
@@ -1202,6 +1268,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       designerSummaryEl.textContent = formatSummary(summary, 'Open Designer to start drafting your workflow.');
       designerDetailEl.textContent = formatDetail(detail, 'Designer detail will appear here.');
       renderSectionControls(designerControlsEl, currentDesignerSection && currentDesignerSection.controls ? currentDesignerSection.controls : []);
+      writeShellContinuity(captureShellContinuity());
     }}
     function writeValidationSection(section) {{
       currentValidationSection = section || currentValidationSection || {{}};
@@ -1210,6 +1277,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       validationSummaryEl.textContent = formatSummary(summary, 'Validation guidance will appear here.');
       validationDetailEl.textContent = formatDetail(detail, 'Validation detail will appear here.');
       renderSectionControls(validationControlsEl, currentValidationSection && currentValidationSection.controls ? currentValidationSection.controls : []);
+      writeShellContinuity(captureShellContinuity());
     }}
     function applyTemplateControl(control) {{
       const displayName = String(control && (control.template_display_name || control.label) || 'starter template');
@@ -1506,7 +1574,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeDesignerSection(initialDesignerSection);
     writeValidationSection(initialValidationSection);
     writeStepStateBanner(initialStepStateBanner);
+    applyShellContinuity(readShellContinuity());
+    continuityHydrating = false;
     setFocusedSection(focusedSectionId, focusedLevel);
+    writeShellContinuity(captureShellContinuity());
     document.getElementById('refresh').addEventListener('click', async () => {{
       const response = await fetch(initialPayload.routes.workspace_shell, {{ credentials: 'same-origin' }});
       const body = await response.json();
@@ -1553,6 +1624,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       if (body.navigation && body.navigation.default_section) {{
         setFocusedSection(body.navigation.default_section, body.navigation.default_level || 'summary');
       }}
+      applyShellContinuity(readShellContinuity());
+      setFocusedSection(focusedSectionId, focusedLevel);
+      writeShellContinuity(captureShellContinuity());
     }});
     document.getElementById('run-draft').addEventListener('click', async () => {{
       if (!launchTemplate) {{

@@ -523,6 +523,9 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['step_state_banner']['action_target'] == 'runtime.result'
     assert parsed['step_state_banner']['action_kind'] == 'focus_section'
     assert 'Result is ready.' in parsed['step_state_banner']['summary']
+    assert parsed['client_continuity']['enabled'] is True
+    assert parsed['client_continuity']['storage_key'] == 'nexa.runtime_shell.ws-001'
+    assert parsed['client_continuity']['version'] == 'phase6-batch15'
 
 
 def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_workspace() -> None:

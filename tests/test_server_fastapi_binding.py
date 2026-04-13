@@ -487,6 +487,9 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['step_state_banner']['action_target'] == 'runtime.result'
     assert payload['step_state_banner']['action_kind'] == 'focus_section'
     assert 'Result is ready.' in payload['step_state_banner']['summary']
+    assert payload['client_continuity']['enabled'] is True
+    assert payload['client_continuity']['storage_key'] == 'nexa.runtime_shell.ws-001'
+    assert payload['client_continuity']['version'] == 'phase6-batch15'
 
 
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
@@ -550,6 +553,10 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'performBannerAction' in body
     assert 'writeStepStateBanner' in body
     assert 'refreshStepStateBanner' in body
+    assert 'readShellContinuity' in body
+    assert 'writeShellContinuity' in body
+    assert 'applyShellContinuity' in body
+    assert 'nexa.runtime_shell.ws-001' in body
     assert 'writeFocusGuidance' in body
     assert 'renderRuntimeNav' in body
     assert 'setFocusedSection' in body
