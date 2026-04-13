@@ -250,6 +250,8 @@ def _make_client() -> TestClient:
             'effective_model_ref': probe_input.requested_model_ref or probe_input.default_model_ref,
             'round_trip_latency_ms': 187,
         }
+    artifact_store = {'ws-001': _working_save_artifact()}
+
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
         workspace_rows_provider=lambda: ({
@@ -287,7 +289,8 @@ def _make_client() -> TestClient:
             'continuity_source': 'server',
             'archived': False,
         } if workspace_id == 'ws-001' else None,
-        workspace_artifact_source_provider=lambda workspace_id: _working_save_artifact() if workspace_id == 'ws-001' else None,
+        workspace_artifact_source_provider=lambda workspace_id: artifact_store.get(workspace_id),
+        workspace_artifact_source_writer=lambda workspace_id, artifact_source: artifact_store.__setitem__(workspace_id, artifact_source) or artifact_source,
         run_context_provider=lambda run_id: _run_context() if run_id == "run-001" else None,
         target_catalog_provider=lambda workspace_id: {
             "snap-001": ExecutionTargetCatalogEntry(
@@ -696,6 +699,8 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
             "round_trip_latency_ms": 144,
         }
 
+    artifact_store = {'ws-001': _working_save_artifact()}
+
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
         workspace_rows_provider=lambda: ({
@@ -827,6 +832,8 @@ def test_fastapi_binding_workspace_and_onboarding_provider_continuity_round_trip
             "round_trip_latency_ms": 155,
         }
 
+    artifact_store = {'ws-001': _working_save_artifact()}
+
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
         workspace_rows_provider=lambda: ({
@@ -951,6 +958,8 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
             "round_trip_latency_ms": 155,
         }
 
+    artifact_store = {'ws-001': _working_save_artifact()}
+
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
         workspace_rows_provider=lambda: ({
@@ -1031,6 +1040,8 @@ def test_fastapi_binding_managed_secret_round_trip_enables_health_and_probe_reso
 def test_fastapi_binding_workspace_create_and_onboarding_round_trip() -> None:
     workspace_store = InMemoryWorkspaceRegistryStore()
     onboarding_store = InMemoryOnboardingStateStore()
+
+    artifact_store = {'ws-001': _working_save_artifact()}
 
     deps = FastApiRouteDependencies(
         workspace_id_factory=lambda: 'ws-roundtrip',
@@ -1113,3 +1124,28 @@ def test_fastapi_binding_workspace_create_and_onboarding_round_trip() -> None:
     assert summary_after_onboarding_payload['recent_onboarding_count'] == 1
     assert summary_after_onboarding_payload['latest_onboarding_state_id'] == 'onboard-roundtrip'
     assert summary_after_onboarding_payload['latest_activity_at'] == '2026-04-12T10:30:00+00:00'
+
+
+def test_fastapi_binding_workspace_shell_draft_write_persists_server_backed_state() -> None:
+    client = _make_client()
+    response = client.put(
+        '/api/workspaces/ws-001/shell/draft',
+        headers=_session_headers(),
+        json={
+            'template_id': 'text_summarizer',
+            'template_display_name': 'Text Summarizer',
+            'request_text': 'Summarize this article.',
+            'designer_action': 'apply_template',
+            'validation_action': 'open_validation_detail',
+            'validation_status': 'blocked',
+            'validation_message': 'Review validation before running.',
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['routes']['workspace_shell_draft_write'] == '/api/workspaces/ws-001/shell/draft'
+    assert 'Persisted template: Text Summarizer' in '\n'.join(payload['designer_section']['summary']['lines'])
+    assert 'Persisted request: Summarize this article.' in '\n'.join(payload['designer_section']['detail']['items'])
+    assert 'Persisted validation action: open_validation_detail' in '\n'.join(payload['validation_section']['summary']['lines'])
+    assert 'Persisted validation status: blocked' in '\n'.join(payload['validation_section']['detail']['items'])

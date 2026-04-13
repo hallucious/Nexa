@@ -61,6 +61,7 @@ ManagedSecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 AwsSecretsManagerClientProvider = Callable[[], Any]
 WorkspaceRowProvider = Callable[[str], Optional[Mapping[str, Any]]]
 WorkspaceArtifactSourceProvider = Callable[[str], Any | None]
+WorkspaceArtifactSourceWriter = Callable[[str, Any], Any]
 EngineStatusProvider = Callable[[str], Optional[EngineRunStatusSnapshot]]
 EngineResultProvider = Callable[[str], Optional[EngineResultEnvelope]]
 EngineLaunchDecider = Callable[..., EngineRunLaunchResponse]
@@ -140,6 +141,10 @@ def _none_workspace_artifact(_: str) -> Any | None:
     return None
 
 
+def _noop_workspace_artifact_writer(_: str, artifact_source: Any) -> Any:
+    return artifact_source
+
+
 def _none_status(_: str) -> Optional[EngineRunStatusSnapshot]:
     return None
 
@@ -183,6 +188,7 @@ class FastApiRouteDependencies:
     provider_probe_runner: Optional[Callable[..., Any]] = None
     workspace_row_provider: WorkspaceRowProvider = _none_workspace_row
     workspace_artifact_source_provider: WorkspaceArtifactSourceProvider = _none_workspace_artifact
+    workspace_artifact_source_writer: WorkspaceArtifactSourceWriter = _noop_workspace_artifact_writer
     engine_status_provider: EngineStatusProvider = _none_status
     engine_result_provider: EngineResultProvider = _none_result
     admission_policy: ProductAdmissionPolicy = field(default_factory=ProductAdmissionPolicy)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
+import json
 from typing import Any, Callable, Mapping, Optional
 
 from src.server.auth_adapter import AuthorizationGate, RequestAuthResolver
@@ -30,7 +31,7 @@ from src.server.provider_probe_models import ProductProviderProbeRequest
 from src.server.provider_secret_models import ProductProviderBindingWriteRequest
 from src.server.run_control_api import RunControlService
 from src.server.run_action_log_api import RunActionLogReadService
-from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload
+from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -47,6 +48,112 @@ def _to_jsonable(value: Any) -> Any:
 
 def _route_response(status_code: int, body: Mapping[str, Any]) -> HttpRouteResponse:
     return HttpRouteResponse(status_code=status_code, body=_to_jsonable(dict(body)))
+
+
+def _working_save_source_dict_from_model(model) -> dict[str, Any]:
+    return {
+        "meta": {
+            "format_version": getattr(model.meta, "format_version", "1.0.0"),
+            "storage_role": "working_save",
+            "working_save_id": getattr(model.meta, "working_save_id", ""),
+            "name": getattr(model.meta, "name", None),
+            "description": getattr(model.meta, "description", None),
+            "created_at": getattr(model.meta, "created_at", None),
+            "updated_at": getattr(model.meta, "updated_at", None),
+        },
+        "circuit": {
+            "nodes": list(getattr(model.circuit, "nodes", [])),
+            "edges": list(getattr(model.circuit, "edges", [])),
+            "entry": getattr(model.circuit, "entry", None),
+            "outputs": list(getattr(model.circuit, "outputs", [])),
+            "subcircuits": dict(getattr(model.circuit, "subcircuits", {})),
+        },
+        "resources": {
+            "prompts": dict(getattr(model.resources, "prompts", {})),
+            "providers": dict(getattr(model.resources, "providers", {})),
+            "plugins": dict(getattr(model.resources, "plugins", {})),
+        },
+        "state": {
+            "input": dict(getattr(model.state, "input", {})),
+            "working": dict(getattr(model.state, "working", {})),
+            "memory": dict(getattr(model.state, "memory", {})),
+        },
+        "runtime": {
+            "status": getattr(model.runtime, "status", "draft"),
+            "validation_summary": dict(getattr(model.runtime, "validation_summary", {})),
+            "last_run": dict(getattr(model.runtime, "last_run", {})),
+            "errors": list(getattr(model.runtime, "errors", [])),
+        },
+        "ui": {
+            "layout": dict(getattr(model.ui, "layout", {})),
+            "metadata": dict(getattr(model.ui, "metadata", {})),
+        },
+        "designer": dict(getattr(getattr(model, "designer", None), "data", {}) or {}),
+    }
+
+
+def _workspace_artifact_mapping(workspace_row: Mapping[str, Any] | None, artifact_source: Any | None) -> dict[str, Any]:
+    source = resolve_workspace_artifact_source(workspace_row, artifact_source)
+    if isinstance(source, Mapping):
+        return json.loads(json.dumps(_to_jsonable(source)))
+    if source is not None:
+        try:
+            from src.server.workspace_shell_runtime import _load_workspace_model
+            model, _ = _load_workspace_model(source, workspace_row)
+            return _working_save_source_dict_from_model(model)
+        except Exception:
+            pass
+    return _working_save_source_dict_from_model(_default_working_save(workspace_row))
+
+
+def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Mapping[str, Any], now_iso: str | None = None) -> dict[str, Any]:
+    data = json.loads(json.dumps(_to_jsonable(current_source)))
+    designer = dict(data.get("designer") or {})
+    designer_state = dict(designer.get("server_backed_shell_state") or {})
+    ui = dict(data.get("ui") or {})
+    metadata = dict(ui.get("metadata") or {})
+    shell_state = dict(metadata.get("runtime_shell_server_state") or {})
+
+    template_id = str(body.get("template_id") or "").strip() or None
+    template_display_name = str(body.get("template_display_name") or "").strip() or None
+    template_category = str(body.get("template_category") or "").strip() or None
+    request_text = str(body.get("request_text") or "").strip() or None
+    designer_action = str(body.get("designer_action") or "").strip() or None
+    validation_action = str(body.get("validation_action") or "").strip() or None
+    validation_status = str(body.get("validation_status") or "").strip() or None
+    validation_message = str(body.get("validation_message") or "").strip() or None
+
+    if template_id or template_display_name or request_text or designer_action:
+        if template_id is not None:
+            designer_state["selected_template_id"] = template_id
+        if template_display_name is not None:
+            designer_state["selected_template_display_name"] = template_display_name
+        if template_category is not None:
+            designer_state["selected_template_category"] = template_category
+        if request_text is not None:
+            designer_state["request_text"] = request_text
+            designer["draft_request_text"] = request_text
+        if designer_action is not None:
+            designer_state["last_action"] = designer_action
+        if now_iso:
+            designer_state["updated_at"] = now_iso
+        designer["server_backed_shell_state"] = designer_state
+        data["designer"] = designer
+
+    if validation_action or validation_status or validation_message:
+        if validation_action is not None:
+            shell_state["validation_action"] = validation_action
+        if validation_status is not None:
+            shell_state["validation_status"] = validation_status
+        if validation_message is not None:
+            shell_state["validation_message"] = validation_message
+        if now_iso:
+            shell_state["updated_at"] = now_iso
+        metadata["runtime_shell_server_state"] = shell_state
+        ui["metadata"] = metadata
+        data["ui"] = ui
+
+    return data
 
 
 def _reason_to_status_code(reason_code: str) -> int:
@@ -89,6 +196,7 @@ class RunHttpRouteSurface:
         ("put_onboarding", "PUT", "/api/users/me/onboarding"),
         ("list_workspace_runs", "GET", "/api/workspaces/{workspace_id}/runs"),
         ("get_workspace_shell", "GET", "/api/workspaces/{workspace_id}/shell"),
+        ("put_workspace_shell_draft", "PUT", "/api/workspaces/{workspace_id}/shell/draft"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
@@ -206,6 +314,85 @@ class RunHttpRouteSurface:
         payload = build_workspace_shell_runtime_payload(
             workspace_row=workspace_row,
             artifact_source=artifact_source,
+            recent_run_rows=recent_run_rows,
+            result_rows_by_run_id=result_rows_by_run_id,
+            onboarding_rows=onboarding_rows,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
+        )
+        return _route_response(200, payload)
+
+    @classmethod
+    def handle_put_workspace_shell_draft(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        artifact_source: Any | None = None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+        workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "PUT":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace shell draft write route only supports PUT."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/shell/draft"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": "workspace_shell.authentication_required",
+                "message": "Workspace shell draft write requires an authenticated session.",
+            })
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "workspace_shell_not_found",
+                "reason_code": "workspace_shell.workspace_not_found",
+                "message": "Requested workspace shell was not found.",
+            })
+        auth_input = AuthorizationInput(
+            user_id=request_auth.requested_by_user_ref or "",
+            workspace_id=workspace_context.workspace_id,
+            requested_action="write",
+            role_context=request_auth.authenticated_identity.role_refs if request_auth.authenticated_identity else (),
+        )
+        decision = AuthorizationGate.authorize_workspace_scope(auth_input, workspace_context)
+        if not decision.allowed:
+            return _route_response(_reason_to_status_code(f"workspace_shell.{decision.reason_code}"), {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": f"workspace_shell.{decision.reason_code}",
+                "message": "Current user is not allowed to update the requested workspace shell draft.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": "workspace_shell.invalid_request",
+                "message": "Workspace shell draft update payload is invalid.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        updated_source = _apply_workspace_shell_draft_patch(
+            _workspace_artifact_mapping(workspace_row, artifact_source),
+            body,
+            str(body.get("updated_at") or "").strip() or None,
+        )
+        persisted_source = workspace_artifact_source_writer(workspace_context.workspace_id, updated_source) if workspace_artifact_source_writer is not None else updated_source
+        payload = build_workspace_shell_runtime_payload(
+            workspace_row=workspace_row,
+            artifact_source=persisted_source,
             recent_run_rows=recent_run_rows,
             result_rows_by_run_id=result_rows_by_run_id,
             onboarding_rows=onboarding_rows,

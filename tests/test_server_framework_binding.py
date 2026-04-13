@@ -115,6 +115,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "put_onboarding",
         "list_workspace_runs",
         "get_workspace_shell",
+        "put_workspace_shell_draft",
         "launch_run",
         "get_run_status",
         "get_run_result",
@@ -606,3 +607,47 @@ def test_framework_binding_workspace_shell_uses_server_backed_onboarding_step_fo
     assert parsed['step_state_banner']['current_step_id'] == 'review_preview'
     assert parsed['step_state_banner']['action_target'] == 'validation.detail'
     assert parsed['continuity']['onboarding_state']['current_step'] == 'review_preview'
+
+
+def test_framework_binding_put_workspace_shell_draft_persists_template_and_validation_state() -> None:
+    artifact_store = {
+        'ws-001': {
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile"}},
+            "designer": {},
+        }
+    }
+
+    response = FrameworkRouteBindings.handle_put_workspace_shell_draft(
+        request=_request(method='PUT', path='/api/workspaces/ws-001/shell/draft', path_params={'workspace_id': 'ws-001'}, json_body={
+            'template_id': 'text_summarizer',
+            'template_display_name': 'Text Summarizer',
+            'request_text': 'Summarize this article.',
+            'designer_action': 'apply_template',
+            'validation_action': 'open_validation_detail',
+            'validation_status': 'blocked',
+            'validation_message': 'Review validation before running.',
+        }),
+        workspace_context=_workspace(),
+        workspace_row={
+            'workspace_id': 'ws-001',
+            'owner_user_id': 'user-owner',
+            'title': 'Primary Workspace',
+            'description': 'Main',
+        },
+        artifact_source=artifact_store['ws-001'],
+        workspace_artifact_source_writer=lambda workspace_id, artifact_source: artifact_store.__setitem__(workspace_id, artifact_source) or artifact_source,
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert artifact_store['ws-001']['designer']['server_backed_shell_state']['selected_template_id'] == 'text_summarizer'
+    assert artifact_store['ws-001']['designer']['draft_request_text'] == 'Summarize this article.'
+    assert artifact_store['ws-001']['ui']['metadata']['runtime_shell_server_state']['validation_action'] == 'open_validation_detail'
+    assert 'Persisted template: Text Summarizer' in '\n'.join(parsed['designer_section']['summary']['lines'])
+    assert 'Persisted validation action: open_validation_detail' in '\n'.join(parsed['validation_section']['summary']['lines'])
+    assert parsed['routes']['workspace_shell_draft_write'] == '/api/workspaces/ws-001/shell/draft'

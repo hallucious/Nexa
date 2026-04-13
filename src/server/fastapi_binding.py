@@ -377,6 +377,23 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.put("/api/workspaces/{workspace_id}/shell/draft")
+        async def put_workspace_shell_draft(request: Request, workspace_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_put_workspace_shell_draft(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                recent_run_rows=self.dependencies.workspace_run_rows_provider(workspace_id),
+                result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+                artifact_rows_lookup=self.dependencies.artifact_rows_provider,
+                trace_rows_lookup=self.dependencies.trace_rows_provider,
+                workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/app/workspaces/{workspace_id}")
         async def get_workspace_shell_page(request: Request, workspace_id: str) -> Response:
             inbound = FrameworkInboundRequest(

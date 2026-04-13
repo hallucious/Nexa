@@ -336,7 +336,69 @@ def _latest_run_artifacts_detail(preview: Mapping[str, Any] | None) -> dict[str,
     }
 
 
-def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping[str, Any] | None) -> dict[str, Any]:
+
+def _artifact_mapping_from_source(source: Any | None, model: Any) -> dict[str, Any]:
+    if isinstance(source, Mapping):
+        return json.loads(json.dumps(source))
+    if isinstance(model, WorkingSaveModel):
+        return {
+            "meta": {
+                "format_version": model.meta.format_version,
+                "storage_role": "working_save",
+                "working_save_id": model.meta.working_save_id,
+                "name": model.meta.name,
+                "description": model.meta.description,
+                "created_at": model.meta.created_at,
+                "updated_at": model.meta.updated_at,
+            },
+            "circuit": {
+                "nodes": list(model.circuit.nodes),
+                "edges": list(model.circuit.edges),
+                "entry": model.circuit.entry,
+                "outputs": list(model.circuit.outputs),
+                "subcircuits": dict(model.circuit.subcircuits),
+            },
+            "resources": {
+                "prompts": dict(model.resources.prompts),
+                "providers": dict(model.resources.providers),
+                "plugins": dict(model.resources.plugins),
+            },
+            "state": {
+                "input": dict(model.state.input),
+                "working": dict(model.state.working),
+                "memory": dict(model.state.memory),
+            },
+            "runtime": {
+                "status": model.runtime.status,
+                "validation_summary": dict(model.runtime.validation_summary),
+                "last_run": dict(model.runtime.last_run),
+                "errors": list(model.runtime.errors),
+            },
+            "ui": {"layout": dict(model.ui.layout), "metadata": dict(model.ui.metadata)},
+            "designer": dict(model.designer.data) if model.designer is not None else {},
+        }
+    return {}
+
+
+def _server_backed_shell_state(source: Any | None, model: Any) -> dict[str, Mapping[str, Any]]:
+    mapping = _artifact_mapping_from_source(source, model)
+    designer_state = {}
+    validation_state = {}
+    designer = mapping.get("designer") if isinstance(mapping, Mapping) else None
+    if isinstance(designer, Mapping):
+        raw = designer.get("server_backed_shell_state")
+        if isinstance(raw, Mapping):
+            designer_state = dict(raw)
+    ui = mapping.get("ui") if isinstance(mapping, Mapping) else None
+    if isinstance(ui, Mapping):
+        metadata = ui.get("metadata")
+        if isinstance(metadata, Mapping):
+            raw = metadata.get("runtime_shell_server_state")
+            if isinstance(raw, Mapping):
+                validation_state = dict(raw)
+    return {"designer": designer_state, "validation": validation_state}
+
+def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping[str, Any] | None, persisted_state: Mapping[str, Any] | None = None) -> dict[str, Any]:
     shell_map = shell or {}
     designer = shell_map.get("designer") or {}
     request_state = designer.get("request_state") or {}
@@ -353,16 +415,20 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
         or str(request_state.get("input_placeholder") or "").strip()
         or "Start from Designer to describe your goal or choose a starter template."
     )
+    persisted = dict(persisted_state or {})
     lines = _summary_lines(
         f"Request status: {request_state.get('request_status')}" if request_state.get("request_status") else None,
         f"Preview status: {preview_state.get('preview_status')}" if preview_state.get("preview_status") else None,
         f"Approval status: {approval_state.get('approval_status')}" if approval_state.get("approval_status") else None,
         f"Templates available: {template_count}",
         f"Connected providers: {connected_count}",
+        f"Persisted template: {persisted.get('selected_template_display_name') or persisted.get('selected_template_id')}" if persisted.get("selected_template_display_name") or persisted.get("selected_template_id") else None,
     )
     detail_items = _summary_lines(
         f"Submit enabled: {request_state.get('can_submit')}" if request_state.get("can_submit") is not None else None,
         f"Current request: {request_state.get('current_request_text')}" if request_state.get("current_request_text") else None,
+        f"Persisted request: {persisted.get('request_text')}" if persisted.get("request_text") else None,
+        f"Last designer action: {persisted.get('last_action')}" if persisted.get("last_action") else None,
         f"Provider setup summary: {provider_guidance.get('summary')}" if provider_guidance.get("summary") else None,
         *[
             f"Suggested action: {action.get('label')}"
@@ -406,7 +472,7 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
     }
 
 
-def _validation_section(shell: Mapping[str, Any] | None, *, runnable: bool = False) -> dict[str, Any]:
+def _validation_section(shell: Mapping[str, Any] | None, *, runnable: bool = False, persisted_state: Mapping[str, Any] | None = None) -> dict[str, Any]:
     shell_map = shell or {}
     validation = shell_map.get("validation") or {}
     summary_block = validation.get("summary") or {}
@@ -414,16 +480,20 @@ def _validation_section(shell: Mapping[str, Any] | None, *, runnable: bool = Fal
     overall_status = str(validation.get("overall_status") or "unknown").strip() or "unknown"
     headline = f"Validation: {overall_status}"
     primary_line = str(beginner_summary.get("cause") or beginner_summary.get("status_signal") or "Review validation before the next step.").strip() or "Review validation before the next step."
+    persisted = dict(persisted_state or {})
     lines = _summary_lines(
         primary_line,
         f"Blocking findings: {summary_block.get('blocking_count')}" if summary_block.get("blocking_count") is not None else None,
         f"Warnings: {summary_block.get('warning_count')}" if summary_block.get("warning_count") is not None else None,
         f"Next action: {beginner_summary.get('next_action_label')}" if beginner_summary.get("next_action_label") else None,
+        f"Persisted validation action: {persisted.get('validation_action')}" if persisted.get("validation_action") else None,
     )
     detail_items = _summary_lines(
         f"Requires confirmation: {summary_block.get('requires_user_confirmation')}" if summary_block.get("requires_user_confirmation") is not None else None,
         f"Can execute: {summary_block.get('can_execute')}" if summary_block.get("can_execute") is not None else None,
         f"Top issue: {summary_block.get('top_issue_label')}" if summary_block.get("top_issue_label") else None,
+        f"Persisted validation status: {persisted.get('validation_status')}" if persisted.get("validation_status") else None,
+        f"Persisted validation message: {persisted.get('validation_message')}" if persisted.get("validation_message") else None,
         *[
             f"Suggested action: {action.get('label')}"
             for action in (validation.get("suggested_actions") or [])
@@ -760,6 +830,7 @@ def build_workspace_shell_runtime_payload(
     source = resolve_workspace_artifact_source(workspace_row, artifact_source)
     model, loaded = _load_workspace_model(source, workspace_row)
     shell_vm = read_builder_shell_view_model(model)
+    server_backed_state = _server_backed_shell_state(source, model)
     template_gallery = read_template_gallery_view_model(model) if isinstance(model, WorkingSaveModel) else None
     workspace_id = str((workspace_row or {}).get("workspace_id") or getattr(getattr(model, "meta", None), "working_save_id", "workspace")).strip() or "workspace"
     workspace_title = str((workspace_row or {}).get("title") or getattr(getattr(model, "meta", None), "name", "Workspace")).strip() or "Workspace"
@@ -817,6 +888,7 @@ def build_workspace_shell_runtime_payload(
             "workspace_runs": f"/api/workspaces/{workspace_id}/runs",
             "onboarding": f"/api/users/me/onboarding?workspace_id={workspace_id}",
             "onboarding_write": "/api/users/me/onboarding",
+            "workspace_shell_draft_write": f"/api/workspaces/{workspace_id}/shell/draft",
         },
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,
@@ -830,8 +902,8 @@ def build_workspace_shell_runtime_payload(
         "latest_run_result_detail": _latest_run_result_detail(latest_run_result_preview),
         "latest_run_artifacts_detail": _latest_run_artifacts_detail(latest_run_artifacts_preview),
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
-        "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None),
-        "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None),
+        "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer")),
+        "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),
         "navigation": navigation,
         "step_state_banner": _step_state_banner(
             asdict(shell_vm),

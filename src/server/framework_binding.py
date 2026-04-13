@@ -113,6 +113,12 @@ class FrameworkRouteBindings:
             summary="Read browser-runnable workspace shell projection.",
         ),
         FrameworkRouteDefinition(
+            route_name="put_workspace_shell_draft",
+            method="PUT",
+            path_template="/api/workspaces/{workspace_id}/shell/draft",
+            summary="Persist server-backed workspace shell draft state.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_run",
             method="POST",
             path_template="/api/runs",
@@ -653,6 +659,35 @@ class FrameworkRouteBindings:
             artifact_source=artifact_source,
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_put_workspace_shell_draft(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        artifact_source: Any | None = None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+        workspace_artifact_source_writer=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_put_workspace_shell_draft(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            recent_run_rows=list(recent_run_rows),
+            result_rows_by_run_id=result_rows_by_run_id,
+            onboarding_rows=list(onboarding_rows),
+            artifact_source=artifact_source,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
+            workspace_artifact_source_writer=workspace_artifact_source_writer,
         )
         return cls.to_framework_response(response)
 
