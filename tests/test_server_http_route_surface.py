@@ -281,3 +281,18 @@ def test_result_route_can_project_ready_failure_from_engine_result() -> None:
     assert response.body["result_state"] == "ready_failure"
     assert response.body["final_status"] == "failed"
     assert response.body["result_summary"]["title"] == "Run failed"
+
+
+def test_workspace_result_history_route_returns_beginner_facing_result_cards() -> None:
+    response = RunHttpRouteSurface.handle_workspace_result_history(
+        http_request=_auth_request(method="GET", path="/api/workspaces/ws-001/result-history", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "owner_user_id": "user-owner", "title": "Primary Workspace", "created_at": "2026-04-11T12:00:00+00:00", "updated_at": "2026-04-11T12:05:00+00:00", "archived": False},
+        run_rows=({**_run_row(status="completed", status_family="terminal_success"), "run_id": "run-002", "updated_at": "2026-04-11T12:01:00+00:00", "finished_at": "2026-04-11T12:01:00+00:00"},),
+        result_rows_by_run_id={"run-002": {"run_id": "run-002", "workspace_id": "ws-001", "result_state": "ready_success", "final_status": "completed", "result_summary": "Success.", "final_output": {"output_key": "answer", "value_preview": "Latest Hello", "value_type": "string"}}},
+        artifact_rows_lookup=lambda _run_id: (),
+        recent_run_rows=(), provider_binding_rows=(), managed_secret_rows=(), provider_probe_rows=(), onboarding_rows=(),
+    )
+    assert response.status_code == 200
+    assert response.body["result_history"]["returned_count"] == 1
+    assert response.body["result_history"]["items"][0]["output_preview"] == "Latest Hello"

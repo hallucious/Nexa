@@ -25,6 +25,8 @@ class CircuitLibraryItemView:
     continue_href: str
     role_label: str | None = None
     result_history_label: str | None = None
+    result_history_href: str | None = None
+    result_history_action_label: str | None = None
     has_recent_result_history: bool = False
     archived: bool = False
     latest_run_id: str | None = None
@@ -137,6 +139,11 @@ def _items_from_summaries(summaries: Sequence[ProductWorkspaceSummaryView], *, a
             app_language=app_language,
             fallback_text="Recent result history available" if has_recent_result_history else "No recent result history yet",
         )
+        result_history_href = None
+        if has_recent_result_history:
+            result_history_href = f"/app/workspaces/{summary.workspace_id}/results"
+            if summary.last_run_id:
+                result_history_href = f"{result_history_href}?run_id={summary.last_run_id}"
         items.append(
             CircuitLibraryItemView(
                 workspace_id=summary.workspace_id,
@@ -154,6 +161,11 @@ def _items_from_summaries(summaries: Sequence[ProductWorkspaceSummaryView], *, a
                 continue_href=f"/app/workspaces/{summary.workspace_id}",
                 role_label=role_label,
                 result_history_label=result_history_label,
+                result_history_href=result_history_href,
+                result_history_action_label=(
+                    ui_text("circuit_library.action.open_results", app_language=app_language, fallback_text="Open results")
+                    if has_recent_result_history else None
+                ),
                 has_recent_result_history=has_recent_result_history,
                 archived=summary.archived,
                 latest_run_id=summary.last_run_id,

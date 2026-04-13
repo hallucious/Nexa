@@ -7,6 +7,9 @@ from src.server.workspace_onboarding_models import (
     ProductWorkspaceSummaryView,
 )
 from src.ui.circuit_library import read_circuit_library_view_model
+from src.ui.result_history import read_result_history_view_model
+from src.server.run_list_models import ProductWorkspaceRunListResponse, ProductRunListAppliedFilters, ProductRunListItemView, ProductRunListLinks
+from src.server.run_read_models import ProductExecutionTargetView, ProductRunResultResponse, ProductResultSummaryView, ProductFinalOutputView
 
 
 def _summary(
@@ -96,3 +99,32 @@ def test_circuit_library_projects_empty_state_when_no_workspaces_are_visible() -
     assert vm.returned_count == 0
     assert vm.items == []
     assert vm.empty_title == "No workflows yet"
+
+
+def test_circuit_library_projects_expose_result_history_reentry_link() -> None:
+    response = ProductWorkspaceListResponse(returned_count=1, workspaces=(_summary("ws-result", title="Results Workflow", last_run_id="run-001", last_result_status="completed", recent_run_count=1),))
+    vm = read_circuit_library_view_model(response)
+    assert vm.items[0].result_history_href == "/app/workspaces/ws-result/results?run_id=run-001"
+    assert vm.items[0].result_history_action_label == "Open results"
+
+
+def test_result_history_view_model_projects_beginner_reopen_cards() -> None:
+    response = ProductWorkspaceRunListResponse(
+        workspace_id="ws-001",
+        workspace_title="Primary Workspace",
+        returned_count=2,
+        total_visible_count=2,
+        runs=(
+            ProductRunListItemView(run_id="run-002", workspace_id="ws-001", execution_target=ProductExecutionTargetView(target_type="commit_snapshot", target_ref="snap-002"), status="completed", status_family="terminal_success", created_at="2026-04-11T12:01:00+00:00", updated_at="2026-04-11T12:01:05+00:00", completed_at="2026-04-11T12:01:05+00:00", result_state="ready_success", result_summary=ProductResultSummaryView(title="Run completed", description="Success."), links=ProductRunListLinks(status="/api/runs/run-002", result="/api/runs/run-002/result", trace="/api/runs/run-002/trace", artifacts="/api/runs/run-002/artifacts")),
+            ProductRunListItemView(run_id="run-001", workspace_id="ws-001", execution_target=ProductExecutionTargetView(target_type="commit_snapshot", target_ref="snap-001"), status="failed", status_family="terminal_failure", created_at="2026-04-11T12:00:00+00:00", updated_at="2026-04-11T12:00:05+00:00", completed_at="2026-04-11T12:00:05+00:00", result_state="ready_failure", result_summary=ProductResultSummaryView(title="Run failed", description="The run failed."), links=ProductRunListLinks(status="/api/runs/run-001", result="/api/runs/run-001/result", trace="/api/runs/run-001/trace", artifacts="/api/runs/run-001/artifacts")),
+        ),
+        applied_filters=ProductRunListAppliedFilters(limit=20),
+    )
+    vm = read_result_history_view_model(response, result_rows_by_run_id={"run-002": ProductRunResultResponse(run_id="run-002", workspace_id="ws-001", result_state="ready_success", final_status="completed", result_summary=ProductResultSummaryView(title="Last successful result", description="Success."), final_output=ProductFinalOutputView(output_key="answer", value_preview="Hello again", value_type="string"))}, selected_run_id="run-002")
+    assert vm.visible is True
+    assert vm.history_status == "ready"
+    assert vm.selected_run_id == "run-002"
+    assert vm.items[0].status_key == "success"
+    assert vm.items[0].open_result_href == "/app/workspaces/ws-001/results?run_id=run-002"
+    assert vm.items[0].output_preview == "Hello again"
+    assert vm.items[1].status_key == "failed"

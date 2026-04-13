@@ -314,6 +314,7 @@ def _make_client() -> TestClient:
                 "final_status": "completed",
                 "result_summary": "Success.",
                 "updated_at": "2026-04-11T12:01:05+00:00",
+                "final_output": {"output_key": "answer", "value_preview": "Latest Hello", "value_type": "string"},
             }
         } if workspace_id == "ws-001" else {},
         artifact_row_provider=lambda artifact_id: artifact_rows["run-001"][0] if artifact_id == "artifact-1" else None,
@@ -449,6 +450,7 @@ def test_fastapi_binding_circuit_library_routes_round_trip() -> None:
     assert api_payload['status'] == 'ready'
     assert api_payload['library']['returned_count'] == 1
     assert api_payload['library']['items'][0]['continue_href'] == '/app/workspaces/ws-001'
+    assert api_payload['library']['items'][0]['result_history_href'] == '/app/workspaces/ws-001/results?run_id=run-001'
 
     page_response = client.get('/app/library', headers=_session_headers())
     assert page_response.status_code == 200
@@ -1174,3 +1176,16 @@ def test_fastapi_binding_workspace_shell_draft_write_persists_server_backed_stat
     assert 'Persisted request: Summarize this article.' in '\n'.join(payload['designer_section']['detail']['items'])
     assert 'Persisted validation action: open_validation_detail' in '\n'.join(payload['validation_section']['summary']['lines'])
     assert 'Persisted validation status: blocked' in '\n'.join(payload['validation_section']['detail']['items'])
+
+
+def test_fastapi_binding_workspace_result_history_routes_round_trip() -> None:
+    client = _make_client()
+    api_response = client.get('/api/workspaces/ws-001/result-history', headers=_session_headers())
+    assert api_response.status_code == 200
+    api_payload = api_response.json()
+    assert api_payload['result_history']['returned_count'] >= 1
+    assert api_payload['result_history']['items'][0]['open_result_href'].startswith('/app/workspaces/ws-001/results?run_id=')
+    page_response = client.get('/app/workspaces/ws-001/results?run_id=run-002', headers=_session_headers())
+    assert page_response.status_code == 200
+    assert 'Recent results' in page_response.text
+    assert 'Latest Hello' in page_response.text

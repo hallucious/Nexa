@@ -53,6 +53,24 @@ def build_circuit_library_payload(
     )
     item_sections = []
     for item in view_model.items:
+        controls = [
+            {
+                "control_id": f"continue-{item.workspace_id}",
+                "label": item.continue_label,
+                "action_kind": "navigate",
+                "action_target": item.continue_href,
+            },
+        ]
+        if item.has_recent_result_history and item.result_history_href:
+            controls.insert(
+                0,
+                {
+                    "control_id": f"open-results-{item.workspace_id}",
+                    "label": item.result_history_action_label or "Open results",
+                    "action_kind": "navigate",
+                    "action_target": item.result_history_href,
+                },
+            )
         item_sections.append(
             {
                 "workspace_id": item.workspace_id,
@@ -60,6 +78,8 @@ def build_circuit_library_payload(
                 "status_label": item.status_label,
                 "continue_href": item.continue_href,
                 "continue_label": item.continue_label,
+                "result_history_href": item.result_history_href,
+                "result_history_action_label": item.result_history_action_label,
                 "has_recent_result_history": item.has_recent_result_history,
                 "section": build_shell_section(
                     headline=item.status_label,
@@ -69,15 +89,9 @@ def build_circuit_library_payload(
                         item.role_label,
                         item.result_history_label,
                         f"Continue route: {item.continue_href}",
+                        f"Result history route: {item.result_history_href}" if item.result_history_href else None,
                     ],
-                    controls=(
-                        {
-                            "control_id": f"continue-{item.workspace_id}",
-                            "label": item.continue_label,
-                            "action_kind": "navigate",
-                            "action_target": item.continue_href,
-                        },
-                    ),
+                    controls=tuple(controls),
                 ),
             }
         )
@@ -117,10 +131,12 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
         continue_label = escape(str(item.get("continue_label") or "Continue"))
         status_label = escape(str(item.get("status_label") or ""))
         title_text = escape(str(item.get("title") or item.get("workspace_id") or "Workflow"))
-        control_html = "".join(
-            f'<a class="action-link" href="{continue_href}">{continue_label}</a>'
-            for _control in controls[:1]
-        )
+        result_history_href = escape(str(item.get("result_history_href") or ""))
+        result_history_label = escape(str(item.get("result_history_action_label") or "Open results"))
+        control_html = ""
+        if result_history_href:
+            control_html += f'<a class="action-link secondary" href="{result_history_href}">{result_history_label}</a>'
+        control_html += f'<a class="action-link" href="{continue_href}">{continue_label}</a>'
         cards_html += f"""
         <article class=\"workflow-card\">
           <div class=\"workflow-card-head\">

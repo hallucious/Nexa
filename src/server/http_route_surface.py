@@ -33,6 +33,7 @@ from src.server.run_control_api import RunControlService
 from src.server.run_action_log_api import RunActionLogReadService
 from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
 from src.server.circuit_library_runtime import build_circuit_library_payload
+from src.server.result_history_runtime import build_workspace_result_history_payload
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -239,6 +240,7 @@ class RunHttpRouteSurface:
         ("get_history_summary", "GET", "/api/users/me/history-summary"),
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
+        ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
         ("get_workspace", "GET", "/api/workspaces/{workspace_id}"),
         ("create_workspace", "POST", "/api/workspaces"),
         ("get_provider_catalog", "GET", "/api/providers/catalog"),
@@ -767,6 +769,56 @@ class RunHttpRouteSurface:
                 "error_family": "circuit_library_read_failure",
                 "reason_code": "circuit_library.forbidden",
                 "message": "Current user is not allowed to read the circuit library.",
+            })
+        return _route_response(200, payload)
+
+    @classmethod
+    def handle_workspace_result_history(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        artifact_rows_lookup=None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace result history route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/result-history"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        request_auth = _request_auth(http_request)
+        payload = build_workspace_result_history_payload(
+            request_auth=request_auth,
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            run_rows=run_rows,
+            result_rows_by_run_id=result_rows_by_run_id,
+            artifact_rows_lookup=artifact_rows_lookup,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+            selected_run_id=str((http_request.query_params or {}).get("run_id") or "").strip() or None,
+        )
+        if payload is None:
+            return _route_response(403 if request_auth.is_authenticated else 401, {
+                "status": "rejected",
+                "error_family": "result_history_read_failure",
+                "reason_code": "result_history.forbidden" if request_auth.is_authenticated else "result_history.authentication_required",
+                "message": "Current user is not allowed to read workspace result history." if request_auth.is_authenticated else "Workspace result history requires an authenticated session.",
+                "workspace_id": workspace_id,
             })
         return _route_response(200, payload)
 
