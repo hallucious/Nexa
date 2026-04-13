@@ -14,7 +14,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.i18n import ui_language_from_sources, ui_text
-from src.ui.provider_setup_guidance import ProviderSetupGuidanceView, read_provider_setup_guidance_view_model
+from src.ui.provider_setup_guidance import ProviderSetupGuidanceView, ProviderInlineKeyEntryView, read_provider_setup_guidance_view_model, read_provider_inline_key_entry_view
 from src.ui.template_gallery import TemplateGalleryViewModel, read_template_gallery_view_model
 
 
@@ -147,6 +147,7 @@ class DesignerPanelViewModel:
     related_targets: list[DesignerTargetRefView] = field(default_factory=list)
     template_gallery: TemplateGalleryViewModel = field(default_factory=TemplateGalleryViewModel)
     provider_setup_guidance: ProviderSetupGuidanceView = field(default_factory=ProviderSetupGuidanceView)
+    provider_inline_key_entry: ProviderInlineKeyEntryView = field(default_factory=ProviderInlineKeyEntryView)
     summary_signals: list[DesignerSummarySignalView] = field(default_factory=list)
     explanation: str | None = None
 
@@ -187,6 +188,27 @@ def _provider_setup_env(source) -> Mapping[str, str] | None:
     if bool(metadata.get("provider_setup_detect_process_env")):
         return None
     return {}
+
+
+def _session_keys_from_metadata(source) -> dict[str, str]:
+    """Extract session-injected provider keys from working save UI metadata.
+
+    The UI layer stores session keys under metadata["provider_session_keys"]
+    as a dict of preset → raw_api_key.  These keys are never written to disk
+    in a commit snapshot; they live only in the working save UI layer.
+
+    This is the connection point between the UI "paste your key here" surface
+    and the semantic backend resolution path.
+    """
+    metadata = _working_save_metadata(source)
+    raw = metadata.get("provider_session_keys")
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, str] = {}
+    for preset, key in raw.items():
+        if isinstance(preset, str) and isinstance(key, str) and key.strip():
+            result[str(preset)] = key.strip()
+    return result
 
 def _is_beginner_empty_workspace(source) -> bool:
     if not isinstance(source, WorkingSaveModel):
@@ -237,6 +259,7 @@ def read_designer_panel_view_model(
     preview: CircuitDraftPreview | None = None,
     approval_flow: DesignerApprovalFlowState | None = None,
     explanation: str | None = None,
+    session_keys: dict | None = None,
 ) -> DesignerPanelViewModel:
     storage_role = _storage_role(source)
     session_mode = _session_mode_from_card(session_state_card)
@@ -245,7 +268,15 @@ def read_designer_panel_view_model(
 
     placeholder_key = "designer.request.input_placeholder.beginner" if _is_beginner_empty_workspace(source) else "designer.request.input_placeholder"
     template_gallery_vm = read_template_gallery_view_model(source)
-    provider_setup_guidance_vm = read_provider_setup_guidance_view_model(source, env=_provider_setup_env(source))
+    # Merge metadata-stored session keys with caller-supplied keys.
+    # Caller-supplied keys take priority (freshly pasted key overrides stored key).
+    metadata_session_keys = _session_keys_from_metadata(source)
+    effective_session_keys: dict = {**metadata_session_keys, **(session_keys or {})}
+    env = _provider_setup_env(source)
+    provider_setup_guidance_vm = read_provider_setup_guidance_view_model(source, env=env)
+    inline_key_entry_vm = read_provider_inline_key_entry_view(
+        source, session_keys=effective_session_keys, env=env
+    )
 
     request_state = DesignerRequestStateView(
         current_request_text=session_state_card.conversation_context.user_request_text if session_state_card is not None else None,
@@ -383,6 +414,7 @@ def read_designer_panel_view_model(
         related_targets=related_targets,
         template_gallery=template_gallery_vm,
         provider_setup_guidance=provider_setup_guidance_vm,
+        provider_inline_key_entry=inline_key_entry_vm,
         summary_signals=summary_signals,
         explanation=explanation,
     )

@@ -38,19 +38,45 @@ class DesignerRequestNormalizer:
         semantic_backend_preset_providers: Mapping[str, Any] | None = None,
         semantic_backend_preset_factories: Mapping[str, Callable[[], Any]] | None = None,
         semantic_backend_preset_use_env: bool = False,
+        semantic_backend_session_key: str | None = None,
+        semantic_backend_session_keys: Mapping[str, str] | None = None,
         use_llm_semantic_interpreter: bool = False,
         llm_backend_required: bool = False,
     ) -> None:
-        self._semantic_interpreter = build_designer_semantic_interpreter(
-            semantic_interpreter=semantic_interpreter,
-            semantic_backend=semantic_backend,
-            semantic_backend_preset=semantic_backend_preset,
-            semantic_backend_preset_providers=semantic_backend_preset_providers,
-            semantic_backend_preset_factories=semantic_backend_preset_factories,
-            semantic_backend_preset_use_env=semantic_backend_preset_use_env,
-            use_llm_semantic_interpreter=use_llm_semantic_interpreter,
-            llm_backend_required=llm_backend_required,
-        )
+        self._prebuilt_semantic_interpreter = semantic_interpreter
+        self._semantic_backend = semantic_backend
+        self._semantic_backend_preset = semantic_backend_preset
+        self._semantic_backend_preset_providers = semantic_backend_preset_providers
+        self._semantic_backend_preset_factories = semantic_backend_preset_factories
+        self._semantic_backend_preset_use_env = semantic_backend_preset_use_env
+        self._semantic_backend_session_key = (semantic_backend_session_key or "").strip() or None
+        self._semantic_backend_session_keys = self._normalize_session_keys(semantic_backend_session_keys)
+        self._use_llm_semantic_interpreter = use_llm_semantic_interpreter
+        self._llm_backend_required = llm_backend_required
+        try:
+            self._semantic_interpreter = build_designer_semantic_interpreter(
+                semantic_interpreter=semantic_interpreter,
+                semantic_backend=semantic_backend,
+                semantic_backend_preset=semantic_backend_preset,
+                semantic_backend_preset_providers=semantic_backend_preset_providers,
+                semantic_backend_preset_factories=semantic_backend_preset_factories,
+                semantic_backend_preset_use_env=semantic_backend_preset_use_env,
+                semantic_backend_session_key=self._semantic_backend_session_key,
+                semantic_backend_session_keys=self._semantic_backend_session_keys,
+                use_llm_semantic_interpreter=use_llm_semantic_interpreter,
+                llm_backend_required=llm_backend_required,
+            )
+        except ValueError as exc:
+            allow_deferred_session_resolution = (
+                semantic_interpreter is None
+                and semantic_backend is None
+                and semantic_backend_preset is not None
+                and not llm_backend_required
+                and "No provider configured for semantic backend preset" in str(exc)
+            )
+            if not allow_deferred_session_resolution:
+                raise
+            self._semantic_interpreter = build_designer_semantic_interpreter()
         self._symbolic_grounder = symbolic_grounder or DeterministicSymbolicGrounder()
         self._referential_support = DesignerReferentialResolutionSupport(self._symbolic_grounder)
         self._outcome_projector = SemanticGroundingOutcomeProjector()
@@ -60,7 +86,60 @@ class DesignerRequestNormalizer:
             self._referential_support,
         )
 
-    def normalize(self, request_text: str, *, context: RequestNormalizationContext | None = None) -> DesignerIntent:
+    @staticmethod
+    def _normalize_session_keys(session_keys: Mapping[str, str] | None) -> dict[str, str]:
+        normalized: dict[str, str] = {}
+        if not session_keys:
+            return normalized
+        for preset, key in session_keys.items():
+            if isinstance(preset, str) and isinstance(key, str) and key.strip():
+                normalized[preset] = key.strip()
+        return normalized
+
+    def _session_keys_from_context(self, context: RequestNormalizationContext | None) -> dict[str, str]:
+        if context is None or context.session_state_card is None:
+            return {}
+        notes = context.session_state_card.notes
+        raw = notes.get("provider_session_keys") if isinstance(notes, dict) else None
+        if not isinstance(raw, Mapping):
+            return {}
+        return self._normalize_session_keys(raw)
+
+    def _semantic_interpreter_for_context(
+        self,
+        context: RequestNormalizationContext | None,
+        *,
+        semantic_backend_session_key: str | None = None,
+        semantic_backend_session_keys: Mapping[str, str] | None = None,
+    ) -> DesignerSemanticInterpreter:
+        if self._prebuilt_semantic_interpreter is not None:
+            return self._prebuilt_semantic_interpreter
+        effective_session_key = (semantic_backend_session_key or "").strip() or self._semantic_backend_session_key
+        effective_session_keys = dict(self._semantic_backend_session_keys)
+        effective_session_keys.update(self._session_keys_from_context(context))
+        effective_session_keys.update(self._normalize_session_keys(semantic_backend_session_keys))
+        if not effective_session_key and not effective_session_keys:
+            return self._semantic_interpreter
+        return build_designer_semantic_interpreter(
+            semantic_backend=self._semantic_backend,
+            semantic_backend_preset=self._semantic_backend_preset,
+            semantic_backend_preset_providers=self._semantic_backend_preset_providers,
+            semantic_backend_preset_factories=self._semantic_backend_preset_factories,
+            semantic_backend_preset_use_env=self._semantic_backend_preset_use_env,
+            semantic_backend_session_key=effective_session_key,
+            semantic_backend_session_keys=effective_session_keys or None,
+            use_llm_semantic_interpreter=self._use_llm_semantic_interpreter,
+            llm_backend_required=self._llm_backend_required,
+        )
+
+    def normalize(
+        self,
+        request_text: str,
+        *,
+        context: RequestNormalizationContext | None = None,
+        semantic_backend_session_key: str | None = None,
+        semantic_backend_session_keys: Mapping[str, str] | None = None,
+    ) -> DesignerIntent:
         if not request_text or not request_text.strip():
             raise ValueError("request_text must be non-empty")
         context = context or RequestNormalizationContext()
@@ -69,7 +148,12 @@ class DesignerRequestNormalizer:
                 working_save_ref=context.session_state_card.current_working_save.savefile_ref,
                 session_state_card=context.session_state_card,
             )
-        semantic_intent = self._semantic_interpreter.interpret(request_text, context=context)
+        semantic_interpreter = self._semantic_interpreter_for_context(
+            context,
+            semantic_backend_session_key=semantic_backend_session_key,
+            semantic_backend_session_keys=semantic_backend_session_keys,
+        )
+        semantic_intent = semantic_interpreter.interpret(request_text, context=context)
         effective_request_text = semantic_intent.effective_request_text
         category = semantic_intent.category
         scope = self._intent_support.build_scope(category, effective_request_text, context)

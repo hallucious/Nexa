@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
 from src.designer.semantic_backend import GenerateTextSemanticBackend
+from src.providers.env_diagnostics import (
+    ProviderKeyResolution,
+    ProviderAccessPathType,
+    resolve_provider_key,
+)
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,59 @@ def available_semantic_backend_presets(*, env: Mapping[str, str] | None = None) 
         if any((env.get(name) or "").strip() for name in spec.env_var_names):
             available.append(spec.preset)
     return tuple(available)
+
+
+def available_semantic_backend_presets_with_session(
+    *,
+    session_keys: Mapping[str, str] | None = None,
+    env: Mapping[str, str] | None = None,
+) -> tuple[str, ...]:
+    """Return presets available via any path: session-injected key OR env var.
+
+    This is the beginner-safe version of available_semantic_backend_presets().
+    A preset is considered available if the user has supplied a key through the
+    UI (session_keys) even when no env var is set.
+
+    Args:
+        session_keys: Mapping of preset → raw API key entered in the UI.
+                      Keys are not stored persistently; they live only for the
+                      current session.
+        env:          Optional env override (defaults to os.environ).
+    """
+    session_keys = session_keys or {}
+    env = os.environ if env is None else env
+    available: list[str] = []
+    for spec in _PRESET_SPECS:
+        # Session-injected key takes priority
+        if (session_keys.get(spec.preset) or "").strip():
+            available.append(spec.preset)
+            continue
+        # Env var fallback
+        if any((env.get(name) or "").strip() for name in spec.env_var_names):
+            available.append(spec.preset)
+    return tuple(available)
+
+
+def resolve_semantic_backend_key(
+    preset: str,
+    *,
+    session_key: str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> ProviderKeyResolution:
+    """Resolve an API key for a preset through the layered access path.
+
+    Wraps env_diagnostics.resolve_provider_key() with preset-specific metadata.
+    Callers receive a ProviderKeyResolution that describes both the resolved key
+    and which path was used (session, env var, or .env file).
+    """
+    canonical = normalize_semantic_backend_preset(preset)
+    spec = _PRESET_TO_SPEC[canonical]
+    return resolve_provider_key(
+        canonical,
+        spec.env_var_names,
+        session_key=session_key,
+        env=env,
+    )
 
 
 def missing_semantic_backend_preset_env_vars(
@@ -195,6 +253,104 @@ def build_live_semantic_provider_from_preset(preset: str) -> Any:
 def semantic_backend_preset_factory_from_env(preset: str) -> Callable[[], Any]:
     canonical = normalize_semantic_backend_preset(preset)
     return _default_provider_factory_for_preset(canonical)
+
+
+def build_semantic_backend_from_key(
+    preset: str,
+    api_key: str,
+    *,
+    temperature: float = 0.0,
+    max_output_tokens: int = 1200,
+    instructions: str | None = None,
+    prompt_builder: Callable[[str, str, Mapping[str, Any]], str] | None = None,
+) -> GenerateTextSemanticBackend:
+    """Build a semantic backend from a directly-supplied API key.
+
+    This is the beginner-safe entry point.  No env var lookup is performed;
+    the caller supplies the key that the user entered in the UI.
+
+    Typical flow:
+      1. User selects a provider in the ProviderInlineKeyEntryView UI.
+      2. User pastes their API key.
+      3. UI calls resolve_semantic_backend_key(preset, session_key=pasted_key).
+      4. If resolved, UI calls build_semantic_backend_from_key(preset, api_key).
+
+    Args:
+        preset:    Canonical preset name ("gpt", "claude", "gemini", "perplexity").
+        api_key:   Raw API key entered by the user.
+    """
+    if not api_key or not api_key.strip():
+        raise ValueError("api_key must be non-empty when building from inline key")
+    canonical = normalize_semantic_backend_preset(preset)
+    spec = _PRESET_TO_SPEC[canonical]
+    provider = _build_provider_from_inline_key(canonical, api_key.strip())
+    return GenerateTextSemanticBackend(
+        provider=provider,
+        provider_name=spec.provider_name,
+        temperature=temperature,
+        max_output_tokens=max_output_tokens,
+        instructions=instructions,
+        prompt_builder=prompt_builder,
+    )
+
+
+def build_semantic_backend_with_session(
+    preset: str,
+    *,
+    session_key: str | None = None,
+    env: Mapping[str, str] | None = None,
+    temperature: float = 0.0,
+    max_output_tokens: int = 1200,
+    instructions: str | None = None,
+    prompt_builder: Callable[[str, str, Mapping[str, Any]], str] | None = None,
+) -> GenerateTextSemanticBackend:
+    """Build a semantic backend through the full layered resolution path.
+
+    Tries session_key first (beginner / UI path), then env var, then .env file.
+    Raises ValueError if no key is available on any path.
+    """
+    resolution = resolve_semantic_backend_key(preset, session_key=session_key, env=env)
+    if not resolution.access_path.resolved or not resolution.api_key:
+        raise ValueError(
+            f"No API key available for preset {preset!r}. "
+            "Enter your key in the provider setup UI or set the corresponding environment variable."
+        )
+    if resolution.access_path.path_type == ProviderAccessPathType.SESSION_INJECTED:
+        return build_semantic_backend_from_key(
+            preset,
+            resolution.api_key,
+            temperature=temperature,
+            max_output_tokens=max_output_tokens,
+            instructions=instructions,
+            prompt_builder=prompt_builder,
+        )
+    # env var or .env file — use existing env-based factory
+    return build_semantic_backend_from_preset(
+        preset,
+        use_env_provider=True,
+        temperature=temperature,
+        max_output_tokens=max_output_tokens,
+        instructions=instructions,
+        prompt_builder=prompt_builder,
+    )
+
+
+def _build_provider_from_inline_key(canonical_preset: str, api_key: str) -> Any:
+    """Build a provider instance using a directly-supplied API key."""
+    if canonical_preset == "gpt":
+        from src.providers.gpt_provider import GPTProvider
+        return GPTProvider.from_api_key(api_key)
+    if canonical_preset == "claude":
+        from src.providers.claude_provider import ClaudeProvider
+        return ClaudeProvider.from_api_key(api_key)
+    if canonical_preset == "gemini":
+        from src.providers.gemini_provider import GeminiProvider
+        return GeminiProvider.from_api_key(api_key)
+    if canonical_preset == "perplexity":
+        from src.providers.perplexity_provider import PerplexityProvider
+        return PerplexityProvider.from_api_key(api_key)
+    supported = ", ".join(supported_semantic_backend_presets())
+    raise ValueError(f"unknown semantic backend preset: {canonical_preset!r}. Supported presets: {supported}")
 
 
 def _default_provider_factory_for_preset(canonical_preset: str) -> Callable[[], Any]:

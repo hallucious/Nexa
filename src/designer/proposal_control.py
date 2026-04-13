@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from typing import Mapping
 
 from src.designer.models.designer_proposal_control import (
     DesignerControlledProposalResult,
@@ -35,6 +36,8 @@ class DesignerProposalControlPlane:
         session_state_card: DesignerSessionStateCard | None = None,
         control_state: DesignerProposalControlState | None = None,
         control_policy: ProposalControlPolicy | None = None,
+        semantic_backend_session_key: str | None = None,
+        semantic_backend_session_keys: Mapping[str, str] | None = None,
     ) -> DesignerControlledProposalResult:
         policy = control_policy or ProposalControlPolicy()
         state = control_state or self._initial_state(session_state_card)
@@ -43,6 +46,8 @@ class DesignerProposalControlPlane:
                 request_text,
                 working_save_ref=working_save_ref,
                 session_state_card=session_state_card,
+                semantic_backend_session_key=semantic_backend_session_key,
+                semantic_backend_session_keys=semantic_backend_session_keys,
             )
         except ValueError as exc:
             result = self._from_exception(state, policy, exc)

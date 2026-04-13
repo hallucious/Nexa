@@ -63,6 +63,11 @@ class GeminiProvider:
         model = os.environ.get("GEMINI_MODEL", "gemini-2.5-pro")
         return GeminiProvider(api_key, model=model)
 
+    @staticmethod
+    def from_api_key(api_key: str) -> "GeminiProvider":
+        """Build from a directly-supplied API key (beginner / session path)."""
+        return GeminiProvider(api_key)
+
     def judge_continuity(self, *, pic_text: str, current_text: str) -> GeminiResult:
         prompt = (
             "You are a strict reviewer for project semantic continuity.\n"

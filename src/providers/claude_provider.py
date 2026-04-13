@@ -40,6 +40,11 @@ class ClaudeProvider:
         timeout_i = int(timeout) if timeout.isdigit() else 60
         return cls(api_key, model=model, timeout_sec=timeout_i)
 
+    @classmethod
+    def from_api_key(cls, api_key: str) -> "ClaudeProvider":
+        """Build from a directly-supplied API key (beginner / session path)."""
+        return cls(api_key)
+
     def fingerprint(self) -> str:
         info = {
             "provider": type(self).__name__,

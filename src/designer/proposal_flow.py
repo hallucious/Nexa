@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import inspect
+from typing import Any, Mapping
 
 from src.designer.models.circuit_draft_preview import CircuitDraftPreview
 from src.designer.models.designer_proposal_control import (
@@ -130,6 +132,48 @@ def get_starter_circuit_template(template_id: str) -> StarterCircuitTemplateSpec
     raise KeyError(f"unknown starter template: {template_id}")
 
 
+def _call_normalizer_with_optional_session_keys(
+    normalizer: Any,
+    request_text: str,
+    *,
+    context: RequestNormalizationContext,
+    semantic_backend_session_key: str | None,
+    semantic_backend_session_keys: Mapping[str, str] | None,
+) -> DesignerIntent:
+    """Call normalize() without breaking older test doubles or consumers.
+
+    Some existing normalizer stubs only accept `(request_text, *, context=...)`.
+    The Phase 4 session-key wiring adds optional keyword arguments, but proposal
+    flow must remain backward-compatible with older doubles and legacy callers.
+    """
+
+    normalize = normalizer.normalize
+    try:
+        parameters = inspect.signature(normalize).parameters
+    except (TypeError, ValueError):
+        parameters = {}
+
+    kwargs: dict[str, Any] = {"context": context}
+    if "semantic_backend_session_key" in parameters:
+        kwargs["semantic_backend_session_key"] = semantic_backend_session_key
+    if "semantic_backend_session_keys" in parameters:
+        kwargs["semantic_backend_session_keys"] = semantic_backend_session_keys
+    return normalize(request_text, **kwargs)
+
+
+def _session_keys_from_session_state_card(session_state_card: DesignerSessionStateCard | None) -> dict[str, str]:
+    if session_state_card is None or not isinstance(session_state_card.notes, dict):
+        return {}
+    raw = session_state_card.notes.get("provider_session_keys")
+    if not isinstance(raw, Mapping):
+        return {}
+    result: dict[str, str] = {}
+    for preset, key in raw.items():
+        if isinstance(preset, str) and isinstance(key, str) and key.strip():
+            result[preset] = key.strip()
+    return result
+
+
 class DesignerProposalFlow:
     def __init__(
         self,
@@ -154,6 +198,8 @@ class DesignerProposalFlow:
         *,
         working_save_ref: str | None = None,
         session_state_card: DesignerSessionStateCard | None = None,
+        semantic_backend_session_key: str | None = None,
+        semantic_backend_session_keys: Mapping[str, str] | None = None,
     ) -> DesignerProposalBundle:
         session_state_card = session_state_card or self._session_state_card_builder.build(
             request_text=request_text,
@@ -162,7 +208,18 @@ class DesignerProposalFlow:
             target_scope_mode="existing_circuit" if working_save_ref else "new_circuit",
         )
         context = RequestNormalizationContext(working_save_ref=working_save_ref, session_state_card=session_state_card)
-        intent = self._normalizer.normalize(request_text, context=context)
+        effective_session_keys = dict(_session_keys_from_session_state_card(session_state_card))
+        if semantic_backend_session_keys:
+            for preset, key in semantic_backend_session_keys.items():
+                if isinstance(preset, str) and isinstance(key, str) and key.strip():
+                    effective_session_keys[preset] = key.strip()
+        intent = _call_normalizer_with_optional_session_keys(
+            self._normalizer,
+            request_text,
+            context=context,
+            semantic_backend_session_key=semantic_backend_session_key,
+            semantic_backend_session_keys=effective_session_keys or None,
+        )
         if intent.category in {"EXPLAIN_CIRCUIT", "ANALYZE_CIRCUIT"}:
             raise ValueError("Step 2 proposal flow only supports mutation-oriented designer requests")
         patch = self._patch_builder.build(intent)
@@ -217,6 +274,8 @@ class DesignerProposalFlow:
         session_state_card: DesignerSessionStateCard | None = None,
         control_state: DesignerProposalControlState | None = None,
         control_policy: ProposalControlPolicy | None = None,
+        semantic_backend_session_key: str | None = None,
+        semantic_backend_session_keys: Mapping[str, str] | None = None,
     ) -> DesignerControlledProposalResult:
         from src.designer.proposal_control import DesignerProposalControlPlane
 
@@ -227,6 +286,8 @@ class DesignerProposalFlow:
             session_state_card=session_state_card,
             control_state=control_state,
             control_policy=control_policy,
+            semantic_backend_session_key=semantic_backend_session_key,
+            semantic_backend_session_keys=semantic_backend_session_keys,
         )
 
 

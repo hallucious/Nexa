@@ -246,6 +246,7 @@ def read_builder_shell_view_model(
     preview: CircuitDraftPreview | None = None,
     approval_flow: DesignerApprovalFlowState | None = None,
     explanation: str | None = None,
+    session_keys: dict | None = None,
 ) -> BuilderShellViewModel:
     source_unwrapped = _unwrap(source)
     role = _storage_role(source_unwrapped)
@@ -268,7 +269,32 @@ def read_builder_shell_view_model(
     artifact_vm = read_artifact_viewer_view_model(source_unwrapped if source_unwrapped is not None else execution_record, execution_record=execution_record, selected_artifact_id=selected_artifact_id) if (source_unwrapped is not None or execution_record is not None) else None
     inspector_vm = read_selected_object_view_model(source_unwrapped, selected_ref=resolved_selected_ref, validation_report=validation_report, execution_record=execution_record, preview_overlay=preview_overlay) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
     validation_vm = read_validation_panel_view_model(source_unwrapped, validation_report=validation_report, precheck=precheck, execution_record=execution_record) if source_unwrapped is not None else None
-    designer_vm = read_designer_panel_view_model(source_unwrapped, session_state_card=session_state_card, intent=intent, patch_plan=patch_plan, precheck=precheck, preview=preview, approval_flow=approval_flow) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
+    # Merge caller-supplied session_keys with any keys already stored in the
+    # working save UI metadata.  Caller-supplied keys take priority so the UI
+    # can inject a freshly-pasted key without overwriting existing metadata.
+    effective_session_keys: dict = {}
+    if isinstance(source_unwrapped, WorkingSaveModel):
+        metadata_keys = {
+            k: v
+            for k, v in (source_unwrapped.ui.metadata or {}).get("provider_session_keys", {}).items()
+            if isinstance(k, str) and isinstance(v, str) and v.strip()
+        }
+        effective_session_keys.update(metadata_keys)
+    if session_keys:
+        effective_session_keys.update(
+            {k: v for k, v in session_keys.items() if isinstance(k, str) and isinstance(v, str) and v.strip()}
+        )
+
+    designer_vm = read_designer_panel_view_model(
+        source_unwrapped,
+        session_state_card=session_state_card,
+        intent=intent,
+        patch_plan=patch_plan,
+        precheck=precheck,
+        preview=preview,
+        approval_flow=approval_flow,
+        session_keys=effective_session_keys or None,
+    ) if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel)) else None
 
     diff_vm = None
     if diff_mode and diff_source is not None and diff_target is not None:

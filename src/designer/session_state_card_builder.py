@@ -39,6 +39,19 @@ from src.designer.session_state_persistence import (
 _COMMITTED_SUMMARY_EXPOSED_HISTORY_LIMIT = 2
 
 
+def _provider_session_keys_from_metadata(metadata: Any) -> dict[str, str]:
+    if not isinstance(metadata, dict):
+        return {}
+    raw = metadata.get("provider_session_keys")
+    if not isinstance(raw, dict):
+        return {}
+    result: dict[str, str] = {}
+    for preset, key in raw.items():
+        if isinstance(preset, str) and isinstance(key, str) and key.strip():
+            result[preset] = key.strip()
+    return result
+
+
 class DesignerSessionStateCardBuilder:
     def build(
         self,
@@ -110,6 +123,11 @@ class DesignerSessionStateCardBuilder:
         persisted_revision = None if fresh_cycle_from_committed_baseline else (persisted_card.revision_state if persisted_card is not None else None)
         persisted_conversation = persisted_card.conversation_context if persisted_card is not None else None
         notes = dict(persisted_card.notes) if persisted_card is not None else {}
+        provider_session_keys = self._provider_session_keys_from_artifact(artifact)
+        if provider_session_keys:
+            notes["provider_session_keys"] = provider_session_keys
+        else:
+            notes.pop("provider_session_keys", None)
         notes = self._apply_committed_summary_exposure_policy(notes)
         if fresh_cycle_from_committed_baseline:
             notes = self._prepare_notes_for_fresh_cycle_from_committed_baseline(
@@ -262,6 +280,12 @@ class DesignerSessionStateCardBuilder:
             ),
             notes=notes,
         )
+
+    def _provider_session_keys_from_artifact(self, artifact: WorkingSaveModel | CommitSnapshotModel | None) -> dict[str, str]:
+        if not isinstance(artifact, WorkingSaveModel):
+            return {}
+        metadata = getattr(getattr(artifact, "ui", None), "metadata", None)
+        return _provider_session_keys_from_metadata(metadata)
 
     def _build_working_save_reality(self, artifact: WorkingSaveModel | CommitSnapshotModel | None) -> WorkingSaveReality:
         if artifact is None:

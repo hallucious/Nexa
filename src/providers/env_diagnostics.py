@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Mapping
 
 NEXA_DOTENV_INSTALLED = "NEXA_DOTENV_INSTALLED"
 NEXA_DOTENV_PATH = "NEXA_DOTENV_PATH"
@@ -171,11 +172,131 @@ def read_env_setup_status() -> EnvSetupStatus:
     )
 
 
+class ProviderAccessPathType:
+    SESSION_INJECTED = "session_injected"
+    ENV_VAR = "env_var"
+    DOTENV_FILE = "dotenv_file"
+    UNAVAILABLE = "unavailable"
+
+
+def _mask_key(api_key: str) -> str:
+    if len(api_key) <= 8:
+        return "****"
+    return f"{api_key[:4]}...{api_key[-4:]}"
+
+
+@dataclass(frozen=True)
+class ProviderAccessPath:
+    path_type: str
+    resolved: bool
+    key_hint: str | None = None
+    source_label: str | None = None
+
+
+@dataclass(frozen=True)
+class ProviderKeyResolution:
+    preset: str
+    access_path: ProviderAccessPath
+    api_key: str | None
+
+
+def _resolve_from_env_mapping(env_var_names: tuple[str, ...], env: Mapping[str, str]) -> tuple[str, str] | None:
+    for var_name in env_var_names:
+        value = (env.get(var_name) or "").strip()
+        if value:
+            return var_name, value
+    return None
+
+
+def resolve_provider_key(
+    preset: str,
+    env_var_names: tuple[str, ...],
+    *,
+    session_key: str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> ProviderKeyResolution:
+    """Resolve a provider API key through layered priority.
+
+    Priority:
+      1. session_key — API key supplied directly by the UI.
+      2. env var     — key in the provided env mapping or current process env.
+      3. .env file   — only when `env is None`; explicit env mappings stay isolated.
+      4. unavailable — no key found anywhere.
+
+    Important isolation rule:
+      When `env` is passed explicitly, it is treated as the full environment
+      snapshot for this resolution. We must not fall back to the process
+      environment or load a real `.env` file, otherwise tests and UI preview
+      state become polluted by machine-local configuration.
+    """
+
+    if session_key and session_key.strip():
+        key = session_key.strip()
+        return ProviderKeyResolution(
+            preset=preset,
+            access_path=ProviderAccessPath(
+                path_type=ProviderAccessPathType.SESSION_INJECTED,
+                resolved=True,
+                key_hint=_mask_key(key),
+                source_label="entered in UI",
+            ),
+            api_key=key,
+        )
+
+    effective_env: Mapping[str, str] = env if env is not None else os.environ
+    env_match = _resolve_from_env_mapping(env_var_names, effective_env)
+    if env_match is not None:
+        var_name, value = env_match
+        return ProviderKeyResolution(
+            preset=preset,
+            access_path=ProviderAccessPath(
+                path_type=ProviderAccessPathType.ENV_VAR,
+                resolved=True,
+                key_hint=_mask_key(value),
+                source_label=f"env:{var_name}",
+            ),
+            api_key=value,
+        )
+
+    if env is None:
+        dotenv_path = _find_existing_env_file()
+        if dotenv_path is not None and _dotenv_installed():
+            _try_load_env_file(dotenv_path)
+            env_match = _resolve_from_env_mapping(env_var_names, os.environ)
+            if env_match is not None:
+                var_name, value = env_match
+                return ProviderKeyResolution(
+                    preset=preset,
+                    access_path=ProviderAccessPath(
+                        path_type=ProviderAccessPathType.DOTENV_FILE,
+                        resolved=True,
+                        key_hint=_mask_key(value),
+                        source_label=f".env:{var_name}",
+                    ),
+                    api_key=value,
+                )
+
+    return ProviderKeyResolution(
+        preset=preset,
+        access_path=ProviderAccessPath(
+            path_type=ProviderAccessPathType.UNAVAILABLE,
+            resolved=False,
+            key_hint=None,
+            source_label=None,
+        ),
+        api_key=None,
+    )
+
+
 __all__ = [
     "EnvSetupStatus",
     "NEXA_DOTENV_INSTALLED",
     "NEXA_DOTENV_PATH",
+    "ProviderAccessPath",
+    "ProviderAccessPathType",
+    "ProviderKeyResolution",
     "publish_dotenv_status",
     "read_env_setup_status",
     "resolve_api_key_or_raise",
+    "resolve_provider_key",
 ]
