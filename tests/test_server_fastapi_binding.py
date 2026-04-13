@@ -531,6 +531,11 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'Validation review' in body
     assert 'Designer detail layer' in body
     assert 'Validation detail layer' in body
+    assert 'designer-controls' in body
+    assert 'validation-controls' in body
+    assert 'performShellAction' in body
+    assert 'Use Text Summarizer' in body
+    assert 'Open Validation detail' in body
     assert 'focus-state' in body
     assert 'focus-guidance' in body
     assert 'Recommended next: Result' in body

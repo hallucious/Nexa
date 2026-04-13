@@ -337,7 +337,8 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
     provider_inline = designer.get("provider_inline_key_entry") or {}
     provider_guidance = designer.get("provider_setup_guidance") or {}
     gallery = template_gallery or designer.get("template_gallery") or {}
-    template_count = len(gallery.get("templates") or ())
+    templates = tuple(gallery.get("templates") or ())
+    template_count = len(templates)
     connected_count = int(provider_inline.get("connected_count") or 0)
     summary_text = (
         str(preview_state.get("one_sentence_summary") or "").strip()
@@ -361,13 +362,43 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
             if isinstance(action, Mapping) and action.get("label")
         ][:3],
     )
+    controls: list[dict[str, Any]] = [
+        {
+            "control_id": "designer-open-detail",
+            "label": "Open Designer detail",
+            "action_kind": "focus_section",
+            "action_target": "designer.detail",
+        },
+        {
+            "control_id": "designer-open-templates",
+            "label": "Open starter templates",
+            "action_kind": "focus_auxiliary",
+            "action_target": "templates",
+        },
+    ]
+    if templates:
+        first_template = templates[0]
+        controls.insert(
+            0,
+            {
+                "control_id": f"designer-template-{first_template.get('template_id') or 'primary'}",
+                "label": f"Use {str(first_template.get('display_name') or 'starter template').strip()}",
+                "action_kind": "apply_template",
+                "action_target": str(first_template.get("template_id") or "").strip() or "template",
+                "request_text": str(first_template.get("designer_request_text") or "").strip() or None,
+                "template_display_name": str(first_template.get("display_name") or "").strip() or None,
+                "template_summary": str(first_template.get("summary") or "").strip() or None,
+                "template_category": str(first_template.get("category") or "").strip() or None,
+            },
+        )
     return {
         "summary": {"headline": "Designer workspace", "lines": [summary_text, *lines]},
         "detail": {"title": "Designer detail", "items": detail_items or ["Use Designer to draft or review the workflow before running."]},
+        "controls": controls,
     }
 
 
-def _validation_section(shell: Mapping[str, Any] | None) -> dict[str, Any]:
+def _validation_section(shell: Mapping[str, Any] | None, *, runnable: bool = False) -> dict[str, Any]:
     shell_map = shell or {}
     validation = shell_map.get("validation") or {}
     summary_block = validation.get("summary") or {}
@@ -391,9 +422,45 @@ def _validation_section(shell: Mapping[str, Any] | None) -> dict[str, Any]:
             if isinstance(action, Mapping) and action.get("label")
         ][:3],
     )
+    controls: list[dict[str, Any]] = [
+        {
+            "control_id": "validation-open-detail",
+            "label": "Open Validation detail",
+            "action_kind": "focus_section",
+            "action_target": "validation.detail",
+        },
+        {
+            "control_id": "validation-open-help",
+            "label": "Open contextual help",
+            "action_kind": "focus_auxiliary",
+            "action_target": "help",
+        },
+    ]
+    can_execute = bool(summary_block.get("can_execute"))
+    if runnable and can_execute:
+        controls.insert(
+            0,
+            {
+                "control_id": "validation-run-draft",
+                "label": "Run draft",
+                "action_kind": "run_draft",
+                "action_target": "execution",
+            },
+        )
+    elif overall_status == "blocked" or summary_block.get("blocking_count"):
+        controls.insert(
+            0,
+            {
+                "control_id": "validation-open-designer",
+                "label": "Open Designer",
+                "action_kind": "focus_section",
+                "action_target": "designer.detail",
+            },
+        )
     return {
         "summary": {"headline": headline, "lines": lines},
         "detail": {"title": "Validation detail", "items": detail_items or ["Validation details will appear here as findings accumulate."]},
+        "controls": controls,
     }
 
 
@@ -714,7 +781,7 @@ def build_workspace_shell_runtime_payload(
         "latest_run_artifacts_detail": _latest_run_artifacts_detail(latest_run_artifacts_preview),
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None),
-        "validation_section": _validation_section(asdict(shell_vm)),
+        "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None),
         "navigation": navigation,
         "step_state_banner": _step_state_banner(
             asdict(shell_vm),
@@ -836,10 +903,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <section id="designer-summary-card" tabindex="-1" class="card focus-target">
         <h2>Designer workspace</h2>
         <pre id="designer-summary">Open Designer to start drafting your workflow.</pre>
+        <div id="designer-controls" class="actions"></div>
       </section>
       <section id="validation-summary-card" tabindex="-1" class="card focus-target">
         <h2>Validation review</h2>
         <pre id="validation-summary">Validation guidance will appear here.</pre>
+        <div id="validation-controls" class="actions"></div>
       </section>
     </div>
     <div class="row">
@@ -947,8 +1016,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const latestRunArtifactsDetailEl = document.getElementById('latest-run-artifacts-detail');
     const designerSummaryEl = document.getElementById('designer-summary');
     const designerDetailEl = document.getElementById('designer-detail');
+    const designerControlsEl = document.getElementById('designer-controls');
     const validationSummaryEl = document.getElementById('validation-summary');
     const validationDetailEl = document.getElementById('validation-detail');
+    const validationControlsEl = document.getElementById('validation-controls');
     const runtimeNavEl = document.getElementById('runtime-nav');
     const focusStateEl = document.getElementById('focus-state');
     const focusGuidanceEl = document.getElementById('focus-guidance');
@@ -968,6 +1039,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let latestResultBodyState = null;
     let latestTraceBodyState = null;
     let latestArtifactsBodyState = null;
+    let currentDesignerSection = initialDesignerSection || null;
+    let currentValidationSection = initialValidationSection || null;
+    let currentStepStateBanner = initialStepStateBanner || null;
     function writeLog(message) {{
       logEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
     }}
@@ -1099,54 +1173,139 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }};
     }}
     function auxiliaryFocusTargetId(actionTarget) {{
-      if (actionTarget === 'designer') return 'starter-templates-card';
-      if (actionTarget === 'validation') return 'contextual-help-card';
+      if (actionTarget === 'designer') return 'designer-summary-card';
+      if (actionTarget === 'validation') return 'validation-summary-card';
+      if (actionTarget === 'templates') return 'starter-templates-card';
+      if (actionTarget === 'help') return 'contextual-help-card';
       return null;
     }}
-    async function performBannerAction(banner) {{
-      const actionTarget = banner && typeof banner.action_target === 'string' ? banner.action_target : '';
-      if (!actionTarget) {{
-        writeLog('No recommended action is available.');
-        return;
+    function renderSectionControls(container, controls) {{
+      if (!container) return;
+      container.innerHTML = '';
+      const items = Array.isArray(controls) ? controls : [];
+      for (const control of items) {{
+        if (!control || typeof control !== 'object') continue;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'secondary';
+        button.textContent = String(control.label || control.control_id || 'Action');
+        button.dataset.actionKind = String(control.action_kind || 'none');
+        button.dataset.actionTarget = String(control.action_target || '');
+        button.addEventListener('click', async () => performShellAction(control));
+        container.appendChild(button);
       }}
-      if (actionTarget === 'execution') {{
+    }}
+    function writeDesignerSection(section) {{
+      currentDesignerSection = section || currentDesignerSection || {{}};
+      const summary = currentDesignerSection && currentDesignerSection.summary ? currentDesignerSection.summary : null;
+      const detail = currentDesignerSection && currentDesignerSection.detail ? currentDesignerSection.detail : null;
+      designerSummaryEl.textContent = formatSummary(summary, 'Open Designer to start drafting your workflow.');
+      designerDetailEl.textContent = formatDetail(detail, 'Designer detail will appear here.');
+      renderSectionControls(designerControlsEl, currentDesignerSection && currentDesignerSection.controls ? currentDesignerSection.controls : []);
+    }}
+    function writeValidationSection(section) {{
+      currentValidationSection = section || currentValidationSection || {{}};
+      const summary = currentValidationSection && currentValidationSection.summary ? currentValidationSection.summary : null;
+      const detail = currentValidationSection && currentValidationSection.detail ? currentValidationSection.detail : null;
+      validationSummaryEl.textContent = formatSummary(summary, 'Validation guidance will appear here.');
+      validationDetailEl.textContent = formatDetail(detail, 'Validation detail will appear here.');
+      renderSectionControls(validationControlsEl, currentValidationSection && currentValidationSection.controls ? currentValidationSection.controls : []);
+    }}
+    function applyTemplateControl(control) {{
+      const displayName = String(control && (control.template_display_name || control.label) || 'starter template');
+      const templateSummary = String(control && control.template_summary || 'Template selected.');
+      const requestText = String(control && control.request_text || '').trim();
+      const category = String(control && control.template_category || '').trim();
+      const templateId = String(control && control.action_target || '').trim();
+      writeDesignerSection({{
+        summary: {{ headline: 'Designer workspace', lines: [
+          'Template selected: ' + displayName,
+          templateSummary,
+          requestText ? ('Designer request: ' + requestText) : null,
+        ].filter(Boolean) }},
+        detail: {{ title: 'Designer detail', items: [
+          templateId ? ('Template id: ' + templateId) : null,
+          category ? ('Category: ' + category) : null,
+          requestText ? ('Designer request: ' + requestText) : null,
+          'Next step: review Validation, then run the draft when ready.',
+        ].filter(Boolean) }},
+        controls: currentDesignerSection && currentDesignerSection.controls ? currentDesignerSection.controls : [],
+      }});
+      writeStepStateBanner({{
+        title: 'Step 2 of 5 — Review template',
+        summary: 'Template "' + displayName + '" is loaded into Designer. Review the draft, then continue to Validation.',
+        action_label: 'Review Validation',
+        action_target: 'validation.detail',
+        action_kind: 'focus_section',
+        recommended_section: 'designer',
+        phase: 'pre_run',
+      }});
+      setFocusedSection('designer', 'detail');
+      writeLog('Loaded template into Designer: ' + displayName);
+    }}
+    async function performShellAction(control) {{
+      const kind = control && typeof control.action_kind === 'string' ? control.action_kind : 'none';
+      const target = control && typeof control.action_target === 'string' ? control.action_target : '';
+      if (kind === 'run_draft') {{
         document.getElementById('run-draft').click();
         return;
       }}
-      if (actionTarget === 'runtime.status') {{
-        const body = await refreshLatestRunStatus();
-        writeLog(body || 'No recent run is available yet.');
+      if (kind === 'apply_template') {{
+        applyTemplateControl(control);
         return;
       }}
-      if (actionTarget === 'runtime.result') {{
-        const body = await refreshLatestRunResult();
-        writeLog(body || 'No recent run result is available yet.');
-        return;
-      }}
-      if (actionTarget === 'runtime.trace') {{
-        const body = await refreshLatestRunTrace();
-        writeLog(body || 'No recent trace is available yet.');
-        return;
-      }}
-      if (actionTarget === 'runtime.artifacts') {{
-        const body = await refreshLatestRunArtifacts();
-        writeLog(body || 'No recent artifacts are available yet.');
-        return;
-      }}
-      const auxiliaryTargetId = auxiliaryFocusTargetId(actionTarget);
-      if (auxiliaryTargetId) {{
-        const target = document.getElementById(auxiliaryTargetId);
-        if (target) {{
-          target.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
-          target.focus({{ preventScroll: true }});
-          if (focusStateEl) {{
-            focusStateEl.textContent = 'Focus: ' + actionTarget;
+      if (kind === 'focus_auxiliary') {{
+        const targetId = auxiliaryFocusTargetId(target);
+        if (targetId) {{
+          const node = document.getElementById(targetId);
+          if (node) {{
+            node.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+            node.focus({{ preventScroll: true }});
+            writeLog('Focused ' + target + '.');
+            return;
           }}
-          writeLog('Focused ' + actionTarget + ' guidance.');
-          return;
         }}
       }}
-      writeLog('Action target not yet wired: ' + actionTarget);
+      if (kind === 'focus_section') {{
+        if (target === 'runtime.status') {{ await refreshLatestRunStatus(); return; }}
+        if (target === 'runtime.result') {{ await refreshLatestRunResult(); return; }}
+        if (target === 'runtime.trace') {{ await refreshLatestRunTrace(); return; }}
+        if (target === 'runtime.artifacts') {{ await refreshLatestRunArtifacts(); return; }}
+        let sectionId = target;
+        let level = 'summary';
+        if (target.endsWith('.detail')) {{
+          const parts = target.split('.');
+          sectionId = parts[0];
+          level = 'detail';
+        }}
+        if (sectionConfig(sectionId)) {{
+          setFocusedSection(sectionId, level);
+          writeLog('Focused ' + target + '.');
+          return;
+        }}
+        const targetId = auxiliaryFocusTargetId(sectionId);
+        if (targetId) {{
+          const node = document.getElementById(targetId);
+          if (node) {{
+            node.scrollIntoView({{ behavior: 'smooth', block: 'center' }});
+            node.focus({{ preventScroll: true }});
+            writeLog('Focused ' + target + '.');
+            return;
+          }}
+        }}
+      }}
+      writeLog('Action target not yet wired: ' + String(target || kind));
+    }}
+    async function performBannerAction(banner) {{
+      if (!banner || typeof banner !== 'object') {{
+        writeLog('No recommended action is available.');
+        return;
+      }}
+      await performShellAction({{
+        action_kind: banner.action_kind || 'focus_section',
+        action_target: banner.action_target || '',
+        action_label: banner.action_label || 'Open next step',
+      }});
     }}
     function deriveStepStateBannerFromBodies(statusBody, resultBody, traceBody, artifactsBody) {{
       const normalizedStatus = String((statusBody || {{}}).status || '').toLowerCase();
@@ -1168,9 +1327,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       return null;
     }}
     function writeStepStateBanner(banner) {{
-      const formatted = formatStepStateBanner(banner, 'Step 1 of 5 — Enter goal', 'Describe your goal to start the first-run path.');
-      const actionLabel = banner && typeof banner.action_label === 'string' && banner.action_label ? banner.action_label : 'Open Designer';
-      const actionTarget = banner && typeof banner.action_target === 'string' && banner.action_target ? banner.action_target : 'designer';
+      currentStepStateBanner = banner || currentStepStateBanner || initialStepStateBanner || null;
+      const formatted = formatStepStateBanner(currentStepStateBanner, 'Step 1 of 5 — Enter goal', 'Describe your goal to start the first-run path.');
+      const actionLabel = currentStepStateBanner && typeof currentStepStateBanner.action_label === 'string' && currentStepStateBanner.action_label ? currentStepStateBanner.action_label : 'Open Designer';
+      const actionTarget = currentStepStateBanner && typeof currentStepStateBanner.action_target === 'string' && currentStepStateBanner.action_target ? currentStepStateBanner.action_target : 'designer';
       stepStateBannerTitleEl.textContent = formatted.title;
       stepStateBannerSummaryEl.textContent = formatted.summary;
       stepStateBannerActionEl.textContent = actionLabel + ' → ' + actionTarget;
@@ -1182,7 +1342,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     function refreshStepStateBanner() {{
       const derived = deriveStepStateBannerFromBodies(latestStatusBodyState, latestResultBodyState, latestTraceBodyState, latestArtifactsBodyState);
-      writeStepStateBanner(derived || initialStepStateBanner);
+      writeStepStateBanner(derived || currentStepStateBanner || initialStepStateBanner);
     }}
     function sectionConfig(sectionId) {{
       const sections = currentNavigation && Array.isArray(currentNavigation.sections) ? currentNavigation.sections : [];
@@ -1351,6 +1511,20 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const response = await fetch(initialPayload.routes.workspace_shell, {{ credentials: 'same-origin' }});
       const body = await response.json();
       writeLog(body);
+      if (body.designer_section) {{
+        writeDesignerSection(body.designer_section);
+      }}
+      if (body.validation_section) {{
+        writeValidationSection(body.validation_section);
+      }}
+      if (body.navigation) {{
+        currentNavigation = body.navigation;
+        renderRuntimeNav();
+        writeFocusGuidance(currentNavigation);
+      }}
+      if (body.step_state_banner) {{
+        writeStepStateBanner(body.step_state_banner);
+      }}
       if (body.latest_run_status_preview && body.latest_run_status_preview.run_id) {{
         setActiveRun(body.latest_run_status_preview.run_id);
         writeLatestRunStatus(body.latest_run_status_summary || summarizeStatusBody(body.latest_run_status_preview));
@@ -1375,6 +1549,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       if (body.latest_run_artifacts_detail) {{
         writeLatestRunArtifactsDetail(body.latest_run_artifacts_detail);
+      }}
+      if (body.navigation && body.navigation.default_section) {{
+        setFocusedSection(body.navigation.default_section, body.navigation.default_level || 'summary');
       }}
     }});
     document.getElementById('run-draft').addEventListener('click', async () => {{
@@ -1401,7 +1578,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         writeLatestRunArtifacts('Waiting for artifact details.');
         writeLatestRunTraceDetail('Open latest trace to view the detail layer.');
         writeLatestRunArtifactsDetail('Open latest artifacts to view the detail layer.');
-        writeStepStateBanner({{ title: 'Step 4 of 5 — Run', summary: 'Launch accepted. Watch Status while Nexa starts the run.' }});
+        writeStepStateBanner({{ title: 'Step 4 of 5 — Run', summary: 'Launch accepted. Watch Status while Nexa starts the run.', action_label: 'Open Status', action_target: 'runtime.status', action_kind: 'focus_section' }});
         await pollLatestRunUntilSettled();
       }}
     }});

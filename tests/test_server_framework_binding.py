@@ -506,8 +506,13 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert 'Artifact count: 1' in parsed['latest_run_artifacts_detail']['items']
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
+    assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'
+    assert parsed['designer_section']['controls'][1]['action_target'] == 'designer.detail'
     assert parsed['validation_section']['summary']['headline'] == 'Validation: unknown'
     assert parsed['validation_section']['detail']['title'] == 'Validation detail'
+    assert parsed['validation_section']['controls'][0]['action_kind'] == 'run_draft'
+    assert parsed['validation_section']['controls'][1]['action_kind'] == 'focus_section'
+    assert parsed['validation_section']['controls'][2]['action_kind'] == 'focus_auxiliary'
     assert parsed['navigation']['default_section'] == 'result'
     assert parsed['navigation']['default_level'] == 'detail'
     assert parsed['navigation']['guidance_label'] == 'Recommended next: Result'
