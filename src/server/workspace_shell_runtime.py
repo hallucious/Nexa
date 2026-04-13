@@ -502,6 +502,136 @@ def _artifact_mapping_from_source(source: Any | None, model: Any) -> dict[str, A
     return {}
 
 
+def _trace_history_section(
+    recent_run_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
+    trace_rows_lookup: Any | None,
+) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    for row in _recent_run_rows_for_workspace(recent_run_rows, workspace_id):
+        run_id = str(row.get("run_id") or "").strip()
+        if not run_id:
+            continue
+        trace_rows = tuple(trace_rows_lookup(run_id) or ()) if trace_rows_lookup is not None else ()
+        if not trace_rows:
+            continue
+        ordered = sorted(
+            trace_rows,
+            key=lambda item: (int(item.get("sequence_number") or 0), str(item.get("occurred_at") or "")),
+        )
+        latest = ordered[-1]
+        entries.append(
+            {
+                "run_id": run_id,
+                "event_count": len(ordered),
+                "latest_event_type": str(latest.get("event_type") or "").strip() or None,
+                "latest_node_id": str(latest.get("node_id") or "").strip() or None,
+            }
+        )
+    latest = entries[0] if entries else None
+    controls: list[dict[str, Any]] = [
+        {
+            "control_id": "trace-history-open-latest",
+            "label": "Open latest trace",
+            "action_kind": "focus_section",
+            "action_target": "runtime.trace",
+        }
+    ]
+    if len(entries) > 1:
+        previous = entries[1]
+        controls.append(
+            {
+                "control_id": f"trace-history-open-{previous['run_id']}",
+                "label": f"Open {previous['run_id']} trace",
+                "action_kind": "open_run_trace",
+                "action_target": previous["run_id"],
+            }
+        )
+    return {
+        "summary": {
+            "headline": "Trace history",
+            "lines": _summary_lines(
+                f"Recent traces: {len(entries)}" if entries else "No recent trace history is available yet.",
+                f"Latest: {latest['run_id']} — {latest['event_count']} events" if latest else None,
+            ),
+        },
+        "detail": {
+            "title": "Trace history detail",
+            "items": [
+                f"{index + 1}. {entry['run_id']} — {entry['event_count']} events"
+                + (f" — latest: {entry['latest_event_type']}" if entry.get("latest_event_type") else "")
+                for index, entry in enumerate(entries[:3])
+            ]
+            or ["Trace history entries will appear here as runs accumulate."],
+        },
+        "history": entries[:3],
+        "controls": controls,
+    }
+
+
+def _artifacts_history_section(
+    recent_run_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
+    artifact_rows_lookup: Any | None,
+) -> dict[str, Any]:
+    entries: list[dict[str, Any]] = []
+    for row in _recent_run_rows_for_workspace(recent_run_rows, workspace_id):
+        run_id = str(row.get("run_id") or "").strip()
+        if not run_id:
+            continue
+        artifact_rows = tuple(artifact_rows_lookup(run_id) or ()) if artifact_rows_lookup is not None else ()
+        if not artifact_rows:
+            continue
+        first = artifact_rows[0]
+        entries.append(
+            {
+                "run_id": run_id,
+                "artifact_count": len(artifact_rows),
+                "first_artifact_id": str(first.get("artifact_id") or "").strip() or None,
+                "first_label": str(first.get("label") or first.get("payload_preview") or "").strip() or None,
+            }
+        )
+    latest = entries[0] if entries else None
+    controls: list[dict[str, Any]] = [
+        {
+            "control_id": "artifacts-history-open-latest",
+            "label": "Open latest artifacts",
+            "action_kind": "focus_section",
+            "action_target": "runtime.artifacts",
+        }
+    ]
+    if len(entries) > 1:
+        previous = entries[1]
+        controls.append(
+            {
+                "control_id": f"artifacts-history-open-{previous['run_id']}",
+                "label": f"Open {previous['run_id']} artifacts",
+                "action_kind": "open_run_artifacts",
+                "action_target": previous["run_id"],
+            }
+        )
+    return {
+        "summary": {
+            "headline": "Artifacts history",
+            "lines": _summary_lines(
+                f"Recent artifact sets: {len(entries)}" if entries else "No recent artifacts history is available yet.",
+                f"Latest: {latest['run_id']} — {latest['artifact_count']} artifacts" if latest else None,
+            ),
+        },
+        "detail": {
+            "title": "Artifacts history detail",
+            "items": [
+                f"{index + 1}. {entry['run_id']} — {entry['artifact_count']} artifacts"
+                + (f" — first: {entry['first_artifact_id']}" if entry.get("first_artifact_id") else "")
+                for index, entry in enumerate(entries[:3])
+            ]
+            or ["Artifacts history entries will appear here as runs accumulate."],
+        },
+        "history": entries[:3],
+        "controls": controls,
+    }
+
+
 def _server_backed_shell_state(source: Any | None, model: Any) -> dict[str, Mapping[str, Any]]:
     mapping = _artifact_mapping_from_source(source, model)
     designer_state = {}
@@ -1026,6 +1156,8 @@ def build_workspace_shell_runtime_payload(
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
         "status_history_section": _status_history_section(recent_run_rows, workspace_id),
         "result_history_section": _result_history_section(recent_run_rows, workspace_id, result_rows_by_run_id),
+        "trace_history_section": _trace_history_section(recent_run_rows, workspace_id, trace_rows_lookup),
+        "artifacts_history_section": _artifacts_history_section(recent_run_rows, workspace_id, artifact_rows_lookup),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer")),
         "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),
         "navigation": navigation,
@@ -1077,6 +1209,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_trace_detail_json = json.dumps(payload.get("latest_run_trace_detail"), ensure_ascii=False)
     status_history_section_json = json.dumps(payload.get("status_history_section"), ensure_ascii=False)
     result_history_section_json = json.dumps(payload.get("result_history_section"), ensure_ascii=False)
+    trace_history_section_json = json.dumps(payload.get("trace_history_section"), ensure_ascii=False)
+    artifacts_history_section_json = json.dumps(payload.get("artifacts_history_section"), ensure_ascii=False)
     designer_section_json = json.dumps(payload.get("designer_section"), ensure_ascii=False)
     validation_section_json = json.dumps(payload.get("validation_section"), ensure_ascii=False)
     step_state_banner_json = json.dumps(payload.get("step_state_banner"), ensure_ascii=False)
@@ -1232,6 +1366,20 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       </section>
     </div>
     <div class="row">
+      <section id="trace-history-card" tabindex="-1" class="card focus-target">
+        <h2>Trace history</h2>
+        <pre id="trace-history-summary">Recent trace history will appear here.</pre>
+        <pre id="trace-history-detail">Trace history detail will appear here.</pre>
+        <div id="trace-history-controls" class="actions"></div>
+      </section>
+      <section id="artifacts-history-card" tabindex="-1" class="card focus-target">
+        <h2>Artifacts history</h2>
+        <pre id="artifacts-history-summary">Recent artifacts history will appear here.</pre>
+        <pre id="artifacts-history-detail">Artifacts history detail will appear here.</pre>
+        <div id="artifacts-history-controls" class="actions"></div>
+      </section>
+    </div>
+    <div class="row">
       <section id="latest-run-trace-card" tabindex="-1" class="card focus-target">
         <h2>Latest trace</h2>
         <pre id="latest-run-trace">Waiting for trace details.</pre>
@@ -1273,6 +1421,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRunTraceDetail = {latest_run_trace_detail_json};
     const initialStatusHistorySection = {status_history_section_json};
     const initialResultHistorySection = {result_history_section_json};
+    const initialTraceHistorySection = {trace_history_section_json};
+    const initialArtifactsHistorySection = {artifacts_history_section_json};
     const initialDesignerSection = {designer_section_json};
     const initialValidationSection = {validation_section_json};
     const initialStepStateBanner = {step_state_banner_json};
@@ -1294,6 +1444,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const resultHistorySummaryEl = document.getElementById('result-history-summary');
     const resultHistoryDetailEl = document.getElementById('result-history-detail');
     const resultHistoryControlsEl = document.getElementById('result-history-controls');
+    const traceHistorySummaryEl = document.getElementById('trace-history-summary');
+    const traceHistoryDetailEl = document.getElementById('trace-history-detail');
+    const traceHistoryControlsEl = document.getElementById('trace-history-controls');
+    const artifactsHistorySummaryEl = document.getElementById('artifacts-history-summary');
+    const artifactsHistoryDetailEl = document.getElementById('artifacts-history-detail');
+    const artifactsHistoryControlsEl = document.getElementById('artifacts-history-controls');
     const designerSummaryEl = document.getElementById('designer-summary');
     const designerDetailEl = document.getElementById('designer-detail');
     const designerControlsEl = document.getElementById('designer-controls');
@@ -1321,6 +1477,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let latestArtifactsBodyState = null;
     let currentStatusHistorySection = initialStatusHistorySection || null;
     let currentResultHistorySection = initialResultHistorySection || null;
+    let currentTraceHistorySection = initialTraceHistorySection || null;
+    let currentArtifactsHistorySection = initialArtifactsHistorySection || null;
     let currentDesignerSection = initialDesignerSection || null;
     let currentValidationSection = initialValidationSection || null;
     let currentStepStateBanner = initialStepStateBanner || null;
@@ -1380,6 +1538,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         focusedLevel,
         designerSection: currentDesignerSection,
         validationSection: currentValidationSection,
+        traceHistorySection: currentTraceHistorySection,
+        artifactsHistorySection: currentArtifactsHistorySection,
         stepStateBanner: currentStepStateBanner,
       }};
     }}
@@ -1582,6 +1742,24 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       renderSectionControls(resultHistoryControlsEl, currentResultHistorySection && currentResultHistorySection.controls ? currentResultHistorySection.controls : []);
       writeShellContinuity(captureShellContinuity());
     }}
+    function writeTraceHistorySection(section) {{
+      currentTraceHistorySection = section || currentTraceHistorySection || {{}};
+      const summary = currentTraceHistorySection && currentTraceHistorySection.summary ? currentTraceHistorySection.summary : null;
+      const detail = currentTraceHistorySection && currentTraceHistorySection.detail ? currentTraceHistorySection.detail : null;
+      traceHistorySummaryEl.textContent = formatSummary(summary, 'Recent trace history will appear here.');
+      traceHistoryDetailEl.textContent = formatDetail(detail, 'Trace history detail will appear here.');
+      renderSectionControls(traceHistoryControlsEl, currentTraceHistorySection && currentTraceHistorySection.controls ? currentTraceHistorySection.controls : []);
+      writeShellContinuity(captureShellContinuity());
+    }}
+    function writeArtifactsHistorySection(section) {{
+      currentArtifactsHistorySection = section || currentArtifactsHistorySection || {{}};
+      const summary = currentArtifactsHistorySection && currentArtifactsHistorySection.summary ? currentArtifactsHistorySection.summary : null;
+      const detail = currentArtifactsHistorySection && currentArtifactsHistorySection.detail ? currentArtifactsHistorySection.detail : null;
+      artifactsHistorySummaryEl.textContent = formatSummary(summary, 'Recent artifacts history will appear here.');
+      artifactsHistoryDetailEl.textContent = formatDetail(detail, 'Artifacts history detail will appear here.');
+      renderSectionControls(artifactsHistoryControlsEl, currentArtifactsHistorySection && currentArtifactsHistorySection.controls ? currentArtifactsHistorySection.controls : []);
+      writeShellContinuity(captureShellContinuity());
+    }}
     function writeDesignerSection(section) {{
       currentDesignerSection = section || currentDesignerSection || {{}};
       const summary = currentDesignerSection && currentDesignerSection.summary ? currentDesignerSection.summary : null;
@@ -1656,6 +1834,22 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
           setActiveRun(target);
           await refreshLatestRunResult();
           writeLog('Opened result for ' + target + '.');
+          return;
+        }}
+      }}
+      if (kind === 'open_run_trace') {{
+        if (target) {{
+          setActiveRun(target);
+          await refreshLatestRunTrace();
+          writeLog('Opened trace for ' + target + '.');
+          return;
+        }}
+      }}
+      if (kind === 'open_run_artifacts') {{
+        if (target) {{
+          setActiveRun(target);
+          await refreshLatestRunArtifacts();
+          writeLog('Opened artifacts for ' + target + '.');
           return;
         }}
       }}
@@ -1935,6 +2129,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeLatestRunArtifactsDetail(initialRunArtifactsDetail || 'Open latest artifacts to view the detail layer.');
     writeStatusHistorySection(initialStatusHistorySection);
     writeResultHistorySection(initialResultHistorySection);
+    writeTraceHistorySection(initialTraceHistorySection);
+    writeArtifactsHistorySection(initialArtifactsHistorySection);
     writeDesignerSection(initialDesignerSection);
     writeValidationSection(initialValidationSection);
     writeStepStateBanner(initialStepStateBanner);
@@ -1951,6 +2147,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       if (body.result_history_section) {{
         writeResultHistorySection(body.result_history_section);
+      }}
+      if (body.trace_history_section) {{
+        writeTraceHistorySection(body.trace_history_section);
+      }}
+      if (body.artifacts_history_section) {{
+        writeArtifactsHistorySection(body.artifacts_history_section);
       }}
       if (body.designer_section) {{
         writeDesignerSection(body.designer_section);
