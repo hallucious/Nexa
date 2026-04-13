@@ -328,6 +328,74 @@ def _latest_run_artifacts_detail(preview: Mapping[str, Any] | None) -> dict[str,
     }
 
 
+def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping[str, Any] | None) -> dict[str, Any]:
+    shell_map = shell or {}
+    designer = shell_map.get("designer") or {}
+    request_state = designer.get("request_state") or {}
+    preview_state = designer.get("preview_state") or {}
+    approval_state = designer.get("approval_state") or {}
+    provider_inline = designer.get("provider_inline_key_entry") or {}
+    provider_guidance = designer.get("provider_setup_guidance") or {}
+    gallery = template_gallery or designer.get("template_gallery") or {}
+    template_count = len(gallery.get("templates") or ())
+    connected_count = int(provider_inline.get("connected_count") or 0)
+    summary_text = (
+        str(preview_state.get("one_sentence_summary") or "").strip()
+        or str(request_state.get("input_placeholder") or "").strip()
+        or "Start from Designer to describe your goal or choose a starter template."
+    )
+    lines = _summary_lines(
+        f"Request status: {request_state.get('request_status')}" if request_state.get("request_status") else None,
+        f"Preview status: {preview_state.get('preview_status')}" if preview_state.get("preview_status") else None,
+        f"Approval status: {approval_state.get('approval_status')}" if approval_state.get("approval_status") else None,
+        f"Templates available: {template_count}",
+        f"Connected providers: {connected_count}",
+    )
+    detail_items = _summary_lines(
+        f"Submit enabled: {request_state.get('can_submit')}" if request_state.get("can_submit") is not None else None,
+        f"Current request: {request_state.get('current_request_text')}" if request_state.get("current_request_text") else None,
+        f"Provider setup summary: {provider_guidance.get('summary')}" if provider_guidance.get("summary") else None,
+        *[
+            f"Suggested action: {action.get('label')}"
+            for action in (designer.get("suggested_actions") or [])
+            if isinstance(action, Mapping) and action.get("label")
+        ][:3],
+    )
+    return {
+        "summary": {"headline": "Designer workspace", "lines": [summary_text, *lines]},
+        "detail": {"title": "Designer detail", "items": detail_items or ["Use Designer to draft or review the workflow before running."]},
+    }
+
+
+def _validation_section(shell: Mapping[str, Any] | None) -> dict[str, Any]:
+    shell_map = shell or {}
+    validation = shell_map.get("validation") or {}
+    summary_block = validation.get("summary") or {}
+    beginner_summary = validation.get("beginner_summary") or {}
+    overall_status = str(validation.get("overall_status") or "unknown").strip() or "unknown"
+    headline = f"Validation: {overall_status}"
+    primary_line = str(beginner_summary.get("cause") or beginner_summary.get("status_signal") or "Review validation before the next step.").strip() or "Review validation before the next step."
+    lines = _summary_lines(
+        primary_line,
+        f"Blocking findings: {summary_block.get('blocking_count')}" if summary_block.get("blocking_count") is not None else None,
+        f"Warnings: {summary_block.get('warning_count')}" if summary_block.get("warning_count") is not None else None,
+        f"Next action: {beginner_summary.get('next_action_label')}" if beginner_summary.get("next_action_label") else None,
+    )
+    detail_items = _summary_lines(
+        f"Requires confirmation: {summary_block.get('requires_user_confirmation')}" if summary_block.get("requires_user_confirmation") is not None else None,
+        f"Can execute: {summary_block.get('can_execute')}" if summary_block.get("can_execute") is not None else None,
+        f"Top issue: {summary_block.get('top_issue_label')}" if summary_block.get("top_issue_label") else None,
+        *[
+            f"Suggested action: {action.get('label')}"
+            for action in (validation.get("suggested_actions") or [])
+            if isinstance(action, Mapping) and action.get("label")
+        ][:3],
+    )
+    return {
+        "summary": {"headline": headline, "lines": lines},
+        "detail": {"title": "Validation detail", "items": detail_items or ["Validation details will appear here as findings accumulate."]},
+    }
+
 
 
 def _navigation_model(
@@ -339,6 +407,8 @@ def _navigation_model(
     latest_run_artifacts_preview: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     sections = (
+        {"section_id": "designer", "label": "Designer", "target_id": "designer-summary-card", "detail_target_id": "designer-detail-card"},
+        {"section_id": "validation", "label": "Validation", "target_id": "validation-summary-card", "detail_target_id": "validation-detail-card"},
         {"section_id": "status", "label": "Status", "target_id": "latest-run-status-card", "detail_target_id": "latest-run-status-detail-card"},
         {"section_id": "result", "label": "Result", "target_id": "latest-run-result-card", "detail_target_id": "latest-run-result-detail-card"},
         {"section_id": "trace", "label": "Trace", "target_id": "latest-run-trace-card", "detail_target_id": "latest-run-trace-detail-card"},
@@ -347,9 +417,14 @@ def _navigation_model(
     shell_map = shell or {}
     mobile = shell_map.get("mobile_first_run") or {}
     contextual_help = shell_map.get("contextual_help") or {}
+    beginner_onboarding = shell_map.get("beginner_onboarding") or {}
+    validation = shell_map.get("validation") or {}
     mobile_visible = bool(mobile.get("visible"))
     primary_action_target = str(mobile.get("primary_action_target") or "").strip()
-    help_stage = str(contextual_help.get("stage") or "").strip()
+    onboarding_target = str(beginner_onboarding.get("primary_action_target") or "").strip()
+    help_stage = str(contextual_help.get("stage") or "").strip().lower()
+    shell_status = str(shell_map.get("shell_status") or "").strip().lower()
+    validation_status = str(validation.get("overall_status") or "").strip().lower()
     latest_status = str((latest_run_status_preview or {}).get("status") or "").strip().lower()
     latest_result_state = str((latest_run_result_preview or {}).get("result_state") or "").strip().lower()
     latest_trace_count = int((latest_run_trace_preview or {}).get("event_count") or 0)
@@ -361,7 +436,12 @@ def _navigation_model(
     guidance_summary = "Open status first to follow the current runtime state."
 
     if mobile_visible:
-        if latest_result_state.startswith("ready") or primary_action_target == "execution.output" or help_stage == "result":
+        if shell_status == "blocked" or validation_status == "blocked" or onboarding_target == "validation":
+            default_section = "validation"
+            default_level = "detail"
+            guidance_label = "Recommended next: Validation"
+            guidance_summary = "Resolve the blocking validation issue before continuing the first-run path."
+        elif latest_result_state.startswith("ready") or primary_action_target == "execution.output" or help_stage == "result":
             default_section = "result"
             default_level = "detail"
             guidance_label = "Recommended next: Result"
@@ -381,9 +461,16 @@ def _navigation_model(
             default_level = "summary"
             guidance_label = "Recommended next: Status"
             guidance_summary = "The mobile first-run path is still in progress, so follow Status first."
+        elif onboarding_target == "designer" or help_stage in {"start", "review"} or primary_action_target == "designer":
+            default_section = "designer"
+            default_level = "detail"
+            guidance_label = "Recommended next: Designer"
+            guidance_summary = "Use Designer first to describe or review the workflow before running."
         else:
-            guidance_label = "Recommended next: Status"
-            guidance_summary = "For a first-run runtime view, start with Status and then move to Result when it is ready."
+            default_section = "designer"
+            default_level = "detail"
+            guidance_label = "Recommended next: Designer"
+            guidance_summary = "Start with Designer, then move to Validation and Run when the workflow is ready."
 
     return {
         "default_section": default_section,
@@ -518,11 +605,11 @@ def _step_state_banner(
         "trace": "Trace",
         "artifacts": "Artifacts",
     }.get(recommended_section, recommended_section.title())
-    if action_target and str(action_target).startswith("runtime."):
+    if action_target and (str(action_target).startswith("runtime.") or action_target in {"designer", "validation"}):
         action_kind = "focus_section"
     elif action_target == "execution":
         action_kind = "run_draft"
-    elif action_target in {"designer", "validation"}:
+    elif action_target in {"designer.templates", "validation.review"}:
         action_kind = "focus_auxiliary"
     else:
         action_kind = "none"
@@ -626,6 +713,8 @@ def build_workspace_shell_runtime_payload(
         "latest_run_result_detail": _latest_run_result_detail(latest_run_result_preview),
         "latest_run_artifacts_detail": _latest_run_artifacts_detail(latest_run_artifacts_preview),
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
+        "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None),
+        "validation_section": _validation_section(asdict(shell_vm)),
         "navigation": navigation,
         "step_state_banner": _step_state_banner(
             asdict(shell_vm),
@@ -667,6 +756,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_result_detail_json = json.dumps(payload.get("latest_run_result_detail"), ensure_ascii=False)
     latest_run_artifacts_detail_json = json.dumps(payload.get("latest_run_artifacts_detail"), ensure_ascii=False)
     latest_run_trace_detail_json = json.dumps(payload.get("latest_run_trace_detail"), ensure_ascii=False)
+    designer_section_json = json.dumps(payload.get("designer_section"), ensure_ascii=False)
+    validation_section_json = json.dumps(payload.get("validation_section"), ensure_ascii=False)
     step_state_banner_json = json.dumps(payload.get("step_state_banner"), ensure_ascii=False)
     navigation = payload.get("navigation") or {}
     navigation_json = json.dumps(navigation, ensure_ascii=False)
@@ -741,6 +832,26 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <p id="step-state-banner-action">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))} → <code>{escape(str((payload.get('step_state_banner') or {}).get('action_target') or 'designer'))}</code></p>
       <button id="step-state-banner-action-button" class="secondary">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))}</button>
     </section>
+    <div class="row">
+      <section id="designer-summary-card" tabindex="-1" class="card focus-target">
+        <h2>Designer workspace</h2>
+        <pre id="designer-summary">Open Designer to start drafting your workflow.</pre>
+      </section>
+      <section id="validation-summary-card" tabindex="-1" class="card focus-target">
+        <h2>Validation review</h2>
+        <pre id="validation-summary">Validation guidance will appear here.</pre>
+      </section>
+    </div>
+    <div class="row">
+      <section id="designer-detail-card" tabindex="-1" class="card focus-target">
+        <h2>Designer detail layer</h2>
+        <pre id="designer-detail">Designer detail will appear here.</pre>
+      </section>
+      <section id="validation-detail-card" tabindex="-1" class="card focus-target">
+        <h2>Validation detail layer</h2>
+        <pre id="validation-detail">Validation detail will appear here.</pre>
+      </section>
+    </div>
     <div class="row">
       <section id="contextual-help-card" tabindex="-1" class="card focus-target">
         <h2>{help_title}</h2>
@@ -821,6 +932,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRunResultDetail = {latest_run_result_detail_json};
     const initialRunArtifactsDetail = {latest_run_artifacts_detail_json};
     const initialRunTraceDetail = {latest_run_trace_detail_json};
+    const initialDesignerSection = {designer_section_json};
+    const initialValidationSection = {validation_section_json};
     const initialStepStateBanner = {step_state_banner_json};
     const initialNavigation = {navigation_json};
     const logEl = document.getElementById('browser-log');
@@ -832,6 +945,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const latestRunResultDetailEl = document.getElementById('latest-run-result-detail');
     const latestRunTraceDetailEl = document.getElementById('latest-run-trace-detail');
     const latestRunArtifactsDetailEl = document.getElementById('latest-run-artifacts-detail');
+    const designerSummaryEl = document.getElementById('designer-summary');
+    const designerDetailEl = document.getElementById('designer-detail');
+    const validationSummaryEl = document.getElementById('validation-summary');
+    const validationDetailEl = document.getElementById('validation-detail');
     const runtimeNavEl = document.getElementById('runtime-nav');
     const focusStateEl = document.getElementById('focus-state');
     const focusGuidanceEl = document.getElementById('focus-guidance');
@@ -1226,6 +1343,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeLatestRunResultDetail(initialRunResultDetail || 'Open latest run result to view the detail layer.');
     writeLatestRunTraceDetail(initialRunTraceDetail || 'Open latest trace to view the detail layer.');
     writeLatestRunArtifactsDetail(initialRunArtifactsDetail || 'Open latest artifacts to view the detail layer.');
+    writeDesignerSection(initialDesignerSection);
+    writeValidationSection(initialValidationSection);
     writeStepStateBanner(initialStepStateBanner);
     setFocusedSection(focusedSectionId, focusedLevel);
     document.getElementById('refresh').addEventListener('click', async () => {{

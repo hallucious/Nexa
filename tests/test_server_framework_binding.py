@@ -504,9 +504,14 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert 'First artifact id: artifact-1' in parsed['latest_run_artifacts_summary']['lines']
     assert parsed['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in parsed['latest_run_artifacts_detail']['items']
+    assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
+    assert parsed['designer_section']['detail']['title'] == 'Designer detail'
+    assert parsed['validation_section']['summary']['headline'] == 'Validation: unknown'
+    assert parsed['validation_section']['detail']['title'] == 'Validation detail'
     assert parsed['navigation']['default_section'] == 'result'
     assert parsed['navigation']['default_level'] == 'detail'
     assert parsed['navigation']['guidance_label'] == 'Recommended next: Result'
+    assert [section['section_id'] for section in parsed['navigation']['sections']] == ['designer', 'validation', 'status', 'result', 'trace', 'artifacts']
     assert parsed['step_state_banner']['title'] == 'Step 5 of 5 — Read result'
     assert parsed['step_state_banner']['recommended_section'] == 'result'
     assert parsed['step_state_banner']['action_label'] == 'Open Result'
@@ -541,10 +546,10 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
 
     parsed = json.loads(response.body_text)
     assert response.status_code == 200
-    assert parsed['navigation']['default_section'] == 'status'
+    assert parsed['navigation']['default_section'] == 'designer'
     assert parsed['step_state_banner']['title'] == 'Step 1 of 5 — Enter goal'
     assert parsed['step_state_banner']['phase'] == 'pre_run'
     assert parsed['step_state_banner']['action_label'] == 'Open Designer'
     assert parsed['step_state_banner']['action_target'] == 'designer'
-    assert parsed['step_state_banner']['action_kind'] == 'focus_auxiliary'
+    assert parsed['step_state_banner']['action_kind'] == 'focus_section'
     assert 'prepare your first workflow' in parsed['step_state_banner']['summary']

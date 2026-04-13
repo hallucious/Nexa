@@ -471,11 +471,16 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert 'First artifact id: artifact-2' in payload['latest_run_artifacts_summary']['lines']
     assert payload['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in payload['latest_run_artifacts_detail']['items']
+    assert payload['designer_section']['summary']['headline'] == 'Designer workspace'
+    assert 'Templates available:' in '\n'.join(payload['designer_section']['summary']['lines'])
+    assert payload['designer_section']['detail']['title'] == 'Designer detail'
+    assert payload['validation_section']['summary']['headline'] == 'Validation: unknown'
+    assert payload['validation_section']['detail']['title'] == 'Validation detail'
     assert payload['navigation']['default_section'] == 'result'
     assert payload['navigation']['default_level'] == 'detail'
     assert payload['navigation']['guidance_label'] == 'Recommended next: Result'
     assert 'mobile first-run path should move to Result next' in payload['navigation']['guidance_summary']
-    assert [section['section_id'] for section in payload['navigation']['sections']] == ['status', 'result', 'trace', 'artifacts']
+    assert [section['section_id'] for section in payload['navigation']['sections']] == ['designer', 'validation', 'status', 'result', 'trace', 'artifacts']
     assert payload['step_state_banner']['title'] == 'Step 5 of 5 — Read result'
     assert payload['step_state_banner']['recommended_section'] == 'result'
     assert payload['step_state_banner']['action_label'] == 'Open Result'
@@ -522,6 +527,10 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'summarizeTraceBody' in body
     assert 'summarizeArtifactsBody' in body
     assert 'Runtime focus' in body
+    assert 'Designer workspace' in body
+    assert 'Validation review' in body
+    assert 'Designer detail layer' in body
+    assert 'Validation detail layer' in body
     assert 'focus-state' in body
     assert 'focus-guidance' in body
     assert 'Recommended next: Result' in body
