@@ -106,6 +106,12 @@ def _workspace_artifact_mapping(workspace_row: Mapping[str, Any] | None, artifac
     return _working_save_source_dict_from_model(_default_working_save(workspace_row))
 
 
+def _append_bounded_history(current: Any, entry: Mapping[str, Any], *, limit: int = 5) -> list[dict[str, Any]]:
+    existing = [dict(item) for item in (current or ()) if isinstance(item, Mapping)]
+    existing.append(dict(entry))
+    return existing[-limit:]
+
+
 def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Mapping[str, Any], now_iso: str | None = None) -> dict[str, Any]:
     data = json.loads(json.dumps(_to_jsonable(current_source)))
     designer = dict(data.get("designer") or {})
@@ -122,33 +128,81 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
     validation_action = str(body.get("validation_action") or "").strip() or None
     validation_status = str(body.get("validation_status") or "").strip() or None
     validation_message = str(body.get("validation_message") or "").strip() or None
+    clear_designer_state = bool(body.get("clear_designer_state"))
+    clear_validation_state = bool(body.get("clear_validation_state"))
 
-    if template_id or template_display_name or request_text or designer_action:
-        if template_id is not None:
-            designer_state["selected_template_id"] = template_id
-        if template_display_name is not None:
-            designer_state["selected_template_display_name"] = template_display_name
-        if template_category is not None:
-            designer_state["selected_template_category"] = template_category
-        if request_text is not None:
-            designer_state["request_text"] = request_text
-            designer["draft_request_text"] = request_text
-        if designer_action is not None:
-            designer_state["last_action"] = designer_action
-        if now_iso:
-            designer_state["updated_at"] = now_iso
+    if template_id or template_display_name or request_text or designer_action or clear_designer_state:
+        if clear_designer_state:
+            for key in (
+                "selected_template_id",
+                "selected_template_display_name",
+                "selected_template_category",
+                "request_text",
+                "last_action",
+                "updated_at",
+            ):
+                designer_state.pop(key, None)
+            designer.pop("draft_request_text", None)
+            designer_state["history"] = _append_bounded_history(
+                designer_state.get("history"),
+                {"entry_type": "designer_state_cleared", "occurred_at": now_iso},
+            )
+        else:
+            if template_id is not None:
+                designer_state["selected_template_id"] = template_id
+            if template_display_name is not None:
+                designer_state["selected_template_display_name"] = template_display_name
+            if template_category is not None:
+                designer_state["selected_template_category"] = template_category
+            if request_text is not None:
+                designer_state["request_text"] = request_text
+                designer["draft_request_text"] = request_text
+            if designer_action is not None:
+                designer_state["last_action"] = designer_action
+            if now_iso:
+                designer_state["updated_at"] = now_iso
+            designer_state["history"] = _append_bounded_history(
+                designer_state.get("history"),
+                {
+                    "entry_type": "template_applied" if template_id or template_display_name else "designer_action",
+                    "template_id": template_id,
+                    "template_display_name": template_display_name,
+                    "template_category": template_category,
+                    "request_text": request_text,
+                    "designer_action": designer_action,
+                    "occurred_at": now_iso,
+                },
+            )
         designer["server_backed_shell_state"] = designer_state
         data["designer"] = designer
 
-    if validation_action or validation_status or validation_message:
-        if validation_action is not None:
-            shell_state["validation_action"] = validation_action
-        if validation_status is not None:
-            shell_state["validation_status"] = validation_status
-        if validation_message is not None:
-            shell_state["validation_message"] = validation_message
-        if now_iso:
-            shell_state["updated_at"] = now_iso
+    if validation_action or validation_status or validation_message or clear_validation_state:
+        if clear_validation_state:
+            for key in ("validation_action", "validation_status", "validation_message", "updated_at"):
+                shell_state.pop(key, None)
+            shell_state["validation_action_history"] = _append_bounded_history(
+                shell_state.get("validation_action_history"),
+                {"entry_type": "validation_state_cleared", "occurred_at": now_iso},
+            )
+        else:
+            if validation_action is not None:
+                shell_state["validation_action"] = validation_action
+            if validation_status is not None:
+                shell_state["validation_status"] = validation_status
+            if validation_message is not None:
+                shell_state["validation_message"] = validation_message
+            if now_iso:
+                shell_state["updated_at"] = now_iso
+            shell_state["validation_action_history"] = _append_bounded_history(
+                shell_state.get("validation_action_history"),
+                {
+                    "entry_type": "validation_action",
+                    "validation_action": validation_action,
+                    "validation_status": validation_status,
+                    "validation_message": validation_message,
+                    "occurred_at": now_iso,
+                },
+            )
         metadata["runtime_shell_server_state"] = shell_state
         ui["metadata"] = metadata
         data["ui"] = ui

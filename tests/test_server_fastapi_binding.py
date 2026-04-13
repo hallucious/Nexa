@@ -1147,5 +1147,13 @@ def test_fastapi_binding_workspace_shell_draft_write_persists_server_backed_stat
     assert payload['routes']['workspace_shell_draft_write'] == '/api/workspaces/ws-001/shell/draft'
     assert 'Persisted template: Text Summarizer' in '\n'.join(payload['designer_section']['summary']['lines'])
     assert 'Persisted request: Summarize this article.' in '\n'.join(payload['designer_section']['detail']['items'])
+    assert payload['designer_history']['title'] == 'Designer history'
+    assert 'Applied: Text Summarizer' in '\n'.join(payload['designer_history']['items'])
+    assert payload['designer_section']['controls'][-1]['action_kind'] == 'persist_shell_draft'
+    assert payload['designer_section']['controls'][-1]['draft_patch']['clear_designer_state'] is True
     assert 'Persisted validation action: open_validation_detail' in '\n'.join(payload['validation_section']['summary']['lines'])
     assert 'Persisted validation status: blocked' in '\n'.join(payload['validation_section']['detail']['items'])
+    assert payload['validation_history']['title'] == 'Validation history'
+    assert 'Action: open_validation_detail' in '\n'.join(payload['validation_history']['items'])
+    assert payload['validation_section']['controls'][-1]['action_kind'] == 'persist_shell_draft'
+    assert payload['validation_section']['controls'][-1]['draft_patch']['clear_validation_state'] is True

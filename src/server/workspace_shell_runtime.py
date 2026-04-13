@@ -220,6 +220,39 @@ def _summary_lines(*values: str | None) -> list[str]:
     return [value for value in values if isinstance(value, str) and value.strip()]
 
 
+def _history_lines(entries: Sequence[Mapping[str, Any]] | None, *, kind: str) -> list[str]:
+    rendered: list[str] = []
+    for entry in tuple(entries or ())[:3]:
+        if not isinstance(entry, Mapping):
+            continue
+        occurred_at = str(entry.get("occurred_at") or "").strip()
+        if kind == "designer":
+            label = str(entry.get("template_display_name") or entry.get("template_id") or entry.get("designer_action") or entry.get("entry_type") or "designer event").strip()
+            prefix = "Cleared" if entry.get("entry_type") == "designer_state_cleared" else "Applied"
+            rendered.append(f"{prefix}: {label}" + (f" at {occurred_at}" if occurred_at else ""))
+        else:
+            label = str(entry.get("validation_action") or entry.get("validation_status") or entry.get("entry_type") or "validation event").strip()
+            prefix = "Cleared" if entry.get("entry_type") == "validation_state_cleared" else "Action"
+            rendered.append(f"{prefix}: {label}" + (f" at {occurred_at}" if occurred_at else ""))
+    return rendered
+
+
+def _latest_designer_history_entry(persisted_state: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    entries = tuple(item for item in (persisted_state or {}).get("history", ()) if isinstance(item, Mapping))
+    for entry in reversed(entries):
+        if entry.get("entry_type") == "template_applied" and (entry.get("template_id") or entry.get("template_display_name")):
+            return entry
+    return None
+
+
+def _latest_validation_history_entry(persisted_state: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    entries = tuple(item for item in (persisted_state or {}).get("validation_action_history", ()) if isinstance(item, Mapping))
+    for entry in reversed(entries):
+        if entry.get("entry_type") == "validation_action" and (entry.get("validation_action") or entry.get("validation_status")):
+            return entry
+    return None
+
+
 def _latest_run_status_summary(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if not preview:
         return None
@@ -416,6 +449,8 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
         or "Start from Designer to describe your goal or choose a starter template."
     )
     persisted = dict(persisted_state or {})
+    history_entries = tuple(item for item in persisted.get("history", ()) if isinstance(item, Mapping))
+    history_lines = _history_lines(history_entries, kind="designer")
     lines = _summary_lines(
         f"Request status: {request_state.get('request_status')}" if request_state.get("request_status") else None,
         f"Preview status: {preview_state.get('preview_status')}" if preview_state.get("preview_status") else None,
@@ -423,6 +458,7 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
         f"Templates available: {template_count}",
         f"Connected providers: {connected_count}",
         f"Persisted template: {persisted.get('selected_template_display_name') or persisted.get('selected_template_id')}" if persisted.get("selected_template_display_name") or persisted.get("selected_template_id") else None,
+        f"History entries: {len(history_entries)}" if history_entries else None,
     )
     detail_items = _summary_lines(
         f"Submit enabled: {request_state.get('can_submit')}" if request_state.get("can_submit") is not None else None,
@@ -465,9 +501,34 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
                 "template_category": str(first_template.get("category") or "").strip() or None,
             },
         )
+    latest_history = _latest_designer_history_entry(persisted)
+    if latest_history is not None:
+        controls.append(
+            {
+                "control_id": "designer-restore-last-template",
+                "label": "Restore last template",
+                "action_kind": "apply_template",
+                "action_target": str(latest_history.get("template_id") or "template").strip() or "template",
+                "request_text": str(latest_history.get("request_text") or "").strip() or None,
+                "template_display_name": str(latest_history.get("template_display_name") or latest_history.get("template_id") or "Last template").strip(),
+                "template_summary": "Restore the most recent template selection from shell history.",
+                "template_category": str(latest_history.get("template_category") or "").strip() or None,
+            }
+        )
+    if persisted.get("selected_template_id") or persisted.get("request_text"):
+        controls.append(
+            {
+                "control_id": "designer-clear-template-state",
+                "label": "Clear template state",
+                "action_kind": "persist_shell_draft",
+                "action_target": "designer.clear",
+                "draft_patch": {"clear_designer_state": True},
+            }
+        )
     return {
         "summary": {"headline": "Designer workspace", "lines": [summary_text, *lines]},
         "detail": {"title": "Designer detail", "items": detail_items or ["Use Designer to draft or review the workflow before running."]},
+        "history": {"title": "Designer history", "items": history_lines or ["No recent designer history yet."]},
         "controls": controls,
     }
 
@@ -481,12 +542,15 @@ def _validation_section(shell: Mapping[str, Any] | None, *, runnable: bool = Fal
     headline = f"Validation: {overall_status}"
     primary_line = str(beginner_summary.get("cause") or beginner_summary.get("status_signal") or "Review validation before the next step.").strip() or "Review validation before the next step."
     persisted = dict(persisted_state or {})
+    history_entries = tuple(item for item in persisted.get("validation_action_history", ()) if isinstance(item, Mapping))
+    history_lines = _history_lines(history_entries, kind="validation")
     lines = _summary_lines(
         primary_line,
         f"Blocking findings: {summary_block.get('blocking_count')}" if summary_block.get("blocking_count") is not None else None,
         f"Warnings: {summary_block.get('warning_count')}" if summary_block.get("warning_count") is not None else None,
         f"Next action: {beginner_summary.get('next_action_label')}" if beginner_summary.get("next_action_label") else None,
         f"Persisted validation action: {persisted.get('validation_action')}" if persisted.get("validation_action") else None,
+        f"History entries: {len(history_entries)}" if history_entries else None,
     )
     detail_items = _summary_lines(
         f"Requires confirmation: {summary_block.get('requires_user_confirmation')}" if summary_block.get("requires_user_confirmation") is not None else None,
@@ -535,12 +599,37 @@ def _validation_section(shell: Mapping[str, Any] | None, *, runnable: bool = Fal
                 "action_target": "designer.detail",
             },
         )
+    latest_history = _latest_validation_history_entry(persisted)
+    if latest_history is not None:
+        controls.append(
+            {
+                "control_id": "validation-repeat-last-action",
+                "label": "Repeat last validation action",
+                "action_kind": "persist_shell_draft",
+                "action_target": "validation.repeat",
+                "draft_patch": {
+                    "validation_action": str(latest_history.get("validation_action") or "").strip() or None,
+                    "validation_status": str(latest_history.get("validation_status") or "").strip() or None,
+                    "validation_message": str(latest_history.get("validation_message") or "").strip() or None,
+                },
+            }
+        )
+    if persisted.get("validation_action") or persisted.get("validation_status") or persisted.get("validation_message"):
+        controls.append(
+            {
+                "control_id": "validation-clear-state",
+                "label": "Clear validation state",
+                "action_kind": "persist_shell_draft",
+                "action_target": "validation.clear",
+                "draft_patch": {"clear_validation_state": True},
+            }
+        )
     return {
         "summary": {"headline": headline, "lines": lines},
         "detail": {"title": "Validation detail", "items": detail_items or ["Validation details will appear here as findings accumulate."]},
+        "history": {"title": "Validation history", "items": history_lines or ["No recent validation history yet."]},
         "controls": controls,
     }
-
 
 
 def _navigation_model(
@@ -904,6 +993,8 @@ def build_workspace_shell_runtime_payload(
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer")),
         "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),
+        "designer_history": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer")).get("history"),
+        "validation_history": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")).get("history"),
         "navigation": navigation,
         "step_state_banner": _step_state_banner(
             asdict(shell_vm),
@@ -953,6 +1044,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_trace_detail_json = json.dumps(payload.get("latest_run_trace_detail"), ensure_ascii=False)
     designer_section_json = json.dumps(payload.get("designer_section"), ensure_ascii=False)
     validation_section_json = json.dumps(payload.get("validation_section"), ensure_ascii=False)
+    designer_history_json = json.dumps(payload.get("designer_history"), ensure_ascii=False)
+    validation_history_json = json.dumps(payload.get("validation_history"), ensure_ascii=False)
     step_state_banner_json = json.dumps(payload.get("step_state_banner"), ensure_ascii=False)
     navigation = payload.get("navigation") or {}
     navigation_json = json.dumps(navigation, ensure_ascii=False)
@@ -1052,6 +1145,16 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       </section>
     </div>
     <div class="row">
+      <section id="designer-history-card" tabindex="-1" class="card focus-target">
+        <h2>Designer history</h2>
+        <pre id="designer-history">No recent designer history yet.</pre>
+      </section>
+      <section id="validation-history-card" tabindex="-1" class="card focus-target">
+        <h2>Validation history</h2>
+        <pre id="validation-history">No recent validation history yet.</pre>
+      </section>
+    </div>
+    <div class="row">
       <section id="contextual-help-card" tabindex="-1" class="card focus-target">
         <h2>{help_title}</h2>
         <p>{help_summary}</p>
@@ -1133,6 +1236,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRunTraceDetail = {latest_run_trace_detail_json};
     const initialDesignerSection = {designer_section_json};
     const initialValidationSection = {validation_section_json};
+    const initialDesignerHistory = {designer_history_json};
+    const initialValidationHistory = {validation_history_json};
     const initialStepStateBanner = {step_state_banner_json};
     const initialNavigation = {navigation_json};
     const initialClientContinuity = {client_continuity_json};
@@ -1230,6 +1335,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         focusedLevel,
         designerSection: currentDesignerSection,
         validationSection: currentValidationSection,
+        designerHistory: currentDesignerHistory,
+        validationHistory: currentValidationHistory,
         stepStateBanner: currentStepStateBanner,
       }};
     }}
@@ -1252,6 +1359,14 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       if (snapshot.validationSection) {{
         currentValidationSection = snapshot.validationSection;
         writeValidationSection(snapshot.validationSection);
+      }}
+      if (snapshot.designerHistory) {{
+        currentDesignerHistory = snapshot.designerHistory;
+        writeDesignerHistory(snapshot.designerHistory);
+      }}
+      if (snapshot.validationHistory) {{
+        currentValidationHistory = snapshot.validationHistory;
+        writeValidationHistory(snapshot.validationHistory);
       }}
       if (snapshot.stepStateBanner) {{
         currentStepStateBanner = snapshot.stepStateBanner;
@@ -1414,13 +1529,62 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         container.appendChild(button);
       }}
     }}
-    function writeDesignerSection(section) {{
+        function formatHistory(history, fallbackMessage) {{
+      if (!history) return fallbackMessage;
+      const title = typeof history.title === 'string' && history.title ? history.title : 'History';
+      const items = Array.isArray(history.items) ? history.items.filter((item) => typeof item === 'string' && item) : [];
+      return [title, ...items.map((item) => '- ' + item)].join('\n');
+    }}
+    function writeDesignerHistory(history) {{
+      currentDesignerHistory = history || currentDesignerHistory || {{}};
+      designerHistoryEl.textContent = formatHistory(currentDesignerHistory, 'No recent designer history yet.');
+      writeShellContinuity(captureShellContinuity());
+    }}
+    function writeValidationHistory(history) {{
+      currentValidationHistory = history || currentValidationHistory || {{}};
+      validationHistoryEl.textContent = formatHistory(currentValidationHistory, 'No recent validation history yet.');
+      writeShellContinuity(captureShellContinuity());
+    }}
+    function workspaceShellDraftWritePath() {{
+      return initialPayload && initialPayload.routes && typeof initialPayload.routes.workspace_shell_draft_write === 'string' && initialPayload.routes.workspace_shell_draft_write
+        ? initialPayload.routes.workspace_shell_draft_write
+        : '';
+    }}
+    async function persistShellDraft(partialState) {{
+      const path = workspaceShellDraftWritePath();
+      if (!path || !partialState || typeof partialState !== 'object') return null;
+      const response = await fetch(path, {{
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {{ 'content-type': 'application/json' }},
+        body: JSON.stringify(partialState),
+      }});
+      const body = await response.json();
+      if (!response.ok) {{
+        writeLog(body);
+        return null;
+      }}
+      if (body.designer_section) writeDesignerSection(body.designer_section);
+      if (body.validation_section) writeValidationSection(body.validation_section);
+      if (body.designer_history) writeDesignerHistory(body.designer_history);
+      if (body.validation_history) writeValidationHistory(body.validation_history);
+      if (body.step_state_banner) writeStepStateBanner(body.step_state_banner);
+      if (body.navigation) {{
+        currentNavigation = body.navigation;
+        renderRuntimeNav();
+        writeFocusGuidance(currentNavigation);
+      }}
+      writeLog(body);
+      return body;
+    }}
+function writeDesignerSection(section) {{
       currentDesignerSection = section || currentDesignerSection || {{}};
       const summary = currentDesignerSection && currentDesignerSection.summary ? currentDesignerSection.summary : null;
       const detail = currentDesignerSection && currentDesignerSection.detail ? currentDesignerSection.detail : null;
       designerSummaryEl.textContent = formatSummary(summary, 'Open Designer to start drafting your workflow.');
       designerDetailEl.textContent = formatDetail(detail, 'Designer detail will appear here.');
       renderSectionControls(designerControlsEl, currentDesignerSection && currentDesignerSection.controls ? currentDesignerSection.controls : []);
+      if (currentDesignerSection && currentDesignerSection.history) {{ writeDesignerHistory(currentDesignerSection.history); }}
       writeShellContinuity(captureShellContinuity());
     }}
     function writeValidationSection(section) {{
@@ -1430,6 +1594,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       validationSummaryEl.textContent = formatSummary(summary, 'Validation guidance will appear here.');
       validationDetailEl.textContent = formatDetail(detail, 'Validation detail will appear here.');
       renderSectionControls(validationControlsEl, currentValidationSection && currentValidationSection.controls ? currentValidationSection.controls : []);
+      if (currentValidationSection && currentValidationSection.history) {{ writeValidationHistory(currentValidationSection.history); }}
       writeShellContinuity(captureShellContinuity());
     }}
     async function applyTemplateControl(control) {{
@@ -1450,6 +1615,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
           requestText ? ('Designer request: ' + requestText) : null,
           'Next step: review Validation, then run the draft when ready.',
         ].filter(Boolean) }},
+        history: currentDesignerHistory || {{ title: 'Designer history', items: [] }},
         controls: currentDesignerSection && currentDesignerSection.controls ? currentDesignerSection.controls : [],
       }});
       writeStepStateBanner({{
@@ -1460,6 +1626,13 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         action_kind: 'focus_section',
         recommended_section: 'designer',
         phase: 'pre_run',
+      }});
+      await persistShellDraft({{
+        template_id: templateId || null,
+        template_display_name: displayName,
+        template_category: category || null,
+        request_text: requestText || null,
+        designer_action: 'apply_template',
       }});
       setFocusedSection('designer', 'detail');
       writeLog('Loaded template into Designer: ' + displayName);
@@ -1485,6 +1658,18 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
             writeLog('Focused ' + target + '.');
             return;
           }}
+        }}
+      }}
+      if (kind === 'persist_shell_draft') {{
+        const patch = control && control.draft_patch && typeof control.draft_patch === 'object' ? control.draft_patch : null;
+        if (patch) {{
+          await persistShellDraft(patch);
+          if (target === 'designer.clear') {{
+            setFocusedSection('designer', 'summary');
+          }} else if (target === 'validation.clear') {{
+            setFocusedSection('validation', 'summary');
+          }}
+          return;
         }}
       }}
       if (kind === 'focus_section') {{
@@ -1518,8 +1703,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         if (sectionConfig(sectionId)) {{
           if (sectionId === 'designer') {{
             await persistCurrentStep('enter_goal');
+            await persistShellDraft({{ designer_action: 'open_designer_detail', request_text: currentDesignerSection && currentDesignerSection.detail ? null : null }});
           }} else if (sectionId === 'validation') {{
             await persistCurrentStep('review_preview');
+            await persistShellDraft({{ validation_action: 'open_validation_detail', validation_status: 'review', validation_message: 'Review validation before the next step.' }});
           }}
           setFocusedSection(sectionId, level);
           writeLog('Focused ' + target + '.');
@@ -1751,6 +1938,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeLatestRunArtifactsDetail(initialRunArtifactsDetail || 'Open latest artifacts to view the detail layer.');
     writeDesignerSection(initialDesignerSection);
     writeValidationSection(initialValidationSection);
+    writeDesignerHistory(initialDesignerHistory);
+    writeValidationHistory(initialValidationHistory);
     writeStepStateBanner(initialStepStateBanner);
     applyShellContinuity(readShellContinuity());
     continuityHydrating = false;
@@ -1765,6 +1954,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       if (body.validation_section) {{
         writeValidationSection(body.validation_section);
+      }}
+      if (body.designer_history) {{
+        writeDesignerHistory(body.designer_history);
+      }}
+      if (body.validation_history) {{
+        writeValidationHistory(body.validation_history);
       }}
       if (body.navigation) {{
         currentNavigation = body.navigation;

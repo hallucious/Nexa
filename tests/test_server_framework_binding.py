@@ -647,7 +647,11 @@ def test_framework_binding_put_workspace_shell_draft_persists_template_and_valid
     assert response.status_code == 200
     assert artifact_store['ws-001']['designer']['server_backed_shell_state']['selected_template_id'] == 'text_summarizer'
     assert artifact_store['ws-001']['designer']['draft_request_text'] == 'Summarize this article.'
+    assert artifact_store['ws-001']['designer']['server_backed_shell_state']['history'][-1]['template_display_name'] == 'Text Summarizer'
     assert artifact_store['ws-001']['ui']['metadata']['runtime_shell_server_state']['validation_action'] == 'open_validation_detail'
+    assert artifact_store['ws-001']['ui']['metadata']['runtime_shell_server_state']['validation_action_history'][-1]['validation_status'] == 'blocked'
     assert 'Persisted template: Text Summarizer' in '\n'.join(parsed['designer_section']['summary']['lines'])
+    assert 'Applied: Text Summarizer' in '\n'.join(parsed['designer_history']['items'])
     assert 'Persisted validation action: open_validation_detail' in '\n'.join(parsed['validation_section']['summary']['lines'])
+    assert 'Action: open_validation_detail' in '\n'.join(parsed['validation_history']['items'])
     assert parsed['routes']['workspace_shell_draft_write'] == '/api/workspaces/ws-001/shell/draft'
