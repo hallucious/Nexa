@@ -44,6 +44,7 @@ WorkspaceRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 WorkspaceMembershipRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 RecentRunRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 OnboardingRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+FeedbackRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 ProviderCatalogRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 WorkspaceProviderBindingRowsProvider = Callable[[str], Sequence[Mapping[str, Any]]]
 WorkspaceProviderBindingRowProvider = Callable[[str, str], Optional[Mapping[str, Any]]]
@@ -56,6 +57,7 @@ ProviderBindingWriter = Callable[[Mapping[str, Any]], Any]
 RunRecordWriter = Callable[[Mapping[str, Any]], Any]
 WorkspaceRegistryWriter = Callable[[Mapping[str, Any], Mapping[str, Any]], Any]
 OnboardingStateWriter = Callable[[Mapping[str, Any]], Any]
+FeedbackWriter = Callable[[Mapping[str, Any]], Any]
 ManagedSecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, Any]]
 ManagedSecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 AwsSecretsManagerClientProvider = Callable[[], Any]
@@ -129,6 +131,10 @@ def _noop_onboarding_state_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return dict(row)
 
 
+def _noop_feedback_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    return dict(row)
+
+
 def _noop_run_record_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
     return dict(row)
 
@@ -169,6 +175,7 @@ class FastApiRouteDependencies:
     workspace_membership_rows_provider: WorkspaceMembershipRowsProvider = _empty_noarg_rows
     recent_run_rows_provider: RecentRunRowsProvider = _empty_noarg_rows
     onboarding_rows_provider: OnboardingRowsProvider = _empty_noarg_rows
+    feedback_rows_provider: FeedbackRowsProvider = _empty_noarg_rows
     provider_catalog_rows_provider: ProviderCatalogRowsProvider = _empty_noarg_rows
     workspace_provider_binding_rows_provider: WorkspaceProviderBindingRowsProvider = _empty_provider_binding_rows
     workspace_provider_binding_row_provider: WorkspaceProviderBindingRowProvider = _none_provider_binding_row
@@ -179,6 +186,7 @@ class FastApiRouteDependencies:
     provider_binding_writer: ProviderBindingWriter = _noop_provider_binding_writer
     workspace_registry_writer: WorkspaceRegistryWriter = _noop_workspace_registry_writer
     onboarding_state_writer: OnboardingStateWriter = _noop_onboarding_state_writer
+    feedback_writer: FeedbackWriter = _noop_feedback_writer
     run_record_writer: RunRecordWriter = _noop_run_record_writer
     provider_probe_history_writer: ProviderProbeHistoryWriter = _noop_probe_history_writer
     managed_secret_writer: ManagedSecretWriter = _default_secret_writer
@@ -200,5 +208,6 @@ class FastApiRouteDependencies:
     binding_id_factory: Optional[IdentifierFactory] = None
     probe_event_id_factory: Optional[IdentifierFactory] = None
     onboarding_state_id_factory: Optional[IdentifierFactory] = None
+    feedback_id_factory: Optional[IdentifierFactory] = None
     now_iso_provider: Optional[NowIsoProvider] = None
     session_claims_resolver: Optional[SessionClaimsResolver] = None

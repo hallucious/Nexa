@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from src.server import (
     EngineLaunchAdapter,
     EngineResultEnvelope,
@@ -296,3 +298,57 @@ def test_workspace_result_history_route_returns_beginner_facing_result_cards() -
     assert response.status_code == 200
     assert response.body["result_history"]["returned_count"] == 1
     assert response.body["result_history"]["items"][0]["output_preview"] == "Latest Hello"
+
+
+def test_http_route_surface_workspace_feedback_read_and_submit_round_trip() -> None:
+    feedback_rows = [
+        {
+            "feedback_id": "fb-001",
+            "user_id": "user-owner",
+            "workspace_id": "ws-001",
+            "workspace_title": "Primary Workspace",
+            "category": "friction_note",
+            "surface": "circuit_library",
+            "message": "The library did not make the next step obvious.",
+            "status": "received",
+            "created_at": "2026-04-14T08:00:00+00:00",
+        },
+    ]
+    get_response = RunHttpRouteSurface.handle_workspace_feedback(
+        http_request=HttpRouteRequest(method="GET", path="/api/workspaces/ws-001/feedback", headers={"Authorization": "Bearer token", "X-Request-Id": "req-http-1"}, session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["editor"]}, path_params={"workspace_id": "ws-001"}, query_params={"surface": "result_history", "run_id": "run-001"}),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace", "owner_user_id": "user-owner", "created_at": "2026-04-11T11:59:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
+        feedback_rows=feedback_rows,
+    )
+    assert get_response.status_code == 200
+    payload = get_response.body
+    assert payload["feedback_channel"]["submit_path"] == "/api/workspaces/ws-001/feedback"
+    assert payload["feedback_channel"]["items"][0]["feedback_id"] == "fb-001"
+
+    written = {}
+    post_response = RunHttpRouteSurface.handle_submit_workspace_feedback(
+        http_request=_auth_request(method="POST", path="/api/workspaces/ws-001/feedback", path_params={"workspace_id": "ws-001"}, json_body={"category": "bug_report", "surface": "result_history", "message": "This screen failed unexpectedly.", "run_id": "run-001"}),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace", "owner_user_id": "user-owner", "created_at": "2026-04-11T11:59:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
+        feedback_writer=lambda row: written.setdefault("row", dict(row)),
+        feedback_id_factory=lambda: "fb-002",
+        now_iso="2026-04-14T08:10:00+00:00",
+    )
+    assert post_response.status_code == 202
+    submit_payload = post_response.body
+    assert submit_payload["feedback"]["feedback_id"] == "fb-002"
+    assert written["row"]["surface"] == "result_history"
+
+
+def test_http_route_surface_workspace_feedback_rejects_empty_message() -> None:
+    response = RunHttpRouteSurface.handle_submit_workspace_feedback(
+        http_request=_auth_request(method="POST", path="/api/workspaces/ws-001/feedback", path_params={"workspace_id": "ws-001"}, json_body={"category": "bug_report", "surface": "result_history", "message": "   "}),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace", "owner_user_id": "user-owner", "created_at": "2026-04-11T11:59:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
+        feedback_writer=lambda row: row,
+        feedback_id_factory=lambda: "fb-003",
+        now_iso="2026-04-14T08:10:00+00:00",
+    )
+    assert response.status_code == 400
+    payload = response.body
+    assert payload["reason_code"] == "workspace_feedback.message_missing"

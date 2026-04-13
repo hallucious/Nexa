@@ -31,6 +31,8 @@ class CircuitLibraryItemView:
     continue_label: str
     continue_href: str
     role_label: str | None = None
+    feedback_href: str | None = None
+    feedback_label: str | None = None
     result_history_label: str | None = None
     result_history_href: str | None = None
     result_history_action_label: str | None = None
@@ -282,6 +284,8 @@ def _items_from_summaries(
                 continue_label=continue_label,
                 continue_href=continue_href,
                 role_label=role_label,
+                feedback_href=f"/app/workspaces/{summary.workspace_id}/feedback?surface=circuit_library",
+                feedback_label=ui_text("circuit_library.action.feedback", app_language=app_language, fallback_text="Report an issue"),
                 result_history_label=result_history_label,
                 result_history_href=result_history_href,
                 result_history_action_label=(

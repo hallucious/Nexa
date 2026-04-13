@@ -104,6 +104,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "list_workspaces",
         "get_circuit_library",
         "get_workspace_result_history",
+        "get_workspace_feedback",
+        "submit_workspace_feedback",
         "get_workspace",
         "create_workspace",
         "get_provider_catalog",
@@ -707,3 +709,44 @@ def test_framework_binding_handles_workspace_result_history_round_trip() -> None
     parsed = json.loads(response.body_text)
     assert parsed["result_history"]["returned_count"] == 1
     assert parsed["result_history"]["items"][0]["output_preview"] == "Latest Hello"
+
+
+def test_framework_binding_workspace_feedback_route_round_trip() -> None:
+    request = _request(method="GET", path="/api/workspaces/ws-001/feedback", path_params={"workspace_id": "ws-001"}, query_params={"surface": "circuit_library"})
+    response = FrameworkRouteBindings.handle_workspace_feedback(
+        request=request,
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace", "owner_user_id": "user-owner", "created_at": "2026-04-11T11:59:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
+        feedback_rows=(
+            {
+                "feedback_id": "fb-001",
+                "user_id": "user-owner",
+                "workspace_id": "ws-001",
+                "workspace_title": "Primary Workspace",
+                "category": "friction_note",
+                "surface": "circuit_library",
+                "message": "The library did not make the next step obvious.",
+                "status": "received",
+                "created_at": "2026-04-14T08:00:00+00:00",
+            },
+        ),
+    )
+    assert response.status_code == 200
+    payload = json.loads(response.body_text)
+    assert payload["feedback_channel"]["prefill_surface"] == "circuit_library"
+
+
+def test_framework_binding_workspace_feedback_submit_round_trip() -> None:
+    request = _request(method="POST", path="/api/workspaces/ws-001/feedback", path_params={"workspace_id": "ws-001"}, json_body={"category": "confusing_screen", "surface": "workspace_shell", "message": "I do not understand this workflow screen."})
+    response = FrameworkRouteBindings.handle_submit_workspace_feedback(
+        request=request,
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace", "owner_user_id": "user-owner", "created_at": "2026-04-11T11:59:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
+        feedback_writer=lambda row: row,
+        feedback_id_factory=lambda: "fb-010",
+        now_iso="2026-04-14T08:20:00+00:00",
+    )
+    assert response.status_code == 202
+    payload = json.loads(response.body_text)
+    assert payload["feedback"]["feedback_id"] == "fb-010"
+    assert payload["feedback"]["surface"] == "workspace_shell"

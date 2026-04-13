@@ -28,6 +28,7 @@ from src.server.provider_secret_api import ProviderSecretIntegrationService
 from src.server.provider_health_api import ProviderHealthService, SecretMetadataReader
 from src.server.provider_probe_api import ProviderProbeRunner, ProviderProbeService
 from src.server.provider_probe_models import ProductProviderProbeRequest
+from src.server.feedback_runtime import build_workspace_feedback_payload, build_feedback_submission_payload
 from src.server.provider_secret_models import ProductProviderBindingWriteRequest
 from src.server.run_control_api import RunControlService
 from src.server.run_action_log_api import RunActionLogReadService
@@ -241,6 +242,8 @@ class RunHttpRouteSurface:
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
+        ("get_workspace_feedback", "GET", "/api/workspaces/{workspace_id}/feedback"),
+        ("submit_workspace_feedback", "POST", "/api/workspaces/{workspace_id}/feedback"),
         ("get_workspace", "GET", "/api/workspaces/{workspace_id}"),
         ("create_workspace", "POST", "/api/workspaces"),
         ("get_provider_catalog", "GET", "/api/providers/catalog"),
@@ -821,6 +824,175 @@ class RunHttpRouteSurface:
                 "workspace_id": workspace_id,
             })
         return _route_response(200, payload)
+
+    @classmethod
+    def handle_workspace_feedback(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        feedback_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace feedback route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/feedback"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_read_failure",
+                "reason_code": "workspace_feedback.authentication_required",
+                "message": "Workspace feedback requires an authenticated session.",
+            })
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_not_found",
+                "reason_code": "workspace_feedback.workspace_not_found",
+                "message": "Requested workspace feedback context was not found.",
+            })
+        auth_input = AuthorizationInput(
+            user_id=request_auth.requested_by_user_ref or "",
+            workspace_id=workspace_context.workspace_id,
+            requested_action="read",
+            role_context=request_auth.authenticated_identity.role_refs if request_auth.authenticated_identity else (),
+        )
+        decision = AuthorizationGate.authorize_workspace_scope(auth_input, workspace_context)
+        if not decision.allowed:
+            return _route_response(_reason_to_status_code(f"workspace_feedback.{decision.reason_code}"), {
+                "status": "rejected",
+                "error_family": "workspace_feedback_read_failure",
+                "reason_code": f"workspace_feedback.{decision.reason_code}",
+                "message": "Current user is not allowed to read the requested workspace feedback channel.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        payload = build_workspace_feedback_payload(
+            workspace_id=workspace_context.workspace_id,
+            workspace_title=str(workspace_row.get("title") or workspace_context.workspace_id),
+            feedback_rows=feedback_rows,
+            current_user_id=request_auth.requested_by_user_ref or None,
+            prefill_category=str((http_request.query_params or {}).get("category") or "").strip() or None,
+            prefill_surface=str((http_request.query_params or {}).get("surface") or "").strip() or None,
+            prefill_run_id=str((http_request.query_params or {}).get("run_id") or "").strip() or None,
+            confirmation_feedback_id=str((http_request.query_params or {}).get("feedback_id") or "").strip() or None,
+        )
+        return _route_response(200, payload)
+
+    @classmethod
+    def handle_submit_workspace_feedback(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        feedback_writer: Callable[[Mapping[str, Any]], Any] | None = None,
+        feedback_id_factory: Callable[[], str] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace feedback submission route only supports POST."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/feedback"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_write_failure",
+                "reason_code": "workspace_feedback.authentication_required",
+                "message": "Workspace feedback submission requires an authenticated session.",
+            })
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_not_found",
+                "reason_code": "workspace_feedback.workspace_not_found",
+                "message": "Requested workspace feedback context was not found.",
+            })
+        auth_input = AuthorizationInput(
+            user_id=request_auth.requested_by_user_ref or "",
+            workspace_id=workspace_context.workspace_id,
+            requested_action="write",
+            role_context=request_auth.authenticated_identity.role_refs if request_auth.authenticated_identity else (),
+        )
+        decision = AuthorizationGate.authorize_workspace_scope(auth_input, workspace_context)
+        if not decision.allowed:
+            return _route_response(_reason_to_status_code(f"workspace_feedback.{decision.reason_code}"), {
+                "status": "rejected",
+                "error_family": "workspace_feedback_write_failure",
+                "reason_code": f"workspace_feedback.{decision.reason_code}",
+                "message": "Current user is not allowed to submit feedback for the requested workspace.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_write_failure",
+                "reason_code": "workspace_feedback.invalid_request",
+                "message": "Feedback payload is invalid.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        category = str(body.get("category") or "").strip().lower()
+        surface = str(body.get("surface") or "").strip().lower() or "unknown"
+        message = str(body.get("message") or "").strip()
+        run_id = str(body.get("run_id") or "").strip() or None
+        if category not in {"confusing_screen", "friction_note", "bug_report"}:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_write_failure",
+                "reason_code": "workspace_feedback.category_invalid",
+                "message": "Feedback category must be one of confusing_screen, friction_note, or bug_report.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        if surface not in {"circuit_library", "result_history", "workspace_shell", "unknown"}:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_write_failure",
+                "reason_code": "workspace_feedback.surface_invalid",
+                "message": "Feedback surface must be recognized before it can be recorded.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        if not message:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_write_failure",
+                "reason_code": "workspace_feedback.message_missing",
+                "message": "Feedback message must not be empty.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        if len(message) > 1000:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "workspace_feedback_write_failure",
+                "reason_code": "workspace_feedback.message_too_long",
+                "message": "Feedback message must be 1000 characters or fewer.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        row = {
+            "feedback_id": feedback_id_factory() if feedback_id_factory is not None else "feedback-missing-id",
+            "user_id": request_auth.requested_by_user_ref or "",
+            "workspace_id": workspace_context.workspace_id,
+            "workspace_title": str(workspace_row.get("title") or workspace_context.workspace_id),
+            "category": category,
+            "surface": surface,
+            "message": message,
+            "run_id": run_id,
+            "status": "received",
+            "created_at": str(now_iso or "").strip() or "1970-01-01T00:00:00+00:00",
+        }
+        persisted = feedback_writer(row) if feedback_writer is not None else row
+        payload = build_feedback_submission_payload(row=persisted, workspace_title=str(workspace_row.get("title") or workspace_context.workspace_id))
+        return _route_response(202, payload)
 
     @classmethod
     def handle_get_workspace(

@@ -6,6 +6,7 @@ pytest.importorskip("fastapi")
 pytest.importorskip("httpx")
 from src.server.managed_secret_metadata_store import InMemoryManagedSecretMetadataStore, bind_managed_secret_metadata_store
 from src.server.onboarding_state_store import InMemoryOnboardingStateStore, bind_onboarding_state_store
+from src.server.feedback_store import InMemoryFeedbackStore, bind_feedback_store
 from src.server.provider_binding_store import InMemoryProviderBindingStore, bind_provider_binding_store
 from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore, bind_probe_history_store
 from src.server.workspace_registry_store import InMemoryWorkspaceRegistryStore, bind_workspace_registry_store
@@ -129,7 +130,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -361,6 +362,8 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
     deps = bind_probe_history_store(dependencies=deps, store=probe_store)
     if onboarding_store is not None:
         deps = bind_onboarding_state_store(dependencies=deps, store=onboarding_store)
+    if feedback_store is not None:
+        deps = bind_feedback_store(dependencies=deps, store=feedback_store)
     return TestClient(create_fastapi_app(dependencies=deps))
 
 
@@ -1217,3 +1220,43 @@ def test_fastapi_binding_library_and_result_history_align_with_server_onboarding
     assert result_history_payload['result_history']['onboarding_incomplete'] is True
     assert result_history_payload['result_history']['onboarding_step_id'] == 'read_result'
     assert result_history_payload['onboarding_banner']['action_href'] == '/app/workspaces/ws-001/results?run_id=run-001'
+
+
+def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
+    feedback_store = InMemoryFeedbackStore()
+    client = _make_client(feedback_store=feedback_store)
+
+    get_response = client.get('/api/workspaces/ws-001/feedback?surface=result_history&run_id=run-001', headers=_session_headers())
+    assert get_response.status_code == 200
+    get_payload = get_response.json()
+    assert get_payload['feedback_channel']['submit_path'] == '/api/workspaces/ws-001/feedback'
+    assert get_payload['feedback_channel']['prefill_surface'] == 'result_history'
+    assert get_payload['feedback_channel']['prefill_run_id'] == 'run-001'
+
+    submit_response = client.post(
+        '/api/workspaces/ws-001/feedback',
+        headers=_session_headers(),
+        json={
+            'category': 'bug_report',
+            'surface': 'result_history',
+            'message': 'This result screen failed unexpectedly.',
+            'run_id': 'run-001',
+        },
+    )
+    assert submit_response.status_code == 202
+    submit_payload = submit_response.json()
+    assert submit_payload['feedback']['surface'] == 'result_history'
+    assert submit_payload['feedback']['workspace_id'] == 'ws-001'
+
+    get_after_submit = client.get('/api/workspaces/ws-001/feedback', headers=_session_headers())
+    assert get_after_submit.status_code == 200
+    after_payload = get_after_submit.json()
+    assert after_payload['feedback_channel']['returned_count'] == 1
+    assert after_payload['feedback_channel']['items'][0]['message'] == 'This result screen failed unexpectedly.'
+
+    page_response = client.get('/app/workspaces/ws-001/feedback?surface=result_history&run_id=run-001', headers=_session_headers())
+    assert page_response.status_code == 200
+    body = page_response.text
+    assert 'Help us improve this workflow' in body
+    assert '/api/workspaces/ws-001/feedback' in body
+    assert 'Report confusing screen' in body

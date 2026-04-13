@@ -14,6 +14,7 @@ from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRoute
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
 from src.server.result_history_runtime import render_workspace_result_history_html
+from src.server.feedback_runtime import render_workspace_feedback_html
 
 
 def default_fastapi_session_claims_resolver(
@@ -132,6 +133,30 @@ class FastApiRouteBindings:
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/workspaces/{workspace_id}/feedback")
+        async def get_workspace_feedback(request: Request, workspace_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id})
+            outbound = FrameworkRouteBindings.handle_workspace_feedback(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                feedback_rows=self.dependencies.feedback_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
+        @router.post("/api/workspaces/{workspace_id}/feedback")
+        async def submit_workspace_feedback(request: Request, workspace_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_submit_workspace_feedback(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                feedback_writer=self.dependencies.feedback_writer,
+                feedback_id_factory=self.dependencies.feedback_id_factory or (lambda: 'feedback-missing-id-factory'),
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else '',
             )
             return self._framework_response(outbound)
 
@@ -487,6 +512,29 @@ class FastApiRouteBindings:
                 return framework_response
             payload = json.loads(outbound.body_text)
             return HTMLResponse(content=render_workspace_result_history_html(payload), status_code=200)
+
+        @router.get("/app/workspaces/{workspace_id}/feedback")
+        async def get_workspace_feedback_page(request: Request, workspace_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method=request.method,
+                path=f"/api/workspaces/{workspace_id}/feedback",
+                headers=dict(request.headers),
+                path_params={"workspace_id": workspace_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_workspace_feedback(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                feedback_rows=self.dependencies.feedback_rows_provider(),
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            return HTMLResponse(content=render_workspace_feedback_html(payload), status_code=200)
 
         @router.get("/app/workspaces/{workspace_id}")
         async def get_workspace_shell_page(request: Request, workspace_id: str) -> Response:

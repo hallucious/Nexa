@@ -211,3 +211,26 @@ def test_result_history_projects_onboarding_banner_when_first_success_is_not_fin
     assert vm.onboarding_step_id == "read_result"
     assert vm.onboarding_action_href == "/app/workspaces/ws-001/results?run_id=run-002"
     assert vm.onboarding_action_label == "Stay on this result"
+
+
+def test_circuit_library_projects_workspace_feedback_entrypoint() -> None:
+    response = ProductWorkspaceListResponse(returned_count=1, workspaces=(_summary("ws-result", title="Results Workflow", last_run_id="run-001", last_result_status="completed", recent_run_count=1),))
+    vm = read_circuit_library_view_model(response)
+    assert vm.items[0].feedback_href == "/app/workspaces/ws-result/feedback?surface=circuit_library"
+    assert vm.items[0].feedback_label == "Report an issue"
+
+
+def test_result_history_projects_feedback_entrypoint_for_selected_run() -> None:
+    response = ProductWorkspaceRunListResponse(
+        workspace_id="ws-001",
+        workspace_title="Primary Workspace",
+        returned_count=1,
+        total_visible_count=1,
+        runs=(
+            ProductRunListItemView(run_id="run-002", workspace_id="ws-001", execution_target=ProductExecutionTargetView(target_type="commit_snapshot", target_ref="snap-002"), status="completed", status_family="terminal_success", created_at="2026-04-11T12:01:00+00:00", updated_at="2026-04-11T12:01:05+00:00", completed_at="2026-04-11T12:01:05+00:00", result_state="ready_success", result_summary=ProductResultSummaryView(title="Run completed", description="Success."), links=ProductRunListLinks(status="/api/runs/run-002", result="/api/runs/run-002/result", trace="/api/runs/run-002/trace", artifacts="/api/runs/run-002/artifacts")),
+        ),
+        applied_filters=ProductRunListAppliedFilters(limit=20),
+    )
+    vm = read_result_history_view_model(response, selected_run_id="run-002")
+    assert vm.feedback_href == "/app/workspaces/ws-001/feedback?surface=result_history&run_id=run-002"
+    assert vm.feedback_label == "Report a problem on this screen"

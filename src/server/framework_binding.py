@@ -47,6 +47,18 @@ class FrameworkRouteBindings:
             summary="Read beginner-facing workspace result history surface.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_workspace_feedback",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/feedback",
+            summary="Read beginner-facing workspace feedback channel.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="submit_workspace_feedback",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/feedback",
+            summary="Record structured product feedback for a workspace.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_workspace",
             method="GET",
             path_template="/api/workspaces/{workspace_id}",
@@ -353,6 +365,44 @@ class FrameworkRouteBindings:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_workspace_feedback(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        feedback_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_workspace_feedback(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            feedback_rows=feedback_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_submit_workspace_feedback(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        feedback_writer=None,
+        feedback_id_factory=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_submit_workspace_feedback(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            feedback_writer=feedback_writer,
+            feedback_id_factory=feedback_id_factory,
+            now_iso=now_iso,
         )
         return cls.to_framework_response(response)
 

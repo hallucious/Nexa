@@ -42,6 +42,8 @@ class ResultHistoryViewModel:
     onboarding_action_label: str | None = None
     onboarding_action_href: str | None = None
     explanation: str | None = None
+    feedback_href: str | None = None
+    feedback_label: str | None = None
 
 
 _READY_SUCCESS = {"ready_success", "terminal_success", "completed"}
@@ -269,4 +271,6 @@ def read_result_history_view_model(
         onboarding_action_label=onboarding_action_label,
         onboarding_action_href=onboarding_action_href,
         explanation=explanation,
+        feedback_href=(f"/app/workspaces/{workspace_id}/feedback?surface=result_history" + (f"&run_id={selected}" if selected else "")) if workspace_id else None,
+        feedback_label=ui_text("result_history.action.feedback", app_language=app_language, fallback_text="Report a problem on this screen"),
     )
