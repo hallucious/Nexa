@@ -32,6 +32,7 @@ from src.server.provider_secret_models import ProductProviderBindingWriteRequest
 from src.server.run_control_api import RunControlService
 from src.server.run_action_log_api import RunActionLogReadService
 from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
+from src.server.circuit_library_runtime import build_circuit_library_payload
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -237,6 +238,7 @@ class RunHttpRouteSurface:
         ("get_recent_activity", "GET", "/api/users/me/activity"),
         ("get_history_summary", "GET", "/api/users/me/history-summary"),
         ("list_workspaces", "GET", "/api/workspaces"),
+        ("get_circuit_library", "GET", "/api/workspaces/library"),
         ("get_workspace", "GET", "/api/workspaces/{workspace_id}"),
         ("create_workspace", "POST", "/api/workspaces"),
         ("get_provider_catalog", "GET", "/api/providers/catalog"),
@@ -721,6 +723,52 @@ class RunHttpRouteSurface:
             return _route_response(200, asdict(outcome.response))
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
+
+    @classmethod
+    def handle_circuit_library(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        membership_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Circuit library route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/workspaces/library":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "circuit_library_read_failure",
+                "reason_code": "circuit_library.authentication_required",
+                "message": "Circuit library requires an authenticated session.",
+            })
+
+        payload = build_circuit_library_payload(
+            request_auth=request_auth,
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        if payload is None:
+            return _route_response(403, {
+                "status": "rejected",
+                "error_family": "circuit_library_read_failure",
+                "reason_code": "circuit_library.forbidden",
+                "message": "Current user is not allowed to read the circuit library.",
+            })
+        return _route_response(200, payload)
 
     @classmethod
     def handle_get_workspace(

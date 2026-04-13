@@ -438,6 +438,23 @@ def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
     assert [event["sequence"] for event in trace_payload["events"]] == [1, 2]
 
 
+
+
+def test_fastapi_binding_circuit_library_routes_round_trip() -> None:
+    client = _make_client()
+
+    api_response = client.get('/api/workspaces/library', headers=_session_headers())
+    assert api_response.status_code == 200
+    api_payload = api_response.json()
+    assert api_payload['status'] == 'ready'
+    assert api_payload['library']['returned_count'] == 1
+    assert api_payload['library']['items'][0]['continue_href'] == '/app/workspaces/ws-001'
+
+    page_response = client.get('/app/library', headers=_session_headers())
+    assert page_response.status_code == 200
+    assert 'My workflows' in page_response.text
+    assert '/app/workspaces/ws-001' in page_response.text
+
 def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     client = _make_client()
     response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())

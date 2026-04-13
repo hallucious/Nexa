@@ -12,6 +12,7 @@ from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
+from src.server.circuit_library_runtime import render_circuit_library_runtime_html
 
 
 def default_fastapi_session_claims_resolver(
@@ -88,6 +89,21 @@ class FastApiRouteBindings:
         async def list_workspaces(request: Request) -> Response:
             inbound = self._inbound_request(request=request)
             outbound = FrameworkRouteBindings.handle_list_workspaces(
+                request=inbound,
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/workspaces/library")
+        async def get_circuit_library(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_circuit_library(
                 request=inbound,
                 workspace_rows=self.dependencies.workspace_rows_provider(),
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
@@ -393,6 +409,33 @@ class FastApiRouteBindings:
                 workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
             )
             return self._framework_response(outbound)
+
+        @router.get("/app/library")
+        async def get_circuit_library_page(request: Request) -> Response:
+            inbound = FrameworkInboundRequest(
+                method=request.method,
+                path="/api/workspaces/library",
+                headers=dict(request.headers),
+                path_params={},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_circuit_library(
+                request=inbound,
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            return HTMLResponse(content=render_circuit_library_runtime_html(payload), status_code=200)
 
         @router.get("/app/workspaces/{workspace_id}")
         async def get_workspace_shell_page(request: Request, workspace_id: str) -> Response:

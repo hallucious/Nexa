@@ -35,6 +35,12 @@ class FrameworkRouteBindings:
             summary="List accessible workspaces.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_circuit_library",
+            method="GET",
+            path_template="/api/workspaces/library",
+            summary="Read beginner-facing circuit library surface.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_workspace",
             method="GET",
             path_template="/api/workspaces/{workspace_id}",
@@ -276,6 +282,31 @@ class FrameworkRouteBindings:
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_list_workspaces(
+            http_request=cls.to_http_route_request(request),
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_circuit_library(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_rows: Sequence[Mapping[str, Any]] = (),
+        membership_rows: Sequence[Mapping[str, Any]] = (),
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_circuit_library(
             http_request=cls.to_http_route_request(request),
             workspace_rows=workspace_rows,
             membership_rows=membership_rows,

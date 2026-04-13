@@ -86,6 +86,45 @@ def test_http_route_definitions_are_unique() -> None:
     assert len(definitions) == len(set(definitions))
 
 
+
+
+def test_circuit_library_route_returns_registry_backed_return_use_payload() -> None:
+    response = RunHttpRouteSurface.handle_circuit_library(
+        http_request=_auth_request(method="GET", path="/api/workspaces/library"),
+        workspace_rows=({
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "last_run_id": "run-001",
+            "last_result_status": "completed",
+            "continuity_source": "server",
+            "archived": False,
+        },),
+        membership_rows=(),
+        recent_run_rows=(_run_row(status="completed", status_family="terminal_success"),),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["library"]["returned_count"] == 1
+    assert response.body["library"]["items"][0]["has_recent_result_history"] is True
+    assert response.body["item_sections"][0]["continue_href"] == "/app/workspaces/ws-001"
+
+
+def test_circuit_library_route_requires_authentication() -> None:
+    response = RunHttpRouteSurface.handle_circuit_library(
+        http_request=HttpRouteRequest(method="GET", path="/api/workspaces/library"),
+        workspace_rows=(),
+        membership_rows=(),
+        recent_run_rows=(),
+    )
+
+    assert response.status_code == 401
+    assert response.body["reason_code"] == "circuit_library.authentication_required"
+
 def test_launch_route_returns_accepted_http_response() -> None:
     response = RunHttpRouteSurface.handle_launch(
         http_request=_auth_request(

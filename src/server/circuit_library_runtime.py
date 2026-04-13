@@ -1,0 +1,180 @@
+from __future__ import annotations
+
+from dataclasses import asdict
+from html import escape
+from typing import Any, Mapping, Sequence
+
+from src.server.workspace_onboarding_api import WorkspaceRegistryService
+from src.server.workspace_onboarding_models import ProductWorkspaceListResponse
+from src.ui.circuit_library import read_circuit_library_view_model
+from src.server.workspace_shell_sections import build_shell_section
+
+
+def build_circuit_library_payload(
+    *,
+    request_auth,
+    workspace_rows: Sequence[Mapping[str, Any]] = (),
+    membership_rows: Sequence[Mapping[str, Any]] = (),
+    recent_run_rows: Sequence[Mapping[str, Any]] = (),
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+    onboarding_rows: Sequence[Mapping[str, Any]] = (),
+    app_language: str = "en",
+) -> dict[str, Any] | None:
+    outcome = WorkspaceRegistryService.list_workspaces(
+        request_auth=request_auth,
+        workspace_rows=workspace_rows,
+        membership_rows=membership_rows,
+        recent_run_rows=recent_run_rows,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+        onboarding_rows=onboarding_rows,
+    )
+    if not outcome.ok or outcome.response is None:
+        return None
+    response: ProductWorkspaceListResponse = outcome.response
+    view_model = read_circuit_library_view_model(response, app_language=app_language)
+    overview = build_shell_section(
+        headline=view_model.title or "My workflows",
+        lines=[
+            view_model.subtitle or "",
+            f"Visible workflows: {view_model.returned_count}",
+        ],
+        detail_title="Library overview",
+        detail_items=[
+            "Source of truth: server-backed workspace registry",
+            "Return-use path: continue an existing workflow from the product surface",
+            "Artifact reopen remains a secondary import/export path",
+        ],
+        summary_empty="No workflows are visible yet.",
+        detail_empty="Library detail will appear here once workflows exist.",
+    )
+    item_sections = []
+    for item in view_model.items:
+        item_sections.append(
+            {
+                "workspace_id": item.workspace_id,
+                "title": item.title,
+                "status_label": item.status_label,
+                "continue_href": item.continue_href,
+                "continue_label": item.continue_label,
+                "has_recent_result_history": item.has_recent_result_history,
+                "section": build_shell_section(
+                    headline=item.status_label,
+                    lines=[item.updated_label] + list(item.summary_lines),
+                    detail_title="Workflow detail",
+                    detail_items=[
+                        item.role_label,
+                        item.result_history_label,
+                        f"Continue route: {item.continue_href}",
+                    ],
+                    controls=(
+                        {
+                            "control_id": f"continue-{item.workspace_id}",
+                            "label": item.continue_label,
+                            "action_kind": "navigate",
+                            "action_target": item.continue_href,
+                        },
+                    ),
+                ),
+            }
+        )
+    return {
+        "status": "ready",
+        "source_of_truth": "workspace_registry",
+        "library": asdict(view_model),
+        "overview_section": overview,
+        "item_sections": item_sections,
+        "routes": {
+            "workspace_list": "/api/workspaces",
+            "app_library": "/app/library",
+        },
+    }
+
+
+def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
+    library = dict(payload.get("library") or {})
+    title = escape(str(library.get("title") or "My workflows"))
+    subtitle = escape(str(library.get("subtitle") or "Continue a saved workflow without reopening files."))
+    empty_title = escape(str(library.get("empty_title") or "No workflows yet"))
+    empty_summary = escape(str(library.get("empty_summary") or "Create your first workflow to see it here."))
+    item_sections = list(payload.get("item_sections") or [])
+
+    def _render_lines(lines: Sequence[str]) -> str:
+        if not lines:
+            return ""
+        return "".join(f"<li>{escape(str(line))}</li>" for line in lines if str(line).strip())
+
+    cards_html = ""
+    for item in item_sections:
+        section = dict(item.get("section") or {})
+        summary = dict(section.get("summary") or {})
+        detail = dict(section.get("detail") or {})
+        controls = list(section.get("controls") or [])
+        continue_href = escape(str(item.get("continue_href") or "#"))
+        continue_label = escape(str(item.get("continue_label") or "Continue"))
+        status_label = escape(str(item.get("status_label") or ""))
+        title_text = escape(str(item.get("title") or item.get("workspace_id") or "Workflow"))
+        control_html = "".join(
+            f'<a class="action-link" href="{continue_href}">{continue_label}</a>'
+            for _control in controls[:1]
+        )
+        cards_html += f"""
+        <article class=\"workflow-card\">
+          <div class=\"workflow-card-head\">
+            <h2>{title_text}</h2>
+            <span class=\"status-badge\">{status_label}</span>
+          </div>
+          <ul class=\"summary-lines\">{_render_lines(summary.get('lines') or [])}</ul>
+          <details>
+            <summary>{escape(str(detail.get('title') or 'Workflow detail'))}</summary>
+            <ul class=\"detail-lines\">{_render_lines(detail.get('items') or [])}</ul>
+          </details>
+          <div class=\"actions\">{control_html}</div>
+        </article>
+        """
+    if not cards_html:
+        cards_html = f"""
+        <article class=\"workflow-card empty\">
+          <h2>{empty_title}</h2>
+          <p>{empty_summary}</p>
+        </article>
+        """
+
+    return f"""<!doctype html>
+<html lang=\"en\">
+  <head>
+    <meta charset=\"utf-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+    <title>{title}</title>
+    <style>
+      body {{ font-family: Arial, sans-serif; margin: 0; background: #0b1220; color: #e5e7eb; }}
+      main {{ max-width: 960px; margin: 0 auto; padding: 24px; }}
+      header {{ margin-bottom: 24px; }}
+      h1 {{ margin: 0 0 8px; font-size: 2rem; }}
+      p {{ margin: 0; color: #cbd5e1; }}
+      .workflow-grid {{ display: grid; gap: 16px; }}
+      .workflow-card {{ background: #111827; border: 1px solid #334155; border-radius: 16px; padding: 16px; }}
+      .workflow-card-head {{ display: flex; justify-content: space-between; gap: 12px; align-items: center; }}
+      .status-badge {{ background: #1f2937; border: 1px solid #475569; border-radius: 999px; padding: 4px 10px; font-size: 0.875rem; }}
+      .summary-lines, .detail-lines {{ margin: 12px 0 0; padding-left: 18px; }}
+      .actions {{ margin-top: 16px; }}
+      .action-link {{ display: inline-block; padding: 10px 14px; border-radius: 10px; background: #2563eb; color: white; text-decoration: none; }}
+      a.top-link {{ color: #93c5fd; text-decoration: none; }}
+      details summary {{ cursor: pointer; margin-top: 12px; }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <a class=\"top-link\" href=\"/api/workspaces\">Open raw workspace registry</a>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </header>
+      <section class=\"workflow-grid\">{cards_html}</section>
+    </main>
+  </body>
+</html>
+"""

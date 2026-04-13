@@ -102,6 +102,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_recent_activity",
         "get_history_summary",
         "list_workspaces",
+        "get_circuit_library",
         "get_workspace",
         "create_workspace",
         "get_provider_catalog",
@@ -299,6 +300,32 @@ def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None
     assert onboarding_payload["state"]["first_success_achieved"] is True
     assert onboarding_payload["state"]["advanced_surfaces_unlocked"] is True
 
+
+
+
+def test_framework_binding_handles_circuit_library_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_circuit_library(
+        request=_request(method="GET", path="/api/workspaces/library"),
+        workspace_rows=({
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "last_run_id": "run-001",
+            "last_result_status": "completed",
+            "continuity_source": "server",
+            "archived": False,
+        },),
+        membership_rows=(),
+        recent_run_rows=(_run_row(status="completed", status_family="terminal_success"),),
+    )
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed["status"] == "ready"
+    assert parsed["library"]["returned_count"] == 1
+    assert parsed["library"]["items"][0]["continue_href"] == "/app/workspaces/ws-001"
 
 def test_framework_binding_handles_workspace_provider_health_round_trip() -> None:
     from src.server import AwsSecretsManagerBindingConfig, AwsSecretsManagerSecretAuthority
