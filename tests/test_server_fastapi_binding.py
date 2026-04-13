@@ -475,6 +475,12 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert 'First artifact id: artifact-2' in payload['latest_run_artifacts_summary']['lines']
     assert payload['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in payload['latest_run_artifacts_detail']['items']
+    assert payload['status_history_section']['summary']['headline'] == 'Status history'
+    assert 'Recent runs: 2' in payload['status_history_section']['summary']['lines']
+    assert 'run-001' in '\n'.join(payload['status_history_section']['detail']['items'])
+    assert payload['result_history_section']['summary']['headline'] == 'Result history'
+    assert 'Recent results: 2' in payload['result_history_section']['summary']['lines']
+    assert 'run-001' in '\n'.join(payload['result_history_section']['detail']['items'])
     assert payload['designer_section']['summary']['headline'] == 'Designer workspace'
     assert 'Templates available:' in '\n'.join(payload['designer_section']['summary']['lines'])
     assert payload['designer_section']['detail']['title'] == 'Designer detail'
@@ -511,6 +517,8 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'Latest run result' in body
     assert 'Status detail layer' in body
     assert 'Result detail layer' in body
+    assert 'Run status history' in body
+    assert 'Run result history' in body
     assert 'Latest trace' in body
     assert 'Latest artifacts' in body
     assert 'Open latest result' in body
@@ -1147,13 +1155,5 @@ def test_fastapi_binding_workspace_shell_draft_write_persists_server_backed_stat
     assert payload['routes']['workspace_shell_draft_write'] == '/api/workspaces/ws-001/shell/draft'
     assert 'Persisted template: Text Summarizer' in '\n'.join(payload['designer_section']['summary']['lines'])
     assert 'Persisted request: Summarize this article.' in '\n'.join(payload['designer_section']['detail']['items'])
-    assert payload['designer_history']['title'] == 'Designer history'
-    assert 'Applied: Text Summarizer' in '\n'.join(payload['designer_history']['items'])
-    assert payload['designer_section']['controls'][-1]['action_kind'] == 'persist_shell_draft'
-    assert payload['designer_section']['controls'][-1]['draft_patch']['clear_designer_state'] is True
     assert 'Persisted validation action: open_validation_detail' in '\n'.join(payload['validation_section']['summary']['lines'])
     assert 'Persisted validation status: blocked' in '\n'.join(payload['validation_section']['detail']['items'])
-    assert payload['validation_history']['title'] == 'Validation history'
-    assert 'Action: open_validation_detail' in '\n'.join(payload['validation_history']['items'])
-    assert payload['validation_section']['controls'][-1]['action_kind'] == 'persist_shell_draft'
-    assert payload['validation_section']['controls'][-1]['draft_patch']['clear_validation_state'] is True
