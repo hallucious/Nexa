@@ -3,8 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable, Mapping, Optional
 
-from src.server.auth_adapter import RequestAuthResolver
-from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
+from src.server.auth_adapter import AuthorizationGate, RequestAuthResolver
+from src.server.auth_models import AuthorizationInput, RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.boundary_models import EngineResultEnvelope, EngineRunLaunchRequest, EngineRunLaunchResponse, EngineRunStatusSnapshot
 from src.server.http_route_models import HttpRouteRequest, HttpRouteResponse
 from src.server.run_admission import RunAdmissionService
@@ -30,6 +30,7 @@ from src.server.provider_probe_models import ProductProviderProbeRequest
 from src.server.provider_secret_models import ProductProviderBindingWriteRequest
 from src.server.run_control_api import RunControlService
 from src.server.run_action_log_api import RunActionLogReadService
+from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -87,6 +88,7 @@ class RunHttpRouteSurface:
         ("get_onboarding", "GET", "/api/users/me/onboarding"),
         ("put_onboarding", "PUT", "/api/users/me/onboarding"),
         ("list_workspace_runs", "GET", "/api/workspaces/{workspace_id}/runs"),
+        ("get_workspace_shell", "GET", "/api/workspaces/{workspace_id}/shell"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
@@ -142,6 +144,69 @@ class RunHttpRouteSurface:
             allowed_model_refs=allowed_model_refs,
             notes=str(body.get("notes") or "").strip() or None,
         )
+
+    @classmethod
+    def handle_workspace_shell(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        artifact_source: Any | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace shell route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/shell"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "workspace_shell_read_failure",
+                "reason_code": "workspace_shell.authentication_required",
+                "message": "Workspace shell requires an authenticated session.",
+            })
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "workspace_shell_not_found",
+                "reason_code": "workspace_shell.workspace_not_found",
+                "message": "Requested workspace shell was not found.",
+            })
+
+        auth_input = AuthorizationInput(
+            user_id=request_auth.requested_by_user_ref or "",
+            workspace_id=workspace_context.workspace_id,
+            requested_action="read",
+            role_context=request_auth.authenticated_identity.role_refs if request_auth.authenticated_identity else (),
+        )
+        decision = AuthorizationGate.authorize_workspace_scope(auth_input, workspace_context)
+        if not decision.allowed:
+            return _route_response(
+                _reason_to_status_code(f"workspace_shell.{decision.reason_code}"),
+                {
+                    "status": "rejected",
+                    "error_family": "workspace_shell_read_failure",
+                    "reason_code": f"workspace_shell.{decision.reason_code}",
+                    "message": "Current user is not allowed to read the requested workspace shell.",
+                    "workspace_id": workspace_context.workspace_id,
+                },
+            )
+
+        payload = build_workspace_shell_runtime_payload(
+            workspace_row=workspace_row,
+            artifact_source=artifact_source,
+            recent_run_rows=recent_run_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        return _route_response(200, payload)
 
     @classmethod
     def handle_launch(

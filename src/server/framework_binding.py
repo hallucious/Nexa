@@ -107,6 +107,12 @@ class FrameworkRouteBindings:
             summary="List workspace runs with pagination.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_workspace_shell",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/shell",
+            summary="Read browser-runnable workspace shell projection.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_run",
             method="POST",
             path_template="/api/runs",
@@ -620,6 +626,27 @@ class FrameworkRouteBindings:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_workspace_shell(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        artifact_source: Any | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_workspace_shell(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            recent_run_rows=list(recent_run_rows),
+            onboarding_rows=list(onboarding_rows),
+            artifact_source=artifact_source,
         )
         return cls.to_framework_response(response)
 

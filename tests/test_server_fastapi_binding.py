@@ -74,6 +74,17 @@ def _run_row(*, status: str = "running", trace_available: bool = False) -> dict:
     }
 
 
+def _working_save_artifact() -> dict:
+    return {
+        "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+        "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+        "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+        "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile", "provider_session_keys": {"gpt": "sk-test-session"}}},
+    }
+
+
 def _session_headers(user_id: str = "user-owner") -> dict[str, str]:
     return {
         "Authorization": "Bearer token",
@@ -244,6 +255,7 @@ def _make_client() -> TestClient:
             'continuity_source': 'server',
             'archived': False,
         } if workspace_id == 'ws-001' else None,
+        workspace_artifact_source_provider=lambda workspace_id: _working_save_artifact() if workspace_id == 'ws-001' else None,
         run_context_provider=lambda run_id: _run_context() if run_id == "run-001" else None,
         target_catalog_provider=lambda workspace_id: {
             "snap-001": ExecutionTargetCatalogEntry(
@@ -389,6 +401,33 @@ def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
     assert trace_payload["provider_continuity"]["provider_binding_count"] == 1
     assert trace_payload["activity_continuity"]["recent_run_count"] == 1
     assert [event["sequence"] for event in trace_payload["events"]] == [1, 2]
+
+
+def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['workspace_id'] == 'ws-001'
+    assert payload['click_test_ready'] is True
+    assert payload['launch_request_template']['execution_target']['target_type'] == 'working_save'
+    assert payload['shell']['mobile_first_run']['visible'] is True
+    assert payload['shell']['privacy_transparency']['visible'] is True
+    assert payload['routes']['launch_run'] == '/api/runs'
+
+
+def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/app/workspaces/ws-001', headers=_session_headers())
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    body = response.text
+    assert 'Nexa Runtime Shell' in body
+    assert 'Run draft' in body
+    assert '/api/runs' in body
+    assert '/api/workspaces/ws-001/shell' in body
 
 
 def test_fastapi_binding_returns_auth_failure_without_session_claims() -> None:

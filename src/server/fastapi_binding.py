@@ -4,13 +4,14 @@ import json
 from typing import Any, Mapping, Optional
 
 from fastapi import APIRouter, Body, FastAPI, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from src.server.framework_binding import FrameworkRouteBindings
 from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthority
 from src.server.aws_secrets_manager_models import AwsSecretsManagerBindingConfig
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkOutboundResponse
 from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRouteDependencies
+from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 
 
 def default_fastapi_session_claims_resolver(
@@ -359,6 +360,44 @@ class FastApiRouteBindings:
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
             )
             return self._framework_response(outbound)
+
+        @router.get("/api/workspaces/{workspace_id}/shell")
+        async def get_workspace_shell(request: Request, workspace_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id})
+            outbound = FrameworkRouteBindings.handle_workspace_shell(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                recent_run_rows=self.dependencies.workspace_run_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/app/workspaces/{workspace_id}")
+        async def get_workspace_shell_page(request: Request, workspace_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method=request.method,
+                path=f"/api/workspaces/{workspace_id}/shell",
+                headers=dict(request.headers),
+                path_params={"workspace_id": workspace_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_workspace_shell(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                recent_run_rows=self.dependencies.workspace_run_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            return HTMLResponse(content=render_workspace_shell_runtime_html(payload), status_code=200)
 
         @router.post("/api/runs")
         async def launch_run(request: Request, payload: dict[str, Any] | None = Body(default=None)) -> Response:

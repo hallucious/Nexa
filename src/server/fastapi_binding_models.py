@@ -60,6 +60,7 @@ ManagedSecretWriter = Callable[[str, str, str, Mapping[str, Any]], Mapping[str, 
 ManagedSecretMetadataReader = Callable[[str], Optional[Mapping[str, Any]]]
 AwsSecretsManagerClientProvider = Callable[[], Any]
 WorkspaceRowProvider = Callable[[str], Optional[Mapping[str, Any]]]
+WorkspaceArtifactSourceProvider = Callable[[str], Any | None]
 EngineStatusProvider = Callable[[str], Optional[EngineRunStatusSnapshot]]
 EngineResultProvider = Callable[[str], Optional[EngineResultEnvelope]]
 EngineLaunchDecider = Callable[..., EngineRunLaunchResponse]
@@ -135,6 +136,10 @@ def _none_workspace_row(_: str) -> Optional[Mapping[str, Any]]:
     return None
 
 
+def _none_workspace_artifact(_: str) -> Any | None:
+    return None
+
+
 def _none_status(_: str) -> Optional[EngineRunStatusSnapshot]:
     return None
 
@@ -177,6 +182,7 @@ class FastApiRouteDependencies:
     aws_secrets_manager_config: Optional[AwsSecretsManagerBindingConfig] = None
     provider_probe_runner: Optional[Callable[..., Any]] = None
     workspace_row_provider: WorkspaceRowProvider = _none_workspace_row
+    workspace_artifact_source_provider: WorkspaceArtifactSourceProvider = _none_workspace_artifact
     engine_status_provider: EngineStatusProvider = _none_status
     engine_result_provider: EngineResultProvider = _none_result
     admission_policy: ProductAdmissionPolicy = field(default_factory=ProductAdmissionPolicy)

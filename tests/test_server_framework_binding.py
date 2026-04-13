@@ -114,6 +114,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_onboarding",
         "put_onboarding",
         "list_workspace_runs",
+        "get_workspace_shell",
         "launch_run",
         "get_run_status",
         "get_run_result",
