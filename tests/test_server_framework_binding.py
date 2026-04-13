@@ -507,3 +507,6 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['navigation']['default_section'] == 'result'
     assert parsed['navigation']['default_level'] == 'detail'
     assert parsed['navigation']['guidance_label'] == 'Recommended next: Result'
+    assert parsed['step_state_banner']['title'] == 'Step 5 of 5 — Read result'
+    assert parsed['step_state_banner']['recommended_section'] == 'result'
+    assert 'Result is ready.' in parsed['step_state_banner']['summary']

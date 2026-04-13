@@ -393,6 +393,99 @@ def _navigation_model(
         "sections": [dict(item) for item in sections],
     }
 
+
+def _step_state_banner(
+    shell: Mapping[str, Any] | None,
+    *,
+    latest_run_status_preview: Mapping[str, Any] | None,
+    latest_run_result_preview: Mapping[str, Any] | None,
+    latest_run_trace_preview: Mapping[str, Any] | None,
+    latest_run_artifacts_preview: Mapping[str, Any] | None,
+    navigation: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    shell_map = shell or {}
+    mobile = shell_map.get("mobile_first_run") or {}
+    steps = tuple(mobile.get("steps") or ())
+    if not steps:
+        return None
+
+    current_step_id = "enter_goal"
+    step_index: dict[str, int] = {}
+    step_label: dict[str, str] = {}
+    fallback_step: Mapping[str, Any] | None = None
+    active_step: Mapping[str, Any] | None = None
+    for index, step in enumerate(steps, start=1):
+        if not isinstance(step, Mapping):
+            continue
+        step_id = str(step.get("step_id") or "").strip()
+        if not step_id:
+            continue
+        step_index[step_id] = index
+        step_label[step_id] = str(step.get("label") or step_id).strip() or step_id
+        if fallback_step is None:
+            fallback_step = step
+        if str(step.get("status") or "") == "active" and active_step is None:
+            active_step = step
+            current_step_id = step_id
+    fallback_step = active_step or fallback_step
+
+    latest_status = str((latest_run_status_preview or {}).get("status") or "").strip().lower()
+    latest_result_state = str((latest_run_result_preview or {}).get("result_state") or "").strip().lower()
+    latest_trace_count = int((latest_run_trace_preview or {}).get("event_count") or 0)
+    latest_artifact_count = int((latest_run_artifacts_preview or {}).get("artifact_count") or 0)
+    recommended_section = str((navigation or {}).get("default_section") or "status").strip() or "status"
+
+    if latest_result_state.startswith("ready"):
+        current_step_id = "read_result"
+        severity = "success"
+        summary = "Result is ready. Open Result next to finish the first-run path."
+    elif latest_status in {"failed", "partial"} and latest_trace_count > 0:
+        current_step_id = "run"
+        severity = "warning"
+        summary = "Run needs diagnosis. Open Trace next to understand what happened."
+    elif latest_artifact_count > 0 and not latest_result_state.startswith("ready"):
+        current_step_id = "read_result"
+        severity = "info"
+        summary = "A readable result is not ready yet, but artifacts are available. Open Artifacts next."
+    elif latest_status in {"running", "queued", "accepted"}:
+        current_step_id = "run"
+        severity = "info"
+        summary = "Run is in progress. Watch Status while Nexa prepares the result."
+    else:
+        severity = "info"
+        summary_by_step = {
+            "enter_goal": "Describe your goal to start the first-run path.",
+            "review_preview": "Review the proposed workflow preview before approving.",
+            "approve": "Approve the proposed workflow so Nexa can prepare it for running.",
+            "run": "Run the workflow to generate your first result.",
+            "read_result": "Read the result to finish the first-run path.",
+        }
+        summary = summary_by_step.get(current_step_id, "Follow the guided first-run path one step at a time.")
+
+    total_steps = max(len(step_index), 1)
+    fallback_step_id = str((fallback_step or {}).get("step_id") or "enter_goal").strip() or "enter_goal"
+    current_index = step_index.get(current_step_id) or step_index.get(fallback_step_id) or 1
+    current_label = step_label.get(current_step_id) or step_label.get(fallback_step_id) or "Step"
+    next_section_label = {
+        "status": "Status",
+        "result": "Result",
+        "trace": "Trace",
+        "artifacts": "Artifacts",
+    }.get(recommended_section, recommended_section.title())
+    return {
+        "visible": True,
+        "banner_id": current_step_id,
+        "severity": severity,
+        "title": f"Step {current_index} of {total_steps} — {current_label}",
+        "summary": summary,
+        "current_step_id": current_step_id,
+        "current_step_label": current_label,
+        "current_step_index": current_index,
+        "total_steps": total_steps,
+        "recommended_section": recommended_section,
+        "recommended_section_label": next_section_label,
+    }
+
 def build_workspace_shell_runtime_payload(
     *,
     workspace_row: Mapping[str, Any] | None,
@@ -433,6 +526,14 @@ def build_workspace_shell_runtime_payload(
     latest_run_artifacts_preview = _latest_run_artifacts_preview(latest_run_row, artifact_rows_lookup)
     latest_run_trace_preview = _latest_run_trace_preview(latest_run_row, trace_rows_lookup)
 
+    navigation = _navigation_model(
+        asdict(shell_vm),
+        latest_run_status_preview=latest_run_status_preview,
+        latest_run_result_preview=latest_run_result_preview,
+        latest_run_trace_preview=latest_run_trace_preview,
+        latest_run_artifacts_preview=latest_run_artifacts_preview,
+    )
+
     payload = {
         "workspace_id": workspace_id,
         "workspace_title": workspace_title,
@@ -466,12 +567,14 @@ def build_workspace_shell_runtime_payload(
         "latest_run_result_detail": _latest_run_result_detail(latest_run_result_preview),
         "latest_run_artifacts_detail": _latest_run_artifacts_detail(latest_run_artifacts_preview),
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
-        "navigation": _navigation_model(
+        "navigation": navigation,
+        "step_state_banner": _step_state_banner(
             asdict(shell_vm),
             latest_run_status_preview=latest_run_status_preview,
             latest_run_result_preview=latest_run_result_preview,
             latest_run_trace_preview=latest_run_trace_preview,
             latest_run_artifacts_preview=latest_run_artifacts_preview,
+            navigation=navigation,
         ),
         "continuity": {
             "onboarding_state": onboarding_state,
@@ -505,6 +608,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_result_detail_json = json.dumps(payload.get("latest_run_result_detail"), ensure_ascii=False)
     latest_run_artifacts_detail_json = json.dumps(payload.get("latest_run_artifacts_detail"), ensure_ascii=False)
     latest_run_trace_detail_json = json.dumps(payload.get("latest_run_trace_detail"), ensure_ascii=False)
+    step_state_banner_json = json.dumps(payload.get("step_state_banner"), ensure_ascii=False)
     navigation = payload.get("navigation") or {}
     navigation_json = json.dumps(navigation, ensure_ascii=False)
     template_items = []
@@ -569,6 +673,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <div id="runtime-nav" class="nav"></div>
       <p id="focus-guidance"><strong>{escape(str(navigation.get('guidance_label') or 'Recommended next: Status'))}</strong> — {escape(str(navigation.get('guidance_summary') or 'Open status first to follow the current runtime state.'))}</p>
       <pre id="focus-state">Focus: {escape(str(navigation.get('default_section') or 'status'))}</pre>
+    </section>
+    <section class="card" style="margin-top:16px;">
+      <h2>Step state banner</h2>
+      <p id="step-state-banner-title">{escape(str((payload.get('step_state_banner') or {}).get('title') or 'Step 1 of 5 — Enter goal'))}</p>
+      <pre id="step-state-banner-summary">{escape(str((payload.get('step_state_banner') or {}).get('summary') or 'Describe your goal to start the first-run path.'))}</pre>
     </section>
     <div class="row">
       <section class="card">
@@ -650,6 +759,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRunResultDetail = {latest_run_result_detail_json};
     const initialRunArtifactsDetail = {latest_run_artifacts_detail_json};
     const initialRunTraceDetail = {latest_run_trace_detail_json};
+    const initialStepStateBanner = {step_state_banner_json};
     const initialNavigation = {navigation_json};
     const logEl = document.getElementById('browser-log');
     const latestRunStatusEl = document.getElementById('latest-run-status');
@@ -662,6 +772,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const latestRunArtifactsDetailEl = document.getElementById('latest-run-artifacts-detail');
     const runtimeNavEl = document.getElementById('runtime-nav');
     const focusStateEl = document.getElementById('focus-state');
+    const stepStateBannerTitleEl = document.getElementById('step-state-banner-title');
+    const stepStateBannerSummaryEl = document.getElementById('step-state-banner-summary');
     let activeRunId = initialRunStatusPreview ? initialRunStatusPreview.run_id : null;
     let focusedSectionId = (initialNavigation && initialNavigation.default_section) || 'status';
     let focusedLevel = (initialNavigation && initialNavigation.default_level) || 'summary';
@@ -669,6 +781,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let activeRunResultPath = initialPayload.routes.latest_run_result || null;
     let activeRunTracePath = initialPayload.routes.latest_run_trace || null;
     let activeRunArtifactsPath = initialPayload.routes.latest_run_artifacts || null;
+    let latestStatusBodyState = null;
+    let latestResultBodyState = null;
+    let latestTraceBodyState = null;
+    let latestArtifactsBodyState = null;
     function writeLog(message) {{
       logEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
     }}
@@ -793,6 +909,40 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         ].filter(Boolean),
       }};
     }}
+    function formatStepStateBanner(banner, fallbackTitle, fallbackSummary) {{
+      return {{
+        title: banner && typeof banner.title === 'string' && banner.title ? banner.title : fallbackTitle,
+        summary: banner && typeof banner.summary === 'string' && banner.summary ? banner.summary : fallbackSummary,
+      }};
+    }}
+    function deriveStepStateBannerFromBodies(statusBody, resultBody, traceBody, artifactsBody) {{
+      const normalizedStatus = String((statusBody || {{}}).status || '').toLowerCase();
+      const normalizedResultState = String((resultBody || {{}}).result_state || '').toLowerCase();
+      const traceCount = Number((traceBody || {{}}).event_count || (Array.isArray((traceBody || {{}}).events) ? traceBody.events.length : 0) || 0);
+      const artifactCount = Number((artifactsBody || {{}}).artifact_count || (Array.isArray((artifactsBody || {{}}).artifacts) ? artifactsBody.artifacts.length : 0) || 0);
+      if (normalizedResultState.startsWith('ready')) {{
+        return {{ title: 'Step 5 of 5 — Read result', summary: 'Result is ready. Open Result next to finish the first-run path.' }};
+      }}
+      if (['running', 'queued', 'accepted'].includes(normalizedStatus)) {{
+        return {{ title: 'Step 4 of 5 — Run', summary: 'Run is in progress. Watch Status while Nexa prepares the result.' }};
+      }}
+      if (['failed', 'partial'].includes(normalizedStatus) && traceCount > 0) {{
+        return {{ title: 'Step 4 of 5 — Run', summary: 'Run needs diagnosis. Open Trace next to understand what happened.' }};
+      }}
+      if (artifactCount > 0 && !normalizedResultState.startsWith('ready')) {{
+        return {{ title: 'Step 5 of 5 — Read result', summary: 'A readable result is not ready yet, but artifacts are available. Open Artifacts next.' }};
+      }}
+      return null;
+    }}
+    function writeStepStateBanner(banner) {{
+      const formatted = formatStepStateBanner(banner, 'Step 1 of 5 — Enter goal', 'Describe your goal to start the first-run path.');
+      stepStateBannerTitleEl.textContent = formatted.title;
+      stepStateBannerSummaryEl.textContent = formatted.summary;
+    }}
+    function refreshStepStateBanner() {{
+      const derived = deriveStepStateBannerFromBodies(latestStatusBodyState, latestResultBodyState, latestTraceBodyState, latestArtifactsBodyState);
+      writeStepStateBanner(derived || initialStepStateBanner);
+    }}
     function sectionConfig(sectionId) {{
       const sections = initialNavigation && Array.isArray(initialNavigation.sections) ? initialNavigation.sections : [];
       return sections.find((section) => section && section.section_id === sectionId) || null;
@@ -874,8 +1024,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       const response = await fetch(activeRunStatusPath, {{ credentials: 'same-origin' }});
       const body = await response.json();
+      latestStatusBodyState = body;
       writeLatestRunStatus(summarizeStatusBody(body));
       writeLatestRunStatusDetail(detailFromStatusBody(body));
+      refreshStepStateBanner();
       setFocusedSection('status', 'detail');
       return body;
     }}
@@ -887,8 +1039,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       const response = await fetch(activeRunResultPath, {{ credentials: 'same-origin' }});
       const body = await response.json();
+      latestResultBodyState = body;
       writeLatestRunResult(summarizeResultBody(body));
       writeLatestRunResultDetail(detailFromResultBody(body));
+      refreshStepStateBanner();
       setFocusedSection('result', 'detail');
       return body;
     }}
@@ -900,8 +1054,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       const response = await fetch(activeRunTracePath, {{ credentials: 'same-origin' }});
       const body = await response.json();
+      latestTraceBodyState = body;
       writeLatestRunTrace(summarizeTraceBody(body));
       writeLatestRunTraceDetail(detailFromTraceBody(body));
+      refreshStepStateBanner();
       setFocusedSection('trace', 'detail');
       return body;
     }}
@@ -913,8 +1069,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       const response = await fetch(activeRunArtifactsPath, {{ credentials: 'same-origin' }});
       const body = await response.json();
+      latestArtifactsBodyState = body;
       writeLatestRunArtifacts(summarizeArtifactsBody(body));
       writeLatestRunArtifactsDetail(detailFromArtifactsBody(body));
+      refreshStepStateBanner();
       setFocusedSection('artifacts', 'detail');
       return body;
     }}
@@ -943,6 +1101,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeLatestRunResultDetail(initialRunResultDetail || 'Open latest run result to view the detail layer.');
     writeLatestRunTraceDetail(initialRunTraceDetail || 'Open latest trace to view the detail layer.');
     writeLatestRunArtifactsDetail(initialRunArtifactsDetail || 'Open latest artifacts to view the detail layer.');
+    writeStepStateBanner(initialStepStateBanner);
     setFocusedSection(focusedSectionId, focusedLevel);
     document.getElementById('refresh').addEventListener('click', async () => {{
       const response = await fetch(initialPayload.routes.workspace_shell, {{ credentials: 'same-origin' }});
@@ -998,6 +1157,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         writeLatestRunArtifacts('Waiting for artifact details.');
         writeLatestRunTraceDetail('Open latest trace to view the detail layer.');
         writeLatestRunArtifactsDetail('Open latest artifacts to view the detail layer.');
+        writeStepStateBanner({{ title: 'Step 4 of 5 — Run', summary: 'Launch accepted. Watch Status while Nexa starts the run.' }});
         await pollLatestRunUntilSettled();
       }}
     }});
