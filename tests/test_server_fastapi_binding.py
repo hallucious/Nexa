@@ -447,6 +447,7 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['shell']['mobile_first_run']['visible'] is True
     assert payload['shell']['privacy_transparency']['visible'] is True
     assert payload['routes']['launch_run'] == '/api/runs'
+    assert payload['routes']['onboarding_write'] == '/api/users/me/onboarding'
     assert payload['latest_run_status_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
@@ -537,6 +538,8 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'designer-controls' in body
     assert 'validation-controls' in body
     assert 'performShellAction' in body
+    assert 'persistOnboardingState' in body
+    assert '/api/users/me/onboarding' in body
     assert 'Use Text Summarizer' in body
     assert 'Open Validation detail' in body
     assert 'focus-state' in body

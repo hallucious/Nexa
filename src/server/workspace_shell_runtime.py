@@ -208,6 +208,14 @@ def _latest_run_trace_preview(
         "latest_message": str(latest.get("message_preview") or "").strip() or None,
     }
 
+def _normalized_onboarding_current_step(onboarding_state: Mapping[str, Any] | None) -> str | None:
+    if not isinstance(onboarding_state, Mapping):
+        return None
+    step = str(onboarding_state.get("current_step") or "").strip().lower()
+    allowed = {"enter_goal", "review_preview", "approve", "run", "read_result"}
+    return step if step in allowed else None
+
+
 def _summary_lines(*values: str | None) -> list[str]:
     return [value for value in values if isinstance(value, str) and value.strip()]
 
@@ -472,6 +480,7 @@ def _navigation_model(
     latest_run_result_preview: Mapping[str, Any] | None,
     latest_run_trace_preview: Mapping[str, Any] | None,
     latest_run_artifacts_preview: Mapping[str, Any] | None,
+    onboarding_state: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     sections = (
         {"section_id": "designer", "label": "Designer", "target_id": "designer-summary-card", "detail_target_id": "designer-detail-card"},
@@ -496,6 +505,7 @@ def _navigation_model(
     latest_result_state = str((latest_run_result_preview or {}).get("result_state") or "").strip().lower()
     latest_trace_count = int((latest_run_trace_preview or {}).get("event_count") or 0)
     latest_artifact_count = int((latest_run_artifacts_preview or {}).get("artifact_count") or 0)
+    onboarding_step = _normalized_onboarding_current_step(onboarding_state)
 
     default_section = "status"
     default_level = "summary"
@@ -528,7 +538,22 @@ def _navigation_model(
             default_level = "summary"
             guidance_label = "Recommended next: Status"
             guidance_summary = "The mobile first-run path is still in progress, so follow Status first."
-        elif onboarding_target == "designer" or help_stage in {"start", "review"} or primary_action_target == "designer":
+        elif onboarding_step == "read_result":
+            default_section = "result"
+            default_level = "detail"
+            guidance_label = "Recommended next: Result"
+            guidance_summary = "Server-backed workspace progression points to Result as the next first-run step."
+        elif onboarding_step == "run":
+            default_section = "status"
+            default_level = "summary"
+            guidance_label = "Recommended next: Status"
+            guidance_summary = "Server-backed workspace progression points to Status while the run step is active."
+        elif onboarding_step in {"review_preview", "approve"}:
+            default_section = "validation"
+            default_level = "detail"
+            guidance_label = "Recommended next: Validation"
+            guidance_summary = "Server-backed workspace progression points to Validation before the run step."
+        elif onboarding_target == "designer" or onboarding_step == "enter_goal" or help_stage in {"start", "review"} or primary_action_target == "designer":
             default_section = "designer"
             default_level = "detail"
             guidance_label = "Recommended next: Designer"
@@ -556,6 +581,7 @@ def _step_state_banner(
     latest_run_trace_preview: Mapping[str, Any] | None,
     latest_run_artifacts_preview: Mapping[str, Any] | None,
     navigation: Mapping[str, Any] | None,
+    onboarding_state: Mapping[str, Any] | None,
 ) -> dict[str, Any] | None:
     shell_map = shell or {}
     mobile = shell_map.get("mobile_first_run") or {}
@@ -590,6 +616,7 @@ def _step_state_banner(
     latest_trace_count = int((latest_run_trace_preview or {}).get("event_count") or 0)
     latest_artifact_count = int((latest_run_artifacts_preview or {}).get("artifact_count") or 0)
     recommended_section = str((navigation or {}).get("default_section") or "status").strip() or "status"
+    onboarding_step = _normalized_onboarding_current_step(onboarding_state)
     action_label: str | None = None
     action_target: str | None = None
     phase = "pre_run"
@@ -635,7 +662,28 @@ def _step_state_banner(
         shell_status = str(shell_map.get("shell_status") or "").strip().lower()
         onboarding_target = str(beginner_onboarding.get("primary_action_target") or "").strip()
         help_stage = str(contextual_help.get("stage") or "").strip().lower()
-        if shell_status == "blocked":
+        if onboarding_step in {"review_preview", "approve"}:
+            current_step_id = onboarding_step
+            summary = "Server-backed workspace progression says review and validation come next before the run step."
+            action_label = "Review Validation"
+            action_target = "validation.detail"
+        elif onboarding_step == "enter_goal":
+            current_step_id = "enter_goal"
+            summary = "Server-backed workspace progression says start in Designer by describing your goal."
+            action_label = "Open Designer"
+            action_target = "designer"
+        elif onboarding_step == "run":
+            current_step_id = "run"
+            summary = "Server-backed workspace progression says the run step is next. Open Status to follow it."
+            action_label = "Open Status"
+            action_target = "runtime.status"
+        elif onboarding_step == "read_result":
+            current_step_id = "read_result"
+            summary = "Server-backed workspace progression says read the latest result next."
+            action_label = "Open Result"
+            action_target = "runtime.result"
+            phase = "post_run"
+        elif shell_status == "blocked":
             severity = "warning"
             current_step_id = "review_preview"
             summary = str(beginner_onboarding.get("summary") or contextual_help.get("summary") or "Resolve the blocking review issue before you run.")
@@ -745,6 +793,7 @@ def build_workspace_shell_runtime_payload(
         latest_run_result_preview=latest_run_result_preview,
         latest_run_trace_preview=latest_run_trace_preview,
         latest_run_artifacts_preview=latest_run_artifacts_preview,
+        onboarding_state=onboarding_state,
     )
 
     payload = {
@@ -767,6 +816,7 @@ def build_workspace_shell_runtime_payload(
             "latest_run_trace": (f"/api/runs/{latest_run_id}/trace?limit=20" if latest_run_id else None),
             "workspace_runs": f"/api/workspaces/{workspace_id}/runs",
             "onboarding": f"/api/users/me/onboarding?workspace_id={workspace_id}",
+            "onboarding_write": "/api/users/me/onboarding",
         },
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,
@@ -790,6 +840,7 @@ def build_workspace_shell_runtime_payload(
             latest_run_trace_preview=latest_run_trace_preview,
             latest_run_artifacts_preview=latest_run_artifacts_preview,
             navigation=navigation,
+            onboarding_state=onboarding_state,
         ),
         "continuity": {
             "onboarding_state": onboarding_state,
@@ -834,6 +885,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     navigation = payload.get("navigation") or {}
     navigation_json = json.dumps(navigation, ensure_ascii=False)
     client_continuity_json = json.dumps(payload.get("client_continuity"), ensure_ascii=False)
+    continuity_json = json.dumps(payload.get("continuity"), ensure_ascii=False)
     template_items = []
     for template in (template_gallery.get("templates") or [])[:6]:
         title = escape(str(template.get("display_name") or template.get("template_id") or "Template"))
@@ -1012,6 +1064,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialStepStateBanner = {step_state_banner_json};
     const initialNavigation = {navigation_json};
     const initialClientContinuity = {client_continuity_json};
+    const initialContinuity = {continuity_json};
     const logEl = document.getElementById('browser-log');
     const latestRunStatusEl = document.getElementById('latest-run-status');
     const latestRunResultEl = document.getElementById('latest-run-result');
@@ -1050,6 +1103,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentValidationSection = initialValidationSection || null;
     let currentStepStateBanner = initialStepStateBanner || null;
     let continuityHydrating = true;
+    let currentOnboardingState = initialContinuity && typeof initialContinuity === 'object' ? (initialContinuity.onboarding_state || null) : null;
     function writeLog(message) {{
       logEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
     }}
@@ -1057,6 +1111,33 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       return initialClientContinuity && initialClientContinuity.enabled && typeof initialClientContinuity.storage_key === 'string'
         ? initialClientContinuity.storage_key
         : null;
+    }}
+    function onboardingWritePath() {{
+      return initialPayload && initialPayload.routes && typeof initialPayload.routes.onboarding_write === 'string' && initialPayload.routes.onboarding_write
+        ? initialPayload.routes.onboarding_write
+        : '/api/users/me/onboarding';
+    }}
+    async function persistOnboardingState(partialState) {{
+      if (!partialState || typeof partialState !== 'object') return null;
+      const requestBody = Object.assign({{ workspace_id: initialPayload.workspace_id }}, partialState);
+      const response = await fetch(onboardingWritePath(), {{
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: {{ 'content-type': 'application/json' }},
+        body: JSON.stringify(requestBody),
+      }});
+      const body = await response.json();
+      if (response.ok && body && typeof body === 'object' && body.state) {{
+        currentOnboardingState = body.state;
+        return body.state;
+      }}
+      writeLog(body);
+      return null;
+    }}
+    async function persistCurrentStep(currentStep, extras) {{
+      if (typeof currentStep !== 'string' || !currentStep) return null;
+      const payload = Object.assign({{ current_step: currentStep }}, extras && typeof extras === 'object' ? extras : {{}});
+      return persistOnboardingState(payload);
     }}
     function readShellContinuity() {{
       const key = continuityStorageKey();
@@ -1279,7 +1360,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       renderSectionControls(validationControlsEl, currentValidationSection && currentValidationSection.controls ? currentValidationSection.controls : []);
       writeShellContinuity(captureShellContinuity());
     }}
-    function applyTemplateControl(control) {{
+    async function applyTemplateControl(control) {{
       const displayName = String(control && (control.template_display_name || control.label) || 'starter template');
       const templateSummary = String(control && control.template_summary || 'Template selected.');
       const requestText = String(control && control.request_text || '').trim();
@@ -1335,10 +1416,26 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         }}
       }}
       if (kind === 'focus_section') {{
-        if (target === 'runtime.status') {{ await refreshLatestRunStatus(); return; }}
-        if (target === 'runtime.result') {{ await refreshLatestRunResult(); return; }}
-        if (target === 'runtime.trace') {{ await refreshLatestRunTrace(); return; }}
-        if (target === 'runtime.artifacts') {{ await refreshLatestRunArtifacts(); return; }}
+        if (target === 'runtime.status') {{
+          await persistCurrentStep('run');
+          await refreshLatestRunStatus();
+          return;
+        }}
+        if (target === 'runtime.result') {{
+          await persistCurrentStep('read_result', {{ first_success_achieved: true, advanced_surfaces_unlocked: true }});
+          await refreshLatestRunResult();
+          return;
+        }}
+        if (target === 'runtime.trace') {{
+          await persistCurrentStep('run');
+          await refreshLatestRunTrace();
+          return;
+        }}
+        if (target === 'runtime.artifacts') {{
+          await persistCurrentStep('read_result');
+          await refreshLatestRunArtifacts();
+          return;
+        }}
         let sectionId = target;
         let level = 'summary';
         if (target.endsWith('.detail')) {{
@@ -1347,6 +1444,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
           level = 'detail';
         }}
         if (sectionConfig(sectionId)) {{
+          if (sectionId === 'designer') {{
+            await persistCurrentStep('enter_goal');
+          }} else if (sectionId === 'validation') {{
+            await persistCurrentStep('review_preview');
+          }}
           setFocusedSection(sectionId, level);
           writeLog('Focused ' + target + '.');
           return;
@@ -1511,6 +1613,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       latestResultBodyState = body;
       writeLatestRunResult(summarizeResultBody(body));
       writeLatestRunResultDetail(detailFromResultBody(body));
+      const normalizedResultState = String((body || {{}}).result_state || '').toLowerCase();
+      if (normalizedResultState.startsWith('ready')) {{
+        await persistCurrentStep('read_result', {{ first_success_achieved: true, advanced_surfaces_unlocked: true }});
+      }}
       refreshStepStateBanner();
       setFocusedSection('result', 'detail');
       return body;
@@ -1596,6 +1702,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       if (body.step_state_banner) {{
         writeStepStateBanner(body.step_state_banner);
       }}
+      if (body.continuity && typeof body.continuity === 'object' && body.continuity.onboarding_state) {{
+        currentOnboardingState = body.continuity.onboarding_state;
+      }}
       if (body.latest_run_status_preview && body.latest_run_status_preview.run_id) {{
         setActiveRun(body.latest_run_status_preview.run_id);
         writeLatestRunStatus(body.latest_run_status_summary || summarizeStatusBody(body.latest_run_status_preview));
@@ -1645,6 +1754,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         setActiveRun(body.run_id);
         writeLatestRunStatus({{ headline: 'Status: accepted', lines: ['Run id: ' + body.run_id, 'Summary: Launch accepted.'] }});
         writeLatestRunStatusDetail({{ title: 'Status detail', items: ['Run id: ' + body.run_id, 'Status: accepted', 'Summary: Launch accepted.'] }});
+        await persistCurrentStep('run');
         setFocusedSection('status', 'detail');
         writeLatestRunResult('Waiting for run result.');
         writeLatestRunResultDetail('Open latest run result to view the detail layer.');

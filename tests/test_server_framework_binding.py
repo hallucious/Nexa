@@ -561,3 +561,48 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['step_state_banner']['action_target'] == 'designer'
     assert parsed['step_state_banner']['action_kind'] == 'focus_section'
     assert 'prepare your first workflow' in parsed['step_state_banner']['summary']
+
+
+def test_framework_binding_workspace_shell_uses_server_backed_onboarding_step_for_navigation() -> None:
+    response = FrameworkRouteBindings.handle_workspace_shell(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shell", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+        },
+        onboarding_rows=({
+            "onboarding_state_id": "onboard-001",
+            "user_id": "user-owner",
+            "workspace_id": "ws-001",
+            "first_success_achieved": False,
+            "advanced_surfaces_unlocked": False,
+            "dismissed_guidance_state": {},
+            "current_step": "review_preview",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+        },),
+        recent_run_rows=(),
+        result_rows_by_run_id={},
+        artifact_rows_lookup=lambda run_id: (),
+        trace_rows_lookup=lambda run_id: (),
+        artifact_source={
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile"}},
+        },
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed['routes']['onboarding_write'] == '/api/users/me/onboarding'
+    assert parsed['navigation']['default_section'] == 'validation'
+    assert parsed['navigation']['default_level'] == 'detail'
+    assert parsed['step_state_banner']['current_step_id'] == 'review_preview'
+    assert parsed['step_state_banner']['action_target'] == 'validation.detail'
+    assert parsed['continuity']['onboarding_state']['current_step'] == 'review_preview'
