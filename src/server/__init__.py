@@ -156,6 +156,7 @@ from src.server.provider_health_models import (
     ProviderHealthListOutcome,
 )
 from src.server.provider_runtime_metrics import AutoRecoveryProviderRuntimeMetrics
+from src.server.scoring_policy_validator import ScoringPolicyValidationResult, validate_scoring_policy
 from src.server.provider_probe_models import (
     ProductProviderProbeFindingView,
     ProductProviderProbeLinks,

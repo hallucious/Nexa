@@ -332,3 +332,55 @@ def test_apply_auto_recovery_uses_default_scoring_policy_when_missing() -> None:
     scoring_event = outcome.updated_run_record["action_log"][-2]
     trace = scoring_event["after_state"]["scoring_trace"]
     assert all("health_weight" in entry for entry in trace)
+
+
+def test_validate_scoring_policy_defaults_when_weights_are_invalid() -> None:
+    from src.server.scoring_policy_validator import validate_scoring_policy
+
+    result = validate_scoring_policy({
+        "health_weight": -1,
+        "cost_weight": 0,
+        "priority_weight": 0,
+        "latency_weight": 0,
+        "reliability_weight": 0,
+    })
+
+    assert result.is_valid is False
+    assert result.used_default is True
+    total = (
+        result.normalized_policy.health_weight
+        + result.normalized_policy.cost_weight
+        + result.normalized_policy.priority_weight
+        + result.normalized_policy.latency_weight
+        + result.normalized_policy.reliability_weight
+    )
+    assert round(total, 6) == 1.0
+
+
+def test_apply_auto_recovery_normalizes_custom_scoring_policy_trace_weights() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-normalized",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", cost_ratio=1.1),
+            AutoRecoveryFallbackCandidate(provider_key="gemini", status="healthy", cost_ratio=0.9),
+        ),
+        scoring_policy={
+            "health_weight": 2.0,
+            "cost_weight": 1.0,
+            "priority_weight": 1.0,
+            "latency_weight": 0.0,
+            "reliability_weight": 0.0,
+        },
+    )
+
+    assert outcome.applied is True
+    scoring_event = outcome.updated_run_record["action_log"][-2]
+    trace = scoring_event["after_state"]["scoring_trace"]
+    assert trace
+    first = trace[0]
+    assert first["health_weight"] == 0.5
+    assert first["cost_weight"] == 0.25
+    assert first["priority_weight"] == 0.25

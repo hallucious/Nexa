@@ -9,6 +9,7 @@ import uuid
 
 from src.server.pricing_resolver import score_cost_ratio
 from src.server.provider_health_models import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal
+from src.server.scoring_policy_validator import validate_scoring_policy
 
 QueueJobIdFactory = Callable[[], str]
 
@@ -59,23 +60,7 @@ class AutoRecoveryScoringPolicy:
 
 
 def _coerce_scoring_policy(value: Any) -> AutoRecoveryScoringPolicy:
-    if isinstance(value, AutoRecoveryScoringPolicy):
-        return value.normalized()
-    if isinstance(value, Mapping):
-        def _weight(key: str, default: float) -> float:
-            raw = value.get(key, default)
-            try:
-                return float(raw)
-            except (TypeError, ValueError):
-                return default
-        return AutoRecoveryScoringPolicy(
-            health_weight=_weight("health_weight", 0.6),
-            cost_weight=_weight("cost_weight", 0.3),
-            priority_weight=_weight("priority_weight", 0.1),
-            latency_weight=_weight("latency_weight", 0.0),
-            reliability_weight=_weight("reliability_weight", 0.0),
-        ).normalized()
-    return AutoRecoveryScoringPolicy()
+    return validate_scoring_policy(value).normalized_policy
 
 
 def _coerce_int(value: Any, default: int = 0) -> int:
