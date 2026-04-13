@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from src.server.provider_health_models import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal
-from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, apply_auto_recovery
+from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, AutoRecoveryScoringPolicy, apply_auto_recovery
 
 RunRecordWriter = Callable[[Mapping[str, Any]], Any]
 QueueJobIdFactory = Callable[[], str]
@@ -13,6 +13,7 @@ ProviderHealthResolver = Callable[[Mapping[str, Any]], AutoRecoveryProviderHealt
 WorkspaceProviderHealthSignalsResolver = Callable[[Mapping[str, Any]], Mapping[str, AutoRecoveryProviderHealthSignal] | Sequence[AutoRecoveryProviderHealthSignal] | None]
 WorkspaceProviderBindingRowsResolver = Callable[[Mapping[str, Any]], Sequence[Mapping[str, Any]] | None]
 FallbackCandidatesResolver = Callable[[Mapping[str, Any], AutoRecoveryProviderHealthSignal | None], Sequence[AutoRecoveryFallbackCandidate] | None]
+WorkspaceScoringPolicyResolver = Callable[[Mapping[str, Any]], Mapping[str, Any] | AutoRecoveryScoringPolicy | None]
 
 
 def _normalize_provider_key(value: Any) -> str:
@@ -138,6 +139,7 @@ class AutoRecoveryScheduler:
         workspace_provider_health_signals_resolver: Optional[WorkspaceProviderHealthSignalsResolver] = None,
         workspace_provider_binding_rows_resolver: Optional[WorkspaceProviderBindingRowsResolver] = None,
         fallback_candidates_resolver: Optional[FallbackCandidatesResolver] = None,
+        workspace_scoring_policy_resolver: Optional[WorkspaceScoringPolicyResolver] = None,
         batch_limit: int = 50,
         max_applied_per_batch: Optional[int] = None,
     ) -> AutoRecoverySchedulerOutcome:
@@ -174,12 +176,14 @@ class AutoRecoveryScheduler:
                     binding_rows=binding_rows,
                     workspace_provider_health_signals=workspace_provider_health_signals,
                 )
+            scoring_policy = workspace_scoring_policy_resolver(row) if workspace_scoring_policy_resolver is not None else None
             outcome: AutoRecoveryOutcome = apply_auto_recovery(
                 row,
                 now_iso=now_iso,
                 queue_job_id_factory=queue_job_id_factory,
                 provider_health=provider_health,
                 fallback_candidates=fallback_candidates,
+                scoring_policy=scoring_policy,
             )
             if not outcome.applied or outcome.updated_run_record is None or outcome.action is None:
                 continue

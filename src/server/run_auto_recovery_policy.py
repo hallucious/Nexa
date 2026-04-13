@@ -30,6 +30,42 @@ class AutoRecoveryOutcome:
     fallback_provider_key: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class AutoRecoveryScoringPolicy:
+    health_weight: float = 0.6
+    cost_weight: float = 0.3
+    priority_weight: float = 0.1
+
+    def normalized(self) -> "AutoRecoveryScoringPolicy":
+        weights = [max(0.0, float(self.health_weight)), max(0.0, float(self.cost_weight)), max(0.0, float(self.priority_weight))]
+        total = sum(weights)
+        if total <= 0:
+            return AutoRecoveryScoringPolicy()
+        return AutoRecoveryScoringPolicy(
+            health_weight=weights[0] / total,
+            cost_weight=weights[1] / total,
+            priority_weight=weights[2] / total,
+        )
+
+
+def _coerce_scoring_policy(value: Any) -> AutoRecoveryScoringPolicy:
+    if isinstance(value, AutoRecoveryScoringPolicy):
+        return value.normalized()
+    if isinstance(value, Mapping):
+        def _weight(key: str, default: float) -> float:
+            raw = value.get(key, default)
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return default
+        return AutoRecoveryScoringPolicy(
+            health_weight=_weight("health_weight", 0.6),
+            cost_weight=_weight("cost_weight", 0.3),
+            priority_weight=_weight("priority_weight", 0.1),
+        ).normalized()
+    return AutoRecoveryScoringPolicy()
+
+
 def _coerce_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
@@ -110,11 +146,11 @@ def _fallback_health_score(status: str) -> float:
     return 0.0
 
 
-def _fallback_candidate_breakdown(candidate: AutoRecoveryFallbackCandidate) -> dict[str, float | str | bool]:
+def _fallback_candidate_breakdown(candidate: AutoRecoveryFallbackCandidate, *, scoring_policy: AutoRecoveryScoringPolicy) -> dict[str, float | str | bool]:
     health_score = _fallback_health_score(candidate.status)
     cost_score = score_cost_ratio(candidate.cost_ratio)
     priority_score = float(candidate.priority_weight)
-    final_score = (0.6 * health_score) + (0.3 * cost_score) + (0.1 * priority_score)
+    final_score = (scoring_policy.health_weight * health_score) + (scoring_policy.cost_weight * cost_score) + (scoring_policy.priority_weight * priority_score)
     return {
         "provider": candidate.provider_key,
         "health_score": health_score,
@@ -122,11 +158,14 @@ def _fallback_candidate_breakdown(candidate: AutoRecoveryFallbackCandidate) -> d
         "priority_score": priority_score,
         "final_score": final_score,
         "selected": False,
+        "health_weight": scoring_policy.health_weight,
+        "cost_weight": scoring_policy.cost_weight,
+        "priority_weight": scoring_policy.priority_weight,
     }
 
 
-def _fallback_candidate_score(candidate: AutoRecoveryFallbackCandidate) -> tuple[float, float, float, str]:
-    breakdown = _fallback_candidate_breakdown(candidate)
+def _fallback_candidate_score(candidate: AutoRecoveryFallbackCandidate, *, scoring_policy: AutoRecoveryScoringPolicy) -> tuple[float, float, float, str]:
+    breakdown = _fallback_candidate_breakdown(candidate, scoring_policy=scoring_policy)
     normalized_cost = float(candidate.cost_ratio) if candidate.cost_ratio is not None else 1.0
     return (float(breakdown["final_score"]), float(breakdown["health_score"]) + float(breakdown["priority_score"]), -normalized_cost, candidate.provider_key)
 
@@ -136,6 +175,7 @@ def _select_fallback_candidate(
     *,
     provider_health: AutoRecoveryProviderHealthSignal | None = None,
     fallback_candidates: Sequence[AutoRecoveryFallbackCandidate] | None = None,
+    scoring_policy: AutoRecoveryScoringPolicy | None = None,
 ) -> AutoRecoveryFallbackCandidate | None:
     current_provider_key = _resolve_current_provider_key(run_record_row, provider_health)
     if not fallback_candidates:
@@ -147,7 +187,8 @@ def _select_fallback_candidate(
     )
     if not normalized_candidates:
         return None
-    return max(normalized_candidates, key=_fallback_candidate_score)
+    resolved_scoring_policy = _coerce_scoring_policy(scoring_policy)
+    return max(normalized_candidates, key=lambda candidate: _fallback_candidate_score(candidate, scoring_policy=resolved_scoring_policy))
 
 
 def _current_backoff_seconds(run_record_row: Mapping[str, Any], *, provider_health: AutoRecoveryProviderHealthSignal | None = None) -> int:
@@ -173,6 +214,7 @@ def apply_auto_recovery(
     queue_job_id_factory: Optional[QueueJobIdFactory] = None,
     provider_health: AutoRecoveryProviderHealthSignal | None = None,
     fallback_candidates: Sequence[AutoRecoveryFallbackCandidate] | None = None,
+    scoring_policy: AutoRecoveryScoringPolicy | Mapping[str, Any] | None = None,
 ) -> AutoRecoveryOutcome:
     now_dt = _parse_iso(now_iso)
     if now_dt is None:
@@ -190,10 +232,12 @@ def apply_auto_recovery(
     is_stuck = bool(claimed_by_worker_ref and lease_expires_at is not None and lease_expires_at < now_dt and status in _ACTIVE_STATUSES)
     is_infra_failure = latest_error_family == _INFRA_FAILURE_FAMILY
     resolved_provider_health = provider_health or AutoRecoveryProviderHealthSignal()
+    resolved_scoring_policy = _coerce_scoring_policy(scoring_policy)
     resolved_fallback_candidate = _select_fallback_candidate(
         run_record_row,
         provider_health=resolved_provider_health,
         fallback_candidates=fallback_candidates,
+        scoring_policy=resolved_scoring_policy,
     )
     scoring_trace = []
     if fallback_candidates:
@@ -204,7 +248,7 @@ def apply_auto_recovery(
             if _fallback_health_score(candidate.status) > 0 and candidate.provider_key.strip().lower() != current_provider_key
         )
         for candidate in normalized_candidates:
-            breakdown = dict(_fallback_candidate_breakdown(candidate))
+            breakdown = dict(_fallback_candidate_breakdown(candidate, scoring_policy=resolved_scoring_policy))
             if resolved_fallback_candidate is not None and candidate.provider_key == resolved_fallback_candidate.provider_key:
                 breakdown["selected"] = True
             scoring_trace.append(breakdown)

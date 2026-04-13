@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal, apply_auto_recovery
+from src.server import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal, AutoRecoveryScoringPolicy, apply_auto_recovery
 
 
 def _run_row(**overrides):
@@ -248,3 +248,45 @@ def test_apply_auto_recovery_emits_scoring_trace_for_fallback_selection() -> Non
     assert len(trace) == 2
     assert any(item["selected"] for item in trace)
     assert scoring_event["after_state"]["selected_provider_key"] == outcome.fallback_provider_key
+
+
+def test_apply_auto_recovery_uses_workspace_scoring_policy_weights() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-policy",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", cost_ratio=1.6, priority_weight=0.0),
+            AutoRecoveryFallbackCandidate(provider_key="mistral", status="healthy", cost_ratio=1.3, priority_weight=0.9),
+        ),
+        scoring_policy=AutoRecoveryScoringPolicy(health_weight=0.2, cost_weight=0.1, priority_weight=0.7),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_fallback_retry"
+    assert outcome.fallback_provider_key == "mistral"
+    scoring_event = outcome.updated_run_record["action_log"][-2]
+    trace = scoring_event["after_state"]["scoring_trace"]
+    selected = [entry for entry in trace if entry["selected"]]
+    assert selected and selected[0]["provider"] == "mistral"
+
+
+def test_apply_auto_recovery_uses_default_scoring_policy_when_missing() -> None:
+    outcome = apply_auto_recovery(
+        _run_row(auto_retry_count=2, auto_retry_limit=2, provider_key="openai"),
+        now_iso="2026-04-13T01:00:00+00:00",
+        queue_job_id_factory=lambda: "job-default",
+        provider_health=AutoRecoveryProviderHealthSignal(status="down", provider_key="openai"),
+        fallback_candidates=(
+            AutoRecoveryFallbackCandidate(provider_key="anthropic", status="healthy", cost_ratio=1.1, priority_weight=0.0),
+            AutoRecoveryFallbackCandidate(provider_key="mistral", status="healthy", cost_ratio=1.2, priority_weight=0.9),
+        ),
+    )
+
+    assert outcome.applied is True
+    assert outcome.action == "auto_fallback_retry"
+    assert outcome.fallback_provider_key in {"anthropic", "mistral"}
+    scoring_event = outcome.updated_run_record["action_log"][-2]
+    trace = scoring_event["after_state"]["scoring_trace"]
+    assert all("health_weight" in entry for entry in trace)

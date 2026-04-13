@@ -64,7 +64,7 @@ from src.server.worker_queue_orchestration import WorkerQueueOrchestrationServic
 from src.server.run_read_api import RunResultReadService, RunStatusReadService
 from src.server.run_list_api import RunListReadService
 from src.server.run_control_api import RunControlService, build_run_control_actions
-from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, apply_auto_recovery
+from src.server.run_auto_recovery_policy import AutoRecoveryOutcome, AutoRecoveryScoringPolicy, apply_auto_recovery
 from src.server.run_auto_recovery_scheduler import (
     AutoRecoveryScheduledUpdate,
     AutoRecoveryScheduler,
@@ -286,6 +286,7 @@ __all__ = [
     "RequestAuthResolver",
     "build_run_control_actions",
     "AutoRecoveryOutcome",
+    "AutoRecoveryScoringPolicy",
     "apply_auto_recovery",
     "RunAuthorizationContext",
     "SessionContext",

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal, AutoRecoveryScheduler
+from src.server import AutoRecoveryFallbackCandidate, AutoRecoveryProviderHealthSignal, AutoRecoveryScoringPolicy, AutoRecoveryScheduler
 
 
 def _run_row(run_id: str, **overrides):
@@ -261,3 +261,46 @@ def test_scheduler_prefers_highest_scoring_workspace_binding_candidate() -> None
 
     assert outcome.stats.auto_fallback_retry_count == 1
     assert writes["run-scored-fallback"]["fallback_provider_key"] == "mistral"
+
+
+def test_scheduler_uses_workspace_scoring_policy_resolver() -> None:
+    writes = {}
+
+    def writer(row):
+        writes[row["run_id"]] = dict(row)
+        return row
+
+    rows = [_run_row("run-policy-fallback", provider_key="openai")]
+
+    def provider_health_resolver(row):
+        return AutoRecoveryProviderHealthSignal(status="down", provider_key="openai")
+
+    def workspace_provider_binding_rows_resolver(row):
+        return (
+            {"workspace_id": row["workspace_id"], "provider_key": "anthropic", "enabled": True, "cost_ratio": 1.5, "priority_weight": 0.1},
+            {"workspace_id": row["workspace_id"], "provider_key": "mistral", "enabled": True, "cost_ratio": 1.4, "priority_weight": 0.9},
+        )
+
+    def workspace_provider_health_signals_resolver(row):
+        return {
+            "anthropic": AutoRecoveryProviderHealthSignal(status="healthy", provider_key="anthropic"),
+            "mistral": AutoRecoveryProviderHealthSignal(status="healthy", provider_key="mistral"),
+        }
+
+    def workspace_scoring_policy_resolver(row):
+        return AutoRecoveryScoringPolicy(health_weight=0.1, cost_weight=0.1, priority_weight=0.8)
+
+    outcome = AutoRecoveryScheduler.run_batch(
+        rows,
+        now_iso="2026-04-13T01:00:00+00:00",
+        run_record_writer=writer,
+        queue_job_id_factory=lambda: "job-policy-fallback",
+        provider_health_resolver=provider_health_resolver,
+        workspace_provider_binding_rows_resolver=workspace_provider_binding_rows_resolver,
+        workspace_provider_health_signals_resolver=workspace_provider_health_signals_resolver,
+        workspace_scoring_policy_resolver=workspace_scoring_policy_resolver,
+        batch_limit=10,
+    )
+
+    assert outcome.stats.auto_fallback_retry_count == 1
+    assert writes["run-policy-fallback"]["fallback_provider_key"] == "mistral"
