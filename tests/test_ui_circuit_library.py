@@ -128,3 +128,86 @@ def test_result_history_view_model_projects_beginner_reopen_cards() -> None:
     assert vm.items[0].open_result_href == "/app/workspaces/ws-001/results?run_id=run-002"
     assert vm.items[0].output_preview == "Hello again"
     assert vm.items[1].status_key == "failed"
+
+
+
+def test_circuit_library_prioritizes_server_onboarding_resume_target() -> None:
+    response = ProductWorkspaceListResponse(
+        returned_count=1,
+        workspaces=(
+            _summary(
+                "ws-onboarding",
+                title="Onboarding Workflow",
+                last_run_id="run-101",
+                last_result_status="completed",
+                recent_run_count=1,
+            ),
+        ),
+    )
+
+    vm = read_circuit_library_view_model(
+        response,
+        onboarding_state_by_workspace_id={
+            "ws-onboarding": {
+                "workspace_id": "ws-onboarding",
+                "first_success_achieved": False,
+                "advanced_surfaces_unlocked": False,
+                "current_step": "read_result",
+            }
+        },
+    )
+
+    assert vm.items[0].status_key == "resume_onboarding"
+    assert vm.items[0].onboarding_incomplete is True
+    assert vm.items[0].continue_href == "/app/workspaces/ws-onboarding/results?run_id=run-101"
+    assert vm.items[0].continue_label == "Resume first result"
+    assert any("Server progress saved your place" in line for line in vm.items[0].summary_lines)
+
+
+def test_result_history_projects_onboarding_banner_when_first_success_is_not_finished() -> None:
+    response = ProductWorkspaceRunListResponse(
+        workspace_id="ws-001",
+        workspace_title="Primary Workflow",
+        returned_count=1,
+        total_visible_count=1,
+        runs=(
+            ProductRunListItemView(
+                run_id="run-002",
+                workspace_id="ws-001",
+                execution_target=ProductExecutionTargetView(target_type="approved_snapshot", target_ref="snap-001"),
+                status="completed",
+                status_family="terminal_success",
+                created_at="2026-04-13T09:00:00+00:00",
+                updated_at="2026-04-13T09:05:00+00:00",
+                completed_at="2026-04-13T09:05:00+00:00",
+                result_state="ready_success",
+                result_summary=ProductResultSummaryView(title="Last successful result", description="Success."),
+                links=ProductRunListLinks(status="/api/runs/run-002", result="/api/runs/run-002/result", trace="/api/runs/run-002/trace", artifacts="/api/runs/run-002/artifacts"),
+            ),
+        ),
+        applied_filters=ProductRunListAppliedFilters(limit=20),
+    )
+    vm = read_result_history_view_model(
+        response,
+        result_rows_by_run_id={
+            "run-002": ProductRunResultResponse(
+                run_id="run-002",
+                workspace_id="ws-001",
+                result_state="ready_success",
+                final_status="completed",
+                result_summary=ProductResultSummaryView(title="Last successful result", description="Success."),
+                final_output=ProductFinalOutputView(output_key="answer", value_preview="Hello again", value_type="string"),
+            )
+        },
+        selected_run_id="run-002",
+        onboarding_state={
+            "workspace_id": "ws-001",
+            "first_success_achieved": False,
+            "advanced_surfaces_unlocked": False,
+            "current_step": "read_result",
+        },
+    )
+    assert vm.onboarding_incomplete is True
+    assert vm.onboarding_step_id == "read_result"
+    assert vm.onboarding_action_href == "/app/workspaces/ws-001/results?run_id=run-002"
+    assert vm.onboarding_action_label == "Stay on this result"

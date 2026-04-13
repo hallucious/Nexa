@@ -19,56 +19,107 @@ def _run_context_for_row(workspace_context: WorkspaceAuthorizationContext, row: 
     return RunAuthorizationContext(run_id=run_id, workspace_context=workspace_context, run_owner_user_ref=owner)
 
 
-def build_workspace_result_history_payload(*, request_auth, workspace_context: WorkspaceAuthorizationContext | None, workspace_row: Mapping[str, Any] | None, run_rows: Sequence[Mapping[str, Any]] = (), result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None, artifact_rows_lookup=None, recent_run_rows: Sequence[Mapping[str, Any]] = (), provider_binding_rows: Sequence[Mapping[str, Any]] = (), managed_secret_rows: Sequence[Mapping[str, Any]] = (), provider_probe_rows: Sequence[Mapping[str, Any]] = (), onboarding_rows: Sequence[Mapping[str, Any]] = (), selected_run_id: str | None = None, app_language: str = "en") -> dict[str, Any] | None:
-    outcome = RunListReadService.list_workspace_runs(
+def _workspace_onboarding_state(*, request_auth, onboarding_rows: Sequence[Mapping[str, Any]], workspace_id: str) -> dict[str, Any] | None:
+    user_id = str(getattr(request_auth, "requested_by_user_ref", "") or "").strip()
+    if not user_id or not workspace_id:
+        return None
+    for row in onboarding_rows:
+        if str(row.get("user_id") or "").strip() != user_id:
+            continue
+        if str(row.get("workspace_id") or "").strip() != workspace_id:
+            continue
+        return dict(row)
+    return None
+
+
+def build_workspace_result_history_payload(
+    *,
+    request_auth,
+    workspace_context: WorkspaceAuthorizationContext | None,
+    workspace_row: Mapping[str, Any] | None,
+    run_rows: Sequence[Mapping[str, Any]] = (),
+    result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+    artifact_rows_lookup=None,
+    recent_run_rows: Sequence[Mapping[str, Any]] = (),
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+    onboarding_rows: Sequence[Mapping[str, Any]] = (),
+    app_language: str = "en",
+    selected_run_id: str | None = None,
+) -> dict[str, Any] | None:
+    if workspace_context is None or workspace_row is None:
+        return None
+    list_outcome = RunListReadService.list_workspace_runs(
         request_auth=request_auth,
         workspace_context=workspace_context,
         run_rows=run_rows,
-        result_rows_by_run_id=result_rows_by_run_id,
-        workspace_row=workspace_row,
+        limit=20,
+        cursor=None,
         recent_run_rows=recent_run_rows,
         provider_binding_rows=provider_binding_rows,
         managed_secret_rows=managed_secret_rows,
         provider_probe_rows=provider_probe_rows,
         onboarding_rows=onboarding_rows,
-        limit=10,
     )
-    if not outcome.ok or outcome.response is None or workspace_context is None:
+    if not list_outcome.ok or list_outcome.response is None:
         return None
-    response = outcome.response
-    run_row_lookup = {str(row.get("run_id") or "").strip(): dict(row) for row in run_rows if str(row.get("run_id") or "").strip()}
+    response = list_outcome.response
     result_map: dict[str, Any] = {}
-    for item in response.runs:
-        run_context = _run_context_for_row(workspace_context, run_row_lookup.get(item.run_id, {}))
-        if run_context is None:
-            continue
-        read_outcome = RunResultReadService.read_result(
-            request_auth=request_auth,
-            run_context=run_context,
-            run_record_row=run_row_lookup.get(item.run_id),
-            result_row=(result_rows_by_run_id or {}).get(item.run_id),
-            artifact_rows=artifact_rows_lookup(item.run_id) if artifact_rows_lookup is not None else (),
-            workspace_row=workspace_row,
-            recent_run_rows=recent_run_rows,
-            provider_binding_rows=provider_binding_rows,
-            managed_secret_rows=managed_secret_rows,
-            provider_probe_rows=provider_probe_rows,
-            onboarding_rows=onboarding_rows,
+    run_record_rows_by_id = {str(row.get("run_id") or "").strip(): row for row in run_rows}
+    for row in response.runs:
+        run_record_row = run_record_rows_by_id.get(row.run_id)
+        context = _run_context_for_row(
+            workspace_context,
+            run_record_row
+            or {"run_id": row.run_id, "requested_by_user_id": request_auth.requested_by_user_ref, "workspace_id": response.workspace_id},
         )
-        if read_outcome.ok and read_outcome.response is not None:
-            result_map[item.run_id] = read_outcome.response
-    view_model = read_result_history_view_model(response, result_rows_by_run_id=result_map, app_language=app_language, selected_run_id=selected_run_id)
+        if context is None:
+            continue
+        if result_rows_by_run_id is not None and row.run_id in result_rows_by_run_id:
+            result_row = result_rows_by_run_id[row.run_id]
+            result_outcome = RunResultReadService.read_result(
+                request_auth=request_auth,
+                run_context=context,
+                run_record_row=run_record_row,
+                result_row=result_row,
+                artifact_rows=artifact_rows_lookup(row.run_id) if artifact_rows_lookup is not None else (),
+                workspace_row=workspace_row,
+                recent_run_rows=recent_run_rows,
+                provider_binding_rows=provider_binding_rows,
+                managed_secret_rows=managed_secret_rows,
+                provider_probe_rows=provider_probe_rows,
+                onboarding_rows=onboarding_rows,
+            )
+            if result_outcome.ok and result_outcome.response is not None:
+                result_map[row.run_id] = result_outcome.response
+    onboarding_state = _workspace_onboarding_state(
+        request_auth=request_auth,
+        onboarding_rows=onboarding_rows,
+        workspace_id=response.workspace_id,
+    )
+    view_model = read_result_history_view_model(
+        response,
+        result_rows_by_run_id=result_map,
+        app_language=app_language,
+        selected_run_id=selected_run_id,
+        onboarding_state=onboarding_state,
+    )
+    overview_lines = [view_model.subtitle or "", f"Visible results: {view_model.returned_count}"]
+    if view_model.onboarding_incomplete and view_model.onboarding_summary:
+        overview_lines.append(view_model.onboarding_summary)
     overview = build_shell_section(
         headline=view_model.title or "Recent results",
-        lines=[view_model.subtitle or "", f"Visible results: {view_model.returned_count}"],
+        lines=overview_lines,
         detail_title="Result history overview",
         detail_items=[
-            "Source of truth: server-backed run history + result history",
-            "Beginner path: recent result snapshots instead of advanced trace literacy",
-            "Artifact reopen remains a secondary import/export path",
+            f"Workspace: {response.workspace_title}",
+            "Source of truth: server-backed run history and result history",
+            "Trace literacy is optional on this surface",
+            "Onboarding continuity is projected from canonical server state" if view_model.onboarding_incomplete else None,
         ],
         summary_empty="No recent results are visible yet.",
-        detail_empty="Result history detail will appear here once runs complete.",
+        detail_empty="Result history detail will appear here once runs exist.",
     )
     item_sections = []
     for item in view_model.items:
@@ -76,25 +127,36 @@ def build_workspace_result_history_payload(*, request_auth, workspace_context: W
         detail_items = [item.timestamp_label, item.result_summary]
         if item.output_preview:
             detail_items.append(f"Latest output preview: {item.output_preview}")
-        item_sections.append({
-            "run_id": item.run_id,
-            "workspace_id": item.workspace_id,
-            "status_label": item.status_label,
-            "open_result_href": item.open_result_href,
-            "continue_href": item.continue_href,
-            "section": build_shell_section(
-                headline=item.result_title,
-                lines=[item.status_label] + list(item.summary_lines),
-                detail_title="Result detail",
-                detail_items=detail_items,
-                controls=(
-                    {"control_id": f"open-result-{item.run_id}", "label": "Open result", "action_kind": "navigate", "action_target": item.open_result_href},
-                    {"control_id": f"continue-workflow-{item.run_id}", "label": "Continue workflow", "action_kind": "navigate", "action_target": item.continue_href},
+        item_sections.append(
+            {
+                "run_id": item.run_id,
+                "workspace_id": item.workspace_id,
+                "status_label": item.status_label,
+                "open_result_href": item.open_result_href,
+                "continue_href": item.continue_href,
+                "section": build_shell_section(
+                    headline=item.result_title,
+                    lines=[item.status_label] + list(item.summary_lines),
+                    detail_title="Result detail",
+                    detail_items=detail_items,
+                    controls=(
+                        {"control_id": f"open-result-{item.run_id}", "label": "Open result", "action_kind": "navigate", "action_target": item.open_result_href},
+                        {"control_id": f"continue-workflow-{item.run_id}", "label": "Continue workflow", "action_kind": "navigate", "action_target": item.continue_href},
+                    ),
                 ),
-            ),
-            "selected": selected,
-        })
+                "selected": selected,
+            }
+        )
     selected_item = next((item for item in view_model.items if item.run_id == view_model.selected_run_id), None)
+    onboarding_banner = None
+    if view_model.onboarding_incomplete:
+        onboarding_banner = {
+            "title": view_model.onboarding_title,
+            "summary": view_model.onboarding_summary,
+            "action_label": view_model.onboarding_action_label,
+            "action_href": view_model.onboarding_action_href,
+            "current_step": view_model.onboarding_step_id,
+        }
     return {
         "status": "ready",
         "workspace_id": response.workspace_id,
@@ -104,6 +166,7 @@ def build_workspace_result_history_payload(*, request_auth, workspace_context: W
         "overview_section": overview,
         "item_sections": item_sections,
         "selected_result": asdict(selected_item) if selected_item is not None else None,
+        "onboarding_banner": onboarding_banner,
         "routes": {
             "workspace_list": "/api/workspaces",
             "library": "/app/library",
@@ -123,6 +186,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
     workspace_title = escape(str(payload.get("workspace_title") or history.get("workspace_title") or "Workflow"))
     item_sections = list(payload.get("item_sections") or [])
     selected = dict(payload.get("selected_result") or {})
+    onboarding_banner = dict(payload.get("onboarding_banner") or {})
 
     def _render_lines(lines: Sequence[str]) -> str:
         return "".join(f"<li>{escape(str(line))}</li>" for line in lines if str(line).strip())
@@ -162,6 +226,17 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
     selected_output_html = ""
     if selected.get("output_preview"):
         selected_output_html = f'<section class="selected-output"><h2>{escape(str(selected.get("output_label") or "Latest output"))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
+    onboarding_html = ""
+    if onboarding_banner:
+        action_href = escape(str(onboarding_banner.get("action_href") or "#"))
+        action_label = escape(str(onboarding_banner.get("action_label") or "Continue workflow"))
+        onboarding_html = (
+            '<section class="onboarding-banner">'
+            f'<h2>{escape(str(onboarding_banner.get("title") or "Resume onboarding"))}</h2>'
+            f'<p>{escape(str(onboarding_banner.get("summary") or ""))}</p>'
+            f'<a class="action-link" href="{action_href}">{action_label}</a>'
+            '</section>'
+        )
     return f"""<!doctype html>
 <html lang="en">
   <head>
@@ -175,7 +250,8 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
       h1 {{ margin: 0 0 8px; font-size: 2rem; }}
       p {{ margin: 0; color: #cbd5e1; }}
       .result-grid {{ display: grid; gap: 16px; }}
-      .result-card, .selected-output {{ background: #111827; border: 1px solid #334155; border-radius: 16px; padding: 16px; }}
+      .result-card, .selected-output, .onboarding-banner {{ background: #111827; border: 1px solid #334155; border-radius: 16px; padding: 16px; }}
+      .onboarding-banner {{ margin-bottom: 16px; border-color: #2563eb; }}
       .result-card.selected {{ border-color: #60a5fa; box-shadow: 0 0 0 1px #60a5fa inset; }}
       .result-card-head {{ display: flex; justify-content: space-between; gap: 12px; align-items: center; }}
       .status-badge {{ background: #1f2937; border: 1px solid #475569; border-radius: 999px; padding: 4px 10px; font-size: 0.875rem; }}
@@ -196,6 +272,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         <h1>{title}</h1>
         <p>{workspace_title} · {subtitle}</p>
       </header>
+      {onboarding_html}
       {selected_output_html}
       <section class="result-grid">{cards_html}</section>
     </main>

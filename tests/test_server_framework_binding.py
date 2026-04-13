@@ -321,12 +321,22 @@ def test_framework_binding_handles_circuit_library_round_trip() -> None:
         },),
         membership_rows=(),
         recent_run_rows=(_run_row(status="completed", status_family="terminal_success"),),
+        onboarding_rows=({
+            "onboarding_state_id": "onboard-001",
+            "user_id": "user-owner",
+            "workspace_id": "ws-001",
+            "first_success_achieved": False,
+            "advanced_surfaces_unlocked": False,
+            "current_step": "read_result",
+            "updated_at": "2026-04-11T12:09:00+00:00",
+        },),
     )
     parsed = json.loads(response.body_text)
     assert response.status_code == 200
     assert parsed["status"] == "ready"
     assert parsed["library"]["returned_count"] == 1
-    assert parsed["library"]["items"][0]["continue_href"] == "/app/workspaces/ws-001"
+    assert parsed["library"]["items"][0]["continue_href"] == "/app/workspaces/ws-001/results?run_id=run-001"
+    assert parsed["library"]["items"][0]["onboarding_incomplete"] is True
 
 def test_framework_binding_handles_workspace_provider_health_round_trip() -> None:
     from src.server import AwsSecretsManagerBindingConfig, AwsSecretsManagerSecretAuthority

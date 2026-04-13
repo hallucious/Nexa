@@ -129,7 +129,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client() -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -359,6 +359,8 @@ def _make_client() -> TestClient:
         now_iso_provider=lambda: "2026-04-11T12:09:00+00:00",
     )
     deps = bind_probe_history_store(dependencies=deps, store=probe_store)
+    if onboarding_store is not None:
+        deps = bind_onboarding_state_store(dependencies=deps, store=onboarding_store)
     return TestClient(create_fastapi_app(dependencies=deps))
 
 
@@ -1189,3 +1191,29 @@ def test_fastapi_binding_workspace_result_history_routes_round_trip() -> None:
     assert page_response.status_code == 200
     assert 'Recent results' in page_response.text
     assert 'Latest Hello' in page_response.text
+
+
+
+def test_fastapi_binding_library_and_result_history_align_with_server_onboarding_progress() -> None:
+    onboarding_store = InMemoryOnboardingStateStore()
+    client = _make_client(onboarding_store=onboarding_store)
+
+    onboarding_put = client.put(
+        '/api/users/me/onboarding',
+        headers=_session_headers(),
+        json={'workspace_id': 'ws-001', 'first_success_achieved': False, 'advanced_surfaces_unlocked': False, 'current_step': 'read_result'},
+    )
+    assert onboarding_put.status_code == 200
+
+    library_response = client.get('/api/workspaces/library', headers=_session_headers())
+    assert library_response.status_code == 200
+    library_payload = library_response.json()
+    assert library_payload['library']['items'][0]['continue_href'] == '/app/workspaces/ws-001/results?run_id=run-001'
+    assert library_payload['library']['items'][0]['onboarding_incomplete'] is True
+
+    result_history_response = client.get('/api/workspaces/ws-001/result-history?run_id=run-001', headers=_session_headers())
+    assert result_history_response.status_code == 200
+    result_history_payload = result_history_response.json()
+    assert result_history_payload['result_history']['onboarding_incomplete'] is True
+    assert result_history_payload['result_history']['onboarding_step_id'] == 'read_result'
+    assert result_history_payload['onboarding_banner']['action_href'] == '/app/workspaces/ws-001/results?run_id=run-001'

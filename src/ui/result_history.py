@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Mapping, Sequence
 
 from src.ui.i18n import ui_text
 
@@ -35,6 +35,12 @@ class ResultHistoryViewModel:
     selected_run_id: str | None = None
     empty_title: str | None = None
     empty_summary: str | None = None
+    onboarding_incomplete: bool = False
+    onboarding_step_id: str | None = None
+    onboarding_title: str | None = None
+    onboarding_summary: str | None = None
+    onboarding_action_label: str | None = None
+    onboarding_action_href: str | None = None
     explanation: str | None = None
 
 
@@ -46,6 +52,27 @@ _ACTIVE_STATES = {"pending", "active", "not_ready", "queued", "running"}
 
 def _field(source: object, name: str, default=None):
     return getattr(source, name, default)
+
+
+def _normalized_onboarding_state(onboarding_state: object | None) -> Mapping[str, object] | None:
+    if not isinstance(onboarding_state, Mapping):
+        return None
+    return onboarding_state
+
+
+def _onboarding_incomplete(onboarding_state: object | None) -> bool:
+    state = _normalized_onboarding_state(onboarding_state)
+    if state is None:
+        return False
+    return not bool(state.get("first_success_achieved"))
+
+
+def _onboarding_step_id(onboarding_state: object | None) -> str | None:
+    state = _normalized_onboarding_state(onboarding_state)
+    if state is None:
+        return None
+    step = str(state.get("current_step") or "").strip().lower()
+    return step or None
 
 
 def _result_history_status_key(item: object, result: object | None) -> str:
@@ -148,7 +175,63 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
     )
 
 
-def read_result_history_view_model(source: object | Sequence[object] | None, *, result_rows_by_run_id: dict[str, object] | None = None, app_language: str = "en", selected_run_id: str | None = None, explanation: str | None = None) -> ResultHistoryViewModel:
+def _onboarding_banner(*, onboarding_state: object | None, app_language: str, workspace_id: str | None, selected_run_id: str | None) -> tuple[bool, str | None, str | None, str | None, str | None, str | None]:
+    incomplete = _onboarding_incomplete(onboarding_state)
+    step_id = _onboarding_step_id(onboarding_state)
+    workspace_href = f"/app/workspaces/{workspace_id}" if workspace_id else None
+    result_href = None
+    if workspace_id and selected_run_id:
+        result_href = f"/app/workspaces/{workspace_id}/results?run_id={selected_run_id}"
+    elif workspace_id:
+        result_href = f"/app/workspaces/{workspace_id}/results"
+    if not incomplete:
+        return False, step_id, None, None, None, None
+    if step_id == "read_result":
+        return (
+            True,
+            step_id,
+            ui_text("result_history.onboarding.title", app_language=app_language, fallback_text="Finish your first result"),
+            ui_text("result_history.onboarding.read_result", app_language=app_language, fallback_text="Server-backed onboarding says reading this result is your next beginner step."),
+            ui_text("result_history.onboarding.action.read_result", app_language=app_language, fallback_text="Stay on this result"),
+            result_href,
+        )
+    if step_id == "run":
+        return (
+            True,
+            step_id,
+            ui_text("result_history.onboarding.title", app_language=app_language, fallback_text="Resume onboarding"),
+            ui_text("result_history.onboarding.run", app_language=app_language, fallback_text="Server-backed onboarding says the run step is next, so keep this result history as reference and continue the workflow."),
+            ui_text("result_history.onboarding.action.continue_workflow", app_language=app_language, fallback_text="Continue workflow"),
+            workspace_href,
+        )
+    if step_id in {"review_preview", "approve", "enter_goal"}:
+        return (
+            True,
+            step_id,
+            ui_text("result_history.onboarding.title", app_language=app_language, fallback_text="Resume onboarding"),
+            ui_text("result_history.onboarding.review", app_language=app_language, fallback_text="Your onboarding progress is still mid-flow, so return to the workflow and continue from the saved beginner step."),
+            ui_text("result_history.onboarding.action.continue_workflow", app_language=app_language, fallback_text="Continue workflow"),
+            workspace_href,
+        )
+    return (
+        True,
+        step_id,
+        ui_text("result_history.onboarding.title", app_language=app_language, fallback_text="Resume onboarding"),
+        ui_text("result_history.onboarding.resume", app_language=app_language, fallback_text="Server-backed onboarding progress was preserved, so you can continue from where you left off."),
+        ui_text("result_history.onboarding.action.continue_workflow", app_language=app_language, fallback_text="Continue workflow"),
+        workspace_href,
+    )
+
+
+def read_result_history_view_model(
+    source: object | Sequence[object] | None,
+    *,
+    result_rows_by_run_id: dict[str, object] | None = None,
+    app_language: str = "en",
+    selected_run_id: str | None = None,
+    explanation: str | None = None,
+    onboarding_state: object | None = None,
+) -> ResultHistoryViewModel:
     if source is not None and hasattr(source, "runs") and hasattr(source, "workspace_id"):
         workspace_id = _field(source, "workspace_id")
         workspace_title = _field(source, "workspace_title")
@@ -161,6 +244,12 @@ def read_result_history_view_model(source: object | Sequence[object] | None, *, 
     visible_runs = [item for item in run_items if _field(item, "result_summary") is not None or _field(item, "result_state") is not None or str(_field(item, "status_family") or "").strip().lower() in {"active", "pending", "terminal_success", "terminal_failure", "terminal_partial"}]
     items = [_result_history_item(item, result_rows_by_run_id.get(str(_field(item, "run_id") or "")), app_language=app_language) for item in visible_runs]
     selected = selected_run_id if any(item.run_id == selected_run_id for item in items) else (items[0].run_id if items else None)
+    onboarding_incomplete, onboarding_step_id, onboarding_title, onboarding_summary, onboarding_action_label, onboarding_action_href = _onboarding_banner(
+        onboarding_state=onboarding_state,
+        app_language=app_language,
+        workspace_id=workspace_id,
+        selected_run_id=selected,
+    )
     return ResultHistoryViewModel(
         workspace_id=workspace_id,
         workspace_title=workspace_title,
@@ -173,5 +262,11 @@ def read_result_history_view_model(source: object | Sequence[object] | None, *, 
         selected_run_id=selected,
         empty_title=ui_text("result_history.empty.title", app_language=app_language, fallback_text="No recent results yet"),
         empty_summary=ui_text("result_history.empty.summary", app_language=app_language, fallback_text="Run a workflow once, then return here to reopen its latest result."),
+        onboarding_incomplete=onboarding_incomplete,
+        onboarding_step_id=onboarding_step_id,
+        onboarding_title=onboarding_title,
+        onboarding_summary=onboarding_summary,
+        onboarding_action_label=onboarding_action_label,
+        onboarding_action_href=onboarding_action_href,
         explanation=explanation,
     )
