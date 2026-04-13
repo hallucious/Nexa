@@ -440,3 +440,31 @@ def test_framework_binding_handles_provider_probe_history_round_trip() -> None:
     assert response.status_code == 200
     assert parsed["returned_count"] == 1
     assert parsed["items"][0]["probe_event_id"] == "probe-002"
+
+
+def test_framework_binding_workspace_shell_includes_latest_run_previews() -> None:
+    response = FrameworkRouteBindings.handle_workspace_shell(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shell", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+        },
+        recent_run_rows=(_run_row(status="completed", status_family="terminal_success"),),
+        result_rows_by_run_id={"run-001": {"final_status": "completed", "result_state": "ready_success", "result_summary": "Success."}},
+        artifact_source={
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile"}},
+        },
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed["latest_run_status_preview"]["run_id"] == "run-001"
+    assert parsed["latest_run_result_preview"]["result_state"] == "ready_success"

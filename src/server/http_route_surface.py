@@ -153,6 +153,7 @@ class RunHttpRouteSurface:
         workspace_context: Optional[WorkspaceAuthorizationContext],
         workspace_row: Optional[Mapping[str, Any]],
         recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_source: Any | None = None,
     ) -> HttpRouteResponse:
@@ -204,6 +205,7 @@ class RunHttpRouteSurface:
             workspace_row=workspace_row,
             artifact_source=artifact_source,
             recent_run_rows=recent_run_rows,
+            result_rows_by_run_id=result_rows_by_run_id,
             onboarding_rows=onboarding_rows,
         )
         return _route_response(200, payload)

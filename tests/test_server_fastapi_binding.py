@@ -415,6 +415,9 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['shell']['mobile_first_run']['visible'] is True
     assert payload['shell']['privacy_transparency']['visible'] is True
     assert payload['routes']['launch_run'] == '/api/runs'
+    assert payload['latest_run_status_preview']['run_id'] == 'run-002'
+    assert payload['latest_run_result_preview']['run_id'] == 'run-002'
+    assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
 
 
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
@@ -428,6 +431,9 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'Run draft' in body
     assert '/api/runs' in body
     assert '/api/workspaces/ws-001/shell' in body
+    assert 'Latest run status' in body
+    assert 'Latest run result' in body
+    assert 'pollLatestRunUntilSettled' in body
 
 
 def test_fastapi_binding_returns_auth_failure_without_session_claims() -> None:

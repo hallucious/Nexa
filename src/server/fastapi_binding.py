@@ -369,6 +369,7 @@ class FastApiRouteBindings:
                 workspace_context=self.dependencies.workspace_context_provider(workspace_id),
                 workspace_row=self.dependencies.workspace_row_provider(workspace_id),
                 recent_run_rows=self.dependencies.workspace_run_rows_provider(workspace_id),
+                result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
             )
@@ -390,6 +391,7 @@ class FastApiRouteBindings:
                 workspace_context=self.dependencies.workspace_context_provider(workspace_id),
                 workspace_row=self.dependencies.workspace_row_provider(workspace_id),
                 recent_run_rows=self.dependencies.workspace_run_rows_provider(workspace_id),
+                result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
             )
