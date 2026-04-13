@@ -456,6 +456,10 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_trace_preview']['latest_event_type'] == 'node.completed'
     assert payload['latest_run_artifacts_preview']['artifact_count'] == 1
     assert payload['latest_run_artifacts_preview']['first_artifact_id'] == 'artifact-2'
+    assert payload['latest_run_trace_summary']['headline'] == 'Trace events: 2'
+    assert 'Latest event: node.completed' in payload['latest_run_trace_summary']['lines']
+    assert payload['latest_run_artifacts_summary']['headline'] == 'Artifacts: 1'
+    assert 'First artifact id: artifact-2' in payload['latest_run_artifacts_summary']['lines']
 
 
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
@@ -480,6 +484,11 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'refreshLatestRunTrace' in body
     assert 'refreshLatestRunArtifacts' in body
     assert 'pollLatestRunUntilSettled' in body
+    assert 'Trace events: 2' in body
+    assert 'Artifacts: 1' in body
+    assert 'formatSummary' in body
+    assert 'summarizeTraceBody' in body
+    assert 'summarizeArtifactsBody' in body
 
 
 def test_fastapi_binding_returns_auth_failure_without_session_claims() -> None:

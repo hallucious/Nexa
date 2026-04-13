@@ -208,6 +208,67 @@ def _latest_run_trace_preview(
         "latest_message": str(latest.get("message_preview") or "").strip() or None,
     }
 
+def _summary_lines(*values: str | None) -> list[str]:
+    return [value for value in values if isinstance(value, str) and value.strip()]
+
+
+def _latest_run_status_summary(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not preview:
+        return None
+    status = str(preview.get("status") or "unknown").strip() or "unknown"
+    summary = str(preview.get("summary") or status).strip() or status
+    run_id = str(preview.get("run_id") or "").strip() or None
+    headline = f"Status: {summary}"
+    lines = _summary_lines(
+        f"Run id: {run_id}" if run_id else None,
+        f"Started: {preview.get('started_at')}" if preview.get('started_at') else None,
+        f"Updated: {preview.get('updated_at')}" if preview.get('updated_at') else None,
+    )
+    return {"headline": headline, "lines": lines}
+
+
+def _latest_run_result_summary(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not preview:
+        return None
+    summary = str(preview.get("summary") or "Result available.").strip() or "Result available."
+    result_state = str(preview.get("result_state") or "").strip() or None
+    final_status = str(preview.get("final_status") or "").strip() or None
+    lines = _summary_lines(
+        f"Result state: {result_state}" if result_state else None,
+        f"Final status: {final_status}" if final_status else None,
+    )
+    return {"headline": summary, "lines": lines}
+
+
+def _latest_run_artifacts_summary(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not preview:
+        return None
+    count = int(preview.get("artifact_count") or 0)
+    headline = f"Artifacts: {count}"
+    first_artifact_id = str(preview.get("first_artifact_id") or "").strip() or None
+    first_label = str(preview.get("first_label") or "").strip() or None
+    lines = _summary_lines(
+        f"First artifact id: {first_artifact_id}" if first_artifact_id else None,
+        f"Preview: {first_label}" if first_label else None,
+    )
+    return {"headline": headline, "lines": lines}
+
+
+def _latest_run_trace_summary(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if not preview:
+        return None
+    count = int(preview.get("event_count") or 0)
+    latest_event_type = str(preview.get("latest_event_type") or "").strip() or None
+    latest_node_id = str(preview.get("latest_node_id") or "").strip() or None
+    latest_message = str(preview.get("latest_message") or "").strip() or None
+    headline = f"Trace events: {count}"
+    lines = _summary_lines(
+        f"Latest event: {latest_event_type}" if latest_event_type else None,
+        f"Latest node: {latest_node_id}" if latest_node_id else None,
+        f"Latest message: {latest_message}" if latest_message else None,
+    )
+    return {"headline": headline, "lines": lines}
+
 
 def build_workspace_shell_runtime_payload(
     *,
@@ -244,6 +305,11 @@ def build_workspace_shell_runtime_payload(
             onboarding_state = dict(row)
             break
 
+    latest_run_status_preview = _latest_run_status_preview(latest_run_row)
+    latest_run_result_preview = _latest_run_result_preview(latest_run_row, result_rows_by_run_id)
+    latest_run_artifacts_preview = _latest_run_artifacts_preview(latest_run_row, artifact_rows_lookup)
+    latest_run_trace_preview = _latest_run_trace_preview(latest_run_row, trace_rows_lookup)
+
     payload = {
         "workspace_id": workspace_id,
         "workspace_title": workspace_title,
@@ -265,10 +331,14 @@ def build_workspace_shell_runtime_payload(
             "workspace_runs": f"/api/workspaces/{workspace_id}/runs",
             "onboarding": f"/api/users/me/onboarding?workspace_id={workspace_id}",
         },
-        "latest_run_status_preview": _latest_run_status_preview(latest_run_row),
-        "latest_run_result_preview": _latest_run_result_preview(latest_run_row, result_rows_by_run_id),
-        "latest_run_artifacts_preview": _latest_run_artifacts_preview(latest_run_row, artifact_rows_lookup),
-        "latest_run_trace_preview": _latest_run_trace_preview(latest_run_row, trace_rows_lookup),
+        "latest_run_status_preview": latest_run_status_preview,
+        "latest_run_result_preview": latest_run_result_preview,
+        "latest_run_artifacts_preview": latest_run_artifacts_preview,
+        "latest_run_trace_preview": latest_run_trace_preview,
+        "latest_run_status_summary": _latest_run_status_summary(latest_run_status_preview),
+        "latest_run_result_summary": _latest_run_result_summary(latest_run_result_preview),
+        "latest_run_artifacts_summary": _latest_run_artifacts_summary(latest_run_artifacts_preview),
+        "latest_run_trace_summary": _latest_run_trace_summary(latest_run_trace_preview),
         "continuity": {
             "onboarding_state": onboarding_state,
             "load_status": getattr(loaded, "load_status", "generated_default") if loaded is not None else "generated_default",
@@ -293,6 +363,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_result_preview_json = json.dumps(payload.get("latest_run_result_preview"), ensure_ascii=False)
     latest_run_artifacts_preview_json = json.dumps(payload.get("latest_run_artifacts_preview"), ensure_ascii=False)
     latest_run_trace_preview_json = json.dumps(payload.get("latest_run_trace_preview"), ensure_ascii=False)
+    latest_run_status_summary_json = json.dumps(payload.get("latest_run_status_summary"), ensure_ascii=False)
+    latest_run_result_summary_json = json.dumps(payload.get("latest_run_result_summary"), ensure_ascii=False)
+    latest_run_artifacts_summary_json = json.dumps(payload.get("latest_run_artifacts_summary"), ensure_ascii=False)
+    latest_run_trace_summary_json = json.dumps(payload.get("latest_run_trace_summary"), ensure_ascii=False)
     template_items = []
     for template in (template_gallery.get("templates") or [])[:6]:
         title = escape(str(template.get("display_name") or template.get("template_id") or "Template"))
@@ -399,6 +473,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRunResultPreview = {latest_run_result_preview_json};
     const initialRunArtifactsPreview = {latest_run_artifacts_preview_json};
     const initialRunTracePreview = {latest_run_trace_preview_json};
+    const initialRunStatusSummary = {latest_run_status_summary_json};
+    const initialRunResultSummary = {latest_run_result_summary_json};
+    const initialRunArtifactsSummary = {latest_run_artifacts_summary_json};
+    const initialRunTraceSummary = {latest_run_trace_summary_json};
     const logEl = document.getElementById('browser-log');
     const latestRunStatusEl = document.getElementById('latest-run-status');
     const latestRunResultEl = document.getElementById('latest-run-result');
@@ -412,17 +490,73 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     function writeLog(message) {{
       logEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
     }}
+    function formatSummary(summary, fallbackMessage) {{
+      if (!summary) return fallbackMessage;
+      const headline = typeof summary.headline === 'string' && summary.headline ? summary.headline : fallbackMessage;
+      const lines = Array.isArray(summary.lines) ? summary.lines.filter((line) => typeof line === 'string' && line) : [];
+      return [headline, ...lines].join('\n');
+    }}
+    function summarizeStatusBody(body) {{
+      if (!body || typeof body !== 'object') return null;
+      return {{
+        headline: 'Status: ' + String(body.status || body.summary || 'unknown'),
+        lines: [
+          body.run_id ? ('Run id: ' + body.run_id) : null,
+          body.summary ? ('Summary: ' + body.summary) : null,
+          body.started_at ? ('Started: ' + body.started_at) : null,
+          body.updated_at ? ('Updated: ' + body.updated_at) : null,
+        ].filter(Boolean),
+      }};
+    }}
+    function summarizeResultBody(body) {{
+      if (!body || typeof body !== 'object') return null;
+      return {{
+        headline: String(body.summary || body.result_summary || body.result_state || 'Result available.'),
+        lines: [
+          body.result_state ? ('Result state: ' + body.result_state) : null,
+          body.final_status ? ('Final status: ' + body.final_status) : null,
+          body.message ? ('Message: ' + body.message) : null,
+        ].filter(Boolean),
+      }};
+    }}
+    function summarizeTraceBody(body) {{
+      if (!body || typeof body !== 'object') return null;
+      const events = Array.isArray(body.events) ? body.events : [];
+      const latest = events.length ? events[events.length - 1] : null;
+      return {{
+        headline: 'Trace events: ' + String(Number(body.event_count || events.length || 0)),
+        lines: [
+          latest && latest.event_type ? ('Latest event: ' + latest.event_type) : null,
+          latest && latest.node_id ? ('Latest node: ' + latest.node_id) : null,
+          latest && latest.message ? ('Latest message: ' + latest.message) : null,
+          body.message ? ('Trace status: ' + body.message) : null,
+        ].filter(Boolean),
+      }};
+    }}
+    function summarizeArtifactsBody(body) {{
+      if (!body || typeof body !== 'object') return null;
+      const artifacts = Array.isArray(body.artifacts) ? body.artifacts : [];
+      const first = artifacts.length ? artifacts[0] : null;
+      return {{
+        headline: 'Artifacts: ' + String(Number(body.artifact_count || artifacts.length || 0)),
+        lines: [
+          first && first.artifact_id ? ('First artifact id: ' + first.artifact_id) : null,
+          first && first.label ? ('Preview: ' + first.label) : null,
+          first && first.preview ? ('Payload preview: ' + first.preview) : null,
+        ].filter(Boolean),
+      }};
+    }}
     function writeLatestRunStatus(message) {{
-      latestRunStatusEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
+      latestRunStatusEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent run is available yet.');
     }}
     function writeLatestRunResult(message) {{
-      latestRunResultEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
+      latestRunResultEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent run result is available yet.');
     }}
     function writeLatestRunTrace(message) {{
-      latestRunTraceEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
+      latestRunTraceEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent trace is available yet.');
     }}
     function writeLatestRunArtifacts(message) {{
-      latestRunArtifactsEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
+      latestRunArtifactsEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent artifacts are available yet.');
     }}
     function setActiveRun(runId) {{
       if (!runId) return;
@@ -439,7 +573,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       const response = await fetch(activeRunStatusPath, {{ credentials: 'same-origin' }});
       const body = await response.json();
-      writeLatestRunStatus(body);
+      writeLatestRunStatus(summarizeStatusBody(body));
       return body;
     }}
     async function refreshLatestRunResult() {{
@@ -449,7 +583,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       const response = await fetch(activeRunResultPath, {{ credentials: 'same-origin' }});
       const body = await response.json();
-      writeLatestRunResult(body);
+      writeLatestRunResult(summarizeResultBody(body));
       return body;
     }}
     async function refreshLatestRunTrace() {{
@@ -459,7 +593,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       const response = await fetch(activeRunTracePath, {{ credentials: 'same-origin' }});
       const body = await response.json();
-      writeLatestRunTrace(body);
+      writeLatestRunTrace(summarizeTraceBody(body));
       return body;
     }}
     async function refreshLatestRunArtifacts() {{
@@ -469,7 +603,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       const response = await fetch(activeRunArtifactsPath, {{ credentials: 'same-origin' }});
       const body = await response.json();
-      writeLatestRunArtifacts(body);
+      writeLatestRunArtifacts(summarizeArtifactsBody(body));
       return body;
     }}
     async function pollLatestRunUntilSettled() {{
@@ -488,26 +622,26 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       await refreshLatestRunTrace();
       await refreshLatestRunArtifacts();
     }}
-    writeLatestRunStatus(initialRunStatusPreview || 'No recent run is available yet.');
-    writeLatestRunResult(initialRunResultPreview || 'No recent run result is available yet.');
-    writeLatestRunTrace(initialRunTracePreview || 'No recent trace is available yet.');
-    writeLatestRunArtifacts(initialRunArtifactsPreview || 'No recent artifacts are available yet.');
+    writeLatestRunStatus(initialRunStatusSummary || 'No recent run is available yet.');
+    writeLatestRunResult(initialRunResultSummary || 'No recent run result is available yet.');
+    writeLatestRunTrace(initialRunTraceSummary || 'No recent trace is available yet.');
+    writeLatestRunArtifacts(initialRunArtifactsSummary || 'No recent artifacts are available yet.');
     document.getElementById('refresh').addEventListener('click', async () => {{
       const response = await fetch(initialPayload.routes.workspace_shell, {{ credentials: 'same-origin' }});
       const body = await response.json();
       writeLog(body);
       if (body.latest_run_status_preview && body.latest_run_status_preview.run_id) {{
         setActiveRun(body.latest_run_status_preview.run_id);
-        writeLatestRunStatus(body.latest_run_status_preview);
+        writeLatestRunStatus(body.latest_run_status_summary || summarizeStatusBody(body.latest_run_status_preview));
       }}
       if (body.latest_run_result_preview) {{
-        writeLatestRunResult(body.latest_run_result_preview);
+        writeLatestRunResult(body.latest_run_result_summary || summarizeResultBody(body.latest_run_result_preview));
       }}
       if (body.latest_run_trace_preview) {{
-        writeLatestRunTrace(body.latest_run_trace_preview);
+        writeLatestRunTrace(body.latest_run_trace_summary || summarizeTraceBody(body.latest_run_trace_preview));
       }}
       if (body.latest_run_artifacts_preview) {{
-        writeLatestRunArtifacts(body.latest_run_artifacts_preview);
+        writeLatestRunArtifacts(body.latest_run_artifacts_summary || summarizeArtifactsBody(body.latest_run_artifacts_preview));
       }}
     }});
     document.getElementById('run-draft').addEventListener('click', async () => {{
@@ -525,7 +659,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       writeLog(body);
       if (body.run_id) {{
         setActiveRun(body.run_id);
-        writeLatestRunStatus({{ run_id: body.run_id, status: 'accepted', summary: 'Launch accepted.' }});
+        writeLatestRunStatus({{ headline: 'Status: accepted', lines: ['Run id: ' + body.run_id, 'Summary: Launch accepted.'] }});
         writeLatestRunResult('Waiting for run result.');
         writeLatestRunTrace('Waiting for trace details.');
         writeLatestRunArtifacts('Waiting for artifact details.');
