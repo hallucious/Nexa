@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping
+from typing import Mapping, Any
 
 from src.designer.models.circuit_draft_preview import CircuitDraftPreview
 from src.designer.models.circuit_patch_plan import CircuitPatchPlan
@@ -122,6 +122,16 @@ class DesignerTargetRefView:
     label: str
 
 
+
+
+@dataclass(frozen=True)
+class DesignerSummarySignalView:
+    family: str
+    severity: str
+    label: str
+    summary: str
+
+
 @dataclass(frozen=True)
 class DesignerPanelViewModel:
     session_mode: str
@@ -137,6 +147,7 @@ class DesignerPanelViewModel:
     related_targets: list[DesignerTargetRefView] = field(default_factory=list)
     template_gallery: TemplateGalleryViewModel = field(default_factory=TemplateGalleryViewModel)
     provider_setup_guidance: ProviderSetupGuidanceView = field(default_factory=ProviderSetupGuidanceView)
+    summary_signals: list[DesignerSummarySignalView] = field(default_factory=list)
     explanation: str | None = None
 
 
@@ -187,6 +198,21 @@ def _is_beginner_empty_workspace(source) -> bool:
         return False
     return not source.circuit.nodes and not source.circuit.edges
 
+
+
+
+def _policy_validation_summary_from_source(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None) -> dict[str, Any] | None:
+    unwrapped = source.parsed_model if isinstance(source, LoadedNexArtifact) else source
+    if isinstance(unwrapped, ExecutionRecordModel):
+        metrics = unwrapped.observability.metrics if isinstance(unwrapped.observability.metrics, dict) else {}
+        recovery = metrics.get("recovery") if isinstance(metrics.get("recovery"), Mapping) else None
+        policy_validation = recovery.get("policy_validation") if isinstance(recovery, Mapping) and isinstance(recovery.get("policy_validation"), Mapping) else None
+        return dict(policy_validation) if policy_validation is not None else None
+    if isinstance(unwrapped, WorkingSaveModel):
+        last_run = unwrapped.runtime.last_run if isinstance(unwrapped.runtime.last_run, dict) else {}
+        policy_validation = last_run.get("policy_validation") if isinstance(last_run.get("policy_validation"), Mapping) else None
+        return dict(policy_validation) if policy_validation is not None else None
+    return None
 
 def _session_mode_from_card(card: DesignerSessionStateCard | None) -> str:
     if card is None:
@@ -315,6 +341,34 @@ def read_designer_panel_view_model(
         related_targets.extend(DesignerTargetRefView(f"node:{node}", "node", node) for node in patch_plan.change_scope.touched_nodes)
         related_targets.extend(DesignerTargetRefView(f"edge:{edge}", "edge", edge) for edge in patch_plan.change_scope.touched_edges)
         related_targets.extend(DesignerTargetRefView(f"output:{output}", "output", output) for output in patch_plan.change_scope.touched_outputs)
+    summary_signals: list[DesignerSummarySignalView] = []
+    policy_validation = _policy_validation_summary_from_source(source)
+    if policy_validation is not None:
+        status = str(policy_validation.get("status") or "invalid")
+        reason = str(policy_validation.get("reason") or "invalid_policy")
+        fallback_applied = bool(policy_validation.get("fallback_applied"))
+        summary_signals.append(
+            DesignerSummarySignalView(
+                family="policy_validation",
+                severity="warning",
+                label=ui_text(
+                    "designer.summary.policy_validation_label",
+                    app_language=app_language,
+                    fallback_text="Policy validation",
+                ),
+                summary=ui_text(
+                    "designer.summary.policy_validation_warning",
+                    app_language=app_language,
+                    fallback_text=(
+                        "Invalid scoring policy ({reason}); safe defaults applied."
+                        if fallback_applied
+                        else "Invalid scoring policy ({reason})."
+                    ),
+                    reason=reason,
+                ),
+            )
+        )
+
     return DesignerPanelViewModel(
         session_mode=session_mode,
         storage_role=storage_role,
@@ -329,6 +383,7 @@ def read_designer_panel_view_model(
         related_targets=related_targets,
         template_gallery=template_gallery_vm,
         provider_setup_guidance=provider_setup_guidance_vm,
+        summary_signals=summary_signals,
         explanation=explanation,
     )
 

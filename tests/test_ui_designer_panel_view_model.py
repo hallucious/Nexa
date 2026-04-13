@@ -219,3 +219,31 @@ def test_designer_panel_exposes_starter_template_gallery_for_empty_working_save(
     assert "workflow" in vm.template_gallery.title.lower()
     assert vm.provider_setup_guidance.visible is True
     assert vm.provider_setup_guidance.primary_action_target == "provider_setup"
+
+
+def test_designer_panel_surfaces_policy_validation_summary_signal() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-warning", name="Warn Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(
+            status="draft",
+            validation_summary={},
+            last_run={
+                "policy_validation": {
+                    "status": "invalid",
+                    "reason": "negative_weight",
+                    "fallback_applied": True,
+                }
+            },
+            errors=[],
+        ),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_designer_panel_view_model(source)
+
+    signal = next(signal for signal in vm.summary_signals if signal.family == "policy_validation")
+    assert signal.severity == "warning"
+    assert "negative_weight" in signal.summary

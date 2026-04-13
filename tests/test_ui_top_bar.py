@@ -147,3 +147,31 @@ def test_top_bar_uses_beginner_storage_role_and_search_copy_before_first_success
 
     assert vm.storage_badge.label == "저장되지 않음"
     assert vm.quick_jump_placeholder == "단계, 문제, 실행, 액션 검색"
+
+
+def test_top_bar_surfaces_policy_validation_attention_signal() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-policy", name="Policy Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(
+            status="draft",
+            validation_summary={},
+            last_run={
+                "policy_validation": {
+                    "status": "invalid",
+                    "reason": "negative_weight",
+                    "fallback_applied": True,
+                }
+            },
+            errors=[],
+        ),
+        ui=UIModel(layout={}, metadata={"app_language": "en-US"}),
+    )
+
+    vm = read_builder_top_bar_view_model(source)
+
+    signal = next(signal for signal in vm.attention_signals if signal.family == "policy_validation")
+    assert signal.severity == "warning"
+    assert "negative_weight" in signal.summary

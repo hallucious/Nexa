@@ -59,6 +59,16 @@ class ModeOptionView:
     available: bool = True
 
 
+
+
+@dataclass(frozen=True)
+class TopBarAttentionSignalView:
+    family: str
+    severity: str
+    label: str
+    summary: str
+
+
 @dataclass(frozen=True)
 class BuilderTopBarViewModel:
     topbar_status: str = "ready"
@@ -68,6 +78,7 @@ class BuilderTopBarViewModel:
     global_status: GlobalStatusSummaryView = field(default_factory=GlobalStatusSummaryView)
     primary_actions: list[PrimaryActionButtonView] = field(default_factory=list)
     mode_options: list[ModeOptionView] = field(default_factory=list)
+    attention_signals: list[TopBarAttentionSignalView] = field(default_factory=list)
     quick_jump_placeholder: str | None = None
     explanation: str | None = None
 
@@ -165,6 +176,22 @@ def _action_emphasis(action: BuilderActionView, *, is_primary_slot: bool) -> str
     return "secondary"
 
 
+
+
+def _policy_validation_summary(source, execution_record: ExecutionRecordModel | None) -> dict[str, str | bool] | None:
+    if execution_record is not None:
+        metrics = execution_record.observability.metrics if isinstance(execution_record.observability.metrics, dict) else {}
+        recovery = metrics.get("recovery") if isinstance(metrics.get("recovery"), dict) else None
+        policy_validation = recovery.get("policy_validation") if isinstance(recovery, dict) and isinstance(recovery.get("policy_validation"), dict) else None
+        if policy_validation is not None:
+            return dict(policy_validation)
+    if isinstance(source, WorkingSaveModel):
+        last_run = source.runtime.last_run if isinstance(source.runtime.last_run, dict) else {}
+        policy_validation = last_run.get("policy_validation") if isinstance(last_run.get("policy_validation"), dict) else None
+        if policy_validation is not None:
+            return dict(policy_validation)
+    return None
+
 def _mode_options(*, role: str, execution_view: ExecutionPanelViewModel | None, approval_flow: DesignerApprovalFlowState | None, app_language: str) -> list[ModeOptionView]:
     review_active = approval_flow is not None and approval_flow.current_stage not in {None, "idle", "none", "completed"}
     run_active = execution_view is not None and execution_view.execution_status in {"running", "queued", "paused", "completed", "failed", "cancelled", "partial"}
@@ -233,6 +260,33 @@ def read_builder_top_bar_view_model(
     execution_status = execution_view.execution_status if execution_view is not None else "idle"
     topbar_status = "empty" if source_unwrapped is None else overall_status
 
+    attention_signals: list[TopBarAttentionSignalView] = []
+    policy_validation = _policy_validation_summary(source_unwrapped, execution_record)
+    if policy_validation is not None:
+        reason = str(policy_validation.get("reason") or "invalid_policy")
+        fallback_applied = bool(policy_validation.get("fallback_applied"))
+        attention_signals.append(
+            TopBarAttentionSignalView(
+                family="policy_validation",
+                severity="warning",
+                label=ui_text(
+                    "topbar.attention.policy_validation_label",
+                    app_language=app_language,
+                    fallback_text="Policy validation",
+                ),
+                summary=ui_text(
+                    "topbar.attention.policy_validation_warning",
+                    app_language=app_language,
+                    fallback_text=(
+                        "Invalid scoring policy ({reason}); safe defaults applied."
+                        if fallback_applied
+                        else "Invalid scoring policy ({reason})."
+                    ),
+                    reason=reason,
+                ),
+            )
+        )
+
     return BuilderTopBarViewModel(
         topbar_status=topbar_status,
         source_role=role,
@@ -257,6 +311,7 @@ def read_builder_top_bar_view_model(
         ),
         primary_actions=primary_actions,
         mode_options=_mode_options(role=role, execution_view=execution_view, approval_flow=approval_flow, app_language=app_language),
+        attention_signals=attention_signals,
         quick_jump_placeholder=beginner_ui_text("palette.placeholder", beginner_text_key="palette.placeholder.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text="Search nodes, findings, runs, actions"),
         explanation=explanation,
     )
