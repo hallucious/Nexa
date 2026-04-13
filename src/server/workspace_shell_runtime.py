@@ -13,6 +13,7 @@ from src.storage.models.working_save_model import RuntimeModel, UIModel, Working
 from src.storage.validators.shared_validator import load_nex
 from src.ui.builder_shell import read_builder_shell_view_model
 from src.ui.template_gallery import read_template_gallery_view_model
+from src.server.workspace_shell_sections import build_shell_section
 
 _WORKSPACE_ARTIFACT_KEYS: tuple[str, ...] = (
     "working_save_source",
@@ -386,21 +387,18 @@ def _status_history_section(recent_run_rows: Sequence[Mapping[str, Any]], worksp
                 "action_target": previous["run_id"],
             }
         )
-    return {
-        "summary": {
-            "headline": "Status history",
-            "lines": _summary_lines(
-                f"Recent runs: {len(entries)}" if entries else "No recent status history is available yet.",
-                f"Latest: {latest['run_id']} — {latest['summary']}" if latest else None,
-            ),
-        },
-        "detail": {
-            "title": "Status history detail",
-            "items": [f"{index + 1}. {entry['run_id']} — {entry['summary']}" for index, entry in enumerate(entries[:3])] or ["Status history entries will appear here as runs accumulate."],
-        },
-        "history": entries[:3],
-        "controls": controls,
-    }
+    return build_shell_section(
+        headline="Status history",
+        lines=_summary_lines(
+            f"Recent runs: {len(entries)}" if entries else "No recent status history is available yet.",
+            f"Latest: {latest['run_id']} — {latest['summary']}" if latest else None,
+        ),
+        detail_title="Status history detail",
+        detail_items=[f"{index + 1}. {entry['run_id']} — {entry['summary']}" for index, entry in enumerate(entries[:3])],
+        detail_empty="Status history entries will appear here as runs accumulate.",
+        controls=controls,
+        history=entries[:3],
+    )
 
 
 def _result_history_section(
@@ -441,21 +439,18 @@ def _result_history_section(
                 "action_target": previous["run_id"],
             }
         )
-    return {
-        "summary": {
-            "headline": "Result history",
-            "lines": _summary_lines(
-                f"Recent results: {len(entries)}" if entries else "No recent result history is available yet.",
-                f"Latest: {latest['run_id']} — {latest['result_state']}" if latest else None,
-            ),
-        },
-        "detail": {
-            "title": "Result history detail",
-            "items": [f"{index + 1}. {entry['run_id']} — {entry['result_state']} — {entry['summary']}" for index, entry in enumerate(entries[:3])] or ["Result history entries will appear here as runs complete."],
-        },
-        "history": entries[:3],
-        "controls": controls,
-    }
+    return build_shell_section(
+        headline="Result history",
+        lines=_summary_lines(
+            f"Recent results: {len(entries)}" if entries else "No recent result history is available yet.",
+            f"Latest: {latest['run_id']} — {latest['result_state']}" if latest else None,
+        ),
+        detail_title="Result history detail",
+        detail_items=[f"{index + 1}. {entry['run_id']} — {entry['result_state']} — {entry['summary']}" for index, entry in enumerate(entries[:3])],
+        detail_empty="Result history entries will appear here as runs complete.",
+        controls=controls,
+        history=entries[:3],
+    )
 
 
 
@@ -547,26 +542,22 @@ def _trace_history_section(
                 "action_target": previous["run_id"],
             }
         )
-    return {
-        "summary": {
-            "headline": "Trace history",
-            "lines": _summary_lines(
-                f"Recent traces: {len(entries)}" if entries else "No recent trace history is available yet.",
-                f"Latest: {latest['run_id']} — {latest['event_count']} events" if latest else None,
-            ),
-        },
-        "detail": {
-            "title": "Trace history detail",
-            "items": [
-                f"{index + 1}. {entry['run_id']} — {entry['event_count']} events"
-                + (f" — latest: {entry['latest_event_type']}" if entry.get("latest_event_type") else "")
-                for index, entry in enumerate(entries[:3])
-            ]
-            or ["Trace history entries will appear here as runs accumulate."],
-        },
-        "history": entries[:3],
-        "controls": controls,
-    }
+    return build_shell_section(
+        headline="Trace history",
+        lines=_summary_lines(
+            f"Recent traces: {len(entries)}" if entries else "No recent trace history is available yet.",
+            f"Latest: {latest['run_id']} — {latest['event_count']} events" if latest else None,
+        ),
+        detail_title="Trace history detail",
+        detail_items=[
+            f"{index + 1}. {entry['run_id']} — {entry['event_count']} events"
+            + (f" — latest: {entry['latest_event_type']}" if entry.get("latest_event_type") else "")
+            for index, entry in enumerate(entries[:3])
+        ],
+        detail_empty="Trace history entries will appear here as runs accumulate.",
+        controls=controls,
+        history=entries[:3],
+    )
 
 
 def _artifacts_history_section(
@@ -610,26 +601,22 @@ def _artifacts_history_section(
                 "action_target": previous["run_id"],
             }
         )
-    return {
-        "summary": {
-            "headline": "Artifacts history",
-            "lines": _summary_lines(
-                f"Recent artifact sets: {len(entries)}" if entries else "No recent artifacts history is available yet.",
-                f"Latest: {latest['run_id']} — {latest['artifact_count']} artifacts" if latest else None,
-            ),
-        },
-        "detail": {
-            "title": "Artifacts history detail",
-            "items": [
-                f"{index + 1}. {entry['run_id']} — {entry['artifact_count']} artifacts"
-                + (f" — first: {entry['first_artifact_id']}" if entry.get("first_artifact_id") else "")
-                for index, entry in enumerate(entries[:3])
-            ]
-            or ["Artifacts history entries will appear here as runs accumulate."],
-        },
-        "history": entries[:3],
-        "controls": controls,
-    }
+    return build_shell_section(
+        headline="Artifacts history",
+        lines=_summary_lines(
+            f"Recent artifact sets: {len(entries)}" if entries else "No recent artifacts history is available yet.",
+            f"Latest: {latest['run_id']} — {latest['artifact_count']} artifacts" if latest else None,
+        ),
+        detail_title="Artifacts history detail",
+        detail_items=[
+            f"{index + 1}. {entry['run_id']} — {entry['artifact_count']} artifacts"
+            + (f" — first: {entry['first_artifact_id']}" if entry.get("first_artifact_id") else "")
+            for index, entry in enumerate(entries[:3])
+        ],
+        detail_empty="Artifacts history entries will appear here as runs accumulate.",
+        controls=controls,
+        history=entries[:3],
+    )
 
 
 def _server_backed_shell_state(source: Any | None, model: Any) -> dict[str, Mapping[str, Any]]:
@@ -1724,59 +1711,33 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         container.appendChild(button);
       }}
     }}
-    function writeStatusHistorySection(section) {{
-      currentStatusHistorySection = section || currentStatusHistorySection || {{}};
-      const summary = currentStatusHistorySection && currentStatusHistorySection.summary ? currentStatusHistorySection.summary : null;
-      const detail = currentStatusHistorySection && currentStatusHistorySection.detail ? currentStatusHistorySection.detail : null;
-      statusHistorySummaryEl.textContent = formatSummary(summary, 'Recent status history will appear here.');
-      statusHistoryDetailEl.textContent = formatDetail(detail, 'Status history detail will appear here.');
-      renderSectionControls(statusHistoryControlsEl, currentStatusHistorySection && currentStatusHistorySection.controls ? currentStatusHistorySection.controls : []);
+    function writeShellSection(section, currentValue, summaryEl, detailEl, controlsEl, summaryFallback, detailFallback) {{
+      const nextValue = section || currentValue || {{}};
+      const summary = nextValue && nextValue.summary ? nextValue.summary : null;
+      const detail = nextValue && nextValue.detail ? nextValue.detail : null;
+      if (summaryEl) summaryEl.textContent = formatSummary(summary, summaryFallback);
+      if (detailEl) detailEl.textContent = formatDetail(detail, detailFallback);
+      if (controlsEl) renderSectionControls(controlsEl, nextValue && nextValue.controls ? nextValue.controls : []);
       writeShellContinuity(captureShellContinuity());
+      return nextValue;
+    }}
+    function writeStatusHistorySection(section) {{
+      currentStatusHistorySection = writeShellSection(section, currentStatusHistorySection, statusHistorySummaryEl, statusHistoryDetailEl, statusHistoryControlsEl, 'Recent status history will appear here.', 'Status history detail will appear here.');
     }}
     function writeResultHistorySection(section) {{
-      currentResultHistorySection = section || currentResultHistorySection || {{}};
-      const summary = currentResultHistorySection && currentResultHistorySection.summary ? currentResultHistorySection.summary : null;
-      const detail = currentResultHistorySection && currentResultHistorySection.detail ? currentResultHistorySection.detail : null;
-      resultHistorySummaryEl.textContent = formatSummary(summary, 'Recent result history will appear here.');
-      resultHistoryDetailEl.textContent = formatDetail(detail, 'Result history detail will appear here.');
-      renderSectionControls(resultHistoryControlsEl, currentResultHistorySection && currentResultHistorySection.controls ? currentResultHistorySection.controls : []);
-      writeShellContinuity(captureShellContinuity());
+      currentResultHistorySection = writeShellSection(section, currentResultHistorySection, resultHistorySummaryEl, resultHistoryDetailEl, resultHistoryControlsEl, 'Recent result history will appear here.', 'Result history detail will appear here.');
     }}
     function writeTraceHistorySection(section) {{
-      currentTraceHistorySection = section || currentTraceHistorySection || {{}};
-      const summary = currentTraceHistorySection && currentTraceHistorySection.summary ? currentTraceHistorySection.summary : null;
-      const detail = currentTraceHistorySection && currentTraceHistorySection.detail ? currentTraceHistorySection.detail : null;
-      traceHistorySummaryEl.textContent = formatSummary(summary, 'Recent trace history will appear here.');
-      traceHistoryDetailEl.textContent = formatDetail(detail, 'Trace history detail will appear here.');
-      renderSectionControls(traceHistoryControlsEl, currentTraceHistorySection && currentTraceHistorySection.controls ? currentTraceHistorySection.controls : []);
-      writeShellContinuity(captureShellContinuity());
+      currentTraceHistorySection = writeShellSection(section, currentTraceHistorySection, traceHistorySummaryEl, traceHistoryDetailEl, traceHistoryControlsEl, 'Recent trace history will appear here.', 'Trace history detail will appear here.');
     }}
     function writeArtifactsHistorySection(section) {{
-      currentArtifactsHistorySection = section || currentArtifactsHistorySection || {{}};
-      const summary = currentArtifactsHistorySection && currentArtifactsHistorySection.summary ? currentArtifactsHistorySection.summary : null;
-      const detail = currentArtifactsHistorySection && currentArtifactsHistorySection.detail ? currentArtifactsHistorySection.detail : null;
-      artifactsHistorySummaryEl.textContent = formatSummary(summary, 'Recent artifacts history will appear here.');
-      artifactsHistoryDetailEl.textContent = formatDetail(detail, 'Artifacts history detail will appear here.');
-      renderSectionControls(artifactsHistoryControlsEl, currentArtifactsHistorySection && currentArtifactsHistorySection.controls ? currentArtifactsHistorySection.controls : []);
-      writeShellContinuity(captureShellContinuity());
+      currentArtifactsHistorySection = writeShellSection(section, currentArtifactsHistorySection, artifactsHistorySummaryEl, artifactsHistoryDetailEl, artifactsHistoryControlsEl, 'Recent artifacts history will appear here.', 'Artifacts history detail will appear here.');
     }}
     function writeDesignerSection(section) {{
-      currentDesignerSection = section || currentDesignerSection || {{}};
-      const summary = currentDesignerSection && currentDesignerSection.summary ? currentDesignerSection.summary : null;
-      const detail = currentDesignerSection && currentDesignerSection.detail ? currentDesignerSection.detail : null;
-      designerSummaryEl.textContent = formatSummary(summary, 'Open Designer to start drafting your workflow.');
-      designerDetailEl.textContent = formatDetail(detail, 'Designer detail will appear here.');
-      renderSectionControls(designerControlsEl, currentDesignerSection && currentDesignerSection.controls ? currentDesignerSection.controls : []);
-      writeShellContinuity(captureShellContinuity());
+      currentDesignerSection = writeShellSection(section, currentDesignerSection, designerSummaryEl, designerDetailEl, designerControlsEl, 'Open Designer to start drafting your workflow.', 'Designer detail will appear here.');
     }}
     function writeValidationSection(section) {{
-      currentValidationSection = section || currentValidationSection || {{}};
-      const summary = currentValidationSection && currentValidationSection.summary ? currentValidationSection.summary : null;
-      const detail = currentValidationSection && currentValidationSection.detail ? currentValidationSection.detail : null;
-      validationSummaryEl.textContent = formatSummary(summary, 'Validation guidance will appear here.');
-      validationDetailEl.textContent = formatDetail(detail, 'Validation detail will appear here.');
-      renderSectionControls(validationControlsEl, currentValidationSection && currentValidationSection.controls ? currentValidationSection.controls : []);
-      writeShellContinuity(captureShellContinuity());
+      currentValidationSection = writeShellSection(section, currentValidationSection, validationSummaryEl, validationDetailEl, validationControlsEl, 'Validation guidance will appear here.', 'Validation detail will appear here.');
     }}
     async function applyTemplateControl(control) {{
       const displayName = String(control && (control.template_display_name || control.label) || 'starter template');
