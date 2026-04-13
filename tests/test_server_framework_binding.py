@@ -454,6 +454,23 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
         },
         recent_run_rows=(_run_row(status="completed", status_family="terminal_success"),),
         result_rows_by_run_id={"run-001": {"final_status": "completed", "result_state": "ready_success", "result_summary": "Success."}},
+        artifact_rows_lookup=lambda run_id: ({
+            "artifact_id": "artifact-1",
+            "run_id": run_id,
+            "workspace_id": "ws-001",
+            "artifact_type": "report",
+            "label": "Primary report",
+            "payload_preview": "Hello",
+        },) if run_id == "run-001" else (),
+        trace_rows_lookup=lambda run_id: ({
+            "trace_event_ref": "evt-1",
+            "run_id": run_id,
+            "sequence_number": 1,
+            "event_type": "node.completed",
+            "occurred_at": "2026-04-11T12:00:10+00:00",
+            "node_id": "node-1",
+            "message_preview": "Node completed",
+        },) if run_id == "run-001" else (),
         artifact_source={
             "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
             "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
@@ -468,3 +485,7 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert response.status_code == 200
     assert parsed["latest_run_status_preview"]["run_id"] == "run-001"
     assert parsed["latest_run_result_preview"]["result_state"] == "ready_success"
+    assert parsed["latest_run_trace_preview"]["event_count"] == 1
+    assert parsed["latest_run_artifacts_preview"]["artifact_count"] == 1
+    assert parsed["routes"]["latest_run_trace"] == "/api/runs/run-001/trace?limit=20"
+    assert parsed["routes"]["latest_run_artifacts"] == "/api/runs/run-001/artifacts"

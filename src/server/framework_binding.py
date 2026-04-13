@@ -640,6 +640,8 @@ class FrameworkRouteBindings:
         result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         artifact_source: Any | None = None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -649,6 +651,8 @@ class FrameworkRouteBindings:
             result_rows_by_run_id=result_rows_by_run_id,
             onboarding_rows=list(onboarding_rows),
             artifact_source=artifact_source,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
         )
         return cls.to_framework_response(response)
 

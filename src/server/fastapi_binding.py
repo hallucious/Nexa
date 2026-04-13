@@ -372,6 +372,8 @@ class FastApiRouteBindings:
                 result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+                artifact_rows_lookup=self.dependencies.artifact_rows_provider,
+                trace_rows_lookup=self.dependencies.trace_rows_provider,
             )
             return self._framework_response(outbound)
 
@@ -394,6 +396,8 @@ class FastApiRouteBindings:
                 result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+                artifact_rows_lookup=self.dependencies.artifact_rows_provider,
+                trace_rows_lookup=self.dependencies.trace_rows_provider,
             )
             framework_response = self._framework_response(outbound)
             if framework_response.status_code != 200:

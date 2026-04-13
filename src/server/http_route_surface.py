@@ -156,6 +156,8 @@ class RunHttpRouteSurface:
         result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_source: Any | None = None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace shell route only supports GET."})
@@ -207,6 +209,8 @@ class RunHttpRouteSurface:
             recent_run_rows=recent_run_rows,
             result_rows_by_run_id=result_rows_by_run_id,
             onboarding_rows=onboarding_rows,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
         )
         return _route_response(200, payload)
 

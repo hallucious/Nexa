@@ -142,6 +142,18 @@ def _make_client() -> TestClient:
                 "metadata_json": {"value_type": "string", "inline_value": "Hello"},
                 "created_at": "2026-04-11T12:00:15+00:00",
             }
+        ],
+        "run-002": [
+            {
+                "artifact_id": "artifact-2",
+                "run_id": "run-002",
+                "workspace_id": "ws-001",
+                "artifact_type": "summary",
+                "label": "Latest report",
+                "payload_preview": "Latest Hello",
+                "metadata_json": {"value_type": "string", "inline_value": "Latest Hello"},
+                "created_at": "2026-04-11T12:01:15+00:00",
+            }
         ]
     }
     trace_rows = {
@@ -163,6 +175,26 @@ def _make_client() -> TestClient:
                 "occurred_at": "2026-04-11T12:00:10+00:00",
                 "node_id": "node-a",
                 "message_preview": "Node A started",
+            },
+        ],
+        "run-002": [
+            {
+                "trace_event_ref": "evt-4",
+                "run_id": "run-002",
+                "sequence_number": 2,
+                "event_type": "node.completed",
+                "occurred_at": "2026-04-11T12:01:20+00:00",
+                "node_id": "node-d",
+                "message_preview": "Node D completed",
+            },
+            {
+                "trace_event_ref": "evt-3",
+                "run_id": "run-002",
+                "sequence_number": 1,
+                "event_type": "node.started",
+                "occurred_at": "2026-04-11T12:01:10+00:00",
+                "node_id": "node-c",
+                "message_preview": "Node C started",
             },
         ]
     }
@@ -418,6 +450,12 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_status_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
+    assert payload['routes']['latest_run_trace'] == '/api/runs/run-002/trace?limit=20'
+    assert payload['routes']['latest_run_artifacts'] == '/api/runs/run-002/artifacts'
+    assert payload['latest_run_trace_preview']['event_count'] == 2
+    assert payload['latest_run_trace_preview']['latest_event_type'] == 'node.completed'
+    assert payload['latest_run_artifacts_preview']['artifact_count'] == 1
+    assert payload['latest_run_artifacts_preview']['first_artifact_id'] == 'artifact-2'
 
 
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
@@ -433,6 +471,14 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert '/api/workspaces/ws-001/shell' in body
     assert 'Latest run status' in body
     assert 'Latest run result' in body
+    assert 'Latest trace' in body
+    assert 'Latest artifacts' in body
+    assert 'Open latest trace' in body
+    assert 'Open latest artifacts' in body
+    assert '/api/runs/run-002/trace?limit=20' in body
+    assert '/api/runs/run-002/artifacts' in body
+    assert 'refreshLatestRunTrace' in body
+    assert 'refreshLatestRunArtifacts' in body
     assert 'pollLatestRunUntilSettled' in body
 
 
