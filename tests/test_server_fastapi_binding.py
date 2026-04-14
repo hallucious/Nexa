@@ -1274,6 +1274,10 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '원본 워크스페이스 레지스트리' in library_page.text
     assert '실행 중' in library_page.text
     assert '최근 결과 이력을 확인할 수 있습니다' in library_page.text
+    assert '제품 화면에서 이 워크플로우를 바로 계속할 수 있습니다.' in library_page.text
+    assert '제품 화면에서 최근 결과 이력을 바로 열 수 있습니다.' in library_page.text
+    assert '이어서 사용 경로:' not in library_page.text
+    assert '결과 이력 경로:' not in library_page.text
 
     result_page = client.get('/app/workspaces/ws-001/results?run_id=run-002&app_language=ko', headers=_session_headers())
     assert result_page.status_code == 200
