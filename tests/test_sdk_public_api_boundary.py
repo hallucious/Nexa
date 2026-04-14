@@ -19,6 +19,8 @@ from src.sdk.artifacts import (
     create_commit_snapshot_from_working_save,
     create_working_save_from_commit_snapshot,
 )
+from src.server.framework_binding_models import FrameworkOutboundResponse
+
 from src.sdk.server import (
     ProductExecutionTarget,
     ProductLaunchOptions,
@@ -52,7 +54,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.8"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.9"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -112,8 +114,8 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
 
-    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.2"
-    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.2"
+    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.3"
+    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.3"
     assert sdk.PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
@@ -137,7 +139,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.4"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.5"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
@@ -156,9 +158,9 @@ def test_sdk_root_exposes_public_mcp_compatibility_policy() -> None:
     policy = sdk.build_public_mcp_compatibility_policy()
 
     assert isinstance(policy, sdk.PublicMcpCompatibilityPolicy)
-    assert policy.supported_manifest_versions == ("1.2",)
-    assert policy.supported_schema_versions == ("1.2",)
-    policy.assert_supported(manifest_version="1.2", schema_version="1.2")
+    assert policy.supported_manifest_versions == ("1.3",)
+    assert policy.supported_schema_versions == ("1.3",)
+    policy.assert_supported(manifest_version="1.3", schema_version="1.3")
 
 
 def test_sdk_root_exposes_public_mcp_route_contracts() -> None:
@@ -180,3 +182,28 @@ def test_sdk_root_exposes_typed_normalized_arguments() -> None:
     assert normalized.route_contract.route_family == "activity-read"
     assert normalized.query_params == {"workspace_id": "ws-1", "limit": "5"}
     assert normalized.json_body is None
+
+
+def test_sdk_root_exposes_public_mcp_response_contracts() -> None:
+    contracts = sdk.build_public_mcp_response_contracts()
+    indexed = {contract.route_name: contract for contract in contracts}
+
+    assert isinstance(indexed["launch_run"], sdk.PublicMcpResponseContract)
+    assert indexed["launch_run"].success_status_codes == (202,)
+    assert indexed["get_run_status"].response_shape == "status"
+
+
+def test_sdk_root_exposes_public_mcp_normalized_response() -> None:
+    normalized = sdk.build_public_mcp_adapter_scaffold().normalize_framework_resource_response(
+        "get_run_status",
+        FrameworkOutboundResponse(
+            status_code=200,
+            headers={"content-type": "application/json"},
+            body_text='{"run_id": "run-1", "status": "queued"}',
+            media_type="application/json",
+        ),
+    )
+
+    assert isinstance(normalized, sdk.PublicMcpNormalizedResponse)
+    assert normalized.response_contract.route_family == "run-read"
+    assert normalized.body["status"] == "queued"

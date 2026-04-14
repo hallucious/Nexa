@@ -3,6 +3,9 @@ from __future__ import annotations
 from src import integration as root_integration
 from src import sdk
 from src.sdk import integration
+from src.server.framework_binding_models import FrameworkOutboundResponse
+from src.server.http_route_models import HttpRouteResponse
+
 from src.sdk.integration import (
     MCP_ADAPTER_SCAFFOLD_VERSION,
     MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
@@ -19,12 +22,15 @@ from src.sdk.integration import (
     PublicMcpHttpDispatch,
     PublicMcpManifest,
     PublicMcpNormalizedArguments,
+    PublicMcpNormalizedResponse,
+    PublicMcpResponseContract,
     PublicMcpResourceDescriptor,
     PublicMcpRouteContract,
     PublicMcpToolDescriptor,
     build_public_mcp_adapter_scaffold,
     build_public_mcp_argument_schemas,
     build_public_mcp_route_contracts,
+    build_public_mcp_response_contracts,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
     build_public_mcp_manifest,
@@ -35,7 +41,7 @@ from src.sdk.integration import (
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.8"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.9"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -69,9 +75,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.6"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.7"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.6"
+    assert surface.version == "1.7"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -126,12 +132,12 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.2"
-    assert PUBLIC_MCP_SCHEMA_VERSION == "1.2"
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.3"
+    assert PUBLIC_MCP_SCHEMA_VERSION == "1.3"
     assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.2"
-    assert manifest.schema_version == "1.2"
+    assert manifest.manifest_version == "1.3"
+    assert manifest.schema_version == "1.3"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -139,8 +145,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
-    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.2"
-    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.2"
+    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.3"
+    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.3"
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -168,7 +174,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.4"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.5"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -377,9 +383,9 @@ def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> N
 
     assert isinstance(policy, PublicMcpCompatibilityPolicy)
     assert policy.policy_version == "1.0"
-    assert policy.supports_manifest_version("1.2") is True
-    assert policy.supports_schema_version("1.2") is True
-    policy.assert_supported(manifest_version="1.2", schema_version="1.2")
+    assert policy.supports_manifest_version("1.3") is True
+    assert policy.supports_schema_version("1.3") is True
+    policy.assert_supported(manifest_version="1.3", schema_version="1.3")
 
 
 def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
@@ -404,9 +410,9 @@ def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
     export = bridge.export()
 
-    assert export.schema_version == "1.2"
+    assert export.schema_version == "1.3"
     assert export.compatibility_policy.policy_version == "1.0"
-    bridge.assert_consumer_compatibility(manifest_version="1.2", schema_version="1.2")
+    bridge.assert_consumer_compatibility(manifest_version="1.3", schema_version="1.3")
 
     try:
         bridge.assert_consumer_compatibility(manifest_version="0.9")
@@ -498,3 +504,83 @@ def test_route_contract_rejects_query_params_for_path_only_resource() -> None:
         assert "Unexpected query field" in str(exc) or "does not accept query params" in str(exc)
     else:
         raise AssertionError("Expected path-only route contract validation")
+
+
+def test_build_public_mcp_response_contracts_exports_curated_success_shapes() -> None:
+    contracts = build_public_mcp_response_contracts()
+    indexed = {contract.route_name: contract for contract in contracts}
+
+    assert isinstance(indexed["launch_run"], PublicMcpResponseContract)
+    assert indexed["launch_run"].response_shape == "accepted"
+    assert indexed["launch_run"].success_status_codes == (202,)
+    assert indexed["get_run_status"].response_shape == "status"
+    assert indexed["get_run_status"].success_status_codes == (200,)
+
+
+def test_manifest_includes_response_contracts() -> None:
+    manifest = build_public_mcp_manifest()
+    launch_tool = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
+    status_resource = next(resource for resource in manifest.resources if resource.route_name == "get_run_status")
+    manifest_dict = manifest.to_dict()
+    status_dict = next(resource for resource in manifest_dict["resources"] if resource["route_name"] == "get_run_status")
+
+    assert launch_tool.response_contract is not None
+    assert launch_tool.response_contract.success_status_codes == (202,)
+    assert status_resource.response_contract is not None
+    assert status_resource.response_contract.response_shape == "status"
+    assert status_dict["response_contract"]["success_status_codes"] == [200]
+
+
+def test_adapter_scaffold_normalizes_framework_response_against_public_contract() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    normalized = adapter.normalize_framework_resource_response(
+        "get_run_status",
+        FrameworkOutboundResponse(
+            status_code=200,
+            headers={"content-type": "application/json"},
+            body_text='{"run_id": "run-1", "status": "queued"}',
+            media_type="application/json",
+        ),
+    )
+
+    assert isinstance(normalized, PublicMcpNormalizedResponse)
+    assert normalized.ok is True
+    assert normalized.response_contract.response_shape == "status"
+    assert normalized.body["run_id"] == "run-1"
+
+
+def test_adapter_scaffold_normalizes_http_response_against_public_contract() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    normalized = adapter.normalize_http_tool_response(
+        "launch_run",
+        HttpRouteResponse(
+            status_code=202,
+            body={"run_id": "run-1", "status": "queued"},
+            headers={"content-type": "application/json"},
+        ),
+    )
+
+    assert isinstance(normalized, PublicMcpNormalizedResponse)
+    assert normalized.ok is True
+    assert normalized.response_contract.success_status_codes == (202,)
+    assert normalized.body["status"] == "queued"
+
+
+def test_adapter_scaffold_rejects_unexpected_success_status_for_response_contract() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    try:
+        adapter.normalize_http_tool_response(
+            "launch_run",
+            HttpRouteResponse(
+                status_code=200,
+                body={"run_id": "run-1"},
+                headers={"content-type": "application/json"},
+            ),
+        )
+    except ValueError as exc:
+        assert "Unexpected success status code" in str(exc)
+    else:
+        raise AssertionError("Expected response-contract success status validation")

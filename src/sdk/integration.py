@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 """Public integration-side SDK boundary for Nexa.
 
 This module does not implement a full MCP server. Instead, it defines the
@@ -20,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.6"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.7"
 
 
 @dataclass(frozen=True)
@@ -136,6 +138,57 @@ class PublicMcpNormalizedArguments:
 
 
 @dataclass(frozen=True)
+class PublicMcpResponseContract:
+    name: str
+    route_name: str
+    kind: str
+    route_family: str
+    response_shape: str
+    success_status_codes: tuple[int, ...]
+    response_media_type: str = "application/json"
+    response_type: PublicTypeRef | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "route_family": self.route_family,
+            "response_shape": self.response_shape,
+            "success_status_codes": list(self.success_status_codes),
+            "response_media_type": self.response_media_type,
+            "response_type": _type_ref_dict(self.response_type),
+        }
+
+
+@dataclass(frozen=True)
+class PublicMcpNormalizedResponse:
+    name: str
+    route_name: str
+    kind: str
+    response_contract: PublicMcpResponseContract
+    status_code: int
+    media_type: str
+    body: Any
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status_code < 300
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "response_contract": self.response_contract.to_dict(),
+            "status_code": self.status_code,
+            "media_type": self.media_type,
+            "ok": self.ok,
+            "body": self.body,
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpCompatibilitySurface:
     version: str
     tools: tuple[PublicMcpToolDescriptor, ...]
@@ -187,8 +240,8 @@ class PublicMcpCompatibilityPolicy:
         }
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.2"
-PUBLIC_MCP_SCHEMA_VERSION = "1.2"
+PUBLIC_MCP_MANIFEST_VERSION = "1.3"
+PUBLIC_MCP_SCHEMA_VERSION = "1.3"
 PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
@@ -203,6 +256,7 @@ class PublicMcpManifestTool:
     response_type: PublicTypeRef | None = None
     argument_schema: PublicMcpArgumentSchema | None = None
     route_contract: PublicMcpRouteContract | None = None
+    response_contract: PublicMcpResponseContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -217,6 +271,7 @@ class PublicMcpManifestResource:
     response_type: PublicTypeRef | None = None
     argument_schema: PublicMcpArgumentSchema | None = None
     route_contract: PublicMcpRouteContract | None = None
+    response_contract: PublicMcpResponseContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -262,6 +317,7 @@ class PublicMcpManifest:
                     "response_type": _type_ref_dict(tool.response_type),
                     "argument_schema": _argument_schema_dict(tool.argument_schema),
                     "route_contract": tool.route_contract.to_dict() if tool.route_contract is not None else None,
+                    "response_contract": tool.response_contract.to_dict() if tool.response_contract is not None else None,
                     "tags": list(tool.tags),
                 }
                 for tool in self.tools
@@ -277,6 +333,7 @@ class PublicMcpManifest:
                     "response_type": _type_ref_dict(resource.response_type),
                     "argument_schema": _argument_schema_dict(resource.argument_schema),
                     "route_contract": resource.route_contract.to_dict() if resource.route_contract is not None else None,
+                    "response_contract": resource.response_contract.to_dict() if resource.response_contract is not None else None,
                     "tags": list(resource.tags),
                 }
                 for resource in self.resources
@@ -287,7 +344,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.4"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.5"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -677,6 +734,7 @@ class PublicMcpToolExport:
     response_type: PublicTypeRef | None = None
     argument_schema: PublicMcpArgumentSchema | None = None
     route_contract: PublicMcpRouteContract | None = None
+    response_contract: PublicMcpResponseContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -690,6 +748,7 @@ class PublicMcpResourceExport:
     response_type: PublicTypeRef | None = None
     argument_schema: PublicMcpArgumentSchema | None = None
     route_contract: PublicMcpRouteContract | None = None
+    response_contract: PublicMcpResponseContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -785,6 +844,14 @@ class PublicMcpAdapterScaffold:
         descriptor = self._resource_by_name(resource_name)
         return self._route_contract_for_descriptor(descriptor, kind="resource")
 
+    def export_tool_response_contract(self, tool_name: str) -> PublicMcpResponseContract:
+        descriptor = self._tool_by_name(tool_name)
+        return self._response_contract_for_descriptor(descriptor, kind="tool")
+
+    def export_resource_response_contract(self, resource_name: str) -> PublicMcpResponseContract:
+        descriptor = self._resource_by_name(resource_name)
+        return self._response_contract_for_descriptor(descriptor, kind="resource")
+
     def normalize_tool_arguments(
         self,
         tool_name: str,
@@ -835,6 +902,62 @@ class PublicMcpAdapterScaffold:
             json_body=normalized["json_body"],
         )
 
+    def normalize_framework_tool_response(
+        self,
+        tool_name: str,
+        response: "FrameworkOutboundResponse",
+    ) -> PublicMcpNormalizedResponse:
+        descriptor = self._tool_by_name(tool_name)
+        return _normalize_public_framework_response(
+            descriptor.name,
+            descriptor.route_name,
+            "tool",
+            self._response_contract_for_descriptor(descriptor, kind="tool"),
+            response,
+        )
+
+    def normalize_framework_resource_response(
+        self,
+        resource_name: str,
+        response: "FrameworkOutboundResponse",
+    ) -> PublicMcpNormalizedResponse:
+        descriptor = self._resource_by_name(resource_name)
+        return _normalize_public_framework_response(
+            descriptor.name,
+            descriptor.route_name,
+            "resource",
+            self._response_contract_for_descriptor(descriptor, kind="resource"),
+            response,
+        )
+
+    def normalize_http_tool_response(
+        self,
+        tool_name: str,
+        response: "HttpRouteResponse",
+    ) -> PublicMcpNormalizedResponse:
+        descriptor = self._tool_by_name(tool_name)
+        return _normalize_public_http_response(
+            descriptor.name,
+            descriptor.route_name,
+            "tool",
+            self._response_contract_for_descriptor(descriptor, kind="tool"),
+            response,
+        )
+
+    def normalize_http_resource_response(
+        self,
+        resource_name: str,
+        response: "HttpRouteResponse",
+    ) -> PublicMcpNormalizedResponse:
+        descriptor = self._resource_by_name(resource_name)
+        return _normalize_public_http_response(
+            descriptor.name,
+            descriptor.route_name,
+            "resource",
+            self._response_contract_for_descriptor(descriptor, kind="resource"),
+            response,
+        )
+
     def export_tool(
         self,
         tool_name: str,
@@ -862,6 +985,7 @@ class PublicMcpAdapterScaffold:
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
+            response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -891,7 +1015,8 @@ class PublicMcpAdapterScaffold:
             invocation=invocation,
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
-            route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
+            route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
+            response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -941,6 +1066,7 @@ class PublicMcpAdapterScaffold:
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
+            response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -964,6 +1090,7 @@ class PublicMcpAdapterScaffold:
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
+            response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -978,6 +1105,7 @@ class PublicMcpAdapterScaffold:
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
+            response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -992,6 +1120,7 @@ class PublicMcpAdapterScaffold:
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
+            response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -1045,6 +1174,27 @@ class PublicMcpAdapterScaffold:
             body_field_names=tuple(field.name for field in schema.body_fields) if schema is not None else (),
             allow_additional_query_params=bool(schema.allow_additional_query_params) if schema is not None else False,
             allow_additional_body_fields=bool(schema.allow_additional_body_fields) if schema is not None else False,
+        )
+
+    def _response_contract_for_descriptor(
+        self,
+        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
+        *,
+        kind: str,
+    ) -> PublicMcpResponseContract:
+        spec = _RESPONSE_CONTRACT_BY_ROUTE_NAME.get(descriptor.route_name)
+        if spec is None:
+            raise ValueError(f"Missing public MCP response contract for route_name: {descriptor.route_name}")
+        route_contract = self._route_contract_for_descriptor(descriptor, kind=kind)
+        return PublicMcpResponseContract(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            kind=kind,
+            route_family=route_contract.route_family,
+            response_shape=str(spec["response_shape"]),
+            success_status_codes=tuple(int(code) for code in spec["success_status_codes"]),
+            response_media_type=str(spec.get("response_media_type", "application/json")),
+            response_type=getattr(descriptor, "response_type", None),
         )
 
     def _build_invocation(
@@ -1105,6 +1255,75 @@ def _argument_schema_dict(schema: PublicMcpArgumentSchema | None) -> dict[str, A
     if schema is None:
         return None
     return schema.to_dict()
+
+
+def _decode_public_response_body(*, media_type: str, body_text: str) -> Any:
+    if "json" in media_type.lower():
+        return json.loads(body_text)
+    return body_text
+
+
+def _assert_public_response_matches_contract(
+    response_contract: PublicMcpResponseContract,
+    *,
+    status_code: int,
+    media_type: str,
+) -> None:
+    if 200 <= status_code < 300 and status_code not in response_contract.success_status_codes:
+        raise ValueError(
+            f"Unexpected success status code for public route {response_contract.route_name}: {status_code}; expected one of {', '.join(map(str, response_contract.success_status_codes))}"
+        )
+    if response_contract.response_media_type and response_contract.response_media_type not in media_type.lower():
+        raise ValueError(
+            f"Unexpected media type for public route {response_contract.route_name}: {media_type}; expected {response_contract.response_media_type}"
+        )
+
+
+def _normalize_public_framework_response(
+    name: str,
+    route_name: str,
+    kind: str,
+    response_contract: PublicMcpResponseContract,
+    response: "FrameworkOutboundResponse",
+) -> PublicMcpNormalizedResponse:
+    _assert_public_response_matches_contract(
+        response_contract,
+        status_code=response.status_code,
+        media_type=response.media_type,
+    )
+    return PublicMcpNormalizedResponse(
+        name=name,
+        route_name=route_name,
+        kind=kind,
+        response_contract=response_contract,
+        status_code=response.status_code,
+        media_type=response.media_type,
+        body=_decode_public_response_body(media_type=response.media_type, body_text=response.body_text),
+    )
+
+
+def _normalize_public_http_response(
+    name: str,
+    route_name: str,
+    kind: str,
+    response_contract: PublicMcpResponseContract,
+    response: "HttpRouteResponse",
+) -> PublicMcpNormalizedResponse:
+    media_type = str(dict(response.headers).get("content-type", "application/json"))
+    _assert_public_response_matches_contract(
+        response_contract,
+        status_code=response.status_code,
+        media_type=media_type,
+    )
+    return PublicMcpNormalizedResponse(
+        name=name,
+        route_name=route_name,
+        kind=kind,
+        response_contract=response_contract,
+        status_code=response.status_code,
+        media_type=media_type,
+        body=dict(response.body),
+    )
 
 
 def _normalize_string_mapping(values: Mapping[str, object] | None) -> Mapping[str, str]:
@@ -1607,6 +1826,39 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
 }
 
 
+_RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
+    "launch_run": {"response_shape": "accepted", "success_status_codes": (202,)},
+    "launch_workspace_shell": {"response_shape": "accepted", "success_status_codes": (202,)},
+    "commit_workspace_shell": {"response_shape": "snapshot-commit", "success_status_codes": (200,)},
+    "checkout_workspace_shell": {"response_shape": "working-save-checkout", "success_status_codes": (200,)},
+    "retry_run": {"response_shape": "run-control", "success_status_codes": (200,)},
+    "force_reset_run": {"response_shape": "run-control", "success_status_codes": (200,)},
+    "mark_run_reviewed": {"response_shape": "run-control", "success_status_codes": (200,)},
+    "get_run_status": {"response_shape": "status", "success_status_codes": (200,)},
+    "get_run_result": {"response_shape": "result", "success_status_codes": (200,)},
+    "list_workspace_runs": {"response_shape": "list", "success_status_codes": (200,)},
+    "get_run_trace": {"response_shape": "trace", "success_status_codes": (200,)},
+    "list_run_artifacts": {"response_shape": "list", "success_status_codes": (200,)},
+    "get_artifact_detail": {"response_shape": "detail", "success_status_codes": (200,)},
+    "get_run_actions": {"response_shape": "action-log", "success_status_codes": (200,)},
+    "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,)},
+    "get_workspace": {"response_shape": "detail", "success_status_codes": (200,)},
+    "list_workspaces": {"response_shape": "list", "success_status_codes": (200,)},
+}
+
+
+def build_public_mcp_response_contracts() -> tuple[PublicMcpResponseContract, ...]:
+    """Return exported response contracts for the curated public MCP surface."""
+
+    adapter = build_public_mcp_adapter_scaffold()
+    contracts: list[PublicMcpResponseContract] = []
+    for tool in build_public_mcp_tools():
+        contracts.append(adapter.export_tool_response_contract(tool.name))
+    for resource in build_public_mcp_resources():
+        contracts.append(adapter.export_resource_response_contract(resource.name))
+    return tuple(contracts)
+
+
 _TOOL_SPECS: tuple[dict[str, object], ...] = (
     {
         "name": "launch_run",
@@ -1835,6 +2087,12 @@ __all__ = [
     "PublicTypeRef",
     "PublicMcpToolDescriptor",
     "PublicMcpResourceDescriptor",
+    "PublicMcpArgumentField",
+    "PublicMcpArgumentSchema",
+    "PublicMcpRouteContract",
+    "PublicMcpNormalizedArguments",
+    "PublicMcpResponseContract",
+    "PublicMcpNormalizedResponse",
     "PublicMcpCompatibilitySurface",
     "PublicMcpCompatibilityPolicy",
     "PublicMcpManifestTool",
@@ -1846,13 +2104,16 @@ __all__ = [
     "PublicMcpAdapterExport",
     "PublicMcpAdapterScaffold",
     "PublicMcpHostRouteBinding",
+    "PublicMcpFrameworkDispatch",
+    "PublicMcpHttpDispatch",
     "PublicMcpHostBridgeExport",
     "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",
+    "build_public_mcp_resources",
     "build_public_mcp_argument_schemas",
     "build_public_mcp_route_contracts",
+    "build_public_mcp_response_contracts",
     "build_public_mcp_compatibility_policy",
-    "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",
     "build_public_mcp_adapter_scaffold",
     "build_public_mcp_manifest",

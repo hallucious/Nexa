@@ -37,6 +37,8 @@ from src.sdk.integration import (
     PublicMcpArgumentSchema,
     PublicMcpRouteContract,
     PublicMcpNormalizedArguments,
+    PublicMcpResponseContract,
+    PublicMcpNormalizedResponse,
     PublicMcpCompatibilitySurface,
     PublicMcpCompatibilityPolicy,
     PublicMcpManifestTool,
@@ -56,6 +58,7 @@ from src.sdk.integration import (
     PublicMcpToolDescriptor,
     build_public_mcp_argument_schemas,
     build_public_mcp_route_contracts,
+    build_public_mcp_response_contracts,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
     build_public_mcp_adapter_scaffold,
@@ -77,7 +80,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.8"
+PUBLIC_SDK_SURFACE_VERSION = "1.9"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -95,6 +98,8 @@ __all__ = [
     "PublicMcpArgumentSchema",
     "PublicMcpRouteContract",
     "PublicMcpNormalizedArguments",
+    "PublicMcpResponseContract",
+    "PublicMcpNormalizedResponse",
     "artifacts",
     "server",
     "integration",
@@ -126,6 +131,8 @@ __all__ = [
     "PublicMcpArgumentSchema",
     "PublicMcpRouteContract",
     "PublicMcpNormalizedArguments",
+    "PublicMcpResponseContract",
+    "PublicMcpNormalizedResponse",
     "PublicMcpCompatibilitySurface",
     "PublicMcpCompatibilityPolicy",
     "PublicMcpManifestTool",
@@ -144,6 +151,7 @@ __all__ = [
     "build_public_mcp_tools",
     "build_public_mcp_argument_schemas",
     "build_public_mcp_route_contracts",
+    "build_public_mcp_response_contracts",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",
