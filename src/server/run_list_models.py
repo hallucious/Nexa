@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional, Literal
 
-from src.server.run_read_models import ProductExecutionTargetView, ProductResultSummaryView, ProductRunControlActionsView, ProductRunRecoveryView
+from src.server.run_read_models import ProductExecutionTargetView, ProductResultSummaryView, ProductRunControlActionsView, ProductRunRecoveryView, ProductSourceArtifactView
 from src.server.run_action_log_models import ProductRunLastActionView
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
 
@@ -44,6 +44,7 @@ class ProductRunListItemView:
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     requested_by_user_id: Optional[str] = None
+    source_artifact: Optional[ProductSourceArtifactView] = None
     result_state: Optional[str] = None
     latest_error_family: Optional[str] = None
     trace_available: bool = False

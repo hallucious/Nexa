@@ -76,7 +76,39 @@ def test_run_list_returns_sorted_paginated_workspace_runs() -> None:
     assert response.activity_continuity.recent_onboarding_count == 1
     assert response.runs[1].result_state == "ready_success"
     assert response.runs[1].result_summary is not None
+    assert response.runs[1].source_artifact is not None
+    assert response.runs[1].source_artifact.storage_role == "commit_snapshot"
+    assert response.runs[1].source_artifact.canonical_ref == "snap-run-002"
     assert response.runs[1].links.status == "/api/runs/run-002"
+
+
+def test_run_list_prefers_result_metrics_source_artifact_when_available() -> None:
+    outcome = RunListReadService.list_workspace_runs(
+        request_auth=_auth(),
+        workspace_context=_workspace(),
+        run_rows=(_run_row("run-010", "2026-04-11T12:10:00+00:00", status="completed", status_family="terminal_success"),),
+        result_rows_by_run_id={
+            "run-010": {
+                "final_status": "completed",
+                "result_state": "ready_success",
+                "result_summary": "Success.",
+                "metrics": {
+                    "source_artifact": {
+                        "storage_role": "commit_snapshot",
+                        "canonical_ref": "snap-run-010",
+                        "commit_id": "snap-run-010",
+                        "source_working_save_id": "ws-010",
+                    }
+                },
+            }
+        },
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.runs[0].source_artifact is not None
+    assert outcome.response.runs[0].source_artifact.commit_id == "snap-run-010"
+    assert outcome.response.runs[0].source_artifact.source_working_save_id == "ws-010"
 
 
 def test_run_list_applies_filters_and_cursor() -> None:

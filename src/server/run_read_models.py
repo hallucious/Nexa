@@ -47,6 +47,21 @@ class ProductExecutionTargetView:
 
 
 @dataclass(frozen=True)
+class ProductSourceArtifactView:
+    storage_role: str
+    canonical_ref: str
+    working_save_id: Optional[str] = None
+    commit_id: Optional[str] = None
+    source_working_save_id: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if self.storage_role not in {"working_save", "commit_snapshot"}:
+            raise ValueError(f"Unsupported ProductSourceArtifactView.storage_role: {self.storage_role}")
+        if not self.canonical_ref:
+            raise ValueError("ProductSourceArtifactView.canonical_ref must be non-empty")
+
+
+@dataclass(frozen=True)
 class ProductEngineSignalView:
     severity: str
     code: str
@@ -143,6 +158,7 @@ class ProductRunStatusResponse:
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
     progress: Optional[ProductRunProgressView] = None
     latest_engine_signal: Optional[ProductEngineSignalView] = None
+    source_artifact: Optional[ProductSourceArtifactView] = None
     recovery: Optional[ProductRunRecoveryView] = None
     actions: Optional[ProductRunControlActionsView] = None
     last_action: Optional[ProductRunLastActionView] = None
@@ -225,6 +241,7 @@ class ProductRunResultResponse:
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
     result_summary: Optional[ProductResultSummaryView] = None
     final_output: Optional[ProductFinalOutputView] = None
+    source_artifact: Optional[ProductSourceArtifactView] = None
     artifact_refs: tuple[ProductArtifactRefView, ...] = ()
     trace_ref: Optional[ProductTraceRefView] = None
     recovery: Optional[ProductRunRecoveryView] = None

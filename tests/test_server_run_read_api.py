@@ -104,6 +104,10 @@ def test_status_read_uses_engine_snapshot_without_fabricating_progress() -> None
     assert outcome.response.progress is not None
     assert outcome.response.progress.percent == 42
     assert outcome.response.latest_engine_signal is not None
+    assert outcome.response.source_artifact is not None
+    assert outcome.response.source_artifact.storage_role == "commit_snapshot"
+    assert outcome.response.source_artifact.canonical_ref == "snap-001"
+    assert outcome.response.source_artifact.commit_id == "snap-001"
     assert outcome.response.links.result == "/api/runs/run-001/result"
 
 
@@ -188,6 +192,9 @@ def test_result_read_returns_ready_success_projection_from_rows() -> None:
     assert outcome.response.artifact_refs[0].artifact_id == "art-001"
     assert outcome.response.trace_ref is not None
     assert outcome.response.trace_ref.endpoint == "/api/runs/run-001/trace"
+    assert outcome.response.source_artifact is not None
+    assert outcome.response.source_artifact.storage_role == "commit_snapshot"
+    assert outcome.response.source_artifact.canonical_ref == "snap-001"
 
 
 def test_result_read_can_project_directly_from_engine_result_envelope() -> None:
@@ -212,6 +219,38 @@ def test_result_read_can_project_directly_from_engine_result_envelope() -> None:
     assert outcome.response.final_status == "failed"
     assert outcome.response.result_summary is not None
     assert outcome.response.result_summary.title == "Run failed"
+    assert outcome.response.source_artifact is None
+
+
+def test_result_read_prefers_metrics_source_artifact_when_available() -> None:
+    run_row = _run_row(status="completed", status_family="terminal_success")
+    outcome = RunResultReadService.read_result(
+        request_auth=_auth_context(),
+        run_context=_run_context(),
+        run_record_row=run_row,
+        result_row={
+            "run_id": "run-001",
+            "workspace_id": "ws-001",
+            "result_state": "ready_success",
+            "final_status": "completed",
+            "result_summary": "ok",
+            "metrics": {
+                "source_artifact": {
+                    "storage_role": "commit_snapshot",
+                    "canonical_ref": "snap-001",
+                    "commit_id": "snap-001",
+                    "source_working_save_id": "ws-001",
+                }
+            },
+        },
+    )
+
+    assert outcome.ok is True
+    assert outcome.response is not None
+    assert outcome.response.source_artifact is not None
+    assert outcome.response.source_artifact.storage_role == "commit_snapshot"
+    assert outcome.response.source_artifact.commit_id == "snap-001"
+    assert outcome.response.source_artifact.source_working_save_id == "ws-001"
 
 
 def test_result_read_rejects_forbidden_caller_before_returning_result_shape() -> None:
