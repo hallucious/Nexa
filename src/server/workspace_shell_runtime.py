@@ -1402,7 +1402,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     mobile_items = []
     for step in mobile.get("steps") or []:
         label = escape(str(step.get("label") or step.get("step_id") or ui_text("server.shell.status", app_language=app_language, fallback_text="Step")))
-        status = escape(str(step.get("status") or "pending"))
+        raw_status = str(step.get("status") or "pending").strip().lower() or "pending"
+        localized_status = ui_text(f"server.shell.mobile_status.{raw_status}", app_language=app_language, fallback_text=raw_status)
+        status = escape(localized_status)
         mobile_items.append(f"<li>{label} — <em>{status}</em></li>")
     mobile_empty_label = ui_text("server.shell.mobile_unavailable", app_language=app_language, fallback_text="Mobile first-run projection unavailable.")
     mobile_markup = "".join(mobile_items) or f"<li>{escape(mobile_empty_label)}</li>"

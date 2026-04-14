@@ -21,7 +21,7 @@ from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
 from src.ui.inspector_panel import SelectedObjectViewModel, read_selected_object_view_model
-from src.ui.i18n import beginner_ui_text, normalize_ui_language, ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.panel_coordination import BuilderPanelCoordinationStateView, read_panel_coordination_state
 from src.ui.top_bar import BuilderTopBarViewModel, read_builder_top_bar_view_model
 from src.ui.command_palette import CommandPaletteViewModel, read_command_palette_view_model
@@ -262,7 +262,7 @@ def read_builder_shell_view_model(
 ) -> BuilderShellViewModel:
     source_unwrapped = _unwrap(source)
     role = _storage_role(source_unwrapped)
-    app_language = normalize_ui_language(app_language) if app_language is not None else ui_language_from_sources(source_unwrapped, execution_record)
+    app_language = app_language or ui_language_from_sources(source_unwrapped, execution_record)
 
     graph_vm = read_graph_view_model(
         source,

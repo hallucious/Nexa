@@ -1348,7 +1348,10 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert 'Trace 상세 레이어' in body
     assert '아티팩트 상세 레이어' in body
     assert '개인정보와 데이터 처리' in body
-    assert '템플릿 둘러보기' in body
+    assert '목표부터 시작하세요' in body
+    assert '텍스트 요약기' in body
+    assert '진행 중' in body
+    assert '대기 중' in body
 
 
 def test_fastapi_binding_product_surfaces_expose_accessible_landmarks() -> None:
