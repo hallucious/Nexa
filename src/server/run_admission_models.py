@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+from src.server.run_read_models import ProductSourceArtifactView
 
 
 ProductLaunchStatus = Literal["accepted", "rejected"]
@@ -204,6 +205,7 @@ class ProductRunLaunchAcceptedResponse:
     execution_target: ProductExecutionTarget
     initial_run_status: str
     links: ProductRunLaunchLinks
+    source_artifact: Optional[ProductSourceArtifactView] = None
     workspace_title: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None

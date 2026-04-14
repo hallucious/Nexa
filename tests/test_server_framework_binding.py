@@ -219,6 +219,8 @@ def test_framework_binding_handles_launch_round_trip() -> None:
     assert parsed["status"] == "accepted"
     assert parsed["run_id"] == "run-001"
     assert parsed["workspace_title"] is None
+    assert parsed["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert parsed["source_artifact"]["canonical_ref"] == "snap-001"
 
 
 def test_framework_binding_handles_result_route_round_trip() -> None:
@@ -823,6 +825,8 @@ def test_framework_binding_launch_workspace_shell_round_trip() -> None:
     assert parsed['execution_target']['target_type'] == 'working_save'
     assert parsed['execution_target']['target_ref'] == 'ws-framework-launch'
     assert parsed['launch_context']['action'] == 'launch_workspace_shell'
+    assert parsed['source_artifact']['storage_role'] == 'working_save'
+    assert parsed['source_artifact']['canonical_ref'] == 'ws-framework-launch'
 
 
 def test_framework_binding_workspace_shell_draft_rejects_commit_snapshot_source() -> None:

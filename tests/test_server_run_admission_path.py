@@ -91,6 +91,10 @@ def test_run_admission_accepts_approved_snapshot_and_builds_engine_request_and_r
     assert outcome.accepted_response is not None
     assert outcome.accepted_response.run_id == "run-001"
     assert outcome.accepted_response.execution_target.target_type == "commit_snapshot"
+    assert outcome.accepted_response.source_artifact is not None
+    assert outcome.accepted_response.source_artifact.storage_role == "commit_snapshot"
+    assert outcome.accepted_response.source_artifact.canonical_ref == "snap-001"
+    assert outcome.accepted_response.source_artifact.commit_id == "snap-001"
     assert outcome.engine_request is not None
     assert outcome.engine_request.execution_target.target_type == "commit_snapshot"
     assert outcome.engine_request.execution_target.target_ref == "snap-001"

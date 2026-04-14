@@ -156,6 +156,8 @@ def test_launch_route_returns_accepted_http_response() -> None:
     assert response.body["status"] == "accepted"
     assert response.body["run_id"] == "run-001"
     assert response.body["links"]["run_status"] == "/api/runs/run-001"
+    assert response.body["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert response.body["source_artifact"]["canonical_ref"] == "snap-001"
 
 
 def test_launch_route_returns_engine_rejection_with_distinct_http_shape() -> None:
@@ -418,6 +420,8 @@ def test_launch_workspace_shell_route_uses_current_public_working_save() -> None
     assert response.body['execution_target']['target_type'] == 'working_save'
     assert response.body['execution_target']['target_ref'] == 'ws-shell-launch'
     assert response.body['launch_context']['action'] == 'launch_workspace_shell'
+    assert response.body['source_artifact']['storage_role'] == 'working_save'
+    assert response.body['source_artifact']['canonical_ref'] == 'ws-shell-launch'
 
 
 def test_launch_workspace_shell_route_uses_current_public_commit_snapshot() -> None:
@@ -435,6 +439,8 @@ def test_launch_workspace_shell_route_uses_current_public_commit_snapshot() -> N
     assert response.body['execution_target']['target_type'] == 'commit_snapshot'
     assert response.body['execution_target']['target_ref'] == 'snap-shell-launch-001'
     assert response.body['launch_context']['storage_role'] == 'commit_snapshot'
+    assert response.body['source_artifact']['storage_role'] == 'commit_snapshot'
+    assert response.body['source_artifact']['canonical_ref'] == 'snap-shell-launch-001'
 
 
 def test_workspace_shell_draft_route_rejects_commit_snapshot_source() -> None:

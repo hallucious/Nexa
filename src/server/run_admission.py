@@ -22,6 +22,7 @@ from src.server.run_admission_models import (
     RunAdmissionOutcome,
     RunRecordProjection,
 )
+from src.server.run_read_models import ProductSourceArtifactView
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
@@ -52,6 +53,63 @@ def _status_family(status: str) -> str:
     if normalized in {"partial", "paused"}:
         return "terminal_partial"
     return "unknown"
+
+
+def _source_artifact_view_from_resolved_target(resolved_target: ResolvedExecutionTarget) -> ProductSourceArtifactView | None:
+    source_payload = resolved_target.source_payload
+
+    def _from_mapping(payload: Mapping[str, Any]) -> ProductSourceArtifactView | None:
+        meta = payload.get("meta") if isinstance(payload.get("meta"), Mapping) else {}
+        storage_role = str(meta.get("storage_role") or resolved_target.storage_role or "").strip() or None
+        if storage_role == "working_save":
+            working_save_id = str(meta.get("working_save_id") or resolved_target.resolved_target_ref or "").strip() or None
+            if working_save_id is None:
+                return None
+            return ProductSourceArtifactView(
+                storage_role="working_save",
+                canonical_ref=working_save_id,
+                working_save_id=working_save_id,
+            )
+        if storage_role == "commit_snapshot":
+            commit_id = str(meta.get("commit_id") or resolved_target.resolved_target_ref or "").strip() or None
+            source_working_save_id = str(meta.get("source_working_save_id") or "").strip() or None
+            if source_working_save_id is None:
+                lineage = payload.get("lineage") if isinstance(payload.get("lineage"), Mapping) else {}
+                source_working_save_id = str(lineage.get("source_working_save_id") or "").strip() or None
+            if commit_id is None:
+                return None
+            return ProductSourceArtifactView(
+                storage_role="commit_snapshot",
+                canonical_ref=commit_id,
+                working_save_id=source_working_save_id,
+                commit_id=commit_id,
+                source_working_save_id=source_working_save_id,
+            )
+        return None
+
+    if isinstance(source_payload, LoadedNexArtifact):
+        parsed_model = source_payload.parsed_model
+        if parsed_model is not None:
+            source_payload = parsed_model
+        else:
+            source_payload = source_payload.raw
+    if isinstance(source_payload, WorkingSaveModel):
+        return ProductSourceArtifactView(
+            storage_role="working_save",
+            canonical_ref=source_payload.meta.working_save_id,
+            working_save_id=source_payload.meta.working_save_id,
+        )
+    if isinstance(source_payload, CommitSnapshotModel):
+        return ProductSourceArtifactView(
+            storage_role="commit_snapshot",
+            canonical_ref=source_payload.meta.commit_id,
+            working_save_id=source_payload.meta.source_working_save_id,
+            commit_id=source_payload.meta.commit_id,
+            source_working_save_id=source_payload.meta.source_working_save_id,
+        )
+    if isinstance(source_payload, Mapping):
+        return _from_mapping(source_payload)
+    return None
 
 
 class ExecutionTargetResolver:
@@ -422,6 +480,7 @@ class RunAdmissionService:
                 run_status=f"/api/runs/{record.run_id}",
                 run_result=f"/api/runs/{record.run_id}/result",
             ),
+            source_artifact=_source_artifact_view_from_resolved_target(resolved_target),
             workspace_title=str((workspace_row or {}).get("title") or "").strip() or None,
             provider_continuity=_provider_continuity_summary_for_workspace(
                 request.workspace_id,

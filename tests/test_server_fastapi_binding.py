@@ -399,6 +399,8 @@ def test_fastapi_binding_launch_endpoint_round_trip() -> None:
     assert payload["provider_continuity"]["provider_binding_count"] == 1
     assert payload["activity_continuity"]["recent_run_count"] == 2
     assert payload["activity_continuity"]["latest_run_id"] == "run-001"
+    assert payload["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert payload["source_artifact"]["canonical_ref"] == "snap-001"
 
 
 def test_fastapi_binding_status_endpoint_round_trip() -> None:
@@ -1466,6 +1468,8 @@ def test_fastapi_binding_workspace_shell_launch_round_trip() -> None:
     assert payload['execution_target']['target_type'] == 'working_save'
     assert payload['execution_target']['target_ref'] == 'ws-001-draft'
     assert payload['launch_context']['action'] == 'launch_workspace_shell'
+    assert payload['source_artifact']['storage_role'] == 'working_save'
+    assert payload['source_artifact']['canonical_ref'] == 'ws-001-draft'
 
 
 def test_fastapi_binding_workspace_shell_draft_rejects_commit_snapshot_source() -> None:
