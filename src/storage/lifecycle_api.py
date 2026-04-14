@@ -22,7 +22,7 @@ from src.storage.models.commit_snapshot_model import (
     CommitValidationModel,
 )
 from src.storage.models.execution_record_model import ExecutionRecordModel
-from src.storage.models.working_save_model import RuntimeModel, WorkingSaveMeta, WorkingSaveModel
+from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.serialization import (
     serialize_commit_snapshot,
     serialize_execution_record,
@@ -46,6 +46,15 @@ def _normalize_commit_validation_result(value: str) -> str:
             "Commit Snapshot validation_result must be one of {'passed', 'passed_with_warnings'}"
         )
     return normalized
+
+
+def _default_checkout_working_save_id(name: str | None, fallback: str | None) -> str:
+    raw = (name or fallback or 'workspace').strip().lower()
+    slug = ''.join(ch if ch.isalnum() else '-' for ch in raw)
+    while '--' in slug:
+        slug = slug.replace('--', '-')
+    slug = slug.strip('-') or 'workspace'
+    return f"{slug}-draft"
 
 
 def _build_execution_summary(initial_state: dict | None, final_state: dict | None, started_at: float, ended_at: float) -> dict:
@@ -235,6 +244,77 @@ def create_commit_snapshot_from_working_save(
             metadata={},
         ),
     )
+
+
+def create_working_save_from_commit_snapshot(
+    commit_snapshot: CommitSnapshotModel,
+    *,
+    working_save_id: str | None = None,
+    created_at: str | None = None,
+    updated_at: str | None = None,
+    runtime_status: str = 'draft',
+    validation_summary: dict | None = None,
+    last_run: dict | None = None,
+    errors: list | None = None,
+    ui_layout: dict | None = None,
+    ui_metadata: dict | None = None,
+) -> WorkingSaveModel:
+    resolved_working_save_id = (
+        working_save_id
+        or _resolve_commit_snapshot_working_save_id(commit_snapshot, None)
+        or _default_checkout_working_save_id(commit_snapshot.meta.name, commit_snapshot.meta.commit_id)
+    )
+    created = created_at or commit_snapshot.meta.created_at or _iso_now()
+    updated = updated_at or _iso_now()
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(
+            format_version=commit_snapshot.meta.format_version,
+            storage_role='working_save',
+            working_save_id=resolved_working_save_id,
+            name=commit_snapshot.meta.name,
+            description=commit_snapshot.meta.description,
+            created_at=created,
+            updated_at=updated,
+        ),
+        circuit=commit_snapshot.circuit,
+        resources=commit_snapshot.resources,
+        state=commit_snapshot.state,
+        runtime=RuntimeModel(
+            status=runtime_status,
+            validation_summary=dict(validation_summary or {}),
+            last_run=dict(last_run or {}),
+            errors=list(errors or []),
+        ),
+        ui=UIModel(layout=dict(ui_layout or {}), metadata=dict(ui_metadata or {})),
+    )
+
+
+def create_serialized_working_save_from_commit_snapshot(
+    commit_snapshot: CommitSnapshotModel,
+    *,
+    working_save_id: str | None = None,
+    created_at: str | None = None,
+    updated_at: str | None = None,
+    runtime_status: str = 'draft',
+    validation_summary: dict | None = None,
+    last_run: dict | None = None,
+    errors: list | None = None,
+    ui_layout: dict | None = None,
+    ui_metadata: dict | None = None,
+) -> dict:
+    working_save = create_working_save_from_commit_snapshot(
+        commit_snapshot,
+        working_save_id=working_save_id,
+        created_at=created_at,
+        updated_at=updated_at,
+        runtime_status=runtime_status,
+        validation_summary=validation_summary,
+        last_run=last_run,
+        errors=errors,
+        ui_layout=ui_layout,
+        ui_metadata=ui_metadata,
+    )
+    return serialize_working_save(working_save)
 
 
 def create_serialized_commit_snapshot_from_working_save(
@@ -836,7 +916,9 @@ def apply_execution_record_to_working_save(
 
 __all__ = [
     'create_commit_snapshot_from_working_save',
+    'create_working_save_from_commit_snapshot',
     'create_serialized_commit_snapshot_from_working_save',
+    'create_serialized_working_save_from_commit_snapshot',
     'create_execution_record_from_commit_snapshot',
     'create_serialized_execution_record_from_commit_snapshot',
     'create_execution_record_and_update_working_save',

@@ -285,3 +285,135 @@ def test_savefile_commit_rejects_public_commit_snapshot_input(tmp_path, monkeypa
     assert payload["status"] == "error"
     assert payload["subcommand"] == "commit"
     assert "working_save artifacts" in payload["message"]
+
+
+
+def test_savefile_checkout_converts_public_commit_snapshot_to_public_working_save(tmp_path, monkeypatch, capsys):
+    in_path = tmp_path / "public_commit_snapshot.nex"
+    out_path = tmp_path / "checked_out_working_save.nex"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-010")
+    save_nex_artifact_file(snapshot, in_path)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "nexa",
+            "savefile",
+            "checkout",
+            str(in_path),
+            str(out_path),
+            "--working-save-id",
+            "restored-ws-010",
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["input_mode"] == "public_commit_snapshot"
+    assert payload["storage_role"] == "working_save"
+    assert payload["working_save_id"] == "restored-ws-010"
+    assert payload["source_commit_id"] == "commit-010"
+    raw = json.loads(out_path.read_text(encoding="utf-8"))
+    assert raw["meta"]["storage_role"] == "working_save"
+    assert raw["meta"]["working_save_id"] == "restored-ws-010"
+    assert raw["runtime"]["status"] == "draft"
+
+
+
+def test_savefile_checkout_rejects_public_working_save_input(tmp_path, monkeypatch, capsys):
+    in_path = tmp_path / "public_working_save.nex"
+    out_path = tmp_path / "ignored_checkout.nex"
+    save_nex_artifact_file(_working_save(), in_path)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "nexa",
+            "savefile",
+            "checkout",
+            str(in_path),
+            str(out_path),
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert payload["subcommand"] == "checkout"
+    assert "commit_snapshot artifacts" in payload["message"]
+
+
+
+def test_savefile_upgrade_converts_legacy_savefile_to_public_working_save(tmp_path, monkeypatch, capsys):
+    from src.contracts.savefile_factory import make_minimal_savefile
+    from src.contracts.savefile_serializer import save_savefile_file
+
+    in_path = tmp_path / "legacy_input.nex"
+    out_path = tmp_path / "upgraded_working_save.nex"
+    legacy = make_minimal_savefile(
+        name="legacy_upgrade_demo",
+        version="1.0.0",
+        entry="node1",
+        node_type="plugin",
+        resource_ref={"plugin": "plugin.main"},
+        outputs={"result": "output.value"},
+        circuit_outputs=[{"name": "result", "node_id": "node1", "path": "output.value"}],
+        plugins={"plugin.main": {"entry": "plugins.example.run", "config": {}}},
+    )
+    save_savefile_file(legacy, str(in_path))
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "nexa",
+            "savefile",
+            "upgrade",
+            str(in_path),
+            str(out_path),
+            "--working-save-id",
+            "legacy-upgrade-ws",
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["input_mode"] == "legacy"
+    assert payload["storage_role"] == "working_save"
+    assert payload["working_save_id"] == "legacy-upgrade-ws"
+    raw = json.loads(out_path.read_text(encoding="utf-8"))
+    assert raw["meta"]["storage_role"] == "working_save"
+    assert raw["meta"]["working_save_id"] == "legacy-upgrade-ws"
+
+
+
+def test_savefile_upgrade_rejects_public_artifact_input(tmp_path, monkeypatch, capsys):
+    in_path = tmp_path / "public_input.nex"
+    out_path = tmp_path / "ignored_upgrade.nex"
+    save_nex_artifact_file(_working_save(), in_path)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "nexa",
+            "savefile",
+            "upgrade",
+            str(in_path),
+            str(out_path),
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert payload["subcommand"] == "upgrade"
+    assert "legacy savefiles" in payload["message"]

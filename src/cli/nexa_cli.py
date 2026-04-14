@@ -265,6 +265,18 @@ def build_parser():
     savefile_commit.add_argument("--parent-commit-id", help="Optional parent commit id")
     savefile_commit.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
 
+    savefile_checkout = savefile_sub.add_parser("checkout")
+    savefile_checkout.add_argument("input", help="Path to input .nex commit snapshot")
+    savefile_checkout.add_argument("output", help="Path to output .nex working save")
+    savefile_checkout.add_argument("--working-save-id", help="Optional Working Save identifier override")
+    savefile_checkout.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
+
+    savefile_upgrade = savefile_sub.add_parser("upgrade")
+    savefile_upgrade.add_argument("input", help="Path to legacy input .nex savefile")
+    savefile_upgrade.add_argument("output", help="Path to output public working save")
+    savefile_upgrade.add_argument("--working-save-id", help="Optional Working Save identifier override")
+    savefile_upgrade.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
+
     savefile_set_name = savefile_sub.add_parser("set-name")
     savefile_set_name.add_argument("input", help="Path to input .nex savefile")
     savefile_set_name.add_argument("--name", required=True, help="New savefile name")
@@ -941,6 +953,101 @@ def _load_commit_source(input_value: str):
         return source["input_path"], loaded.parsed_model, "public"
     return source["input_path"], working_save_model_from_legacy_savefile(source["savefile"]), "legacy"
 
+
+
+def _load_checkout_source(input_value: str):
+    source = _load_cli_savefile_source(input_value)
+    if source["mode"] != "public":
+        raise ValueError("savefile checkout only supports public commit_snapshot artifacts")
+    loaded = source["loaded"]
+    if loaded.storage_role != "commit_snapshot":
+        raise ValueError("savefile checkout only supports commit_snapshot artifacts")
+    return source["input_path"], loaded.parsed_model
+
+
+
+def savefile_checkout_command(args) -> int:
+    from src.storage.lifecycle_api import create_working_save_from_commit_snapshot
+    from src.storage.nex_api import validate_working_save
+    from src.storage.serialization import save_nex_artifact_file
+
+    input_path, commit_snapshot = _load_checkout_source(args.input)
+    output_path = Path(args.output)
+    if output_path.suffix != ".nex":
+        raise ValueError("working save output must use .nex extension")
+    if output_path.exists() and not args.force:
+        raise FileExistsError(f"output already exists: {output_path}")
+
+    working_save = create_working_save_from_commit_snapshot(
+        commit_snapshot,
+        working_save_id=getattr(args, "working_save_id", None),
+    )
+    report = validate_working_save(working_save)
+    blocking_messages = _blocking_validation_messages(report)
+    if blocking_messages:
+        raise ValueError(blocking_messages[0])
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    save_nex_artifact_file(working_save, output_path)
+
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "output": str(output_path),
+        "input_mode": "public_commit_snapshot",
+        "storage_role": "working_save",
+        "canonical_ref": working_save.meta.working_save_id,
+        "working_save_id": working_save.meta.working_save_id,
+        "source_commit_id": commit_snapshot.meta.commit_id,
+        "name": working_save.meta.name,
+        "entry": working_save.circuit.entry,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+
+def savefile_upgrade_command(args) -> int:
+    from src.storage.legacy_savefile_bridge import working_save_model_from_legacy_savefile
+    from src.storage.nex_api import validate_working_save
+    from src.storage.serialization import save_nex_artifact_file
+
+    source = _load_cli_savefile_source(args.input)
+    if source["mode"] == "public":
+        raise ValueError("savefile upgrade only supports legacy savefiles; public artifacts are already role-aware")
+
+    input_path = source["input_path"]
+    working_save = working_save_model_from_legacy_savefile(
+        source["savefile"],
+        working_save_id=getattr(args, "working_save_id", None),
+    )
+    output_path = Path(args.output)
+    if output_path.suffix != ".nex":
+        raise ValueError("working save output must use .nex extension")
+    if output_path.exists() and not args.force:
+        raise FileExistsError(f"output already exists: {output_path}")
+
+    report = validate_working_save(working_save)
+    blocking_messages = _blocking_validation_messages(report)
+    if blocking_messages:
+        raise ValueError(blocking_messages[0])
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    save_nex_artifact_file(working_save, output_path)
+
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "output": str(output_path),
+        "input_mode": "legacy",
+        "storage_role": "working_save",
+        "canonical_ref": working_save.meta.working_save_id,
+        "working_save_id": working_save.meta.working_save_id,
+        "name": working_save.meta.name,
+        "entry": working_save.circuit.entry,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
 
 
 def savefile_commit_command(args) -> int:
@@ -1659,6 +1766,10 @@ def main():
                 return savefile_info_command(args)
             if getattr(args, "savefile_command", None) == "commit":
                 return savefile_commit_command(args)
+            if getattr(args, "savefile_command", None) == "checkout":
+                return savefile_checkout_command(args)
+            if getattr(args, "savefile_command", None) == "upgrade":
+                return savefile_upgrade_command(args)
             if getattr(args, "savefile_command", None) == "set-name":
                 return savefile_set_name_command(args)
             if getattr(args, "savefile_command", None) == "set-entry":
