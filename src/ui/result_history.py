@@ -195,6 +195,18 @@ def _result_summary_text(item: object, result: object | None, *, app_language: s
     return ui_text(f"result_history.summary.{status_key}", app_language=app_language, fallback_text=fallback)
 
 
+
+
+def _localized_output_key(value: object, *, app_language: str) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return raw
+    return ui_text(
+        f"result_history.output_key.{raw}",
+        app_language=app_language,
+        fallback_text=raw,
+    )
+
 def _result_history_item(item: object, result: object | None, *, app_language: str) -> ResultHistoryItemView:
     status_key = _result_history_status_key(item, result)
     output_preview = None
@@ -202,7 +214,7 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
     final_output = _field(result, "final_output") if result is not None else None
     if final_output is not None:
         output_preview = _field(final_output, "value_preview")
-        output_key = _field(final_output, "output_key")
+        output_key = _localized_output_key(_field(final_output, "output_key"), app_language=app_language)
         output_label = ui_text("result_history.output_label", app_language=app_language, fallback_text=f"Latest output ({output_key})", output_key=output_key)
     workspace_id = str(_field(item, "workspace_id") or "")
     run_id = str(_field(item, "run_id") or "")

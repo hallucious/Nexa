@@ -1289,6 +1289,7 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '라이브러리로 돌아가기' in result_page.text
     assert '결과 상세' in result_page.text
     assert '결과 열기' in result_page.text
+    assert '최신 출력 (답변)' in result_page.text
     assert '실행 완료' in result_page.text
     assert '마지막 업데이트: 2026-04-11 12:01' in result_page.text
     assert '+00:00' not in result_page.text
@@ -1364,7 +1365,7 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '제공자 접근' in body
     assert '세션 전용 키' in body
     assert '외부 입력' in body
-    assert '외부 파일이나 URL 입력이 없습니다' in body
+    assert '외부 파일이나 웹 주소 입력이 없습니다' in body
     assert '저장 경계' in body
     assert '세션 키' in body
     assert '로컬 작업 저장 연속성만 사용' in body
