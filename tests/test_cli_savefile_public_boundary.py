@@ -23,9 +23,9 @@ def _working_save(*, name: str = "public_demo") -> WorkingSaveModel:
             nodes=[
                 {
                     "id": "node1",
-                    "type": "plugin",
-                    "resource_ref": {"plugin": "plugin.main"},
-                    "inputs": {},
+                    "type": "ai",
+                    "resource_ref": {"prompt": "prompt.main", "provider": "provider.test"},
+                    "inputs": {"name": "state.input.name"},
                     "outputs": {"result": "output.value"},
                 }
             ],
@@ -33,11 +33,11 @@ def _working_save(*, name: str = "public_demo") -> WorkingSaveModel:
             outputs=[{"name": "result", "node_id": "node1", "path": "output.value"}],
         ),
         resources=ResourcesModel(
-            prompts={},
-            providers={},
-            plugins={"plugin.main": {"entry": "plugins.example.run"}},
+            prompts={"prompt.main": {"template": "Hello {{name}}"}},
+            providers={"provider.test": {"type": "test", "model": "test-model", "config": {}}},
+            plugins={},
         ),
-        state=StateModel(input={}, working={}, memory={}),
+        state=StateModel(input={"name": "Nexa"}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
         ui=UIModel(layout={}, metadata={"created_by": "test"}),
     )
@@ -104,3 +104,38 @@ def test_is_savefile_contract_accepts_public_commit_snapshot_payload(tmp_path):
     save_nex_artifact_file(snapshot, path)
 
     assert is_savefile_contract(str(path)) is True
+
+
+def test_engine_cli_run_public_working_save_emits_role_aware_summary(tmp_path, monkeypatch):
+    circuit_path = tmp_path / "public_run.nex"
+    out_path = tmp_path / "result.json"
+    save_nex_artifact_file(_working_save(), circuit_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "run", str(circuit_path), "--out", str(out_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["storage_role"] == "working_save"
+    assert payload["canonical_ref"] == "public-demo-draft"
+    assert payload["replay_payload"]["circuit"]["id"] == "public_demo"
+    assert payload["result"]["status"] == "success"
+
+
+def test_engine_cli_run_public_commit_snapshot_emits_role_aware_summary(tmp_path, monkeypatch):
+    circuit_path = tmp_path / "public_commit_run.nex"
+    out_path = tmp_path / "result.json"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-001")
+    save_nex_artifact_file(snapshot, circuit_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "run", str(circuit_path), "--out", str(out_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["storage_role"] == "commit_snapshot"
+    assert payload["canonical_ref"] == "commit-001"
+    assert payload["replay_payload"]["circuit"]["id"] == "public_demo"
+    assert payload["result"]["status"] == "success"

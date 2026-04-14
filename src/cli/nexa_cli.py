@@ -596,16 +596,17 @@ def savefile_template_list_command(args) -> int:
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
 
-def _build_new_savefile(args):
-    from src.contracts.savefile_factory import make_minimal_savefile
-
+def _build_new_working_save(args):
     output_path = Path(args.output)
     if output_path.suffix != ".nex":
         raise ValueError("savefile output must use .nex extension")
 
     name = args.name or output_path.stem
-
     template_name = args.template or args.node_type
+
+    from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
+    from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
+    from src.storage.legacy_savefile_bridge import default_working_save_id
 
     ui_metadata = {
         "created_by": "nexa savefile new",
@@ -613,33 +614,74 @@ def _build_new_savefile(args):
     }
 
     if template_name == "plugin":
-        return make_minimal_savefile(
-            name=name,
-            version=args.version,
-            description=args.description,
-            entry=args.entry,
-            node_type="plugin",
-            resource_ref={"plugin": args.plugin_id},
-            plugins={args.plugin_id: {"entry": args.plugin_entry}},
-            ui_metadata=ui_metadata,
+        return WorkingSaveModel(
+            meta=WorkingSaveMeta(
+                format_version=args.version,
+                storage_role="working_save",
+                working_save_id=default_working_save_id(name, fallback=output_path.stem),
+                name=name,
+                description=args.description,
+            ),
+            circuit=CircuitModel(
+                entry=args.entry,
+                nodes=[
+                    {
+                        "id": args.entry,
+                        "type": "plugin",
+                        "resource_ref": {"plugin": args.plugin_id},
+                        "inputs": {},
+                        "outputs": {"result": "output.value"},
+                    }
+                ],
+                edges=[],
+                outputs=[{"name": "result", "node_id": args.entry, "path": "output.value"}],
+            ),
+            resources=ResourcesModel(
+                prompts={},
+                providers={},
+                plugins={args.plugin_id: {"entry": args.plugin_entry}},
+            ),
+            state=StateModel(input={}, working={}, memory={}),
+            runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+            ui=UIModel(layout={}, metadata=ui_metadata),
         )
 
-    return make_minimal_savefile(
-        name=name,
-        version=args.version,
-        description=args.description,
-        entry=args.entry,
-        node_type="ai",
-        resource_ref={"prompt": args.prompt_id, "provider": args.provider_id},
-        prompts={args.prompt_id: {"template": args.prompt_template}},
-        providers={
-            args.provider_id: {
-                "type": args.provider_type,
-                "model": args.provider_model,
-                "config": {},
-            }
-        },
-        ui_metadata=ui_metadata,
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(
+            format_version=args.version,
+            storage_role="working_save",
+            working_save_id=default_working_save_id(name, fallback=output_path.stem),
+            name=name,
+            description=args.description,
+        ),
+        circuit=CircuitModel(
+            entry=args.entry,
+            nodes=[
+                {
+                    "id": args.entry,
+                    "type": "ai",
+                    "resource_ref": {"prompt": args.prompt_id, "provider": args.provider_id},
+                    "inputs": {},
+                    "outputs": {"result": "output.value"},
+                }
+            ],
+            edges=[],
+            outputs=[{"name": "result", "node_id": args.entry, "path": "output.value"}],
+        ),
+        resources=ResourcesModel(
+            prompts={args.prompt_id: {"template": args.prompt_template}},
+            providers={
+                args.provider_id: {
+                    "type": args.provider_type,
+                    "model": args.provider_model,
+                    "config": {},
+                }
+            },
+            plugins={},
+        ),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata=ui_metadata),
     )
 
 
@@ -747,8 +789,7 @@ def _persist_public_working_save(model, input_path: Path) -> None:
 
 
 def savefile_new_command(args) -> int:
-    from src.contracts.savefile_validator import validate_savefile
-    from src.storage.legacy_savefile_bridge import default_working_save_id, working_save_model_from_legacy_savefile
+    from src.storage.nex_api import validate_working_save
     from src.storage.serialization import save_nex_artifact_file
 
     output_path = Path(args.output)
@@ -757,14 +798,11 @@ def savefile_new_command(args) -> int:
     if output_path.exists() and not args.force:
         raise FileExistsError(f"output already exists: {output_path}")
 
-    savefile = _build_new_savefile(args)
-    validate_savefile(savefile)
-
-    working_save = working_save_model_from_legacy_savefile(
-        savefile,
-        working_save_id=default_working_save_id(savefile.meta.name, fallback=output_path.stem),
-        format_version=args.version,
-    )
+    working_save = _build_new_working_save(args)
+    report = validate_working_save(working_save)
+    blocking_messages = _blocking_validation_messages(report)
+    if blocking_messages:
+        raise ValueError(blocking_messages[0])
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     save_nex_artifact_file(working_save, output_path)
@@ -774,9 +812,9 @@ def savefile_new_command(args) -> int:
         "output": str(output_path),
         "storage_role": "working_save",
         "canonical_ref": working_save.meta.working_save_id,
-        "name": savefile.meta.name,
-        "entry": savefile.circuit.entry,
-        "node_type": savefile.circuit.nodes[0].type,
+        "name": working_save.meta.name,
+        "entry": working_save.circuit.entry,
+        "node_type": str((working_save.circuit.nodes or [{}])[0].get("type") or ""),
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
@@ -1208,26 +1246,38 @@ def _extract_savefile_metrics(trace) -> dict:
     }
 
 
-def _savefile_payload(savefile, trace, started_at, ended_at):
-    return create_serialized_savefile_execution_payload(
+def _savefile_payload(savefile, trace, started_at, ended_at, *, storage_role: str | None = None, canonical_ref: str | None = None):
+    payload = create_serialized_savefile_execution_payload(
         savefile,
         trace,
         started_at=started_at,
         ended_at=ended_at,
     )
+    if storage_role is not None:
+        payload["storage_role"] = storage_role
+    if canonical_ref is not None:
+        payload["canonical_ref"] = canonical_ref
+    return payload
 
 
 def _run_savefile_command(args):
     started_at = time.time()
     cli_state = load_cli_state(args.state, args.var)
-    savefile, trace = execute_savefile(
+    execution_context, trace = execute_savefile(
         args.circuit,
         input_overrides=cli_state or None,
         run_id=f"savefile-{int(started_at)}",
     )
     ended_at = time.time()
 
-    payload = _savefile_payload(savefile, trace, started_at, ended_at)
+    payload = _savefile_payload(
+        execution_context.savefile,
+        trace,
+        started_at,
+        ended_at,
+        storage_role=execution_context.storage_role,
+        canonical_ref=execution_context.canonical_ref,
+    )
 
     if args.out:
         file_already_existed = _canonical_output_path(args.out, args.circuit).exists()
@@ -1242,6 +1292,7 @@ def _run_savefile_command(args):
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
     metrics = _extract_savefile_metrics(trace)
+    savefile = execution_context.savefile
     circuit_meta = {"id": savefile.meta.name, "nodes": [{"id": node.id} for node in savefile.circuit.nodes]}
     record = build_success_observability_record(
         args=args,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
@@ -11,6 +12,8 @@ from src.circuit.runtime_adapter import (
 )
 from src.contracts.savefile_executor_aligned import SavefileExecutor
 from src.contracts.savefile_loader import load_savefile_from_path
+from src.storage.nex_api import load_nex
+from src.storage.legacy_savefile_bridge import savefile_from_loaded_nex_artifact
 from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
 from src.contracts.savefile_validator import validate_savefile
 from src.engine.cli_policy_integration import apply_baseline_policy
@@ -33,13 +36,51 @@ def is_savefile_contract(circuit_path: str) -> bool:
     return required.issubset(set(data.keys()))
 
 
+@dataclass(frozen=True)
+class SavefileExecutionContext:
+    savefile: Any
+    storage_role: str | None = None
+    canonical_ref: str | None = None
+    public_load_status: str | None = None
+
+
+def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
+    try:
+        data = json.loads(Path(circuit_path).read_text(encoding="utf-8"))
+    except Exception:
+        data = None
+
+    if isinstance(data, dict):
+        meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
+        storage_role = meta.get("storage_role")
+        if storage_role in {"working_save", "commit_snapshot"}:
+            loaded = load_nex(circuit_path)
+            if loaded.parsed_model is None:
+                blocking_messages = [finding.message for finding in loaded.findings if getattr(finding, "blocking", False)]
+                detail = blocking_messages[0] if blocking_messages else f"public .nex artifact could not be loaded ({loaded.load_status})"
+                raise ValueError(detail)
+            canonical_ref = None
+            parsed_meta = getattr(loaded.parsed_model, "meta", None)
+            if parsed_meta is not None:
+                canonical_ref = getattr(parsed_meta, "working_save_id", None) or getattr(parsed_meta, "commit_id", None)
+            return SavefileExecutionContext(
+                savefile=savefile_from_loaded_nex_artifact(loaded),
+                storage_role=loaded.storage_role,
+                canonical_ref=canonical_ref,
+                public_load_status=loaded.load_status,
+            )
+
+    return SavefileExecutionContext(savefile=load_savefile_from_path(circuit_path))
+
+
 def execute_savefile(
     circuit_path: str,
     *,
     input_overrides: Mapping[str, Any] | None = None,
     run_id: str = "cli",
 ):
-    savefile = load_savefile_from_path(circuit_path)
+    context = _load_execution_context(circuit_path)
+    savefile = context.savefile
 
     if input_overrides:
         savefile.state.input.update(dict(input_overrides))
@@ -48,10 +89,10 @@ def execute_savefile(
     provider_registry = build_provider_registry_from_savefile(savefile)
     executor = SavefileExecutor(provider_registry)
     trace = executor.execute(savefile, run_id=run_id)
-    return savefile, trace
+    return context, trace
 
 
-def build_savefile_trace_summary(savefile_name: str, trace: Any) -> dict[str, Any]:
+def build_savefile_trace_summary(savefile_name: str, trace: Any, *, storage_role: str | None = None, canonical_ref: str | None = None) -> dict[str, Any]:
     nodes: dict[str, dict[str, Any]] = {}
     any_failure = False
 
@@ -68,11 +109,16 @@ def build_savefile_trace_summary(savefile_name: str, trace: Any) -> dict[str, An
     if trace_status == "FAILURE":
         any_failure = True
 
-    return {
+    payload = {
         "circuit_id": savefile_name,
         "status": "FAILURE" if any_failure else "SUCCESS",
         "nodes": nodes,
     }
+    if storage_role is not None:
+        payload["storage_role"] = storage_role
+    if canonical_ref is not None:
+        payload["canonical_ref"] = canonical_ref
+    return payload
 
 
 def write_or_print_payload(payload: dict[str, Any], out_path: Optional[str]) -> None:
@@ -101,8 +147,13 @@ def run_savefile_nex(
     baseline_path: Optional[str] = None,
     policy_config_path: Optional[str] = None,
 ) -> int:
-    savefile, trace = execute_savefile(circuit_path, run_id="cli")
-    payload = build_savefile_trace_summary(savefile.meta.name, trace)
+    context, trace = execute_savefile(circuit_path, run_id="cli")
+    payload = build_savefile_trace_summary(
+        context.savefile.meta.name,
+        trace,
+        storage_role=context.storage_role,
+        canonical_ref=context.canonical_ref,
+    )
     return _emit_policy_wrapped_payload(payload, out_path, baseline_path, policy_config_path)
 
 
