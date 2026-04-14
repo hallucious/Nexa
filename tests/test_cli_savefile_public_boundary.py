@@ -139,3 +139,43 @@ def test_engine_cli_run_public_commit_snapshot_emits_role_aware_summary(tmp_path
     assert payload["canonical_ref"] == "commit-001"
     assert payload["replay_payload"]["circuit"]["id"] == "public_demo"
     assert payload["result"]["status"] == "success"
+
+
+def test_engine_cli_run_public_working_save_materializes_source_artifact_identity(tmp_path, monkeypatch):
+    circuit_path = tmp_path / "public_identity_run.nex"
+    out_path = tmp_path / "result.json"
+    save_nex_artifact_file(_working_save(), circuit_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "run", str(circuit_path), "--out", str(out_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["source_artifact"]["storage_role"] == "working_save"
+    assert payload["source_artifact"]["canonical_ref"] == "public-demo-draft"
+    assert payload["source_artifact"]["working_save_id"] == "public-demo-draft"
+    assert payload["execution_record"]["source"]["working_save_id"] == "public-demo-draft"
+    assert payload["execution_record"]["source"]["commit_id"].startswith("uncommitted::")
+    assert payload["replay_payload"]["source_artifact"]["working_save_id"] == "public-demo-draft"
+
+
+def test_engine_cli_run_public_commit_snapshot_materializes_source_artifact_identity(tmp_path, monkeypatch):
+    circuit_path = tmp_path / "public_commit_identity_run.nex"
+    out_path = tmp_path / "result.json"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-001")
+    save_nex_artifact_file(snapshot, circuit_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "run", str(circuit_path), "--out", str(out_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert payload["source_artifact"]["canonical_ref"] == "commit-001"
+    assert payload["source_artifact"]["commit_id"] == "commit-001"
+    assert payload["source_artifact"]["working_save_id"] == "public-demo-draft"
+    assert payload["execution_record"]["source"]["commit_id"] == "commit-001"
+    assert payload["execution_record"]["source"]["working_save_id"] == "public-demo-draft"
+    assert payload["replay_payload"]["source_artifact"]["commit_id"] == "commit-001"

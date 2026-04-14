@@ -42,6 +42,8 @@ class SavefileExecutionContext:
     storage_role: str | None = None
     canonical_ref: str | None = None
     public_load_status: str | None = None
+    working_save_id: str | None = None
+    commit_id: str | None = None
 
 
 def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
@@ -60,14 +62,24 @@ def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
                 detail = blocking_messages[0] if blocking_messages else f"public .nex artifact could not be loaded ({loaded.load_status})"
                 raise ValueError(detail)
             canonical_ref = None
+            working_save_id = None
+            commit_id = None
             parsed_meta = getattr(loaded.parsed_model, "meta", None)
             if parsed_meta is not None:
-                canonical_ref = getattr(parsed_meta, "working_save_id", None) or getattr(parsed_meta, "commit_id", None)
+                working_save_id = getattr(parsed_meta, "working_save_id", None)
+                commit_id = getattr(parsed_meta, "commit_id", None)
+                canonical_ref = working_save_id or commit_id
+            if working_save_id is None:
+                lineage = getattr(loaded.parsed_model, "lineage", None)
+                if lineage is not None:
+                    working_save_id = getattr(lineage, "source_working_save_id", None)
             return SavefileExecutionContext(
                 savefile=savefile_from_loaded_nex_artifact(loaded),
                 storage_role=loaded.storage_role,
                 canonical_ref=canonical_ref,
                 public_load_status=loaded.load_status,
+                working_save_id=working_save_id,
+                commit_id=commit_id,
             )
 
     return SavefileExecutionContext(savefile=load_savefile_from_path(circuit_path))

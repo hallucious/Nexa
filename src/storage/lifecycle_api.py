@@ -66,6 +66,10 @@ def create_serialized_savefile_execution_payload(
     *,
     started_at: float,
     ended_at: float,
+    storage_role: str | None = None,
+    canonical_ref: str | None = None,
+    commit_id: str | None = None,
+    working_save_id: str | None = None,
 ) -> dict:
     final_state = getattr(trace, "final_state", {}) or {}
     node_results = getattr(trace, "node_results", {}) or {}
@@ -90,6 +94,13 @@ def create_serialized_savefile_execution_payload(
         "input_state": getattr(savefile.state, "input", {}) or {},
         "expected_outputs": expected_outputs,
     }
+    if storage_role is not None or canonical_ref is not None or working_save_id is not None or commit_id is not None:
+        replay_payload["source_artifact"] = {
+            "storage_role": storage_role,
+            "canonical_ref": canonical_ref,
+            "working_save_id": working_save_id,
+            "commit_id": commit_id,
+        }
 
     payload = {
         "result": {
@@ -108,11 +119,20 @@ def create_serialized_savefile_execution_payload(
         "artifacts": getattr(trace, "all_artifacts", []),
         "replay_payload": replay_payload,
     }
+    if storage_role is not None or canonical_ref is not None or working_save_id is not None or commit_id is not None:
+        payload["source_artifact"] = {
+            "storage_role": storage_role,
+            "canonical_ref": canonical_ref,
+            "working_save_id": working_save_id,
+            "commit_id": commit_id,
+        }
     payload["execution_record"] = create_serialized_execution_record_from_savefile_trace(
         savefile,
         trace,
         started_at=started_at,
         ended_at=ended_at,
+        commit_id=commit_id,
+        working_save_id=working_save_id,
     )
     components = create_serialized_execution_artifact_components(payload)
     payload["execution_record"] = components['execution_record']

@@ -1246,12 +1246,26 @@ def _extract_savefile_metrics(trace) -> dict:
     }
 
 
-def _savefile_payload(savefile, trace, started_at, ended_at, *, storage_role: str | None = None, canonical_ref: str | None = None):
+def _savefile_payload(
+    savefile,
+    trace,
+    started_at,
+    ended_at,
+    *,
+    storage_role: str | None = None,
+    canonical_ref: str | None = None,
+    working_save_id: str | None = None,
+    commit_id: str | None = None,
+):
     payload = create_serialized_savefile_execution_payload(
         savefile,
         trace,
         started_at=started_at,
         ended_at=ended_at,
+        storage_role=storage_role,
+        canonical_ref=canonical_ref,
+        working_save_id=working_save_id,
+        commit_id=commit_id,
     )
     if storage_role is not None:
         payload["storage_role"] = storage_role
@@ -1277,6 +1291,8 @@ def _run_savefile_command(args):
         ended_at,
         storage_role=execution_context.storage_role,
         canonical_ref=execution_context.canonical_ref,
+        working_save_id=execution_context.working_save_id,
+        commit_id=execution_context.commit_id,
     )
 
     if args.out:
