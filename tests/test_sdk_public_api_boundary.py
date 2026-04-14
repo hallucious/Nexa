@@ -54,7 +54,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.14"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.15"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -114,8 +114,8 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
 
-    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.6"
-    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.6"
+    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.7"
+    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.7"
     assert sdk.PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
@@ -139,7 +139,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.10"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.11"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
@@ -158,9 +158,9 @@ def test_sdk_root_exposes_public_mcp_compatibility_policy() -> None:
     policy = sdk.build_public_mcp_compatibility_policy()
 
     assert isinstance(policy, sdk.PublicMcpCompatibilityPolicy)
-    assert policy.supported_manifest_versions == ("1.6",)
-    assert policy.supported_schema_versions == ("1.6",)
-    policy.assert_supported(manifest_version="1.6", schema_version="1.6")
+    assert policy.supported_manifest_versions == ("1.7",)
+    assert policy.supported_schema_versions == ("1.7",)
+    policy.assert_supported(manifest_version="1.7", schema_version="1.7")
 
 
 def test_sdk_root_exposes_public_mcp_transport_contracts() -> None:
@@ -186,6 +186,20 @@ def test_sdk_root_exposes_public_mcp_transport_envelopes() -> None:
     assert isinstance(envelope.transport_context, sdk.PublicMcpTransportContext)
     assert envelope.transport_context.request_id == "req-789"
     assert envelope.transport_context.session_subject == "user-789"
+
+
+def test_sdk_root_exposes_public_mcp_transport_assessment() -> None:
+    bridge = sdk.build_public_mcp_host_bridge_scaffold()
+    assessment = bridge.assess_tool_transport_context(
+        "launch_run",
+        headers={"X-Request-Id": "req-321"},
+    )
+
+    assert isinstance(assessment, sdk.PublicMcpTransportAssessment)
+    assert assessment.ok is False
+    assert "missing_authorization_header" in assessment.warnings
+    assert "missing_identity_context" in assessment.warnings
+    assert "forward_identity_context" in assessment.suggested_actions
 
 
 def test_sdk_root_exposes_public_mcp_route_contracts() -> None:
@@ -245,6 +259,23 @@ def test_sdk_root_exposes_public_mcp_execution_report_types() -> None:
     assert report.error.category == "request_contract_error"
     assert report.retryable is False
     assert report.recommended_action == "fix_request_arguments"
+
+
+def test_sdk_root_execution_report_includes_transport_assessment() -> None:
+    bridge = sdk.build_public_mcp_host_bridge_scaffold()
+    report = bridge.execute_framework_tool_report(
+        "launch_run",
+        {
+            "workspace_id": "ws-1",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-1"},
+        },
+        headers={"X-Request-Id": "req-555"},
+    )
+
+    assert report.transport_context is not None
+    assert report.transport_assessment is not None
+    assert report.transport_assessment.ok is False
+    assert "missing_authorization_header" in report.transport_assessment.warnings
 
 
 def test_sdk_root_exposes_public_mcp_recovery_policies() -> None:

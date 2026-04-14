@@ -31,6 +31,7 @@ from src.sdk.integration import (
     PublicMcpSessionContract,
     PublicMcpTransportContract,
     PublicMcpTransportContext,
+    PublicMcpTransportAssessment,
     PublicMcpFrameworkEnvelope,
     PublicMcpHttpEnvelope,
     PublicMcpResponseContract,
@@ -88,7 +89,7 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.14"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.15"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -122,9 +123,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.12"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.13"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.12"
+    assert surface.version == "1.13"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -179,12 +180,12 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.6"
-    assert PUBLIC_MCP_SCHEMA_VERSION == "1.6"
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.7"
+    assert PUBLIC_MCP_SCHEMA_VERSION == "1.7"
     assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.6"
-    assert manifest.schema_version == "1.6"
+    assert manifest.manifest_version == "1.7"
+    assert manifest.schema_version == "1.7"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -192,8 +193,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
-    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.6"
-    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.6"
+    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.7"
+    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.7"
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -221,7 +222,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.10"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.11"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -430,9 +431,9 @@ def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> N
 
     assert isinstance(policy, PublicMcpCompatibilityPolicy)
     assert policy.policy_version == "1.0"
-    assert policy.supports_manifest_version("1.6") is True
-    assert policy.supports_schema_version("1.6") is True
-    policy.assert_supported(manifest_version="1.6", schema_version="1.6")
+    assert policy.supports_manifest_version("1.7") is True
+    assert policy.supports_schema_version("1.7") is True
+    policy.assert_supported(manifest_version="1.7", schema_version="1.7")
 
 
 def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
@@ -457,9 +458,9 @@ def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
     export = bridge.export()
 
-    assert export.schema_version == "1.6"
+    assert export.schema_version == "1.7"
     assert export.compatibility_policy.policy_version == "1.0"
-    bridge.assert_consumer_compatibility(manifest_version="1.6", schema_version="1.6")
+    bridge.assert_consumer_compatibility(manifest_version="1.7", schema_version="1.7")
 
     try:
         bridge.assert_consumer_compatibility(manifest_version="0.9")
@@ -922,6 +923,21 @@ def test_host_bridge_builds_http_envelope_with_transport_context() -> None:
     assert envelope.dispatch.request.path == "/api/runs/run-1"
 
 
+def test_host_bridge_assesses_transport_context_for_mutating_route() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+    assessment = bridge.assess_tool_transport_context(
+        "launch_run",
+        headers={"X-Request-Id": "req-999"},
+    )
+
+    assert isinstance(assessment, PublicMcpTransportAssessment)
+    assert assessment.ok is False
+    assert "missing_authorization_header" in assessment.warnings
+    assert "missing_session_claims" in assessment.warnings
+    assert "forward_authorization_header" in assessment.suggested_actions
+    assert "forward_identity_context" in assessment.suggested_actions
+
+
 def test_host_bridge_transport_context_rejects_non_string_session_claim_keys() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
 
@@ -936,6 +952,16 @@ def test_host_bridge_transport_context_rejects_non_string_session_claim_keys() -
         assert "session_claims" in str(exc)
     else:
         raise AssertionError("Expected session_claim key validation")
+
+
+def test_transport_contract_exports_posture_modes() -> None:
+    contracts = build_public_mcp_transport_contracts()
+    indexed = {contract.route_name: contract for contract in contracts}
+
+    assert indexed["launch_run"].request_id_mode == "recommended"
+    assert indexed["launch_run"].authorization_mode == "recommended-pass-through"
+    assert indexed["launch_run"].session_subject_mode == "recommended-pass-through"
+    assert indexed["get_run_status"].authorization_mode == "optional-pass-through"
 
 
 def test_manifest_includes_recovery_policies() -> None:
@@ -977,3 +1003,24 @@ def test_host_bridge_framework_tool_report_uses_route_recovery_policy_for_launch
     assert report.safe_to_retry_same_request is False
     assert report.recommended_action == "inspect_launch_outcome_before_retry"
     assert report.error.recovery_hint.recoverability == "manual_verification_before_retry"
+
+
+def test_execution_report_includes_transport_assessment_for_launch_run() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    report = bridge.execute_framework_tool_report(
+        "launch_run",
+        {
+            "workspace_id": "ws-001",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-001"},
+        },
+        headers={"X-Request-Id": "req-111"},
+    )
+
+    assert report.transport_context is not None
+    assert report.transport_assessment is not None
+    assert report.transport_assessment.ok is False
+    assert report.transport_context.request_id == "req-111"
+    assert "missing_authorization_header" in report.transport_assessment.warnings
+    assert "missing_identity_context" in report.transport_assessment.warnings
+
+

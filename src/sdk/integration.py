@@ -22,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.12"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.13"
 
 
 @dataclass(frozen=True)
@@ -277,6 +277,8 @@ class PublicMcpExecutionReport:
     kind: str
     transport_kind: str
     phase: str
+    transport_context: PublicMcpTransportContext | None = None
+    transport_assessment: PublicMcpTransportAssessment | None = None
     normalized_response: PublicMcpNormalizedResponse | None = None
     error: PublicMcpExecutionError | None = None
 
@@ -313,6 +315,8 @@ class PublicMcpExecutionReport:
             "retryable": self.retryable,
             "safe_to_retry_same_request": self.safe_to_retry_same_request,
             "recommended_action": self.recommended_action,
+            "transport_context": self.transport_context.to_dict() if self.transport_context is not None else None,
+            "transport_assessment": self.transport_assessment.to_dict() if self.transport_assessment is not None else None,
             "normalized_response": self.normalized_response.to_dict() if self.normalized_response is not None else None,
             "error": self.error.to_dict() if self.error is not None else None,
         }
@@ -395,6 +399,10 @@ class PublicMcpTransportContract:
     transport_profile: str
     header_mode: str
     session_mode: str
+    request_id_mode: str = "recommended"
+    language_mode: str = "optional"
+    authorization_mode: str = "optional-pass-through"
+    session_subject_mode: str = "optional-pass-through"
     request_id_header_name: str = "x-request-id"
     language_header_name: str = "accept-language"
     authorization_header_name: str = "authorization"
@@ -411,6 +419,10 @@ class PublicMcpTransportContract:
             "transport_profile": self.transport_profile,
             "header_mode": self.header_mode,
             "session_mode": self.session_mode,
+            "request_id_mode": self.request_id_mode,
+            "language_mode": self.language_mode,
+            "authorization_mode": self.authorization_mode,
+            "session_subject_mode": self.session_subject_mode,
             "request_id_header_name": self.request_id_header_name,
             "language_header_name": self.language_header_name,
             "authorization_header_name": self.authorization_header_name,
@@ -450,8 +462,35 @@ class PublicMcpTransportContext:
         }
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.6"
-PUBLIC_MCP_SCHEMA_VERSION = "1.6"
+@dataclass(frozen=True)
+class PublicMcpTransportAssessment:
+    name: str
+    route_name: str
+    kind: str
+    transport_contract: PublicMcpTransportContract
+    transport_context: PublicMcpTransportContext
+    warnings: tuple[str, ...] = ()
+    suggested_actions: tuple[str, ...] = ()
+
+    @property
+    def ok(self) -> bool:
+        return len(self.warnings) == 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "transport_contract": self.transport_contract.to_dict(),
+            "transport_context": self.transport_context.to_dict(),
+            "ok": self.ok,
+            "warnings": list(self.warnings),
+            "suggested_actions": list(self.suggested_actions),
+        }
+
+
+PUBLIC_MCP_MANIFEST_VERSION = "1.7"
+PUBLIC_MCP_SCHEMA_VERSION = "1.7"
 PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
@@ -562,7 +601,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.10"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.11"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -610,6 +649,7 @@ class PublicMcpFrameworkEnvelope:
     kind: str
     transport_contract: PublicMcpTransportContract | None
     transport_context: PublicMcpTransportContext
+    transport_assessment: PublicMcpTransportAssessment
     dispatch: PublicMcpFrameworkDispatch
 
 
@@ -620,6 +660,7 @@ class PublicMcpHttpEnvelope:
     kind: str
     transport_contract: PublicMcpTransportContract | None
     transport_context: PublicMcpTransportContext
+    transport_assessment: PublicMcpTransportAssessment
     dispatch: PublicMcpHttpDispatch
 
 
@@ -946,6 +987,60 @@ class PublicMcpHostBridgeScaffold:
             session_subject=subject,
         )
 
+    def assess_transport_context(
+        self,
+        *,
+        name: str,
+        route_name: str,
+        kind: str,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        transport_contract: PublicMcpTransportContract | None = None,
+    ) -> PublicMcpTransportAssessment:
+        context = self.normalize_transport_context(
+            name=name,
+            route_name=route_name,
+            kind=kind,
+            headers=headers,
+            session_claims=session_claims,
+            transport_contract=transport_contract,
+        )
+        return _assess_public_transport_context(context)
+
+    def assess_tool_transport_context(
+        self,
+        tool_name: str,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpTransportAssessment:
+        contract = self.adapter_scaffold.export_tool_transport_contract(tool_name)
+        return self.assess_transport_context(
+            name=tool_name,
+            route_name=tool_name,
+            kind="tool",
+            headers=headers,
+            session_claims=session_claims,
+            transport_contract=contract,
+        )
+
+    def assess_resource_transport_context(
+        self,
+        resource_name: str,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpTransportAssessment:
+        contract = self.adapter_scaffold.export_resource_transport_contract(resource_name)
+        return self.assess_transport_context(
+            name=resource_name,
+            route_name=resource_name,
+            kind="resource",
+            headers=headers,
+            session_claims=session_claims,
+            transport_contract=contract,
+        )
+
     def build_framework_tool_envelope(
         self,
         tool_name: str,
@@ -956,19 +1051,21 @@ class PublicMcpHostBridgeScaffold:
     ) -> PublicMcpFrameworkEnvelope:
         dispatch = self.build_framework_tool_dispatch(tool_name, arguments, headers=headers, session_claims=session_claims)
         transport_contract = self.adapter_scaffold.export_tool_transport_contract(tool_name)
+        transport_context = self.normalize_transport_context(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            headers=headers,
+            session_claims=session_claims,
+            transport_contract=transport_contract,
+        )
         return PublicMcpFrameworkEnvelope(
             name=dispatch.name,
             route_name=dispatch.route_name,
             kind=dispatch.kind,
             transport_contract=transport_contract,
-            transport_context=self.normalize_transport_context(
-                name=dispatch.name,
-                route_name=dispatch.route_name,
-                kind=dispatch.kind,
-                headers=headers,
-                session_claims=session_claims,
-                transport_contract=transport_contract,
-            ),
+            transport_context=transport_context,
+            transport_assessment=_assess_public_transport_context(transport_context),
             dispatch=dispatch,
         )
 
@@ -982,19 +1079,21 @@ class PublicMcpHostBridgeScaffold:
     ) -> PublicMcpFrameworkEnvelope:
         dispatch = self.build_framework_resource_dispatch(resource_name, arguments, headers=headers, session_claims=session_claims)
         transport_contract = self.adapter_scaffold.export_resource_transport_contract(resource_name)
+        transport_context = self.normalize_transport_context(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            headers=headers,
+            session_claims=session_claims,
+            transport_contract=transport_contract,
+        )
         return PublicMcpFrameworkEnvelope(
             name=dispatch.name,
             route_name=dispatch.route_name,
             kind=dispatch.kind,
             transport_contract=transport_contract,
-            transport_context=self.normalize_transport_context(
-                name=dispatch.name,
-                route_name=dispatch.route_name,
-                kind=dispatch.kind,
-                headers=headers,
-                session_claims=session_claims,
-                transport_contract=transport_contract,
-            ),
+            transport_context=transport_context,
+            transport_assessment=_assess_public_transport_context(transport_context),
             dispatch=dispatch,
         )
 
@@ -1008,19 +1107,21 @@ class PublicMcpHostBridgeScaffold:
     ) -> PublicMcpHttpEnvelope:
         dispatch = self.build_http_tool_dispatch(tool_name, arguments, headers=headers, session_claims=session_claims)
         transport_contract = self.adapter_scaffold.export_tool_transport_contract(tool_name)
+        transport_context = self.normalize_transport_context(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            headers=headers,
+            session_claims=session_claims,
+            transport_contract=transport_contract,
+        )
         return PublicMcpHttpEnvelope(
             name=dispatch.name,
             route_name=dispatch.route_name,
             kind=dispatch.kind,
             transport_contract=transport_contract,
-            transport_context=self.normalize_transport_context(
-                name=dispatch.name,
-                route_name=dispatch.route_name,
-                kind=dispatch.kind,
-                headers=headers,
-                session_claims=session_claims,
-                transport_contract=transport_contract,
-            ),
+            transport_context=transport_context,
+            transport_assessment=_assess_public_transport_context(transport_context),
             dispatch=dispatch,
         )
 
@@ -1034,19 +1135,21 @@ class PublicMcpHostBridgeScaffold:
     ) -> PublicMcpHttpEnvelope:
         dispatch = self.build_http_resource_dispatch(resource_name, arguments, headers=headers, session_claims=session_claims)
         transport_contract = self.adapter_scaffold.export_resource_transport_contract(resource_name)
+        transport_context = self.normalize_transport_context(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            headers=headers,
+            session_claims=session_claims,
+            transport_contract=transport_contract,
+        )
         return PublicMcpHttpEnvelope(
             name=dispatch.name,
             route_name=dispatch.route_name,
             kind=dispatch.kind,
             transport_contract=transport_contract,
-            transport_context=self.normalize_transport_context(
-                name=dispatch.name,
-                route_name=dispatch.route_name,
-                kind=dispatch.kind,
-                headers=headers,
-                session_claims=session_claims,
-                transport_contract=transport_contract,
-            ),
+            transport_context=transport_context,
+            transport_assessment=_assess_public_transport_context(transport_context),
             dispatch=dispatch,
         )
 
@@ -1216,6 +1319,9 @@ class PublicMcpHostBridgeScaffold:
     def execute_framework_dispatch_report(
         self,
         dispatch: PublicMcpFrameworkDispatch,
+        *,
+        transport_context: PublicMcpTransportContext | None = None,
+        transport_assessment: PublicMcpTransportAssessment | None = None,
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
@@ -1229,6 +1335,8 @@ class PublicMcpHostBridgeScaffold:
                 phase="binding_lookup",
                 exc=exc,
                 recovery_policy=dispatch.recovery_policy,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
             )
         try:
             response = handler(request=dispatch.request, **handler_kwargs)
@@ -1241,6 +1349,8 @@ class PublicMcpHostBridgeScaffold:
                 phase="handler_execution",
                 exc=exc,
                 recovery_policy=dispatch.recovery_policy,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
             )
         response_contract = dispatch.response_contract
         if response_contract is None:
@@ -1252,6 +1362,8 @@ class PublicMcpHostBridgeScaffold:
                 phase="response_normalization",
                 exc=ValueError(f"Missing public MCP response contract for framework dispatch: {dispatch.route_name}"),
                 recovery_policy=dispatch.recovery_policy,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
             )
         try:
             normalized = _normalize_public_framework_response(
@@ -1269,6 +1381,9 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="framework",
                 phase="response_normalization",
                 exc=exc,
+                recovery_policy=dispatch.recovery_policy,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
             )
         return PublicMcpExecutionReport(
             name=dispatch.name,
@@ -1276,6 +1391,8 @@ class PublicMcpHostBridgeScaffold:
             kind=dispatch.kind,
             transport_kind="framework",
             phase="completed",
+            transport_context=transport_context,
+            transport_assessment=transport_assessment,
             normalized_response=normalized,
         )
 
@@ -1289,7 +1406,7 @@ class PublicMcpHostBridgeScaffold:
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
-            dispatch = self.build_framework_tool_dispatch(
+            envelope = self.build_framework_tool_envelope(
                 tool_name,
                 arguments,
                 headers=headers,
@@ -1304,7 +1421,12 @@ class PublicMcpHostBridgeScaffold:
                 phase="dispatch_build",
                 exc=exc,
             )
-        return self.execute_framework_dispatch_report(dispatch, **handler_kwargs)
+        return self.execute_framework_dispatch_report(
+            envelope.dispatch,
+            transport_context=envelope.transport_context,
+            transport_assessment=envelope.transport_assessment,
+            **handler_kwargs,
+        )
 
     def execute_framework_resource_report(
         self,
@@ -1316,7 +1438,7 @@ class PublicMcpHostBridgeScaffold:
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
-            dispatch = self.build_framework_resource_dispatch(
+            envelope = self.build_framework_resource_envelope(
                 resource_name,
                 arguments,
                 headers=headers,
@@ -1331,11 +1453,19 @@ class PublicMcpHostBridgeScaffold:
                 phase="dispatch_build",
                 exc=exc,
             )
-        return self.execute_framework_dispatch_report(dispatch, **handler_kwargs)
+        return self.execute_framework_dispatch_report(
+            envelope.dispatch,
+            transport_context=envelope.transport_context,
+            transport_assessment=envelope.transport_assessment,
+            **handler_kwargs,
+        )
 
     def execute_http_dispatch_report(
         self,
         dispatch: PublicMcpHttpDispatch,
+        *,
+        transport_context: PublicMcpTransportContext | None = None,
+        transport_assessment: PublicMcpTransportAssessment | None = None,
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
@@ -1348,6 +1478,9 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="http",
                 phase="binding_lookup",
                 exc=exc,
+                recovery_policy=dispatch.recovery_policy,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
             )
         try:
             response = handler(http_request=dispatch.request, **handler_kwargs)
@@ -1359,6 +1492,9 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="http",
                 phase="handler_execution",
                 exc=exc,
+                recovery_policy=dispatch.recovery_policy,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
             )
         response_contract = dispatch.response_contract
         if response_contract is None:
@@ -1370,6 +1506,8 @@ class PublicMcpHostBridgeScaffold:
                 phase="response_normalization",
                 exc=ValueError(f"Missing public MCP response contract for http dispatch: {dispatch.route_name}"),
                 recovery_policy=dispatch.recovery_policy,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
             )
         try:
             normalized = _normalize_public_http_response(
@@ -1387,6 +1525,9 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="http",
                 phase="response_normalization",
                 exc=exc,
+                recovery_policy=dispatch.recovery_policy,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
             )
         return PublicMcpExecutionReport(
             name=dispatch.name,
@@ -1394,6 +1535,8 @@ class PublicMcpHostBridgeScaffold:
             kind=dispatch.kind,
             transport_kind="http",
             phase="completed",
+            transport_context=transport_context,
+            transport_assessment=transport_assessment,
             normalized_response=normalized,
         )
 
@@ -1407,7 +1550,7 @@ class PublicMcpHostBridgeScaffold:
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
-            dispatch = self.build_http_tool_dispatch(
+            envelope = self.build_http_tool_envelope(
                 tool_name,
                 arguments,
                 headers=headers,
@@ -1422,7 +1565,12 @@ class PublicMcpHostBridgeScaffold:
                 phase="dispatch_build",
                 exc=exc,
             )
-        return self.execute_http_dispatch_report(dispatch, **handler_kwargs)
+        return self.execute_http_dispatch_report(
+            envelope.dispatch,
+            transport_context=envelope.transport_context,
+            transport_assessment=envelope.transport_assessment,
+            **handler_kwargs,
+        )
 
     def execute_http_resource_report(
         self,
@@ -1434,7 +1582,7 @@ class PublicMcpHostBridgeScaffold:
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
-            dispatch = self.build_http_resource_dispatch(
+            envelope = self.build_http_resource_envelope(
                 resource_name,
                 arguments,
                 headers=headers,
@@ -1449,7 +1597,12 @@ class PublicMcpHostBridgeScaffold:
                 phase="dispatch_build",
                 exc=exc,
             )
-        return self.execute_http_dispatch_report(dispatch, **handler_kwargs)
+        return self.execute_http_dispatch_report(
+            envelope.dispatch,
+            transport_context=envelope.transport_context,
+            transport_assessment=envelope.transport_assessment,
+            **handler_kwargs,
+        )
 
 
 @dataclass(frozen=True)
@@ -2034,6 +2187,10 @@ class PublicMcpAdapterScaffold:
             transport_profile=route_contract.transport_profile,
             header_mode="selective-forward",
             session_mode=session_mode,
+            request_id_mode="recommended",
+            language_mode="optional",
+            authorization_mode=("recommended-pass-through" if session_mode == "recommended-pass-through" else "optional-pass-through"),
+            session_subject_mode=("recommended-pass-through" if session_mode == "recommended-pass-through" else "optional-pass-through"),
             session_contract=session_contract,
         )
 
@@ -2197,6 +2354,8 @@ def _public_mcp_execution_report_error(
     phase: str,
     exc: Exception,
     recovery_policy: PublicMcpRecoveryPolicy | None = None,
+    transport_context: PublicMcpTransportContext | None = None,
+    transport_assessment: PublicMcpTransportAssessment | None = None,
 ) -> PublicMcpExecutionReport:
     category = _classify_public_mcp_execution_error(phase=phase, exc=exc)
     return PublicMcpExecutionReport(
@@ -2205,6 +2364,8 @@ def _public_mcp_execution_report_error(
         kind=kind,
         transport_kind=transport_kind,
         phase=phase,
+        transport_context=transport_context,
+        transport_assessment=transport_assessment,
         error=PublicMcpExecutionError(
             category=category,
             phase=phase,
@@ -3275,6 +3436,7 @@ __all__ = [
     "PublicMcpSessionContract",
     "PublicMcpTransportContract",
     "PublicMcpTransportContext",
+    "PublicMcpTransportAssessment",
     "PublicMcpResponseContract",
     "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
@@ -3311,3 +3473,44 @@ __all__ = [
     "build_public_mcp_manifest",
     "build_public_mcp_host_bridge_scaffold",
 ]
+
+def _append_unique(values: list[str], value: str | None) -> None:
+    if value and value not in values:
+        values.append(value)
+
+
+def _assess_public_transport_context(context: PublicMcpTransportContext) -> PublicMcpTransportAssessment:
+    contract = context.transport_contract
+    warnings: list[str] = []
+    actions: list[str] = []
+
+    if contract.request_id_mode == "recommended" and not context.request_id:
+        warnings.append("missing_request_id")
+        _append_unique(actions, "attach_request_id")
+
+    if contract.authorization_mode == "recommended-pass-through" and not context.authorization_present:
+        warnings.append("missing_authorization_header")
+        _append_unique(actions, "forward_authorization_header")
+
+    if contract.session_subject_mode == "recommended-pass-through":
+        if not context.session_present:
+            warnings.append("missing_session_claims")
+            _append_unique(actions, "forward_session_claims")
+        elif context.session_subject is None:
+            warnings.append("missing_session_subject_claim")
+            _append_unique(actions, "forward_subject_session_claim")
+
+    if contract.session_mode == "recommended-pass-through" and not context.authorization_present and not context.session_present:
+        warnings.append("missing_identity_context")
+        _append_unique(actions, "forward_identity_context")
+
+    return PublicMcpTransportAssessment(
+        name=context.name,
+        route_name=context.route_name,
+        kind=context.kind,
+        transport_contract=contract,
+        transport_context=context,
+        warnings=tuple(warnings),
+        suggested_actions=tuple(actions),
+    )
+
