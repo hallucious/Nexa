@@ -22,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.8"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.9"
 
 
 @dataclass(frozen=True)
@@ -193,6 +193,49 @@ class PublicMcpNormalizedResponse:
 
 
 @dataclass(frozen=True)
+class PublicMcpExecutionError:
+    category: str
+    phase: str
+    message: str
+    exception_type: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "category": self.category,
+            "phase": self.phase,
+            "message": self.message,
+            "exception_type": self.exception_type,
+        }
+
+
+@dataclass(frozen=True)
+class PublicMcpExecutionReport:
+    name: str
+    route_name: str
+    kind: str
+    transport_kind: str
+    phase: str
+    normalized_response: PublicMcpNormalizedResponse | None = None
+    error: PublicMcpExecutionError | None = None
+
+    @property
+    def ok(self) -> bool:
+        return self.error is None and self.normalized_response is not None and self.phase == "completed"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "transport_kind": self.transport_kind,
+            "phase": self.phase,
+            "ok": self.ok,
+            "normalized_response": self.normalized_response.to_dict() if self.normalized_response is not None else None,
+            "error": self.error.to_dict() if self.error is not None else None,
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpCompatibilitySurface:
     version: str
     tools: tuple[PublicMcpToolDescriptor, ...]
@@ -348,7 +391,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.6"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.7"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -830,6 +873,241 @@ class PublicMcpHostBridgeScaffold:
             framework_handler_name=_framework_handler_name(descriptor.route_name),
             path_param_names=_path_template_keys(framework_definition.path_template),
         )
+
+
+    def execute_framework_dispatch_report(
+        self,
+        dispatch: PublicMcpFrameworkDispatch,
+        **handler_kwargs: Any,
+    ) -> PublicMcpExecutionReport:
+        try:
+            handler = getattr(FrameworkRouteBindings, dispatch.handler_name)
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="framework",
+                phase="binding_lookup",
+                exc=exc,
+            )
+        try:
+            response = handler(request=dispatch.request, **handler_kwargs)
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="framework",
+                phase="handler_execution",
+                exc=exc,
+            )
+        response_contract = dispatch.response_contract
+        if response_contract is None:
+            return _public_mcp_execution_report_error(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="framework",
+                phase="response_normalization",
+                exc=ValueError(f"Missing public MCP response contract for framework dispatch: {dispatch.route_name}"),
+            )
+        try:
+            normalized = _normalize_public_framework_response(
+                dispatch.name,
+                dispatch.route_name,
+                dispatch.kind,
+                response_contract,
+                response,
+            )
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="framework",
+                phase="response_normalization",
+                exc=exc,
+            )
+        return PublicMcpExecutionReport(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            transport_kind="framework",
+            phase="completed",
+            normalized_response=normalized,
+        )
+
+    def execute_framework_tool_report(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        **handler_kwargs: Any,
+    ) -> PublicMcpExecutionReport:
+        try:
+            dispatch = self.build_framework_tool_dispatch(
+                tool_name,
+                arguments,
+                headers=headers,
+                session_claims=session_claims,
+            )
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=tool_name,
+                route_name=tool_name,
+                kind="tool",
+                transport_kind="framework",
+                phase="dispatch_build",
+                exc=exc,
+            )
+        return self.execute_framework_dispatch_report(dispatch, **handler_kwargs)
+
+    def execute_framework_resource_report(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        **handler_kwargs: Any,
+    ) -> PublicMcpExecutionReport:
+        try:
+            dispatch = self.build_framework_resource_dispatch(
+                resource_name,
+                arguments,
+                headers=headers,
+                session_claims=session_claims,
+            )
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=resource_name,
+                route_name=resource_name,
+                kind="resource",
+                transport_kind="framework",
+                phase="dispatch_build",
+                exc=exc,
+            )
+        return self.execute_framework_dispatch_report(dispatch, **handler_kwargs)
+
+    def execute_http_dispatch_report(
+        self,
+        dispatch: PublicMcpHttpDispatch,
+        **handler_kwargs: Any,
+    ) -> PublicMcpExecutionReport:
+        try:
+            handler = getattr(RunHttpRouteSurface, _framework_handler_name(dispatch.route_name))
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="http",
+                phase="binding_lookup",
+                exc=exc,
+            )
+        try:
+            response = handler(http_request=dispatch.request, **handler_kwargs)
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="http",
+                phase="handler_execution",
+                exc=exc,
+            )
+        response_contract = dispatch.response_contract
+        if response_contract is None:
+            return _public_mcp_execution_report_error(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="http",
+                phase="response_normalization",
+                exc=ValueError(f"Missing public MCP response contract for http dispatch: {dispatch.route_name}"),
+            )
+        try:
+            normalized = _normalize_public_http_response(
+                dispatch.name,
+                dispatch.route_name,
+                dispatch.kind,
+                response_contract,
+                response,
+            )
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="http",
+                phase="response_normalization",
+                exc=exc,
+            )
+        return PublicMcpExecutionReport(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            transport_kind="http",
+            phase="completed",
+            normalized_response=normalized,
+        )
+
+    def execute_http_tool_report(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        **handler_kwargs: Any,
+    ) -> PublicMcpExecutionReport:
+        try:
+            dispatch = self.build_http_tool_dispatch(
+                tool_name,
+                arguments,
+                headers=headers,
+                session_claims=session_claims,
+            )
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=tool_name,
+                route_name=tool_name,
+                kind="tool",
+                transport_kind="http",
+                phase="dispatch_build",
+                exc=exc,
+            )
+        return self.execute_http_dispatch_report(dispatch, **handler_kwargs)
+
+    def execute_http_resource_report(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        **handler_kwargs: Any,
+    ) -> PublicMcpExecutionReport:
+        try:
+            dispatch = self.build_http_resource_dispatch(
+                resource_name,
+                arguments,
+                headers=headers,
+                session_claims=session_claims,
+            )
+        except Exception as exc:
+            return _public_mcp_execution_report_error(
+                name=resource_name,
+                route_name=resource_name,
+                kind="resource",
+                transport_kind="http",
+                phase="dispatch_build",
+                exc=exc,
+            )
+        return self.execute_http_dispatch_report(dispatch, **handler_kwargs)
 
 
 @dataclass(frozen=True)
@@ -1378,6 +1656,46 @@ def _argument_schema_dict(schema: PublicMcpArgumentSchema | None) -> dict[str, A
         return None
     return schema.to_dict()
 
+
+
+def _classify_public_mcp_execution_error(*, phase: str, exc: Exception) -> str:
+    if phase == "dispatch_build":
+        return "request_contract_error"
+    if phase == "binding_lookup":
+        return "binding_error"
+    if phase == "handler_execution":
+        return "handler_error"
+    if phase == "response_normalization":
+        if isinstance(exc, json.JSONDecodeError):
+            return "response_decode_error"
+        if isinstance(exc, ValueError):
+            return "response_contract_error"
+        return "response_error"
+    return "unexpected_error"
+
+
+def _public_mcp_execution_report_error(
+    *,
+    name: str,
+    route_name: str,
+    kind: str,
+    transport_kind: str,
+    phase: str,
+    exc: Exception,
+) -> PublicMcpExecutionReport:
+    return PublicMcpExecutionReport(
+        name=name,
+        route_name=route_name,
+        kind=kind,
+        transport_kind=transport_kind,
+        phase=phase,
+        error=PublicMcpExecutionError(
+            category=_classify_public_mcp_execution_error(phase=phase, exc=exc),
+            phase=phase,
+            message=str(exc),
+            exception_type=type(exc).__name__,
+        ),
+    )
 
 def _decode_public_response_body(*, media_type: str, body_text: str) -> Any:
     if "json" in media_type.lower():
@@ -2250,6 +2568,8 @@ __all__ = [
     "PublicMcpNormalizedArguments",
     "PublicMcpResponseContract",
     "PublicMcpNormalizedResponse",
+    "PublicMcpExecutionError",
+    "PublicMcpExecutionReport",
     "PublicMcpCompatibilitySurface",
     "PublicMcpCompatibilityPolicy",
     "PublicMcpManifestTool",

@@ -39,6 +39,8 @@ from src.sdk.integration import (
     PublicMcpNormalizedArguments,
     PublicMcpResponseContract,
     PublicMcpNormalizedResponse,
+    PublicMcpExecutionError,
+    PublicMcpExecutionReport,
     PublicMcpCompatibilitySurface,
     PublicMcpCompatibilityPolicy,
     PublicMcpManifestTool,
@@ -80,7 +82,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.10"
+PUBLIC_SDK_SURFACE_VERSION = "1.11"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -100,6 +102,8 @@ __all__ = [
     "PublicMcpNormalizedArguments",
     "PublicMcpResponseContract",
     "PublicMcpNormalizedResponse",
+    "PublicMcpExecutionError",
+    "PublicMcpExecutionReport",
     "artifacts",
     "server",
     "integration",

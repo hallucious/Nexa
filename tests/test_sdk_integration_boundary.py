@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from src import integration as root_integration
 from src import sdk
 from src.sdk import integration
@@ -77,7 +79,7 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.10"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.11"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -111,9 +113,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.8"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.9"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.8"
+    assert surface.version == "1.9"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -210,7 +212,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.6"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.7"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -706,3 +708,105 @@ def test_host_bridge_can_execute_http_resource_and_normalize_response() -> None:
     assert normalized.response_contract.response_shape == "status"
     assert normalized.body["run_id"] == "run-001"
     assert normalized.body["status"] == "running"
+
+
+def test_host_bridge_framework_resource_report_successfully_tracks_completed_lifecycle() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    report = bridge.execute_framework_resource_report(
+        "get_run_status",
+        {"run_id": "run-001"},
+        headers={"Authorization": "Bearer token", "X-Request-Id": "req-framework-report-1"},
+        session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["editor"]},
+        run_context=_run_context(),
+        run_record_row=_run_row(),
+        engine_status=EngineRunStatusSnapshot(
+            run_id="run-001",
+            status="running",
+            active_node_id="node-1",
+            active_node_label="Node 1",
+            progress_percent=20,
+            progress_summary="Working",
+            latest_signal=EngineSignal(severity="info", code="NODE_RUNNING", message="Node 1 is executing."),
+            trace_ref="trace://run-001",
+            artifact_count=0,
+        ),
+    )
+
+    assert report.ok is True
+    assert report.phase == "completed"
+    assert report.transport_kind == "framework"
+    assert report.normalized_response is not None
+    assert report.normalized_response.body["status"] == "running"
+    assert report.error is None
+
+
+def test_host_bridge_resource_report_captures_dispatch_build_error_category() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    report = bridge.execute_framework_resource_report("get_run_status", {"include": "summary"})
+
+    assert report.ok is False
+    assert report.phase == "dispatch_build"
+    assert report.error is not None
+    assert report.error.category == "request_contract_error"
+    assert "Missing required path field(s) for public MCP export" in report.error.message
+
+
+def test_host_bridge_framework_dispatch_report_captures_response_contract_error() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    dispatch = bridge.build_framework_resource_dispatch("get_run_status", {"run_id": "run-001"})
+    strict_contract = replace(
+        bridge.adapter_scaffold.export_resource_response_contract("get_run_status"),
+        required_top_level_keys=("run_id", "status", "missing"),
+    )
+    strict_dispatch = PublicMcpFrameworkDispatch(
+        name=dispatch.name,
+        route_name=dispatch.route_name,
+        kind=dispatch.kind,
+        handler_name=dispatch.handler_name,
+        request=dispatch.request,
+        route_contract=dispatch.route_contract,
+        response_contract=strict_contract,
+    )
+
+    report = bridge.execute_framework_dispatch_report(
+        strict_dispatch,
+        run_context=_run_context(),
+        run_record_row=_run_row(),
+        engine_status=EngineRunStatusSnapshot(
+            run_id="run-001",
+            status="running",
+            active_node_id="node-1",
+            active_node_label="Node 1",
+            progress_percent=20,
+            progress_summary="Working",
+            latest_signal=EngineSignal(severity="info", code="NODE_RUNNING", message="Node 1 is executing."),
+            trace_ref="trace://run-001",
+            artifact_count=0,
+        ),
+    )
+
+    assert report.ok is False
+    assert report.phase == "response_normalization"
+    assert report.error is not None
+    assert report.error.category == "response_contract_error"
+    assert "Missing required response keys" in report.error.message
+
+
+def test_host_bridge_http_dispatch_report_captures_binding_error() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    dispatch = PublicMcpHttpDispatch(
+        name="broken_resource",
+        route_name="missing_http_route",
+        kind="resource",
+        request=bridge.build_http_resource_request_from_arguments("get_run_status", {"run_id": "run-001"}),
+        response_contract=bridge.adapter_scaffold.export_resource_response_contract("get_run_status"),
+    )
+
+    report = bridge.execute_http_dispatch_report(dispatch)
+
+    assert report.ok is False
+    assert report.phase == "binding_lookup"
+    assert report.error is not None
+    assert report.error.category == "binding_error"

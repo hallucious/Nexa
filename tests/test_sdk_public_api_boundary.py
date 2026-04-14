@@ -54,7 +54,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.10"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.11"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -139,7 +139,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.6"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.7"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
@@ -207,3 +207,13 @@ def test_sdk_root_exposes_public_mcp_normalized_response() -> None:
     assert isinstance(normalized, sdk.PublicMcpNormalizedResponse)
     assert normalized.response_contract.route_family == "run-read"
     assert normalized.body["status"] == "queued"
+
+
+def test_sdk_root_exposes_public_mcp_execution_report_types() -> None:
+    bridge = sdk.build_public_mcp_host_bridge_scaffold()
+    report = bridge.execute_framework_resource_report("get_run_status", {"include": "summary"})
+
+    assert isinstance(report, sdk.PublicMcpExecutionReport)
+    assert isinstance(report.error, sdk.PublicMcpExecutionError)
+    assert report.phase == "dispatch_build"
+    assert report.error.category == "request_contract_error"
