@@ -37,6 +37,9 @@ from src.sdk.integration import (
     PublicMcpArgumentSchema,
     PublicMcpRouteContract,
     PublicMcpNormalizedArguments,
+    PublicMcpSessionContract,
+    PublicMcpTransportContract,
+    PublicMcpTransportContext,
     PublicMcpResponseContract,
     PublicMcpRecoveryPolicy,
     PublicMcpNormalizedResponse,
@@ -56,12 +59,15 @@ from src.sdk.integration import (
     PublicMcpHostRouteBinding,
     PublicMcpFrameworkDispatch,
     PublicMcpHttpDispatch,
+    PublicMcpFrameworkEnvelope,
+    PublicMcpHttpEnvelope,
     PublicMcpHostBridgeExport,
     PublicMcpHostBridgeScaffold,
     PublicMcpResourceDescriptor,
     PublicMcpToolDescriptor,
     build_public_mcp_argument_schemas,
     build_public_mcp_route_contracts,
+    build_public_mcp_transport_contracts,
     build_public_mcp_response_contracts,
     build_public_mcp_recovery_policies,
     build_public_mcp_compatibility_policy,
@@ -85,7 +91,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.13"
+PUBLIC_SDK_SURFACE_VERSION = "1.14"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -103,6 +109,9 @@ __all__ = [
     "PublicMcpArgumentSchema",
     "PublicMcpRouteContract",
     "PublicMcpNormalizedArguments",
+    "PublicMcpSessionContract",
+    "PublicMcpTransportContract",
+    "PublicMcpTransportContext",
     "PublicMcpResponseContract",
     "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
@@ -155,11 +164,14 @@ __all__ = [
     "PublicMcpHostRouteBinding",
     "PublicMcpFrameworkDispatch",
     "PublicMcpHttpDispatch",
+    "PublicMcpFrameworkEnvelope",
+    "PublicMcpHttpEnvelope",
     "PublicMcpHostBridgeExport",
     "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",
     "build_public_mcp_argument_schemas",
     "build_public_mcp_route_contracts",
+    "build_public_mcp_transport_contracts",
     "build_public_mcp_response_contracts",
     "build_public_mcp_recovery_policies",
     "build_public_mcp_compatibility_policy",

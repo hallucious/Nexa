@@ -28,6 +28,11 @@ from src.sdk.integration import (
     PublicMcpNormalizedResponse,
     PublicMcpRecoveryHint,
     PublicMcpRecoveryPolicy,
+    PublicMcpSessionContract,
+    PublicMcpTransportContract,
+    PublicMcpTransportContext,
+    PublicMcpFrameworkEnvelope,
+    PublicMcpHttpEnvelope,
     PublicMcpResponseContract,
     PublicMcpResourceDescriptor,
     PublicMcpRouteContract,
@@ -35,6 +40,7 @@ from src.sdk.integration import (
     build_public_mcp_adapter_scaffold,
     build_public_mcp_argument_schemas,
     build_public_mcp_route_contracts,
+    build_public_mcp_transport_contracts,
     build_public_mcp_response_contracts,
     build_public_mcp_recovery_policies,
     build_public_mcp_compatibility_policy,
@@ -82,7 +88,7 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.13"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.14"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -116,9 +122,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.11"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.12"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.11"
+    assert surface.version == "1.12"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -173,12 +179,12 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.5"
-    assert PUBLIC_MCP_SCHEMA_VERSION == "1.5"
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.6"
+    assert PUBLIC_MCP_SCHEMA_VERSION == "1.6"
     assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.5"
-    assert manifest.schema_version == "1.5"
+    assert manifest.manifest_version == "1.6"
+    assert manifest.schema_version == "1.6"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -186,8 +192,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
-    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.5"
-    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.5"
+    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.6"
+    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.6"
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -215,7 +221,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.9"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.10"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -424,9 +430,9 @@ def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> N
 
     assert isinstance(policy, PublicMcpCompatibilityPolicy)
     assert policy.policy_version == "1.0"
-    assert policy.supports_manifest_version("1.5") is True
-    assert policy.supports_schema_version("1.5") is True
-    policy.assert_supported(manifest_version="1.5", schema_version="1.5")
+    assert policy.supports_manifest_version("1.6") is True
+    assert policy.supports_schema_version("1.6") is True
+    policy.assert_supported(manifest_version="1.6", schema_version="1.6")
 
 
 def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
@@ -451,9 +457,9 @@ def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
     export = bridge.export()
 
-    assert export.schema_version == "1.5"
+    assert export.schema_version == "1.6"
     assert export.compatibility_policy.policy_version == "1.0"
-    bridge.assert_consumer_compatibility(manifest_version="1.5", schema_version="1.5")
+    bridge.assert_consumer_compatibility(manifest_version="1.6", schema_version="1.6")
 
     try:
         bridge.assert_consumer_compatibility(manifest_version="0.9")
@@ -852,6 +858,84 @@ def test_build_public_mcp_recovery_policies_exports_route_family_retry_profiles(
     assert indexed["launch_run"].timeout_recommended_action == "inspect_launch_outcome_before_retry"
     assert indexed["get_run_status"].idempotency_class == "read-only"
     assert indexed["get_run_status"].safe_to_retry_same_request_on_timeout is True
+
+
+def test_build_public_mcp_transport_contracts_exports_session_boundary() -> None:
+    contracts = build_public_mcp_transport_contracts()
+    indexed = {contract.route_name: contract for contract in contracts}
+
+    assert isinstance(indexed["launch_run"], PublicMcpTransportContract)
+    assert indexed["launch_run"].session_mode == "recommended-pass-through"
+    assert indexed["launch_run"].session_contract is not None
+    assert indexed["launch_run"].session_contract.subject_claim_names == ("user_id", "sub", "subject")
+    assert indexed["get_run_status"].session_mode == "optional-pass-through"
+
+
+def test_manifest_includes_transport_contracts() -> None:
+    manifest = build_public_mcp_manifest(base_url="https://api.nexa.test")
+    launch_tool = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
+    status_resource = next(resource for resource in manifest.resources if resource.route_name == "get_run_status")
+    manifest_dict = manifest.to_dict()
+    launch_tool_dict = next(tool for tool in manifest_dict["tools"] if tool["route_name"] == "launch_run")
+
+    assert launch_tool.transport_contract is not None
+    assert launch_tool.transport_contract.session_mode == "recommended-pass-through"
+    assert status_resource.transport_contract is not None
+    assert status_resource.transport_contract.request_id_header_name == "x-request-id"
+    assert launch_tool_dict["transport_contract"]["session_contract"]["subject_claim_names"] == ["user_id", "sub", "subject"]
+
+
+def test_host_bridge_builds_framework_envelope_with_transport_context() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+    envelope = bridge.build_framework_tool_envelope(
+        "launch_run",
+        {
+            "workspace_id": "ws-001",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-001"},
+        },
+        headers={"Authorization": "Bearer token", "X-Request-Id": "req-123", "Accept-Language": "ko"},
+        session_claims={"sub": "user-123", "session_id": "sess-1"},
+    )
+
+    assert isinstance(envelope, PublicMcpFrameworkEnvelope)
+    assert isinstance(envelope.transport_context, PublicMcpTransportContext)
+    assert envelope.transport_contract is not None
+    assert envelope.transport_context.request_id == "req-123"
+    assert envelope.transport_context.language == "ko"
+    assert envelope.transport_context.authorization_present is True
+    assert envelope.transport_context.session_present is True
+    assert envelope.transport_context.session_subject == "user-123"
+
+
+def test_host_bridge_builds_http_envelope_with_transport_context() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+    envelope = bridge.build_http_resource_envelope(
+        "get_run_status",
+        {"run_id": "run-1", "include": "summary"},
+        headers={"X-Request-Id": "req-456"},
+        session_claims={"user_id": "user-456"},
+    )
+
+    assert isinstance(envelope, PublicMcpHttpEnvelope)
+    assert envelope.transport_context.request_id == "req-456"
+    assert envelope.transport_context.session_subject == "user-456"
+    assert envelope.dispatch.request.path == "/api/runs/run-1"
+
+
+def test_host_bridge_transport_context_rejects_non_string_session_claim_keys() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    try:
+        bridge.normalize_transport_context(
+            name="get_run_status",
+            route_name="get_run_status",
+            kind="resource",
+            session_claims={1: "bad-key"},  # type: ignore[dict-item]
+        )
+    except ValueError as exc:
+        assert "session_claims" in str(exc)
+    else:
+        raise AssertionError("Expected session_claim key validation")
 
 
 def test_manifest_includes_recovery_policies() -> None:

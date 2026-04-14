@@ -22,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.11"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.12"
 
 
 @dataclass(frozen=True)
@@ -370,8 +370,88 @@ class PublicMcpCompatibilityPolicy:
         }
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.5"
-PUBLIC_MCP_SCHEMA_VERSION = "1.5"
+@dataclass(frozen=True)
+class PublicMcpSessionContract:
+    mode: str
+    subject_claim_names: tuple[str, ...] = ()
+    session_id_claim_names: tuple[str, ...] = ()
+    optional_claim_names: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "mode": self.mode,
+            "subject_claim_names": list(self.subject_claim_names),
+            "session_id_claim_names": list(self.session_id_claim_names),
+            "optional_claim_names": list(self.optional_claim_names),
+        }
+
+
+@dataclass(frozen=True)
+class PublicMcpTransportContract:
+    name: str
+    route_name: str
+    kind: str
+    route_family: str
+    transport_profile: str
+    header_mode: str
+    session_mode: str
+    request_id_header_name: str = "x-request-id"
+    language_header_name: str = "accept-language"
+    authorization_header_name: str = "authorization"
+    session_claims_header_name: str = "x-nexa-session-claims"
+    allow_additional_headers: bool = True
+    session_contract: PublicMcpSessionContract | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "route_family": self.route_family,
+            "transport_profile": self.transport_profile,
+            "header_mode": self.header_mode,
+            "session_mode": self.session_mode,
+            "request_id_header_name": self.request_id_header_name,
+            "language_header_name": self.language_header_name,
+            "authorization_header_name": self.authorization_header_name,
+            "session_claims_header_name": self.session_claims_header_name,
+            "allow_additional_headers": self.allow_additional_headers,
+            "session_contract": self.session_contract.to_dict() if self.session_contract is not None else None,
+        }
+
+
+@dataclass(frozen=True)
+class PublicMcpTransportContext:
+    name: str
+    route_name: str
+    kind: str
+    transport_contract: PublicMcpTransportContract
+    headers: Mapping[str, str]
+    session_claims: Mapping[str, Any] | None
+    request_id: str | None
+    language: str | None
+    authorization_present: bool
+    session_present: bool
+    session_subject: str | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "transport_contract": self.transport_contract.to_dict(),
+            "headers": dict(self.headers),
+            "session_claims": dict(self.session_claims) if self.session_claims is not None else None,
+            "request_id": self.request_id,
+            "language": self.language,
+            "authorization_present": self.authorization_present,
+            "session_present": self.session_present,
+            "session_subject": self.session_subject,
+        }
+
+
+PUBLIC_MCP_MANIFEST_VERSION = "1.6"
+PUBLIC_MCP_SCHEMA_VERSION = "1.6"
 PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
@@ -388,6 +468,7 @@ class PublicMcpManifestTool:
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
+    transport_contract: PublicMcpTransportContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -404,6 +485,7 @@ class PublicMcpManifestResource:
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
+    transport_contract: PublicMcpTransportContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -451,6 +533,7 @@ class PublicMcpManifest:
                     "route_contract": tool.route_contract.to_dict() if tool.route_contract is not None else None,
                     "response_contract": tool.response_contract.to_dict() if tool.response_contract is not None else None,
                     "recovery_policy": tool.recovery_policy.to_dict() if tool.recovery_policy is not None else None,
+                    "transport_contract": tool.transport_contract.to_dict() if tool.transport_contract is not None else None,
                     "tags": list(tool.tags),
                 }
                 for tool in self.tools
@@ -468,6 +551,7 @@ class PublicMcpManifest:
                     "route_contract": resource.route_contract.to_dict() if resource.route_contract is not None else None,
                     "response_contract": resource.response_contract.to_dict() if resource.response_contract is not None else None,
                     "recovery_policy": resource.recovery_policy.to_dict() if resource.recovery_policy is not None else None,
+                    "transport_contract": resource.transport_contract.to_dict() if resource.transport_contract is not None else None,
                     "tags": list(resource.tags),
                 }
                 for resource in self.resources
@@ -478,7 +562,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.9"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.10"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -517,6 +601,26 @@ class PublicMcpHttpDispatch:
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
+
+
+@dataclass(frozen=True)
+class PublicMcpFrameworkEnvelope:
+    name: str
+    route_name: str
+    kind: str
+    transport_contract: PublicMcpTransportContract | None
+    transport_context: PublicMcpTransportContext
+    dispatch: PublicMcpFrameworkDispatch
+
+
+@dataclass(frozen=True)
+class PublicMcpHttpEnvelope:
+    name: str
+    route_name: str
+    kind: str
+    transport_contract: PublicMcpTransportContract | None
+    transport_context: PublicMcpTransportContext
+    dispatch: PublicMcpHttpDispatch
 
 
 @dataclass(frozen=True)
@@ -803,6 +907,147 @@ class PublicMcpHostBridgeScaffold:
             route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
             response_contract=self.adapter_scaffold.export_resource_response_contract(resource_name),
             recovery_policy=self.adapter_scaffold.export_resource_recovery_policy(resource_name),
+        )
+
+    def normalize_transport_context(
+        self,
+        *,
+        name: str,
+        route_name: str,
+        kind: str,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        transport_contract: PublicMcpTransportContract | None = None,
+    ) -> PublicMcpTransportContext:
+        if transport_contract is None:
+            transport_contract = (
+                self.adapter_scaffold.export_tool_transport_contract(name)
+                if kind == "tool"
+                else self.adapter_scaffold.export_resource_transport_contract(name)
+            )
+        normalized_headers = _normalize_public_headers(headers)
+        normalized_claims = _normalize_public_session_claims(session_claims)
+        session_contract = transport_contract.session_contract
+        subject = _resolve_session_subject(normalized_claims, session_contract)
+        request_id = normalized_headers.get(transport_contract.request_id_header_name)
+        language = normalized_headers.get(transport_contract.language_header_name)
+        auth_present = transport_contract.authorization_header_name in normalized_headers
+        return PublicMcpTransportContext(
+            name=name,
+            route_name=route_name,
+            kind=kind,
+            transport_contract=transport_contract,
+            headers=normalized_headers,
+            session_claims=normalized_claims,
+            request_id=request_id,
+            language=language,
+            authorization_present=auth_present,
+            session_present=normalized_claims is not None,
+            session_subject=subject,
+        )
+
+    def build_framework_tool_envelope(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpFrameworkEnvelope:
+        dispatch = self.build_framework_tool_dispatch(tool_name, arguments, headers=headers, session_claims=session_claims)
+        transport_contract = self.adapter_scaffold.export_tool_transport_contract(tool_name)
+        return PublicMcpFrameworkEnvelope(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            transport_contract=transport_contract,
+            transport_context=self.normalize_transport_context(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                headers=headers,
+                session_claims=session_claims,
+                transport_contract=transport_contract,
+            ),
+            dispatch=dispatch,
+        )
+
+    def build_framework_resource_envelope(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpFrameworkEnvelope:
+        dispatch = self.build_framework_resource_dispatch(resource_name, arguments, headers=headers, session_claims=session_claims)
+        transport_contract = self.adapter_scaffold.export_resource_transport_contract(resource_name)
+        return PublicMcpFrameworkEnvelope(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            transport_contract=transport_contract,
+            transport_context=self.normalize_transport_context(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                headers=headers,
+                session_claims=session_claims,
+                transport_contract=transport_contract,
+            ),
+            dispatch=dispatch,
+        )
+
+    def build_http_tool_envelope(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpHttpEnvelope:
+        dispatch = self.build_http_tool_dispatch(tool_name, arguments, headers=headers, session_claims=session_claims)
+        transport_contract = self.adapter_scaffold.export_tool_transport_contract(tool_name)
+        return PublicMcpHttpEnvelope(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            transport_contract=transport_contract,
+            transport_context=self.normalize_transport_context(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                headers=headers,
+                session_claims=session_claims,
+                transport_contract=transport_contract,
+            ),
+            dispatch=dispatch,
+        )
+
+    def build_http_resource_envelope(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpHttpEnvelope:
+        dispatch = self.build_http_resource_dispatch(resource_name, arguments, headers=headers, session_claims=session_claims)
+        transport_contract = self.adapter_scaffold.export_resource_transport_contract(resource_name)
+        return PublicMcpHttpEnvelope(
+            name=dispatch.name,
+            route_name=dispatch.route_name,
+            kind=dispatch.kind,
+            transport_contract=transport_contract,
+            transport_context=self.normalize_transport_context(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                headers=headers,
+                session_claims=session_claims,
+                transport_contract=transport_contract,
+            ),
+            dispatch=dispatch,
         )
 
     def execute_framework_dispatch(
@@ -1231,6 +1476,7 @@ class PublicMcpToolExport:
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
+    transport_contract: PublicMcpTransportContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -1246,6 +1492,7 @@ class PublicMcpResourceExport:
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
+    transport_contract: PublicMcpTransportContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -1356,6 +1603,14 @@ class PublicMcpAdapterScaffold:
     def export_resource_recovery_policy(self, resource_name: str) -> PublicMcpRecoveryPolicy:
         descriptor = self._resource_by_name(resource_name)
         return self._recovery_policy_for_descriptor(descriptor, kind="resource")
+
+    def export_tool_transport_contract(self, tool_name: str) -> PublicMcpTransportContract:
+        descriptor = self._tool_by_name(tool_name)
+        return self._transport_contract_for_descriptor(descriptor, kind="tool")
+
+    def export_resource_transport_contract(self, resource_name: str) -> PublicMcpTransportContract:
+        descriptor = self._resource_by_name(resource_name)
+        return self._transport_contract_for_descriptor(descriptor, kind="resource")
 
     def normalize_tool_arguments(
         self,
@@ -1492,6 +1747,7 @@ class PublicMcpAdapterScaffold:
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
+            transport_contract=self._transport_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -1524,6 +1780,7 @@ class PublicMcpAdapterScaffold:
             route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
+            transport_contract=self._transport_contract_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -1575,6 +1832,7 @@ class PublicMcpAdapterScaffold:
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
+            transport_contract=self._transport_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -1600,6 +1858,7 @@ class PublicMcpAdapterScaffold:
             route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
+            transport_contract=self._transport_contract_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -1616,6 +1875,7 @@ class PublicMcpAdapterScaffold:
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
+            transport_contract=self._transport_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -1632,6 +1892,7 @@ class PublicMcpAdapterScaffold:
             route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
+            transport_contract=self._transport_contract_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -1739,6 +2000,41 @@ class PublicMcpAdapterScaffold:
             response_decode_recommended_action=str(spec.get("response_decode_recommended_action", "inspect_response_serialization")),
             response_error_recommended_action=str(spec.get("response_error_recommended_action", "inspect_response_handling")),
             unexpected_error_recommended_action=str(spec.get("unexpected_error_recommended_action", "inspect_unexpected_failure")),
+        )
+
+    def _transport_contract_for_descriptor(
+        self,
+        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
+        *,
+        kind: str,
+    ) -> PublicMcpTransportContract:
+        route_contract = self._route_contract_for_descriptor(descriptor, kind=kind)
+        session_mode = (
+            "recommended-pass-through"
+            if route_contract.route_family in {
+                "run-launch",
+                "workspace-shell-launch",
+                "workspace-shell-commit",
+                "workspace-shell-checkout",
+                "run-control",
+            }
+            else "optional-pass-through"
+        )
+        session_contract = PublicMcpSessionContract(
+            mode=session_mode,
+            subject_claim_names=("user_id", "sub", "subject"),
+            session_id_claim_names=("session_id", "sid", "session"),
+            optional_claim_names=("email", "name", "display_name", "username", "org_id", "roles"),
+        )
+        return PublicMcpTransportContract(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            kind=kind,
+            route_family=route_contract.route_family,
+            transport_profile=route_contract.transport_profile,
+            header_mode="selective-forward",
+            session_mode=session_mode,
+            session_contract=session_contract,
         )
 
     def _build_invocation(
@@ -2010,6 +2306,41 @@ def _normalize_public_http_response(
         media_type=media_type,
         body=decoded_body,
     )
+
+
+def _normalize_public_headers(headers: Mapping[str, Any] | None) -> dict[str, str]:
+    if headers is None:
+        return {}
+    normalized: dict[str, str] = {}
+    for key, value in headers.items():
+        if not isinstance(key, str):
+            raise ValueError("Public MCP headers must use string keys")
+        normalized[key.strip().lower()] = str(value)
+    return normalized
+
+
+def _normalize_public_session_claims(session_claims: Mapping[str, Any] | None) -> dict[str, Any] | None:
+    if session_claims is None:
+        return None
+    normalized: dict[str, Any] = {}
+    for key, value in session_claims.items():
+        if not isinstance(key, str):
+            raise ValueError("Public MCP session_claims must use string keys")
+        normalized[key] = value
+    return normalized
+
+
+def _resolve_session_subject(
+    session_claims: Mapping[str, Any] | None,
+    session_contract: PublicMcpSessionContract | None,
+) -> str | None:
+    if not session_claims or session_contract is None:
+        return None
+    for claim_name in session_contract.subject_claim_names:
+        value = session_claims.get(claim_name)
+        if value is not None:
+            return str(value)
+    return None
 
 
 def _normalize_string_mapping(values: Mapping[str, object] | None) -> Mapping[str, str]:
@@ -2685,6 +3016,18 @@ def build_public_mcp_response_contracts() -> tuple[PublicMcpResponseContract, ..
     return tuple(contracts)
 
 
+def build_public_mcp_transport_contracts() -> tuple[PublicMcpTransportContract, ...]:
+    """Return exported transport/session contracts for the curated public MCP surface."""
+
+    adapter = build_public_mcp_adapter_scaffold()
+    contracts: list[PublicMcpTransportContract] = []
+    for tool in build_public_mcp_tools():
+        contracts.append(adapter.export_tool_transport_contract(tool.name))
+    for resource in build_public_mcp_resources():
+        contracts.append(adapter.export_resource_transport_contract(resource.name))
+    return tuple(contracts)
+
+
 def build_public_mcp_recovery_policies() -> tuple[PublicMcpRecoveryPolicy, ...]:
     """Return exported recovery policies for the curated public MCP surface."""
 
@@ -2929,6 +3272,9 @@ __all__ = [
     "PublicMcpArgumentSchema",
     "PublicMcpRouteContract",
     "PublicMcpNormalizedArguments",
+    "PublicMcpSessionContract",
+    "PublicMcpTransportContract",
+    "PublicMcpTransportContext",
     "PublicMcpResponseContract",
     "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
@@ -2948,12 +3294,15 @@ __all__ = [
     "PublicMcpHostRouteBinding",
     "PublicMcpFrameworkDispatch",
     "PublicMcpHttpDispatch",
+    "PublicMcpFrameworkEnvelope",
+    "PublicMcpHttpEnvelope",
     "PublicMcpHostBridgeExport",
     "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",
     "build_public_mcp_resources",
     "build_public_mcp_argument_schemas",
     "build_public_mcp_route_contracts",
+    "build_public_mcp_transport_contracts",
     "build_public_mcp_response_contracts",
     "build_public_mcp_recovery_policies",
     "build_public_mcp_compatibility_policy",
