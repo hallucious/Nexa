@@ -1336,16 +1336,17 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '최근 실행이 아직 없습니다.' in body
     assert '최근 결과 이력' in body
     assert '연결된 제공자 수:' in body
-    assert '최근 trace가 아직 없습니다.' in body
+    assert '실행 추적 이력' in body
+    assert '최근 실행 추적 이력이 여기에 표시됩니다.' in body
     assert '포커스:' in body
     assert '상황별 도움말' in body
     assert '마지막 작업 로그' in body
     assert '준비됨.' in body
-    assert '최신 trace' in body
-    assert '최신 trace 열기' in body
+    assert '최신 실행 추적' in body
+    assert '최신 실행 추적 열기' in body
     assert '최근 아티팩트 이력' in body
     assert '최신 아티팩트 열기' in body
-    assert 'Trace 상세 레이어' in body
+    assert '실행 추적 상세 레이어' in body
     assert '아티팩트 상세 레이어' in body
     assert '개인정보와 데이터 처리' in body
     assert '제공자 접근' in body

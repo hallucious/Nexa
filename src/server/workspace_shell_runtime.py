@@ -536,6 +536,45 @@ def _status_history_section(recent_run_rows: Sequence[Mapping[str, Any]], worksp
     )
 
 
+
+
+def _localized_runtime_section_label(section_id: str, *, app_language: str = "en") -> str:
+    normalized = str(section_id or "").strip().lower()
+    key_map = {
+        "designer": "server.shell.section.designer",
+        "validation": "server.shell.section.validation",
+        "status": "server.shell.section.status",
+        "result": "server.shell.section.result",
+        "trace": "server.shell.section.trace",
+        "artifacts": "server.shell.section.artifacts",
+    }
+    fallback_map = {
+        "designer": "Designer",
+        "validation": "Validation",
+        "status": "Status",
+        "result": "Result",
+        "trace": "Trace",
+        "artifacts": "Artifacts",
+    }
+    key = key_map.get(normalized)
+    if key is None:
+        return normalized.title() or "Status"
+    return ui_text(key, app_language=app_language, fallback_text=fallback_map[normalized])
+
+
+def _localized_runtime_action_target_label(action_target: str | None, *, app_language: str = "en") -> str | None:
+    target = str(action_target or "").strip()
+    if not target:
+        return None
+    if target.startswith("runtime."):
+        section_id = target.split(".", 1)[1]
+        return _localized_runtime_section_label(section_id, app_language=app_language)
+    if target == "designer":
+        return _localized_runtime_section_label("designer", app_language=app_language)
+    if target == "validation":
+        return _localized_runtime_section_label("validation", app_language=app_language)
+    return target
+
 def _result_history_section(
     recent_run_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
@@ -636,6 +675,8 @@ def _trace_history_section(
     recent_run_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
     trace_rows_lookup: Any | None,
+    *,
+    app_language: str = "en",
 ) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     for row in _recent_run_rows_for_workspace(recent_run_rows, workspace_id):
@@ -662,7 +703,7 @@ def _trace_history_section(
     controls: list[dict[str, Any]] = [
         {
             "control_id": "trace-history-open-latest",
-            "label": "Open latest trace",
+            "label": ui_text("server.shell.trace_history_open_latest", app_language=app_language, fallback_text="Open latest trace"),
             "action_kind": "focus_section",
             "action_target": "runtime.trace",
         }
@@ -672,24 +713,24 @@ def _trace_history_section(
         controls.append(
             {
                 "control_id": f"trace-history-open-{previous['run_id']}",
-                "label": f"Open {previous['run_id']} trace",
+                "label": ui_text("server.shell.trace_history_open_for", app_language=app_language, fallback_text="Open {run_id} trace", run_id=str(previous["run_id"])),
                 "action_kind": "open_run_trace",
                 "action_target": previous["run_id"],
             }
         )
     return build_shell_section(
-        headline="Trace history",
+        headline=ui_text("server.shell.trace_history", app_language=app_language, fallback_text="Trace history"),
         lines=_summary_lines(
-            f"Recent traces: {len(entries)}" if entries else "No recent trace history is available yet.",
-            f"Latest: {latest['run_id']} — {latest['event_count']} events" if latest else None,
+            ui_text("server.shell.recent_traces_prefix", app_language=app_language, fallback_text="Recent traces: ") + str(len(entries)) if entries else ui_text("server.shell.no_recent_trace_history", app_language=app_language, fallback_text="No recent trace history is available yet."),
+            ui_text("server.shell.latest_prefix", app_language=app_language, fallback_text="Latest: ") + f"{latest['run_id']} — {latest['event_count']} {ui_text('server.shell.events_suffix', app_language=app_language, fallback_text='events')}" if latest else None,
         ),
-        detail_title="Trace history detail",
+        detail_title=ui_text("server.shell.trace_detail_title", app_language=app_language, fallback_text="Trace detail"),
         detail_items=[
-            f"{index + 1}. {entry['run_id']} — {entry['event_count']} events"
+            f"{index + 1}. {entry['run_id']} — {entry['event_count']} {ui_text('server.shell.events_suffix', app_language=app_language, fallback_text='events')}"
             + (f" — latest: {entry['latest_event_type']}" if entry.get("latest_event_type") else "")
             for index, entry in enumerate(entries[:3])
         ],
-        detail_empty="Trace history entries will appear here as runs accumulate.",
+        detail_empty=ui_text("server.shell.trace_history_entries_pending", app_language=app_language, fallback_text="Trace history entries will appear here as runs accumulate."),
         controls=controls,
         history=entries[:3],
     )
@@ -920,6 +961,7 @@ def _validation_section(shell: Mapping[str, Any] | None, *, runnable: bool = Fal
 def _navigation_model(
     shell: Mapping[str, Any] | None,
     *,
+    app_language: str = "en",
     latest_run_status_preview: Mapping[str, Any] | None,
     latest_run_result_preview: Mapping[str, Any] | None,
     latest_run_trace_preview: Mapping[str, Any] | None,
@@ -927,12 +969,12 @@ def _navigation_model(
     onboarding_state: Mapping[str, Any] | None,
 ) -> dict[str, Any]:
     sections = (
-        {"section_id": "designer", "label": "Designer", "target_id": "designer-summary-card", "detail_target_id": "designer-detail-card"},
-        {"section_id": "validation", "label": "Validation", "target_id": "validation-summary-card", "detail_target_id": "validation-detail-card"},
-        {"section_id": "status", "label": "Status", "target_id": "latest-run-status-card", "detail_target_id": "latest-run-status-detail-card"},
-        {"section_id": "result", "label": "Result", "target_id": "latest-run-result-card", "detail_target_id": "latest-run-result-detail-card"},
-        {"section_id": "trace", "label": "Trace", "target_id": "latest-run-trace-card", "detail_target_id": "latest-run-trace-detail-card"},
-        {"section_id": "artifacts", "label": "Artifacts", "target_id": "latest-run-artifacts-card", "detail_target_id": "latest-run-artifacts-detail-card"},
+        {"section_id": "designer", "label": _localized_runtime_section_label("designer", app_language=app_language), "target_id": "designer-summary-card", "detail_target_id": "designer-detail-card"},
+        {"section_id": "validation", "label": _localized_runtime_section_label("validation", app_language=app_language), "target_id": "validation-summary-card", "detail_target_id": "validation-detail-card"},
+        {"section_id": "status", "label": _localized_runtime_section_label("status", app_language=app_language), "target_id": "latest-run-status-card", "detail_target_id": "latest-run-status-detail-card"},
+        {"section_id": "result", "label": _localized_runtime_section_label("result", app_language=app_language), "target_id": "latest-run-result-card", "detail_target_id": "latest-run-result-detail-card"},
+        {"section_id": "trace", "label": _localized_runtime_section_label("trace", app_language=app_language), "target_id": "latest-run-trace-card", "detail_target_id": "latest-run-trace-detail-card"},
+        {"section_id": "artifacts", "label": _localized_runtime_section_label("artifacts", app_language=app_language), "target_id": "latest-run-artifacts-card", "detail_target_id": "latest-run-artifacts-detail-card"},
     )
     shell_map = shell or {}
     mobile = shell_map.get("mobile_first_run") or {}
@@ -953,59 +995,59 @@ def _navigation_model(
 
     default_section = "status"
     default_level = "summary"
-    guidance_label = "Recommended next: Status"
+    guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("status", app_language=app_language))
     guidance_summary = "Open status first to follow the current runtime state."
 
     if mobile_visible:
         if shell_status == "blocked" or validation_status == "blocked" or onboarding_target == "validation":
             default_section = "validation"
             default_level = "detail"
-            guidance_label = "Recommended next: Validation"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("validation", app_language=app_language))
             guidance_summary = "Resolve the blocking validation issue before continuing the first-run path."
         elif latest_result_state.startswith("ready") or primary_action_target == "execution.output" or help_stage == "result":
             default_section = "result"
             default_level = "detail"
-            guidance_label = "Recommended next: Result"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("result", app_language=app_language))
             guidance_summary = "A readable result is ready, so the mobile first-run path should move to Result next."
         elif latest_status in {"failed", "partial"} and latest_trace_count > 0:
             default_section = "trace"
             default_level = "detail"
-            guidance_label = "Recommended next: Trace"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("trace", app_language=app_language))
             guidance_summary = "The latest run needs explanation, so open Trace next in the first-run path."
         elif latest_artifact_count > 0 and latest_result_state.startswith("missing"):
             default_section = "artifacts"
             default_level = "detail"
-            guidance_label = "Recommended next: Artifacts"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("artifacts", app_language=app_language))
             guidance_summary = "Artifacts are available before a readable result summary, so open Artifacts next."
         elif latest_status in {"running", "queued"} or primary_action_target == "execution" or help_stage == "wait":
             default_section = "status"
             default_level = "summary"
-            guidance_label = "Recommended next: Status"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("status", app_language=app_language))
             guidance_summary = "The mobile first-run path is still in progress, so follow Status first."
         elif onboarding_step == "read_result":
             default_section = "result"
             default_level = "detail"
-            guidance_label = "Recommended next: Result"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("result", app_language=app_language))
             guidance_summary = "Server-backed workspace progression points to Result as the next first-run step."
         elif onboarding_step == "run":
             default_section = "status"
             default_level = "summary"
-            guidance_label = "Recommended next: Status"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("status", app_language=app_language))
             guidance_summary = "Server-backed workspace progression points to Status while the run step is active."
         elif onboarding_step in {"review_preview", "approve"}:
             default_section = "validation"
             default_level = "detail"
-            guidance_label = "Recommended next: Validation"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("validation", app_language=app_language))
             guidance_summary = "Server-backed workspace progression points to Validation before the run step."
         elif onboarding_target == "designer" or onboarding_step == "enter_goal" or help_stage in {"start", "review"} or primary_action_target == "designer":
             default_section = "designer"
             default_level = "detail"
-            guidance_label = "Recommended next: Designer"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("designer", app_language=app_language))
             guidance_summary = "Use Designer first to describe or review the workflow before running."
         else:
             default_section = "designer"
             default_level = "detail"
-            guidance_label = "Recommended next: Designer"
+            guidance_label = ui_text("server.shell.recommended_next", app_language=app_language, fallback_text="Recommended next: {section}", section=_localized_runtime_section_label("designer", app_language=app_language))
             guidance_summary = "Start with Designer, then move to Validation and Run when the workflow is ready."
 
     return {
@@ -1020,6 +1062,7 @@ def _navigation_model(
 def _step_state_banner(
     shell: Mapping[str, Any] | None,
     *,
+    app_language: str = "en",
     latest_run_status_preview: Mapping[str, Any] | None,
     latest_run_result_preview: Mapping[str, Any] | None,
     latest_run_trace_preview: Mapping[str, Any] | None,
@@ -1068,29 +1111,29 @@ def _step_state_banner(
     if latest_result_state.startswith("ready"):
         current_step_id = "read_result"
         severity = "success"
-        summary = "Result is ready. Open Result next to finish the first-run path."
-        action_label = "Open Result"
+        summary = ui_text("server.shell.result_ready_summary", app_language=app_language, fallback_text="Result is ready. Open Result next to finish the first-run path.")
+        action_label = ui_text("server.shell.open_result", app_language=app_language, fallback_text="Open Result")
         action_target = "runtime.result"
         phase = "post_run"
     elif latest_status in {"failed", "partial"} and latest_trace_count > 0:
         current_step_id = "run"
         severity = "warning"
-        summary = "Run needs diagnosis. Open Trace next to understand what happened."
-        action_label = "Open Trace"
+        summary = ui_text("server.shell.run_needs_diagnosis_summary", app_language=app_language, fallback_text="Run needs diagnosis. Open Trace next to understand what happened.")
+        action_label = ui_text("server.shell.open_trace", app_language=app_language, fallback_text="Open Trace")
         action_target = "runtime.trace"
         phase = "post_run"
     elif latest_artifact_count > 0 and not latest_result_state.startswith("ready"):
         current_step_id = "read_result"
         severity = "info"
-        summary = "A readable result is not ready yet, but artifacts are available. Open Artifacts next."
-        action_label = "Open Artifacts"
+        summary = ui_text("server.shell.artifacts_ready_summary", app_language=app_language, fallback_text="A readable result is not ready yet, but artifacts are available. Open Artifacts next.")
+        action_label = ui_text("server.shell.open_artifacts", app_language=app_language, fallback_text="Open Artifacts")
         action_target = "runtime.artifacts"
         phase = "post_run"
     elif latest_status in {"running", "queued", "accepted"}:
         current_step_id = "run"
         severity = "info"
-        summary = "Run is in progress. Watch Status while Nexa prepares the result."
-        action_label = "Open Status"
+        summary = ui_text("server.shell.run_in_progress_summary", app_language=app_language, fallback_text="Run is in progress. Watch Status while Nexa prepares the result.")
+        action_label = ui_text("server.shell.open_status", app_language=app_language, fallback_text="Open Status")
         action_target = "runtime.status"
         phase = "running"
     else:
@@ -1109,22 +1152,22 @@ def _step_state_banner(
         if onboarding_step in {"review_preview", "approve"}:
             current_step_id = onboarding_step
             summary = "Server-backed workspace progression says review and validation come next before the run step."
-            action_label = "Review Validation"
+            action_label = ui_text("server.shell.review_validation_action", app_language=app_language, fallback_text="Review Validation")
             action_target = "validation.detail"
         elif onboarding_step == "enter_goal":
             current_step_id = "enter_goal"
             summary = "Server-backed workspace progression says start in Designer by describing your goal."
-            action_label = "Open Designer"
+            action_label = ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer")
             action_target = "designer"
         elif onboarding_step == "run":
             current_step_id = "run"
             summary = "Server-backed workspace progression says the run step is next. Open Status to follow it."
-            action_label = "Open Status"
+            action_label = ui_text("server.shell.open_status", app_language=app_language, fallback_text="Open Status")
             action_target = "runtime.status"
         elif onboarding_step == "read_result":
             current_step_id = "read_result"
             summary = "Server-backed workspace progression says read the latest result next."
-            action_label = "Open Result"
+            action_label = ui_text("server.shell.open_result", app_language=app_language, fallback_text="Open Result")
             action_target = "runtime.result"
             phase = "post_run"
         elif shell_status == "blocked":
@@ -1145,25 +1188,20 @@ def _step_state_banner(
         elif help_stage == "wait":
             current_step_id = "run"
             summary = str(contextual_help.get("summary") or summary)
-            action_label = "Open Status"
+            action_label = ui_text("server.shell.open_status", app_language=app_language, fallback_text="Open Status")
             action_target = "runtime.status"
         elif current_step_id == "run":
-            action_label = "Run draft"
+            action_label = ui_text("server.shell.run_draft_action", app_language=app_language, fallback_text="Run draft")
             action_target = "execution"
         elif current_step_id == "read_result":
-            action_label = "Open Result"
+            action_label = ui_text("server.shell.open_result", app_language=app_language, fallback_text="Open Result")
             action_target = "runtime.result"
 
     total_steps = max(len(step_index), 1)
     fallback_step_id = str((fallback_step or {}).get("step_id") or "enter_goal").strip() or "enter_goal"
     current_index = step_index.get(current_step_id) or step_index.get(fallback_step_id) or 1
     current_label = step_label.get(current_step_id) or step_label.get(fallback_step_id) or "Step"
-    next_section_label = {
-        "status": "Status",
-        "result": "Result",
-        "trace": "Trace",
-        "artifacts": "Artifacts",
-    }.get(recommended_section, recommended_section.title())
+    next_section_label = _localized_runtime_section_label(recommended_section, app_language=app_language)
     if action_target and (str(action_target).startswith("runtime.") or action_target in {"designer", "validation"}):
         action_kind = "focus_section"
     elif action_target == "execution":
@@ -1236,6 +1274,7 @@ def build_workspace_shell_runtime_payload(
 
     navigation = _navigation_model(
         asdict(shell_vm),
+        app_language=app_language,
         latest_run_status_preview=latest_run_status_preview,
         latest_run_result_preview=latest_run_result_preview,
         latest_run_trace_preview=latest_run_trace_preview,
@@ -1281,13 +1320,14 @@ def build_workspace_shell_runtime_payload(
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
         "status_history_section": _status_history_section(recent_run_rows, workspace_id),
         "result_history_section": _result_history_section(recent_run_rows, workspace_id, result_rows_by_run_id),
-        "trace_history_section": _trace_history_section(recent_run_rows, workspace_id, trace_rows_lookup),
+        "trace_history_section": _trace_history_section(recent_run_rows, workspace_id, trace_rows_lookup, app_language=app_language),
         "artifacts_history_section": _artifacts_history_section(recent_run_rows, workspace_id, artifact_rows_lookup),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer")),
         "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),
         "navigation": navigation,
         "step_state_banner": _step_state_banner(
             asdict(shell_vm),
+            app_language=app_language,
             latest_run_status_preview=latest_run_status_preview,
             latest_run_result_preview=latest_run_result_preview,
             latest_run_trace_preview=latest_run_trace_preview,
@@ -1452,13 +1492,13 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <h2 id="runtime-focus-title">{escape(ui_text("server.shell.runtime_focus", app_language=app_language, fallback_text="Runtime focus"))}</h2>
       <div id="runtime-nav" class="nav" aria-label="{escape(ui_text("server.shell.runtime_nav_aria", app_language=app_language, fallback_text="Runtime section navigation"))}"></div>
       <p id="focus-guidance"><strong>{escape(str(navigation.get('guidance_label') or 'Recommended next: Status'))}</strong> — {escape(str(navigation.get('guidance_summary') or 'Open status first to follow the current runtime state.'))}</p>
-      <pre id="focus-state">{escape(ui_text('server.shell.focus_state', app_language=app_language, fallback_text='Focus: {section}', section=str(navigation.get('default_section') or 'status')))}</pre>
+      <pre id="focus-state">{escape(ui_text('server.shell.focus_state', app_language=app_language, fallback_text='Focus: {section}', section=_localized_runtime_section_label(str(navigation.get('default_section') or 'status'), app_language=app_language)))}</pre>
     </section>
     <section class="card" style="margin-top:16px;" role="region" aria-labelledby="step-state-banner-heading">
       <h2 id="step-state-banner-heading">{escape(ui_text("server.shell.step_state_banner", app_language=app_language, fallback_text="Step state banner"))}</h2>
       <p id="step-state-banner-title">{escape(str((payload.get('step_state_banner') or {}).get('title') or ui_text('server.shell.step.enter_goal', app_language=app_language, fallback_text='Step 1 of 5 — Enter goal')))}</p>
       <pre id="step-state-banner-summary" aria-live="polite">{escape(str((payload.get('step_state_banner') or {}).get('summary') or ui_text('server.shell.summary.enter_goal', app_language=app_language, fallback_text='Describe your goal to start the first-run path.')))}</pre>
-      <p id="step-state-banner-action">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or ui_text('server.shell.open_designer', app_language=app_language, fallback_text='Open Designer')))} → <code>{escape(str((payload.get('step_state_banner') or {}).get('action_target') or 'designer'))}</code></p>
+      <p id="step-state-banner-action">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or ui_text('server.shell.open_designer', app_language=app_language, fallback_text='Open Designer')))} → <code>{escape(_localized_runtime_action_target_label(str((payload.get('step_state_banner') or {}).get('action_target') or 'designer'), app_language=app_language) or 'designer')}</code></p>
       <button id="step-state-banner-action-button" class="secondary">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or ui_text('server.shell.open_designer', app_language=app_language, fallback_text='Open Designer')))}</button>
     </section>
     <div class="row">
