@@ -12,11 +12,20 @@ from src.ui.i18n import ui_text
 
 _SUCCESS_RESULT_STATUSES = {"completed", "succeeded", "ready_success", "success", "terminal_success"}
 _ONBOARDING_STEP_LABELS = {
-    "enter_goal": "enter your goal",
-    "review_preview": "review the workflow preview",
-    "approve": "approve the workflow",
-    "run": "run the workflow",
-    "read_result": "read the result",
+    "enter_goal": ("circuit_library.onboarding.step.enter_goal", "enter your goal"),
+    "review_preview": ("circuit_library.onboarding.step.review_preview", "review the workflow preview"),
+    "approve": ("circuit_library.onboarding.step.approve", "approve the workflow"),
+    "run": ("circuit_library.onboarding.step.run", "run the workflow"),
+    "read_result": ("circuit_library.onboarding.step.read_result", "read the result"),
+}
+
+_ROLE_LABEL_KEYS = {
+    "owner": ("circuit_library.role.owner", "Owner"),
+    "admin": ("circuit_library.role.admin", "Admin"),
+    "editor": ("circuit_library.role.editor", "Editor"),
+    "collaborator": ("circuit_library.role.collaborator", "Collaborator"),
+    "reviewer": ("circuit_library.role.reviewer", "Reviewer"),
+    "viewer": ("circuit_library.role.viewer", "Viewer"),
 }
 
 
@@ -92,6 +101,23 @@ def _onboarding_incomplete(onboarding_state: object | None) -> bool:
     if state is None:
         return False
     return not bool(state.get("first_success_achieved"))
+
+
+def _localized_onboarding_step_label(step_id: str, *, app_language: str) -> str:
+    key, fallback = _ONBOARDING_STEP_LABELS.get(step_id, (None, step_id.replace("_", " ")))
+    if key is None:
+        return fallback
+    return ui_text(key, app_language=app_language, fallback_text=fallback)
+
+
+def _localized_role(role: str | None, *, app_language: str) -> str:
+    normalized = str(role or "").strip().lower()
+    if not normalized:
+        return ""
+    key, fallback = _ROLE_LABEL_KEYS.get(normalized, (None, normalized.replace("_", " ").title()))
+    if key is None:
+        return fallback
+    return ui_text(key, app_language=app_language, fallback_text=fallback)
 
 
 def _status_key(summary: ProductWorkspaceSummaryView, *, onboarding_state: object | None = None) -> str:
@@ -195,8 +221,8 @@ def _summary_lines(summary: ProductWorkspaceSummaryView, *, app_language: str, o
             ui_text(
                 "circuit_library.summary.role",
                 app_language=app_language,
-                fallback_text=f"Access: {summary.role}",
-                role=summary.role,
+                fallback_text=f"Access: {_localized_role(summary.role, app_language=app_language) or summary.role}",
+                role=_localized_role(summary.role, app_language=app_language) or summary.role,
             )
         )
     onboarding_progress_label = _onboarding_progress_label(onboarding_state, app_language=app_language)
@@ -228,7 +254,7 @@ def _summary_lines(summary: ProductWorkspaceSummaryView, *, app_language: str, o
         lines.append(ui_text("circuit_library.summary.no_history", app_language=app_language, fallback_text="No recent result history yet."))
     step_id = _onboarding_step_id(onboarding_state)
     if _onboarding_incomplete(onboarding_state) and step_id:
-        step_label = _ONBOARDING_STEP_LABELS.get(step_id, step_id.replace("_", " "))
+        step_label = _localized_onboarding_step_label(step_id, app_language=app_language)
         lines.append(
             ui_text(
                 "circuit_library.summary.resume_step",
@@ -254,8 +280,8 @@ def _items_from_summaries(
         role_label = ui_text(
             "circuit_library.role_label",
             app_language=app_language,
-            fallback_text=f"Role: {summary.role}",
-            role=summary.role,
+            fallback_text=f"Role: {_localized_role(summary.role, app_language=app_language) or summary.role}",
+            role=_localized_role(summary.role, app_language=app_language) or summary.role,
         )
         result_history_label = ui_text(
             "circuit_library.result_history.available" if has_recent_result_history else "circuit_library.result_history.empty",

@@ -1272,6 +1272,8 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '<html lang="ko">' in library_page.text
     assert '워크플로우 라이브러리' in library_page.text
     assert '원본 워크스페이스 레지스트리' in library_page.text
+    assert '실행 중' in library_page.text
+    assert '최근 결과 이력을 확인할 수 있습니다' in library_page.text
 
     result_page = client.get('/app/workspaces/ws-001/results?run_id=run-002&app_language=ko', headers=_session_headers())
     assert result_page.status_code == 200
@@ -1280,6 +1282,8 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '라이브러리로 돌아가기' in result_page.text
     assert '결과 상세' in result_page.text
     assert '결과 열기' in result_page.text
+    assert '실행 완료' in result_page.text
+    assert '성공적으로 완료되었습니다.' in result_page.text
 
     feedback_page = client.get('/app/workspaces/ws-001/feedback?surface=result_history&run_id=run-001&app_language=ko', headers=_session_headers())
     assert feedback_page.status_code == 200
@@ -1288,6 +1292,9 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '피드백 보내기' in feedback_page.text
     assert '라이브러리로 돌아가기' in feedback_page.text
     assert '최근 피드백' in feedback_page.text
+    assert '헷갈리는 화면 신고' in feedback_page.text
+    assert '빠른 불편 메모' in feedback_page.text
+    assert '버그 신고 바로가기' in feedback_page.text
 
 
 def test_fastapi_binding_feedback_submission_localizes_server_message() -> None:

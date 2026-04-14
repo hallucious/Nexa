@@ -234,3 +234,34 @@ def test_result_history_projects_feedback_entrypoint_for_selected_run() -> None:
     vm = read_result_history_view_model(response, selected_run_id="run-002")
     assert vm.feedback_href == "/app/workspaces/ws-001/feedback?surface=result_history&run_id=run-002"
     assert vm.feedback_label == "Report a problem on this screen"
+
+
+def test_circuit_library_and_result_history_localize_surface_labels_for_korean() -> None:
+    response = ProductWorkspaceListResponse(
+        returned_count=1,
+        workspaces=(_summary("ws-result", title="결과 워크플로우", last_run_id="run-001", last_result_status="completed", recent_run_count=1, active_run_count=1),),
+    )
+    library_vm = read_circuit_library_view_model(response, app_language="ko")
+    assert library_vm.items[0].status_label == "실행 중"
+    assert library_vm.items[0].role_label == "권한: 소유자"
+    assert any("최근 결과 이력" in line for line in [library_vm.items[0].result_history_label or ""])
+
+    runs = ProductWorkspaceRunListResponse(
+        workspace_id="ws-001",
+        workspace_title="주요 워크스페이스",
+        returned_count=1,
+        total_visible_count=1,
+        runs=(
+            ProductRunListItemView(
+                run_id="run-002", workspace_id="ws-001", execution_target=ProductExecutionTargetView(target_type="commit_snapshot", target_ref="snap-002"),
+                status="completed", status_family="terminal_success", created_at="2026-04-11T12:01:00+00:00", updated_at="2026-04-11T12:01:05+00:00", completed_at="2026-04-11T12:01:05+00:00",
+                result_state="ready_success", result_summary=ProductResultSummaryView(title="Run completed", description="Success."),
+                links=ProductRunListLinks(status="/api/runs/run-002", result="/api/runs/run-002/result", trace="/api/runs/run-002/trace", artifacts="/api/runs/run-002/artifacts")
+            ),
+        ),
+        applied_filters=ProductRunListAppliedFilters(limit=20),
+    )
+    history_vm = read_result_history_view_model(runs, app_language="ko", selected_run_id="run-002")
+    assert history_vm.items[0].status_label == "결과 준비됨"
+    assert history_vm.items[0].result_title == "실행 완료"
+    assert any("성공적으로 완료되었습니다." == line for line in history_vm.items[0].summary_lines)

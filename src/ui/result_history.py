@@ -52,6 +52,42 @@ _READY_FAILURE = {"ready_failure", "terminal_failure", "failed"}
 _ACTIVE_STATES = {"pending", "active", "not_ready", "queued", "running"}
 
 
+_SYSTEM_RESULT_TITLES = {
+    "Run completed": ("result_history.system_title.run_completed", "Run completed"),
+    "Run failed": ("result_history.system_title.run_failed", "Run failed"),
+    "Last successful result": ("result_history.title.success", "Last successful result"),
+    "Latest partial result": ("result_history.title.partial", "Latest partial result"),
+    "Latest run still in progress": ("result_history.title.running", "Latest run still in progress"),
+    "Latest run result": ("result_history.title.unknown", "Latest run result"),
+}
+
+_SYSTEM_RESULT_SUMMARIES = {
+    "Success.": ("result_history.system_summary.success", "Success."),
+    "The run failed.": ("result_history.system_summary.failed", "The run failed."),
+    "A recent result is available for this workflow.": ("result_history.summary.success", "A recent result is available for this workflow."),
+    "A partial result is available for this workflow.": ("result_history.summary.partial", "A partial result is available for this workflow."),
+    "The last run failed before producing a complete result.": ("result_history.summary.failed", "The last run failed before producing a complete result."),
+    "This run is still progressing and does not have a final result yet.": ("result_history.summary.running", "This run is still progressing and does not have a final result yet."),
+    "Recent result details are not available yet.": ("result_history.summary.unknown", "Recent result details are not available yet."),
+}
+
+
+def _localized_system_result_title(value: str, *, app_language: str) -> str:
+    key_fallback = _SYSTEM_RESULT_TITLES.get(value)
+    if key_fallback is None:
+        return value
+    key, fallback = key_fallback
+    return ui_text(key, app_language=app_language, fallback_text=fallback)
+
+
+def _localized_system_result_summary(value: str, *, app_language: str) -> str:
+    key_fallback = _SYSTEM_RESULT_SUMMARIES.get(value)
+    if key_fallback is None:
+        return value
+    key, fallback = key_fallback
+    return ui_text(key, app_language=app_language, fallback_text=fallback)
+
+
 def _field(source: object, name: str, default=None):
     return getattr(source, name, default)
 
@@ -113,9 +149,9 @@ def _result_title(item: object, result: object | None, *, app_language: str) -> 
     result_summary = _field(result, "result_summary") if result is not None else None
     item_summary = _field(item, "result_summary")
     if result_summary is not None:
-        return str(_field(result_summary, "title") or "Result")
+        return _localized_system_result_title(str(_field(result_summary, "title") or "Result"), app_language=app_language)
     if item_summary is not None:
-        return str(_field(item_summary, "title") or "Result")
+        return _localized_system_result_title(str(_field(item_summary, "title") or "Result"), app_language=app_language)
     status_key = _result_history_status_key(item, result)
     fallback = {
         "success": "Last successful result",
@@ -131,9 +167,9 @@ def _result_summary_text(item: object, result: object | None, *, app_language: s
     result_summary = _field(result, "result_summary") if result is not None else None
     item_summary = _field(item, "result_summary")
     if result_summary is not None:
-        return str(_field(result_summary, "description") or "")
+        return _localized_system_result_summary(str(_field(result_summary, "description") or ""), app_language=app_language)
     if item_summary is not None:
-        return str(_field(item_summary, "description") or "")
+        return _localized_system_result_summary(str(_field(item_summary, "description") or ""), app_language=app_language)
     status_key = _result_history_status_key(item, result)
     fallback = {
         "success": "A recent result is available for this workflow.",

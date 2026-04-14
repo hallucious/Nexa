@@ -36,3 +36,15 @@ def test_feedback_channel_projects_structured_options_and_existing_items() -> No
     assert {option.category_key for option in vm.options} == {"confusing_screen", "friction_note", "bug_report"}
     assert vm.items[0].category_key == "bug_report"
     assert vm.items[0].surface_key == "result_history"
+
+
+def test_feedback_channel_localizes_options_for_korean() -> None:
+    vm = read_feedback_channel_view_model(
+        workspace_id="ws-001",
+        workspace_title="주요 워크플로우",
+        app_language="ko",
+    )
+    titles = {option.category_key: option.title for option in vm.options}
+    assert titles["confusing_screen"] == "헷갈리는 화면 신고"
+    assert titles["friction_note"] == "빠른 불편 메모"
+    assert titles["bug_report"] == "버그 신고 바로가기"
