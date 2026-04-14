@@ -18,10 +18,13 @@ from src.sdk.integration import (
     PublicMcpHostBridgeScaffold,
     PublicMcpHttpDispatch,
     PublicMcpManifest,
+    PublicMcpNormalizedArguments,
     PublicMcpResourceDescriptor,
+    PublicMcpRouteContract,
     PublicMcpToolDescriptor,
     build_public_mcp_adapter_scaffold,
     build_public_mcp_argument_schemas,
+    build_public_mcp_route_contracts,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
     build_public_mcp_manifest,
@@ -32,7 +35,7 @@ from src.sdk.integration import (
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.7"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.8"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -66,9 +69,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.5"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.6"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.5"
+    assert surface.version == "1.6"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -123,12 +126,12 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.1"
-    assert PUBLIC_MCP_SCHEMA_VERSION == "1.1"
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.2"
+    assert PUBLIC_MCP_SCHEMA_VERSION == "1.2"
     assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.1"
-    assert manifest.schema_version == "1.1"
+    assert manifest.manifest_version == "1.2"
+    assert manifest.schema_version == "1.2"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -136,8 +139,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
-    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.1"
-    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.1"
+    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.2"
+    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.2"
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -165,7 +168,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.3"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.4"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -374,9 +377,9 @@ def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> N
 
     assert isinstance(policy, PublicMcpCompatibilityPolicy)
     assert policy.policy_version == "1.0"
-    assert policy.supports_manifest_version("1.1") is True
-    assert policy.supports_schema_version("1.1") is True
-    policy.assert_supported(manifest_version="1.1", schema_version="1.1")
+    assert policy.supports_manifest_version("1.2") is True
+    assert policy.supports_schema_version("1.2") is True
+    policy.assert_supported(manifest_version="1.2", schema_version="1.2")
 
 
 def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
@@ -401,9 +404,9 @@ def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
     export = bridge.export()
 
-    assert export.schema_version == "1.1"
+    assert export.schema_version == "1.2"
     assert export.compatibility_policy.policy_version == "1.0"
-    bridge.assert_consumer_compatibility(manifest_version="1.1", schema_version="1.1")
+    bridge.assert_consumer_compatibility(manifest_version="1.2", schema_version="1.2")
 
     try:
         bridge.assert_consumer_compatibility(manifest_version="0.9")
@@ -411,3 +414,87 @@ def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
         assert "Unsupported public MCP manifest version" in str(exc)
     else:
         raise AssertionError("Expected bridge manifest compatibility rejection")
+
+
+def test_build_public_mcp_route_contracts_exports_transport_profiles() -> None:
+    contracts = build_public_mcp_route_contracts()
+    indexed = {contract.route_name: contract for contract in contracts}
+
+    assert isinstance(indexed["launch_run"], PublicMcpRouteContract)
+    assert indexed["launch_run"].transport_profile == "body-only"
+    assert indexed["launch_workspace_shell"].transport_profile == "path-and-body"
+    assert indexed["get_run_status"].transport_profile == "path-and-query"
+    assert indexed["get_recent_activity"].transport_profile == "query-only"
+    assert indexed["list_workspaces"].transport_profile == "no-arguments"
+
+
+def test_adapter_scaffold_normalize_arguments_returns_typed_contract_result() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    normalized = adapter.normalize_tool_arguments(
+        "launch_workspace_shell",
+        {
+            "workspace_id": "ws-1",
+            "launch_options": {"mode": "standard"},
+            "app_language": "ko",
+        },
+    )
+
+    assert isinstance(normalized, PublicMcpNormalizedArguments)
+    assert normalized.route_name == "launch_workspace_shell"
+    assert normalized.route_contract.transport_profile == "path-and-body"
+    assert normalized.path_params == {"workspace_id": "ws-1"}
+    assert normalized.json_body == {"launch_options": {"mode": "standard"}, "app_language": "ko"}
+
+
+def test_manifest_includes_route_contracts() -> None:
+    manifest = build_public_mcp_manifest()
+    launch_tool = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
+    activity_resource = next(resource for resource in manifest.resources if resource.route_name == "get_recent_activity")
+    manifest_dict = manifest.to_dict()
+    list_workspaces = next(resource for resource in manifest_dict["resources"] if resource["route_name"] == "list_workspaces")
+
+    assert launch_tool.route_contract is not None
+    assert launch_tool.route_contract.transport_profile == "body-only"
+    assert activity_resource.route_contract is not None
+    assert activity_resource.route_contract.transport_profile == "query-only"
+    assert list_workspaces["route_contract"]["transport_profile"] == "no-arguments"
+
+
+def test_build_public_mcp_host_bridge_scaffold_exposes_route_contracts_on_dispatch() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    dispatch = bridge.build_framework_tool_dispatch(
+        "launch_run",
+        {
+            "workspace_id": "ws-1",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-1"},
+        },
+    )
+
+    assert isinstance(dispatch, PublicMcpFrameworkDispatch)
+    assert dispatch.route_contract is not None
+    assert dispatch.route_contract.route_family == "run-launch"
+    assert dispatch.route_contract.transport_profile == "body-only"
+
+
+def test_route_contract_rejects_arguments_for_no_arguments_resource() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    try:
+        adapter.normalize_resource_arguments("list_workspaces", {"limit": 10})
+    except ValueError as exc:
+        assert "Unexpected query field" in str(exc) or "does not accept arguments" in str(exc)
+    else:
+        raise AssertionError("Expected no-arguments route contract validation")
+
+
+def test_route_contract_rejects_query_params_for_path_only_resource() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    try:
+        adapter.normalize_resource_arguments("get_workspace", {"workspace_id": "ws-1", "lang": "ko"})
+    except ValueError as exc:
+        assert "Unexpected query field" in str(exc) or "does not accept query params" in str(exc)
+    else:
+        raise AssertionError("Expected path-only route contract validation")

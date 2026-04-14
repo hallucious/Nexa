@@ -20,7 +20,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.5"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.6"
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,56 @@ class PublicMcpArgumentSchema:
 
 
 @dataclass(frozen=True)
+class PublicMcpRouteContract:
+    name: str
+    route_name: str
+    kind: str
+    route_family: str
+    transport_profile: str
+    path_param_names: tuple[str, ...] = ()
+    query_param_names: tuple[str, ...] = ()
+    body_field_names: tuple[str, ...] = ()
+    allow_additional_query_params: bool = False
+    allow_additional_body_fields: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "route_family": self.route_family,
+            "transport_profile": self.transport_profile,
+            "path_param_names": list(self.path_param_names),
+            "query_param_names": list(self.query_param_names),
+            "body_field_names": list(self.body_field_names),
+            "allow_additional_query_params": self.allow_additional_query_params,
+            "allow_additional_body_fields": self.allow_additional_body_fields,
+        }
+
+
+@dataclass(frozen=True)
+class PublicMcpNormalizedArguments:
+    name: str
+    route_name: str
+    kind: str
+    route_contract: PublicMcpRouteContract
+    path_params: Mapping[str, str]
+    query_params: Mapping[str, str]
+    json_body: Mapping[str, Any] | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "route_contract": self.route_contract.to_dict(),
+            "path_params": dict(self.path_params),
+            "query_params": dict(self.query_params),
+            "json_body": dict(self.json_body) if self.json_body is not None else None,
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpCompatibilitySurface:
     version: str
     tools: tuple[PublicMcpToolDescriptor, ...]
@@ -137,8 +187,8 @@ class PublicMcpCompatibilityPolicy:
         }
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.1"
-PUBLIC_MCP_SCHEMA_VERSION = "1.1"
+PUBLIC_MCP_MANIFEST_VERSION = "1.2"
+PUBLIC_MCP_SCHEMA_VERSION = "1.2"
 PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
@@ -152,6 +202,7 @@ class PublicMcpManifestTool:
     request_type: PublicTypeRef | None = None
     response_type: PublicTypeRef | None = None
     argument_schema: PublicMcpArgumentSchema | None = None
+    route_contract: PublicMcpRouteContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -165,6 +216,7 @@ class PublicMcpManifestResource:
     uri_template: str
     response_type: PublicTypeRef | None = None
     argument_schema: PublicMcpArgumentSchema | None = None
+    route_contract: PublicMcpRouteContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -209,6 +261,7 @@ class PublicMcpManifest:
                     "request_type": _type_ref_dict(tool.request_type),
                     "response_type": _type_ref_dict(tool.response_type),
                     "argument_schema": _argument_schema_dict(tool.argument_schema),
+                    "route_contract": tool.route_contract.to_dict() if tool.route_contract is not None else None,
                     "tags": list(tool.tags),
                 }
                 for tool in self.tools
@@ -223,6 +276,7 @@ class PublicMcpManifest:
                     "uri_template": resource.uri_template,
                     "response_type": _type_ref_dict(resource.response_type),
                     "argument_schema": _argument_schema_dict(resource.argument_schema),
+                    "route_contract": resource.route_contract.to_dict() if resource.route_contract is not None else None,
                     "tags": list(resource.tags),
                 }
                 for resource in self.resources
@@ -233,7 +287,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.3"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.4"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -257,6 +311,7 @@ class PublicMcpFrameworkDispatch:
     route_name: str
     handler_name: str
     request: FrameworkInboundRequest
+    route_contract: PublicMcpRouteContract | None = None
 
 
 @dataclass(frozen=True)
@@ -264,6 +319,7 @@ class PublicMcpHttpDispatch:
     name: str
     route_name: str
     request: HttpRouteRequest
+    route_contract: PublicMcpRouteContract | None = None
 
 
 @dataclass(frozen=True)
@@ -464,12 +520,13 @@ class PublicMcpHostBridgeScaffold:
             headers=headers,
             session_claims=session_claims,
         )
-        route_name = self.adapter_scaffold._tool_by_name(tool_name).route_name
+        descriptor = self.adapter_scaffold._tool_by_name(tool_name)
         return PublicMcpFrameworkDispatch(
             name=tool_name,
-            route_name=route_name,
-            handler_name=_framework_handler_name(route_name),
+            route_name=descriptor.route_name,
+            handler_name=_framework_handler_name(descriptor.route_name),
             request=request,
+            route_contract=self.adapter_scaffold.export_tool_contract(tool_name),
         )
 
     def build_framework_resource_dispatch(
@@ -486,12 +543,13 @@ class PublicMcpHostBridgeScaffold:
             headers=headers,
             session_claims=session_claims,
         )
-        route_name = self.adapter_scaffold._resource_by_name(resource_name).route_name
+        descriptor = self.adapter_scaffold._resource_by_name(resource_name)
         return PublicMcpFrameworkDispatch(
             name=resource_name,
-            route_name=route_name,
-            handler_name=_framework_handler_name(route_name),
+            route_name=descriptor.route_name,
+            handler_name=_framework_handler_name(descriptor.route_name),
             request=request,
+            route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
         )
 
     def build_http_tool_dispatch(
@@ -508,10 +566,12 @@ class PublicMcpHostBridgeScaffold:
             headers=headers,
             session_claims=session_claims,
         )
+        descriptor = self.adapter_scaffold._tool_by_name(tool_name)
         return PublicMcpHttpDispatch(
             name=tool_name,
-            route_name=self.adapter_scaffold._tool_by_name(tool_name).route_name,
+            route_name=descriptor.route_name,
             request=request,
+            route_contract=self.adapter_scaffold.export_tool_contract(tool_name),
         )
 
     def build_http_resource_dispatch(
@@ -528,10 +588,12 @@ class PublicMcpHostBridgeScaffold:
             headers=headers,
             session_claims=session_claims,
         )
+        descriptor = self.adapter_scaffold._resource_by_name(resource_name)
         return PublicMcpHttpDispatch(
             name=resource_name,
-            route_name=self.adapter_scaffold._resource_by_name(resource_name).route_name,
+            route_name=descriptor.route_name,
             request=request,
+            route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
         )
 
     def _framework_request_from_invocation(
@@ -614,6 +676,7 @@ class PublicMcpToolExport:
     request_type: PublicTypeRef | None = None
     response_type: PublicTypeRef | None = None
     argument_schema: PublicMcpArgumentSchema | None = None
+    route_contract: PublicMcpRouteContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -626,6 +689,7 @@ class PublicMcpResourceExport:
     invocation: PublicMcpInvocation
     response_type: PublicTypeRef | None = None
     argument_schema: PublicMcpArgumentSchema | None = None
+    route_contract: PublicMcpRouteContract | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -713,6 +777,64 @@ class PublicMcpAdapterScaffold:
         descriptor = self._resource_by_name(resource_name)
         return self._argument_schema_for_descriptor(descriptor)
 
+    def export_tool_contract(self, tool_name: str) -> PublicMcpRouteContract:
+        descriptor = self._tool_by_name(tool_name)
+        return self._route_contract_for_descriptor(descriptor, kind="tool")
+
+    def export_resource_contract(self, resource_name: str) -> PublicMcpRouteContract:
+        descriptor = self._resource_by_name(resource_name)
+        return self._route_contract_for_descriptor(descriptor, kind="resource")
+
+    def normalize_tool_arguments(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+    ) -> PublicMcpNormalizedArguments:
+        descriptor = self._tool_by_name(tool_name)
+        route_contract = self._route_contract_for_descriptor(descriptor, kind="tool")
+        normalized = _normalize_public_mcp_arguments(
+            method=descriptor.method,
+            path_template=descriptor.path,
+            arguments=arguments,
+            kind="tool",
+            schema=self._argument_schema_for_descriptor(descriptor),
+            route_contract=route_contract,
+        )
+        return PublicMcpNormalizedArguments(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            kind="tool",
+            route_contract=route_contract,
+            path_params=normalized["path_params"],
+            query_params=normalized["query_params"],
+            json_body=normalized["json_body"],
+        )
+
+    def normalize_resource_arguments(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+    ) -> PublicMcpNormalizedArguments:
+        descriptor = self._resource_by_name(resource_name)
+        route_contract = self._route_contract_for_descriptor(descriptor, kind="resource")
+        normalized = _normalize_public_mcp_arguments(
+            method=descriptor.method,
+            path_template=descriptor.path,
+            arguments=arguments,
+            kind="resource",
+            schema=self._argument_schema_for_descriptor(descriptor),
+            route_contract=route_contract,
+        )
+        return PublicMcpNormalizedArguments(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            kind="resource",
+            route_contract=route_contract,
+            path_params=normalized["path_params"],
+            query_params=normalized["query_params"],
+            json_body=normalized["json_body"],
+        )
+
     def export_tool(
         self,
         tool_name: str,
@@ -739,6 +861,7 @@ class PublicMcpAdapterScaffold:
             request_type=descriptor.request_type,
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
+            route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -768,6 +891,7 @@ class PublicMcpAdapterScaffold:
             invocation=invocation,
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
+            route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -776,19 +900,12 @@ class PublicMcpAdapterScaffold:
         tool_name: str,
         arguments: Mapping[str, Any] | None = None,
     ) -> PublicMcpToolExport:
-        descriptor = self._tool_by_name(tool_name)
-        normalized = _normalize_public_mcp_arguments(
-            method=descriptor.method,
-            path_template=descriptor.path,
-            arguments=arguments,
-            kind="tool",
-            schema=self._argument_schema_for_descriptor(descriptor),
-        )
+        normalized = self.normalize_tool_arguments(tool_name, arguments)
         return self.export_tool(
             tool_name,
-            path_params=normalized["path_params"],
-            query_params=normalized["query_params"],
-            json_body=normalized["json_body"],
+            path_params=normalized.path_params,
+            query_params=normalized.query_params,
+            json_body=normalized.json_body,
         )
 
     def export_resource_from_arguments(
@@ -796,18 +913,11 @@ class PublicMcpAdapterScaffold:
         resource_name: str,
         arguments: Mapping[str, Any] | None = None,
     ) -> PublicMcpResourceExport:
-        descriptor = self._resource_by_name(resource_name)
-        normalized = _normalize_public_mcp_arguments(
-            method=descriptor.method,
-            path_template=descriptor.path,
-            arguments=arguments,
-            kind="resource",
-            schema=self._argument_schema_for_descriptor(descriptor),
-        )
+        normalized = self.normalize_resource_arguments(resource_name, arguments)
         return self.export_resource(
             resource_name,
-            path_params=normalized["path_params"],
-            query_params=normalized["query_params"],
+            path_params=normalized.path_params,
+            query_params=normalized.query_params,
         )
 
 
@@ -830,6 +940,7 @@ class PublicMcpAdapterScaffold:
             request_type=descriptor.request_type,
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
+            route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -852,6 +963,7 @@ class PublicMcpAdapterScaffold:
             invocation=invocation,
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
+            route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -865,6 +977,7 @@ class PublicMcpAdapterScaffold:
             request_type=descriptor.request_type,
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
+            route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -878,6 +991,7 @@ class PublicMcpAdapterScaffold:
             uri_template=self._resource_uri_template(descriptor.path),
             response_type=descriptor.response_type,
             argument_schema=self._argument_schema_for_descriptor(descriptor),
+            route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -908,6 +1022,29 @@ class PublicMcpAdapterScaffold:
             body_fields=tuple(spec.get("body_fields", ())),
             allow_additional_query_params=bool(spec.get("allow_additional_query_params", False)),
             allow_additional_body_fields=bool(spec.get("allow_additional_body_fields", False)),
+        )
+
+    def _route_contract_for_descriptor(
+        self,
+        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
+        *,
+        kind: str,
+    ) -> PublicMcpRouteContract:
+        spec = _ROUTE_CONTRACT_BY_ROUTE_NAME.get(descriptor.route_name)
+        if spec is None:
+            raise ValueError(f"Missing public MCP route contract for route_name: {descriptor.route_name}")
+        schema = self._argument_schema_for_descriptor(descriptor)
+        return PublicMcpRouteContract(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            kind=kind,
+            route_family=str(spec["route_family"]),
+            transport_profile=str(spec["transport_profile"]),
+            path_param_names=tuple(field.name for field in schema.path_fields) if schema is not None else (),
+            query_param_names=tuple(field.name for field in schema.query_fields) if schema is not None else (),
+            body_field_names=tuple(field.name for field in schema.body_fields) if schema is not None else (),
+            allow_additional_query_params=bool(schema.allow_additional_query_params) if schema is not None else False,
+            allow_additional_body_fields=bool(schema.allow_additional_body_fields) if schema is not None else False,
         )
 
     def _build_invocation(
@@ -983,6 +1120,7 @@ def _normalize_public_mcp_arguments(
     arguments: Mapping[str, Any] | None,
     kind: str,
     schema: PublicMcpArgumentSchema | None = None,
+    route_contract: PublicMcpRouteContract | None = None,
 ) -> dict[str, Any]:
     raw_arguments = dict(arguments or {})
     path_keys = set(_path_template_keys(path_template))
@@ -1034,6 +1172,8 @@ def _normalize_public_mcp_arguments(
     }
     if schema is not None:
         _validate_public_mcp_arguments_against_schema(schema, normalized)
+    if route_contract is not None:
+        _validate_public_mcp_arguments_against_route_contract(route_contract, normalized)
     return normalized
 
 
@@ -1090,6 +1230,44 @@ def _validate_unknown_field_names(
     extras = sorted(set(values) - allowed)
     if extras:
         raise ValueError(f"Unexpected {location} field(s) for public route {route_name}: {', '.join(extras)}")
+
+
+def _validate_public_mcp_arguments_against_route_contract(
+    route_contract: PublicMcpRouteContract,
+    normalized: Mapping[str, Any],
+) -> None:
+    path_params = dict(normalized.get("path_params") or {})
+    query_params = dict(normalized.get("query_params") or {})
+    body = normalized.get("json_body")
+    body_mapping = dict(body) if isinstance(body, Mapping) else {}
+
+    profile = route_contract.transport_profile
+    if profile == "body-only":
+        if path_params:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept path params under transport profile {profile}")
+        if query_params:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept query params under transport profile {profile}")
+    elif profile == "path-and-body":
+        if query_params:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept query params under transport profile {profile}")
+    elif profile == "path-and-query":
+        if body_mapping:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept body payload under transport profile {profile}")
+    elif profile == "path-only":
+        if query_params:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept query params under transport profile {profile}")
+        if body_mapping:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept body payload under transport profile {profile}")
+    elif profile == "query-only":
+        if path_params:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept path params under transport profile {profile}")
+        if body_mapping:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept body payload under transport profile {profile}")
+    elif profile == "no-arguments":
+        if path_params or query_params or body_mapping:
+            raise ValueError(f"Public route {route_contract.route_name} does not accept arguments under transport profile {profile}")
+    else:
+        raise ValueError(f"Unknown public MCP transport profile: {profile}")
 
 
 def _coerce_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
@@ -1408,6 +1586,27 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
 }
 
 
+_ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
+    "launch_run": {"route_family": "run-launch", "transport_profile": "body-only"},
+    "launch_workspace_shell": {"route_family": "workspace-shell-launch", "transport_profile": "path-and-body"},
+    "commit_workspace_shell": {"route_family": "workspace-shell-commit", "transport_profile": "path-and-body"},
+    "checkout_workspace_shell": {"route_family": "workspace-shell-checkout", "transport_profile": "path-and-body"},
+    "retry_run": {"route_family": "run-control", "transport_profile": "path-and-query"},
+    "force_reset_run": {"route_family": "run-control", "transport_profile": "path-and-query"},
+    "mark_run_reviewed": {"route_family": "run-control", "transport_profile": "path-and-query"},
+    "get_run_status": {"route_family": "run-read", "transport_profile": "path-and-query"},
+    "get_run_result": {"route_family": "run-read", "transport_profile": "path-and-query"},
+    "list_workspace_runs": {"route_family": "workspace-run-list", "transport_profile": "path-and-query"},
+    "get_run_trace": {"route_family": "run-trace", "transport_profile": "path-and-query"},
+    "list_run_artifacts": {"route_family": "run-artifacts", "transport_profile": "path-and-query"},
+    "get_artifact_detail": {"route_family": "artifact-read", "transport_profile": "path-and-query"},
+    "get_run_actions": {"route_family": "run-actions", "transport_profile": "path-and-query"},
+    "get_recent_activity": {"route_family": "activity-read", "transport_profile": "query-only"},
+    "get_workspace": {"route_family": "workspace-read", "transport_profile": "path-only"},
+    "list_workspaces": {"route_family": "workspace-list", "transport_profile": "no-arguments"},
+}
+
+
 _TOOL_SPECS: tuple[dict[str, object], ...] = (
     {
         "name": "launch_run",
@@ -1598,6 +1797,18 @@ def build_public_mcp_argument_schemas() -> tuple[PublicMcpArgumentSchema, ...]:
     return tuple(schemas)
 
 
+def build_public_mcp_route_contracts() -> tuple[PublicMcpRouteContract, ...]:
+    """Return exported route-family normalization contracts for the curated public MCP surface."""
+
+    adapter = build_public_mcp_adapter_scaffold()
+    contracts: list[PublicMcpRouteContract] = []
+    for tool in build_public_mcp_tools():
+        contracts.append(adapter.export_tool_contract(tool.name))
+    for resource in build_public_mcp_resources():
+        contracts.append(adapter.export_resource_contract(resource.name))
+    return tuple(contracts)
+
+
 def build_public_mcp_compatibility_policy() -> PublicMcpCompatibilityPolicy:
     """Return the version-compatibility policy for the curated public MCP surface."""
 
@@ -1639,6 +1850,7 @@ __all__ = [
     "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",
     "build_public_mcp_argument_schemas",
+    "build_public_mcp_route_contracts",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",

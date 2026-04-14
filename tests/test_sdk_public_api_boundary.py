@@ -52,7 +52,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.7"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.8"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -112,8 +112,8 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
 
-    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.1"
-    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.1"
+    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.2"
+    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.2"
     assert sdk.PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
@@ -137,7 +137,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.3"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.4"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
@@ -156,6 +156,27 @@ def test_sdk_root_exposes_public_mcp_compatibility_policy() -> None:
     policy = sdk.build_public_mcp_compatibility_policy()
 
     assert isinstance(policy, sdk.PublicMcpCompatibilityPolicy)
-    assert policy.supported_manifest_versions == ("1.1",)
-    assert policy.supported_schema_versions == ("1.1",)
-    policy.assert_supported(manifest_version="1.1", schema_version="1.1")
+    assert policy.supported_manifest_versions == ("1.2",)
+    assert policy.supported_schema_versions == ("1.2",)
+    policy.assert_supported(manifest_version="1.2", schema_version="1.2")
+
+
+def test_sdk_root_exposes_public_mcp_route_contracts() -> None:
+    contracts = sdk.build_public_mcp_route_contracts()
+    indexed = {contract.route_name: contract for contract in contracts}
+
+    assert isinstance(indexed["launch_run"], sdk.PublicMcpRouteContract)
+    assert indexed["launch_run"].transport_profile == "body-only"
+    assert indexed["list_workspaces"].transport_profile == "no-arguments"
+
+
+def test_sdk_root_exposes_typed_normalized_arguments() -> None:
+    normalized = sdk.build_public_mcp_adapter_scaffold().normalize_resource_arguments(
+        "get_recent_activity",
+        {"workspace_id": "ws-1", "limit": 5},
+    )
+
+    assert isinstance(normalized, sdk.PublicMcpNormalizedArguments)
+    assert normalized.route_contract.route_family == "activity-read"
+    assert normalized.query_params == {"workspace_id": "ws-1", "limit": "5"}
+    assert normalized.json_body is None

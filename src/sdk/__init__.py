@@ -35,6 +35,8 @@ from src.sdk.integration import (
     PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION,
     PublicMcpArgumentField,
     PublicMcpArgumentSchema,
+    PublicMcpRouteContract,
+    PublicMcpNormalizedArguments,
     PublicMcpCompatibilitySurface,
     PublicMcpCompatibilityPolicy,
     PublicMcpManifestTool,
@@ -53,6 +55,7 @@ from src.sdk.integration import (
     PublicMcpResourceDescriptor,
     PublicMcpToolDescriptor,
     build_public_mcp_argument_schemas,
+    build_public_mcp_route_contracts,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
     build_public_mcp_adapter_scaffold,
@@ -74,7 +77,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.7"
+PUBLIC_SDK_SURFACE_VERSION = "1.8"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -90,6 +93,8 @@ __all__ = [
     "PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION",
     "PublicMcpArgumentField",
     "PublicMcpArgumentSchema",
+    "PublicMcpRouteContract",
+    "PublicMcpNormalizedArguments",
     "artifacts",
     "server",
     "integration",
@@ -119,6 +124,8 @@ __all__ = [
     "PublicMcpResourceDescriptor",
     "PublicMcpArgumentField",
     "PublicMcpArgumentSchema",
+    "PublicMcpRouteContract",
+    "PublicMcpNormalizedArguments",
     "PublicMcpCompatibilitySurface",
     "PublicMcpCompatibilityPolicy",
     "PublicMcpManifestTool",
@@ -136,6 +143,7 @@ __all__ = [
     "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",
     "build_public_mcp_argument_schemas",
+    "build_public_mcp_route_contracts",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",
