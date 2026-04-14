@@ -143,6 +143,18 @@ class FrameworkRouteBindings:
             summary="Persist server-backed workspace shell draft state.",
         ),
         FrameworkRouteDefinition(
+            route_name="commit_workspace_shell",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/shell/commit",
+            summary="Commit the current workspace shell draft into a public commit snapshot.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="checkout_workspace_shell",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/shell/checkout",
+            summary="Checkout the current workspace shell commit snapshot into a public working save.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_run",
             method="POST",
             path_template="/api/runs",
@@ -797,6 +809,64 @@ class FrameworkRouteBindings:
         workspace_artifact_source_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_put_workspace_shell_draft(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            recent_run_rows=list(recent_run_rows),
+            result_rows_by_run_id=result_rows_by_run_id,
+            onboarding_rows=list(onboarding_rows),
+            artifact_source=artifact_source,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
+            workspace_artifact_source_writer=workspace_artifact_source_writer,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_commit_workspace_shell(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        artifact_source: Any | None = None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+        workspace_artifact_source_writer=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_commit_workspace_shell(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            recent_run_rows=list(recent_run_rows),
+            result_rows_by_run_id=result_rows_by_run_id,
+            onboarding_rows=list(onboarding_rows),
+            artifact_source=artifact_source,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
+            workspace_artifact_source_writer=workspace_artifact_source_writer,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_checkout_workspace_shell(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        artifact_source: Any | None = None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+        workspace_artifact_source_writer=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_checkout_workspace_shell(
             http_request=cls.to_http_route_request(request),
             workspace_context=workspace_context,
             workspace_row=workspace_row,

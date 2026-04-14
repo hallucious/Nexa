@@ -264,6 +264,8 @@ class RunHttpRouteSurface:
         ("list_workspace_runs", "GET", "/api/workspaces/{workspace_id}/runs"),
         ("get_workspace_shell", "GET", "/api/workspaces/{workspace_id}/shell"),
         ("put_workspace_shell_draft", "PUT", "/api/workspaces/{workspace_id}/shell/draft"),
+        ("commit_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/commit"),
+        ("checkout_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/checkout"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
@@ -468,6 +470,144 @@ class RunHttpRouteSurface:
             trace_rows_lookup=trace_rows_lookup,
             app_language_override=_request_app_language(http_request.query_params),
         )
+        return _route_response(200, payload)
+
+
+    @staticmethod
+    def _workspace_shell_write_guard(
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        *,
+        expected_path: str,
+        method_label: str,
+    ) -> HttpRouteResponse | tuple[str, Mapping[str, Any], Any]:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": f"{method_label} route only supports POST."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        if http_request.path.rstrip("/") != expected_path.format(workspace_id=workspace_id):
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": "workspace_shell.authentication_required",
+                "message": f"{method_label} requires an authenticated session.",
+            })
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "workspace_shell_not_found",
+                "reason_code": "workspace_shell.workspace_not_found",
+                "message": "Requested workspace shell was not found.",
+            })
+        auth_input = AuthorizationInput(
+            user_id=request_auth.requested_by_user_ref or "",
+            workspace_id=workspace_context.workspace_id,
+            requested_action="write",
+            role_context=request_auth.authenticated_identity.role_refs if request_auth.authenticated_identity else (),
+        )
+        decision = AuthorizationGate.authorize_workspace_scope(auth_input, workspace_context)
+        if not decision.allowed:
+            return _route_response(_reason_to_status_code(f"workspace_shell.{decision.reason_code}"), {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": f"workspace_shell.{decision.reason_code}",
+                "message": "Current user is not allowed to update the requested workspace shell draft.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        return workspace_id, workspace_row, workspace_context
+
+    @staticmethod
+    def _load_workspace_shell_artifact_model(workspace_row: Mapping[str, Any] | None, artifact_source: Any | None):
+        from src.server.workspace_shell_runtime import _load_workspace_model
+        source = resolve_workspace_artifact_source(workspace_row, artifact_source)
+        model, loaded = _load_workspace_model(source, workspace_row)
+        return source, model, loaded
+
+
+    @classmethod
+    def handle_commit_workspace_shell(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        artifact_source: Any | None = None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+        workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+    ) -> HttpRouteResponse:
+        guard = cls._workspace_shell_write_guard(http_request, workspace_context, workspace_row, expected_path="/api/workspaces/{workspace_id}/shell/commit", method_label="Workspace shell commit")
+        if isinstance(guard, HttpRouteResponse):
+            return guard
+        workspace_id, workspace_row, workspace_context = guard
+        from src.storage.lifecycle_api import create_commit_snapshot_from_working_save
+        from src.storage.serialization import serialize_commit_snapshot
+        from src.storage.models.commit_snapshot_model import CommitSnapshotModel
+        from src.storage.models.working_save_model import WorkingSaveModel
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            return _route_response(400, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.invalid_request", "message": "Workspace shell commit payload is invalid.", "workspace_id": workspace_context.workspace_id})
+        commit_id = str(body.get("commit_id") or "").strip()
+        if not commit_id:
+            return _route_response(400, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.commit_id_required", "message": "Workspace shell commit requires a non-empty commit_id.", "workspace_id": workspace_context.workspace_id})
+        parent_commit_id = str(body.get("parent_commit_id") or "").strip() or None
+        _source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+        if isinstance(model, CommitSnapshotModel):
+            return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.already_commit_snapshot", "message": "Workspace shell commit requires a working_save source; current workspace shell already resolves to a commit_snapshot.", "workspace_id": workspace_context.workspace_id})
+        if not isinstance(model, WorkingSaveModel):
+            return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.unsupported_source_role", "message": "Workspace shell commit requires a working_save source.", "workspace_id": workspace_context.workspace_id})
+        try:
+            snapshot = create_commit_snapshot_from_working_save(model, commit_id=commit_id, parent_commit_id=parent_commit_id)
+        except Exception as exc:
+            return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.commit_blocked", "message": str(exc), "workspace_id": workspace_context.workspace_id})
+        serialized = serialize_commit_snapshot(snapshot)
+        persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
+        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, app_language_override=_request_app_language(http_request.query_params))
+        payload["transition"] = {"action": "commit_workspace_shell", "from_role": "working_save", "to_role": "commit_snapshot", "workspace_id": workspace_context.workspace_id, "commit_id": snapshot.meta.commit_id, "source_working_save_id": snapshot.meta.source_working_save_id}
+        return _route_response(200, payload)
+
+    @classmethod
+    def handle_checkout_workspace_shell(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        artifact_source: Any | None = None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+        workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+    ) -> HttpRouteResponse:
+        guard = cls._workspace_shell_write_guard(http_request, workspace_context, workspace_row, expected_path="/api/workspaces/{workspace_id}/shell/checkout", method_label="Workspace shell checkout")
+        if isinstance(guard, HttpRouteResponse):
+            return guard
+        workspace_id, workspace_row, workspace_context = guard
+        from src.storage.lifecycle_api import create_working_save_from_commit_snapshot
+        from src.storage.serialization import serialize_working_save
+        from src.storage.models.commit_snapshot_model import CommitSnapshotModel
+        body = http_request.json_body
+        if body is not None and not isinstance(body, Mapping):
+            return _route_response(400, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.invalid_request", "message": "Workspace shell checkout payload is invalid.", "workspace_id": workspace_context.workspace_id})
+        working_save_id = str((body or {}).get("working_save_id") or "").strip() or None
+        _source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+        if not isinstance(model, CommitSnapshotModel):
+            return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.checkout_requires_commit_snapshot", "message": "Workspace shell checkout requires a commit_snapshot source.", "workspace_id": workspace_context.workspace_id})
+        working_save = create_working_save_from_commit_snapshot(model, working_save_id=working_save_id)
+        serialized = serialize_working_save(working_save)
+        persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
+        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, app_language_override=_request_app_language(http_request.query_params))
+        payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": model.meta.commit_id, "working_save_id": working_save.meta.working_save_id}
         return _route_response(200, payload)
 
     @classmethod

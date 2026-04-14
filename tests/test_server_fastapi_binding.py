@@ -86,6 +86,18 @@ def _working_save_artifact() -> dict:
     }
 
 
+
+
+def _valid_working_save_artifact() -> dict:
+    return {
+        "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+        "circuit": {"nodes": [{"id": "n1", "type": "plugin", "plugin_ref": "plugin.main", "inputs": {}, "outputs": {"result": "output.value"}}], "edges": [], "entry": "n1", "outputs": [{"name": "result", "node_id": "n1", "path": "output.value"}]},
+        "resources": {"prompts": {}, "providers": {}, "plugins": {"plugin.main": {"entrypoint": "demo.main"}}},
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+        "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+    }
+
 def _session_headers(user_id: str = "user-owner") -> dict[str, str]:
     return {
         "Authorization": "Bearer token",
@@ -130,7 +142,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -251,7 +263,7 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
             'effective_model_ref': probe_input.requested_model_ref or probe_input.default_model_ref,
             'round_trip_latency_ms': 187,
         }
-    artifact_store = {'ws-001': _working_save_artifact()}
+    artifact_store = {'ws-001': artifact_source or _working_save_artifact()}
 
     deps = FastApiRouteDependencies(
         workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
@@ -1414,3 +1426,27 @@ def test_fastapi_binding_workspace_shell_exposes_focus_and_live_region_semantics
     assert 'id="designer-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="designer-detail-title"' in body
     assert 'id="privacy-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="privacy-title"' in body
     assert 'id="latest-run-trace-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-trace-detail-title"' in body
+
+
+def test_fastapi_binding_workspace_shell_commit_round_trip() -> None:
+    client = _make_client(artifact_source=_valid_working_save_artifact())
+    response = client.post('/api/workspaces/ws-001/shell/commit', headers=_session_headers(), json={'commit_id': 'commit-fastapi-001'})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['storage_role'] == 'commit_snapshot'
+    assert payload['commit_id'] == 'commit-fastapi-001'
+    assert payload['transition']['action'] == 'commit_workspace_shell'
+    assert payload['routes']['workspace_shell_commit'] == '/api/workspaces/ws-001/shell/commit'
+
+
+def test_fastapi_binding_workspace_shell_checkout_round_trip() -> None:
+    client = _make_client(artifact_source=_valid_working_save_artifact())
+    commit_response = client.post('/api/workspaces/ws-001/shell/commit', headers=_session_headers(), json={'commit_id': 'commit-fastapi-002'})
+    assert commit_response.status_code == 200
+    response = client.post('/api/workspaces/ws-001/shell/checkout', headers=_session_headers(), json={'working_save_id': 'ws-fastapi-restored'})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['storage_role'] == 'working_save'
+    assert payload['working_save_id'] == 'ws-fastapi-restored'
+    assert payload['transition']['action'] == 'checkout_workspace_shell'
+    assert payload['routes']['workspace_shell_checkout'] == '/api/workspaces/ws-001/shell/checkout'

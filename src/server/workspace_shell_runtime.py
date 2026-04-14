@@ -1305,6 +1305,8 @@ def build_workspace_shell_runtime_payload(
             "onboarding": f"/api/users/me/onboarding?workspace_id={workspace_id}",
             "onboarding_write": "/api/users/me/onboarding",
             "workspace_shell_draft_write": f"/api/workspaces/{workspace_id}/shell/draft",
+            "workspace_shell_commit": f"/api/workspaces/{workspace_id}/shell/commit",
+            "workspace_shell_checkout": f"/api/workspaces/{workspace_id}/shell/checkout",
         },
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,

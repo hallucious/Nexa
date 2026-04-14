@@ -352,3 +352,44 @@ def test_http_route_surface_workspace_feedback_rejects_empty_message() -> None:
     assert response.status_code == 400
     payload = response.body
     assert payload["reason_code"] == "workspace_feedback.message_missing"
+
+
+def test_commit_workspace_shell_route_persists_commit_snapshot() -> None:
+    artifact_store = {
+        'ws-001': {
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [{"id": "n1", "type": "plugin", "plugin_ref": "plugin.main", "inputs": {}, "outputs": {"result": "output.value"}}], "edges": [], "entry": "n1", "outputs": [{"name": "result", "node_id": "n1", "path": "output.value"}]},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {"plugin.main": {"entrypoint": "demo.main"}}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+        }
+    }
+    response = RunHttpRouteSurface.handle_commit_workspace_shell(
+        http_request=_auth_request(method='POST', path='/api/workspaces/ws-001/shell/commit', path_params={'workspace_id': 'ws-001'}, json_body={'commit_id': 'commit-http-001'}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=artifact_store['ws-001'],
+        workspace_artifact_source_writer=lambda workspace_id, artifact_source: artifact_store.__setitem__(workspace_id, artifact_source) or artifact_source,
+    )
+    assert response.status_code == 200
+    assert artifact_store['ws-001']['meta']['storage_role'] == 'commit_snapshot'
+    assert artifact_store['ws-001']['meta']['commit_id'] == 'commit-http-001'
+    assert response.body['storage_role'] == 'commit_snapshot'
+    assert response.body['transition']['action'] == 'commit_workspace_shell'
+
+
+def test_checkout_workspace_shell_route_restores_working_save() -> None:
+    artifact_store = {'ws-001': _commit_snapshot('snap-http-001')}
+    response = RunHttpRouteSurface.handle_checkout_workspace_shell(
+        http_request=_auth_request(method='POST', path='/api/workspaces/ws-001/shell/checkout', path_params={'workspace_id': 'ws-001'}, json_body={'working_save_id': 'ws-http-restored'}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=artifact_store['ws-001'],
+        workspace_artifact_source_writer=lambda workspace_id, artifact_source: artifact_store.__setitem__(workspace_id, artifact_source) or artifact_source,
+    )
+    assert response.status_code == 200
+    assert artifact_store['ws-001']['meta']['storage_role'] == 'working_save'
+    assert artifact_store['ws-001']['meta']['working_save_id'] == 'ws-http-restored'
+    assert response.body['storage_role'] == 'working_save'
+    assert response.body['transition']['action'] == 'checkout_workspace_shell'
