@@ -187,7 +187,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
     subtitle = escape(str(history.get("subtitle") or ui_text("server.result_history.subtitle", app_language=app_language, fallback_text="Reopen recent results.")))
     empty_title = escape(str(history.get("empty_title") or ui_text("server.result_history.empty_title", app_language=app_language, fallback_text="No recent results yet")))
     empty_summary = escape(str(history.get("empty_summary") or ui_text("server.result_history.empty_summary", app_language=app_language, fallback_text="Run a workflow once to see recent results here.")))
-    workspace_title = escape(str(payload.get("workspace_title") or history.get("workspace_title") or "Workflow"))
+    workspace_title = escape(str(payload.get("workspace_title") or history.get("workspace_title") or ui_text("server.result_history.workflow_fallback", app_language=app_language, fallback_text="Workflow")))
     item_sections = list(payload.get("item_sections") or [])
     selected = dict(payload.get("selected_result") or {})
     onboarding_banner = dict(payload.get("onboarding_banner") or {})

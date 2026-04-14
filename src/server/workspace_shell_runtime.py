@@ -1369,8 +1369,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     latest_run_status_path = escape(str(routes.get("latest_run_status") or ""))
     latest_run_trace_path = escape(str(routes.get("latest_run_trace") or ""))
     latest_run_artifacts_path = escape(str(routes.get("latest_run_artifacts") or ""))
-    help_title = escape(str(contextual_help.get("title") or "Contextual help"))
-    help_summary = escape(str(contextual_help.get("summary") or "Review the projected next action."))
+    help_title = escape(str(contextual_help.get("title") or ui_text("server.shell.contextual_help", app_language=app_language, fallback_text="Contextual help")))
+    help_summary = escape(str(contextual_help.get("summary") or ui_text("server.shell.contextual_help_default", app_language=app_language, fallback_text="Review the projected next action.")))
     shell_status = escape(str((shell.get("shell_status_label") or payload.get("storage_role") or "ready")))
     html = f"""<!doctype html>
 <html lang="{app_language}">
@@ -2469,6 +2469,48 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         'A readable result is not ready yet, but artifacts are available. Open Artifacts next.': ui_text('server.shell.artifacts_ready_summary', app_language=app_language, fallback_text='A readable result is not ready yet, but artifacts are available. Open Artifacts next.'),
         'Launch accepted. Watch Status while Nexa starts the run.': ui_text('server.shell.launch_accepted_summary', app_language=app_language, fallback_text='Launch accepted. Watch Status while Nexa starts the run.'),
         'Review the projected next action.': ui_text('server.shell.review_projected_action', app_language=app_language, fallback_text='Review the projected next action.'),
+        'Contextual help': ui_text('server.shell.contextual_help', app_language=app_language, fallback_text='Contextual help'),
+        'Open status first to follow the current runtime state.': ui_text('server.shell.guidance.status_follow', app_language=app_language, fallback_text='Open status first to follow the current runtime state.'),
+        'Resolve the blocking validation issue before continuing the first-run path.': ui_text('server.shell.guidance.validation_blocked', app_language=app_language, fallback_text='Resolve the blocking validation issue before continuing the first-run path.'),
+        'A readable result is ready, so the mobile first-run path should move to Result next.': ui_text('server.shell.guidance.result_ready', app_language=app_language, fallback_text='A readable result is ready, so the mobile first-run path should move to Result next.'),
+        'The latest run needs explanation, so open Trace next in the first-run path.': ui_text('server.shell.guidance.trace_next', app_language=app_language, fallback_text='The latest run needs explanation, so open Trace next in the first-run path.'),
+        'Artifacts are available before a readable result summary, so open Artifacts next.': ui_text('server.shell.guidance.artifacts_next', app_language=app_language, fallback_text='Artifacts are available before a readable result summary, so open Artifacts next.'),
+        'The mobile first-run path is still in progress, so follow Status first.': ui_text('server.shell.guidance.status_running', app_language=app_language, fallback_text='The mobile first-run path is still in progress, so follow Status first.'),
+        'Server-backed workspace progression points to Result as the next first-run step.': ui_text('server.shell.guidance.result_progression', app_language=app_language, fallback_text='Server-backed workspace progression points to Result as the next first-run step.'),
+        'Server-backed workspace progression points to Status while the run step is active.': ui_text('server.shell.guidance.status_progression', app_language=app_language, fallback_text='Server-backed workspace progression points to Status while the run step is active.'),
+        'Server-backed workspace progression points to Validation before the run step.': ui_text('server.shell.guidance.validation_progression', app_language=app_language, fallback_text='Server-backed workspace progression points to Validation before the run step.'),
+        'Use Designer first to describe or review the workflow before running.': ui_text('server.shell.guidance.designer_progression', app_language=app_language, fallback_text='Use Designer first to describe or review the workflow before running.'),
+        'Start with Designer, then move to Validation and Run when the workflow is ready.': ui_text('server.shell.guidance.designer_default', app_language=app_language, fallback_text='Start with Designer, then move to Validation and Run when the workflow is ready.'),
+        'Review the proposed workflow preview before approving.': ui_text('server.shell.summary.review_preview', app_language=app_language, fallback_text='Review the proposed workflow preview before approving.'),
+        'Approve the proposed workflow so Nexa can prepare it for running.': ui_text('server.shell.summary.approve', app_language=app_language, fallback_text='Approve the proposed workflow so Nexa can prepare it for running.'),
+        'Run the workflow to generate your first result.': ui_text('server.shell.summary.run', app_language=app_language, fallback_text='Run the workflow to generate your first result.'),
+        'Read the result to finish the first-run path.': ui_text('server.shell.summary.read_result', app_language=app_language, fallback_text='Read the result to finish the first-run path.'),
+        'Follow the guided first-run path one step at a time.': ui_text('server.shell.summary.follow_steps', app_language=app_language, fallback_text='Follow the guided first-run path one step at a time.'),
+        'Server-backed workspace progression says review and validation come next before the run step.': ui_text('server.shell.summary.review_before_run', app_language=app_language, fallback_text='Server-backed workspace progression says review and validation come next before the run step.'),
+        'Server-backed workspace progression says start in Designer by describing your goal.': ui_text('server.shell.summary.start_in_designer', app_language=app_language, fallback_text='Server-backed workspace progression says start in Designer by describing your goal.'),
+        'Server-backed workspace progression says the run step is next. Open Status to follow it.': ui_text('server.shell.summary.run_next', app_language=app_language, fallback_text='Server-backed workspace progression says the run step is next. Open Status to follow it.'),
+        'Server-backed workspace progression says read the latest result next.': ui_text('server.shell.summary.read_result_next', app_language=app_language, fallback_text='Server-backed workspace progression says read the latest result next.'),
+        'Resolve the blocking review issue before you run.': ui_text('server.shell.summary.resolve_blocking_review', app_language=app_language, fallback_text='Resolve the blocking review issue before you run.'),
+        'Step 2 of 5 — Review preview': ui_text('server.shell.step.review_preview', app_language=app_language, fallback_text='Step 2 of 5 — Review preview'),
+        'Step 3 of 5 — Approve': ui_text('server.shell.step.approve', app_language=app_language, fallback_text='Step 3 of 5 — Approve'),
+        'Output type: ': ui_text('server.shell.output_type_prefix', app_language=app_language, fallback_text='Output type: '),
+        'Current focus node: ': ui_text('server.shell.current_focus_node_prefix', app_language=app_language, fallback_text='Current focus node: '),
+        'First artifact kind: ': ui_text('server.shell.first_artifact_kind_prefix', app_language=app_language, fallback_text='First artifact kind: '),
+        'First artifact label: ': ui_text('server.shell.first_artifact_label_prefix', app_language=app_language, fallback_text='First artifact label: '),
+        'Action target not yet wired: ': ui_text('server.shell.action_target_unwired_prefix', app_language=app_language, fallback_text='Action target not yet wired: '),
+        'No recommended action is available.': ui_text('server.shell.no_recommended_action', app_language=app_language, fallback_text='No recommended action is available.'),
+        'Open next step': ui_text('server.shell.open_next_step', app_language=app_language, fallback_text='Open next step'),
+        'Loaded template into Designer: ': ui_text('server.shell.loaded_template_log_prefix', app_language=app_language, fallback_text='Loaded template into Designer: '),
+        'Focused ': ui_text('server.shell.focused_prefix', app_language=app_language, fallback_text='Focused '),
+        ' detail': ui_text('server.shell.focus_detail_suffix', app_language=app_language, fallback_text=' detail'),
+        ' summary': ui_text('server.shell.focus_summary_suffix', app_language=app_language, fallback_text=' summary'),
+        'Template selected.': ui_text('server.shell.template_selected_summary', app_language=app_language, fallback_text='Template selected.'),
+        'Template id: ': ui_text('server.shell.template_id', app_language=app_language, fallback_text='Template id: {template_id}', template_id='').replace('{template_id}', ''),
+        'Category: ': ui_text('server.shell.category', app_language=app_language, fallback_text='Category: {category}', category='').replace('{category}', ''),
+        'Next step: review Validation, then run the draft when ready.': ui_text('server.shell.next_step_review_validation', app_language=app_language, fallback_text='Next step: review Validation, then run the draft when ready.'),
+        'Step 2 of 5 — Review template': ui_text('server.shell.banner.review_template_title', app_language=app_language, fallback_text='Step 2 of 5 — Review template'),
+        'Template "': 'Template "',
+        'Review Validation': ui_text('server.shell.banner.review_validation', app_language=app_language, fallback_text='Review Validation'),
     }
     for old, new in replacements.items():
         if new and old in html:
