@@ -258,6 +258,13 @@ def build_parser():
     savefile_info = savefile_sub.add_parser("info")
     savefile_info.add_argument("input", help="Path to input .nex savefile")
 
+    savefile_commit = savefile_sub.add_parser("commit")
+    savefile_commit.add_argument("input", help="Path to input .nex savefile")
+    savefile_commit.add_argument("output", help="Path to output .nex commit snapshot")
+    savefile_commit.add_argument("--commit-id", required=True, help="Commit Snapshot identifier")
+    savefile_commit.add_argument("--parent-commit-id", help="Optional parent commit id")
+    savefile_commit.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
+
     savefile_set_name = savefile_sub.add_parser("set-name")
     savefile_set_name.add_argument("input", help="Path to input .nex savefile")
     savefile_set_name.add_argument("--name", required=True, help="New savefile name")
@@ -920,6 +927,55 @@ def _persist_edited_savefile(savefile, input_path: Path, mode: str) -> None:
 
     validate_savefile(savefile)
     save_savefile_file(savefile, str(input_path))
+
+
+
+def _load_commit_source(input_value: str):
+    from src.storage.legacy_savefile_bridge import working_save_model_from_legacy_savefile
+
+    source = _load_cli_savefile_source(input_value)
+    if source["mode"] == "public":
+        loaded = source["loaded"]
+        if loaded.storage_role != "working_save":
+            raise ValueError("savefile commit only supports working_save artifacts")
+        return source["input_path"], loaded.parsed_model, "public"
+    return source["input_path"], working_save_model_from_legacy_savefile(source["savefile"]), "legacy"
+
+
+
+def savefile_commit_command(args) -> int:
+    from src.storage.lifecycle_api import create_commit_snapshot_from_working_save
+    from src.storage.serialization import save_nex_artifact_file
+
+    input_path, working_save, source_mode = _load_commit_source(args.input)
+    output_path = Path(args.output)
+    if output_path.suffix != ".nex":
+        raise ValueError("commit snapshot output must use .nex extension")
+    if output_path.exists() and not args.force:
+        raise FileExistsError(f"output already exists: {output_path}")
+
+    snapshot = create_commit_snapshot_from_working_save(
+        working_save,
+        commit_id=args.commit_id,
+        parent_commit_id=getattr(args, "parent_commit_id", None),
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    save_nex_artifact_file(snapshot, output_path)
+
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "output": str(output_path),
+        "input_mode": source_mode,
+        "storage_role": "commit_snapshot",
+        "canonical_ref": snapshot.meta.commit_id,
+        "commit_id": snapshot.meta.commit_id,
+        "source_working_save_id": snapshot.meta.source_working_save_id,
+        "name": snapshot.meta.name,
+        "entry": snapshot.circuit.entry,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
 
 
 
@@ -1601,6 +1657,8 @@ def main():
                 return savefile_validate_command(args)
             if getattr(args, "savefile_command", None) == "info":
                 return savefile_info_command(args)
+            if getattr(args, "savefile_command", None) == "commit":
+                return savefile_commit_command(args)
             if getattr(args, "savefile_command", None) == "set-name":
                 return savefile_set_name_command(args)
             if getattr(args, "savefile_command", None) == "set-entry":

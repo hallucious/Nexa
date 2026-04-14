@@ -179,3 +179,109 @@ def test_engine_cli_run_public_commit_snapshot_materializes_source_artifact_iden
     assert payload["execution_record"]["source"]["commit_id"] == "commit-001"
     assert payload["execution_record"]["source"]["working_save_id"] == "public-demo-draft"
     assert payload["replay_payload"]["source_artifact"]["commit_id"] == "commit-001"
+
+
+
+def test_savefile_commit_converts_public_working_save_to_public_commit_snapshot(tmp_path, monkeypatch, capsys):
+    in_path = tmp_path / "public_working_save.nex"
+    out_path = tmp_path / "public_commit_snapshot.nex"
+    save_nex_artifact_file(_working_save(), in_path)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "nexa",
+            "savefile",
+            "commit",
+            str(in_path),
+            str(out_path),
+            "--commit-id",
+            "commit-002",
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["storage_role"] == "commit_snapshot"
+    assert payload["canonical_ref"] == "commit-002"
+    assert payload["source_working_save_id"] == "public-demo-draft"
+    raw = json.loads(out_path.read_text(encoding="utf-8"))
+    assert raw["meta"]["storage_role"] == "commit_snapshot"
+    assert raw["meta"]["commit_id"] == "commit-002"
+    assert raw["meta"]["source_working_save_id"] == "public-demo-draft"
+
+
+
+def test_savefile_commit_converts_legacy_savefile_to_public_commit_snapshot(tmp_path, monkeypatch, capsys):
+    from src.contracts.savefile_factory import make_minimal_savefile
+    from src.contracts.savefile_serializer import save_savefile_file
+
+    in_path = tmp_path / "legacy_input.nex"
+    out_path = tmp_path / "legacy_commit_snapshot.nex"
+    legacy = make_minimal_savefile(
+        name="legacy_demo",
+        version="1.0.0",
+        entry="node1",
+        node_type="plugin",
+        resource_ref={"plugin": "plugin.main"},
+        outputs={"result": "output.value"},
+        circuit_outputs=[{"name": "result", "node_id": "node1", "path": "output.value"}],
+        plugins={"plugin.main": {"entry": "plugins.example.run", "config": {}}},
+    )
+    save_savefile_file(legacy, str(in_path))
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "nexa",
+            "savefile",
+            "commit",
+            str(in_path),
+            str(out_path),
+            "--commit-id",
+            "commit-legacy-001",
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["input_mode"] == "legacy"
+    raw = json.loads(out_path.read_text(encoding="utf-8"))
+    assert raw["meta"]["storage_role"] == "commit_snapshot"
+    assert raw["meta"]["commit_id"] == "commit-legacy-001"
+    assert raw["meta"]["source_working_save_id"]
+
+
+
+def test_savefile_commit_rejects_public_commit_snapshot_input(tmp_path, monkeypatch, capsys):
+    in_path = tmp_path / "already_committed.nex"
+    out_path = tmp_path / "ignored_output.nex"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-003")
+    save_nex_artifact_file(snapshot, in_path)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "nexa",
+            "savefile",
+            "commit",
+            str(in_path),
+            str(out_path),
+            "--commit-id",
+            "commit-004",
+        ],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "error"
+    assert payload["subcommand"] == "commit"
+    assert "working_save artifacts" in payload["message"]
