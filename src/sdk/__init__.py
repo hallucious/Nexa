@@ -29,6 +29,7 @@ from src.sdk.artifacts import (
 from src.sdk.integration import (
     PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
     MCP_ADAPTER_SCAFFOLD_VERSION,
+    MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
     PUBLIC_MCP_MANIFEST_VERSION,
     PublicMcpCompatibilitySurface,
     PublicMcpManifestTool,
@@ -39,11 +40,15 @@ from src.sdk.integration import (
     PublicMcpResourceExport,
     PublicMcpAdapterExport,
     PublicMcpAdapterScaffold,
+    PublicMcpHostRouteBinding,
+    PublicMcpHostBridgeExport,
+    PublicMcpHostBridgeScaffold,
     PublicMcpResourceDescriptor,
     PublicMcpToolDescriptor,
     build_public_mcp_compatibility_surface,
     build_public_mcp_adapter_scaffold,
     build_public_mcp_manifest,
+    build_public_mcp_host_bridge_scaffold,
     build_public_mcp_resources,
     build_public_mcp_tools,
 )
@@ -60,7 +65,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.3"
+PUBLIC_SDK_SURFACE_VERSION = "1.4"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -70,6 +75,7 @@ __all__ = [
     "PUBLIC_SERVER_SDK_SURFACE_VERSION",
     "PUBLIC_INTEGRATION_SDK_SURFACE_VERSION",
     "MCP_ADAPTER_SCAFFOLD_VERSION",
+    "MCP_HOST_BRIDGE_SCAFFOLD_VERSION",
     "PUBLIC_MCP_MANIFEST_VERSION",
     "artifacts",
     "server",
@@ -107,9 +113,13 @@ __all__ = [
     "PublicMcpResourceExport",
     "PublicMcpAdapterExport",
     "PublicMcpAdapterScaffold",
+    "PublicMcpHostRouteBinding",
+    "PublicMcpHostBridgeExport",
+    "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",
     "build_public_mcp_adapter_scaffold",
     "build_public_mcp_manifest",
+    "build_public_mcp_host_bridge_scaffold",
 ]

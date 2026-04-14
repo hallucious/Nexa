@@ -52,7 +52,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.3"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.4"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -115,3 +115,15 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.0"
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
+
+
+def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
+    bridge = sdk.build_public_mcp_host_bridge_scaffold()
+    framework_request = bridge.build_framework_resource_request(
+        "get_run_status",
+        path_params={"run_id": "run-1"},
+    )
+
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.0"
+    assert framework_request.path == "/api/runs/run-1"
+    assert any(binding.route_name == "get_run_status" for binding in bridge.export().resource_bindings)

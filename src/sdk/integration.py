@@ -15,9 +15,12 @@ The goal is to make the public integration boundary explicit:
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from src.server.framework_binding import FrameworkRouteBindings
+from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkRouteDefinition
+from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.1"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.2"
 
 
 @dataclass(frozen=True)
@@ -140,6 +143,188 @@ class PublicMcpManifest:
 
 
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
+
+
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.0"
+
+
+@dataclass(frozen=True)
+class PublicMcpHostRouteBinding:
+    name: str
+    route_name: str
+    binding_kind: str
+    method: str
+    path_template: str
+    framework_handler_name: str
+    path_param_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PublicMcpHostBridgeExport:
+    bridge_version: str
+    adapter_version: str
+    surface_version: str
+    framework_binding_class: str
+    tool_bindings: tuple[PublicMcpHostRouteBinding, ...]
+    resource_bindings: tuple[PublicMcpHostRouteBinding, ...]
+
+
+@dataclass(frozen=True)
+class PublicMcpHostBridgeScaffold:
+    bridge_version: str
+    adapter_scaffold: PublicMcpAdapterScaffold
+
+    def export(self) -> PublicMcpHostBridgeExport:
+        return PublicMcpHostBridgeExport(
+            bridge_version=self.bridge_version,
+            adapter_version=self.adapter_scaffold.adapter_version,
+            surface_version=self.adapter_scaffold.surface.version,
+            framework_binding_class="FrameworkRouteBindings",
+            tool_bindings=tuple(self._tool_binding(tool) for tool in self.adapter_scaffold.surface.tools),
+            resource_bindings=tuple(self._resource_binding(resource) for resource in self.adapter_scaffold.surface.resources),
+        )
+
+    def build_framework_tool_request(
+        self,
+        tool_name: str,
+        *,
+        path_params: Mapping[str, object] | None = None,
+        query_params: Mapping[str, object] | None = None,
+        json_body: Mapping[str, Any] | None = None,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> FrameworkInboundRequest:
+        export = self.adapter_scaffold.export_tool(
+            tool_name,
+            path_params=path_params,
+            query_params=query_params,
+            json_body=json_body,
+        )
+        return self._framework_request_from_invocation(
+            export.invocation,
+            headers=headers,
+            session_claims=session_claims,
+        )
+
+    def build_framework_resource_request(
+        self,
+        resource_name: str,
+        *,
+        path_params: Mapping[str, object] | None = None,
+        query_params: Mapping[str, object] | None = None,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> FrameworkInboundRequest:
+        export = self.adapter_scaffold.export_resource(
+            resource_name,
+            path_params=path_params,
+            query_params=query_params,
+        )
+        return self._framework_request_from_invocation(
+            export.invocation,
+            headers=headers,
+            session_claims=session_claims,
+        )
+
+    def build_http_tool_request(
+        self,
+        tool_name: str,
+        *,
+        path_params: Mapping[str, object] | None = None,
+        query_params: Mapping[str, object] | None = None,
+        json_body: Mapping[str, Any] | None = None,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> HttpRouteRequest:
+        export = self.adapter_scaffold.export_tool(
+            tool_name,
+            path_params=path_params,
+            query_params=query_params,
+            json_body=json_body,
+        )
+        return self._http_request_from_invocation(
+            export.invocation,
+            headers=headers,
+            session_claims=session_claims,
+        )
+
+    def build_http_resource_request(
+        self,
+        resource_name: str,
+        *,
+        path_params: Mapping[str, object] | None = None,
+        query_params: Mapping[str, object] | None = None,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> HttpRouteRequest:
+        export = self.adapter_scaffold.export_resource(
+            resource_name,
+            path_params=path_params,
+            query_params=query_params,
+        )
+        return self._http_request_from_invocation(
+            export.invocation,
+            headers=headers,
+            session_claims=session_claims,
+        )
+
+    def _framework_request_from_invocation(
+        self,
+        invocation: PublicMcpInvocation,
+        *,
+        headers: Mapping[str, Any] | None,
+        session_claims: Mapping[str, Any] | None,
+    ) -> FrameworkInboundRequest:
+        return FrameworkInboundRequest(
+            method=invocation.method,
+            path=invocation.path,
+            headers=dict(headers or {}),
+            path_params=dict(invocation.path_params),
+            query_params=dict(invocation.query_params),
+            json_body=invocation.json_body,
+            session_claims=dict(session_claims) if session_claims is not None else None,
+        )
+
+    def _http_request_from_invocation(
+        self,
+        invocation: PublicMcpInvocation,
+        *,
+        headers: Mapping[str, Any] | None,
+        session_claims: Mapping[str, Any] | None,
+    ) -> HttpRouteRequest:
+        return HttpRouteRequest(
+            method=invocation.method,
+            path=invocation.path,
+            headers=dict(headers or {}),
+            path_params=dict(invocation.path_params),
+            query_params=dict(invocation.query_params),
+            json_body=invocation.json_body,
+            session_claims=dict(session_claims) if session_claims is not None else None,
+        )
+
+    def _tool_binding(self, descriptor: PublicMcpToolDescriptor) -> PublicMcpHostRouteBinding:
+        framework_definition = _framework_route_definition(descriptor.route_name)
+        return PublicMcpHostRouteBinding(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            binding_kind="tool",
+            method=framework_definition.method,
+            path_template=framework_definition.path_template,
+            framework_handler_name=_framework_handler_name(descriptor.route_name),
+            path_param_names=_path_template_keys(framework_definition.path_template),
+        )
+
+    def _resource_binding(self, descriptor: PublicMcpResourceDescriptor) -> PublicMcpHostRouteBinding:
+        framework_definition = _framework_route_definition(descriptor.route_name)
+        return PublicMcpHostRouteBinding(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            binding_kind="resource",
+            method=framework_definition.method,
+            path_template=framework_definition.path_template,
+            framework_handler_name=_framework_handler_name(descriptor.route_name),
+            path_param_names=_path_template_keys(framework_definition.path_template),
+        )
 
 
 @dataclass(frozen=True)
@@ -495,10 +680,86 @@ def build_public_mcp_manifest(
     ).export_manifest(server_name=server_name, server_title=server_title)
 
 
+def build_public_mcp_host_bridge_scaffold(
+    *,
+    base_url: str | None = None,
+    surface: PublicMcpCompatibilitySurface | None = None,
+    resource_uri_prefix: str = "nexa://public",
+) -> PublicMcpHostBridgeScaffold:
+    """Return the minimal in-process host bridge over the public MCP adapter scaffold."""
+
+    return PublicMcpHostBridgeScaffold(
+        bridge_version=MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
+        adapter_scaffold=build_public_mcp_adapter_scaffold(
+            base_url=base_url,
+            surface=surface,
+            resource_uri_prefix=resource_uri_prefix,
+        ),
+    )
+
+
 _ROUTE_INDEX = {
     name: (method, path)
     for name, method, path in RunHttpRouteSurface._ROUTE_DEFINITIONS
 }
+
+
+_FRAMEWORK_ROUTE_INDEX = {
+    definition.route_name: definition
+    for definition in FrameworkRouteBindings.route_definitions()
+}
+
+
+_FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
+    "get_recent_activity": "handle_recent_activity",
+    "get_history_summary": "handle_history_summary",
+    "list_workspaces": "handle_list_workspaces",
+    "get_circuit_library": "handle_circuit_library",
+    "get_workspace_result_history": "handle_workspace_result_history",
+    "get_workspace_feedback": "handle_workspace_feedback",
+    "submit_workspace_feedback": "handle_submit_workspace_feedback",
+    "get_workspace": "handle_get_workspace",
+    "create_workspace": "handle_create_workspace",
+    "get_provider_catalog": "handle_list_provider_catalog",
+    "list_workspace_provider_bindings": "handle_list_workspace_provider_bindings",
+    "put_workspace_provider_binding": "handle_put_workspace_provider_binding",
+    "list_workspace_provider_health": "handle_list_workspace_provider_health",
+    "get_workspace_provider_health": "handle_get_workspace_provider_health",
+    "probe_workspace_provider": "handle_probe_workspace_provider",
+    "list_provider_probe_history": "handle_list_provider_probe_history",
+    "get_onboarding": "handle_get_onboarding",
+    "put_onboarding": "handle_put_onboarding",
+    "list_workspace_runs": "handle_list_workspace_runs",
+    "get_workspace_shell": "handle_workspace_shell",
+    "put_workspace_shell_draft": "handle_put_workspace_shell_draft",
+    "commit_workspace_shell": "handle_commit_workspace_shell",
+    "checkout_workspace_shell": "handle_checkout_workspace_shell",
+    "launch_workspace_shell": "handle_launch_workspace_shell",
+    "launch_run": "handle_launch",
+    "get_run_status": "handle_run_status",
+    "get_run_result": "handle_run_result",
+    "get_run_actions": "handle_run_actions",
+    "retry_run": "handle_retry_run",
+    "force_reset_run": "handle_force_reset_run",
+    "mark_run_reviewed": "handle_mark_run_reviewed",
+    "list_run_artifacts": "handle_run_artifacts",
+    "get_artifact_detail": "handle_artifact_detail",
+    "get_run_trace": "handle_run_trace",
+}
+
+
+def _framework_route_definition(route_name: str) -> FrameworkRouteDefinition:
+    try:
+        return _FRAMEWORK_ROUTE_INDEX[route_name]
+    except KeyError as exc:
+        raise ValueError(f"Unknown framework route definition for public route_name: {route_name}") from exc
+
+
+def _framework_handler_name(route_name: str) -> str:
+    try:
+        return _FRAMEWORK_HANDLER_BY_ROUTE_NAME[route_name]
+    except KeyError as exc:
+        raise ValueError(f"Unknown framework handler mapping for public route_name: {route_name}") from exc
 
 
 _TOOL_SPECS: tuple[dict[str, object], ...] = (
@@ -688,6 +949,7 @@ def build_public_mcp_compatibility_surface() -> PublicMcpCompatibilitySurface:
 __all__ = [
     "PUBLIC_INTEGRATION_SDK_SURFACE_VERSION",
     "MCP_ADAPTER_SCAFFOLD_VERSION",
+    "MCP_HOST_BRIDGE_SCAFFOLD_VERSION",
     "PUBLIC_MCP_MANIFEST_VERSION",
     "PublicTypeRef",
     "PublicMcpToolDescriptor",
@@ -701,9 +963,13 @@ __all__ = [
     "PublicMcpResourceExport",
     "PublicMcpAdapterExport",
     "PublicMcpAdapterScaffold",
+    "PublicMcpHostRouteBinding",
+    "PublicMcpHostBridgeExport",
+    "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",
     "build_public_mcp_adapter_scaffold",
     "build_public_mcp_manifest",
+    "build_public_mcp_host_bridge_scaffold",
 ]
