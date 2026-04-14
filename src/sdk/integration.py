@@ -22,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.7"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.8"
 
 
 @dataclass(frozen=True)
@@ -146,6 +146,8 @@ class PublicMcpResponseContract:
     response_shape: str
     success_status_codes: tuple[int, ...]
     response_media_type: str = "application/json"
+    body_kind: str = "object"
+    required_top_level_keys: tuple[str, ...] = ()
     response_type: PublicTypeRef | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -157,6 +159,8 @@ class PublicMcpResponseContract:
             "response_shape": self.response_shape,
             "success_status_codes": list(self.success_status_codes),
             "response_media_type": self.response_media_type,
+            "body_kind": self.body_kind,
+            "required_top_level_keys": list(self.required_top_level_keys),
             "response_type": _type_ref_dict(self.response_type),
         }
 
@@ -240,8 +244,8 @@ class PublicMcpCompatibilityPolicy:
         }
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.3"
-PUBLIC_MCP_SCHEMA_VERSION = "1.3"
+PUBLIC_MCP_MANIFEST_VERSION = "1.4"
+PUBLIC_MCP_SCHEMA_VERSION = "1.4"
 PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
@@ -344,7 +348,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.5"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.6"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -366,17 +370,21 @@ class PublicMcpHostRouteBinding:
 class PublicMcpFrameworkDispatch:
     name: str
     route_name: str
+    kind: str
     handler_name: str
     request: FrameworkInboundRequest
     route_contract: PublicMcpRouteContract | None = None
+    response_contract: PublicMcpResponseContract | None = None
 
 
 @dataclass(frozen=True)
 class PublicMcpHttpDispatch:
     name: str
     route_name: str
+    kind: str
     request: HttpRouteRequest
     route_contract: PublicMcpRouteContract | None = None
+    response_contract: PublicMcpResponseContract | None = None
 
 
 @dataclass(frozen=True)
@@ -581,9 +589,11 @@ class PublicMcpHostBridgeScaffold:
         return PublicMcpFrameworkDispatch(
             name=tool_name,
             route_name=descriptor.route_name,
+            kind="tool",
             handler_name=_framework_handler_name(descriptor.route_name),
             request=request,
             route_contract=self.adapter_scaffold.export_tool_contract(tool_name),
+            response_contract=self.adapter_scaffold.export_tool_response_contract(tool_name),
         )
 
     def build_framework_resource_dispatch(
@@ -604,9 +614,11 @@ class PublicMcpHostBridgeScaffold:
         return PublicMcpFrameworkDispatch(
             name=resource_name,
             route_name=descriptor.route_name,
+            kind="resource",
             handler_name=_framework_handler_name(descriptor.route_name),
             request=request,
             route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
+            response_contract=self.adapter_scaffold.export_resource_response_contract(resource_name),
         )
 
     def build_http_tool_dispatch(
@@ -627,8 +639,10 @@ class PublicMcpHostBridgeScaffold:
         return PublicMcpHttpDispatch(
             name=tool_name,
             route_name=descriptor.route_name,
+            kind="tool",
             request=request,
             route_contract=self.adapter_scaffold.export_tool_contract(tool_name),
+            response_contract=self.adapter_scaffold.export_tool_response_contract(tool_name),
         )
 
     def build_http_resource_dispatch(
@@ -649,9 +663,115 @@ class PublicMcpHostBridgeScaffold:
         return PublicMcpHttpDispatch(
             name=resource_name,
             route_name=descriptor.route_name,
+            kind="resource",
             request=request,
             route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
+            response_contract=self.adapter_scaffold.export_resource_response_contract(resource_name),
         )
+
+    def execute_framework_dispatch(
+        self,
+        dispatch: PublicMcpFrameworkDispatch,
+        **handler_kwargs: Any,
+    ) -> PublicMcpNormalizedResponse:
+        handler = getattr(FrameworkRouteBindings, dispatch.handler_name)
+        response = handler(request=dispatch.request, **handler_kwargs)
+        response_contract = dispatch.response_contract
+        if response_contract is None:
+            raise ValueError(f"Missing public MCP response contract for framework dispatch: {dispatch.route_name}")
+        return _normalize_public_framework_response(
+            dispatch.name,
+            dispatch.route_name,
+            dispatch.kind,
+            response_contract,
+            response,
+        )
+
+    def execute_framework_tool(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        **handler_kwargs: Any,
+    ) -> PublicMcpNormalizedResponse:
+        dispatch = self.build_framework_tool_dispatch(
+            tool_name,
+            arguments,
+            headers=headers,
+            session_claims=session_claims,
+        )
+        return self.execute_framework_dispatch(dispatch, **handler_kwargs)
+
+    def execute_framework_resource(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        **handler_kwargs: Any,
+    ) -> PublicMcpNormalizedResponse:
+        dispatch = self.build_framework_resource_dispatch(
+            resource_name,
+            arguments,
+            headers=headers,
+            session_claims=session_claims,
+        )
+        return self.execute_framework_dispatch(dispatch, **handler_kwargs)
+
+    def execute_http_dispatch(
+        self,
+        dispatch: PublicMcpHttpDispatch,
+        **handler_kwargs: Any,
+    ) -> PublicMcpNormalizedResponse:
+        handler = getattr(RunHttpRouteSurface, _framework_handler_name(dispatch.route_name))
+        response = handler(http_request=dispatch.request, **handler_kwargs)
+        response_contract = dispatch.response_contract
+        if response_contract is None:
+            raise ValueError(f"Missing public MCP response contract for http dispatch: {dispatch.route_name}")
+        return _normalize_public_http_response(
+            dispatch.name,
+            dispatch.route_name,
+            dispatch.kind,
+            response_contract,
+            response,
+        )
+
+    def execute_http_tool(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        **handler_kwargs: Any,
+    ) -> PublicMcpNormalizedResponse:
+        dispatch = self.build_http_tool_dispatch(
+            tool_name,
+            arguments,
+            headers=headers,
+            session_claims=session_claims,
+        )
+        return self.execute_http_dispatch(dispatch, **handler_kwargs)
+
+    def execute_http_resource(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+        **handler_kwargs: Any,
+    ) -> PublicMcpNormalizedResponse:
+        dispatch = self.build_http_resource_dispatch(
+            resource_name,
+            arguments,
+            headers=headers,
+            session_claims=session_claims,
+        )
+        return self.execute_http_dispatch(dispatch, **handler_kwargs)
 
     def _framework_request_from_invocation(
         self,
@@ -1194,6 +1314,8 @@ class PublicMcpAdapterScaffold:
             response_shape=str(spec["response_shape"]),
             success_status_codes=tuple(int(code) for code in spec["success_status_codes"]),
             response_media_type=str(spec.get("response_media_type", "application/json")),
+            body_kind=str(spec.get("body_kind", "object")),
+            required_top_level_keys=tuple(str(key) for key in spec.get("required_top_level_keys", ())),
             response_type=getattr(descriptor, "response_type", None),
         )
 
@@ -1279,6 +1401,27 @@ def _assert_public_response_matches_contract(
         )
 
 
+def _assert_public_response_body_matches_contract(
+    response_contract: PublicMcpResponseContract,
+    *,
+    body: Any,
+) -> None:
+    if response_contract.body_kind == "object" and not isinstance(body, Mapping):
+        raise ValueError(
+            f"Unexpected response body kind for public route {response_contract.route_name}: expected object"
+        )
+    if response_contract.required_top_level_keys:
+        if not isinstance(body, Mapping):
+            raise ValueError(
+                f"Required response keys cannot be checked for public route {response_contract.route_name}: body is not an object"
+            )
+        missing = [key for key in response_contract.required_top_level_keys if key not in body]
+        if missing:
+            raise ValueError(
+                f"Missing required response keys for public route {response_contract.route_name}: {', '.join(missing)}"
+            )
+
+
 def _normalize_public_framework_response(
     name: str,
     route_name: str,
@@ -1291,6 +1434,8 @@ def _normalize_public_framework_response(
         status_code=response.status_code,
         media_type=response.media_type,
     )
+    decoded_body = _decode_public_response_body(media_type=response.media_type, body_text=response.body_text)
+    _assert_public_response_body_matches_contract(response_contract, body=decoded_body)
     return PublicMcpNormalizedResponse(
         name=name,
         route_name=route_name,
@@ -1298,7 +1443,7 @@ def _normalize_public_framework_response(
         response_contract=response_contract,
         status_code=response.status_code,
         media_type=response.media_type,
-        body=_decode_public_response_body(media_type=response.media_type, body_text=response.body_text),
+        body=decoded_body,
     )
 
 
@@ -1315,6 +1460,8 @@ def _normalize_public_http_response(
         status_code=response.status_code,
         media_type=media_type,
     )
+    decoded_body = dict(response.body)
+    _assert_public_response_body_matches_contract(response_contract, body=decoded_body)
     return PublicMcpNormalizedResponse(
         name=name,
         route_name=route_name,
@@ -1322,7 +1469,7 @@ def _normalize_public_http_response(
         response_contract=response_contract,
         status_code=response.status_code,
         media_type=media_type,
-        body=dict(response.body),
+        body=decoded_body,
     )
 
 
@@ -1827,23 +1974,33 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
 
 
 _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
-    "launch_run": {"response_shape": "accepted", "success_status_codes": (202,)},
-    "launch_workspace_shell": {"response_shape": "accepted", "success_status_codes": (202,)},
-    "commit_workspace_shell": {"response_shape": "snapshot-commit", "success_status_codes": (200,)},
-    "checkout_workspace_shell": {"response_shape": "working-save-checkout", "success_status_codes": (200,)},
-    "retry_run": {"response_shape": "run-control", "success_status_codes": (200,)},
-    "force_reset_run": {"response_shape": "run-control", "success_status_codes": (200,)},
-    "mark_run_reviewed": {"response_shape": "run-control", "success_status_codes": (200,)},
-    "get_run_status": {"response_shape": "status", "success_status_codes": (200,)},
-    "get_run_result": {"response_shape": "result", "success_status_codes": (200,)},
-    "list_workspace_runs": {"response_shape": "list", "success_status_codes": (200,)},
-    "get_run_trace": {"response_shape": "trace", "success_status_codes": (200,)},
-    "list_run_artifacts": {"response_shape": "list", "success_status_codes": (200,)},
-    "get_artifact_detail": {"response_shape": "detail", "success_status_codes": (200,)},
-    "get_run_actions": {"response_shape": "action-log", "success_status_codes": (200,)},
-    "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,)},
-    "get_workspace": {"response_shape": "detail", "success_status_codes": (200,)},
-    "list_workspaces": {"response_shape": "list", "success_status_codes": (200,)},
+    "launch_run": {
+        "response_shape": "accepted",
+        "success_status_codes": (202,),
+        "body_kind": "object",
+        "required_top_level_keys": ("status",),
+    },
+    "launch_workspace_shell": {
+        "response_shape": "accepted",
+        "success_status_codes": (202,),
+        "body_kind": "object",
+        "required_top_level_keys": ("status",),
+    },
+    "commit_workspace_shell": {"response_shape": "snapshot-commit", "success_status_codes": (200,), "body_kind": "object"},
+    "checkout_workspace_shell": {"response_shape": "working-save-checkout", "success_status_codes": (200,), "body_kind": "object"},
+    "retry_run": {"response_shape": "run-control", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status",)},
+    "force_reset_run": {"response_shape": "run-control", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status",)},
+    "mark_run_reviewed": {"response_shape": "run-control", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status",)},
+    "get_run_status": {"response_shape": "status", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("run_id", "status")},
+    "get_run_result": {"response_shape": "result", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("run_id", "result_state")},
+    "list_workspace_runs": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object"},
+    "get_run_trace": {"response_shape": "trace", "success_status_codes": (200,), "body_kind": "object"},
+    "list_run_artifacts": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object"},
+    "get_artifact_detail": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object"},
+    "get_run_actions": {"response_shape": "action-log", "success_status_codes": (200,), "body_kind": "object"},
+    "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object"},
+    "get_workspace": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object"},
+    "list_workspaces": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object"},
 }
 
 

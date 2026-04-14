@@ -3,6 +3,7 @@ from __future__ import annotations
 from src import integration as root_integration
 from src import sdk
 from src.sdk import integration
+from src.server import EngineRunStatusSnapshot, EngineSignal, RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.framework_binding_models import FrameworkOutboundResponse
 from src.server.http_route_models import HttpRouteResponse
 
@@ -40,8 +41,43 @@ from src.sdk.integration import (
 )
 
 
+def _workspace() -> WorkspaceAuthorizationContext:
+    return WorkspaceAuthorizationContext(
+        workspace_id="ws-001",
+        owner_user_ref="user-owner",
+        collaborator_user_refs=("user-collab",),
+        viewer_user_refs=("user-viewer",),
+    )
+
+
+def _run_context(*, owner: str = "user-owner") -> RunAuthorizationContext:
+    return RunAuthorizationContext(
+        run_id="run-001",
+        workspace_context=_workspace(),
+        run_owner_user_ref=owner,
+    )
+
+
+def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
+    return {
+        "run_id": "run-001",
+        "workspace_id": "ws-001",
+        "execution_target_type": "commit_snapshot",
+        "execution_target_ref": "snap-001",
+        "status": status,
+        "status_family": status_family,
+        "created_at": "2026-04-11T12:00:00+00:00",
+        "started_at": "2026-04-11T12:00:05+00:00",
+        "updated_at": "2026-04-11T12:00:10+00:00",
+        "finished_at": None,
+        "requested_by_user_id": "user-owner",
+        "trace_available": False,
+    }
+
+
+
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.9"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.10"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -75,9 +111,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.7"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.8"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.7"
+    assert surface.version == "1.8"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -132,12 +168,12 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.3"
-    assert PUBLIC_MCP_SCHEMA_VERSION == "1.3"
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.4"
+    assert PUBLIC_MCP_SCHEMA_VERSION == "1.4"
     assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.3"
-    assert manifest.schema_version == "1.3"
+    assert manifest.manifest_version == "1.4"
+    assert manifest.schema_version == "1.4"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -145,8 +181,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
-    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.3"
-    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.3"
+    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.4"
+    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.4"
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -174,7 +210,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.5"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.6"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -383,9 +419,9 @@ def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> N
 
     assert isinstance(policy, PublicMcpCompatibilityPolicy)
     assert policy.policy_version == "1.0"
-    assert policy.supports_manifest_version("1.3") is True
-    assert policy.supports_schema_version("1.3") is True
-    policy.assert_supported(manifest_version="1.3", schema_version="1.3")
+    assert policy.supports_manifest_version("1.4") is True
+    assert policy.supports_schema_version("1.4") is True
+    policy.assert_supported(manifest_version="1.4", schema_version="1.4")
 
 
 def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
@@ -410,9 +446,9 @@ def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
     export = bridge.export()
 
-    assert export.schema_version == "1.3"
+    assert export.schema_version == "1.4"
     assert export.compatibility_policy.policy_version == "1.0"
-    bridge.assert_consumer_compatibility(manifest_version="1.3", schema_version="1.3")
+    bridge.assert_consumer_compatibility(manifest_version="1.4", schema_version="1.4")
 
     try:
         bridge.assert_consumer_compatibility(manifest_version="0.9")
@@ -584,3 +620,89 @@ def test_adapter_scaffold_rejects_unexpected_success_status_for_response_contrac
         assert "Unexpected success status code" in str(exc)
     else:
         raise AssertionError("Expected response-contract success status validation")
+
+
+def test_response_contract_exports_body_kind_and_required_keys() -> None:
+    contracts = build_public_mcp_response_contracts()
+    indexed = {contract.route_name: contract for contract in contracts}
+
+    assert indexed["get_run_status"].body_kind == "object"
+    assert indexed["get_run_status"].required_top_level_keys == ("run_id", "status")
+    assert indexed["launch_run"].required_top_level_keys == ("status",)
+
+
+def test_adapter_scaffold_rejects_framework_response_with_wrong_body_kind() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    try:
+        adapter.normalize_framework_resource_response(
+            "get_run_status",
+            FrameworkOutboundResponse(
+                status_code=200,
+                headers={"content-type": "application/json"},
+                body_text='["not", "an", "object"]',
+                media_type="application/json",
+            ),
+        )
+    except ValueError as exc:
+        assert "expected object" in str(exc)
+    else:
+        raise AssertionError("Expected response body kind validation")
+
+
+def test_host_bridge_can_execute_framework_resource_and_normalize_response() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    normalized = bridge.execute_framework_resource(
+        "get_run_status",
+        {"run_id": "run-001"},
+        headers={"Authorization": "Bearer token", "X-Request-Id": "req-framework-bridge-1"},
+        session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["editor"]},
+        run_context=_run_context(),
+        run_record_row=_run_row(),
+        engine_status=EngineRunStatusSnapshot(
+            run_id="run-001",
+            status="running",
+            active_node_id="node-1",
+            active_node_label="Node 1",
+            progress_percent=20,
+            progress_summary="Working",
+            latest_signal=EngineSignal(severity="info", code="NODE_RUNNING", message="Node 1 is executing."),
+            trace_ref="trace://run-001",
+            artifact_count=0,
+        ),
+    )
+
+    assert isinstance(normalized, PublicMcpNormalizedResponse)
+    assert normalized.response_contract.response_shape == "status"
+    assert normalized.body["run_id"] == "run-001"
+    assert normalized.body["status"] == "running"
+
+
+def test_host_bridge_can_execute_http_resource_and_normalize_response() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    normalized = bridge.execute_http_resource(
+        "get_run_status",
+        {"run_id": "run-001"},
+        headers={"Authorization": "Bearer token", "X-Request-Id": "req-http-bridge-1"},
+        session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["editor"]},
+        run_context=_run_context(),
+        run_record_row=_run_row(),
+        engine_status=EngineRunStatusSnapshot(
+            run_id="run-001",
+            status="running",
+            active_node_id="node-1",
+            active_node_label="Node 1",
+            progress_percent=42,
+            progress_summary="Running review stage",
+            latest_signal=EngineSignal(severity="info", code="NODE_RUNNING", message="Review Bundle is currently executing."),
+            trace_ref="trace://run-001",
+            artifact_count=0,
+        ),
+    )
+
+    assert isinstance(normalized, PublicMcpNormalizedResponse)
+    assert normalized.response_contract.response_shape == "status"
+    assert normalized.body["run_id"] == "run-001"
+    assert normalized.body["status"] == "running"

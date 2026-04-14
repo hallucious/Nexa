@@ -80,7 +80,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.9"
+PUBLIC_SDK_SURFACE_VERSION = "1.10"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
