@@ -8,6 +8,7 @@ from src.server.workspace_onboarding_models import ProductWorkspaceSummaryView
 from src.server.auth_models import RequestAuthContext
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.run_recovery_projection import recovery_projection_from_run_row
+from src.server.run_read_api import _source_artifact_view_from_sources
 from src.server.recent_activity_models import (
     HistorySummaryReadOutcome,
     ProductHistorySummaryResponse,
@@ -268,6 +269,7 @@ class RecentActivityService:
                     workspace_id=row_workspace_id,
                     workspace_title=workspace_title,
                     run_id=run_id,
+                    source_artifact=_source_artifact_view_from_sources(row),
                     status=status,
                     status_family=status_family,
                     summary=summary,

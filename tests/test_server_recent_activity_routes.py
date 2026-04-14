@@ -148,6 +148,25 @@ def test_recent_activity_service_returns_sorted_paginated_feed() -> None:
     assert outcome.response.next_cursor == outcome.response.activities[-1].activity_id
     assert outcome.response.total_visible_count == 7
 
+    full_outcome = RecentActivityService.list_recent_activity(
+        request_auth=_auth('user-collab'),
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(_membership(),),
+        onboarding_rows=(_onboarding_row('onboard-001', '2026-04-11T12:12:00+00:00'),),
+        run_rows=(
+            _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
+            _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
+        ),
+        provider_probe_rows=(_probe_row('probe-001', '2026-04-11T12:08:00+00:00'),),
+        provider_binding_rows=(_binding_row('binding-001', '2026-04-11T12:09:00+00:00'),),
+        managed_secret_rows=({'workspace_id': 'ws-001', 'provider_key': 'openai', 'secret_ref': 'secret://ws-001/openai', 'last_rotated_at': '2026-04-11T12:11:00+00:00'},),
+        limit=10,
+    )
+    run_item = next(item for item in full_outcome.response.activities if item.run_id == 'run-002')
+    assert run_item.source_artifact is not None
+    assert run_item.source_artifact.storage_role == 'commit_snapshot'
+    assert run_item.source_artifact.canonical_ref == 'snap-run-002'
+
 
 def test_recent_activity_summary_filters_to_visible_workspace() -> None:
     outcome = RecentActivityService.read_history_summary(
@@ -233,6 +252,29 @@ def test_recent_activity_route_family_round_trip() -> None:
     assert activity_response.body['returned_count'] == 2
     assert activity_response.body['activities'][0]['activity_type'] == 'onboarding_updated'
     assert activity_response.body['activities'][0]['links']['onboarding'] == '/api/users/me/onboarding?workspace_id=ws-001'
+
+    paged_activity_response = RunHttpRouteSurface.handle_recent_activity(
+        http_request=HttpRouteRequest(
+            method='GET',
+            path='/api/users/me/activity',
+            headers={'Authorization': 'Bearer token'},
+            session_claims={'sub': 'user-collab', 'sid': 'sess-001', 'exp': 4102444800, 'roles': ['editor']},
+            query_params={'limit': 10},
+        ),
+        workspace_rows=(_workspace_row(),),
+        membership_rows=(_membership(),),
+        onboarding_rows=(_onboarding_row('onboard-001', '2026-04-11T12:12:00+00:00'),),
+        run_rows=(
+            _run_row('run-001', '2026-04-11T12:06:00+00:00', status='completed', status_family='terminal_success'),
+            _run_row('run-002', '2026-04-11T12:07:00+00:00', status='queued', status_family='pending'),
+        ),
+        provider_probe_rows=(_probe_row('probe-001', '2026-04-11T12:08:00+00:00'),),
+        provider_binding_rows=(_binding_row('binding-001', '2026-04-11T12:09:00+00:00'),),
+        managed_secret_rows=({'workspace_id': 'ws-001', 'provider_key': 'openai', 'secret_ref': 'secret://ws-001/openai', 'last_rotated_at': '2026-04-11T12:10:00+00:00'},),
+    )
+    run_item = next(item for item in paged_activity_response.body['activities'] if item['run_id'] == 'run-002')
+    assert run_item['source_artifact']['storage_role'] == 'commit_snapshot'
+    assert run_item['source_artifact']['canonical_ref'] == 'snap-run-002'
 
     summary_response = RunHttpRouteSurface.handle_history_summary(
         http_request=HttpRouteRequest(

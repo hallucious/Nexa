@@ -16,6 +16,7 @@ class ResultHistoryItemView:
     timestamp_label: str
     result_title: str
     result_summary: str
+    source_artifact: dict[str, object] | None = None
     output_preview: str | None = None
     output_label: str | None = None
     open_result_href: str | None = None
@@ -142,6 +143,46 @@ def _result_history_status_key(item: object, result: object | None) -> str:
     return "unknown"
 
 
+
+
+def _normalized_source_artifact(source: object | None) -> dict[str, object] | None:
+    if source is None:
+        return None
+    if isinstance(source, Mapping):
+        payload = dict(source)
+    else:
+        storage_role = _field(source, "storage_role")
+        canonical_ref = _field(source, "canonical_ref")
+        if not storage_role or not canonical_ref:
+            return None
+        payload = {
+            "storage_role": storage_role,
+            "canonical_ref": canonical_ref,
+            "working_save_id": _field(source, "working_save_id"),
+            "commit_id": _field(source, "commit_id"),
+            "source_working_save_id": _field(source, "source_working_save_id"),
+        }
+    storage_role = str(payload.get("storage_role") or "").strip()
+    canonical_ref = str(payload.get("canonical_ref") or "").strip()
+    if storage_role not in {"working_save", "commit_snapshot"} or not canonical_ref:
+        return None
+    normalized = {
+        "storage_role": storage_role,
+        "canonical_ref": canonical_ref,
+    }
+    for key in ("working_save_id", "commit_id", "source_working_save_id"):
+        value = payload.get(key)
+        if value not in (None, ""):
+            normalized[key] = value
+    return normalized
+
+
+def _result_history_source_artifact(item: object, result: object | None) -> dict[str, object] | None:
+    resolved = _normalized_source_artifact(_field(result, "source_artifact") if result is not None else None)
+    if resolved is not None:
+        return resolved
+    return _normalized_source_artifact(_field(item, "source_artifact"))
+
 def _result_history_status_label(status_key: str, *, app_language: str) -> str:
     fallback = {
         "success": "Result ready",
@@ -231,6 +272,7 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
         timestamp_label=_run_timestamp_label(item, result, app_language=app_language),
         result_title=_result_title(item, result, app_language=app_language),
         result_summary=_result_summary_text(item, result, app_language=app_language),
+        source_artifact=_result_history_source_artifact(item, result),
         output_preview=output_preview,
         output_label=output_label,
         open_result_href=open_result_href,

@@ -9,7 +9,7 @@ from src.server.workspace_onboarding_models import (
 from src.ui.circuit_library import read_circuit_library_view_model
 from src.ui.result_history import read_result_history_view_model
 from src.server.run_list_models import ProductWorkspaceRunListResponse, ProductRunListAppliedFilters, ProductRunListItemView, ProductRunListLinks
-from src.server.run_read_models import ProductExecutionTargetView, ProductRunResultResponse, ProductResultSummaryView, ProductFinalOutputView
+from src.server.run_read_models import ProductExecutionTargetView, ProductRunResultResponse, ProductResultSummaryView, ProductFinalOutputView, ProductSourceArtifactView
 
 
 def _summary(
@@ -106,6 +106,45 @@ def test_circuit_library_projects_expose_result_history_reentry_link() -> None:
     vm = read_circuit_library_view_model(response)
     assert vm.items[0].result_history_href == "/app/workspaces/ws-result/results?run_id=run-001"
     assert vm.items[0].result_history_action_label == "Open results"
+
+
+def test_result_history_view_model_surfaces_source_artifact_identity() -> None:
+    response = ProductWorkspaceRunListResponse(
+        workspace_id="ws-001",
+        workspace_title="Primary Workspace",
+        returned_count=1,
+        total_visible_count=1,
+        runs=(
+            ProductRunListItemView(
+                run_id="run-002",
+                workspace_id="ws-001",
+                execution_target=ProductExecutionTargetView(target_type="commit_snapshot", target_ref="commit-001"),
+                source_artifact=ProductSourceArtifactView(
+                    storage_role="commit_snapshot",
+                    canonical_ref="commit-001",
+                    commit_id="commit-001",
+                    source_working_save_id="ws-001",
+                ),
+                status="completed",
+                status_family="terminal_success",
+                created_at="2026-04-12T10:00:00+00:00",
+                updated_at="2026-04-12T10:03:00+00:00",
+                completed_at="2026-04-12T10:03:00+00:00",
+                result_summary=ProductResultSummaryView(title="Last successful result", description="Success."),
+                links=ProductRunListLinks(
+                    status="/api/runs/run-002",
+                    result="/api/runs/run-002/result",
+                    trace="/api/runs/run-002/trace",
+                    artifacts="/api/runs/run-002/artifacts",
+                ),
+            ),
+        ),
+    )
+
+    vm = read_result_history_view_model(response, selected_run_id="run-002")
+    assert vm.items[0].source_artifact is not None
+    assert vm.items[0].source_artifact["storage_role"] == "commit_snapshot"
+    assert vm.items[0].source_artifact["canonical_ref"] == "commit-001"
 
 
 def test_result_history_view_model_projects_beginner_reopen_cards() -> None:

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Literal, Optional
 
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
+from src.server.run_read_models import ProductSourceArtifactView
 
 RecentActivityFailureFamily = Literal["product_read_failure"]
 _ALLOWED_RECENT_ACTIVITY_FAILURE_FAMILIES = {"product_read_failure"}
@@ -45,6 +46,7 @@ class ProductRecentActivityItemView:
     workspace_id: str
     workspace_title: str
     run_id: Optional[str] = None
+    source_artifact: Optional[ProductSourceArtifactView] = None
     status: Optional[str] = None
     status_family: Optional[str] = None
     summary: Optional[str] = None
