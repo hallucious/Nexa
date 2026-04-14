@@ -1349,10 +1349,10 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '준비됨.' in body
     assert '최신 실행 추적' in body
     assert '최신 실행 추적 열기' in body
-    assert '최근 아티팩트 이력' in body
-    assert '최신 아티팩트 열기' in body
+    assert '최근 산출물 이력' in body
+    assert '최신 산출물 열기' in body
     assert '실행 추적 상세 레이어' in body
-    assert '아티팩트 상세 레이어' in body
+    assert '산출물 상세 레이어' in body
     assert '개인정보와 데이터 처리' in body
     assert '제공자 접근' in body
     assert '세션 전용 키' in body
