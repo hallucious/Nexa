@@ -393,3 +393,45 @@ def test_checkout_workspace_shell_route_restores_working_save() -> None:
     assert artifact_store['ws-001']['meta']['working_save_id'] == 'ws-http-restored'
     assert response.body['storage_role'] == 'working_save'
     assert response.body['transition']['action'] == 'checkout_workspace_shell'
+
+
+def test_launch_workspace_shell_route_uses_current_public_working_save() -> None:
+    response = RunHttpRouteSurface.handle_launch_workspace_shell(
+        http_request=_auth_request(method='POST', path='/api/workspaces/ws-001/shell/launch', path_params={'workspace_id': 'ws-001'}, json_body={'input_payload': {'question': 'hello from shell'}}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source={
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-shell-launch", "name": "Primary Workspace"},
+            "circuit": {"nodes": [{"id": "n1", "type": "plugin", "plugin_ref": "plugin.main", "inputs": {}, "outputs": {"result": "output.value"}}], "edges": [], "entry": "n1", "outputs": [{"name": "result", "node_id": "n1", "path": "output.value"}]},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {"plugin.main": {"entrypoint": "demo.main"}}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+        },
+        run_id_factory=lambda: 'run-shell-001',
+        run_request_id_factory=lambda: 'req-shell-001',
+        now_iso='2026-04-14T09:00:00+00:00',
+    )
+    assert response.status_code == 202
+    assert response.body['status'] == 'accepted'
+    assert response.body['run_id'] == 'run-shell-001'
+    assert response.body['execution_target']['target_type'] == 'working_save'
+    assert response.body['execution_target']['target_ref'] == 'ws-shell-launch'
+    assert response.body['launch_context']['action'] == 'launch_workspace_shell'
+
+
+def test_launch_workspace_shell_route_uses_current_public_commit_snapshot() -> None:
+    response = RunHttpRouteSurface.handle_launch_workspace_shell(
+        http_request=_auth_request(method='POST', path='/api/workspaces/ws-001/shell/launch', path_params={'workspace_id': 'ws-001'}, json_body={'input_payload': {'question': 'hello from snapshot'}}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=_commit_snapshot('snap-shell-launch-001'),
+        run_id_factory=lambda: 'run-shell-002',
+        run_request_id_factory=lambda: 'req-shell-002',
+        now_iso='2026-04-14T09:01:00+00:00',
+    )
+    assert response.status_code == 202
+    assert response.body['status'] == 'accepted'
+    assert response.body['execution_target']['target_type'] == 'commit_snapshot'
+    assert response.body['execution_target']['target_ref'] == 'snap-shell-launch-001'
+    assert response.body['launch_context']['storage_role'] == 'commit_snapshot'

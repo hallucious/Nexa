@@ -266,6 +266,7 @@ class RunHttpRouteSurface:
         ("put_workspace_shell_draft", "PUT", "/api/workspaces/{workspace_id}/shell/draft"),
         ("commit_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/commit"),
         ("checkout_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/checkout"),
+        ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
@@ -527,6 +528,139 @@ class RunHttpRouteSurface:
         source = resolve_workspace_artifact_source(workspace_row, artifact_source)
         model, loaded = _load_workspace_model(source, workspace_row)
         return source, model, loaded
+
+    @staticmethod
+    def _workspace_shell_launch_guard(
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        *,
+        expected_path: str,
+    ) -> HttpRouteResponse | tuple[str, Mapping[str, Any], Any]:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace shell launch route only supports POST."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        if http_request.path.rstrip("/") != expected_path.format(workspace_id=workspace_id):
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "workspace_shell_not_found",
+                "reason_code": "workspace_shell.workspace_not_found",
+                "message": "Requested workspace shell was not found.",
+            })
+        body = http_request.json_body
+        if body is not None and not isinstance(body, Mapping):
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "workspace_shell_launch_failure",
+                "reason_code": "workspace_shell.invalid_request",
+                "message": "Workspace shell launch payload is invalid.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        return workspace_id, workspace_row, workspace_context
+
+
+    @classmethod
+    def handle_launch_workspace_shell(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        policy: ProductAdmissionPolicy = ProductAdmissionPolicy(),
+        engine_launch_decider: Optional[Callable[[EngineRunLaunchRequest], EngineRunLaunchResponse]] = None,
+        run_id_factory: Optional[Callable[[], str]] = None,
+        run_request_id_factory: Optional[Callable[[], str]] = None,
+        now_iso: Optional[str] = None,
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        artifact_source: Any | None = None,
+    ) -> HttpRouteResponse:
+        guard = cls._workspace_shell_launch_guard(
+            http_request,
+            workspace_context,
+            workspace_row,
+            expected_path="/api/workspaces/{workspace_id}/shell/launch",
+        )
+        if isinstance(guard, HttpRouteResponse):
+            return guard
+        workspace_id, workspace_row, workspace_context = guard
+        body = http_request.json_body if isinstance(http_request.json_body, Mapping) else {}
+        source, model, loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+        from src.server.workspace_shell_runtime import _execution_target_for
+        target = _execution_target_for(model)
+        if target is None:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "workspace_shell_launch_failure",
+                "reason_code": "workspace_shell.launch_source_unsupported",
+                "message": "Workspace shell launch requires a working_save or commit_snapshot source.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        launch_options = body.get("launch_options") if isinstance(body.get("launch_options"), Mapping) else {}
+        client_context = body.get("client_context") if isinstance(body.get("client_context"), Mapping) else {}
+        request_body = {
+            "workspace_id": workspace_id,
+            "execution_target": target,
+            "input_payload": body.get("input_payload") if isinstance(body.get("input_payload"), Mapping) else {},
+            "launch_options": {
+                "allow_working_save_execution": bool(launch_options.get("allow_working_save_execution", target.get("target_type") == "working_save")),
+            },
+            "client_context": {
+                "source": str(client_context.get("source") or client_context.get("surface") or "workspace_shell"),
+                **{k: v for k, v in client_context.items() if k not in {"surface", "source"}},
+            },
+        }
+        source_payload = source if source is not None else (loaded if loaded is not None else model)
+        target_catalog = {
+            str(target["target_ref"]): ExecutionTargetCatalogEntry(
+                workspace_id=workspace_id,
+                target_ref=str(target["target_ref"]),
+                target_type=str(target["target_type"]),
+                source=source_payload,
+            )
+        }
+        delegated = HttpRouteRequest(
+            method="POST",
+            path="/api/runs",
+            headers=dict(http_request.headers),
+            path_params={},
+            query_params=dict(http_request.query_params),
+            json_body=request_body,
+            session_claims=http_request.session_claims,
+        )
+        response = cls.handle_launch(
+            http_request=delegated,
+            workspace_context=workspace_context,
+            target_catalog=target_catalog,
+            policy=policy,
+            engine_launch_decider=engine_launch_decider,
+            run_id_factory=run_id_factory,
+            run_request_id_factory=run_request_id_factory,
+            now_iso=now_iso,
+            workspace_row=workspace_row,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+        )
+        if isinstance(response.body, Mapping):
+            body_payload = dict(response.body)
+            body_payload["launch_context"] = {
+                "action": "launch_workspace_shell",
+                "workspace_id": workspace_context.workspace_id,
+                "storage_role": target["target_type"],
+                "target_ref": target["target_ref"],
+            }
+            return _route_response(response.status_code, body_payload)
+        return response
 
 
     @classmethod

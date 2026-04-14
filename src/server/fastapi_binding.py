@@ -489,6 +489,27 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.post("/api/workspaces/{workspace_id}/shell/launch")
+        async def launch_workspace_shell(request: Request, workspace_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_launch_workspace_shell(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                policy=self.dependencies.admission_policy,
+                engine_launch_decider=self.dependencies.engine_launch_decider,
+                run_id_factory=self.dependencies.run_id_factory,
+                run_request_id_factory=self.dependencies.run_request_id_factory,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+            )
+            return self._framework_response(outbound)
+
         @router.get("/app/library")
         async def get_circuit_library_page(request: Request) -> Response:
             inbound = FrameworkInboundRequest(

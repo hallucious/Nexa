@@ -155,6 +155,12 @@ class FrameworkRouteBindings:
             summary="Checkout the current workspace shell commit snapshot into a public working save.",
         ),
         FrameworkRouteDefinition(
+            route_name="launch_workspace_shell",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/shell/launch",
+            summary="Launch a run directly from the current workspace shell public artifact.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_run",
             method="POST",
             path_template="/api/runs",
@@ -819,6 +825,43 @@ class FrameworkRouteBindings:
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
             workspace_artifact_source_writer=workspace_artifact_source_writer,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_launch_workspace_shell(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        policy: ProductAdmissionPolicy = ProductAdmissionPolicy(),
+        engine_launch_decider: Optional[callable] = None,
+        run_id_factory: Optional[callable] = None,
+        run_request_id_factory: Optional[callable] = None,
+        now_iso: Optional[str] = None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        artifact_source: Any | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_launch_workspace_shell(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            policy=policy,
+            engine_launch_decider=engine_launch_decider,
+            run_id_factory=run_id_factory,
+            run_request_id_factory=run_request_id_factory,
+            now_iso=now_iso,
+            recent_run_rows=list(recent_run_rows),
+            provider_binding_rows=list(provider_binding_rows),
+            managed_secret_rows=list(managed_secret_rows),
+            provider_probe_rows=list(provider_probe_rows),
+            onboarding_rows=list(onboarding_rows),
+            artifact_source=artifact_source,
         )
         return cls.to_framework_response(response)
 

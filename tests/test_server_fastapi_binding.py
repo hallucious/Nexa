@@ -1450,3 +1450,13 @@ def test_fastapi_binding_workspace_shell_checkout_round_trip() -> None:
     assert payload['working_save_id'] == 'ws-fastapi-restored'
     assert payload['transition']['action'] == 'checkout_workspace_shell'
     assert payload['routes']['workspace_shell_checkout'] == '/api/workspaces/ws-001/shell/checkout'
+
+
+def test_fastapi_binding_workspace_shell_launch_round_trip() -> None:
+    client = _make_client(artifact_source=_valid_working_save_artifact())
+    response = client.post('/api/workspaces/ws-001/shell/launch', headers=_session_headers(), json={'input_payload': {'question': 'hello from fastapi shell'}})
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload['execution_target']['target_type'] == 'working_save'
+    assert payload['execution_target']['target_ref'] == 'ws-001-draft'
+    assert payload['launch_context']['action'] == 'launch_workspace_shell'

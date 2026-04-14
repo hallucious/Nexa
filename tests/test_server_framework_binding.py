@@ -122,6 +122,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "put_workspace_shell_draft",
         "commit_workspace_shell",
         "checkout_workspace_shell",
+        "launch_workspace_shell",
         "launch_run",
         "get_run_status",
         "get_run_result",
@@ -797,3 +798,28 @@ def test_framework_binding_checkout_workspace_shell_restores_working_save() -> N
     assert parsed['storage_role'] == 'working_save'
     assert parsed['transition']['action'] == 'checkout_workspace_shell'
     assert parsed['routes']['workspace_shell_checkout'] == '/api/workspaces/ws-001/shell/checkout'
+
+
+def test_framework_binding_launch_workspace_shell_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_launch_workspace_shell(
+        request=_request(method='POST', path='/api/workspaces/ws-001/shell/launch', path_params={'workspace_id': 'ws-001'}, json_body={'input_payload': {'question': 'hello from framework shell'}}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source={
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-framework-launch", "name": "Primary Workspace"},
+            "circuit": {"nodes": [{"id": "n1", "type": "plugin", "plugin_ref": "plugin.main", "inputs": {}, "outputs": {"result": "output.value"}}], "edges": [], "entry": "n1", "outputs": [{"name": "result", "node_id": "n1", "path": "output.value"}]},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {"plugin.main": {"entrypoint": "demo.main"}}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+        },
+        run_id_factory=lambda: 'run-framework-shell-001',
+        run_request_id_factory=lambda: 'req-framework-shell-001',
+        now_iso='2026-04-14T09:10:00+00:00',
+    )
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 202
+    assert parsed['run_id'] == 'run-framework-shell-001'
+    assert parsed['execution_target']['target_type'] == 'working_save'
+    assert parsed['execution_target']['target_ref'] == 'ws-framework-launch'
+    assert parsed['launch_context']['action'] == 'launch_workspace_shell'
