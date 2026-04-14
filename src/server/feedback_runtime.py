@@ -135,7 +135,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
         items_html = f'<article class="feedback-item empty"><h2>{empty_title}</h2><p>{empty_summary}</p></article>'
     confirmation_html = ""
     if confirmation_title or confirmation_summary:
-        confirmation_html = f'<section class="confirmation"><h2>{confirmation_title}</h2><p>{confirmation_summary}</p></section>'
+        confirmation_html = f'<section class="confirmation" role="region" aria-labelledby="feedback-confirmation-title"><h2 id="feedback-confirmation-title">{confirmation_title}</h2><p>{confirmation_summary}</p></section>'
     return f"""<!doctype html>
 <html lang="{app_language}">
   <head>

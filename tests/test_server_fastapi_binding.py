@@ -1347,6 +1347,7 @@ def test_fastapi_binding_product_surfaces_expose_accessible_landmarks() -> None:
     assert 'role="region" aria-labelledby="feedback-form-title"' in feedback_page.text
     assert 'aria-describedby="feedback-status"' in feedback_page.text
     assert 'aria-live="polite"' in feedback_page.text
+    assert 'role="region" aria-labelledby="feedback-confirmation-title"' in feedback_page.text or 'role="region" aria-labelledby="recent-feedback-title"' in feedback_page.text
 
 
 def test_fastapi_binding_workspace_shell_exposes_focus_and_live_region_semantics() -> None:
@@ -1360,3 +1361,6 @@ def test_fastapi_binding_workspace_shell_exposes_focus_and_live_region_semantics
     assert 'aria-label="Runtime section navigation"' in body
     assert 'id="step-state-banner-summary" aria-live="polite"' in body
     assert 'id="browser-log" aria-live="polite"' in body
+    assert 'id="designer-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="designer-detail-title"' in body
+    assert 'id="privacy-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="privacy-title"' in body
+    assert 'id="latest-run-trace-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-trace-detail-title"' in body

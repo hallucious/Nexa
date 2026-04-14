@@ -1294,100 +1294,100 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       </section>
     </div>
     <div class="row">
-      <section id="designer-detail-card" tabindex="-1" class="card focus-target">
-        <h2>Designer detail layer</h2>
+      <section id="designer-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="designer-detail-title">
+        <h2 id="designer-detail-title">Designer detail layer</h2>
         <pre id="designer-detail">Designer detail will appear here.</pre>
       </section>
-      <section id="validation-detail-card" tabindex="-1" class="card focus-target">
-        <h2>Validation detail layer</h2>
+      <section id="validation-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="validation-detail-title">
+        <h2 id="validation-detail-title">Validation detail layer</h2>
         <pre id="validation-detail">Validation detail will appear here.</pre>
       </section>
     </div>
     <div class="row">
-      <section id="contextual-help-card" tabindex="-1" class="card focus-target">
-        <h2>{help_title}</h2>
+      <section id="contextual-help-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="contextual-help-title">
+        <h2 id="contextual-help-title">{help_title}</h2>
         <p>{help_summary}</p>
       </section>
-      <section id="privacy-card" tabindex="-1" class="card focus-target">
-        <h2>{escape(str(privacy.get('title') or 'Privacy and data handling'))}</h2>
+      <section id="privacy-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="privacy-title">
+        <h2 id="privacy-title">{escape(str(privacy.get('title') or 'Privacy and data handling'))}</h2>
         <ul>{privacy_markup}</ul>
       </section>
     </div>
     <div class="row">
-      <section id="mobile-first-run-card" tabindex="-1" class="card focus-target">
-        <h2>Mobile first-run</h2>
+      <section id="mobile-first-run-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="mobile-first-run-title">
+        <h2 id="mobile-first-run-title">Mobile first-run</h2>
         <ul>{mobile_markup}</ul>
       </section>
-      <section id="starter-templates-card" tabindex="-1" class="card focus-target">
-        <h2>Starter templates</h2>
+      <section id="starter-templates-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="starter-templates-title">
+        <h2 id="starter-templates-title">Starter templates</h2>
         <ul>{template_markup}</ul>
       </section>
     </div>
     <div class="row">
-      <section id="latest-run-status-card" tabindex="-1" class="card focus-target">
-        <h2>Latest run status</h2>
+      <section id="latest-run-status-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-status-title">
+        <h2 id="latest-run-status-title">Latest run status</h2>
         <pre id="latest-run-status">Waiting for run status.</pre>
       </section>
-      <section id="latest-run-result-card" tabindex="-1" class="card focus-target">
-        <h2>Latest run result</h2>
+      <section id="latest-run-result-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-result-title">
+        <h2 id="latest-run-result-title">Latest run result</h2>
         <pre id="latest-run-result">Waiting for run result.</pre>
       </section>
     </div>
     <div class="row">
-      <section id="latest-run-status-detail-card" tabindex="-1" class="card focus-target">
-        <h2>Status detail layer</h2>
+      <section id="latest-run-status-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-status-detail-title">
+        <h2 id="latest-run-status-detail-title">Status detail layer</h2>
         <pre id="latest-run-status-detail">Open latest run status to view the detail layer.</pre>
       </section>
-      <section id="latest-run-result-detail-card" tabindex="-1" class="card focus-target">
-        <h2>Result detail layer</h2>
+      <section id="latest-run-result-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-result-detail-title">
+        <h2 id="latest-run-result-detail-title">Result detail layer</h2>
         <pre id="latest-run-result-detail">Open latest run result to view the detail layer.</pre>
       </section>
     </div>
     <div class="row">
-      <section id="status-history-card" tabindex="-1" class="card focus-target">
-        <h2>Run status history</h2>
+      <section id="status-history-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="status-history-title">
+        <h2 id="status-history-title">Run status history</h2>
         <pre id="status-history-summary">Recent status history will appear here.</pre>
         <pre id="status-history-detail">Status history detail will appear here.</pre>
         <div id="status-history-controls" class="actions"></div>
       </section>
-      <section id="result-history-card" tabindex="-1" class="card focus-target">
-        <h2>Run result history</h2>
+      <section id="result-history-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="result-history-card-title">
+        <h2 id="result-history-card-title">Run result history</h2>
         <pre id="result-history-summary">Recent result history will appear here.</pre>
         <pre id="result-history-detail">Result history detail will appear here.</pre>
         <div id="result-history-controls" class="actions"></div>
       </section>
     </div>
     <div class="row">
-      <section id="trace-history-card" tabindex="-1" class="card focus-target">
-        <h2>Trace history</h2>
+      <section id="trace-history-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="trace-history-title">
+        <h2 id="trace-history-title">Trace history</h2>
         <pre id="trace-history-summary">Recent trace history will appear here.</pre>
         <pre id="trace-history-detail">Trace history detail will appear here.</pre>
         <div id="trace-history-controls" class="actions"></div>
       </section>
-      <section id="artifacts-history-card" tabindex="-1" class="card focus-target">
-        <h2>Artifacts history</h2>
+      <section id="artifacts-history-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="artifacts-history-title">
+        <h2 id="artifacts-history-title">Artifacts history</h2>
         <pre id="artifacts-history-summary">Recent artifacts history will appear here.</pre>
         <pre id="artifacts-history-detail">Artifacts history detail will appear here.</pre>
         <div id="artifacts-history-controls" class="actions"></div>
       </section>
     </div>
     <div class="row">
-      <section id="latest-run-trace-card" tabindex="-1" class="card focus-target">
-        <h2>Latest trace</h2>
+      <section id="latest-run-trace-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-trace-title">
+        <h2 id="latest-run-trace-title">Latest trace</h2>
         <pre id="latest-run-trace">Waiting for trace details.</pre>
       </section>
-      <section id="latest-run-artifacts-card" tabindex="-1" class="card focus-target">
-        <h2>Latest artifacts</h2>
+      <section id="latest-run-artifacts-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-artifacts-title">
+        <h2 id="latest-run-artifacts-title">Latest artifacts</h2>
         <pre id="latest-run-artifacts">Waiting for artifact details.</pre>
       </section>
     </div>
     <div class="row">
-      <section id="latest-run-trace-detail-card" tabindex="-1" class="card focus-target">
-        <h2>Trace detail layer</h2>
+      <section id="latest-run-trace-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-trace-detail-title">
+        <h2 id="latest-run-trace-detail-title">Trace detail layer</h2>
         <pre id="latest-run-trace-detail">Open latest trace to view the detail layer.</pre>
       </section>
-      <section id="latest-run-artifacts-detail-card" tabindex="-1" class="card focus-target">
-        <h2>Artifacts detail layer</h2>
+      <section id="latest-run-artifacts-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-artifacts-detail-title">
+        <h2 id="latest-run-artifacts-detail-title">Artifacts detail layer</h2>
         <pre id="latest-run-artifacts-detail">Open latest artifacts to view the detail layer.</pre>
       </section>
     </div>

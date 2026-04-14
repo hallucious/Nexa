@@ -229,7 +229,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         """
     selected_output_html = ""
     if selected.get("output_preview"):
-        selected_output_html = f'<section class="selected-output" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or ui_text("result_history.selected_output.title", app_language=app_language, fallback_text="Latest output")))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
+        selected_output_html = f'<section class="selected-output" role="region" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or ui_text("result_history.selected_output.title", app_language=app_language, fallback_text="Latest output")))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
     onboarding_html = ""
     if onboarding_banner:
         action_href = escape(str(onboarding_banner.get("action_href") or "#"))
