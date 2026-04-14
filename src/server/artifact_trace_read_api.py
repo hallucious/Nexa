@@ -18,6 +18,7 @@ from src.server.artifact_trace_read_models import (
 )
 from src.server.auth_adapter import AuthorizationGate
 from src.server.auth_models import AuthorizationInput, RequestAuthContext, RunAuthorizationContext, WorkspaceAuthorizationContext
+from src.server.run_read_api import _source_artifact_view_from_sources
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 
 
@@ -48,6 +49,22 @@ def _artifact_payload_access(row: Mapping[str, Any]) -> Optional[ProductArtifact
     return None
 
 
+def _resolve_run_record_row(
+    run_id: str | None,
+    run_record_row: Mapping[str, Any] | None,
+    recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...],
+) -> Mapping[str, Any] | None:
+    if isinstance(run_record_row, Mapping):
+        return run_record_row
+    normalized_run_id = str(run_id or '').strip()
+    if not normalized_run_id:
+        return None
+    for row in recent_run_rows:
+        if str(row.get('run_id') or '').strip() == normalized_run_id:
+            return row
+    return None
+
+
 class ArtifactReadService:
     @staticmethod
     def _reject(*, family: str, code: str, message: str, run_id: str | None = None, artifact_id: str | None = None, workspace_title: str | None = None, provider_continuity=None, activity_continuity=None) -> ProductArtifactTraceReadRejectedResponse:
@@ -75,8 +92,10 @@ class ArtifactReadService:
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        run_record_row: Optional[Mapping[str, Any]] = None,
     ) -> ArtifactListReadOutcome:
         run_id = run_context.run_id if run_context is not None else None
+        resolved_run_record_row = _resolve_run_record_row(run_id, run_record_row, recent_run_rows)
         workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
             workspace_id=run_context.workspace_context.workspace_id if run_context is not None else None,
             workspace_row=workspace_row,
@@ -137,6 +156,7 @@ class ArtifactReadService:
                 run_id=run_context.run_id,
                 workspace_id=run_context.workspace_context.workspace_id,
                 artifact_count=len(artifacts),
+                source_artifact=_source_artifact_view_from_sources(resolved_run_record_row),
                 workspace_title=workspace_title,
                 provider_continuity=provider_continuity,
                 activity_continuity=activity_continuity,
@@ -157,8 +177,11 @@ class ArtifactReadService:
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_row: Optional[Mapping[str, Any]],
+        run_record_row: Optional[Mapping[str, Any]] = None,
     ) -> ArtifactDetailReadOutcome:
         artifact_id = str(artifact_row.get('artifact_id') or '') if artifact_row is not None else None
+        artifact_run_id = str(artifact_row.get('run_id') or '') if artifact_row is not None else None
+        resolved_run_record_row = _resolve_run_record_row(artifact_run_id, run_record_row, recent_run_rows)
         workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
             workspace_id=workspace_context.workspace_id if workspace_context is not None else None,
             workspace_row=workspace_row,
@@ -206,6 +229,7 @@ class ArtifactReadService:
                 run_id=str(artifact_row.get('run_id') or ''),
                 workspace_id=str(artifact_row.get('workspace_id') or workspace_context.workspace_id),
                 kind=str(artifact_row.get('artifact_type') or artifact_row.get('kind') or ''),
+                source_artifact=_source_artifact_view_from_sources(resolved_run_record_row),
                 workspace_title=workspace_title,
                 provider_continuity=provider_continuity,
                 activity_continuity=activity_continuity,
@@ -250,6 +274,7 @@ class TraceReadService:
         limit: int = 100,
     ) -> TraceReadOutcome:
         run_id = run_context.run_id if run_context is not None else None
+        resolved_run_record_row = _resolve_run_record_row(run_id, run_record_row, recent_run_rows)
         workspace_title, provider_continuity, activity_continuity = _continuity_projection_for_workspace(
             workspace_id=run_context.workspace_context.workspace_id if run_context is not None else None,
             workspace_row=workspace_row,
@@ -339,6 +364,7 @@ class TraceReadService:
                 run_id=run_context.run_id,
                 workspace_id=run_context.workspace_context.workspace_id,
                 status=str(run_record_row.get('status') or 'unknown'),
+                source_artifact=_source_artifact_view_from_sources(run_record_row),
                 latest_event_time=latest_event_time,
                 event_count=len(ordered_rows),
                 workspace_title=workspace_title,

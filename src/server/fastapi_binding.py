@@ -762,6 +762,7 @@ class FastApiRouteBindings:
             outbound = FrameworkRouteBindings.handle_run_artifacts(
                 request=inbound,
                 run_context=self.dependencies.run_context_provider(run_id),
+                run_record_row=run_record_row,
                 workspace_row=self.dependencies.workspace_row_provider(workspace_id),
                 recent_run_rows=self.dependencies.recent_run_rows_provider(),
                 provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
@@ -775,6 +776,8 @@ class FastApiRouteBindings:
         @router.get("/api/artifacts/{artifact_id}")
         async def get_artifact_detail(request: Request, artifact_id: str) -> Response:
             artifact_row = self.dependencies.artifact_row_provider(artifact_id)
+            run_id = str(artifact_row.get("run_id") or "").strip() if artifact_row is not None else ""
+            run_record_row = self.dependencies.run_record_provider(run_id) if run_id else None
             workspace_id = str(artifact_row.get("workspace_id") or "").strip() if artifact_row is not None else ""
             workspace_context = self.dependencies.workspace_context_provider(workspace_id) if workspace_id else None
             inbound = self._inbound_request(request=request, path_params={"artifact_id": artifact_id})
@@ -788,6 +791,7 @@ class FastApiRouteBindings:
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 artifact_row=artifact_row,
+                run_record_row=run_record_row,
             )
             return self._framework_response(outbound)
 

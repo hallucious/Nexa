@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+from src.server.run_read_models import ProductSourceArtifactView
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
 
 ArtifactTraceReadFailureFamily = Literal["product_read_failure", "run_not_found", "artifact_not_found"]
@@ -54,6 +55,7 @@ class ProductRunArtifactsResponse:
     run_id: str
     workspace_id: str
     artifact_count: int
+    source_artifact: Optional[ProductSourceArtifactView] = None
     workspace_title: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
@@ -74,6 +76,7 @@ class ProductArtifactDetailResponse:
     run_id: str
     workspace_id: str
     kind: str
+    source_artifact: Optional[ProductSourceArtifactView] = None
     workspace_title: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
@@ -129,6 +132,7 @@ class ProductRunTraceResponse:
     status: str
     latest_event_time: Optional[str]
     event_count: int
+    source_artifact: Optional[ProductSourceArtifactView] = None
     workspace_title: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None

@@ -1163,6 +1163,7 @@ class FrameworkRouteBindings:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         artifact_rows: Sequence[Mapping[str, Any]] = (),
+        run_record_row: Optional[Mapping[str, Any]] = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_run_artifacts(
             http_request=cls.to_http_route_request(request),
@@ -1174,6 +1175,7 @@ class FrameworkRouteBindings:
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
             artifact_rows=artifact_rows,
+            run_record_row=run_record_row,
         )
         return cls.to_framework_response(response)
 
@@ -1190,6 +1192,7 @@ class FrameworkRouteBindings:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         artifact_row: Optional[Mapping[str, Any]] = None,
+        run_record_row: Optional[Mapping[str, Any]] = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_artifact_detail(
             http_request=cls.to_http_route_request(request),
@@ -1201,6 +1204,7 @@ class FrameworkRouteBindings:
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
             artifact_row=artifact_row,
+            run_record_row=run_record_row,
         )
         return cls.to_framework_response(response)
 

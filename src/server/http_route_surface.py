@@ -898,6 +898,7 @@ class RunHttpRouteSurface:
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        run_record_row: Optional[Mapping[str, Any]] = None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Run artifacts route only supports GET."})
@@ -918,6 +919,7 @@ class RunHttpRouteSurface:
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
             artifact_rows=artifact_rows,
+            run_record_row=run_record_row,
         )
         if outcome.ok:
             assert outcome.response is not None
@@ -938,6 +940,7 @@ class RunHttpRouteSurface:
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_row: Optional[Mapping[str, Any]] = None,
+        run_record_row: Optional[Mapping[str, Any]] = None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Artifact detail route only supports GET."})
@@ -958,6 +961,7 @@ class RunHttpRouteSurface:
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
             artifact_row=artifact_row,
+            run_record_row=run_record_row,
         )
         if outcome.ok:
             assert outcome.response is not None

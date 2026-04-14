@@ -71,6 +71,8 @@ def test_run_artifacts_route_returns_product_projection() -> None:
     assert response.body["provider_continuity"]["provider_binding_count"] == 1
     assert response.body["activity_continuity"]["recent_run_count"] == 1
     assert response.body["artifacts"][0]["artifact_id"] == "art-001"
+    assert response.body["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert response.body["source_artifact"]["canonical_ref"] == "snap-001"
 
 
 def test_artifact_detail_route_returns_reference_payload_access_when_storage_ref_exists() -> None:
@@ -80,6 +82,7 @@ def test_artifact_detail_route_returns_reference_payload_access_when_storage_ref
         workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace"},
         recent_run_rows=[_run_row()],
         provider_binding_rows=[{"workspace_id": "ws-001", "binding_id": "binding-001", "provider_key": "openai", "updated_at": "2026-04-11T12:05:00+00:00"}],
+        run_record_row=_run_row(),
         artifact_row={
             "artifact_id": "art-001",
             "run_id": "run-001",
@@ -99,6 +102,8 @@ def test_artifact_detail_route_returns_reference_payload_access_when_storage_ref
     assert response.body["activity_continuity"]["recent_run_count"] == 1
     assert response.body["payload_access"]["mode"] == "reference_only"
     assert response.body["payload_access"]["reference"] == "blob://art-001"
+    assert response.body["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert response.body["source_artifact"]["canonical_ref"] == "snap-001"
 
 
 def test_run_trace_route_preserves_sequence_and_paginates() -> None:
@@ -146,6 +151,8 @@ def test_run_trace_route_preserves_sequence_and_paginates() -> None:
     assert response.body["provider_continuity"]["provider_binding_count"] == 1
     assert response.body["activity_continuity"]["recent_run_count"] == 1
     assert response.body["event_count"] == 2
+    assert response.body["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert response.body["source_artifact"]["canonical_ref"] == "snap-001"
     assert response.body["events"][0]["event_id"] == "evt-001"
     assert response.body["next_cursor"] == "1"
 
