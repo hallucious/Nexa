@@ -4,10 +4,13 @@ from src import integration as root_integration
 from src import sdk
 from src.sdk import integration
 from src.sdk.integration import (
+    MCP_ADAPTER_SCAFFOLD_VERSION,
     PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
+    PublicMcpAdapterScaffold,
     PublicMcpCompatibilitySurface,
     PublicMcpResourceDescriptor,
     PublicMcpToolDescriptor,
+    build_public_mcp_adapter_scaffold,
     build_public_mcp_compatibility_surface,
     build_public_mcp_resources,
     build_public_mcp_tools,
@@ -15,7 +18,7 @@ from src.sdk.integration import (
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.1"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.2"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -56,3 +59,36 @@ def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> Non
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
     assert any(resource.route_name == "get_run_trace" for resource in surface.resources)
+
+
+def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> None:
+    scaffold = build_public_mcp_adapter_scaffold(base_url="https://api.nexa.test")
+
+    assert MCP_ADAPTER_SCAFFOLD_VERSION == "1.0"
+    assert isinstance(scaffold, PublicMcpAdapterScaffold)
+
+    launch_export = scaffold.export_tool("launch_run", json_body={"workspace_id": "ws-1"})
+    status_export = scaffold.export_resource("get_run_status", path_params={"run_id": "run-1"})
+    export = scaffold.export()
+
+    assert launch_export.invocation.method == "POST"
+    assert launch_export.invocation.url == "https://api.nexa.test/api/runs"
+    assert launch_export.invocation.json_body == {"workspace_id": "ws-1"}
+    assert status_export.uri_template == "nexa://public/api/runs/{run_id}"
+    assert status_export.invocation.path == "/api/runs/run-1"
+    assert status_export.invocation.url == "https://api.nexa.test/api/runs/run-1"
+    assert export.transport_kind == "http-route-bridge"
+    assert export.stability == "scaffold"
+    assert any(tool.route_name == "launch_run" for tool in export.tools)
+    assert any(resource.route_name == "get_run_status" for resource in export.resources)
+
+
+def test_build_public_mcp_adapter_scaffold_rejects_missing_path_params() -> None:
+    scaffold = build_public_mcp_adapter_scaffold()
+
+    try:
+        scaffold.export_resource("get_run_status")
+    except ValueError as exc:
+        assert "Missing path parameters" in str(exc)
+    else:
+        raise AssertionError("Expected missing path parameter validation")

@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-Version: 1.4.0
+Version: 1.5.0
 
 ---
 
@@ -17,13 +17,12 @@ It does not replace the canonical architecture or contract documents.
 
 ## Authoritative Snapshot
 
-* authoritative implementation baseline commit: `ffc479d`
-* authoritative verified baseline: `2285 passed, 14 skipped`
-* status source: latest repository snapshot aligned to the current handoff baseline (`nexa_ffc479d.Zip`)
+* latest confirmed repository baseline: `e6ee133`
+* latest verified baseline: `2321 passed, 14 skipped`
+* status source: latest repository snapshot aligned to the current handoff baseline (`Nexa_e6ee133.zip`)
+* canonical macro roadmap reference: `nexa_implementation_order_final_v2_2.md`
 * canonical productization reference: `docs/specs/ui/general_user_productization_priority.md`
-* closure references:
-  * `docs/status/PHASE7_CLOSURE_AUDIT.md`
-  * `docs/status/PHASE8_CLOSURE_AUDIT.md`
+* practical next-seam rule: treat Phase 7 and Phase 8 as closed enough to stop being the default work mode, and keep the next official line inside Phase 9 public-boundary / integration consolidation
 
 ---
 
@@ -70,7 +69,7 @@ The current surfaced beginner / return-use product path has now also practically
 | Phase 7 return-use loop | Complete baseline | circuit library, beginner result history, onboarding continuity alignment, and in-product feedback are closure-audited |
 | Phase 8 inclusion / product completeness | Complete baseline | surfaced accessibility and Korean localization closure are now practical and closure-audited |
 | surfaced metadata / terminology refinement | Complete baseline | major user-facing metadata and terminology cleanup batches have been applied |
-| Phase 9 (Stage 5 product expansion) | Open | public-boundary-first expansion remains the next official line; accounts/sessions already belong to the earlier Phase 4.5 foundation |
+| Phase 9 (Stage 5 product expansion) | In progress | public-boundary-first expansion is now active; `src.sdk` and `src.sdk.integration` establish the public spine and minimal MCP adapter/export scaffolding has started the Phase 9.2 integration line |
 
 ---
 
@@ -135,4 +134,4 @@ Every new surfaced family still risks drift across:
 
 The project should now be interpreted as:
 
-**engine/storage/UI foundations implemented, broad server/product continuity present in code, Phase 7 return-use loop closed, Phase 8 inclusion/product completeness closed on the surfaced beginner / return-use path at `ffc479d`, and the next responsible top-level move being to shift planning to Phase 9 (Stage 5 product expansion) rather than continuing Phase 8 indefinitely.**
+**engine/storage/UI foundations are implemented, broad server/product continuity is present in code, Phase 7 and Phase 8 are closed strongly enough to keep closed, and the current responsible top-level move is to continue Phase 9 public-boundary / integration work from the verified `e6ee133` / `2321 passed, 14 skipped` baseline rather than reopening older seams.**

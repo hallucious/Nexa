@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.14.0
+Version: 1.15.0
 
 ────────────────
 Architecture Constitution
@@ -203,18 +203,17 @@ Engine
 
 Current implementation baseline:
 
-* authoritative implementation baseline commit: `ffc479d`
-* authoritative verified baseline: `2285 passed, 14 skipped`
+* latest confirmed repository baseline: `e6ee133`
+* latest verified baseline: `2321 passed, 14 skipped`
 * the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
-* the practical codebase state has now progressed through **Phase 7 return-use loop closure and Phase 8 inclusion/product-completeness closure** on top of the earlier Phase 4.5 server/product continuity foundation
-* the repository now contains both the broad server-side continuity layer (workspace, onboarding, run, provider, artifact/trace, aggregate, user-scope, and setup-entry surfaces) and the product-facing return-use surfaces built on that continuity truth
-* `src/server/` now contains the main continuity families plus the product-facing return-use families required for Phase 7: circuit library runtime, result history runtime, feedback runtime/store, HTTP route surface, framework binding, and FastAPI binding
+* the practical codebase state has already closed the broad **Phase 4.5 continuity foundation**, **Phase 7 return-use loop**, and **Phase 8 inclusion / product-completeness** lines strongly enough that they should no longer be treated as the default next seam
+* the public-boundary-first **Phase 9** line is now the correct official top-level interpretation of the repository, with `src.sdk` acting as the curated public SDK surface and `src.sdk.integration` acting as the first explicit integration boundary
+* `src/server/` still contains the broad continuity families (workspace, onboarding, run, provider, artifact/trace, aggregate, and setup-entry surfaces) that make the earlier product continuity work real rather than speculative
 * `src/server/database_foundation.py` remains the canonical persistence-family foundation for workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index
-* continuity support stores now include provider binding, managed secret metadata, provider probe history, workspace registry, onboarding state, and the Phase 7 in-product feedback store
 * the route/binding surface already exposes product/API continuity reads and writes for workspace, onboarding, provider operations, run launch/status/result/list, artifact detail, trace, recent activity, history summary, circuit library, result history, and feedback channel flows
-* aggregate continuity projection is now joined by surfaced inclusion / product-completeness refinement so users can reenter through library, result history, onboarding continuity, feedback, and localized shell surfaces without relying on storage-internal literacy
-* top-level project-truth documents must therefore be interpreted against the `ffc479d` codebase rather than the older `12577dc` Phase 7-only status world
-* this practical server/product progress does **not** mean the macro productization sequence has been superseded: it means the repository has now practically closed the roadmap's Stage 3 and Stage 4 lines and should move its next official implementation focus to **Phase 9 (Stage 5 product expansion)** work
+* `src/sdk.integration` now contains both curated MCP-style tool/resource descriptors and the minimal MCP adapter/export scaffold needed to prove the Phase 9.2 integration boundary is runnable rather than decorative
+* top-level project-truth documents must therefore be interpreted against the `e6ee133` baseline and its verified `2321 passed, 14 skipped` state rather than the older `ffc479d` / `2285 passed, 14 skipped` snapshot
+* this practical server/product progress does **not** mean the macro productization sequence has been superseded: it means the repository has now practically closed the roadmap's Stage 3 and Stage 4 lines, established the public-boundary spine for Stage 5, and should keep its next official implementation focus inside **Phase 9.2 integration-side consolidation** rather than reopening older seams by habit
 
 Interpretation rule:
 

@@ -1,6 +1,6 @@
 # Nexa TRACKER
 
-Version: 3.3.0
+Version: 3.4.0
 
 ---
 
@@ -8,7 +8,7 @@ Version: 3.3.0
 
 ## Release Snapshot (current convergence baseline)
 
-The current repository state should now be read from the `ffc479d` / `2285 passed, 14 skipped` baseline rather than from older Phase 4.5-only or Phase 7-only closure snapshots.
+The current repository state should now be read from the `e6ee133` / `2321 passed, 14 skipped` baseline rather than from the older `ffc479d` / `2285 passed, 14 skipped` snapshot or earlier Phase 4.5-only / Phase 7-only closure snapshots.
 
 ### 1. Core Execution Engine
 
@@ -68,13 +68,14 @@ The current repository state should now be read from the `ffc479d` / `2285 passe
 ### 5. Current Verified Baseline
 
 ```text
-2285 passed, 14 skipped
+2321 passed, 14 skipped
 ```
 
-* authoritative implementation baseline commit: `ffc479d`
+* latest confirmed repository baseline: `e6ee133`
 * canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
-* practical codebase state has progressed from the earlier Phase 4.5 continuity foundation through Phase 7 return-use loop closure and Phase 8 inclusion/product-completeness closure
-* the old `d468795` / `2087 passed, 13 skipped` top-level status world is now historical, not authoritative
+* practical codebase state has progressed from the earlier Phase 4.5 continuity foundation through Phase 7 return-use loop closure and Phase 8 inclusion/product-completeness closure into **Phase 9 public-boundary-first expansion**
+* `src.sdk` is now the curated public SDK boundary and `src.sdk.integration` is the first explicit integration seam
+* the old `ffc479d` / `2285 passed, 14 skipped` top-level status world is now historical rather than authoritative
 
 
 ### Step67–84: Engine/Circuit Stabilization + Core Contract Freeze
@@ -247,24 +248,25 @@ CLI
 ### Current Status
 
 ```text
-2285 passed, 14 skipped
+2321 passed, 14 skipped
 ```
 
-* authoritative implementation baseline commit: `ffc479d`
-* current practical position is best described as: **Phase 4.5 continuity foundation plus Phase 7 return-use loop closure plus Phase 8 inclusion/product-completeness closure now implemented and audited**
+* latest confirmed repository baseline: `e6ee133`
+* current practical position is best described as: **Phase 4.5 continuity foundation plus Phase 7 closure plus Phase 8 closure are established strongly enough that the repository's next official work line is Phase 9 public-boundary-first expansion**
 * provider probe persistence foundation remains a closed-enough baseline and is no longer the main next-seam candidate
 * the server/product surface now spans workspace, onboarding, recent activity, run launch/read/list, artifact/trace, provider operational surfaces, circuit library, result history, and feedback channel flows
-* continuity projection and surfaced inclusion quality are now broad enough that further work should move to the next official roadmap phase instead of extending Phase 8 indefinitely
+* continuity projection and surfaced inclusion quality are now broad enough that further work should stay in the next official roadmap phase instead of extending Phase 8 indefinitely
 * the macro roadmap and the practical code state must both be kept visible:
   - macro roadmap: still `nexa_implementation_order_final_v2_2.md`
-  - practical code state: Phase 7 and Phase 8 can now both be treated as complete at this baseline
-* general-user productization remains a real roadmap priority, but the next official target should now advance to **Phase 9 (Stage 5 product expansion)** work
+  - practical code state: Phase 9.1 public-boundary foundation has been established and Phase 9.2 integration-side consolidation has started
+* `src.sdk.integration` now contains both curated MCP-style descriptors and a minimal MCP adapter/export scaffold over that boundary
+* general-user productization remains a real roadmap priority, but the next official target should now stay inside **Phase 9 (Stage 5 product expansion)** work
 
 ---
 
 ### Next Priority
 
-* keep the synchronized `ffc479d` status view authoritative at the top level
+* keep the synchronized `e6ee133` / `2321 passed, 14 skipped` status view authoritative at the top level
 * treat Phase 7 and Phase 8 as closed unless a concrete contradiction is found in source or tests
 * begin the next official line from **Phase 9 (Stage 5 product expansion)** work rather than extending Phase 8 by habit
 * keep `accounts / sessions` interpreted as earlier **Phase 4.5 foundation** scope rather than reopening them as fresh Phase 9 expansion work

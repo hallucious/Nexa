@@ -28,10 +28,17 @@ from src.sdk.artifacts import (
 )
 from src.sdk.integration import (
     PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
+    MCP_ADAPTER_SCAFFOLD_VERSION,
     PublicMcpCompatibilitySurface,
+    PublicMcpInvocation,
+    PublicMcpToolExport,
+    PublicMcpResourceExport,
+    PublicMcpAdapterExport,
+    PublicMcpAdapterScaffold,
     PublicMcpResourceDescriptor,
     PublicMcpToolDescriptor,
     build_public_mcp_compatibility_surface,
+    build_public_mcp_adapter_scaffold,
     build_public_mcp_resources,
     build_public_mcp_tools,
 )
@@ -48,7 +55,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.1"
+PUBLIC_SDK_SURFACE_VERSION = "1.2"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -57,6 +64,7 @@ __all__ = [
     "PUBLIC_ARTIFACT_SDK_SURFACE_VERSION",
     "PUBLIC_SERVER_SDK_SURFACE_VERSION",
     "PUBLIC_INTEGRATION_SDK_SURFACE_VERSION",
+    "MCP_ADAPTER_SCAFFOLD_VERSION",
     "artifacts",
     "server",
     "integration",
@@ -85,7 +93,13 @@ __all__ = [
     "PublicMcpToolDescriptor",
     "PublicMcpResourceDescriptor",
     "PublicMcpCompatibilitySurface",
+    "PublicMcpInvocation",
+    "PublicMcpToolExport",
+    "PublicMcpResourceExport",
+    "PublicMcpAdapterExport",
+    "PublicMcpAdapterScaffold",
     "build_public_mcp_tools",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",
+    "build_public_mcp_adapter_scaffold",
 ]

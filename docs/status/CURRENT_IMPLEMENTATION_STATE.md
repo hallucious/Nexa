@@ -1,6 +1,6 @@
 # CURRENT_IMPLEMENTATION_STATE
 
-Version: 1.4.0
+Version: 1.5.0
 
 ## Purpose
 
@@ -18,17 +18,15 @@ It is not a replacement for the detailed architecture/spec documents.
 
 ## Authoritative Snapshot
 
-- authoritative implementation baseline commit: `ffc479d`
-- authoritative verified baseline: `2285 passed, 14 skipped`
-- status source: latest repository snapshot used in the current handoff baseline (`nexa_ffc479d.Zip`)
-- closure references:
-  - `docs/status/PHASE7_CLOSURE_AUDIT.md`
-  - `docs/status/PHASE8_CLOSURE_AUDIT.md`
-- practical phase interpretation: **Phase 4.5 continuity foundation plus Phase 7 return-use loop closure plus Phase 8 inclusion/product-completeness closure now present in code**
+- latest confirmed repository baseline: `e6ee133`
+- latest verified baseline: `2321 passed, 14 skipped`
+- status source: latest repository snapshot used in the current handoff baseline (`Nexa_e6ee133.zip`)
+- canonical macro roadmap reference: `nexa_implementation_order_final_v2_2.md`
+- practical phase interpretation: **Phase 4.5 continuity foundation plus Phase 7 closure plus Phase 8 closure remain present in code, while Phase 9.1 public-boundary foundation is established and Phase 9.2 integration-side consolidation has started**
 
 ## One-Line Position
 
-Nexa at `ffc479d` is no longer mainly a Phase 4.5 continuity repository and no longer only a Phase 7-closure repository; it now also includes the practical closure of the surfaced Phase 8 inclusion/product-completeness line, and top-level truth documents must reflect that newer reality.
+Nexa at `e6ee133` is no longer mainly a Phase 4.5 continuity repository and no longer only a Phase 7/8 closure repository; it now also includes the public-boundary-first Phase 9 line strongly enough that top-level truth documents must treat `src.sdk` / `src.sdk.integration` as current implementation reality rather than future design.
 
 ## Sector Matrix
 
@@ -49,7 +47,7 @@ Nexa at `ffc479d` is no longer mainly a Phase 4.5 continuity repository and no l
 | Phase 7 return-use loop | Complete baseline | circuit library, result history, onboarding continuity alignment, and feedback channel are all present and closure-audited |
 | Phase 8 inclusion / product completeness | Complete baseline | surfaced accessibility and Korean localization closure are implemented and closure-audited |
 | product-facing terminology / metadata refinement | Complete baseline | major surfaced wording, metadata, and fallback cleanup batches have landed |
-| Phase 9 (Stage 5 expansion line) | Open | public-boundary-first expansion remains next official work; accounts/sessions already belong to Phase 4.5 foundation |
+| Phase 9 (Stage 5 expansion line) | In progress | public-boundary-first expansion is active; `src.sdk.integration` now includes both curated MCP descriptors and minimal adapter/export scaffolding over the public boundary |
 
 ## What Should Not Be Reopened Casually
 
@@ -81,4 +79,4 @@ Future new surfaces still need explicit alignment across route surface, framewor
 
 ## Immediate Practical Next Move
 
-**Treat both Phase 7 and Phase 8 as closed at the `ffc479d` / `2285 passed, 14 skipped` baseline, keep their closure audits authoritative, and shift the next official implementation/planning line to Phase 9 (Stage 5 product expansion) instead of continuing narrow Phase 8 cleanup by habit.**
+**Treat both Phase 7 and Phase 8 as closed at the verified `e6ee133` / `2321 passed, 14 skipped` baseline, keep them closed unless a concrete contradiction appears, and continue the next official implementation/planning line inside Phase 9 public-boundary / integration work instead of drifting back into older cleanup habits.**

@@ -52,7 +52,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.1"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.2"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
