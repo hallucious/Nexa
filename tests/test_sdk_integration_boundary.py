@@ -7,10 +7,13 @@ from src.sdk.integration import (
     MCP_ADAPTER_SCAFFOLD_VERSION,
     MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
     PUBLIC_MCP_MANIFEST_VERSION,
+    PUBLIC_MCP_SCHEMA_VERSION,
+    PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION,
     PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
     PublicMcpAdapterScaffold,
     PublicMcpArgumentSchema,
     PublicMcpCompatibilitySurface,
+    PublicMcpCompatibilityPolicy,
     PublicMcpFrameworkDispatch,
     PublicMcpHostBridgeScaffold,
     PublicMcpHttpDispatch,
@@ -18,6 +21,8 @@ from src.sdk.integration import (
     PublicMcpResourceDescriptor,
     PublicMcpToolDescriptor,
     build_public_mcp_adapter_scaffold,
+    build_public_mcp_argument_schemas,
+    build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
     build_public_mcp_manifest,
     build_public_mcp_host_bridge_scaffold,
@@ -27,7 +32,7 @@ from src.sdk.integration import (
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.6"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.7"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -61,9 +66,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.4"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.5"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.4"
+    assert surface.version == "1.5"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -118,9 +123,12 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.0"
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.1"
+    assert PUBLIC_MCP_SCHEMA_VERSION == "1.1"
+    assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.0"
+    assert manifest.manifest_version == "1.1"
+    assert manifest.schema_version == "1.1"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -128,6 +136,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
+    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.1"
+    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.1"
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -155,7 +165,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.2"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.3"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -329,3 +339,75 @@ def test_build_public_mcp_host_bridge_scaffold_rejects_body_on_resource_argument
         assert "does not accept json_body/body" in str(exc)
     else:
         raise AssertionError("Expected body rejection for resource arguments")
+
+
+def test_adapter_scaffold_exports_route_family_standardized_schemas() -> None:
+    scaffold = build_public_mcp_adapter_scaffold()
+
+    workspace_schema = scaffold.export_resource_schema("get_workspace")
+    list_workspaces_schema = scaffold.export_resource_schema("list_workspaces")
+    recent_activity_schema = scaffold.export_resource_schema("get_recent_activity")
+    run_list_schema = scaffold.export_resource_schema("list_workspace_runs")
+
+    assert workspace_schema is not None
+    assert [field.name for field in workspace_schema.path_fields] == ["workspace_id"]
+    assert list_workspaces_schema is not None
+    assert list_workspaces_schema.path_fields == ()
+    assert list_workspaces_schema.query_fields == ()
+    assert recent_activity_schema is not None
+    assert [field.name for field in recent_activity_schema.query_fields] == ["workspace_id", "limit", "cursor"]
+    assert run_list_schema is not None
+    assert [field.name for field in run_list_schema.query_fields] == ["limit", "cursor", "status_family", "requested_by_user_id"]
+
+
+def test_build_public_mcp_argument_schemas_returns_curated_contract_set() -> None:
+    schemas = build_public_mcp_argument_schemas()
+    indexed = {schema.route_name: schema for schema in schemas}
+
+    assert indexed["get_workspace"].path_fields[0].name == "workspace_id"
+    assert indexed["list_workspaces"].route_name == "list_workspaces"
+    assert indexed["get_recent_activity"].query_fields[1].name == "limit"
+
+
+def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> None:
+    policy = build_public_mcp_compatibility_policy()
+
+    assert isinstance(policy, PublicMcpCompatibilityPolicy)
+    assert policy.policy_version == "1.0"
+    assert policy.supports_manifest_version("1.1") is True
+    assert policy.supports_schema_version("1.1") is True
+    policy.assert_supported(manifest_version="1.1", schema_version="1.1")
+
+
+def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
+    policy = build_public_mcp_compatibility_policy()
+
+    try:
+        policy.assert_supported(manifest_version="0.9")
+    except ValueError as exc:
+        assert "Unsupported public MCP manifest version" in str(exc)
+    else:
+        raise AssertionError("Expected unsupported manifest version rejection")
+
+    try:
+        policy.assert_supported(schema_version="0.9")
+    except ValueError as exc:
+        assert "Unsupported public MCP schema version" in str(exc)
+    else:
+        raise AssertionError("Expected unsupported schema version rejection")
+
+
+def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    export = bridge.export()
+
+    assert export.schema_version == "1.1"
+    assert export.compatibility_policy.policy_version == "1.0"
+    bridge.assert_consumer_compatibility(manifest_version="1.1", schema_version="1.1")
+
+    try:
+        bridge.assert_consumer_compatibility(manifest_version="0.9")
+    except ValueError as exc:
+        assert "Unsupported public MCP manifest version" in str(exc)
+    else:
+        raise AssertionError("Expected bridge manifest compatibility rejection")

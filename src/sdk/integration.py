@@ -20,7 +20,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.4"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.5"
 
 
 @dataclass(frozen=True)
@@ -92,7 +92,54 @@ class PublicMcpCompatibilitySurface:
     resources: tuple[PublicMcpResourceDescriptor, ...]
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.0"
+@dataclass(frozen=True)
+class PublicMcpCompatibilityPolicy:
+    policy_version: str
+    manifest_version: str
+    schema_version: str
+    surface_version: str
+    adapter_version: str
+    host_bridge_version: str
+    supported_manifest_versions: tuple[str, ...] = ()
+    supported_schema_versions: tuple[str, ...] = ()
+
+    def supports_manifest_version(self, version: str) -> bool:
+        return version in self.supported_manifest_versions
+
+    def supports_schema_version(self, version: str) -> bool:
+        return version in self.supported_schema_versions
+
+    def assert_supported(
+        self,
+        *,
+        manifest_version: str | None = None,
+        schema_version: str | None = None,
+    ) -> None:
+        if manifest_version is not None and not self.supports_manifest_version(manifest_version):
+            raise ValueError(
+                f"Unsupported public MCP manifest version: {manifest_version}; supported versions: {', '.join(self.supported_manifest_versions)}"
+            )
+        if schema_version is not None and not self.supports_schema_version(schema_version):
+            raise ValueError(
+                f"Unsupported public MCP schema version: {schema_version}; supported versions: {', '.join(self.supported_schema_versions)}"
+            )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "policy_version": self.policy_version,
+            "manifest_version": self.manifest_version,
+            "schema_version": self.schema_version,
+            "surface_version": self.surface_version,
+            "adapter_version": self.adapter_version,
+            "host_bridge_version": self.host_bridge_version,
+            "supported_manifest_versions": list(self.supported_manifest_versions),
+            "supported_schema_versions": list(self.supported_schema_versions),
+        }
+
+
+PUBLIC_MCP_MANIFEST_VERSION = "1.1"
+PUBLIC_MCP_SCHEMA_VERSION = "1.1"
+PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -124,8 +171,10 @@ class PublicMcpManifestResource:
 @dataclass(frozen=True)
 class PublicMcpManifest:
     manifest_version: str
+    schema_version: str
     adapter_version: str
     surface_version: str
+    compatibility_policy: PublicMcpCompatibilityPolicy
     server_name: str
     server_title: str
     transport_kind: str
@@ -138,8 +187,10 @@ class PublicMcpManifest:
     def to_dict(self) -> dict[str, Any]:
         return {
             "manifest_version": self.manifest_version,
+            "schema_version": self.schema_version,
             "adapter_version": self.adapter_version,
             "surface_version": self.surface_version,
+            "compatibility_policy": self.compatibility_policy.to_dict(),
             "server": {
                 "name": self.server_name,
                 "title": self.server_title,
@@ -182,7 +233,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.2"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.3"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -219,7 +270,9 @@ class PublicMcpHttpDispatch:
 class PublicMcpHostBridgeExport:
     bridge_version: str
     adapter_version: str
+    schema_version: str
     surface_version: str
+    compatibility_policy: PublicMcpCompatibilityPolicy
     framework_binding_class: str
     tool_bindings: tuple[PublicMcpHostRouteBinding, ...]
     resource_bindings: tuple[PublicMcpHostRouteBinding, ...]
@@ -234,10 +287,23 @@ class PublicMcpHostBridgeScaffold:
         return PublicMcpHostBridgeExport(
             bridge_version=self.bridge_version,
             adapter_version=self.adapter_scaffold.adapter_version,
+            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
             surface_version=self.adapter_scaffold.surface.version,
+            compatibility_policy=self.adapter_scaffold.compatibility_policy(),
             framework_binding_class="FrameworkRouteBindings",
             tool_bindings=tuple(self._tool_binding(tool) for tool in self.adapter_scaffold.surface.tools),
             resource_bindings=tuple(self._resource_binding(resource) for resource in self.adapter_scaffold.surface.resources),
+        )
+
+    def assert_consumer_compatibility(
+        self,
+        *,
+        manifest_version: str | None = None,
+        schema_version: str | None = None,
+    ) -> None:
+        self.adapter_scaffold.assert_consumer_compatibility(
+            manifest_version=manifest_version,
+            schema_version=schema_version,
         )
 
     def build_framework_tool_request(
@@ -566,9 +632,11 @@ class PublicMcpResourceExport:
 @dataclass(frozen=True)
 class PublicMcpAdapterExport:
     adapter_version: str
+    schema_version: str
     surface_version: str
     transport_kind: str
     stability: str
+    compatibility_policy: PublicMcpCompatibilityPolicy
     tools: tuple[PublicMcpToolExport, ...]
     resources: tuple[PublicMcpResourceExport, ...]
 
@@ -583,9 +651,11 @@ class PublicMcpAdapterScaffold:
     def export(self) -> PublicMcpAdapterExport:
         return PublicMcpAdapterExport(
             adapter_version=self.adapter_version,
+            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
             surface_version=self.surface.version,
             transport_kind="http-route-bridge",
             stability="scaffold",
+            compatibility_policy=self.compatibility_policy(),
             tools=tuple(self._export_tool_descriptor(tool) for tool in self.surface.tools),
             resources=tuple(self._export_resource_descriptor(resource) for resource in self.surface.resources),
         )
@@ -598,8 +668,10 @@ class PublicMcpAdapterScaffold:
     ) -> PublicMcpManifest:
         return PublicMcpManifest(
             manifest_version=PUBLIC_MCP_MANIFEST_VERSION,
+            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
             adapter_version=self.adapter_version,
             surface_version=self.surface.version,
+            compatibility_policy=self.compatibility_policy(),
             server_name=server_name,
             server_title=server_title,
             transport_kind="http-route-bridge",
@@ -608,6 +680,29 @@ class PublicMcpAdapterScaffold:
             resource_uri_prefix=self.resource_uri_prefix,
             tools=tuple(self._manifest_tool(tool) for tool in self.surface.tools),
             resources=tuple(self._manifest_resource(resource) for resource in self.surface.resources),
+        )
+
+    def compatibility_policy(self) -> PublicMcpCompatibilityPolicy:
+        return PublicMcpCompatibilityPolicy(
+            policy_version=PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION,
+            manifest_version=PUBLIC_MCP_MANIFEST_VERSION,
+            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
+            surface_version=self.surface.version,
+            adapter_version=self.adapter_version,
+            host_bridge_version=MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
+            supported_manifest_versions=(PUBLIC_MCP_MANIFEST_VERSION,),
+            supported_schema_versions=(PUBLIC_MCP_SCHEMA_VERSION,),
+        )
+
+    def assert_consumer_compatibility(
+        self,
+        *,
+        manifest_version: str | None = None,
+        schema_version: str | None = None,
+    ) -> None:
+        self.compatibility_policy().assert_supported(
+            manifest_version=manifest_version,
+            schema_version=schema_version,
         )
 
     def export_tool_schema(self, tool_name: str) -> PublicMcpArgumentSchema | None:
@@ -1249,14 +1344,17 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     },
     "retry_run": {
         "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run to retry."),),
+        "query_fields": (_schema_field("reason", "query", "string", description="Optional retry reason hint."),),
         "allow_additional_query_params": True,
     },
     "force_reset_run": {
         "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run to force-reset."),),
+        "query_fields": (_schema_field("reason", "query", "string", description="Optional force-reset reason hint."),),
         "allow_additional_query_params": True,
     },
     "mark_run_reviewed": {
         "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run to mark reviewed."),),
+        "query_fields": (_schema_field("reason", "query", "string", description="Optional review-note hint."),),
         "allow_additional_query_params": True,
     },
     "get_run_status": {
@@ -1272,7 +1370,12 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     },
     "list_workspace_runs": {
         "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose runs should be listed."),),
-        "allow_additional_query_params": True,
+        "query_fields": (
+            _schema_field("limit", "query", "integer", description="Optional page size hint."),
+            _schema_field("cursor", "query", "string", description="Optional pagination cursor."),
+            _schema_field("status_family", "query", "string", description="Optional run-status family filter."),
+            _schema_field("requested_by_user_id", "query", "string", description="Optional requester filter."),
+        ),
     },
     "get_run_trace": {
         "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run whose trace should be read."),),
@@ -1291,7 +1394,16 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "allow_additional_query_params": True,
     },
     "get_recent_activity": {
-        "allow_additional_query_params": True,
+        "query_fields": (
+            _schema_field("workspace_id", "query", "string", description="Optional workspace activity filter."),
+            _schema_field("limit", "query", "integer", description="Optional activity page size hint."),
+            _schema_field("cursor", "query", "string", description="Optional activity pagination cursor."),
+        ),
+    },
+    "get_workspace": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace to read."),),
+    },
+    "list_workspaces": {
     },
 }
 
@@ -1470,6 +1582,28 @@ def build_public_mcp_resources() -> tuple[PublicMcpResourceDescriptor, ...]:
     return tuple(_resource_from_spec(spec) for spec in _RESOURCE_SPECS)
 
 
+def build_public_mcp_argument_schemas() -> tuple[PublicMcpArgumentSchema, ...]:
+    """Return exported argument schemas for the curated public MCP surface."""
+
+    adapter = build_public_mcp_adapter_scaffold()
+    schemas: list[PublicMcpArgumentSchema] = []
+    for tool in build_public_mcp_tools():
+        schema = adapter.export_tool_schema(tool.name)
+        if schema is not None:
+            schemas.append(schema)
+    for resource in build_public_mcp_resources():
+        schema = adapter.export_resource_schema(resource.name)
+        if schema is not None:
+            schemas.append(schema)
+    return tuple(schemas)
+
+
+def build_public_mcp_compatibility_policy() -> PublicMcpCompatibilityPolicy:
+    """Return the version-compatibility policy for the curated public MCP surface."""
+
+    return build_public_mcp_adapter_scaffold().compatibility_policy()
+
+
 def build_public_mcp_compatibility_surface() -> PublicMcpCompatibilitySurface:
     """Return the complete MCP compatibility shape for the public SDK boundary."""
 
@@ -1485,10 +1619,13 @@ __all__ = [
     "MCP_ADAPTER_SCAFFOLD_VERSION",
     "MCP_HOST_BRIDGE_SCAFFOLD_VERSION",
     "PUBLIC_MCP_MANIFEST_VERSION",
+    "PUBLIC_MCP_SCHEMA_VERSION",
+    "PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION",
     "PublicTypeRef",
     "PublicMcpToolDescriptor",
     "PublicMcpResourceDescriptor",
     "PublicMcpCompatibilitySurface",
+    "PublicMcpCompatibilityPolicy",
     "PublicMcpManifestTool",
     "PublicMcpManifestResource",
     "PublicMcpManifest",
@@ -1501,6 +1638,8 @@ __all__ = [
     "PublicMcpHostBridgeExport",
     "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",
+    "build_public_mcp_argument_schemas",
+    "build_public_mcp_compatibility_policy",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",
     "build_public_mcp_adapter_scaffold",
