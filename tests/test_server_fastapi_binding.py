@@ -1371,7 +1371,7 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '제공자 접근' in body
     assert '세션 전용 키' in body
     assert '외부 입력' in body
-    assert '외부 파일이나 URL 입력이 없습니다' in body
+    assert '외부 파일이나 웹 주소 입력이 없습니다' in body
     assert '저장 경계' in body
     assert '세션 키' in body
     assert '로컬 작업 저장 연속성만 사용' in body
@@ -1420,3 +1420,15 @@ def test_fastapi_binding_workspace_shell_exposes_focus_and_live_region_semantics
     assert 'id="designer-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="designer-detail-title"' in body
     assert 'id="privacy-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="privacy-title"' in body
     assert 'id="latest-run-trace-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-trace-detail-title"' in body
+
+def test_fastapi_binding_result_history_localizes_output_key_for_korean() -> None:
+    client = _make_client()
+    response = client.get('/app/workspaces/ws-001/results?run_id=run-002&app_language=ko', headers=_session_headers())
+
+    assert response.status_code == 200
+    body = response.text
+    assert '<html lang="ko">' in body
+    assert '최신 출력 (답변)' in body
+    assert '최신 출력 미리보기: Latest Hello' in body
+
+

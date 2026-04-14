@@ -88,6 +88,25 @@ def _localized_system_result_summary(value: str, *, app_language: str) -> str:
     return ui_text(key, app_language=app_language, fallback_text=fallback)
 
 
+
+
+def _localized_output_key(value: str | None, *, app_language: str) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    lookup = {
+        "answer": ("result_history.output_key.answer", normalized),
+        "result": ("result_history.output_key.result", normalized),
+    }
+    key_fallback = lookup.get(normalized.lower())
+    if key_fallback is None:
+        return normalized
+    key, fallback = key_fallback
+    return ui_text(key, app_language=app_language, fallback_text=fallback)
+
+
 def _field(source: object, name: str, default=None):
     return getattr(source, name, default)
 
@@ -189,7 +208,8 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
     if final_output is not None:
         output_preview = _field(final_output, "value_preview")
         output_key = _field(final_output, "output_key")
-        output_label = ui_text("result_history.output_label", app_language=app_language, fallback_text=f"Latest output ({output_key})", output_key=output_key)
+        display_output_key = _localized_output_key(output_key, app_language=app_language) or output_key
+        output_label = ui_text("result_history.output_label", app_language=app_language, fallback_text=f"Latest output ({display_output_key})", output_key=display_output_key)
     workspace_id = str(_field(item, "workspace_id") or "")
     run_id = str(_field(item, "run_id") or "")
     open_result_href = f"/app/workspaces/{workspace_id}/results?run_id={run_id}"
