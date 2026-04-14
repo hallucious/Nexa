@@ -1,0 +1,73 @@
+from __future__ import annotations
+
+"""Official public server/API SDK boundary for Nexa.
+
+This module exposes the curated request/response models and binding helpers that
+external integrations may depend on. Internal server services remain available
+under ``src.server.*`` but are not part of this narrower public SDK surface.
+"""
+
+from src.server import (
+    FastApiRouteBindings,
+    FrameworkRouteBindings,
+    RunHttpRouteSurface,
+    create_fastapi_app,
+)
+from src.server.artifact_trace_read_models import (
+    ProductArtifactDetailResponse,
+    ProductRunArtifactsResponse,
+    ProductRunTraceResponse,
+)
+from src.server.recent_activity_models import ProductRecentActivityResponse
+from src.server.run_action_log_models import ProductRunActionLogResponse
+from src.server.run_admission_models import (
+    ProductClientContext,
+    ProductExecutionTarget,
+    ProductLaunchOptions,
+    ProductRunLaunchAcceptedResponse,
+    ProductRunLaunchRejectedResponse,
+    ProductRunLaunchRequest,
+)
+from src.server.run_control_models import (
+    ProductRunControlAcceptedResponse,
+    ProductRunControlRejectedResponse,
+)
+from src.server.run_list_models import ProductWorkspaceRunListResponse
+from src.server.run_read_models import (
+    ProductRunResultResponse,
+    ProductRunStatusResponse,
+    ProductSourceArtifactView,
+)
+from src.server.workspace_onboarding_models import (
+    ProductWorkspaceDetailResponse,
+    ProductWorkspaceListResponse,
+)
+
+PUBLIC_SERVER_SDK_SURFACE_VERSION = "1.0"
+
+__all__ = [
+    "PUBLIC_SERVER_SDK_SURFACE_VERSION",
+    "RunHttpRouteSurface",
+    "FrameworkRouteBindings",
+    "FastApiRouteBindings",
+    "create_fastapi_app",
+    "ProductExecutionTarget",
+    "ProductLaunchOptions",
+    "ProductClientContext",
+    "ProductRunLaunchRequest",
+    "ProductRunLaunchAcceptedResponse",
+    "ProductRunLaunchRejectedResponse",
+    "ProductSourceArtifactView",
+    "ProductRunStatusResponse",
+    "ProductRunResultResponse",
+    "ProductWorkspaceRunListResponse",
+    "ProductRunArtifactsResponse",
+    "ProductArtifactDetailResponse",
+    "ProductRunTraceResponse",
+    "ProductRunControlAcceptedResponse",
+    "ProductRunControlRejectedResponse",
+    "ProductRunActionLogResponse",
+    "ProductRecentActivityResponse",
+    "ProductWorkspaceDetailResponse",
+    "ProductWorkspaceListResponse",
+]
