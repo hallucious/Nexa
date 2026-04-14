@@ -129,3 +129,17 @@ def test_builder_shell_surfaces_phase6_privacy_transparency_for_session_key_and_
     fact_values = {fact.fact_id: fact.value for fact in vm.privacy_transparency.facts}
     assert fact_values["provider_access"] == "Session-only key"
     assert fact_values["external_input"] == "Reads from a URL"
+
+
+def test_builder_shell_surfaces_phase6_privacy_transparency_for_session_key_and_external_input_in_korean() -> None:
+    vm = read_builder_shell_view_model(_working_save(provider_session=True, external_input="url"), app_language="ko")
+
+    assert vm.privacy_transparency.title == "개인정보와 데이터 처리"
+    fact_values = {fact.fact_id: fact.value for fact in vm.privacy_transparency.facts}
+    fact_labels = {fact.fact_id: fact.label for fact in vm.privacy_transparency.facts}
+    assert fact_labels["provider_access"] == "제공자 접근"
+    assert fact_values["provider_access"] == "세션 전용 키"
+    assert fact_labels["external_input"] == "외부 입력"
+    assert fact_values["external_input"] == "URL에서 읽음"
+    assert fact_labels["storage_boundary"] == "저장 경계"
+    assert fact_labels["session_key_persistence"] == "세션 키"
