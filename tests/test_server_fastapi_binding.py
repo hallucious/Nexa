@@ -1299,6 +1299,7 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '헷갈리는 화면 신고' in feedback_page.text
     assert '빠른 불편 메모' in feedback_page.text
     assert '버그 신고 바로가기' in feedback_page.text
+    assert '실행 식별자 (선택)' in feedback_page.text
 
 
 def test_fastapi_binding_feedback_submission_localizes_server_message() -> None:
@@ -1360,7 +1361,7 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '저장 경계' in body
     assert '세션 키' in body
     assert '로컬 작업 저장 연속성만 사용' in body
-    assert '세션 키는 작업 저장 UI 상태에만 머물고 승인 스냅샷에는 기록되지 않습니다.' in body
+    assert '세션 키는 작업 저장 화면 상태에만 머물고 승인 스냅샷에는 기록되지 않습니다.' in body
     assert '목표부터 시작하세요' in body
     assert '텍스트 요약기' in body
     assert '진행 중' in body

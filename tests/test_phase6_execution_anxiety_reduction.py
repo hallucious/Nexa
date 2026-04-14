@@ -136,12 +136,12 @@ def test_builder_shell_surfaces_phase6_privacy_transparency_for_session_key_and_
 
     assert vm.privacy_transparency.title == "개인정보와 데이터 처리"
     assert any(fact.value == "로컬 작업 저장 연속성만 사용" for fact in vm.privacy_transparency.facts)
-    assert any("작업 저장 UI 상태" in fact.value for fact in vm.privacy_transparency.facts)
+    assert any("작업 저장 화면 상태" in fact.value for fact in vm.privacy_transparency.facts)
     fact_values = {fact.fact_id: fact.value for fact in vm.privacy_transparency.facts}
     fact_labels = {fact.fact_id: fact.label for fact in vm.privacy_transparency.facts}
     assert fact_labels["provider_access"] == "제공자 접근"
     assert fact_values["provider_access"] == "세션 전용 키"
     assert fact_labels["external_input"] == "외부 입력"
-    assert fact_values["external_input"] == "URL에서 읽음"
+    assert fact_values["external_input"] == "웹 주소에서 읽음"
     assert fact_labels["storage_boundary"] == "저장 경계"
     assert fact_labels["session_key_persistence"] == "세션 키"
