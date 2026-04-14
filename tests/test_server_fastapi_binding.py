@@ -526,6 +526,20 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['client_continuity']['version'] == 'phase6-batch15'
 
 
+
+
+def test_fastapi_binding_workspace_shell_route_localizes_action_schema_for_korean() -> None:
+    client = _make_client()
+    response = client.get('/api/workspaces/ws-001/shell?app_language=ko', headers=_session_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    primary_actions = payload['shell']['action_schema']['primary_actions']
+    assert primary_actions[0]['label'] == '드래프트 저장'
+    assert primary_actions[1]['label'] == '드래프트 검토'
+    assert '드래프트 검토에는' in (primary_actions[1]['reason_disabled'] or '')
+    assert payload['shell']['action_schema']['secondary_actions'][0]['label'] == '최신 실행 재실행'
+
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     client = _make_client()
     response = client.get('/app/workspaces/ws-001', headers=_session_headers())

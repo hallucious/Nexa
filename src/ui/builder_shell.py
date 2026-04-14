@@ -334,6 +334,7 @@ def read_builder_shell_view_model(
         validation_view=validation_vm,
         execution_view=execution_vm,
         designer_view=designer_vm,
+        app_language=app_language,
     )
 
     metadata = _ui_metadata(source_unwrapped)

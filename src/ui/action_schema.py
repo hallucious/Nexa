@@ -82,9 +82,10 @@ def read_builder_action_schema(
     execution_view: ExecutionPanelViewModel | None = None,
     designer_view: DesignerPanelViewModel | None = None,
     explanation: str | None = None,
+    app_language: str | None = None,
 ) -> BuilderActionSchemaView:
     source = _unwrap(source)
-    app_language = ui_language_from_sources(source)
+    app_language = app_language or ui_language_from_sources(source)
     source_role = _storage_role(source)
 
     execution_status = execution_view.execution_status if execution_view is not None else "unknown"
