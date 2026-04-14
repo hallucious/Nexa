@@ -259,7 +259,7 @@ CLI
 * the macro roadmap and the practical code state must both be kept visible:
   - macro roadmap: still `nexa_implementation_order_final_v2_2.md`
   - practical code state: Phase 9.1 public-boundary foundation has been established and Phase 9.2 integration-side consolidation has started
-* `src.sdk.integration` now contains both curated MCP-style descriptors and a minimal MCP adapter/export scaffold over that boundary
+* `src.sdk.integration` now contains both curated MCP-style descriptors and a minimal MCP adapter/export scaffold plus manifest-level export refinement over that boundary
 * general-user productization remains a real roadmap priority, but the next official target should now stay inside **Phase 9 (Stage 5 product expansion)** work
 
 ---

@@ -5,20 +5,23 @@ from src import sdk
 from src.sdk import integration
 from src.sdk.integration import (
     MCP_ADAPTER_SCAFFOLD_VERSION,
+    PUBLIC_MCP_MANIFEST_VERSION,
     PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
     PublicMcpAdapterScaffold,
     PublicMcpCompatibilitySurface,
+    PublicMcpManifest,
     PublicMcpResourceDescriptor,
     PublicMcpToolDescriptor,
     build_public_mcp_adapter_scaffold,
     build_public_mcp_compatibility_surface,
+    build_public_mcp_manifest,
     build_public_mcp_resources,
     build_public_mcp_tools,
 )
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.2"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.3"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -52,9 +55,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.0"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.1"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.0"
+    assert surface.version == "1.1"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -92,3 +95,32 @@ def test_build_public_mcp_adapter_scaffold_rejects_missing_path_params() -> None
         assert "Missing path parameters" in str(exc)
     else:
         raise AssertionError("Expected missing path parameter validation")
+
+
+def test_build_public_mcp_manifest_returns_serializable_public_contract() -> None:
+    scaffold = build_public_mcp_adapter_scaffold(
+        base_url="https://api.nexa.test",
+        resource_uri_prefix="nexa://phase92",
+    )
+
+    manifest = scaffold.export_manifest(server_name="nexa-phase92", server_title="Nexa Phase 9.2")
+    manifest_dict = manifest.to_dict()
+    direct_manifest = build_public_mcp_manifest(
+        base_url="https://api.nexa.test",
+        resource_uri_prefix="nexa://phase92",
+        server_name="nexa-phase92",
+        server_title="Nexa Phase 9.2",
+    )
+
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.0"
+    assert isinstance(manifest, PublicMcpManifest)
+    assert manifest.manifest_version == "1.0"
+    assert manifest.server_name == "nexa-phase92"
+    assert manifest.server_title == "Nexa Phase 9.2"
+    assert manifest.base_url == "https://api.nexa.test"
+    assert manifest.resource_uri_prefix == "nexa://phase92"
+    assert any(tool.route_name == "launch_run" for tool in manifest.tools)
+    assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
+    assert manifest_dict["server"]["name"] == "nexa-phase92"
+    assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
+    assert direct_manifest.to_dict() == manifest_dict

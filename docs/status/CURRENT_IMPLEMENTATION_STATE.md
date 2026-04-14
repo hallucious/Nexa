@@ -47,7 +47,7 @@ Nexa at `e6ee133` is no longer mainly a Phase 4.5 continuity repository and no l
 | Phase 7 return-use loop | Complete baseline | circuit library, result history, onboarding continuity alignment, and feedback channel are all present and closure-audited |
 | Phase 8 inclusion / product completeness | Complete baseline | surfaced accessibility and Korean localization closure are implemented and closure-audited |
 | product-facing terminology / metadata refinement | Complete baseline | major surfaced wording, metadata, and fallback cleanup batches have landed |
-| Phase 9 (Stage 5 expansion line) | In progress | public-boundary-first expansion is active; `src.sdk.integration` now includes both curated MCP descriptors and minimal adapter/export scaffolding over the public boundary |
+| Phase 9 (Stage 5 expansion line) | In progress | public-boundary-first expansion is active; `src.sdk.integration` now includes both curated MCP descriptors and minimal adapter/export scaffolding plus manifest-level export over the public boundary |
 
 ## What Should Not Be Reopened Casually
 

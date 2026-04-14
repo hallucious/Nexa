@@ -17,7 +17,7 @@ from typing import Any, Mapping
 
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.0"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.1"
 
 
 @dataclass(frozen=True)
@@ -54,6 +54,89 @@ class PublicMcpCompatibilitySurface:
     version: str
     tools: tuple[PublicMcpToolDescriptor, ...]
     resources: tuple[PublicMcpResourceDescriptor, ...]
+
+
+PUBLIC_MCP_MANIFEST_VERSION = "1.0"
+
+
+@dataclass(frozen=True)
+class PublicMcpManifestTool:
+    name: str
+    description: str
+    route_name: str
+    method: str
+    path: str
+    request_type: PublicTypeRef | None = None
+    response_type: PublicTypeRef | None = None
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PublicMcpManifestResource:
+    name: str
+    description: str
+    route_name: str
+    method: str
+    path: str
+    uri_template: str
+    response_type: PublicTypeRef | None = None
+    tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PublicMcpManifest:
+    manifest_version: str
+    adapter_version: str
+    surface_version: str
+    server_name: str
+    server_title: str
+    transport_kind: str
+    stability: str
+    base_url: str | None
+    resource_uri_prefix: str
+    tools: tuple[PublicMcpManifestTool, ...]
+    resources: tuple[PublicMcpManifestResource, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "manifest_version": self.manifest_version,
+            "adapter_version": self.adapter_version,
+            "surface_version": self.surface_version,
+            "server": {
+                "name": self.server_name,
+                "title": self.server_title,
+                "transport_kind": self.transport_kind,
+                "stability": self.stability,
+            },
+            "base_url": self.base_url,
+            "resource_uri_prefix": self.resource_uri_prefix,
+            "tools": [
+                {
+                    "name": tool.name,
+                    "description": tool.description,
+                    "route_name": tool.route_name,
+                    "method": tool.method,
+                    "path": tool.path,
+                    "request_type": _type_ref_dict(tool.request_type),
+                    "response_type": _type_ref_dict(tool.response_type),
+                    "tags": list(tool.tags),
+                }
+                for tool in self.tools
+            ],
+            "resources": [
+                {
+                    "name": resource.name,
+                    "description": resource.description,
+                    "route_name": resource.route_name,
+                    "method": resource.method,
+                    "path": resource.path,
+                    "uri_template": resource.uri_template,
+                    "response_type": _type_ref_dict(resource.response_type),
+                    "tags": list(resource.tags),
+                }
+                for resource in self.resources
+            ],
+        }
 
 
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
@@ -118,6 +201,26 @@ class PublicMcpAdapterScaffold:
             stability="scaffold",
             tools=tuple(self._export_tool_descriptor(tool) for tool in self.surface.tools),
             resources=tuple(self._export_resource_descriptor(resource) for resource in self.surface.resources),
+        )
+
+    def export_manifest(
+        self,
+        *,
+        server_name: str = "nexa-public",
+        server_title: str = "Nexa Public Integration Surface",
+    ) -> PublicMcpManifest:
+        return PublicMcpManifest(
+            manifest_version=PUBLIC_MCP_MANIFEST_VERSION,
+            adapter_version=self.adapter_version,
+            surface_version=self.surface.version,
+            server_name=server_name,
+            server_title=server_title,
+            transport_kind="http-route-bridge",
+            stability="scaffold",
+            base_url=self.base_url,
+            resource_uri_prefix=self.resource_uri_prefix,
+            tools=tuple(self._manifest_tool(tool) for tool in self.surface.tools),
+            resources=tuple(self._manifest_resource(resource) for resource in self.surface.resources),
         )
 
     def export_tool(
@@ -218,6 +321,31 @@ class PublicMcpAdapterScaffold:
             response_type=descriptor.response_type,
             tags=descriptor.tags,
         )
+
+    def _manifest_tool(self, descriptor: PublicMcpToolDescriptor) -> PublicMcpManifestTool:
+        return PublicMcpManifestTool(
+            name=descriptor.name,
+            description=descriptor.description,
+            route_name=descriptor.route_name,
+            method=descriptor.method,
+            path=descriptor.path,
+            request_type=descriptor.request_type,
+            response_type=descriptor.response_type,
+            tags=descriptor.tags,
+        )
+
+    def _manifest_resource(self, descriptor: PublicMcpResourceDescriptor) -> PublicMcpManifestResource:
+        return PublicMcpManifestResource(
+            name=descriptor.name,
+            description=descriptor.description,
+            route_name=descriptor.route_name,
+            method=descriptor.method,
+            path=descriptor.path,
+            uri_template=self._resource_uri_template(descriptor.path),
+            response_type=descriptor.response_type,
+            tags=descriptor.tags,
+        )
+
     def _tool_by_name(self, tool_name: str) -> PublicMcpToolDescriptor:
         for tool in self.surface.tools:
             if tool.name == tool_name:
@@ -265,6 +393,12 @@ class PublicMcpAdapterScaffold:
         if not normalized_prefix:
             raise ValueError("resource_uri_prefix must not be empty")
         return f"{normalized_prefix}{path_template}"
+
+
+def _type_ref_dict(type_ref: PublicTypeRef | None) -> dict[str, str] | None:
+    if type_ref is None:
+        return None
+    return {"module": type_ref.module, "name": type_ref.name}
 
 
 def _normalize_string_mapping(values: Mapping[str, object] | None) -> Mapping[str, str]:
@@ -342,6 +476,23 @@ def build_public_mcp_adapter_scaffold(
         base_url=base_url,
         resource_uri_prefix=resource_uri_prefix,
     )
+
+
+def build_public_mcp_manifest(
+    *,
+    base_url: str | None = None,
+    surface: PublicMcpCompatibilitySurface | None = None,
+    resource_uri_prefix: str = "nexa://public",
+    server_name: str = "nexa-public",
+    server_title: str = "Nexa Public Integration Surface",
+) -> PublicMcpManifest:
+    """Return the manifest-level export over the public MCP adapter scaffold."""
+
+    return build_public_mcp_adapter_scaffold(
+        base_url=base_url,
+        surface=surface,
+        resource_uri_prefix=resource_uri_prefix,
+    ).export_manifest(server_name=server_name, server_title=server_title)
 
 
 _ROUTE_INDEX = {
@@ -537,10 +688,14 @@ def build_public_mcp_compatibility_surface() -> PublicMcpCompatibilitySurface:
 __all__ = [
     "PUBLIC_INTEGRATION_SDK_SURFACE_VERSION",
     "MCP_ADAPTER_SCAFFOLD_VERSION",
+    "PUBLIC_MCP_MANIFEST_VERSION",
     "PublicTypeRef",
     "PublicMcpToolDescriptor",
     "PublicMcpResourceDescriptor",
     "PublicMcpCompatibilitySurface",
+    "PublicMcpManifestTool",
+    "PublicMcpManifestResource",
+    "PublicMcpManifest",
     "PublicMcpInvocation",
     "PublicMcpToolExport",
     "PublicMcpResourceExport",
@@ -550,4 +705,5 @@ __all__ = [
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",
     "build_public_mcp_adapter_scaffold",
+    "build_public_mcp_manifest",
 ]

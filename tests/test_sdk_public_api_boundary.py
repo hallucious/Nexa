@@ -52,7 +52,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.2"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.3"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -107,3 +107,11 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert status.source_artifact is not None
     assert status.source_artifact.canonical_ref == "working_save:ws-1"
     assert ProductWorkspaceRunListResponse is not None
+
+
+def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
+    manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
+
+    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.0"
+    assert manifest.server_name == "nexa-public"
+    assert any(tool.route_name == "launch_run" for tool in manifest.tools)

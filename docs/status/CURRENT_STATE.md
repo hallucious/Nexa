@@ -69,7 +69,7 @@ The current surfaced beginner / return-use product path has now also practically
 | Phase 7 return-use loop | Complete baseline | circuit library, beginner result history, onboarding continuity alignment, and in-product feedback are closure-audited |
 | Phase 8 inclusion / product completeness | Complete baseline | surfaced accessibility and Korean localization closure are now practical and closure-audited |
 | surfaced metadata / terminology refinement | Complete baseline | major user-facing metadata and terminology cleanup batches have been applied |
-| Phase 9 (Stage 5 product expansion) | In progress | public-boundary-first expansion is now active; `src.sdk` and `src.sdk.integration` establish the public spine and minimal MCP adapter/export scaffolding has started the Phase 9.2 integration line |
+| Phase 9 (Stage 5 product expansion) | In progress | public-boundary-first expansion is now active; `src.sdk` and `src.sdk.integration` establish the public spine and minimal MCP adapter/export scaffold plus manifest-level export refinementing has started the Phase 9.2 integration line |
 
 ---
 
