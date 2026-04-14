@@ -183,10 +183,10 @@ def build_workspace_result_history_payload(
 def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
     app_language = normalize_ui_language(payload.get("app_language") or "en")
     history = dict(payload.get("result_history") or {})
-    title = escape(str(history.get("title") or "Recent results"))
-    subtitle = escape(str(history.get("subtitle") or "Reopen recent results."))
-    empty_title = escape(str(history.get("empty_title") or "No recent results yet"))
-    empty_summary = escape(str(history.get("empty_summary") or "Run a workflow once to see recent results here."))
+    title = escape(str(history.get("title") or ui_text("server.result_history.title", app_language=app_language, fallback_text="Recent results")))
+    subtitle = escape(str(history.get("subtitle") or ui_text("server.result_history.subtitle", app_language=app_language, fallback_text="Reopen recent results.")))
+    empty_title = escape(str(history.get("empty_title") or ui_text("server.result_history.empty_title", app_language=app_language, fallback_text="No recent results yet")))
+    empty_summary = escape(str(history.get("empty_summary") or ui_text("server.result_history.empty_summary", app_language=app_language, fallback_text="Run a workflow once to see recent results here.")))
     workspace_title = escape(str(payload.get("workspace_title") or history.get("workspace_title") or "Workflow"))
     item_sections = list(payload.get("item_sections") or [])
     selected = dict(payload.get("selected_result") or {})
@@ -206,16 +206,16 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         cards_html += f"""
         <article class="result-card{selected_class}" aria-labelledby="result-title-{escape(str(item.get('run_id') or 'result'))}" {'aria-current="true"' if item.get('selected') else ''}>
           <div class="result-card-head">
-            <h2 id="result-title-{escape(str(item.get('run_id') or 'result'))}">{escape(str(summary.get('headline') or item.get('run_id') or 'Result'))}</h2>
-            <span class="status-badge" aria-label="Result status {escape(str(item.get('status_label') or ''))}">{escape(str(item.get('status_label') or ''))}</span>
+            <h2 id="result-title-{escape(str(item.get('run_id') or 'result'))}">{escape(str(summary.get('headline') or item.get('run_id') or ui_text('server.result_history.card_fallback', app_language=app_language, fallback_text='Result')))}</h2>
+            <span class="status-badge" aria-label="{escape(ui_text('server.result_history.status_aria', app_language=app_language, fallback_text='Result status {status}', status=str(item.get('status_label') or '')))}">{escape(str(item.get('status_label') or ''))}</span>
           </div>
           <ul class="summary-lines">{_render_lines(summary.get('lines') or [])}</ul>
           <details {'open' if item.get('selected') else ''}>
-            <summary>{escape(str(detail.get('title') or 'Result detail'))}</summary>
+            <summary>{escape(str(detail.get('title') or ui_text('server.result_history.result_detail', app_language=app_language, fallback_text='Result detail')))}</summary>
             <ul class="detail-lines">{_render_lines(detail.get('items') or [])}</ul>
           </details>
           <div class="actions">
-            <a class="action-link secondary" href="{open_href}">Open result</a>
+            <a class="action-link secondary" href="{open_href}">{escape(ui_text('server.result_history.open_result_label', app_language=app_language, fallback_text='Open result'))}</a>
             <a class="action-link" href="{continue_href}">{escape(ui_text('server.result_history.open_workflow', app_language=app_language, fallback_text='Open workflow'))}</a>
           </div>
         </article>
@@ -229,14 +229,14 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         """
     selected_output_html = ""
     if selected.get("output_preview"):
-        selected_output_html = f'<section class="selected-output" role="region" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or ui_text("result_history.selected_output.title", app_language=app_language, fallback_text="Latest output")))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
+        selected_output_html = f'<section class="selected-output" role="region" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or ui_text("server.result_history.selected_output_title", app_language=app_language, fallback_text="Selected output")))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
     onboarding_html = ""
     if onboarding_banner:
         action_href = escape(str(onboarding_banner.get("action_href") or "#"))
-        action_label = escape(str(onboarding_banner.get("action_label") or "Continue workflow"))
+        action_label = escape(str(onboarding_banner.get("action_label") or ui_text("server.result_history.onboarding_continue", app_language=app_language, fallback_text="Continue workflow")))
         onboarding_html = (
             '<section class="onboarding-banner" role="region" aria-labelledby="onboarding-banner-title">'
-            f'<h2 id="onboarding-banner-title">{escape(str(onboarding_banner.get("title") or "Resume onboarding"))}</h2>'
+            f'<h2 id="onboarding-banner-title">{escape(str(onboarding_banner.get("title") or ui_text("server.result_history.resume_onboarding", app_language=app_language, fallback_text="Resume onboarding")))}</h2>'
             f'<p>{escape(str(onboarding_banner.get("summary") or ""))}</p>'
             f'<a class="action-link" href="{action_href}">{action_label}</a>'
             '</section>'

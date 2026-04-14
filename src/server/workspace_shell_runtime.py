@@ -222,6 +222,140 @@ def _summary_lines(*values: str | None) -> list[str]:
     return [value for value in values if isinstance(value, str) and value.strip()]
 
 
+def _localize_shell_payload(payload: dict[str, Any], app_language: str) -> dict[str, Any]:
+    if app_language != "ko":
+        return payload
+
+    exact = {
+        "Run draft": ui_text("server.shell.run_draft_action", app_language=app_language, fallback_text="Run draft"),
+        "Open latest result": ui_text("server.shell.result_history_open_latest", app_language=app_language, fallback_text="Open latest result"),
+        "Open latest trace": ui_text("server.shell.trace_history_open_latest", app_language=app_language, fallback_text="Open latest trace"),
+        "Open latest artifacts": ui_text("server.shell.artifacts_history_open_latest", app_language=app_language, fallback_text="Open latest artifacts"),
+        "Refresh latest status": ui_text("server.shell.status_history_refresh_latest", app_language=app_language, fallback_text="Refresh latest status"),
+        "Open Designer detail": ui_text("server.shell.open_designer_detail", app_language=app_language, fallback_text="Open Designer detail"),
+        "Open starter templates": ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"),
+        "Open Validation detail": ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail"),
+        "Open contextual help": ui_text("server.shell.open_contextual_help", app_language=app_language, fallback_text="Open contextual help"),
+        "Open Designer": ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"),
+        "Open Status": ui_text("server.shell.open_status", app_language=app_language, fallback_text="Open Status"),
+        "Open Result": ui_text("server.shell.open_result", app_language=app_language, fallback_text="Open Result"),
+        "Open Trace": ui_text("server.shell.open_trace", app_language=app_language, fallback_text="Open Trace"),
+        "Open Artifacts": ui_text("server.shell.open_artifacts", app_language=app_language, fallback_text="Open Artifacts"),
+        "Review Validation": ui_text("server.shell.banner.review_validation", app_language=app_language, fallback_text="Review Validation"),
+        "Review preview": ui_text("server.shell.review_preview_action", app_language=app_language, fallback_text="Review preview"),
+        "Status history": ui_text("server.shell.run_status_history", app_language=app_language, fallback_text="Status history"),
+        "Result history": ui_text("server.shell.run_result_history", app_language=app_language, fallback_text="Result history"),
+        "Trace history": ui_text("server.shell.trace_history", app_language=app_language, fallback_text="Trace history"),
+        "Artifacts history": ui_text("server.shell.artifacts_history", app_language=app_language, fallback_text="Artifacts history"),
+        "Status detail": ui_text("server.shell.status_detail_title", app_language=app_language, fallback_text="Status detail"),
+        "Result detail": ui_text("server.shell.result_detail_title", app_language=app_language, fallback_text="Result detail"),
+        "Trace detail": ui_text("server.shell.trace_detail_title", app_language=app_language, fallback_text="Trace detail"),
+        "Artifacts detail": ui_text("server.shell.artifacts_detail_title", app_language=app_language, fallback_text="Artifacts detail"),
+        "Designer workspace": ui_text("server.shell.designer_workspace", app_language=app_language, fallback_text="Designer workspace"),
+        "Designer detail": ui_text("server.shell.designer_detail_layer", app_language=app_language, fallback_text="Designer detail"),
+        "Validation detail": ui_text("server.shell.validation_detail_title", app_language=app_language, fallback_text="Validation detail"),
+        "Use Designer to draft or review the workflow before running.": ui_text("server.shell.designer_detail_default", app_language=app_language, fallback_text="Use Designer to draft or review the workflow before running."),
+        "Validation details will appear here as findings accumulate.": ui_text("server.shell.validation_detail_default", app_language=app_language, fallback_text="Validation details will appear here as findings accumulate."),
+        "Review validation before the next step.": ui_text("server.shell.validation_default_summary", app_language=app_language, fallback_text="Review validation before the next step."),
+        "No recent status history is available yet.": ui_text("server.shell.no_recent_status_history", app_language=app_language, fallback_text="No recent status history is available yet."),
+        "No recent result history is available yet.": ui_text("server.shell.no_recent_result_history", app_language=app_language, fallback_text="No recent result history is available yet."),
+        "No recent trace history is available yet.": ui_text("server.shell.no_recent_trace_history", app_language=app_language, fallback_text="No recent trace history is available yet."),
+        "No recent artifacts history is available yet.": ui_text("server.shell.no_recent_artifacts_history", app_language=app_language, fallback_text="No recent artifacts history is available yet."),
+        "Status history entries will appear here as runs accumulate.": ui_text("server.shell.status_history_entries_pending", app_language=app_language, fallback_text="Status history entries will appear here as runs accumulate."),
+        "Result history entries will appear here as runs complete.": ui_text("server.shell.result_history_entries_pending", app_language=app_language, fallback_text="Result history entries will appear here as runs complete."),
+        "Trace history entries will appear here as runs accumulate.": ui_text("server.shell.trace_history_entries_pending", app_language=app_language, fallback_text="Trace history entries will appear here as runs accumulate."),
+        "Artifacts history entries will appear here as runs accumulate.": ui_text("server.shell.artifacts_history_entries_pending", app_language=app_language, fallback_text="Artifacts history entries will appear here as runs accumulate."),
+        "Start from Designer to describe your goal or choose a starter template.": ui_text("server.shell.designer_open_default", app_language=app_language, fallback_text="Start from Designer to describe your goal or choose a starter template."),
+    }
+    prefix = [
+        ("Status: ", ui_text("server.shell.validation_prefix", app_language=app_language, fallback_text="Status: ").replace("검증", "상태") if False else ui_text("server.shell.status", app_language=app_language, fallback_text="Status") + ": "),
+        ("Run id: ", ui_text("server.shell.run_id_prefix", app_language=app_language, fallback_text="Run id: ")),
+        ("Started: ", ui_text("server.shell.started_prefix", app_language=app_language, fallback_text="Started: ")),
+        ("Updated: ", ui_text("server.shell.updated_prefix", app_language=app_language, fallback_text="Updated: ")),
+        ("Result state: ", ui_text("server.shell.result_state_prefix", app_language=app_language, fallback_text="Result state: ")),
+        ("Final status: ", ui_text("server.shell.final_status_prefix", app_language=app_language, fallback_text="Final status: ")),
+        ("Summary: ", ui_text("server.shell.summary_prefix", app_language=app_language, fallback_text="Summary: ")),
+        ("Preview: ", ui_text("server.shell.preview_prefix", app_language=app_language, fallback_text="Preview: ")),
+        ("Trace events: ", ui_text("server.shell.trace_events_prefix", app_language=app_language, fallback_text="Trace events: ")),
+        ("Latest event: ", ui_text("server.shell.latest_event_prefix", app_language=app_language, fallback_text="Latest event: ")),
+        ("Latest event type: ", ui_text("server.shell.latest_event_type_prefix", app_language=app_language, fallback_text="Latest event type: ")),
+        ("Latest node: ", ui_text("server.shell.latest_node_prefix", app_language=app_language, fallback_text="Latest node: ")),
+        ("Latest node id: ", ui_text("server.shell.latest_node_id_prefix", app_language=app_language, fallback_text="Latest node id: ")),
+        ("Latest message: ", ui_text("server.shell.latest_message_prefix", app_language=app_language, fallback_text="Latest message: ")),
+        ("Artifacts: ", ui_text("server.shell.artifacts_prefix", app_language=app_language, fallback_text="Artifacts: ")),
+        ("Event count: ", ui_text("server.shell.event_count_prefix", app_language=app_language, fallback_text="Event count: ")),
+        ("Artifact count: ", ui_text("server.shell.artifact_count_prefix", app_language=app_language, fallback_text="Artifact count: ")),
+        ("First artifact id: ", ui_text("server.shell.first_artifact_id_prefix", app_language=app_language, fallback_text="First artifact id: ")),
+        ("First artifact preview: ", ui_text("server.shell.first_artifact_preview_prefix", app_language=app_language, fallback_text="First artifact preview: ")),
+        ("Recent runs: ", ui_text("server.shell.recent_runs_prefix", app_language=app_language, fallback_text="Recent runs: ")),
+        ("Recent results: ", ui_text("server.shell.recent_results_prefix", app_language=app_language, fallback_text="Recent results: ")),
+        ("Recent traces: ", ui_text("server.shell.recent_traces_prefix", app_language=app_language, fallback_text="Recent traces: ")),
+        ("Recent artifact sets: ", ui_text("server.shell.recent_artifact_sets_prefix", app_language=app_language, fallback_text="Recent artifact sets: ")),
+        ("Latest: ", ui_text("server.shell.latest_prefix", app_language=app_language, fallback_text="Latest: ")),
+        ("Request status: ", ui_text("server.shell.request_status_prefix", app_language=app_language, fallback_text="Request status: ")),
+        ("Preview status: ", ui_text("server.shell.preview_status_prefix", app_language=app_language, fallback_text="Preview status: ")),
+        ("Approval status: ", ui_text("server.shell.approval_status_prefix", app_language=app_language, fallback_text="Approval status: ")),
+        ("Templates available: ", ui_text("server.shell.templates_available_prefix", app_language=app_language, fallback_text="Templates available: ")),
+        ("Connected providers: ", ui_text("server.shell.connected_providers_prefix", app_language=app_language, fallback_text="Connected providers: ")),
+        ("Persisted template: ", ui_text("server.shell.persisted_template_prefix", app_language=app_language, fallback_text="Persisted template: ")),
+        ("Submit enabled: ", ui_text("server.shell.submit_enabled_prefix", app_language=app_language, fallback_text="Submit enabled: ")),
+        ("Persisted request: ", ui_text("server.shell.persisted_request_prefix", app_language=app_language, fallback_text="Persisted request: ")),
+        ("Last designer action: ", ui_text("server.shell.last_designer_action_prefix", app_language=app_language, fallback_text="Last designer action: ")),
+        ("Provider setup summary: ", ui_text("server.shell.provider_setup_summary_prefix", app_language=app_language, fallback_text="Provider setup summary: ")),
+        ("Suggested action: ", ui_text("server.shell.suggested_action_prefix", app_language=app_language, fallback_text="Suggested action: ")),
+        ("Blocking findings: ", ui_text("server.shell.blocking_findings_prefix", app_language=app_language, fallback_text="Blocking findings: ")),
+        ("Warnings: ", ui_text("server.shell.warnings_prefix", app_language=app_language, fallback_text="Warnings: ")),
+        ("Next action: ", ui_text("server.shell.next_action_prefix", app_language=app_language, fallback_text="Next action: ")),
+        ("Persisted validation action: ", ui_text("server.shell.persisted_validation_action_prefix", app_language=app_language, fallback_text="Persisted validation action: ")),
+        ("Requires confirmation: ", ui_text("server.shell.requires_confirmation_prefix", app_language=app_language, fallback_text="Requires confirmation: ")),
+        ("Can execute: ", ui_text("server.shell.can_execute_prefix", app_language=app_language, fallback_text="Can execute: ")),
+        ("Top issue: ", ui_text("server.shell.top_issue_prefix", app_language=app_language, fallback_text="Top issue: ")),
+        ("Persisted validation status: ", ui_text("server.shell.persisted_validation_status_prefix", app_language=app_language, fallback_text="Persisted validation status: ")),
+        ("Persisted validation message: ", ui_text("server.shell.persisted_validation_message_prefix", app_language=app_language, fallback_text="Persisted validation message: ")),
+        ("Designer request: ", ui_text("server.shell.designer_request", app_language=app_language, fallback_text="Designer request: {request}", request="").replace("", "")),
+        ("Opened status for ", ui_text("server.shell.opened_status_prefix", app_language=app_language, fallback_text="Opened status for ")),
+        ("Opened result for ", ui_text("server.shell.opened_result_prefix", app_language=app_language, fallback_text="Opened result for ")),
+        ("Opened trace for ", ui_text("server.shell.opened_trace_prefix", app_language=app_language, fallback_text="Opened trace for ")),
+        ("Opened artifacts for ", ui_text("server.shell.opened_artifacts_prefix", app_language=app_language, fallback_text="Opened artifacts for ")),
+    ]
+
+    def transform(value: Any) -> Any:
+        if isinstance(value, str):
+            if value in exact:
+                return exact[value]
+            if value.startswith("Recommended next: "):
+                tail = value[len("Recommended next: "):]
+                tail_map = {"Status": ui_text("server.shell.status", app_language=app_language, fallback_text="Status"), "Validation": ui_text("server.shell.section.validation", app_language=app_language, fallback_text="Validation"), "Result": ui_text("server.shell.section.result", app_language=app_language, fallback_text="Result"), "Trace": ui_text("server.shell.section.trace", app_language=app_language, fallback_text="Trace"), "Artifacts": ui_text("server.shell.section.artifacts", app_language=app_language, fallback_text="Artifacts"), "Designer": ui_text("server.shell.section.designer", app_language=app_language, fallback_text="Designer")}
+                return ui_text("server.shell.recommended_next_prefix", app_language=app_language, fallback_text="Recommended next: ") + tail_map.get(tail, tail)
+            if value.startswith("Step ") and " — " in value:
+                number, label = value.split(" — ", 1)
+                label_map = {"Enter goal": ui_text("server.shell.step.enter_goal", app_language=app_language, fallback_text="Step 1 of 5 — Enter goal").split(" — ",1)[1], "Review preview": ui_text("server.shell.step.review_preview", app_language=app_language, fallback_text="Step 2 of 5 — Review preview").split(" — ",1)[1], "Approve": ui_text("server.shell.step.approve", app_language=app_language, fallback_text="Step 3 of 5 — Approve").split(" — ",1)[1], "Run": ui_text("server.shell.step.run", app_language=app_language, fallback_text="Step 4 of 5 — Run").split(" — ",1)[1], "Read result": ui_text("server.shell.step.read_result", app_language=app_language, fallback_text="Step 5 of 5 — Read result").split(" — ",1)[1]}
+                num_map={"Step 1 of 5": "5단계 중 1단계", "Step 2 of 5": "5단계 중 2단계", "Step 3 of 5": "5단계 중 3단계", "Step 4 of 5": "5단계 중 4단계", "Step 5 of 5": "5단계 중 5단계"}
+                return f"{num_map.get(number, number)} — {label_map.get(label, label)}"
+            for old, new in prefix:
+                if value.startswith(old):
+                    if old == "Designer request: ":
+                        return ui_text("server.shell.designer_request", app_language=app_language, fallback_text="Designer request: {request}", request=value[len(old):])
+                    return new + value[len(old):]
+            return value
+        if isinstance(value, list):
+            return [transform(item) for item in value]
+        if isinstance(value, dict):
+            return {key: transform(item) for key, item in value.items()}
+        return value
+
+    keys = [
+        "latest_run_status_summary", "latest_run_result_summary", "latest_run_artifacts_summary", "latest_run_trace_summary",
+        "latest_run_status_detail", "latest_run_result_detail", "latest_run_artifacts_detail", "latest_run_trace_detail",
+        "status_history_section", "result_history_section", "trace_history_section", "artifacts_history_section",
+        "designer_section", "validation_section", "navigation", "step_state_banner",
+    ]
+    for key in keys:
+        if key in payload and payload[key] is not None:
+            payload[key] = transform(payload[key])
+    return payload
+
+
 def _latest_run_status_summary(preview: Mapping[str, Any] | None) -> dict[str, Any] | None:
     if not preview:
         return None
@@ -1172,6 +1306,7 @@ def build_workspace_shell_runtime_payload(
             "version": "phase6-batch15",
         },
     }
+    payload = _localize_shell_payload(payload, app_language)
     return payload
 
 
@@ -1212,22 +1347,25 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     continuity_json = json.dumps(payload.get("continuity"), ensure_ascii=False)
     template_items = []
     for template in (template_gallery.get("templates") or [])[:6]:
-        title = escape(str(template.get("display_name") or template.get("template_id") or "Template"))
+        title = escape(str(template.get("display_name") or template.get("template_id") or ui_text("server.feedback.option_fallback", app_language=app_language, fallback_text="Template")))
         summary = escape(str(template.get("summary") or ""))
         template_items.append(f"<li><strong>{title}</strong><br><span>{summary}</span></li>")
-    template_markup = "".join(template_items) or "<li>No starter templates projected yet.</li>"
+    template_empty_label = ui_text("server.shell.mobile_unavailable", app_language=app_language, fallback_text="No starter templates projected yet.")
+    template_markup = "".join(template_items) or f"<li>{escape(template_empty_label)}</li>"
     privacy_items = []
     for fact in (privacy.get("facts") or []):
-        label = escape(str(fact.get("label") or fact.get("fact_id") or "Fact"))
+        label = escape(str(fact.get("label") or fact.get("fact_id") or ui_text("server.feedback.option_fallback", app_language=app_language, fallback_text="Fact")))
         value = escape(str(fact.get("value") or ""))
         privacy_items.append(f"<li><strong>{label}:</strong> {value}</li>")
-    privacy_markup = "".join(privacy_items) or "<li>No privacy facts projected.</li>"
+    privacy_empty_label = ui_text("server.shell.review_projected_action", app_language=app_language, fallback_text="No privacy facts projected.")
+    privacy_markup = "".join(privacy_items) or f"<li>{escape(privacy_empty_label)}</li>"
     mobile_items = []
     for step in mobile.get("steps") or []:
-        label = escape(str(step.get("label") or step.get("step_id") or "Step"))
+        label = escape(str(step.get("label") or step.get("step_id") or ui_text("server.shell.status", app_language=app_language, fallback_text="Step")))
         status = escape(str(step.get("status") or "pending"))
         mobile_items.append(f"<li>{label} — <em>{status}</em></li>")
-    mobile_markup = "".join(mobile_items) or "<li>Mobile first-run projection unavailable.</li>"
+    mobile_empty_label = ui_text("server.shell.mobile_unavailable", app_language=app_language, fallback_text="Mobile first-run projection unavailable.")
+    mobile_markup = "".join(mobile_items) or f"<li>{escape(mobile_empty_label)}</li>"
     latest_run_status_path = escape(str(routes.get("latest_run_status") or ""))
     latest_run_trace_path = escape(str(routes.get("latest_run_trace") or ""))
     latest_run_artifacts_path = escape(str(routes.get("latest_run_artifacts") or ""))
@@ -1257,50 +1395,50 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
 </head>
 <body>
   <main class=\"shell\" role=\"main\" aria-labelledby=\"workspace-shell-title\">
-    <h1 id="workspace-shell-title">Nexa Runtime Shell</h1>
+    <h1 id="workspace-shell-title">{escape(ui_text("server.shell.title", app_language=app_language, fallback_text="Nexa Runtime Shell"))}</h1>
     <p><strong>{workspace_title}</strong> (<code>{workspace_id}</code>)</p>
-    <p>Status: <strong>{shell_status}</strong></p>
-    <div class="actions" role="toolbar" aria-label="Workspace shell actions">
-      <button id="run-draft" {'disabled' if payload.get('launch_request_template') is None else ''}>Run draft</button>
-      <button id="refresh" class="secondary">Refresh shell</button>
-      <button id="open-status" class="secondary" {'disabled' if not latest_run_status_path else ''}>Open latest run status</button>
-      <button id="open-result" class="secondary" {'disabled' if not routes.get('latest_run_result') else ''}>Open latest result</button>
-      <button id="open-trace" class="secondary" {'disabled' if not latest_run_trace_path else ''}>Open latest trace</button>
-      <button id="open-artifacts" class="secondary" {'disabled' if not latest_run_artifacts_path else ''}>Open latest artifacts</button>
+    <p>{escape(ui_text("server.shell.status", app_language=app_language, fallback_text="Status"))}: <strong>{shell_status}</strong></p>
+    <div class="actions" role="toolbar" aria-label="{escape(ui_text("server.shell.actions", app_language=app_language, fallback_text="Workspace shell actions"))}">
+      <button id="run-draft" {'disabled' if payload.get('launch_request_template') is None else ''}>{escape(ui_text("server.shell.run_draft", app_language=app_language, fallback_text="Run draft"))}</button>
+      <button id="refresh" class="secondary">{escape(ui_text("server.shell.refresh", app_language=app_language, fallback_text="Refresh shell"))}</button>
+      <button id="open-status" class="secondary" {'disabled' if not latest_run_status_path else ''}>{escape(ui_text("server.shell.open_latest_status", app_language=app_language, fallback_text="Open latest run status"))}</button>
+      <button id="open-result" class="secondary" {'disabled' if not routes.get('latest_run_result') else ''}>{escape(ui_text("server.shell.open_latest_result", app_language=app_language, fallback_text="Open latest result"))}</button>
+      <button id="open-trace" class="secondary" {'disabled' if not latest_run_trace_path else ''}>{escape(ui_text("server.shell.open_latest_trace", app_language=app_language, fallback_text="Open latest trace"))}</button>
+      <button id="open-artifacts" class="secondary" {'disabled' if not latest_run_artifacts_path else ''}>{escape(ui_text("server.shell.open_latest_artifacts", app_language=app_language, fallback_text="Open latest artifacts"))}</button>
     </div>
     <section class="card" style="margin-top:16px;" role="region" aria-labelledby="runtime-focus-title">
-      <h2 id="runtime-focus-title">Runtime focus</h2>
-      <div id="runtime-nav" class="nav" aria-label="Runtime section navigation"></div>
+      <h2 id="runtime-focus-title">{escape(ui_text("server.shell.runtime_focus", app_language=app_language, fallback_text="Runtime focus"))}</h2>
+      <div id="runtime-nav" class="nav" aria-label="{escape(ui_text("server.shell.runtime_nav_aria", app_language=app_language, fallback_text="Runtime section navigation"))}"></div>
       <p id="focus-guidance"><strong>{escape(str(navigation.get('guidance_label') or 'Recommended next: Status'))}</strong> — {escape(str(navigation.get('guidance_summary') or 'Open status first to follow the current runtime state.'))}</p>
-      <pre id="focus-state">Focus: {escape(str(navigation.get('default_section') or 'status'))}</pre>
+      <pre id="focus-state">{escape(ui_text('server.shell.focus_state', app_language=app_language, fallback_text='Focus: {section}', section=str(navigation.get('default_section') or 'status')))}</pre>
     </section>
     <section class="card" style="margin-top:16px;" role="region" aria-labelledby="step-state-banner-heading">
-      <h2 id="step-state-banner-heading">Step state banner</h2>
-      <p id="step-state-banner-title">{escape(str((payload.get('step_state_banner') or {}).get('title') or 'Step 1 of 5 — Enter goal'))}</p>
-      <pre id="step-state-banner-summary" aria-live="polite">{escape(str((payload.get('step_state_banner') or {}).get('summary') or 'Describe your goal to start the first-run path.'))}</pre>
-      <p id="step-state-banner-action">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))} → <code>{escape(str((payload.get('step_state_banner') or {}).get('action_target') or 'designer'))}</code></p>
-      <button id="step-state-banner-action-button" class="secondary">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))}</button>
+      <h2 id="step-state-banner-heading">{escape(ui_text("server.shell.step_state_banner", app_language=app_language, fallback_text="Step state banner"))}</h2>
+      <p id="step-state-banner-title">{escape(str((payload.get('step_state_banner') or {}).get('title') or ui_text('server.shell.step.enter_goal', app_language=app_language, fallback_text='Step 1 of 5 — Enter goal')))}</p>
+      <pre id="step-state-banner-summary" aria-live="polite">{escape(str((payload.get('step_state_banner') or {}).get('summary') or ui_text('server.shell.summary.enter_goal', app_language=app_language, fallback_text='Describe your goal to start the first-run path.')))}</pre>
+      <p id="step-state-banner-action">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or ui_text('server.shell.open_designer', app_language=app_language, fallback_text='Open Designer')))} → <code>{escape(str((payload.get('step_state_banner') or {}).get('action_target') or 'designer'))}</code></p>
+      <button id="step-state-banner-action-button" class="secondary">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or ui_text('server.shell.open_designer', app_language=app_language, fallback_text='Open Designer')))}</button>
     </section>
     <div class="row">
       <section id="designer-summary-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="designer-summary-title">
-        <h2 id="designer-summary-title">Designer workspace</h2>
-        <pre id="designer-summary">Open Designer to start drafting your workflow.</pre>
+        <h2 id="designer-summary-title">{escape(ui_text("server.shell.designer_workspace", app_language=app_language, fallback_text="Designer workspace"))}</h2>
+        <pre id="designer-summary">{escape(ui_text("server.shell.designer_open_default", app_language=app_language, fallback_text="Open Designer to start drafting your workflow."))}</pre>
         <div id="designer-controls" class="actions"></div>
       </section>
       <section id="validation-summary-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="validation-summary-title">
-        <h2 id="validation-summary-title">Validation review</h2>
-        <pre id="validation-summary">Validation guidance will appear here.</pre>
+        <h2 id="validation-summary-title">{escape(ui_text("server.shell.validation_review", app_language=app_language, fallback_text="Validation review"))}</h2>
+        <pre id="validation-summary">{escape(ui_text("server.shell.validation_default", app_language=app_language, fallback_text="Validation guidance will appear here."))}</pre>
         <div id="validation-controls" class="actions"></div>
       </section>
     </div>
     <div class="row">
       <section id="designer-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="designer-detail-title">
-        <h2 id="designer-detail-title">Designer detail layer</h2>
-        <pre id="designer-detail">Designer detail will appear here.</pre>
+        <h2 id="designer-detail-title">{escape(ui_text("server.shell.designer_detail_layer", app_language=app_language, fallback_text="Designer detail layer"))}</h2>
+        <pre id="designer-detail">{escape(ui_text("server.shell.designer_detail_default", app_language=app_language, fallback_text="Designer detail will appear here."))}</pre>
       </section>
       <section id="validation-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="validation-detail-title">
-        <h2 id="validation-detail-title">Validation detail layer</h2>
-        <pre id="validation-detail">Validation detail will appear here.</pre>
+        <h2 id="validation-detail-title">{escape(ui_text("server.shell.validation_detail_layer", app_language=app_language, fallback_text="Validation detail layer"))}</h2>
+        <pre id="validation-detail">{escape(ui_text("server.shell.validation_detail_default", app_language=app_language, fallback_text="Validation detail will appear here."))}</pre>
       </section>
     </div>
     <div class="row">
@@ -1309,51 +1447,51 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <p>{help_summary}</p>
       </section>
       <section id="privacy-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="privacy-title">
-        <h2 id="privacy-title">{escape(str(privacy.get('title') or 'Privacy and data handling'))}</h2>
+        <h2 id="privacy-title">{escape(str(privacy.get('title') or ui_text('server.shell.privacy', app_language=app_language, fallback_text='Privacy and data handling')))}</h2>
         <ul>{privacy_markup}</ul>
       </section>
     </div>
     <div class="row">
       <section id="mobile-first-run-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="mobile-first-run-title">
-        <h2 id="mobile-first-run-title">Mobile first-run</h2>
+        <h2 id="mobile-first-run-title">{escape(ui_text("server.shell.mobile_first_run", app_language=app_language, fallback_text="Mobile first-run"))}</h2>
         <ul>{mobile_markup}</ul>
       </section>
       <section id="starter-templates-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="starter-templates-title">
-        <h2 id="starter-templates-title">Starter templates</h2>
+        <h2 id="starter-templates-title">{escape(ui_text("server.shell.starter_templates", app_language=app_language, fallback_text="Starter templates"))}</h2>
         <ul>{template_markup}</ul>
       </section>
     </div>
     <div class="row">
       <section id="latest-run-status-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-status-title">
-        <h2 id="latest-run-status-title">Latest run status</h2>
-        <pre id="latest-run-status">Waiting for run status.</pre>
+        <h2 id="latest-run-status-title">{escape(ui_text("server.shell.latest_run_status", app_language=app_language, fallback_text="Latest run status"))}</h2>
+        <pre id="latest-run-status">{escape(ui_text("server.shell.waiting_status", app_language=app_language, fallback_text="Waiting for run status."))}</pre>
       </section>
       <section id="latest-run-result-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-result-title">
-        <h2 id="latest-run-result-title">Latest run result</h2>
-        <pre id="latest-run-result">Waiting for run result.</pre>
+        <h2 id="latest-run-result-title">{escape(ui_text("server.shell.latest_run_result", app_language=app_language, fallback_text="Latest run result"))}</h2>
+        <pre id="latest-run-result">{escape(ui_text("server.shell.waiting_result", app_language=app_language, fallback_text="Waiting for run result."))}</pre>
       </section>
     </div>
     <div class="row">
       <section id="latest-run-status-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-status-detail-title">
-        <h2 id="latest-run-status-detail-title">Status detail layer</h2>
-        <pre id="latest-run-status-detail">Open latest run status to view the detail layer.</pre>
+        <h2 id="latest-run-status-detail-title">{escape(ui_text("server.shell.status_detail_layer", app_language=app_language, fallback_text="Status detail layer"))}</h2>
+        <pre id="latest-run-status-detail">{escape(ui_text("server.shell.status_detail_prompt", app_language=app_language, fallback_text="Open latest run status to view the detail layer."))}</pre>
       </section>
       <section id="latest-run-result-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-result-detail-title">
-        <h2 id="latest-run-result-detail-title">Result detail layer</h2>
-        <pre id="latest-run-result-detail">Open latest run result to view the detail layer.</pre>
+        <h2 id="latest-run-result-detail-title">{escape(ui_text("server.shell.result_detail_layer", app_language=app_language, fallback_text="Result detail layer"))}</h2>
+        <pre id="latest-run-result-detail">{escape(ui_text("server.shell.result_detail_prompt", app_language=app_language, fallback_text="Open latest run result to view the detail layer."))}</pre>
       </section>
     </div>
     <div class="row">
       <section id="status-history-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="status-history-title">
-        <h2 id="status-history-title">Run status history</h2>
-        <pre id="status-history-summary">Recent status history will appear here.</pre>
-        <pre id="status-history-detail">Status history detail will appear here.</pre>
+        <h2 id="status-history-title">{escape(ui_text("server.shell.run_status_history", app_language=app_language, fallback_text="Run status history"))}</h2>
+        <pre id="status-history-summary">{escape(ui_text("server.shell.status_history_summary", app_language=app_language, fallback_text="Recent status history will appear here."))}</pre>
+        <pre id="status-history-detail">{escape(ui_text("server.shell.status_history_detail", app_language=app_language, fallback_text="Status history detail will appear here."))}</pre>
         <div id="status-history-controls" class="actions"></div>
       </section>
       <section id="result-history-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="result-history-card-title">
-        <h2 id="result-history-card-title">Run result history</h2>
-        <pre id="result-history-summary">Recent result history will appear here.</pre>
-        <pre id="result-history-detail">Result history detail will appear here.</pre>
+        <h2 id="result-history-card-title">{escape(ui_text("server.shell.run_result_history", app_language=app_language, fallback_text="Run result history"))}</h2>
+        <pre id="result-history-summary">{escape(ui_text("server.shell.result_history_summary", app_language=app_language, fallback_text="Recent result history will appear here."))}</pre>
+        <pre id="result-history-detail">{escape(ui_text("server.shell.result_history_detail", app_language=app_language, fallback_text="Result history detail will appear here."))}</pre>
         <div id="result-history-controls" class="actions"></div>
       </section>
     </div>

@@ -101,7 +101,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     prefill_run_id = escape(str(channel.get("prefill_run_id") or ""))
     options = list(channel.get("options") or [])
     items = list(channel.get("items") or [])
-    empty_title = escape(str(channel.get("empty_title") or "No feedback sent yet"))
+    empty_title = escape(str(channel.get("empty_title") or ui_text("server.feedback.empty_title", app_language=app_language, fallback_text="No feedback sent yet")))
     empty_summary = escape(str(channel.get("empty_summary") or ""))
     confirmation_title = escape(str(channel.get("confirmation_title") or ""))
     confirmation_summary = escape(str(channel.get("confirmation_summary") or ""))
@@ -123,8 +123,9 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     submit_recorded_text = escape(ui_text("server.feedback.submit_recorded", app_language=app_language, fallback_text="Feedback recorded."))
     workspace_href = escape(str((payload.get("routes") or {}).get("workspace_page") or "#"))
     result_history_href = escape(str((payload.get("routes") or {}).get("result_history") or "#"))
+    option_fallback_label = ui_text("server.feedback.option_fallback", app_language=app_language, fallback_text="Option")
     options_html = "".join(
-        f'<button type="button" class="option" data-category="{escape(str(option.get("category_key") or "friction_note"))}"><strong>{escape(str(option.get("title") or "Option"))}</strong><span>{escape(str(option.get("summary") or ""))}</span></button>'
+        f'<button type="button" class="option" data-category="{escape(str(option.get("category_key") or "friction_note"))}"><strong>{escape(str(option.get("title") or option_fallback_label))}</strong><span>{escape(str(option.get("summary") or ""))}</span></button>'
         for option in options
     )
     items_html = "".join(
@@ -134,8 +135,9 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     if not items_html:
         items_html = f'<article class="feedback-item empty"><h2>{empty_title}</h2><p>{empty_summary}</p></article>'
     confirmation_html = ""
+    confirmation_region_label = escape(ui_text("server.feedback.confirmation_region", app_language=app_language, fallback_text="Feedback confirmation"))
     if confirmation_title or confirmation_summary:
-        confirmation_html = f'<section class="confirmation" role="region" aria-labelledby="feedback-confirmation-title"><h2 id="feedback-confirmation-title">{confirmation_title}</h2><p>{confirmation_summary}</p></section>'
+        confirmation_html = f'<section class="confirmation" role="region" aria-labelledby="feedback-confirmation-title" aria-label="{confirmation_region_label}"><h2 id="feedback-confirmation-title">{confirmation_title}</h2><p>{confirmation_summary}</p></section>'
     return f"""<!doctype html>
 <html lang="{app_language}">
   <head>
@@ -199,7 +201,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           <div class=\"status\" id=\"feedback-status\" aria-live=\"polite\"></div>
         </form>
       </section>
-      <section role="region" aria-labelledby="recent-feedback-title">
+      <section role="region" aria-labelledby="recent-feedback-title" aria-label="{escape(ui_text('server.feedback.recent_region', app_language=app_language, fallback_text='Recent feedback'))}">
         <h2 id="recent-feedback-title">{recent_title}</h2>
         {items_html}
       </section>

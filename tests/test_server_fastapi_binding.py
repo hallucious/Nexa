@@ -1277,12 +1277,17 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert result_page.status_code == 200
     assert '<html lang="ko">' in result_page.text
     assert '최근 결과 이력' in result_page.text
+    assert '라이브러리로 돌아가기' in result_page.text
+    assert '결과 상세' in result_page.text
+    assert '결과 열기' in result_page.text
 
     feedback_page = client.get('/app/workspaces/ws-001/feedback?surface=result_history&run_id=run-001&app_language=ko', headers=_session_headers())
     assert feedback_page.status_code == 200
     assert '<html lang="ko">' in feedback_page.text
     assert '피드백 유형' in feedback_page.text
     assert '피드백 보내기' in feedback_page.text
+    assert '라이브러리로 돌아가기' in feedback_page.text
+    assert '최근 피드백' in feedback_page.text
 
 
 def test_fastapi_binding_feedback_submission_localizes_server_message() -> None:
@@ -1322,7 +1327,9 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '실행 ID:' in body
     assert '상태 상세' in body
     assert '최근 실행이 아직 없습니다.' in body
-    assert 'Trace 이벤트:' in body
+    assert '최근 결과 이력' in body
+    assert '연결된 제공자 수:' in body
+    assert '최근 trace가 아직 없습니다.' in body
     assert '포커스:' in body
 
 
