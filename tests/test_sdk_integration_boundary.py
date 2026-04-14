@@ -26,6 +26,7 @@ from src.sdk.integration import (
     PublicMcpManifest,
     PublicMcpNormalizedArguments,
     PublicMcpNormalizedResponse,
+    PublicMcpRecoveryHint,
     PublicMcpResponseContract,
     PublicMcpResourceDescriptor,
     PublicMcpRouteContract,
@@ -79,7 +80,7 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.11"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.12"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -113,9 +114,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.9"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.10"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.9"
+    assert surface.version == "1.10"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -212,7 +213,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.7"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.8"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -750,7 +751,34 @@ def test_host_bridge_resource_report_captures_dispatch_build_error_category() ->
     assert report.phase == "dispatch_build"
     assert report.error is not None
     assert report.error.category == "request_contract_error"
+    assert report.error.recovery_hint is not None
+    assert isinstance(report.error.recovery_hint, PublicMcpRecoveryHint)
+    assert report.retryable is False
+    assert report.safe_to_retry_same_request is False
+    assert report.recommended_action == "fix_request_arguments"
+    assert report.error.recovery_hint.recoverability == "caller_fix_required"
     assert "Missing required path field(s) for public MCP export" in report.error.message
+
+
+def test_host_bridge_framework_dispatch_report_marks_transient_handler_error_as_retryable(monkeypatch) -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    def _raise_timeout(*args, **kwargs):
+        raise TimeoutError("framework handler timed out")
+
+    monkeypatch.setattr("src.server.framework_binding.FrameworkRouteBindings.handle_run_status", _raise_timeout)
+
+    report = bridge.execute_framework_resource_report("get_run_status", {"run_id": "run-001"})
+
+    assert report.ok is False
+    assert report.phase == "handler_execution"
+    assert report.error is not None
+    assert report.error.category == "handler_error"
+    assert report.error.recovery_hint is not None
+    assert report.retryable is True
+    assert report.safe_to_retry_same_request is True
+    assert report.recommended_action == "retry_same_request"
+    assert report.error.recovery_hint.recoverability == "transient_retry_possible"
 
 
 def test_host_bridge_framework_dispatch_report_captures_response_contract_error() -> None:

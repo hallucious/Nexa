@@ -22,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.9"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.10"
 
 
 @dataclass(frozen=True)
@@ -193,11 +193,28 @@ class PublicMcpNormalizedResponse:
 
 
 @dataclass(frozen=True)
+class PublicMcpRecoveryHint:
+    retryable: bool
+    safe_to_retry_same_request: bool
+    recoverability: str
+    recommended_action: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "retryable": self.retryable,
+            "safe_to_retry_same_request": self.safe_to_retry_same_request,
+            "recoverability": self.recoverability,
+            "recommended_action": self.recommended_action,
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpExecutionError:
     category: str
     phase: str
     message: str
     exception_type: str
+    recovery_hint: PublicMcpRecoveryHint | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -205,6 +222,7 @@ class PublicMcpExecutionError:
             "phase": self.phase,
             "message": self.message,
             "exception_type": self.exception_type,
+            "recovery_hint": self.recovery_hint.to_dict() if self.recovery_hint is not None else None,
         }
 
 
@@ -222,6 +240,24 @@ class PublicMcpExecutionReport:
     def ok(self) -> bool:
         return self.error is None and self.normalized_response is not None and self.phase == "completed"
 
+    @property
+    def retryable(self) -> bool:
+        return bool(self.error is not None and self.error.recovery_hint is not None and self.error.recovery_hint.retryable)
+
+    @property
+    def safe_to_retry_same_request(self) -> bool:
+        return bool(
+            self.error is not None
+            and self.error.recovery_hint is not None
+            and self.error.recovery_hint.safe_to_retry_same_request
+        )
+
+    @property
+    def recommended_action(self) -> str | None:
+        if self.error is None or self.error.recovery_hint is None:
+            return None
+        return self.error.recovery_hint.recommended_action
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
@@ -230,6 +266,9 @@ class PublicMcpExecutionReport:
             "transport_kind": self.transport_kind,
             "phase": self.phase,
             "ok": self.ok,
+            "retryable": self.retryable,
+            "safe_to_retry_same_request": self.safe_to_retry_same_request,
+            "recommended_action": self.recommended_action,
             "normalized_response": self.normalized_response.to_dict() if self.normalized_response is not None else None,
             "error": self.error.to_dict() if self.error is not None else None,
         }
@@ -391,7 +430,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.7"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.8"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -1674,6 +1713,72 @@ def _classify_public_mcp_execution_error(*, phase: str, exc: Exception) -> str:
     return "unexpected_error"
 
 
+def _public_mcp_execution_recovery_hint(*, category: str, phase: str, exc: Exception) -> PublicMcpRecoveryHint:
+    transient = isinstance(exc, (TimeoutError, ConnectionError))
+    if category == "request_contract_error":
+        return PublicMcpRecoveryHint(
+            retryable=False,
+            safe_to_retry_same_request=False,
+            recoverability="caller_fix_required",
+            recommended_action="fix_request_arguments",
+        )
+    if category == "binding_error":
+        return PublicMcpRecoveryHint(
+            retryable=False,
+            safe_to_retry_same_request=False,
+            recoverability="integration_fix_required",
+            recommended_action="inspect_route_binding",
+        )
+    if category == "handler_error":
+        if transient:
+            return PublicMcpRecoveryHint(
+                retryable=True,
+                safe_to_retry_same_request=True,
+                recoverability="transient_retry_possible",
+                recommended_action="retry_same_request",
+            )
+        return PublicMcpRecoveryHint(
+            retryable=False,
+            safe_to_retry_same_request=False,
+            recoverability="handler_investigation_required",
+            recommended_action="inspect_handler_failure",
+        )
+    if category == "response_contract_error":
+        return PublicMcpRecoveryHint(
+            retryable=False,
+            safe_to_retry_same_request=False,
+            recoverability="integration_fix_required",
+            recommended_action="inspect_response_contract",
+        )
+    if category == "response_decode_error":
+        return PublicMcpRecoveryHint(
+            retryable=False,
+            safe_to_retry_same_request=False,
+            recoverability="integration_fix_required",
+            recommended_action="inspect_response_serialization",
+        )
+    if category == "response_error":
+        if transient:
+            return PublicMcpRecoveryHint(
+                retryable=True,
+                safe_to_retry_same_request=True,
+                recoverability="transient_retry_possible",
+                recommended_action="retry_same_request",
+            )
+        return PublicMcpRecoveryHint(
+            retryable=False,
+            safe_to_retry_same_request=False,
+            recoverability="integration_fix_required",
+            recommended_action="inspect_response_handling",
+        )
+    return PublicMcpRecoveryHint(
+        retryable=transient,
+        safe_to_retry_same_request=transient,
+        recoverability="unknown_investigation_required" if not transient else "transient_retry_possible",
+        recommended_action="inspect_unexpected_failure" if not transient else "retry_same_request",
+    )
+
+
 def _public_mcp_execution_report_error(
     *,
     name: str,
@@ -1683,6 +1788,7 @@ def _public_mcp_execution_report_error(
     phase: str,
     exc: Exception,
 ) -> PublicMcpExecutionReport:
+    category = _classify_public_mcp_execution_error(phase=phase, exc=exc)
     return PublicMcpExecutionReport(
         name=name,
         route_name=route_name,
@@ -1690,10 +1796,11 @@ def _public_mcp_execution_report_error(
         transport_kind=transport_kind,
         phase=phase,
         error=PublicMcpExecutionError(
-            category=_classify_public_mcp_execution_error(phase=phase, exc=exc),
+            category=category,
             phase=phase,
             message=str(exc),
             exception_type=type(exc).__name__,
+            recovery_hint=_public_mcp_execution_recovery_hint(category=category, phase=phase, exc=exc),
         ),
     )
 
@@ -2568,6 +2675,7 @@ __all__ = [
     "PublicMcpNormalizedArguments",
     "PublicMcpResponseContract",
     "PublicMcpNormalizedResponse",
+    "PublicMcpRecoveryHint",
     "PublicMcpExecutionError",
     "PublicMcpExecutionReport",
     "PublicMcpCompatibilitySurface",

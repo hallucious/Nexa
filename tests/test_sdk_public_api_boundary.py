@@ -54,7 +54,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.11"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.12"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -139,7 +139,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.7"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.8"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
@@ -215,5 +215,8 @@ def test_sdk_root_exposes_public_mcp_execution_report_types() -> None:
 
     assert isinstance(report, sdk.PublicMcpExecutionReport)
     assert isinstance(report.error, sdk.PublicMcpExecutionError)
+    assert isinstance(report.error.recovery_hint, sdk.PublicMcpRecoveryHint)
     assert report.phase == "dispatch_build"
     assert report.error.category == "request_contract_error"
+    assert report.retryable is False
+    assert report.recommended_action == "fix_request_arguments"
