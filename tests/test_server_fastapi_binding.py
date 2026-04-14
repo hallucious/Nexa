@@ -1318,6 +1318,12 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '최신 실행 결과' in body
     assert '디자이너 작업공간' in body
     assert '단계 상태 배너' in body
+    assert '추천 다음 단계:' in body
+    assert '실행 ID:' in body
+    assert '상태 상세' in body
+    assert '최근 실행이 아직 없습니다.' in body
+    assert 'Trace 이벤트:' in body
+    assert '포커스:' in body
 
 
 def test_fastapi_binding_product_surfaces_expose_accessible_landmarks() -> None:
