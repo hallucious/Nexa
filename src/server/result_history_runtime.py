@@ -8,6 +8,7 @@ from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizati
 from src.server.run_list_api import RunListReadService
 from src.server.run_read_api import RunResultReadService
 from src.server.workspace_shell_sections import build_shell_section
+from src.ui.i18n import normalize_ui_language, ui_text
 from src.ui.result_history import read_result_history_view_model
 
 
@@ -50,6 +51,7 @@ def build_workspace_result_history_payload(
 ) -> dict[str, Any] | None:
     if workspace_context is None or workspace_row is None:
         return None
+    app_language = normalize_ui_language(app_language)
     list_outcome = RunListReadService.list_workspace_runs(
         request_auth=request_auth,
         workspace_context=workspace_context,
@@ -105,28 +107,28 @@ def build_workspace_result_history_payload(
         selected_run_id=selected_run_id,
         onboarding_state=onboarding_state,
     )
-    overview_lines = [view_model.subtitle or "", f"Visible results: {view_model.returned_count}"]
+    overview_lines = [view_model.subtitle or "", ui_text("server.result_history.visible_count", app_language=app_language, fallback_text="Visible results: {count}", count=view_model.returned_count)]
     if view_model.onboarding_incomplete and view_model.onboarding_summary:
         overview_lines.append(view_model.onboarding_summary)
     overview = build_shell_section(
         headline=view_model.title or "Recent results",
         lines=overview_lines,
-        detail_title="Result history overview",
+        detail_title=ui_text("server.result_history.overview_title", app_language=app_language, fallback_text="Result history overview"),
         detail_items=[
-            f"Workspace: {response.workspace_title}",
-            "Source of truth: server-backed run history and result history",
-            "Trace literacy is optional on this surface",
-            "Onboarding continuity is projected from canonical server state" if view_model.onboarding_incomplete else None,
+            ui_text("server.result_history.workspace", app_language=app_language, fallback_text="Workspace: {workspace}", workspace=response.workspace_title),
+            ui_text("server.result_history.source_of_truth", app_language=app_language, fallback_text="Source of truth: server-backed run history and result history"),
+            ui_text("server.result_history.trace_optional", app_language=app_language, fallback_text="Trace literacy is optional on this surface"),
+            ui_text("server.result_history.onboarding_projection", app_language=app_language, fallback_text="Onboarding continuity is projected from canonical server state") if view_model.onboarding_incomplete else None,
         ],
-        summary_empty="No recent results are visible yet.",
-        detail_empty="Result history detail will appear here once runs exist.",
+        summary_empty=ui_text("server.result_history.summary_empty", app_language=app_language, fallback_text="No recent results are visible yet."),
+        detail_empty=ui_text("server.result_history.detail_empty", app_language=app_language, fallback_text="Result history detail will appear here once runs exist."),
     )
     item_sections = []
     for item in view_model.items:
         selected = item.run_id == view_model.selected_run_id
         detail_items = [item.timestamp_label, item.result_summary]
         if item.output_preview:
-            detail_items.append(f"Latest output preview: {item.output_preview}")
+            detail_items.append(ui_text("server.result_history.latest_output_preview", app_language=app_language, fallback_text="Latest output preview: {preview}", preview=item.output_preview))
         item_sections.append(
             {
                 "run_id": item.run_id,
@@ -137,11 +139,11 @@ def build_workspace_result_history_payload(
                 "section": build_shell_section(
                     headline=item.result_title,
                     lines=[item.status_label] + list(item.summary_lines),
-                    detail_title="Result detail",
+                    detail_title=ui_text("server.result_history.result_detail", app_language=app_language, fallback_text="Result detail"),
                     detail_items=detail_items,
                     controls=(
-                        {"control_id": f"open-result-{item.run_id}", "label": "Open result", "action_kind": "navigate", "action_target": item.open_result_href},
-                        {"control_id": f"continue-workflow-{item.run_id}", "label": "Continue workflow", "action_kind": "navigate", "action_target": item.continue_href},
+                        {"control_id": f"open-result-{item.run_id}", "label": ui_text("server.result_history.open_result", app_language=app_language, fallback_text="Open result"), "action_kind": "navigate", "action_target": item.open_result_href},
+                        {"control_id": f"continue-workflow-{item.run_id}", "label": ui_text("server.result_history.continue_workflow", app_language=app_language, fallback_text="Continue workflow"), "action_kind": "navigate", "action_target": item.continue_href},
                     ),
                 ),
                 "selected": selected,
@@ -167,6 +169,7 @@ def build_workspace_result_history_payload(
         "item_sections": item_sections,
         "selected_result": asdict(selected_item) if selected_item is not None else None,
         "onboarding_banner": onboarding_banner,
+        "app_language": app_language,
         "routes": {
             "workspace_list": "/api/workspaces",
             "library": "/app/library",
@@ -178,6 +181,7 @@ def build_workspace_result_history_payload(
 
 
 def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
+    app_language = normalize_ui_language(payload.get("app_language") or "en")
     history = dict(payload.get("result_history") or {})
     title = escape(str(history.get("title") or "Recent results"))
     subtitle = escape(str(history.get("subtitle") or "Reopen recent results."))
@@ -212,7 +216,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
           </details>
           <div class="actions">
             <a class="action-link secondary" href="{open_href}">Open result</a>
-            <a class="action-link" href="{continue_href}">Continue workflow</a>
+            <a class="action-link" href="{continue_href}">{escape(ui_text('server.result_history.open_workflow', app_language=app_language, fallback_text='Open workflow'))}</a>
           </div>
         </article>
         """
@@ -225,7 +229,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         """
     selected_output_html = ""
     if selected.get("output_preview"):
-        selected_output_html = f'<section class="selected-output" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or "Latest output"))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
+        selected_output_html = f'<section class="selected-output" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or ui_text("result_history.selected_output.title", app_language=app_language, fallback_text="Latest output")))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
     onboarding_html = ""
     if onboarding_banner:
         action_href = escape(str(onboarding_banner.get("action_href") or "#"))
@@ -238,7 +242,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
             '</section>'
         )
     return f"""<!doctype html>
-<html lang="en">
+<html lang="{app_language}">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -267,14 +271,14 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
   <body>
     <main role="main" aria-labelledby="result-history-title">
       <header aria-labelledby="result-history-title">
-        <a class="top-link" href="/app/library" aria-label="Back to library">Back to library</a>
-        <a class="top-link" href="{escape(str(payload.get('routes', {}).get('workspace_page') or '#'))}">Continue workflow</a>
+        <a class="top-link" href="{escape(str(payload.get('routes', {}).get('library') or '/app/library'))}" aria-label="{escape(ui_text('server.result_history.back_to_library', app_language=app_language, fallback_text='Back to library'))}">{escape(ui_text('server.result_history.back_to_library', app_language=app_language, fallback_text='Back to library'))}</a>
+        <a class="top-link" href="{escape(str(payload.get('routes', {}).get('workspace_page') or '#'))}">{escape(ui_text('server.result_history.open_workflow', app_language=app_language, fallback_text='Open workflow'))}</a>
         <h1 id="result-history-title">{title}</h1>
         <p>{workspace_title} · {subtitle}</p>
       </header>
       {onboarding_html}
       {selected_output_html}
-      <section class="result-grid" aria-label="Recent result history">{cards_html}</section>
+      <section class="result-grid" aria-label="{escape(ui_text('server.result_history.recent_history_aria', app_language=app_language, fallback_text='Recent result history'))}">{cards_html}</section>
     </main>
   </body>
 </html>

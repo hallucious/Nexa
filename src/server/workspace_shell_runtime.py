@@ -12,6 +12,7 @@ from src.storage.models.shared_sections import CircuitModel, ResourcesModel, Sta
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.validators.shared_validator import load_nex
 from src.ui.builder_shell import read_builder_shell_view_model
+from src.ui.i18n import normalize_ui_language, ui_language_from_sources, ui_text
 from src.ui.template_gallery import read_template_gallery_view_model
 from src.server.workspace_shell_sections import build_shell_section
 
@@ -1065,10 +1066,12 @@ def build_workspace_shell_runtime_payload(
     onboarding_rows: Sequence[Mapping[str, Any]] = (),
     artifact_rows_lookup: Any | None = None,
     trace_rows_lookup: Any | None = None,
+    app_language_override: str | None = None,
 ) -> dict[str, Any]:
     source = resolve_workspace_artifact_source(workspace_row, artifact_source)
     model, loaded = _load_workspace_model(source, workspace_row)
     shell_vm = read_builder_shell_view_model(model)
+    app_language = normalize_ui_language(app_language_override or ui_language_from_sources(model))
     server_backed_state = _server_backed_shell_state(source, model)
     template_gallery = read_template_gallery_view_model(model) if isinstance(model, WorkingSaveModel) else None
     workspace_id = str((workspace_row or {}).get("workspace_id") or getattr(getattr(model, "meta", None), "working_save_id", "workspace")).strip() or "workspace"
@@ -1109,6 +1112,7 @@ def build_workspace_shell_runtime_payload(
     payload = {
         "workspace_id": workspace_id,
         "workspace_title": workspace_title,
+        "app_language": app_language,
         "storage_role": _storage_role(model),
         "click_test_ready": launch_request_template is not None,
         "working_save_id": getattr(getattr(model, "meta", None), "working_save_id", None),
@@ -1172,6 +1176,7 @@ def build_workspace_shell_runtime_payload(
 
 
 def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
+    app_language = normalize_ui_language(payload.get("app_language") or "en")
     workspace_id = escape(str(payload.get("workspace_id") or "workspace"))
     workspace_title = escape(str(payload.get("workspace_title") or "Workspace"))
     shell = payload.get("shell") or {}
@@ -1229,12 +1234,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     help_title = escape(str(contextual_help.get("title") or "Contextual help"))
     help_summary = escape(str(contextual_help.get("summary") or "Review the projected next action."))
     shell_status = escape(str((shell.get("shell_status_label") or payload.get("storage_role") or "ready")))
-    return f"""<!doctype html>
-<html lang=\"en\">
+    html = f"""<!doctype html>
+<html lang="{app_language}">
 <head>
   <meta charset=\"utf-8\" />
   <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>Nexa Runtime Shell — {workspace_title}</title>
+  <title>{escape(ui_text("server.shell.page_title", app_language=app_language, fallback_text="Nexa Runtime Shell — {workspace}", workspace=workspace_title))}</title>
   <style>
     body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
     .shell {{ max-width: 960px; margin: 0 auto; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
@@ -2222,3 +2227,63 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
   </script>
 </body>
 </html>"""
+    replacements = {
+        'Nexa Runtime Shell': ui_text('server.shell.title', app_language=app_language, fallback_text='Nexa Runtime Shell'),
+        'Status:': ui_text('server.shell.status', app_language=app_language, fallback_text='Status') + ':',
+        'Workspace shell actions': ui_text('server.shell.actions', app_language=app_language, fallback_text='Workspace shell actions'),
+        'Run draft': ui_text('server.shell.run_draft', app_language=app_language, fallback_text='Run draft'),
+        'Refresh shell': ui_text('server.shell.refresh', app_language=app_language, fallback_text='Refresh shell'),
+        'Open latest run status': ui_text('server.shell.open_latest_status', app_language=app_language, fallback_text='Open latest run status'),
+        'Open latest result': ui_text('server.shell.open_latest_result', app_language=app_language, fallback_text='Open latest result'),
+        'Open latest trace': ui_text('server.shell.open_latest_trace', app_language=app_language, fallback_text='Open latest trace'),
+        'Open latest artifacts': ui_text('server.shell.open_latest_artifacts', app_language=app_language, fallback_text='Open latest artifacts'),
+        'Runtime focus': ui_text('server.shell.runtime_focus', app_language=app_language, fallback_text='Runtime focus'),
+        'Runtime section navigation': ui_text('server.shell.runtime_nav_aria', app_language=app_language, fallback_text='Runtime section navigation'),
+        'Step state banner': ui_text('server.shell.step_state_banner', app_language=app_language, fallback_text='Step state banner'),
+        'Designer workspace': ui_text('server.shell.designer_workspace', app_language=app_language, fallback_text='Designer workspace'),
+        'Open Designer to start drafting your workflow.': ui_text('server.shell.designer_open_default', app_language=app_language, fallback_text='Open Designer to start drafting your workflow.'),
+        'Validation review': ui_text('server.shell.validation_review', app_language=app_language, fallback_text='Validation review'),
+        'Validation guidance will appear here.': ui_text('server.shell.validation_default', app_language=app_language, fallback_text='Validation guidance will appear here.'),
+        'Designer detail layer': ui_text('server.shell.designer_detail_layer', app_language=app_language, fallback_text='Designer detail layer'),
+        'Designer detail will appear here.': ui_text('server.shell.designer_detail_default', app_language=app_language, fallback_text='Designer detail will appear here.'),
+        'Validation detail layer': ui_text('server.shell.validation_detail_layer', app_language=app_language, fallback_text='Validation detail layer'),
+        'Validation detail will appear here.': ui_text('server.shell.validation_detail_default', app_language=app_language, fallback_text='Validation detail will appear here.'),
+        'Privacy and data handling': ui_text('server.shell.privacy', app_language=app_language, fallback_text='Privacy and data handling'),
+        'Mobile first-run': ui_text('server.shell.mobile_first_run', app_language=app_language, fallback_text='Mobile first-run'),
+        'Mobile first-run projection unavailable.': ui_text('server.shell.mobile_unavailable', app_language=app_language, fallback_text='Mobile first-run projection unavailable.'),
+        'Starter templates': ui_text('server.shell.starter_templates', app_language=app_language, fallback_text='Starter templates'),
+        'Latest run status': ui_text('server.shell.latest_run_status', app_language=app_language, fallback_text='Latest run status'),
+        'Waiting for run status.': ui_text('server.shell.waiting_status', app_language=app_language, fallback_text='Waiting for run status.'),
+        'Latest run result': ui_text('server.shell.latest_run_result', app_language=app_language, fallback_text='Latest run result'),
+        'Waiting for run result.': ui_text('server.shell.waiting_result', app_language=app_language, fallback_text='Waiting for run result.'),
+        'Status detail layer': ui_text('server.shell.status_detail_layer', app_language=app_language, fallback_text='Status detail layer'),
+        'Open latest run status to view the detail layer.': ui_text('server.shell.status_detail_prompt', app_language=app_language, fallback_text='Open latest run status to view the detail layer.'),
+        'Result detail layer': ui_text('server.shell.result_detail_layer', app_language=app_language, fallback_text='Result detail layer'),
+        'Open latest run result to view the detail layer.': ui_text('server.shell.result_detail_prompt', app_language=app_language, fallback_text='Open latest run result to view the detail layer.'),
+        'Run status history': ui_text('server.shell.run_status_history', app_language=app_language, fallback_text='Run status history'),
+        'Recent status history will appear here.': ui_text('server.shell.status_history_summary', app_language=app_language, fallback_text='Recent status history will appear here.'),
+        'Status history detail will appear here.': ui_text('server.shell.status_history_detail', app_language=app_language, fallback_text='Status history detail will appear here.'),
+        'Run result history': ui_text('server.shell.run_result_history', app_language=app_language, fallback_text='Run result history'),
+        'Recent result history will appear here.': ui_text('server.shell.result_history_summary', app_language=app_language, fallback_text='Recent result history will appear here.'),
+        'Result history detail will appear here.': ui_text('server.shell.result_history_detail', app_language=app_language, fallback_text='Result history detail will appear here.'),
+        'Trace history': ui_text('server.shell.trace_history', app_language=app_language, fallback_text='Trace history'),
+        'Recent trace history will appear here.': ui_text('server.shell.trace_history_summary', app_language=app_language, fallback_text='Recent trace history will appear here.'),
+        'Trace history detail will appear here.': ui_text('server.shell.trace_history_detail', app_language=app_language, fallback_text='Trace history detail will appear here.'),
+        'Artifacts history': ui_text('server.shell.artifacts_history', app_language=app_language, fallback_text='Artifacts history'),
+        'Recent artifacts history will appear here.': ui_text('server.shell.artifacts_history_summary', app_language=app_language, fallback_text='Recent artifacts history will appear here.'),
+        'Artifacts history detail will appear here.': ui_text('server.shell.artifacts_history_detail', app_language=app_language, fallback_text='Artifacts history detail will appear here.'),
+        'Latest trace': ui_text('server.shell.latest_trace', app_language=app_language, fallback_text='Latest trace'),
+        'Waiting for trace details.': ui_text('server.shell.waiting_trace', app_language=app_language, fallback_text='Waiting for trace details.'),
+        'Latest artifacts': ui_text('server.shell.latest_artifacts', app_language=app_language, fallback_text='Latest artifacts'),
+        'Waiting for artifact details.': ui_text('server.shell.waiting_artifacts', app_language=app_language, fallback_text='Waiting for artifact details.'),
+        'Trace detail layer': ui_text('server.shell.trace_detail_layer', app_language=app_language, fallback_text='Trace detail layer'),
+        'Open latest trace to view the detail layer.': ui_text('server.shell.trace_detail_prompt', app_language=app_language, fallback_text='Open latest trace to view the detail layer.'),
+        'Artifacts detail layer': ui_text('server.shell.artifacts_detail_layer', app_language=app_language, fallback_text='Artifacts detail layer'),
+        'Open latest artifacts to view the detail layer.': ui_text('server.shell.artifacts_detail_prompt', app_language=app_language, fallback_text='Open latest artifacts to view the detail layer.'),
+        'Last action log': ui_text('server.shell.last_action_log', app_language=app_language, fallback_text='Last action log'),
+        'Ready.': ui_text('server.shell.ready', app_language=app_language, fallback_text='Ready.'),
+    }
+    for old, new in replacements.items():
+        if new and old in html:
+            html = html.replace(old, new)
+    return html

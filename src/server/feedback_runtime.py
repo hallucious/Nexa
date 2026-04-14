@@ -5,6 +5,7 @@ from dataclasses import asdict
 from html import escape
 from typing import Any
 
+from src.ui.i18n import normalize_ui_language, ui_text
 from src.ui.feedback_channel import read_feedback_channel_view_model
 
 _ALLOWED_CATEGORIES = {"confusing_screen", "friction_note", "bug_report"}
@@ -28,6 +29,7 @@ def build_workspace_feedback_payload(
     prefill_run_id: str | None = None,
     confirmation_feedback_id: str | None = None,
 ) -> dict[str, Any]:
+    app_language = normalize_ui_language(app_language)
     view_model = read_feedback_channel_view_model(
         workspace_id=workspace_id,
         workspace_title=workspace_title,
@@ -41,11 +43,12 @@ def build_workspace_feedback_payload(
     )
     return {
         "status": "ready",
+        "app_language": app_language,
         "workspace_id": workspace_id,
         "workspace_title": workspace_title,
         "feedback_channel": asdict(view_model),
         "routes": {
-            "submit": f"/api/workspaces/{workspace_id}/feedback",
+            "submit": f"/api/workspaces/{workspace_id}/feedback?app_language={app_language}",
             "feedback_page": f"/app/workspaces/{workspace_id}/feedback",
             "workspace_page": f"/app/workspaces/{workspace_id}",
             "result_history": f"/app/workspaces/{workspace_id}/results",
@@ -55,23 +58,15 @@ def build_workspace_feedback_payload(
 
 
 def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_title: str, app_language: str = "en") -> dict[str, Any]:
+    app_language = normalize_ui_language(app_language)
     category = str(row.get("category") or "friction_note").strip().lower()
     surface = str(row.get("surface") or "unknown").strip().lower() or "unknown"
-    category_label = {
-        "confusing_screen": "Report confusing screen",
-        "friction_note": "Quick friction note",
-        "bug_report": "Bug report shortcut",
-    }.get(category, category.replace("_", " ").title())
-    surface_label = {
-        "circuit_library": "Library",
-        "result_history": "Result history",
-        "workspace_shell": "Workflow",
-        "unknown": "Current screen",
-    }.get(surface, surface.replace("_", " ").title())
+    category_label = ui_text(f"feedback.category.{category}", app_language=app_language, fallback_text=category.replace("_", " ").title())
+    surface_label = ui_text(f"feedback.surface.{surface}", app_language=app_language, fallback_text=surface.replace("_", " ").title())
     workspace_id = str(row.get("workspace_id") or "").strip()
     return {
         "status": "accepted",
-        "message": "Feedback recorded for product learning.",
+        "message": ui_text("server.feedback.message_recorded", app_language=app_language, fallback_text="Feedback recorded for product learning."),
         "feedback": {
             "feedback_id": str(row.get("feedback_id") or ""),
             "workspace_id": workspace_id,
@@ -86,18 +81,19 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
             "created_at": str(row.get("created_at") or "").strip(),
         },
         "links": {
-            "feedback_page": f"/app/workspaces/{workspace_id}/feedback",
-            "workspace_page": f"/app/workspaces/{workspace_id}",
-            "result_history": f"/app/workspaces/{workspace_id}/results",
-            "library": "/app/library",
+            "feedback_page": f"/app/workspaces/{workspace_id}/feedback?app_language={app_language}",
+            "workspace_page": f"/app/workspaces/{workspace_id}?app_language={app_language}",
+            "result_history": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
+            "library": f"/app/library?app_language={app_language}",
         },
     }
 
 
 def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     channel = dict(payload.get("feedback_channel") or {})
-    workspace_title = escape(str(payload.get("workspace_title") or channel.get("workspace_title") or "Workflow"))
-    title = escape(str(channel.get("title") or "Feedback"))
+    app_language = normalize_ui_language(payload.get("app_language") or "en")
+    workspace_title = escape(str(payload.get("workspace_title") or channel.get("workspace_title") or ui_text("server.feedback.workflow_fallback", app_language=app_language, fallback_text="Workflow")))
+    title = escape(str(channel.get("title") or ui_text("feedback.title", app_language=app_language, fallback_text="Feedback")))
     subtitle = escape(str(channel.get("subtitle") or ""))
     submit_path = escape(str(channel.get("submit_path") or "#"))
     prefill_category = escape(str(channel.get("prefill_category") or "friction_note"))
@@ -110,6 +106,21 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     confirmation_title = escape(str(channel.get("confirmation_title") or ""))
     confirmation_summary = escape(str(channel.get("confirmation_summary") or ""))
     library_href = escape(str((payload.get("routes") or {}).get("library") or "/app/library"))
+    back_to_library_label = escape(ui_text("server.feedback.back_to_library", app_language=app_language, fallback_text="Back to library"))
+    open_workflow_label = escape(ui_text("server.feedback.open_workflow", app_language=app_language, fallback_text="Open workflow"))
+    open_results_label = escape(ui_text("server.feedback.open_results", app_language=app_language, fallback_text="Open results"))
+    form_title = escape(ui_text("server.feedback.form_title", app_language=app_language, fallback_text="Send a quick product note"))
+    category_label = escape(ui_text("server.feedback.category_label", app_language=app_language, fallback_text="Feedback type"))
+    surface_label = escape(ui_text("server.feedback.surface_label", app_language=app_language, fallback_text="Screen"))
+    run_id_label = escape(ui_text("server.feedback.run_id_label", app_language=app_language, fallback_text="Run id (optional)"))
+    run_id_placeholder = escape(ui_text("server.feedback.run_id_placeholder", app_language=app_language, fallback_text="run-001"))
+    message_label = escape(ui_text("server.feedback.message_label", app_language=app_language, fallback_text="What happened?"))
+    message_placeholder = escape(ui_text("server.feedback.message_placeholder", app_language=app_language, fallback_text="Tell us what felt confusing, slow, or broken."))
+    submit_label = escape(ui_text("server.feedback.submit", app_language=app_language, fallback_text="Send feedback"))
+    recent_title = escape(ui_text("server.feedback.recent_title", app_language=app_language, fallback_text="Recent feedback from this workflow"))
+    sending_text = escape(ui_text("server.feedback.sending", app_language=app_language, fallback_text="Sending feedback…"))
+    submit_failed_text = escape(ui_text("server.feedback.submit_failed", app_language=app_language, fallback_text="Could not submit feedback right now."))
+    submit_recorded_text = escape(ui_text("server.feedback.submit_recorded", app_language=app_language, fallback_text="Feedback recorded."))
     workspace_href = escape(str((payload.get("routes") or {}).get("workspace_page") or "#"))
     result_history_href = escape(str((payload.get("routes") or {}).get("result_history") or "#"))
     options_html = "".join(
@@ -126,7 +137,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     if confirmation_title or confirmation_summary:
         confirmation_html = f'<section class="confirmation"><h2>{confirmation_title}</h2><p>{confirmation_summary}</p></section>'
     return f"""<!doctype html>
-<html lang=\"en\">
+<html lang="{app_language}">
   <head>
     <meta charset=\"utf-8\" />
     <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
@@ -153,43 +164,43 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
       <header aria-labelledby="feedback-title">
         <h1 id="feedback-title">{title}</h1>
         <p>{subtitle}</p>
-        <p>Workflow: {workspace_title}</p>
+        <p>{escape(ui_text("server.feedback.workflow_label", app_language=app_language, fallback_text="Workflow: {workspace}", workspace=workspace_title))}</p>
         <div class=\"nav-links\">
-          <a class=\"secondary\" href=\"{library_href}\">Back to library</a>
-          <a class=\"secondary\" href=\"{workspace_href}\">Open workflow</a>
-          <a class=\"secondary\" href=\"{result_history_href}\">Open results</a>
+          <a class=\"secondary\" href=\"{library_href}\">{back_to_library_label}</a>
+          <a class=\"secondary\" href=\"{workspace_href}\">{open_workflow_label}</a>
+          <a class=\"secondary\" href=\"{result_history_href}\">{open_results_label}</a>
         </div>
       </header>
       {confirmation_html}
       <section class=\"form-card\" role=\"region\" aria-labelledby=\"feedback-form-title\">
-        <h2 id="feedback-form-title">Send a quick product note</h2>
+        <h2 id="feedback-form-title">{form_title}</h2>
         <div class=\"option-grid\">{options_html}</div>
         <form id=\"feedback-form\" aria-describedby=\"feedback-status\">
-          <label for=\"category\">Feedback type</label>
+          <label for=\"category\">{category_label}</label>
           <select id=\"category\" name=\"category\">
-            <option value=\"confusing_screen\">Report confusing screen</option>
-            <option value=\"friction_note\">Quick friction note</option>
-            <option value=\"bug_report\">Bug report shortcut</option>
+            <option value=\"confusing_screen\">{escape(ui_text("feedback.category.confusing_screen", app_language=app_language, fallback_text="Report confusing screen"))}</option>
+            <option value=\"friction_note\">{escape(ui_text("feedback.category.friction_note", app_language=app_language, fallback_text="Quick friction note"))}</option>
+            <option value=\"bug_report\">{escape(ui_text("feedback.category.bug_report", app_language=app_language, fallback_text="Bug report shortcut"))}</option>
           </select>
-          <label for=\"surface\">Screen</label>
+          <label for=\"surface\">{surface_label}</label>
           <select id=\"surface\" name=\"surface\">
-            <option value=\"circuit_library\">Library</option>
-            <option value=\"result_history\">Result history</option>
-            <option value=\"workspace_shell\">Workflow</option>
-            <option value=\"unknown\">Current screen</option>
+            <option value=\"circuit_library\">{escape(ui_text("feedback.surface.circuit_library", app_language=app_language, fallback_text="Library"))}</option>
+            <option value=\"result_history\">{escape(ui_text("feedback.surface.result_history", app_language=app_language, fallback_text="Result history"))}</option>
+            <option value=\"workspace_shell\">{escape(ui_text("feedback.surface.workspace_shell", app_language=app_language, fallback_text="Workflow"))}</option>
+            <option value=\"unknown\">{escape(ui_text("feedback.surface.unknown", app_language=app_language, fallback_text="Current screen"))}</option>
           </select>
-          <label for=\"run_id\">Run id (optional)</label>
-          <input id=\"run_id\" name=\"run_id\" value=\"{prefill_run_id}\" placeholder=\"run-001\" />
-          <label for=\"message\">What happened?</label>
-          <textarea id=\"message\" name=\"message\" placeholder=\"Tell us what felt confusing, slow, or broken.\"></textarea>
+          <label for=\"run_id\">{run_id_label}</label>
+          <input id=\"run_id\" name=\"run_id\" value=\"{prefill_run_id}\" placeholder=\"{run_id_placeholder}\" />
+          <label for=\"message\">{message_label}</label>
+          <textarea id=\"message\" name=\"message\" placeholder=\"{message_placeholder}\"></textarea>
           <div class=\"actions\">
-            <button type=\"submit\">Send feedback</button>
+            <button type=\"submit\">{submit_label}</button>
           </div>
           <div class=\"status\" id=\"feedback-status\" aria-live=\"polite\"></div>
         </form>
       </section>
       <section role="region" aria-labelledby="recent-feedback-title">
-        <h2 id="recent-feedback-title">Recent feedback from this workflow</h2>
+        <h2 id="recent-feedback-title">{recent_title}</h2>
         {items_html}
       </section>
     </main>
@@ -208,7 +219,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
       }});
       form.addEventListener('submit', async (event) => {{
         event.preventDefault();
-        statusEl.textContent = 'Sending feedback…';
+        statusEl.textContent = {sending_text!r};
         const payload = {{
           category: categoryEl.value,
           surface: surfaceEl.value,
@@ -222,10 +233,10 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
         }});
         const data = await response.json();
         if (!response.ok) {{
-          statusEl.textContent = data.message || 'Feedback could not be recorded.';
+          statusEl.textContent = data.message || {submit_failed_text!r};
           return;
         }}
-        statusEl.textContent = data.message || 'Feedback recorded.';
+        statusEl.textContent = data.message || {submit_recorded_text!r};
         window.location.search = new URLSearchParams({{ category: categoryEl.value, surface: surfaceEl.value, run_id: runIdEl.value || '', feedback_id: data.feedback.feedback_id }}).toString();
       }});
     </script>

@@ -1263,6 +1263,63 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
 
 
 
+
+def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
+    client = _make_client()
+
+    library_page = client.get('/app/library?app_language=ko', headers=_session_headers())
+    assert library_page.status_code == 200
+    assert '<html lang="ko">' in library_page.text
+    assert '워크플로우 라이브러리' in library_page.text
+    assert '원본 워크스페이스 레지스트리' in library_page.text
+
+    result_page = client.get('/app/workspaces/ws-001/results?run_id=run-002&app_language=ko', headers=_session_headers())
+    assert result_page.status_code == 200
+    assert '<html lang="ko">' in result_page.text
+    assert '최근 결과 이력' in result_page.text
+
+    feedback_page = client.get('/app/workspaces/ws-001/feedback?surface=result_history&run_id=run-001&app_language=ko', headers=_session_headers())
+    assert feedback_page.status_code == 200
+    assert '<html lang="ko">' in feedback_page.text
+    assert '피드백 유형' in feedback_page.text
+    assert '피드백 보내기' in feedback_page.text
+
+
+def test_fastapi_binding_feedback_submission_localizes_server_message() -> None:
+    feedback_store = InMemoryFeedbackStore()
+    client = _make_client(feedback_store=feedback_store)
+
+    submit_response = client.post(
+        '/api/workspaces/ws-001/feedback?app_language=ko',
+        headers=_session_headers(),
+        json={
+            'category': 'bug_report',
+            'surface': 'result_history',
+            'message': '결과 화면이 예상과 다릅니다.',
+            'run_id': 'run-001',
+        },
+    )
+    assert submit_response.status_code == 202
+    payload = submit_response.json()
+    assert payload['message'] == '제품 학습용 피드백이 기록되었습니다.'
+    assert payload['feedback']['category_label'] == '버그 신고 바로가기'
+    assert payload['feedback']['surface_label'] == '결과 이력'
+
+
+def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -> None:
+    client = _make_client()
+    page_response = client.get('/app/workspaces/ws-001?app_language=ko', headers=_session_headers())
+
+    assert page_response.status_code == 200
+    body = page_response.text
+    assert '<html lang="ko">' in body
+    assert 'Nexa 런타임 셸' in body
+    assert '초안 실행' in body
+    assert '최신 실행 결과' in body
+    assert '디자이너 작업공간' in body
+    assert '단계 상태 배너' in body
+
+
 def test_fastapi_binding_product_surfaces_expose_accessible_landmarks() -> None:
     client = _make_client()
 

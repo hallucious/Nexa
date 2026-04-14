@@ -35,6 +35,7 @@ from src.server.run_action_log_api import RunActionLogReadService
 from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
 from src.server.circuit_library_runtime import build_circuit_library_payload
 from src.server.result_history_runtime import build_workspace_result_history_payload
+from src.ui.i18n import normalize_ui_language
 
 
 def _to_jsonable(value: Any) -> Any:
@@ -51,6 +52,11 @@ def _to_jsonable(value: Any) -> Any:
 
 def _route_response(status_code: int, body: Mapping[str, Any]) -> HttpRouteResponse:
     return HttpRouteResponse(status_code=status_code, body=_to_jsonable(dict(body)))
+
+
+def _request_app_language(query_params: Mapping[str, Any] | None) -> str:
+    params = query_params or {}
+    return normalize_ui_language(str(params.get("app_language") or params.get("lang") or "en"))
 
 
 def _working_save_source_dict_from_model(model) -> dict[str, Any]:
@@ -380,6 +386,7 @@ class RunHttpRouteSurface:
             onboarding_rows=onboarding_rows,
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
+            app_language_override=_request_app_language(http_request.query_params),
         )
         return _route_response(200, payload)
 
@@ -459,6 +466,7 @@ class RunHttpRouteSurface:
             onboarding_rows=onboarding_rows,
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
+            app_language_override=_request_app_language(http_request.query_params),
         )
         return _route_response(200, payload)
 
@@ -765,6 +773,7 @@ class RunHttpRouteSurface:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            app_language=_request_app_language(http_request.query_params),
         )
         if payload is None:
             return _route_response(403, {
@@ -813,6 +822,7 @@ class RunHttpRouteSurface:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            app_language=_request_app_language(http_request.query_params),
             selected_run_id=str((http_request.query_params or {}).get("run_id") or "").strip() or None,
         )
         if payload is None:
@@ -881,6 +891,7 @@ class RunHttpRouteSurface:
             prefill_surface=str((http_request.query_params or {}).get("surface") or "").strip() or None,
             prefill_run_id=str((http_request.query_params or {}).get("run_id") or "").strip() or None,
             confirmation_feedback_id=str((http_request.query_params or {}).get("feedback_id") or "").strip() or None,
+            app_language=_request_app_language(http_request.query_params),
         )
         return _route_response(200, payload)
 
@@ -991,7 +1002,11 @@ class RunHttpRouteSurface:
             "created_at": str(now_iso or "").strip() or "1970-01-01T00:00:00+00:00",
         }
         persisted = feedback_writer(row) if feedback_writer is not None else row
-        payload = build_feedback_submission_payload(row=persisted, workspace_title=str(workspace_row.get("title") or workspace_context.workspace_id))
+        payload = build_feedback_submission_payload(
+            row=persisted,
+            workspace_title=str(workspace_row.get("title") or workspace_context.workspace_id),
+            app_language=_request_app_language(http_request.query_params),
+        )
         return _route_response(202, payload)
 
     @classmethod
