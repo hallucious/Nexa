@@ -2052,6 +2052,24 @@ def beginner_ui_text(text_key: str, *, beginner_text_key: str | None = None, sou
     return ui_text(resolved_key, app_language=app_language, fallback_text=fallback_text, params=params, **kwargs)
 
 
+_TRANSLATIONS["en"].update({
+    "server.shell.action_fallback": "Action",
+    "server.shell.message_prefix": "Message: ",
+    "server.shell.starter_template_fallback": "starter template",
+    "server.shell.template_loaded_summary_prefix": "Template \"",
+    "server.shell.template_loaded_summary_suffix": "\" is loaded into Designer. Review the draft, then continue to Validation.",
+    "server.shell.validation_detail_title": "Validation detail",
+})
+
+_TRANSLATIONS["ko"].update({
+    "server.shell.action_fallback": "작업",
+    "server.shell.message_prefix": "메시지: ",
+    "server.shell.starter_template_fallback": "시작 템플릿",
+    "server.shell.template_loaded_summary_prefix": "템플릿 \"",
+    "server.shell.template_loaded_summary_suffix": "\" 이 Designer에 불러와졌습니다. 초안을 확인한 뒤 Validation으로 이동하세요.",
+    "server.shell.validation_detail_title": "검증 상세",
+})
+
 __all__ = [
     'DEFAULT_UI_LANGUAGE',
     'SUPPORTED_UI_LANGUAGES',

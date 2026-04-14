@@ -1333,8 +1333,13 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '포커스:' in body
     assert '상황별 도움말' in body
     assert '마지막 작업 로그' in body
+    assert '준비됨.' in body
     assert '최신 trace' in body
+    assert '최신 trace 열기' in body
     assert '최근 아티팩트 이력' in body
+    assert '최신 아티팩트 열기' in body
+    assert 'Trace 상세 레이어' in body
+    assert '아티팩트 상세 레이어' in body
 
 
 def test_fastapi_binding_product_surfaces_expose_accessible_landmarks() -> None:

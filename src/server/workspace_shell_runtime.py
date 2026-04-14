@@ -830,7 +830,7 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
             0,
             {
                 "control_id": f"designer-template-{first_template.get('template_id') or 'primary'}",
-                "label": f"Use {str(first_template.get('display_name') or 'starter template').strip()}",
+                "label": f"Use {str(first_template.get('display_name') or ui_text('server.shell.starter_template_fallback', app_language='en', fallback_text='starter template')).strip()}",
                 "action_kind": "apply_template",
                 "action_target": str(first_template.get("template_id") or "").strip() or "template",
                 "request_text": str(first_template.get("designer_request_text") or "").strip() or None,
@@ -1345,6 +1345,46 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     navigation_json = json.dumps(navigation, ensure_ascii=False)
     client_continuity_json = json.dumps(payload.get("client_continuity"), ensure_ascii=False)
     continuity_json = json.dumps(payload.get("continuity"), ensure_ascii=False)
+    localized_ui_json = json.dumps({
+        'statusPrefix': ui_text('server.shell.status', app_language=app_language, fallback_text='Status') + ': ',
+        'summaryPrefix': ui_text('server.shell.summary_prefix', app_language=app_language, fallback_text='Summary: '),
+        'messagePrefix': ui_text('server.shell.message_prefix', app_language=app_language, fallback_text='Message: '),
+        'traceStatusPrefix': ui_text('server.shell.trace_status_prefix', app_language=app_language, fallback_text='Trace status: '),
+        'previewPrefix': ui_text('server.shell.preview_prefix', app_language=app_language, fallback_text='Preview: '),
+        'latestMessagePrefix': ui_text('server.shell.latest_message_prefix', app_language=app_language, fallback_text='Latest message: '),
+        'firstArtifactLabelPrefix': ui_text('server.shell.first_artifact_label_prefix', app_language=app_language, fallback_text='First artifact label: '),
+        'noRecentRun': ui_text('server.shell.no_recent_run', app_language=app_language, fallback_text='No recent run is available yet.'),
+        'noRecentResult': ui_text('server.shell.no_recent_result', app_language=app_language, fallback_text='No recent run result is available yet.'),
+        'noRecentTrace': ui_text('server.shell.no_recent_trace', app_language=app_language, fallback_text='No recent trace is available yet.'),
+        'noRecentArtifacts': ui_text('server.shell.no_recent_artifacts', app_language=app_language, fallback_text='No recent artifacts are available yet.'),
+        'openLatestStatusDetailPrompt': ui_text('server.shell.status_detail_prompt', app_language=app_language, fallback_text='Open latest run status to view the detail layer.'),
+        'openLatestResultDetailPrompt': ui_text('server.shell.result_detail_prompt', app_language=app_language, fallback_text='Open latest run result to view the detail layer.'),
+        'openLatestTraceDetailPrompt': ui_text('server.shell.trace_detail_prompt', app_language=app_language, fallback_text='Open latest trace to view the detail layer.'),
+        'openLatestArtifactsDetailPrompt': ui_text('server.shell.artifacts_detail_prompt', app_language=app_language, fallback_text='Open latest artifacts to view the detail layer.'),
+        'actionFallback': ui_text('server.shell.action_fallback', app_language=app_language, fallback_text='Action'),
+        'starterTemplateFallback': ui_text('server.shell.starter_template_fallback', app_language=app_language, fallback_text='starter template'),
+        'templateSelectedSummary': ui_text('server.shell.template_selected_summary', app_language=app_language, fallback_text='Template selected.'),
+        'designerWorkspace': ui_text('server.shell.designer_workspace', app_language=app_language, fallback_text='Designer workspace'),
+        'reviewValidationAction': ui_text('server.shell.banner.review_validation', app_language=app_language, fallback_text='Review Validation'),
+        'templateLoadedSummaryPrefix': ui_text('server.shell.template_loaded_summary_prefix', app_language=app_language, fallback_text='Template "'),
+        'templateLoadedSummarySuffix': ui_text('server.shell.template_loaded_summary_suffix', app_language=app_language, fallback_text='" is loaded into Designer. Review the draft, then continue to Validation.'),
+        'openNextStep': ui_text('server.shell.open_next_step', app_language=app_language, fallback_text='Open next step'),
+        'openDesigner': ui_text('server.shell.open_designer', app_language=app_language, fallback_text='Open Designer'),
+        'openStatus': ui_text('server.shell.open_status', app_language=app_language, fallback_text='Open Status'),
+        'openResult': ui_text('server.shell.open_result', app_language=app_language, fallback_text='Open Result'),
+        'openTrace': ui_text('server.shell.open_trace', app_language=app_language, fallback_text='Open Trace'),
+        'openArtifacts': ui_text('server.shell.open_artifacts', app_language=app_language, fallback_text='Open Artifacts'),
+        'stepRun': ui_text('server.shell.step.run', app_language=app_language, fallback_text='Step 4 of 5 — Run'),
+        'stepReadResult': ui_text('server.shell.step.read_result', app_language=app_language, fallback_text='Step 5 of 5 — Read result'),
+        'runInProgressSummary': ui_text('server.shell.run_in_progress_summary', app_language=app_language, fallback_text='Run is in progress. Watch Status while Nexa prepares the result.'),
+        'runNeedsDiagnosisSummary': ui_text('server.shell.run_needs_diagnosis_summary', app_language=app_language, fallback_text='Run needs diagnosis. Open Trace next to understand what happened.'),
+        'resultReadySummary': ui_text('server.shell.result_ready_summary', app_language=app_language, fallback_text='Result is ready. Open Result next to finish the first-run path.'),
+        'artifactsReadySummary': ui_text('server.shell.artifacts_ready_summary', app_language=app_language, fallback_text='A readable result is not ready yet, but artifacts are available. Open Artifacts next.'),
+        'focusPrefix': ui_text('server.shell.focus_state', app_language=app_language, fallback_text='Focus: {section}', section='').replace('{section}', ''),
+        'focusDetailSuffix': ui_text('server.shell.focus_detail_suffix', app_language=app_language, fallback_text=' detail'),
+        'focusSummarySuffix': ui_text('server.shell.focus_summary_suffix', app_language=app_language, fallback_text=' summary'),
+        'launchAcceptedSummary': ui_text('server.shell.launch_accepted_summary', app_language=app_language, fallback_text='Launch accepted. Watch Status while Nexa starts the run.'),
+    }, ensure_ascii=False)
     template_items = []
     for template in (template_gallery.get("templates") or [])[:6]:
         title = escape(str(template.get("display_name") or template.get("template_id") or ui_text("server.feedback.option_fallback", app_language=app_language, fallback_text="Template")))
@@ -1497,36 +1537,36 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     </div>
     <div class="row">
       <section id="trace-history-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="trace-history-title">
-        <h2 id="trace-history-title">Trace history</h2>
-        <pre id="trace-history-summary">Recent trace history will appear here.</pre>
-        <pre id="trace-history-detail">Trace history detail will appear here.</pre>
+        <h2 id="trace-history-title">{escape(ui_text("server.shell.trace_history", app_language=app_language, fallback_text="Trace history"))}</h2>
+        <pre id="trace-history-summary">{escape(ui_text("server.shell.trace_history_summary", app_language=app_language, fallback_text="Recent trace history will appear here."))}</pre>
+        <pre id="trace-history-detail">{escape(ui_text("server.shell.trace_history_detail", app_language=app_language, fallback_text="Trace history detail will appear here."))}</pre>
         <div id="trace-history-controls" class="actions"></div>
       </section>
       <section id="artifacts-history-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="artifacts-history-title">
-        <h2 id="artifacts-history-title">Artifacts history</h2>
-        <pre id="artifacts-history-summary">Recent artifacts history will appear here.</pre>
-        <pre id="artifacts-history-detail">Artifacts history detail will appear here.</pre>
+        <h2 id="artifacts-history-title">{escape(ui_text("server.shell.artifacts_history", app_language=app_language, fallback_text="Artifacts history"))}</h2>
+        <pre id="artifacts-history-summary">{escape(ui_text("server.shell.artifacts_history_summary", app_language=app_language, fallback_text="Recent artifacts history will appear here."))}</pre>
+        <pre id="artifacts-history-detail">{escape(ui_text("server.shell.artifacts_history_detail", app_language=app_language, fallback_text="Artifacts history detail will appear here."))}</pre>
         <div id="artifacts-history-controls" class="actions"></div>
       </section>
     </div>
     <div class="row">
       <section id="latest-run-trace-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-trace-title">
-        <h2 id="latest-run-trace-title">Latest trace</h2>
-        <pre id="latest-run-trace">Waiting for trace details.</pre>
+        <h2 id="latest-run-trace-title">{escape(ui_text("server.shell.latest_trace", app_language=app_language, fallback_text="Latest trace"))}</h2>
+        <pre id="latest-run-trace">{escape(ui_text("server.shell.waiting_trace", app_language=app_language, fallback_text="Waiting for trace details."))}</pre>
       </section>
       <section id="latest-run-artifacts-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-artifacts-title">
-        <h2 id="latest-run-artifacts-title">Latest artifacts</h2>
-        <pre id="latest-run-artifacts">Waiting for artifact details.</pre>
+        <h2 id="latest-run-artifacts-title">{escape(ui_text("server.shell.latest_artifacts", app_language=app_language, fallback_text="Latest artifacts"))}</h2>
+        <pre id="latest-run-artifacts">{escape(ui_text("server.shell.waiting_artifacts", app_language=app_language, fallback_text="Waiting for artifact details."))}</pre>
       </section>
     </div>
     <div class="row">
       <section id="latest-run-trace-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-trace-detail-title">
-        <h2 id="latest-run-trace-detail-title">Trace detail layer</h2>
-        <pre id="latest-run-trace-detail">Open latest trace to view the detail layer.</pre>
+        <h2 id="latest-run-trace-detail-title">{escape(ui_text("server.shell.trace_detail_layer", app_language=app_language, fallback_text="Trace detail layer"))}</h2>
+        <pre id="latest-run-trace-detail">{escape(ui_text("server.shell.trace_detail_prompt", app_language=app_language, fallback_text="Open latest trace to view the detail layer."))}</pre>
       </section>
       <section id="latest-run-artifacts-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-artifacts-detail-title">
-        <h2 id="latest-run-artifacts-detail-title">Artifacts detail layer</h2>
-        <pre id="latest-run-artifacts-detail">Open latest artifacts to view the detail layer.</pre>
+        <h2 id="latest-run-artifacts-detail-title">{escape(ui_text("server.shell.artifacts_detail_layer", app_language=app_language, fallback_text="Artifacts detail layer"))}</h2>
+        <pre id="latest-run-artifacts-detail">{escape(ui_text("server.shell.artifacts_detail_prompt", app_language=app_language, fallback_text="Open latest artifacts to view the detail layer."))}</pre>
       </section>
     </div>
     <section class=\"card\" style=\"margin-top:16px;\" role=\"region\" aria-labelledby=\"browser-log-title\">
@@ -1614,6 +1654,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentStepStateBanner = initialStepStateBanner || null;
     let continuityHydrating = true;
     let currentOnboardingState = initialContinuity && typeof initialContinuity === 'object' ? (initialContinuity.onboarding_state || null) : null;
+    const localizedUi = {localized_ui_json};
     function writeLog(message) {{
       logEl.textContent = typeof message === 'string' ? message : JSON.stringify(message, null, 2);
     }}
@@ -1713,10 +1754,10 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     function summarizeStatusBody(body) {{
       if (!body || typeof body !== 'object') return null;
       return {{
-        headline: 'Status: ' + String(body.status || body.summary || 'unknown'),
+        headline: localizedUi.statusPrefix + String(body.status || body.summary || 'unknown'),
         lines: [
           body.run_id ? ('Run id: ' + body.run_id) : null,
-          body.summary ? ('Summary: ' + body.summary) : null,
+          body.summary ? (localizedUi.summaryPrefix + body.summary) : null,
           body.started_at ? ('Started: ' + body.started_at) : null,
           body.updated_at ? ('Updated: ' + body.updated_at) : null,
         ].filter(Boolean),
@@ -1729,7 +1770,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         lines: [
           body.result_state ? ('Result state: ' + body.result_state) : null,
           body.final_status ? ('Final status: ' + body.final_status) : null,
-          body.message ? ('Message: ' + body.message) : null,
+          body.message ? (localizedUi.messagePrefix + body.message) : null,
         ].filter(Boolean),
       }};
     }}
@@ -1742,8 +1783,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         lines: [
           latest && latest.event_type ? ('Latest event: ' + latest.event_type) : null,
           latest && latest.node_id ? ('Latest node: ' + latest.node_id) : null,
-          latest && latest.message ? ('Latest message: ' + latest.message) : null,
-          body.message ? ('Trace status: ' + body.message) : null,
+          latest && latest.message ? (localizedUi.latestMessagePrefix + latest.message) : null,
+          body.message ? (localizedUi.traceStatusPrefix + body.message) : null,
         ].filter(Boolean),
       }};
     }}
@@ -1755,7 +1796,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         headline: 'Artifacts: ' + String(Number(body.artifact_count || artifacts.length || 0)),
         lines: [
           first && first.artifact_id ? ('First artifact id: ' + first.artifact_id) : null,
-          first && first.label ? ('Preview: ' + first.label) : null,
+          first && first.label ? (localizedUi.previewPrefix + first.label) : null,
           first && first.preview ? ('Payload preview: ' + first.preview) : null,
         ].filter(Boolean),
       }};
@@ -1766,8 +1807,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         title: 'Status detail',
         items: [
           body.run_id ? ('Run id: ' + body.run_id) : null,
-          body.status ? ('Status: ' + body.status) : null,
-          body.summary ? ('Summary: ' + body.summary) : null,
+          body.status ? (localizedUi.statusPrefix + body.status) : null,
+          body.summary ? (localizedUi.summaryPrefix + body.summary) : null,
           body.started_at ? ('Started: ' + body.started_at) : null,
           body.updated_at ? ('Updated: ' + body.updated_at) : null,
           body.progress && typeof body.progress.percent !== 'undefined' ? ('Progress: ' + body.progress.percent + '%') : null,
@@ -1782,7 +1823,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
           body.run_id ? ('Run id: ' + body.run_id) : null,
           body.result_state ? ('Result state: ' + body.result_state) : null,
           body.final_status ? ('Final status: ' + body.final_status) : null,
-          body.summary ? ('Summary: ' + body.summary) : (body.result_summary ? ('Summary: ' + body.result_summary) : null),
+          body.summary ? (localizedUi.summaryPrefix + body.summary) : (body.result_summary ? (localizedUi.summaryPrefix + body.result_summary) : null),
           body.final_output && body.final_output.output_key ? ('Output key: ' + body.final_output.output_key) : null,
           body.final_output && body.final_output.value_type ? ('Output type: ' + body.final_output.value_type) : null,
         ].filter(Boolean),
@@ -1801,11 +1842,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       return {{
         title: 'Trace detail',
         items: [
-          'Status: ' + String(body.status || 'unknown'),
+          localizedUi.statusPrefix + String(body.status || 'unknown'),
           'Event count: ' + String(Number(body.event_count || events.length || 0)),
           latest && latest.event_type ? ('Latest event type: ' + latest.event_type) : null,
           latest && latest.node_id ? ('Latest node id: ' + latest.node_id) : null,
-          latest && latest.message ? ('Latest message: ' + latest.message) : null,
+          latest && latest.message ? (localizedUi.latestMessagePrefix + latest.message) : null,
           body.current_focus && body.current_focus.node_id ? ('Current focus node: ' + body.current_focus.node_id) : null,
         ].filter(Boolean),
       }};
@@ -1820,7 +1861,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
           'Artifact count: ' + String(Number(body.artifact_count || artifacts.length || 0)),
           first && first.artifact_id ? ('First artifact id: ' + first.artifact_id) : null,
           first && first.kind ? ('First artifact kind: ' + first.kind) : null,
-          first && first.label ? ('First artifact label: ' + first.label) : null,
+          first && first.label ? (localizedUi.firstArtifactLabelPrefix + first.label) : null,
           first && first.preview ? ('First artifact preview: ' + first.preview) : null,
         ].filter(Boolean),
       }};
@@ -1847,7 +1888,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'secondary';
-        button.textContent = String(control.label || control.control_id || 'Action');
+        button.textContent = String(control.label || control.control_id || localizedUi.actionFallback);
         button.dataset.actionKind = String(control.action_kind || 'none');
         button.dataset.actionTarget = String(control.action_target || '');
         button.addEventListener('click', async () => performShellAction(control));
@@ -1883,13 +1924,13 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       currentValidationSection = writeShellSection(section, currentValidationSection, validationSummaryEl, validationDetailEl, validationControlsEl, 'Validation guidance will appear here.', 'Validation detail will appear here.');
     }}
     async function applyTemplateControl(control) {{
-      const displayName = String(control && (control.template_display_name || control.label) || 'starter template');
-      const templateSummary = String(control && control.template_summary || 'Template selected.');
+      const displayName = String(control && (control.template_display_name || control.label) || localizedUi.starterTemplateFallback);
+      const templateSummary = String(control && control.template_summary || localizedUi.templateSelectedSummary);
       const requestText = String(control && control.request_text || '').trim();
       const category = String(control && control.template_category || '').trim();
       const templateId = String(control && control.action_target || '').trim();
       writeDesignerSection({{
-        summary: {{ headline: 'Designer workspace', lines: [
+        summary: {{ headline: localizedUi.designerWorkspace, lines: [
           'Template selected: ' + displayName,
           templateSummary,
           requestText ? ('Designer request: ' + requestText) : null,
@@ -1904,8 +1945,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }});
       writeStepStateBanner({{
         title: 'Step 2 of 5 — Review template',
-        summary: 'Template "' + displayName + '" is loaded into Designer. Review the draft, then continue to Validation.',
-        action_label: 'Review Validation',
+        summary: localizedUi.templateLoadedSummaryPrefix + displayName + localizedUi.templateLoadedSummarySuffix,
+        action_label: localizedUi.reviewValidationAction,
         action_target: 'validation.detail',
         action_kind: 'focus_section',
         recommended_section: 'designer',
@@ -2028,7 +2069,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       await performShellAction({{
         action_kind: banner.action_kind || 'focus_section',
         action_target: banner.action_target || '',
-        action_label: banner.action_label || 'Open next step',
+        action_label: banner.action_label || localizedUi.openNextStep,
       }});
     }}
     function deriveStepStateBannerFromBodies(statusBody, resultBody, traceBody, artifactsBody) {{
@@ -2037,23 +2078,23 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const traceCount = Number((traceBody || {{}}).event_count || (Array.isArray((traceBody || {{}}).events) ? traceBody.events.length : 0) || 0);
       const artifactCount = Number((artifactsBody || {{}}).artifact_count || (Array.isArray((artifactsBody || {{}}).artifacts) ? artifactsBody.artifacts.length : 0) || 0);
       if (normalizedResultState.startsWith('ready')) {{
-        return {{ title: 'Step 5 of 5 — Read result', summary: 'Result is ready. Open Result next to finish the first-run path.' }};
+        return {{ title: localizedUi.stepReadResult, summary: localizedUi.resultReadySummary }};
       }}
       if (['running', 'queued', 'accepted'].includes(normalizedStatus)) {{
-        return {{ title: 'Step 4 of 5 — Run', summary: 'Run is in progress. Watch Status while Nexa prepares the result.' }};
+        return {{ title: localizedUi.stepRun, summary: localizedUi.runInProgressSummary }};
       }}
       if (['failed', 'partial'].includes(normalizedStatus) && traceCount > 0) {{
-        return {{ title: 'Step 4 of 5 — Run', summary: 'Run needs diagnosis. Open Trace next to understand what happened.' }};
+        return {{ title: localizedUi.stepRun, summary: localizedUi.runNeedsDiagnosisSummary }};
       }}
       if (artifactCount > 0 && !normalizedResultState.startsWith('ready')) {{
-        return {{ title: 'Step 5 of 5 — Read result', summary: 'A readable result is not ready yet, but artifacts are available. Open Artifacts next.' }};
+        return {{ title: localizedUi.stepReadResult, summary: localizedUi.artifactsReadySummary }};
       }}
       return null;
     }}
     function writeStepStateBanner(banner) {{
       currentStepStateBanner = banner || currentStepStateBanner || initialStepStateBanner || null;
       const formatted = formatStepStateBanner(currentStepStateBanner, 'Step 1 of 5 — Enter goal', 'Describe your goal to start the first-run path.');
-      const actionLabel = currentStepStateBanner && typeof currentStepStateBanner.action_label === 'string' && currentStepStateBanner.action_label ? currentStepStateBanner.action_label : 'Open Designer';
+      const actionLabel = currentStepStateBanner && typeof currentStepStateBanner.action_label === 'string' && currentStepStateBanner.action_label ? currentStepStateBanner.action_label : localizedUi.openDesigner;
       const actionTarget = currentStepStateBanner && typeof currentStepStateBanner.action_target === 'string' && currentStepStateBanner.action_target ? currentStepStateBanner.action_target : 'designer';
       stepStateBannerTitleEl.textContent = formatted.title;
       stepStateBannerSummaryEl.textContent = formatted.summary;
@@ -2097,7 +2138,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const section = sectionConfig(focusedSectionId);
       if (focusStateEl) {{
         const label = section && section.label ? section.label : focusedSectionId;
-        focusStateEl.textContent = 'Focus: ' + label + (focusedLevel === 'detail' ? ' detail' : ' summary');
+        focusStateEl.textContent = localizedUi.focusPrefix + label + (focusedLevel === 'detail' ? localizedUi.focusDetailSuffix : localizedUi.focusSummarySuffix);
       }}
       const buttons = runtimeNavEl.querySelectorAll('button[data-section-id]');
       buttons.forEach((button) => {{
@@ -2110,28 +2151,28 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
 
     function writeLatestRunStatus(message) {{
-      latestRunStatusEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent run is available yet.');
+      latestRunStatusEl.textContent = typeof message === 'string' ? message : formatSummary(message, localizedUi.noRecentRun);
     }}
     function writeLatestRunResult(message) {{
-      latestRunResultEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent run result is available yet.');
+      latestRunResultEl.textContent = typeof message === 'string' ? message : formatSummary(message, localizedUi.noRecentResult);
     }}
     function writeLatestRunStatusDetail(message) {{
-      latestRunStatusDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, 'Open latest run status to view the detail layer.');
+      latestRunStatusDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, localizedUi.openLatestStatusDetailPrompt);
     }}
     function writeLatestRunResultDetail(message) {{
-      latestRunResultDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, 'Open latest run result to view the detail layer.');
+      latestRunResultDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, localizedUi.openLatestResultDetailPrompt);
     }}
     function writeLatestRunTrace(message) {{
-      latestRunTraceEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent trace is available yet.');
+      latestRunTraceEl.textContent = typeof message === 'string' ? message : formatSummary(message, localizedUi.noRecentTrace);
     }}
     function writeLatestRunArtifacts(message) {{
-      latestRunArtifactsEl.textContent = typeof message === 'string' ? message : formatSummary(message, 'No recent artifacts are available yet.');
+      latestRunArtifactsEl.textContent = typeof message === 'string' ? message : formatSummary(message, localizedUi.noRecentArtifacts);
     }}
     function writeLatestRunTraceDetail(message) {{
-      latestRunTraceDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, 'Open latest trace to view the detail layer.');
+      latestRunTraceDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, localizedUi.openLatestTraceDetailPrompt);
     }}
     function writeLatestRunArtifactsDetail(message) {{
-      latestRunArtifactsDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, 'Open latest artifacts to view the detail layer.');
+      latestRunArtifactsDetailEl.textContent = typeof message === 'string' ? message : formatDetail(message, localizedUi.openLatestArtifactsDetailPrompt);
     }}
     function setActiveRun(runId) {{
       if (!runId) return;
@@ -2143,8 +2184,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     async function refreshLatestRunStatus() {{
       if (!activeRunStatusPath) {{
-        writeLatestRunStatus('No recent run is available yet.');
-        writeLatestRunStatusDetail('Open latest run status to view the detail layer.');
+        writeLatestRunStatus(localizedUi.noRecentRun);
+        writeLatestRunStatusDetail(localizedUi.openLatestStatusDetailPrompt);
         return null;
       }}
       const response = await fetch(activeRunStatusPath, {{ credentials: 'same-origin' }});
@@ -2158,8 +2199,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     async function refreshLatestRunResult() {{
       if (!activeRunResultPath) {{
-        writeLatestRunResult('No recent run result is available yet.');
-        writeLatestRunResultDetail('Open latest run result to view the detail layer.');
+        writeLatestRunResult(localizedUi.noRecentResult);
+        writeLatestRunResultDetail(localizedUi.openLatestResultDetailPrompt);
         return null;
       }}
       const response = await fetch(activeRunResultPath, {{ credentials: 'same-origin' }});
@@ -2177,8 +2218,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     async function refreshLatestRunTrace() {{
       if (!activeRunTracePath) {{
-        writeLatestRunTrace('No recent trace is available yet.');
-        writeLatestRunTraceDetail('Open latest trace to view the detail layer.');
+        writeLatestRunTrace(localizedUi.noRecentTrace);
+        writeLatestRunTraceDetail(localizedUi.openLatestTraceDetailPrompt);
         return null;
       }}
       const response = await fetch(activeRunTracePath, {{ credentials: 'same-origin' }});
@@ -2192,8 +2233,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     async function refreshLatestRunArtifacts() {{
       if (!activeRunArtifactsPath) {{
-        writeLatestRunArtifacts('No recent artifacts are available yet.');
-        writeLatestRunArtifactsDetail('Open latest artifacts to view the detail layer.');
+        writeLatestRunArtifacts(localizedUi.noRecentArtifacts);
+        writeLatestRunArtifactsDetail(localizedUi.openLatestArtifactsDetailPrompt);
         return null;
       }}
       const response = await fetch(activeRunArtifactsPath, {{ credentials: 'same-origin' }});
@@ -2223,14 +2264,14 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     renderRuntimeNav();
     writeFocusGuidance(currentNavigation);
-    writeLatestRunStatus(initialRunStatusSummary || 'No recent run is available yet.');
-    writeLatestRunResult(initialRunResultSummary || 'No recent run result is available yet.');
-    writeLatestRunTrace(initialRunTraceSummary || 'No recent trace is available yet.');
-    writeLatestRunArtifacts(initialRunArtifactsSummary || 'No recent artifacts are available yet.');
-    writeLatestRunStatusDetail(initialRunStatusDetail || 'Open latest run status to view the detail layer.');
-    writeLatestRunResultDetail(initialRunResultDetail || 'Open latest run result to view the detail layer.');
-    writeLatestRunTraceDetail(initialRunTraceDetail || 'Open latest trace to view the detail layer.');
-    writeLatestRunArtifactsDetail(initialRunArtifactsDetail || 'Open latest artifacts to view the detail layer.');
+    writeLatestRunStatus(initialRunStatusSummary || localizedUi.noRecentRun);
+    writeLatestRunResult(initialRunResultSummary || localizedUi.noRecentResult);
+    writeLatestRunTrace(initialRunTraceSummary || localizedUi.noRecentTrace);
+    writeLatestRunArtifacts(initialRunArtifactsSummary || localizedUi.noRecentArtifacts);
+    writeLatestRunStatusDetail(initialRunStatusDetail || localizedUi.openLatestStatusDetailPrompt);
+    writeLatestRunResultDetail(initialRunResultDetail || localizedUi.openLatestResultDetailPrompt);
+    writeLatestRunTraceDetail(initialRunTraceDetail || localizedUi.openLatestTraceDetailPrompt);
+    writeLatestRunArtifactsDetail(initialRunArtifactsDetail || localizedUi.openLatestArtifactsDetailPrompt);
     writeStatusHistorySection(initialStatusHistorySection);
     writeResultHistorySection(initialResultHistorySection);
     writeTraceHistorySection(initialTraceHistorySection);
@@ -2327,40 +2368,40 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         await persistCurrentStep('run');
         setFocusedSection('status', 'detail');
         writeLatestRunResult('Waiting for run result.');
-        writeLatestRunResultDetail('Open latest run result to view the detail layer.');
+        writeLatestRunResultDetail(localizedUi.openLatestResultDetailPrompt);
         writeLatestRunTrace('Waiting for trace details.');
         writeLatestRunArtifacts('Waiting for artifact details.');
-        writeLatestRunTraceDetail('Open latest trace to view the detail layer.');
-        writeLatestRunArtifactsDetail('Open latest artifacts to view the detail layer.');
-        writeStepStateBanner({{ title: 'Step 4 of 5 — Run', summary: 'Launch accepted. Watch Status while Nexa starts the run.', action_label: 'Open Status', action_target: 'runtime.status', action_kind: 'focus_section' }});
+        writeLatestRunTraceDetail(localizedUi.openLatestTraceDetailPrompt);
+        writeLatestRunArtifactsDetail(localizedUi.openLatestArtifactsDetailPrompt);
+        writeStepStateBanner({{ title: localizedUi.stepRun, summary: localizedUi.launchAcceptedSummary, action_label: localizedUi.openStatus, action_target: 'runtime.status', action_kind: 'focus_section' }});
         await pollLatestRunUntilSettled();
       }}
     }});
     document.getElementById('open-status').addEventListener('click', async () => {{
       if (!activeRunStatusPath) {{
-        writeLog('No recent run is available yet.');
+        writeLog(localizedUi.noRecentRun);
         return;
       }}
       const body = await refreshLatestRunStatus();
-      writeLog(body || 'No recent run is available yet.');
+      writeLog(body || localizedUi.noRecentRun);
       await refreshLatestRunResult();
       await refreshLatestRunTrace();
       await refreshLatestRunArtifacts();
     }});
     document.getElementById('open-result').addEventListener('click', async () => {{
       const body = await refreshLatestRunResult();
-      writeLog(body || 'No recent run result is available yet.');
+      writeLog(body || localizedUi.noRecentResult);
     }});
     document.getElementById('step-state-banner-action-button').addEventListener('click', async () => {{
       await performBannerAction(deriveStepStateBannerFromBodies(latestStatusBodyState, latestResultBodyState, latestTraceBodyState, latestArtifactsBodyState) || initialStepStateBanner);
     }});
     document.getElementById('open-trace').addEventListener('click', async () => {{
       const body = await refreshLatestRunTrace();
-      writeLog(body || 'No recent trace is available yet.');
+      writeLog(body || localizedUi.noRecentTrace);
     }});
     document.getElementById('open-artifacts').addEventListener('click', async () => {{
       const body = await refreshLatestRunArtifacts();
-      writeLog(body || 'No recent artifacts are available yet.');
+      writeLog(body || localizedUi.noRecentArtifacts);
     }});
   </script>
 </body>
