@@ -25,6 +25,10 @@ def is_savefile_contract(circuit_path: str) -> bool:
     if not isinstance(data, dict):
         return False
 
+    meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
+    if meta.get("storage_role") in {"working_save", "commit_snapshot"}:
+        return True
+
     required = {"meta", "circuit", "resources", "state", "ui"}
     return required.issubset(set(data.keys()))
 

@@ -13,6 +13,8 @@ from __future__ import annotations
 import json
 from typing import Any, Dict
 
+from src.storage.legacy_savefile_bridge import load_public_nex_as_legacy_savefile
+
 from src.contracts.savefile_format import (
     CircuitSpec,
     EdgeSpec,
@@ -154,6 +156,10 @@ def _load_ui(raw: Dict[str, Any] | None) -> UISpec | None:
 
 
 def load_savefile(data: Dict[str, Any]) -> Savefile:
+    meta = data.get("meta", {}) if isinstance(data, dict) else {}
+    if isinstance(meta, dict) and meta.get("storage_role") in {"working_save", "commit_snapshot"}:
+        return load_public_nex_as_legacy_savefile(data)
+
     required_sections = ("meta", "circuit", "resources", "state", "ui")
     missing = [section for section in required_sections if section not in data]
     if missing:

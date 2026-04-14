@@ -1,6 +1,6 @@
 # BLUEPRINT
 
-Version: 1.13.0
+Version: 1.14.0
 
 ────────────────
 Architecture Constitution
@@ -203,18 +203,18 @@ Engine
 
 Current implementation baseline:
 
-* authoritative implementation baseline commit: `12577dc`
-* authoritative verified baseline: `2281 passed, 14 skipped`
+* authoritative implementation baseline commit: `ffc479d`
+* authoritative verified baseline: `2285 passed, 14 skipped`
 * the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
-* the practical codebase state has now progressed through **Phase 7 return-use loop closure** on top of the earlier Phase 4.5 server/product continuity foundation
+* the practical codebase state has now progressed through **Phase 7 return-use loop closure and Phase 8 inclusion/product-completeness closure** on top of the earlier Phase 4.5 server/product continuity foundation
 * the repository now contains both the broad server-side continuity layer (workspace, onboarding, run, provider, artifact/trace, aggregate, user-scope, and setup-entry surfaces) and the product-facing return-use surfaces built on that continuity truth
 * `src/server/` now contains the main continuity families plus the product-facing return-use families required for Phase 7: circuit library runtime, result history runtime, feedback runtime/store, HTTP route surface, framework binding, and FastAPI binding
 * `src/server/database_foundation.py` remains the canonical persistence-family foundation for workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index
 * continuity support stores now include provider binding, managed secret metadata, provider probe history, workspace registry, onboarding state, and the Phase 7 in-product feedback store
 * the route/binding surface already exposes product/API continuity reads and writes for workspace, onboarding, provider operations, run launch/status/result/list, artifact detail, trace, recent activity, history summary, circuit library, result history, and feedback channel flows
-* aggregate continuity projection is now joined by Phase 7 return-use projection so users can reenter through library, result history, onboarding continuity, and feedback without relying on storage-internal literacy
-* top-level project-truth documents must therefore be interpreted against the `12577dc` codebase, not against the older `d468795` / `2087 passed, 13 skipped` status world
-* this practical server/product progress does **not** mean the macro productization sequence has been superseded: it means the repository has now practically closed the roadmap's Stage 3 return-use loop and should move its next official implementation focus to **Phase 8 inclusion work**
+* aggregate continuity projection is now joined by surfaced inclusion / product-completeness refinement so users can reenter through library, result history, onboarding continuity, feedback, and localized shell surfaces without relying on storage-internal literacy
+* top-level project-truth documents must therefore be interpreted against the `ffc479d` codebase rather than the older `12577dc` Phase 7-only status world
+* this practical server/product progress does **not** mean the macro productization sequence has been superseded: it means the repository has now practically closed the roadmap's Stage 3 and Stage 4 lines and should move its next official implementation focus to **Phase 9 (Stage 5 product expansion)** work
 
 Interpretation rule:
 

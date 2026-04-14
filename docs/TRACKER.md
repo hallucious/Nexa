@@ -1,6 +1,6 @@
 # Nexa TRACKER
 
-Version: 3.2.0
+Version: 3.3.0
 
 ---
 
@@ -8,7 +8,7 @@ Version: 3.2.0
 
 ## Release Snapshot (current convergence baseline)
 
-The current repository state should now be read from the `12577dc` / `2281 passed, 14 skipped` baseline rather than from older Phase 4.5-only continuity snapshots.
+The current repository state should now be read from the `ffc479d` / `2285 passed, 14 skipped` baseline rather than from older Phase 4.5-only or Phase 7-only closure snapshots.
 
 ### 1. Core Execution Engine
 
@@ -52,6 +52,13 @@ The current repository state should now be read from the `12577dc` / `2281 passe
 * onboarding continuity alignment across library/result-history reentry
 * lightweight server-backed in-product feedback channel
 
+### 3.2 Phase 8 Inclusion / Product Completeness Closure
+
+* surfaced accessibility implementation is materially present across workspace shell / library / result / feedback paths
+* Korean localization completeness is materially present across the current beginner / return-use surfaced path
+* major surfaced fallback, terminology, metadata, and raw-identifier cleanup batches have been applied
+* remaining visible English is now predominantly fixture data, payload values, or internal identifiers rather than surfaced product-copy debt
+
 ### 4. Continuity Stores and Persistence Shape
 
 * canonical database families now defined for workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index
@@ -61,12 +68,12 @@ The current repository state should now be read from the `12577dc` / `2281 passe
 ### 5. Current Verified Baseline
 
 ```text
-2281 passed, 14 skipped
+2285 passed, 14 skipped
 ```
 
-* authoritative implementation baseline commit: `12577dc`
+* authoritative implementation baseline commit: `ffc479d`
 * canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
-* practical codebase state has progressed from the earlier Phase 4.5 continuity foundation through Phase 7 return-use loop closure
+* practical codebase state has progressed from the earlier Phase 4.5 continuity foundation through Phase 7 return-use loop closure and Phase 8 inclusion/product-completeness closure
 * the old `d468795` / `2087 passed, 13 skipped` top-level status world is now historical, not authoritative
 
 
@@ -240,26 +247,27 @@ CLI
 ### Current Status
 
 ```text
-2281 passed, 14 skipped
+2285 passed, 14 skipped
 ```
 
-* authoritative implementation baseline commit: `12577dc`
-* current practical position is best described as: **Phase 4.5 continuity foundation plus Phase 7 return-use loop closure now implemented and audited**
+* authoritative implementation baseline commit: `ffc479d`
+* current practical position is best described as: **Phase 4.5 continuity foundation plus Phase 7 return-use loop closure plus Phase 8 inclusion/product-completeness closure now implemented and audited**
 * provider probe persistence foundation remains a closed-enough baseline and is no longer the main next-seam candidate
 * the server/product surface now spans workspace, onboarding, recent activity, run launch/read/list, artifact/trace, provider operational surfaces, circuit library, result history, and feedback channel flows
-* continuity projection is now broad enough that further work should move to the next official roadmap phase instead of extending Phase 7 indefinitely
+* continuity projection and surfaced inclusion quality are now broad enough that further work should move to the next official roadmap phase instead of extending Phase 8 indefinitely
 * the macro roadmap and the practical code state must both be kept visible:
   - macro roadmap: still `nexa_implementation_order_final_v2_2.md`
-  - practical code state: Phase 7 can now be treated as complete at this baseline
-* general-user productization remains a real roadmap priority, but the next official target should now advance to Phase 8 inclusion work
+  - practical code state: Phase 7 and Phase 8 can now both be treated as complete at this baseline
+* general-user productization remains a real roadmap priority, but the next official target should now advance to **Phase 9 (Stage 5 product expansion)** work
 
 ---
 
 ### Next Priority
 
-* keep the synchronized `12577dc` status view authoritative at the top level
-* treat Phase 7 as closed unless a concrete contradiction is found in source or tests
-* begin the next official line from Phase 8 inclusion work rather than extending the Phase 7 return-use loop by habit
+* keep the synchronized `ffc479d` status view authoritative at the top level
+* treat Phase 7 and Phase 8 as closed unless a concrete contradiction is found in source or tests
+* begin the next official line from **Phase 9 (Stage 5 product expansion)** work rather than extending Phase 8 by habit
+* keep `accounts / sessions` interpreted as earlier **Phase 4.5 foundation** scope rather than reopening them as fresh Phase 9 expansion work
 * keep route/binding/export alignment explicit across:
   - `src/server/http_route_surface.py`
   - `src/server/framework_binding.py`

@@ -1,6 +1,6 @@
 # CURRENT_STATE
 
-Version: 1.3.0
+Version: 1.4.0
 
 ---
 
@@ -17,46 +17,40 @@ It does not replace the canonical architecture or contract documents.
 
 ## Authoritative Snapshot
 
-* authoritative implementation baseline commit: `12577dc`
-* authoritative verified baseline: `2281 passed, 14 skipped`
-* status source: latest repository snapshot aligned to the current handoff baseline (`Nexa_12577dc.zip`)
-* canonical roadmap reference: `nexa_implementation_order_final_v2_2.md`
+* authoritative implementation baseline commit: `ffc479d`
+* authoritative verified baseline: `2285 passed, 14 skipped`
+* status source: latest repository snapshot aligned to the current handoff baseline (`nexa_ffc479d.Zip`)
+* canonical productization reference: `docs/specs/ui/general_user_productization_priority.md`
+* closure references:
+  * `docs/status/PHASE7_CLOSURE_AUDIT.md`
+  * `docs/status/PHASE8_CLOSURE_AUDIT.md`
 
 ---
 
 ## Current Position Summary
 
-The current repository should now be understood in two layers at once.
+The current repository should now be understood in three practical layers at once.
 
-### 1. Canonical roadmap layer
+### 1. Architecture / engine layer
 
-The macro dependency order still comes from `nexa_implementation_order_final_v2_2.md`:
+The engine, storage, UI adapter, designer, runtime, and observability foundations remain the stable implementation base.
 
-* beginner/productization priorities remain real
-* Phase 4.5 still has its own macro gate and infrastructure-decision framing
-* later phases such as accessibility/localization completion and product expansion still remain part of the long-term plan, while the Phase 7 return-use loop can now be treated as closed at this baseline
+### 2. Product continuity layer
 
-### 2. Practical code-state layer
+The codebase already contains the broad Phase 4.5 server/product continuity foundation plus the practical closure of the Phase 7 return-use loop:
 
-The actual `12577dc` codebase now includes the earlier Phase 4.5 continuity foundation plus the practical closure of the Phase 7 return-use loop.
+* server-backed circuit library
+* beginner-facing result history
+* onboarding continuity alignment
+* in-product feedback channel
 
-The source now already contains:
+### 3. Inclusion / product-completeness layer
 
-* server-side workspace continuity foundations
-* onboarding continuity foundations
-* run admission / list / status / result continuity foundations
-* artifact / trace continuity foundations
-* provider secret / health / probe / probe-history continuity foundations
-* aggregate recent-activity / history-summary continuity foundations
-* Phase 7 return-use surfaces: circuit library, beginner-facing result history, onboarding continuity alignment, and in-product feedback channel
-* route surface / framework binding / FastAPI binding layers for the product/API surface
-* database schema families and in-memory continuity stores supporting that server line
+The current surfaced beginner / return-use product path has now also practically closed Phase 8:
 
-The practical meaning is:
-
-* the repository is no longer mainly waiting for a first provider-probe-persistence seam
-* the biggest immediate weakness was top-level documentation lag, not absence of server continuity code
-* future planning must keep the roadmap layer and the practical code-state layer visible together
+* accessibility implementation is materially present on the surfaced shell / library / result / feedback path
+* Korean localization completeness is materially present on the current beginner / return-use surfaced path
+* remaining visible English is predominantly fixture data, payload values, or internal identifiers rather than critical surfaced product copy debt
 
 ---
 
@@ -68,74 +62,72 @@ The practical meaning is:
 | storage role split (`working_save` / `commit_snapshot`) | Complete baseline | role-aware `.nex` loading/validation/model split present |
 | UI adapter / view-model layer | Complete baseline | adapter boundary and module view-models exist across panel/workspace/hub surfaces |
 | UI persistence boundary | Complete baseline | `.nex.ui` and commit-boundary stripping rules are implemented |
-| UI i18n foundation | Complete baseline | language resolution, fallback, localized message lookup, persistence boundary present |
+| UI i18n foundation | Complete baseline | language resolution, fallback, localized lookup, EN/KO surfaced-path completeness present |
 | Designer proposal-flow UI surface | Implemented baseline | proposal / precheck / preview / approval projection exists |
 | Subcircuit support | Implemented baseline | loader, validator, runtime path, savefile roundtrip, and official example coverage exist |
-| Phase 4.5 database foundation | Implemented baseline | schema families for workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index are present |
-| Phase 4.5 server continuity surfaces | Implemented baseline | workspace / onboarding / run / artifact-trace / provider operational / aggregate surfaces are already broad |
-| continuity support stores | Implemented baseline | provider binding, managed secret metadata, provider probe history, workspace registry, and onboarding state stores exist |
-| route / binding / FastAPI surface | Implemented baseline | HTTP route surface, framework binding, and FastAPI binding are already wired |
-| general-user product shell | Not yet the dominant implementation truth | roadmap priority remains real, but current code has advanced further on server continuity than on beginner/product closure |
-| remaining edge / exception continuity coverage | Not fully inventoried | likely residual low-frequency surfaces still need explicit mapping |
+| Phase 4.5 database foundation | Implemented baseline | schema families and continuity stores remain present |
+| Phase 4.5 server continuity surfaces | Implemented baseline | workspace / onboarding / run / artifact-trace / provider operational / aggregate surfaces are broad |
+| Phase 7 return-use loop | Complete baseline | circuit library, beginner result history, onboarding continuity alignment, and in-product feedback are closure-audited |
+| Phase 8 inclusion / product completeness | Complete baseline | surfaced accessibility and Korean localization closure are now practical and closure-audited |
+| surfaced metadata / terminology refinement | Complete baseline | major user-facing metadata and terminology cleanup batches have been applied |
+| Phase 9 (Stage 5 product expansion) | Open | public-boundary-first expansion remains the next official line; accounts/sessions already belong to the earlier Phase 4.5 foundation |
 
 ---
 
 ## What Is Closed Enough To Treat As Stable
 
-### 1. The codebase is already beyond the old `d468795` status world
+### 1. The old `12577dc` / `2281 passed, 14 skipped` status world is no longer current top-level truth
 
-That older status line is now historical.
-It must not continue to anchor top-level truth.
+That older world remains historically important because it closed Phase 7.
+It is no longer the best top-level truth snapshot for current planning.
 
-### 2. The server continuity family is real
+### 2. The server continuity family is real and stable baseline reality
 
-The current repository already contains a broad server/product continuity layer.
-Future work should treat that as existing baseline reality, not as a hypothetical design target.
+Future planning should treat the broad server/product continuity line as existing code, not as speculative design.
 
-### 3. The UI/storage/designer foundations remain valid
+### 3. Phase 7 is closed enough to keep closed
 
-The older UI-sector convergence work is still real and implemented.
-The newer server continuity line sits on top of that reality rather than replacing it.
+Return-use loop work should not be reopened casually unless a concrete contradiction is found in source or tests.
 
-### 4. Macro roadmap and practical code-state must stay separated conceptually
+### 4. Phase 8 is now also closed enough to keep closed
 
-The roadmap still defines desired dependency order.
-The code snapshot tells us what is already in source.
-One must not erase the other.
-
----
-
-## Important Corrections To Earlier Mental Models
-
-### 1. The project is not currently “waiting to start Phase 4.5 server continuity”
-
-That model is incorrect for `12577dc`.
-The code is already materially inside that sector.
-
-### 2. The immediate bottleneck was not missing server foundation code
-
-The immediate bottleneck was that top-level truth documents still described an older world.
-
-### 3. The next step is not “invent another adjacent continuity seam by habit”
-
-The next step after this truth sync is to identify the real remaining gaps and choose one bounded next seam deliberately.
+The surfaced beginner / return-use accessibility and Korean localization line is now implemented strongly enough that it should not remain open by habit.
 
 ---
 
 ## What Still Remains Open
 
-### 1. Remaining edge / exception / admin / collaboration continuity coverage
+### 1. Phase 9 (Stage 5 product expansion)
 
-The current broad continuity family still needs an explicit remaining-gap inventory.
-Some lower-frequency surfaces may remain outside the normalized projection family.
+The next official product-facing line is Phase 9.
 
-### 2. Route/binding/export integrity under future changes
+Its first seam should be public-boundary-first expansion work such as:
 
-Every new surface still risks drift across the route surface, framework binding, FastAPI binding, and package export layers.
+* public `.nex` format standardization
+* SDK / public API boundary clarification
+* public-contract versus internal-implementation boundary declaration
 
-### 3. General-user productization closure beyond Phase 7
+Later Phase 9 layers may then cover:
 
-Beginner shell enforcement and first-success blockers still remain part of the broader roadmap, but the Stage 3 return-use loop itself is now practically closed at this baseline. The next official open product work after this point is Phase 8 inclusion work (accessibility and localization completeness).
+* MCP / integration-surface work
+* circuit sharing
+* community / ecosystem expansion
+
+`user accounts / sessions` must not be reintroduced here as a fresh Phase 9 line; that continuity foundation already belongs to Phase 4.5 in the canonical roadmap.
+
+### 2. Non-blocking wording / polish debt outside the surfaced path
+
+Some older or less central surfaces may still contain technical wording or non-ideal copy.
+That is no longer a Phase 8 blocker at this baseline.
+
+### 3. Route / binding / export integrity under future changes
+
+Every new surfaced family still risks drift across:
+
+* `src/server/http_route_surface.py`
+* `src/server/framework_binding.py`
+* `src/server/fastapi_binding.py`
+* `src/server/__init__.py`
 
 ---
 
@@ -143,4 +135,4 @@ Beginner shell enforcement and first-success blockers still remain part of the b
 
 The project should now be interpreted as:
 
-**engine/storage/UI foundations implemented, broad server/product continuity present in code, Phase 7 return-use loop practically closed at `12577dc`, and the next responsible move being to advance to Phase 8 inclusion work rather than extending Phase 7 indefinitely.**
+**engine/storage/UI foundations implemented, broad server/product continuity present in code, Phase 7 return-use loop closed, Phase 8 inclusion/product completeness closed on the surfaced beginner / return-use path at `ffc479d`, and the next responsible top-level move being to shift planning to Phase 9 (Stage 5 product expansion) rather than continuing Phase 8 indefinitely.**

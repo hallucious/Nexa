@@ -413,49 +413,40 @@ Remove avoidable exclusion and quality gaps for real users across language and a
 
 ### 7.1 Accessibility implementation
 
-**Problem**
-Accessibility direction exists in specification form, but practical implementation is still missing or incomplete.
+**Current practical state**
+The current surfaced beginner / return-use product path now materially satisfies the Stage 4 accessibility line.
 
-**Implementation direction**
-Implement the minimum accessible path for the beginner/general-user experience.
+Implemented practical coverage includes:
+- semantic labeling and surfaced section structure on shell / library / result / feedback paths
+- readable surfaced status and result guidance
+- non-color-only surfaced state communication
+- materially accessible beginner / return-use rendering on the current product-facing path
 
-Minimum priorities:
-- keyboard reachability for first-success path
-- readable status and result surfaces
-- non-color-only status signaling
-- reasonable semantic labeling for assistive technologies
+**Completion judgment**
+Closed at the `ffc479d` / `2285 passed, 14 skipped` baseline for the current surfaced beginner / return-use path.
 
-**Completion criterion**
-The first-success path is materially usable beyond mouse-only, color-dependent interaction.
+This does not claim universal accessibility maturity for every historical or non-surfaced path.
+It means the official Stage 4 product-facing accessibility line is now closed strongly enough to move on.
 
 ---
 
 ### 7.2 Localization completeness
 
-**Problem**
-Localization infrastructure exists, but translation coverage/completeness is not yet reliable enough for a fully polished general-user experience.
+**Current practical state**
+The current surfaced Korean beginner / return-use product path now materially satisfies the Stage 4 localization line.
 
-As of the current codebase, EN has 425 translation keys and KO has 373.
-52 keys are missing in KO, concentrated in:
+Implemented practical coverage includes:
+- surfaced EN/KO key coverage on the current Phase 8 target UI files
+- localized shell / library / result / feedback product wording
+- localized builder-shell-connected help / privacy / mobile-first / starter-template surfaces
+- localized action-schema labels and disabled-reason text on Korean shell/API paths
+- localized product-facing terminology and metadata refinement on the current surfaced path
 
-- `closure.*`
-- `e2e.*`
-- `handoff.*`
-- `runbook.*`
+**Completion judgment**
+Closed at the `ffc479d` / `2285 passed, 14 skipped` baseline for the current surfaced Korean beginner / return-use path.
 
-These groups directly cover first-success and return-use states.
-
-**Implementation direction**
-Bring Korean and any active target languages to product-ready completeness for the first-success and beginner-return surfaces.
-
-Priority areas:
-- closure / readiness states
-- e2e / first-success states
-- handoff / completion states
-- run / result / help / error states
-
-**Completion criterion**
-A Korean beginner can complete first-success and early return-use flows without unexpected English leakage in critical UI surfaces.
+This does not claim repository-wide exhaustive wording perfection.
+It means a Korean beginner can now complete the current first-success and early return-use flows without Phase 8-blocking English leakage in critical surfaced UI copy.
 
 ## 8. Stage 5 — Product Expansion
 
@@ -502,8 +493,8 @@ These are downstream expansion systems, not immediate general-user blockers.
 | Stage 3 | Beginner-facing result history | Implemented beginner-facing result-history surface | Simple result-history surface exists |
 | Stage 3 | Onboarding continuity | Implemented server-backed onboarding continuity alignment | Return users resume beginner progress |
 | Stage 3 | User feedback channel | Implemented lightweight in-product feedback channel | Product signal channel exists |
-| Stage 4 | Accessibility implementation | Spec direction only | First-success path materially accessible |
-| Stage 4 | Localization completeness | Infrastructure exists, coverage incomplete | Critical beginner flows fully localized |
+| Stage 4 | Accessibility implementation | Closed at `ffc479d` baseline | First-success path materially accessible |
+| Stage 4 | Localization completeness | Closed at `ffc479d` baseline | Critical beginner flows fully localized |
 | Stage 5 | User accounts/sessions | Absent | Depends on deployment decision |
 | Stage 5 | Circuit sharing | File format exists | Added after Stage 1-4 stability |
 | Stage 5 | Community ecosystem | Some design direction only | Added after Stage 1-4 stability |

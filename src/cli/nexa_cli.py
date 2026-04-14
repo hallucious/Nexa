@@ -6,7 +6,7 @@ import json
 import os
 import sys
 import time
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, is_dataclass, replace
 from pathlib import Path
 
 from src.storage.lifecycle_api import (
@@ -643,23 +643,137 @@ def _build_new_savefile(args):
     )
 
 
+def _read_json_object(path: Path) -> dict:
+    with path.open("r", encoding="utf-8") as handle:
+        data = json.load(handle)
+    if not isinstance(data, dict):
+        raise ValueError(".nex root must be a JSON object")
+    return data
+
+
+def _is_public_nex_payload(data: dict) -> bool:
+    meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
+    return meta.get("storage_role") in {"working_save", "commit_snapshot"}
+
+
+def _load_public_nex_artifact(input_path: Path):
+    from src.storage.nex_api import load_nex
+
+    loaded = load_nex(input_path)
+    if loaded.parsed_model is None:
+        blocking_messages = [finding.message for finding in loaded.findings if getattr(finding, "blocking", False)]
+        detail = blocking_messages[0] if blocking_messages else f"public .nex artifact could not be loaded ({loaded.load_status})"
+        raise ValueError(detail)
+    return loaded
+
+
+def _load_cli_savefile_source(input_value: str):
+    from src.contracts.savefile_loader import load_savefile_from_path
+
+    input_path = Path(input_value)
+    if input_path.suffix != ".nex":
+        raise ValueError("savefile input must use .nex extension")
+
+    raw_data = _read_json_object(input_path)
+    if _is_public_nex_payload(raw_data):
+        return {
+            "mode": "public",
+            "input_path": input_path,
+            "raw_data": raw_data,
+            "loaded": _load_public_nex_artifact(input_path),
+        }
+
+    return {
+        "mode": "legacy",
+        "input_path": input_path,
+        "raw_data": raw_data,
+        "savefile": load_savefile_from_path(str(input_path)),
+    }
+
+
+def _blocking_validation_messages(report) -> list[str]:
+    findings = getattr(report, "findings", []) or []
+    return [finding.message for finding in findings if getattr(finding, "blocking", False)]
+
+
+def _public_artifact_payload(loaded, *, input_path: Path) -> dict:
+    parsed = loaded.parsed_model
+    if parsed is None:
+        raise ValueError("public .nex artifact is not loadable")
+
+    meta = getattr(parsed, "meta", None)
+    circuit = getattr(parsed, "circuit", None)
+    resources = getattr(parsed, "resources", None)
+    state = getattr(parsed, "state", None)
+    ui = getattr(parsed, "ui", None)
+    canonical_ref = getattr(meta, "working_save_id", None) or getattr(meta, "commit_id", None)
+    payload = {
+        "status": "ok",
+        "input": str(input_path),
+        "storage_role": loaded.storage_role,
+        "load_status": loaded.load_status,
+        "name": getattr(meta, "name", None),
+        "version": getattr(meta, "format_version", None),
+        "description": getattr(meta, "description", None),
+        "entry": getattr(circuit, "entry", None),
+        "node_count": len(getattr(circuit, "nodes", []) or []),
+        "edge_count": len(getattr(circuit, "edges", []) or []),
+        "prompt_count": len(getattr(resources, "prompts", {}) or {}),
+        "provider_count": len(getattr(resources, "providers", {}) or {}),
+        "plugin_count": len(getattr(resources, "plugins", {}) or {}),
+        "state_input_key_count": len(getattr(state, "input", {}) or {}),
+        "state_working_key_count": len(getattr(state, "working", {}) or {}),
+        "state_memory_key_count": len(getattr(state, "memory", {}) or {}),
+        "ui_layout_key_count": len(getattr(ui, "layout", {}) or {}) if ui is not None else 0,
+        "ui_metadata_key_count": len(getattr(ui, "metadata", {}) or {}) if ui is not None else 0,
+        "finding_count": len(getattr(loaded, "findings", []) or []),
+        "blocking_count": sum(1 for finding in (getattr(loaded, "findings", []) or []) if getattr(finding, "blocking", False)),
+        "canonical_ref": canonical_ref,
+    }
+    if getattr(loaded, "migration_notes", None):
+        payload["migration_notes"] = list(loaded.migration_notes or [])
+    return payload
+
+
+def _persist_public_working_save(model, input_path: Path) -> None:
+    from src.storage.nex_api import validate_working_save
+    from src.storage.serialization import save_nex_artifact_file
+
+    report = validate_working_save(model)
+    blocking_messages = _blocking_validation_messages(report)
+    if blocking_messages:
+        raise ValueError(blocking_messages[0])
+    save_nex_artifact_file(model, input_path)
+
+
 def savefile_new_command(args) -> int:
-    from src.contracts.savefile_serializer import save_savefile_file
     from src.contracts.savefile_validator import validate_savefile
+    from src.storage.legacy_savefile_bridge import default_working_save_id, working_save_model_from_legacy_savefile
+    from src.storage.serialization import save_nex_artifact_file
 
     output_path = Path(args.output)
+    if output_path.suffix != ".nex":
+        raise ValueError("savefile output must use .nex extension")
     if output_path.exists() and not args.force:
         raise FileExistsError(f"output already exists: {output_path}")
 
     savefile = _build_new_savefile(args)
     validate_savefile(savefile)
 
+    working_save = working_save_model_from_legacy_savefile(
+        savefile,
+        working_save_id=default_working_save_id(savefile.meta.name, fallback=output_path.stem),
+        format_version=args.version,
+    )
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    save_savefile_file(savefile, str(output_path))
+    save_nex_artifact_file(working_save, output_path)
 
     payload = {
         "status": "ok",
         "output": str(output_path),
+        "storage_role": "working_save",
+        "canonical_ref": working_save.meta.working_save_id,
         "name": savefile.meta.name,
         "entry": savefile.circuit.entry,
         "node_type": savefile.circuit.nodes[0].type,
@@ -669,14 +783,37 @@ def savefile_new_command(args) -> int:
 
 
 def savefile_validate_command(args) -> int:
-    from src.contracts.savefile_loader import load_savefile_from_path
     from src.contracts.savefile_validator import validate_savefile
+    from src.storage.nex_api import validate_commit_snapshot, validate_working_save
 
-    input_path = Path(args.input)
-    if input_path.suffix != ".nex":
-        raise ValueError("savefile input must use .nex extension")
+    loaded_source = _load_cli_savefile_source(args.input)
+    input_path = loaded_source["input_path"]
 
-    savefile = load_savefile_from_path(str(input_path))
+    if loaded_source["mode"] == "public":
+        loaded = loaded_source["loaded"]
+        parsed = loaded.parsed_model
+        if loaded.storage_role == "working_save":
+            report = validate_working_save(parsed)
+        else:
+            report = validate_commit_snapshot(parsed)
+        blocking_messages = _blocking_validation_messages(report)
+        payload = {
+            "status": "ok" if not blocking_messages else "error",
+            "input": str(input_path),
+            "storage_role": loaded.storage_role,
+            "name": getattr(getattr(parsed, "meta", None), "name", None),
+            "entry": getattr(getattr(parsed, "circuit", None), "entry", None),
+            "node_count": len(getattr(getattr(parsed, "circuit", None), "nodes", []) or []),
+            "result": getattr(report, "result", None),
+            "warnings": [getattr(finding, "message", "") for finding in (getattr(report, "findings", []) or []) if not getattr(finding, "blocking", False)],
+            "warning_count": getattr(report, "warning_count", 0),
+            "blocking_count": getattr(report, "blocking_count", 0),
+            "canonical_ref": getattr(getattr(parsed, "meta", None), "working_save_id", None) or getattr(getattr(parsed, "meta", None), "commit_id", None),
+        }
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0 if not blocking_messages else 1
+
+    savefile = loaded_source["savefile"]
     warnings = validate_savefile(savefile) or []
 
     payload = {
@@ -693,13 +830,15 @@ def savefile_validate_command(args) -> int:
 
 
 def savefile_info_command(args) -> int:
-    from src.contracts.savefile_loader import load_savefile_from_path
+    loaded_source = _load_cli_savefile_source(args.input)
+    input_path = loaded_source["input_path"]
 
-    input_path = Path(args.input)
-    if input_path.suffix != ".nex":
-        raise ValueError("savefile input must use .nex extension")
+    if loaded_source["mode"] == "public":
+        payload = _public_artifact_payload(loaded_source["loaded"], input_path=input_path)
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
 
-    savefile = load_savefile_from_path(str(input_path))
+    savefile = loaded_source["savefile"]
 
     payload = {
         "status": "ok",
@@ -724,17 +863,20 @@ def savefile_info_command(args) -> int:
 
 
 def _load_editable_savefile(input_value: str):
-    from src.contracts.savefile_loader import load_savefile_from_path
+    source = _load_cli_savefile_source(input_value)
+    if source["mode"] == "public":
+        loaded = source["loaded"]
+        if loaded.storage_role != "working_save":
+            raise ValueError("savefile edit commands only support working_save artifacts")
+        return source["input_path"], loaded.parsed_model, "public"
+    return source["input_path"], source["savefile"], "legacy"
 
-    input_path = Path(input_value)
-    if input_path.suffix != ".nex":
-        raise ValueError("savefile input must use .nex extension")
 
-    savefile = load_savefile_from_path(str(input_path))
-    return input_path, savefile
+def _persist_edited_savefile(savefile, input_path: Path, mode: str) -> None:
+    if mode == "public":
+        _persist_public_working_save(savefile, input_path)
+        return
 
-
-def _persist_edited_savefile(savefile, input_path: Path) -> None:
     from src.contracts.savefile_serializer import save_savefile_file
     from src.contracts.savefile_validator import validate_savefile
 
@@ -744,9 +886,14 @@ def _persist_edited_savefile(savefile, input_path: Path) -> None:
 
 
 def savefile_set_name_command(args) -> int:
-    input_path, savefile = _load_editable_savefile(args.input)
-    savefile.meta.name = args.name
-    _persist_edited_savefile(savefile, input_path)
+    input_path, savefile, mode = _load_editable_savefile(args.input)
+    if mode == "public":
+        if not args.name.strip():
+            raise ValueError("Working Save name must be a non-empty string")
+        savefile = replace(savefile, meta=replace(savefile.meta, name=args.name))
+    else:
+        savefile.meta.name = args.name
+    _persist_edited_savefile(savefile, input_path, mode)
 
     payload = {
         "status": "ok",
@@ -760,9 +907,15 @@ def savefile_set_name_command(args) -> int:
 
 
 def savefile_set_entry_command(args) -> int:
-    input_path, savefile = _load_editable_savefile(args.input)
-    savefile.circuit.entry = args.entry
-    _persist_edited_savefile(savefile, input_path)
+    input_path, savefile, mode = _load_editable_savefile(args.input)
+    if mode == "public":
+        node_ids = {str(node.get("id") or node.get("node_id") or "") for node in savefile.circuit.nodes}
+        if args.entry not in node_ids:
+            raise ValueError(f"Entry node '{args.entry}' not found in nodes")
+        savefile = replace(savefile, circuit=replace(savefile.circuit, entry=args.entry))
+    else:
+        savefile.circuit.entry = args.entry
+    _persist_edited_savefile(savefile, input_path, mode)
 
     payload = {
         "status": "ok",
@@ -776,9 +929,12 @@ def savefile_set_entry_command(args) -> int:
 
 
 def savefile_set_description_command(args) -> int:
-    input_path, savefile = _load_editable_savefile(args.input)
-    savefile.meta.description = args.description
-    _persist_edited_savefile(savefile, input_path)
+    input_path, savefile, mode = _load_editable_savefile(args.input)
+    if mode == "public":
+        savefile = replace(savefile, meta=replace(savefile.meta, description=args.description))
+    else:
+        savefile.meta.description = args.description
+    _persist_edited_savefile(savefile, input_path, mode)
 
     payload = {
         "status": "ok",
@@ -1024,6 +1180,10 @@ def _is_savefile_contract(circuit_path: str) -> bool:
 
     if not isinstance(data, dict):
         return False
+
+    meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
+    if meta.get("storage_role") in {"working_save", "commit_snapshot"}:
+        return True
 
     required = {"meta", "circuit", "resources", "state", "ui"}
     return required.issubset(set(data.keys()))
