@@ -135,6 +135,8 @@ def test_builder_shell_surfaces_phase6_privacy_transparency_for_session_key_and_
     vm = read_builder_shell_view_model(_working_save(provider_session=True, external_input="url"), app_language="ko")
 
     assert vm.privacy_transparency.title == "개인정보와 데이터 처리"
+    assert any(fact.value == "로컬 작업 저장 연속성만 사용" for fact in vm.privacy_transparency.facts)
+    assert any("작업 저장 UI 상태" in fact.value for fact in vm.privacy_transparency.facts)
     fact_values = {fact.fact_id: fact.value for fact in vm.privacy_transparency.facts}
     fact_labels = {fact.fact_id: fact.label for fact in vm.privacy_transparency.facts}
     assert fact_labels["provider_access"] == "제공자 접근"
