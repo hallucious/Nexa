@@ -149,9 +149,9 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <h1>{title}</h1>
+    <main role="main" aria-labelledby="feedback-title">
+      <header aria-labelledby="feedback-title">
+        <h1 id="feedback-title">{title}</h1>
         <p>{subtitle}</p>
         <p>Workflow: {workspace_title}</p>
         <div class=\"nav-links\">
@@ -161,10 +161,10 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
         </div>
       </header>
       {confirmation_html}
-      <section class=\"form-card\">
-        <h2>Send a quick product note</h2>
+      <section class=\"form-card\" role=\"region\" aria-labelledby=\"feedback-form-title\">
+        <h2 id="feedback-form-title">Send a quick product note</h2>
         <div class=\"option-grid\">{options_html}</div>
-        <form id=\"feedback-form\">
+        <form id=\"feedback-form\" aria-describedby=\"feedback-status\">
           <label for=\"category\">Feedback type</label>
           <select id=\"category\" name=\"category\">
             <option value=\"confusing_screen\">Report confusing screen</option>
@@ -185,11 +185,11 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           <div class=\"actions\">
             <button type=\"submit\">Send feedback</button>
           </div>
-          <div class=\"status\" id=\"feedback-status\"></div>
+          <div class=\"status\" id=\"feedback-status\" aria-live=\"polite\"></div>
         </form>
       </section>
-      <section>
-        <h2>Recent feedback from this workflow</h2>
+      <section role="region" aria-labelledby="recent-feedback-title">
+        <h2 id="recent-feedback-title">Recent feedback from this workflow</h2>
         {items_html}
       </section>
     </main>

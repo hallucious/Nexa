@@ -200,10 +200,10 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         open_href = escape(str(item.get("open_result_href") or "#"))
         continue_href = escape(str(item.get("continue_href") or "#"))
         cards_html += f"""
-        <article class="result-card{selected_class}">
+        <article class="result-card{selected_class}" aria-labelledby="result-title-{escape(str(item.get('run_id') or 'result'))}" {'aria-current="true"' if item.get('selected') else ''}>
           <div class="result-card-head">
-            <h2>{escape(str(summary.get('headline') or item.get('run_id') or 'Result'))}</h2>
-            <span class="status-badge">{escape(str(item.get('status_label') or ''))}</span>
+            <h2 id="result-title-{escape(str(item.get('run_id') or 'result'))}">{escape(str(summary.get('headline') or item.get('run_id') or 'Result'))}</h2>
+            <span class="status-badge" aria-label="Result status {escape(str(item.get('status_label') or ''))}">{escape(str(item.get('status_label') or ''))}</span>
           </div>
           <ul class="summary-lines">{_render_lines(summary.get('lines') or [])}</ul>
           <details {'open' if item.get('selected') else ''}>
@@ -225,14 +225,14 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         """
     selected_output_html = ""
     if selected.get("output_preview"):
-        selected_output_html = f'<section class="selected-output"><h2>{escape(str(selected.get("output_label") or "Latest output"))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
+        selected_output_html = f'<section class="selected-output" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or "Latest output"))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
     onboarding_html = ""
     if onboarding_banner:
         action_href = escape(str(onboarding_banner.get("action_href") or "#"))
         action_label = escape(str(onboarding_banner.get("action_label") or "Continue workflow"))
         onboarding_html = (
-            '<section class="onboarding-banner">'
-            f'<h2>{escape(str(onboarding_banner.get("title") or "Resume onboarding"))}</h2>'
+            '<section class="onboarding-banner" role="region" aria-labelledby="onboarding-banner-title">'
+            f'<h2 id="onboarding-banner-title">{escape(str(onboarding_banner.get("title") or "Resume onboarding"))}</h2>'
             f'<p>{escape(str(onboarding_banner.get("summary") or ""))}</p>'
             f'<a class="action-link" href="{action_href}">{action_label}</a>'
             '</section>'
@@ -265,16 +265,16 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <a class="top-link" href="/app/library">Back to library</a>
+    <main role="main" aria-labelledby="result-history-title">
+      <header aria-labelledby="result-history-title">
+        <a class="top-link" href="/app/library" aria-label="Back to library">Back to library</a>
         <a class="top-link" href="{escape(str(payload.get('routes', {}).get('workspace_page') or '#'))}">Continue workflow</a>
-        <h1>{title}</h1>
+        <h1 id="result-history-title">{title}</h1>
         <p>{workspace_title} · {subtitle}</p>
       </header>
       {onboarding_html}
       {selected_output_html}
-      <section class="result-grid">{cards_html}</section>
+      <section class="result-grid" aria-label="Recent result history">{cards_html}</section>
     </main>
   </body>
 </html>

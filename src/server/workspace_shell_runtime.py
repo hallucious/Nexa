@@ -1251,11 +1251,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
   </style>
 </head>
 <body>
-  <div class=\"shell\">
-    <h1>Nexa Runtime Shell</h1>
+  <main class=\"shell\" role=\"main\" aria-labelledby=\"workspace-shell-title\">
+    <h1 id="workspace-shell-title">Nexa Runtime Shell</h1>
     <p><strong>{workspace_title}</strong> (<code>{workspace_id}</code>)</p>
     <p>Status: <strong>{shell_status}</strong></p>
-    <div class="actions">
+    <div class="actions" role="toolbar" aria-label="Workspace shell actions">
       <button id="run-draft" {'disabled' if payload.get('launch_request_template') is None else ''}>Run draft</button>
       <button id="refresh" class="secondary">Refresh shell</button>
       <button id="open-status" class="secondary" {'disabled' if not latest_run_status_path else ''}>Open latest run status</button>
@@ -1263,27 +1263,27 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <button id="open-trace" class="secondary" {'disabled' if not latest_run_trace_path else ''}>Open latest trace</button>
       <button id="open-artifacts" class="secondary" {'disabled' if not latest_run_artifacts_path else ''}>Open latest artifacts</button>
     </div>
-    <section class="card" style="margin-top:16px;">
-      <h2>Runtime focus</h2>
-      <div id="runtime-nav" class="nav"></div>
+    <section class="card" style="margin-top:16px;" role="region" aria-labelledby="runtime-focus-title">
+      <h2 id="runtime-focus-title">Runtime focus</h2>
+      <div id="runtime-nav" class="nav" aria-label="Runtime section navigation"></div>
       <p id="focus-guidance"><strong>{escape(str(navigation.get('guidance_label') or 'Recommended next: Status'))}</strong> — {escape(str(navigation.get('guidance_summary') or 'Open status first to follow the current runtime state.'))}</p>
       <pre id="focus-state">Focus: {escape(str(navigation.get('default_section') or 'status'))}</pre>
     </section>
-    <section class="card" style="margin-top:16px;">
-      <h2>Step state banner</h2>
+    <section class="card" style="margin-top:16px;" role="region" aria-labelledby="step-state-banner-heading">
+      <h2 id="step-state-banner-heading">Step state banner</h2>
       <p id="step-state-banner-title">{escape(str((payload.get('step_state_banner') or {}).get('title') or 'Step 1 of 5 — Enter goal'))}</p>
-      <pre id="step-state-banner-summary">{escape(str((payload.get('step_state_banner') or {}).get('summary') or 'Describe your goal to start the first-run path.'))}</pre>
+      <pre id="step-state-banner-summary" aria-live="polite">{escape(str((payload.get('step_state_banner') or {}).get('summary') or 'Describe your goal to start the first-run path.'))}</pre>
       <p id="step-state-banner-action">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))} → <code>{escape(str((payload.get('step_state_banner') or {}).get('action_target') or 'designer'))}</code></p>
       <button id="step-state-banner-action-button" class="secondary">{escape(str((payload.get('step_state_banner') or {}).get('action_label') or 'Open Designer'))}</button>
     </section>
     <div class="row">
-      <section id="designer-summary-card" tabindex="-1" class="card focus-target">
-        <h2>Designer workspace</h2>
+      <section id="designer-summary-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="designer-summary-title">
+        <h2 id="designer-summary-title">Designer workspace</h2>
         <pre id="designer-summary">Open Designer to start drafting your workflow.</pre>
         <div id="designer-controls" class="actions"></div>
       </section>
-      <section id="validation-summary-card" tabindex="-1" class="card focus-target">
-        <h2>Validation review</h2>
+      <section id="validation-summary-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="validation-summary-title">
+        <h2 id="validation-summary-title">Validation review</h2>
         <pre id="validation-summary">Validation guidance will appear here.</pre>
         <div id="validation-controls" class="actions"></div>
       </section>
@@ -1386,11 +1386,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <pre id="latest-run-artifacts-detail">Open latest artifacts to view the detail layer.</pre>
       </section>
     </div>
-    <section class=\"card\" style=\"margin-top:16px;\">
-      <h2>Last action log</h2>
-      <pre id=\"browser-log\">Ready.</pre>
+    <section class=\"card\" style=\"margin-top:16px;\" role=\"region\" aria-labelledby=\"browser-log-title\">
+      <h2 id=\"browser-log-title\">Last action log</h2>
+      <pre id=\"browser-log\" aria-live=\"polite\">Ready.</pre>
     </section>
-  </div>
+  </main>
   <script>
     const initialPayload = {payload_json};
     const launchTemplate = {launch_template_json};

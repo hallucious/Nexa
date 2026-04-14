@@ -1260,3 +1260,40 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
     assert 'Help us improve this workflow' in body
     assert '/api/workspaces/ws-001/feedback' in body
     assert 'Report confusing screen' in body
+
+
+
+def test_fastapi_binding_product_surfaces_expose_accessible_landmarks() -> None:
+    client = _make_client()
+
+    library_page = client.get('/app/library', headers=_session_headers())
+    assert library_page.status_code == 200
+    assert 'role="main" aria-labelledby="library-title"' in library_page.text
+    assert 'aria-label="Workflow library"' in library_page.text
+    assert 'aria-label="Open raw workspace registry JSON"' in library_page.text
+
+    result_page = client.get('/app/workspaces/ws-001/results?run_id=run-002', headers=_session_headers())
+    assert result_page.status_code == 200
+    assert 'role="main" aria-labelledby="result-history-title"' in result_page.text
+    assert 'aria-label="Recent result history"' in result_page.text
+    assert 'aria-current="true"' in result_page.text
+
+    feedback_page = client.get('/app/workspaces/ws-001/feedback?surface=result_history&run_id=run-001', headers=_session_headers())
+    assert feedback_page.status_code == 200
+    assert 'role="main" aria-labelledby="feedback-title"' in feedback_page.text
+    assert 'role="region" aria-labelledby="feedback-form-title"' in feedback_page.text
+    assert 'aria-describedby="feedback-status"' in feedback_page.text
+    assert 'aria-live="polite"' in feedback_page.text
+
+
+def test_fastapi_binding_workspace_shell_exposes_focus_and_live_region_semantics() -> None:
+    client = _make_client()
+
+    page_response = client.get('/app/workspaces/ws-001', headers=_session_headers())
+    assert page_response.status_code == 200
+    body = page_response.text
+    assert 'role="main" aria-labelledby="workspace-shell-title"' in body
+    assert 'role="toolbar" aria-label="Workspace shell actions"' in body
+    assert 'aria-label="Runtime section navigation"' in body
+    assert 'id="step-state-banner-summary" aria-live="polite"' in body
+    assert 'id="browser-log" aria-live="polite"' in body

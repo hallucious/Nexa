@@ -156,10 +156,10 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
             control_html += f'<a class="action-link secondary" href="{result_history_href}">{result_history_label}</a>'
         control_html += f'<a class="action-link" href="{continue_href}">{continue_label}</a>'
         cards_html += f"""
-        <article class="workflow-card">
+        <article class="workflow-card" aria-labelledby="workflow-title-{escape(str(item.get('workspace_id') or 'workflow'))}">
           <div class="workflow-card-head">
-            <h2>{title_text}</h2>
-            <span class="status-badge">{status_label}</span>
+            <h2 id="workflow-title-{escape(str(item.get('workspace_id') or 'workflow'))}">{title_text}</h2>
+            <span class="status-badge" aria-label="Workflow status {status_label}">{status_label}</span>
           </div>
           <ul class="summary-lines">{_render_lines(summary.get('lines') or [])}</ul>
           <details>
@@ -202,13 +202,13 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
     </style>
   </head>
   <body>
-    <main>
-      <header>
-        <a class="top-link" href="/api/workspaces">Open raw workspace registry</a>
-        <h1>{title}</h1>
+    <main role="main" aria-labelledby="library-title">
+      <header aria-labelledby="library-title">
+        <a class="top-link" href="/api/workspaces" aria-label="Open raw workspace registry JSON">Open raw workspace registry</a>
+        <h1 id="library-title">{title}</h1>
         <p>{subtitle}</p>
       </header>
-      <section class="workflow-grid">{cards_html}</section>
+      <section class="workflow-grid" aria-label="Workflow library">{cards_html}</section>
     </main>
   </body>
 </html>
