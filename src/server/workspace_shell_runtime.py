@@ -1204,10 +1204,10 @@ def build_workspace_shell_runtime_payload(
 ) -> dict[str, Any]:
     source = resolve_workspace_artifact_source(workspace_row, artifact_source)
     model, loaded = _load_workspace_model(source, workspace_row)
-    shell_vm = read_builder_shell_view_model(model)
     app_language = normalize_ui_language(app_language_override or ui_language_from_sources(model))
+    shell_vm = read_builder_shell_view_model(model, app_language=app_language)
     server_backed_state = _server_backed_shell_state(source, model)
-    template_gallery = read_template_gallery_view_model(model) if isinstance(model, WorkingSaveModel) else None
+    template_gallery = read_template_gallery_view_model(model, app_language=app_language) if isinstance(model, WorkingSaveModel) else None
     workspace_id = str((workspace_row or {}).get("workspace_id") or getattr(getattr(model, "meta", None), "working_save_id", "workspace")).strip() or "workspace"
     workspace_title = str((workspace_row or {}).get("title") or getattr(getattr(model, "meta", None), "name", "Workspace")).strip() or "Workspace"
     target = _execution_target_for(model)

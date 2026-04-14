@@ -1347,6 +1347,8 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '최신 아티팩트 열기' in body
     assert 'Trace 상세 레이어' in body
     assert '아티팩트 상세 레이어' in body
+    assert '개인정보와 데이터 처리' in body
+    assert '템플릿 둘러보기' in body
 
 
 def test_fastapi_binding_product_surfaces_expose_accessible_landmarks() -> None:

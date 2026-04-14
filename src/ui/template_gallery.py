@@ -7,7 +7,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import normalize_ui_language, ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -47,9 +47,10 @@ def read_template_gallery_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
     explanation: str | None = None,
+    app_language: str | None = None,
 ) -> TemplateGalleryViewModel:
     source_unwrapped = _unwrap(source)
-    app_language = ui_language_from_sources(source_unwrapped)
+    app_language = normalize_ui_language(app_language) if app_language is not None else ui_language_from_sources(source_unwrapped)
     if not _is_empty_working_save(source_unwrapped):
         return TemplateGalleryViewModel()
 
