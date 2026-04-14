@@ -27,6 +27,7 @@ from src.sdk.integration import (
     PublicMcpNormalizedArguments,
     PublicMcpNormalizedResponse,
     PublicMcpRecoveryHint,
+    PublicMcpRecoveryPolicy,
     PublicMcpResponseContract,
     PublicMcpResourceDescriptor,
     PublicMcpRouteContract,
@@ -35,6 +36,7 @@ from src.sdk.integration import (
     build_public_mcp_argument_schemas,
     build_public_mcp_route_contracts,
     build_public_mcp_response_contracts,
+    build_public_mcp_recovery_policies,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
     build_public_mcp_manifest,
@@ -80,7 +82,7 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.12"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.13"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -114,9 +116,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.10"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.11"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.10"
+    assert surface.version == "1.11"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -171,12 +173,12 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.4"
-    assert PUBLIC_MCP_SCHEMA_VERSION == "1.4"
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.5"
+    assert PUBLIC_MCP_SCHEMA_VERSION == "1.5"
     assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.4"
-    assert manifest.schema_version == "1.4"
+    assert manifest.manifest_version == "1.5"
+    assert manifest.schema_version == "1.5"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -184,8 +186,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
-    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.4"
-    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.4"
+    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.5"
+    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.5"
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -213,7 +215,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.8"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.9"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -422,9 +424,9 @@ def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> N
 
     assert isinstance(policy, PublicMcpCompatibilityPolicy)
     assert policy.policy_version == "1.0"
-    assert policy.supports_manifest_version("1.4") is True
-    assert policy.supports_schema_version("1.4") is True
-    policy.assert_supported(manifest_version="1.4", schema_version="1.4")
+    assert policy.supports_manifest_version("1.5") is True
+    assert policy.supports_schema_version("1.5") is True
+    policy.assert_supported(manifest_version="1.5", schema_version="1.5")
 
 
 def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
@@ -449,9 +451,9 @@ def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
     export = bridge.export()
 
-    assert export.schema_version == "1.4"
+    assert export.schema_version == "1.5"
     assert export.compatibility_policy.policy_version == "1.0"
-    bridge.assert_consumer_compatibility(manifest_version="1.4", schema_version="1.4")
+    bridge.assert_consumer_compatibility(manifest_version="1.5", schema_version="1.5")
 
     try:
         bridge.assert_consumer_compatibility(manifest_version="0.9")
@@ -838,3 +840,56 @@ def test_host_bridge_http_dispatch_report_captures_binding_error() -> None:
     assert report.phase == "binding_lookup"
     assert report.error is not None
     assert report.error.category == "binding_error"
+
+
+def test_build_public_mcp_recovery_policies_exports_route_family_retry_profiles() -> None:
+    policies = build_public_mcp_recovery_policies()
+    indexed = {policy.route_name: policy for policy in policies}
+
+    assert isinstance(indexed["launch_run"], PublicMcpRecoveryPolicy)
+    assert indexed["launch_run"].idempotency_class == "launch-non-idempotent"
+    assert indexed["launch_run"].safe_to_retry_same_request_on_timeout is False
+    assert indexed["launch_run"].timeout_recommended_action == "inspect_launch_outcome_before_retry"
+    assert indexed["get_run_status"].idempotency_class == "read-only"
+    assert indexed["get_run_status"].safe_to_retry_same_request_on_timeout is True
+
+
+def test_manifest_includes_recovery_policies() -> None:
+    manifest = build_public_mcp_manifest(base_url="https://api.nexa.test")
+    launch_tool = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
+    status_resource = next(resource for resource in manifest.resources if resource.route_name == "get_run_status")
+    manifest_dict = manifest.to_dict()
+    launch_tool_dict = next(tool for tool in manifest_dict["tools"] if tool["route_name"] == "launch_run")
+
+    assert launch_tool.recovery_policy is not None
+    assert launch_tool.recovery_policy.idempotency_class == "launch-non-idempotent"
+    assert status_resource.recovery_policy is not None
+    assert status_resource.recovery_policy.safe_to_retry_same_request_on_timeout is True
+    assert launch_tool_dict["recovery_policy"]["timeout_recommended_action"] == "inspect_launch_outcome_before_retry"
+
+
+def test_host_bridge_framework_tool_report_uses_route_recovery_policy_for_launch_timeout(monkeypatch) -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    def _raise_timeout(*args, **kwargs):
+        raise TimeoutError("launch handler timed out")
+
+    monkeypatch.setattr("src.server.framework_binding.FrameworkRouteBindings.handle_launch", _raise_timeout)
+
+    report = bridge.execute_framework_tool_report(
+        "launch_run",
+        {
+            "workspace_id": "ws-001",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-001"},
+        },
+    )
+
+    assert report.ok is False
+    assert report.phase == "handler_execution"
+    assert report.error is not None
+    assert report.error.category == "handler_error"
+    assert report.error.recovery_hint is not None
+    assert report.retryable is True
+    assert report.safe_to_retry_same_request is False
+    assert report.recommended_action == "inspect_launch_outcome_before_retry"
+    assert report.error.recovery_hint.recoverability == "manual_verification_before_retry"

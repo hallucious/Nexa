@@ -22,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.10"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.11"
 
 
 @dataclass(frozen=True)
@@ -162,6 +162,50 @@ class PublicMcpResponseContract:
             "body_kind": self.body_kind,
             "required_top_level_keys": list(self.required_top_level_keys),
             "response_type": _type_ref_dict(self.response_type),
+        }
+
+
+@dataclass(frozen=True)
+class PublicMcpRecoveryPolicy:
+    name: str
+    route_name: str
+    kind: str
+    route_family: str
+    idempotency_class: str
+    timeout_retryable: bool
+    safe_to_retry_same_request_on_timeout: bool
+    timeout_recommended_action: str
+    response_timeout_retryable: bool
+    safe_to_retry_same_request_on_response_timeout: bool
+    response_timeout_recommended_action: str
+    request_contract_recommended_action: str = "fix_request_arguments"
+    binding_error_recommended_action: str = "inspect_route_binding"
+    handler_error_recommended_action: str = "inspect_handler_failure"
+    response_contract_recommended_action: str = "inspect_response_contract"
+    response_decode_recommended_action: str = "inspect_response_serialization"
+    response_error_recommended_action: str = "inspect_response_handling"
+    unexpected_error_recommended_action: str = "inspect_unexpected_failure"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "route_family": self.route_family,
+            "idempotency_class": self.idempotency_class,
+            "timeout_retryable": self.timeout_retryable,
+            "safe_to_retry_same_request_on_timeout": self.safe_to_retry_same_request_on_timeout,
+            "timeout_recommended_action": self.timeout_recommended_action,
+            "response_timeout_retryable": self.response_timeout_retryable,
+            "safe_to_retry_same_request_on_response_timeout": self.safe_to_retry_same_request_on_response_timeout,
+            "response_timeout_recommended_action": self.response_timeout_recommended_action,
+            "request_contract_recommended_action": self.request_contract_recommended_action,
+            "binding_error_recommended_action": self.binding_error_recommended_action,
+            "handler_error_recommended_action": self.handler_error_recommended_action,
+            "response_contract_recommended_action": self.response_contract_recommended_action,
+            "response_decode_recommended_action": self.response_decode_recommended_action,
+            "response_error_recommended_action": self.response_error_recommended_action,
+            "unexpected_error_recommended_action": self.unexpected_error_recommended_action,
         }
 
 
@@ -326,8 +370,8 @@ class PublicMcpCompatibilityPolicy:
         }
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.4"
-PUBLIC_MCP_SCHEMA_VERSION = "1.4"
+PUBLIC_MCP_MANIFEST_VERSION = "1.5"
+PUBLIC_MCP_SCHEMA_VERSION = "1.5"
 PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
@@ -343,6 +387,7 @@ class PublicMcpManifestTool:
     argument_schema: PublicMcpArgumentSchema | None = None
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
+    recovery_policy: PublicMcpRecoveryPolicy | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -358,6 +403,7 @@ class PublicMcpManifestResource:
     argument_schema: PublicMcpArgumentSchema | None = None
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
+    recovery_policy: PublicMcpRecoveryPolicy | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -404,6 +450,7 @@ class PublicMcpManifest:
                     "argument_schema": _argument_schema_dict(tool.argument_schema),
                     "route_contract": tool.route_contract.to_dict() if tool.route_contract is not None else None,
                     "response_contract": tool.response_contract.to_dict() if tool.response_contract is not None else None,
+                    "recovery_policy": tool.recovery_policy.to_dict() if tool.recovery_policy is not None else None,
                     "tags": list(tool.tags),
                 }
                 for tool in self.tools
@@ -420,6 +467,7 @@ class PublicMcpManifest:
                     "argument_schema": _argument_schema_dict(resource.argument_schema),
                     "route_contract": resource.route_contract.to_dict() if resource.route_contract is not None else None,
                     "response_contract": resource.response_contract.to_dict() if resource.response_contract is not None else None,
+                    "recovery_policy": resource.recovery_policy.to_dict() if resource.recovery_policy is not None else None,
                     "tags": list(resource.tags),
                 }
                 for resource in self.resources
@@ -430,7 +478,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.8"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.9"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -457,6 +505,7 @@ class PublicMcpFrameworkDispatch:
     request: FrameworkInboundRequest
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
+    recovery_policy: PublicMcpRecoveryPolicy | None = None
 
 
 @dataclass(frozen=True)
@@ -467,6 +516,7 @@ class PublicMcpHttpDispatch:
     request: HttpRouteRequest
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
+    recovery_policy: PublicMcpRecoveryPolicy | None = None
 
 
 @dataclass(frozen=True)
@@ -676,6 +726,7 @@ class PublicMcpHostBridgeScaffold:
             request=request,
             route_contract=self.adapter_scaffold.export_tool_contract(tool_name),
             response_contract=self.adapter_scaffold.export_tool_response_contract(tool_name),
+            recovery_policy=self.adapter_scaffold.export_tool_recovery_policy(tool_name),
         )
 
     def build_framework_resource_dispatch(
@@ -701,6 +752,7 @@ class PublicMcpHostBridgeScaffold:
             request=request,
             route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
             response_contract=self.adapter_scaffold.export_resource_response_contract(resource_name),
+            recovery_policy=self.adapter_scaffold.export_resource_recovery_policy(resource_name),
         )
 
     def build_http_tool_dispatch(
@@ -725,6 +777,7 @@ class PublicMcpHostBridgeScaffold:
             request=request,
             route_contract=self.adapter_scaffold.export_tool_contract(tool_name),
             response_contract=self.adapter_scaffold.export_tool_response_contract(tool_name),
+            recovery_policy=self.adapter_scaffold.export_tool_recovery_policy(tool_name),
         )
 
     def build_http_resource_dispatch(
@@ -749,6 +802,7 @@ class PublicMcpHostBridgeScaffold:
             request=request,
             route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
             response_contract=self.adapter_scaffold.export_resource_response_contract(resource_name),
+            recovery_policy=self.adapter_scaffold.export_resource_recovery_policy(resource_name),
         )
 
     def execute_framework_dispatch(
@@ -929,6 +983,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="framework",
                 phase="binding_lookup",
                 exc=exc,
+                recovery_policy=dispatch.recovery_policy,
             )
         try:
             response = handler(request=dispatch.request, **handler_kwargs)
@@ -940,6 +995,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="framework",
                 phase="handler_execution",
                 exc=exc,
+                recovery_policy=dispatch.recovery_policy,
             )
         response_contract = dispatch.response_contract
         if response_contract is None:
@@ -950,6 +1006,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="framework",
                 phase="response_normalization",
                 exc=ValueError(f"Missing public MCP response contract for framework dispatch: {dispatch.route_name}"),
+                recovery_policy=dispatch.recovery_policy,
             )
         try:
             normalized = _normalize_public_framework_response(
@@ -1067,6 +1124,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="http",
                 phase="response_normalization",
                 exc=ValueError(f"Missing public MCP response contract for http dispatch: {dispatch.route_name}"),
+                recovery_policy=dispatch.recovery_policy,
             )
         try:
             normalized = _normalize_public_http_response(
@@ -1172,6 +1230,7 @@ class PublicMcpToolExport:
     argument_schema: PublicMcpArgumentSchema | None = None
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
+    recovery_policy: PublicMcpRecoveryPolicy | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -1186,6 +1245,7 @@ class PublicMcpResourceExport:
     argument_schema: PublicMcpArgumentSchema | None = None
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
+    recovery_policy: PublicMcpRecoveryPolicy | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -1288,6 +1348,14 @@ class PublicMcpAdapterScaffold:
     def export_resource_response_contract(self, resource_name: str) -> PublicMcpResponseContract:
         descriptor = self._resource_by_name(resource_name)
         return self._response_contract_for_descriptor(descriptor, kind="resource")
+
+    def export_tool_recovery_policy(self, tool_name: str) -> PublicMcpRecoveryPolicy:
+        descriptor = self._tool_by_name(tool_name)
+        return self._recovery_policy_for_descriptor(descriptor, kind="tool")
+
+    def export_resource_recovery_policy(self, resource_name: str) -> PublicMcpRecoveryPolicy:
+        descriptor = self._resource_by_name(resource_name)
+        return self._recovery_policy_for_descriptor(descriptor, kind="resource")
 
     def normalize_tool_arguments(
         self,
@@ -1423,6 +1491,7 @@ class PublicMcpAdapterScaffold:
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
+            recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -1454,6 +1523,7 @@ class PublicMcpAdapterScaffold:
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
+            recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -1504,6 +1574,7 @@ class PublicMcpAdapterScaffold:
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
+            recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -1528,6 +1599,7 @@ class PublicMcpAdapterScaffold:
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
+            recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -1543,6 +1615,7 @@ class PublicMcpAdapterScaffold:
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="tool"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
+            recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -1558,6 +1631,7 @@ class PublicMcpAdapterScaffold:
             argument_schema=self._argument_schema_for_descriptor(descriptor),
             route_contract=self._route_contract_for_descriptor(descriptor, kind="resource"),
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
+            recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -1634,6 +1708,37 @@ class PublicMcpAdapterScaffold:
             body_kind=str(spec.get("body_kind", "object")),
             required_top_level_keys=tuple(str(key) for key in spec.get("required_top_level_keys", ())),
             response_type=getattr(descriptor, "response_type", None),
+        )
+
+    def _recovery_policy_for_descriptor(
+        self,
+        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
+        *,
+        kind: str,
+    ) -> PublicMcpRecoveryPolicy:
+        route_contract = self._route_contract_for_descriptor(descriptor, kind=kind)
+        spec = _RECOVERY_POLICY_BY_ROUTE_FAMILY.get(route_contract.route_family)
+        if spec is None:
+            raise ValueError(f"Missing public MCP recovery policy for route_family: {route_contract.route_family}")
+        return PublicMcpRecoveryPolicy(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            kind=kind,
+            route_family=route_contract.route_family,
+            idempotency_class=str(spec["idempotency_class"]),
+            timeout_retryable=bool(spec["timeout_retryable"]),
+            safe_to_retry_same_request_on_timeout=bool(spec["safe_to_retry_same_request_on_timeout"]),
+            timeout_recommended_action=str(spec["timeout_recommended_action"]),
+            response_timeout_retryable=bool(spec["response_timeout_retryable"]),
+            safe_to_retry_same_request_on_response_timeout=bool(spec["safe_to_retry_same_request_on_response_timeout"]),
+            response_timeout_recommended_action=str(spec["response_timeout_recommended_action"]),
+            request_contract_recommended_action=str(spec.get("request_contract_recommended_action", "fix_request_arguments")),
+            binding_error_recommended_action=str(spec.get("binding_error_recommended_action", "inspect_route_binding")),
+            handler_error_recommended_action=str(spec.get("handler_error_recommended_action", "inspect_handler_failure")),
+            response_contract_recommended_action=str(spec.get("response_contract_recommended_action", "inspect_response_contract")),
+            response_decode_recommended_action=str(spec.get("response_decode_recommended_action", "inspect_response_serialization")),
+            response_error_recommended_action=str(spec.get("response_error_recommended_action", "inspect_response_handling")),
+            unexpected_error_recommended_action=str(spec.get("unexpected_error_recommended_action", "inspect_unexpected_failure")),
         )
 
     def _build_invocation(
@@ -1713,69 +1818,77 @@ def _classify_public_mcp_execution_error(*, phase: str, exc: Exception) -> str:
     return "unexpected_error"
 
 
-def _public_mcp_execution_recovery_hint(*, category: str, phase: str, exc: Exception) -> PublicMcpRecoveryHint:
+def _public_mcp_execution_recovery_hint(*, category: str, phase: str, exc: Exception, recovery_policy: PublicMcpRecoveryPolicy | None = None) -> PublicMcpRecoveryHint:
     transient = isinstance(exc, (TimeoutError, ConnectionError))
     if category == "request_contract_error":
         return PublicMcpRecoveryHint(
             retryable=False,
             safe_to_retry_same_request=False,
             recoverability="caller_fix_required",
-            recommended_action="fix_request_arguments",
+            recommended_action=(recovery_policy.request_contract_recommended_action if recovery_policy is not None else "fix_request_arguments"),
         )
     if category == "binding_error":
         return PublicMcpRecoveryHint(
             retryable=False,
             safe_to_retry_same_request=False,
             recoverability="integration_fix_required",
-            recommended_action="inspect_route_binding",
+            recommended_action=(recovery_policy.binding_error_recommended_action if recovery_policy is not None else "inspect_route_binding"),
         )
     if category == "handler_error":
         if transient:
+            retryable = recovery_policy.timeout_retryable if recovery_policy is not None else True
+            safe_same = recovery_policy.safe_to_retry_same_request_on_timeout if recovery_policy is not None else True
+            action = recovery_policy.timeout_recommended_action if recovery_policy is not None else "retry_same_request"
+            recoverability = "transient_retry_possible" if safe_same else "manual_verification_before_retry"
             return PublicMcpRecoveryHint(
-                retryable=True,
-                safe_to_retry_same_request=True,
-                recoverability="transient_retry_possible",
-                recommended_action="retry_same_request",
+                retryable=retryable,
+                safe_to_retry_same_request=safe_same if retryable else False,
+                recoverability=recoverability if retryable else "handler_investigation_required",
+                recommended_action=action if retryable else (recovery_policy.handler_error_recommended_action if recovery_policy is not None else "inspect_handler_failure"),
             )
         return PublicMcpRecoveryHint(
             retryable=False,
             safe_to_retry_same_request=False,
             recoverability="handler_investigation_required",
-            recommended_action="inspect_handler_failure",
+            recommended_action=(recovery_policy.handler_error_recommended_action if recovery_policy is not None else "inspect_handler_failure"),
         )
     if category == "response_contract_error":
         return PublicMcpRecoveryHint(
             retryable=False,
             safe_to_retry_same_request=False,
             recoverability="integration_fix_required",
-            recommended_action="inspect_response_contract",
+            recommended_action=(recovery_policy.response_contract_recommended_action if recovery_policy is not None else "inspect_response_contract"),
         )
     if category == "response_decode_error":
         return PublicMcpRecoveryHint(
             retryable=False,
             safe_to_retry_same_request=False,
             recoverability="integration_fix_required",
-            recommended_action="inspect_response_serialization",
+            recommended_action=(recovery_policy.response_decode_recommended_action if recovery_policy is not None else "inspect_response_serialization"),
         )
     if category == "response_error":
         if transient:
+            retryable = recovery_policy.response_timeout_retryable if recovery_policy is not None else True
+            safe_same = recovery_policy.safe_to_retry_same_request_on_response_timeout if recovery_policy is not None else True
+            action = recovery_policy.response_timeout_recommended_action if recovery_policy is not None else "retry_same_request"
+            recoverability = "transient_retry_possible" if safe_same else "manual_verification_before_retry"
             return PublicMcpRecoveryHint(
-                retryable=True,
-                safe_to_retry_same_request=True,
-                recoverability="transient_retry_possible",
-                recommended_action="retry_same_request",
+                retryable=retryable,
+                safe_to_retry_same_request=safe_same if retryable else False,
+                recoverability=recoverability if retryable else "integration_fix_required",
+                recommended_action=action if retryable else (recovery_policy.response_error_recommended_action if recovery_policy is not None else "inspect_response_handling"),
             )
         return PublicMcpRecoveryHint(
             retryable=False,
             safe_to_retry_same_request=False,
             recoverability="integration_fix_required",
-            recommended_action="inspect_response_handling",
+            recommended_action=(recovery_policy.response_error_recommended_action if recovery_policy is not None else "inspect_response_handling"),
         )
     return PublicMcpRecoveryHint(
-        retryable=transient,
-        safe_to_retry_same_request=transient,
-        recoverability="unknown_investigation_required" if not transient else "transient_retry_possible",
-        recommended_action="inspect_unexpected_failure" if not transient else "retry_same_request",
+        retryable=transient and (recovery_policy.timeout_retryable if recovery_policy is not None else True),
+        safe_to_retry_same_request=transient and (recovery_policy.safe_to_retry_same_request_on_timeout if recovery_policy is not None else True),
+        recoverability=("manual_verification_before_retry" if transient and recovery_policy is not None and not recovery_policy.safe_to_retry_same_request_on_timeout else ("transient_retry_possible" if transient else "unknown_investigation_required")),
+        recommended_action=((recovery_policy.timeout_recommended_action if recovery_policy is not None else "retry_same_request") if transient else (recovery_policy.unexpected_error_recommended_action if recovery_policy is not None else "inspect_unexpected_failure")),
     )
 
 
@@ -1787,6 +1900,7 @@ def _public_mcp_execution_report_error(
     transport_kind: str,
     phase: str,
     exc: Exception,
+    recovery_policy: PublicMcpRecoveryPolicy | None = None,
 ) -> PublicMcpExecutionReport:
     category = _classify_public_mcp_execution_error(phase=phase, exc=exc)
     return PublicMcpExecutionReport(
@@ -1800,7 +1914,7 @@ def _public_mcp_execution_report_error(
             phase=phase,
             message=str(exc),
             exception_type=type(exc).__name__,
-            recovery_hint=_public_mcp_execution_recovery_hint(category=category, phase=phase, exc=exc),
+            recovery_hint=_public_mcp_execution_recovery_hint(category=category, phase=phase, exc=exc, recovery_policy=recovery_policy),
         ),
     )
 
@@ -2398,6 +2512,136 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
 }
 
 
+_RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
+    "run-launch": {
+        "idempotency_class": "launch-non-idempotent",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_launch_outcome_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_launch_outcome_before_retry",
+    },
+    "workspace-shell-launch": {
+        "idempotency_class": "launch-non-idempotent",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_launch_outcome_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_launch_outcome_before_retry",
+    },
+    "workspace-shell-commit": {
+        "idempotency_class": "state-mutation",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_workspace_state_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_workspace_state_before_retry",
+    },
+    "workspace-shell-checkout": {
+        "idempotency_class": "state-mutation",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_workspace_state_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_workspace_state_before_retry",
+    },
+    "run-control": {
+        "idempotency_class": "state-mutation",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_run_state_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_run_state_before_retry",
+    },
+    "run-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "workspace-run-list": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "run-trace": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "run-artifacts": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "artifact-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "run-actions": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "activity-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "workspace-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "workspace-list": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+}
+
+
 _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "launch_run": {
         "response_shape": "accepted",
@@ -2439,6 +2683,18 @@ def build_public_mcp_response_contracts() -> tuple[PublicMcpResponseContract, ..
     for resource in build_public_mcp_resources():
         contracts.append(adapter.export_resource_response_contract(resource.name))
     return tuple(contracts)
+
+
+def build_public_mcp_recovery_policies() -> tuple[PublicMcpRecoveryPolicy, ...]:
+    """Return exported recovery policies for the curated public MCP surface."""
+
+    adapter = build_public_mcp_adapter_scaffold()
+    policies: list[PublicMcpRecoveryPolicy] = []
+    for tool in build_public_mcp_tools():
+        policies.append(adapter.export_tool_recovery_policy(tool.name))
+    for resource in build_public_mcp_resources():
+        policies.append(adapter.export_resource_recovery_policy(resource.name))
+    return tuple(policies)
 
 
 _TOOL_SPECS: tuple[dict[str, object], ...] = (
@@ -2674,6 +2930,7 @@ __all__ = [
     "PublicMcpRouteContract",
     "PublicMcpNormalizedArguments",
     "PublicMcpResponseContract",
+    "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
     "PublicMcpRecoveryHint",
     "PublicMcpExecutionError",
@@ -2698,6 +2955,7 @@ __all__ = [
     "build_public_mcp_argument_schemas",
     "build_public_mcp_route_contracts",
     "build_public_mcp_response_contracts",
+    "build_public_mcp_recovery_policies",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_compatibility_surface",
     "build_public_mcp_adapter_scaffold",

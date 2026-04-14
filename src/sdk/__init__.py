@@ -38,6 +38,7 @@ from src.sdk.integration import (
     PublicMcpRouteContract,
     PublicMcpNormalizedArguments,
     PublicMcpResponseContract,
+    PublicMcpRecoveryPolicy,
     PublicMcpNormalizedResponse,
     PublicMcpRecoveryHint,
     PublicMcpExecutionError,
@@ -62,6 +63,7 @@ from src.sdk.integration import (
     build_public_mcp_argument_schemas,
     build_public_mcp_route_contracts,
     build_public_mcp_response_contracts,
+    build_public_mcp_recovery_policies,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
     build_public_mcp_adapter_scaffold,
@@ -83,7 +85,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.12"
+PUBLIC_SDK_SURFACE_VERSION = "1.13"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -102,6 +104,7 @@ __all__ = [
     "PublicMcpRouteContract",
     "PublicMcpNormalizedArguments",
     "PublicMcpResponseContract",
+    "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
     "PublicMcpRecoveryHint",
     "PublicMcpExecutionError",
@@ -158,6 +161,7 @@ __all__ = [
     "build_public_mcp_argument_schemas",
     "build_public_mcp_route_contracts",
     "build_public_mcp_response_contracts",
+    "build_public_mcp_recovery_policies",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",

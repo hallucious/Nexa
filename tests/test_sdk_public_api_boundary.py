@@ -54,7 +54,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.12"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.13"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -114,8 +114,8 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
 
-    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.4"
-    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.4"
+    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.5"
+    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.5"
     assert sdk.PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
@@ -139,7 +139,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.8"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.9"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
@@ -158,9 +158,9 @@ def test_sdk_root_exposes_public_mcp_compatibility_policy() -> None:
     policy = sdk.build_public_mcp_compatibility_policy()
 
     assert isinstance(policy, sdk.PublicMcpCompatibilityPolicy)
-    assert policy.supported_manifest_versions == ("1.4",)
-    assert policy.supported_schema_versions == ("1.4",)
-    policy.assert_supported(manifest_version="1.4", schema_version="1.4")
+    assert policy.supported_manifest_versions == ("1.5",)
+    assert policy.supported_schema_versions == ("1.5",)
+    policy.assert_supported(manifest_version="1.5", schema_version="1.5")
 
 
 def test_sdk_root_exposes_public_mcp_route_contracts() -> None:
@@ -220,3 +220,12 @@ def test_sdk_root_exposes_public_mcp_execution_report_types() -> None:
     assert report.error.category == "request_contract_error"
     assert report.retryable is False
     assert report.recommended_action == "fix_request_arguments"
+
+
+def test_sdk_root_exposes_public_mcp_recovery_policies() -> None:
+    policies = sdk.build_public_mcp_recovery_policies()
+    indexed = {policy.route_name: policy for policy in policies}
+
+    assert isinstance(indexed["launch_run"], sdk.PublicMcpRecoveryPolicy)
+    assert indexed["launch_run"].timeout_recommended_action == "inspect_launch_outcome_before_retry"
+    assert indexed["get_run_status"].safe_to_retry_same_request_on_timeout is True
