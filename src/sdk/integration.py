@@ -20,7 +20,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.3"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.4"
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,7 @@ class PublicMcpToolDescriptor:
     description: str
     request_type: PublicTypeRef | None = None
     response_type: PublicTypeRef | None = None
+    argument_schema: PublicMcpArgumentSchema | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -50,6 +51,38 @@ class PublicMcpResourceDescriptor:
     description: str
     response_type: PublicTypeRef | None = None
     tags: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PublicMcpArgumentField:
+    name: str
+    location: str
+    value_kind: str
+    required: bool = False
+    description: str = ""
+    enum_values: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PublicMcpArgumentSchema:
+    name: str
+    route_name: str
+    path_fields: tuple[PublicMcpArgumentField, ...] = ()
+    query_fields: tuple[PublicMcpArgumentField, ...] = ()
+    body_fields: tuple[PublicMcpArgumentField, ...] = ()
+    allow_additional_query_params: bool = False
+    allow_additional_body_fields: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "path_fields": [_argument_field_dict(field) for field in self.path_fields],
+            "query_fields": [_argument_field_dict(field) for field in self.query_fields],
+            "body_fields": [_argument_field_dict(field) for field in self.body_fields],
+            "allow_additional_query_params": self.allow_additional_query_params,
+            "allow_additional_body_fields": self.allow_additional_body_fields,
+        }
 
 
 @dataclass(frozen=True)
@@ -71,6 +104,7 @@ class PublicMcpManifestTool:
     path: str
     request_type: PublicTypeRef | None = None
     response_type: PublicTypeRef | None = None
+    argument_schema: PublicMcpArgumentSchema | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -83,6 +117,7 @@ class PublicMcpManifestResource:
     path: str
     uri_template: str
     response_type: PublicTypeRef | None = None
+    argument_schema: PublicMcpArgumentSchema | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -122,6 +157,7 @@ class PublicMcpManifest:
                     "path": tool.path,
                     "request_type": _type_ref_dict(tool.request_type),
                     "response_type": _type_ref_dict(tool.response_type),
+                    "argument_schema": _argument_schema_dict(tool.argument_schema),
                     "tags": list(tool.tags),
                 }
                 for tool in self.tools
@@ -135,6 +171,7 @@ class PublicMcpManifest:
                     "path": resource.path,
                     "uri_template": resource.uri_template,
                     "response_type": _type_ref_dict(resource.response_type),
+                    "argument_schema": _argument_schema_dict(resource.argument_schema),
                     "tags": list(resource.tags),
                 }
                 for resource in self.resources
@@ -145,7 +182,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.1"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.2"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -510,6 +547,7 @@ class PublicMcpToolExport:
     invocation: PublicMcpInvocation
     request_type: PublicTypeRef | None = None
     response_type: PublicTypeRef | None = None
+    argument_schema: PublicMcpArgumentSchema | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -521,6 +559,7 @@ class PublicMcpResourceExport:
     uri_template: str
     invocation: PublicMcpInvocation
     response_type: PublicTypeRef | None = None
+    argument_schema: PublicMcpArgumentSchema | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -571,6 +610,14 @@ class PublicMcpAdapterScaffold:
             resources=tuple(self._manifest_resource(resource) for resource in self.surface.resources),
         )
 
+    def export_tool_schema(self, tool_name: str) -> PublicMcpArgumentSchema | None:
+        descriptor = self._tool_by_name(tool_name)
+        return self._argument_schema_for_descriptor(descriptor)
+
+    def export_resource_schema(self, resource_name: str) -> PublicMcpArgumentSchema | None:
+        descriptor = self._resource_by_name(resource_name)
+        return self._argument_schema_for_descriptor(descriptor)
+
     def export_tool(
         self,
         tool_name: str,
@@ -596,6 +643,7 @@ class PublicMcpAdapterScaffold:
             invocation=invocation,
             request_type=descriptor.request_type,
             response_type=descriptor.response_type,
+            argument_schema=self._argument_schema_for_descriptor(descriptor),
             tags=descriptor.tags,
         )
 
@@ -624,6 +672,7 @@ class PublicMcpAdapterScaffold:
             uri_template=uri_template,
             invocation=invocation,
             response_type=descriptor.response_type,
+            argument_schema=self._argument_schema_for_descriptor(descriptor),
             tags=descriptor.tags,
         )
 
@@ -638,6 +687,7 @@ class PublicMcpAdapterScaffold:
             path_template=descriptor.path,
             arguments=arguments,
             kind="tool",
+            schema=self._argument_schema_for_descriptor(descriptor),
         )
         return self.export_tool(
             tool_name,
@@ -657,6 +707,7 @@ class PublicMcpAdapterScaffold:
             path_template=descriptor.path,
             arguments=arguments,
             kind="resource",
+            schema=self._argument_schema_for_descriptor(descriptor),
         )
         return self.export_resource(
             resource_name,
@@ -683,6 +734,7 @@ class PublicMcpAdapterScaffold:
             invocation=invocation,
             request_type=descriptor.request_type,
             response_type=descriptor.response_type,
+            argument_schema=self._argument_schema_for_descriptor(descriptor),
             tags=descriptor.tags,
         )
 
@@ -704,6 +756,7 @@ class PublicMcpAdapterScaffold:
             uri_template=self._resource_uri_template(descriptor.path),
             invocation=invocation,
             response_type=descriptor.response_type,
+            argument_schema=self._argument_schema_for_descriptor(descriptor),
             tags=descriptor.tags,
         )
 
@@ -716,6 +769,7 @@ class PublicMcpAdapterScaffold:
             path=descriptor.path,
             request_type=descriptor.request_type,
             response_type=descriptor.response_type,
+            argument_schema=self._argument_schema_for_descriptor(descriptor),
             tags=descriptor.tags,
         )
 
@@ -728,6 +782,7 @@ class PublicMcpAdapterScaffold:
             path=descriptor.path,
             uri_template=self._resource_uri_template(descriptor.path),
             response_type=descriptor.response_type,
+            argument_schema=self._argument_schema_for_descriptor(descriptor),
             tags=descriptor.tags,
         )
 
@@ -742,6 +797,23 @@ class PublicMcpAdapterScaffold:
             if resource.name == resource_name:
                 return resource
         raise ValueError(f"Unknown MCP resource export name: {resource_name}")
+
+    def _argument_schema_for_descriptor(
+        self,
+        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
+    ) -> PublicMcpArgumentSchema | None:
+        spec = _ARGUMENT_SCHEMA_BY_ROUTE_NAME.get(descriptor.route_name)
+        if spec is None:
+            return None
+        return PublicMcpArgumentSchema(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            path_fields=tuple(spec.get("path_fields", ())),
+            query_fields=tuple(spec.get("query_fields", ())),
+            body_fields=tuple(spec.get("body_fields", ())),
+            allow_additional_query_params=bool(spec.get("allow_additional_query_params", False)),
+            allow_additional_body_fields=bool(spec.get("allow_additional_body_fields", False)),
+        )
 
     def _build_invocation(
         self,
@@ -786,6 +858,23 @@ def _type_ref_dict(type_ref: PublicTypeRef | None) -> dict[str, str] | None:
     return {"module": type_ref.module, "name": type_ref.name}
 
 
+def _argument_field_dict(field: PublicMcpArgumentField) -> dict[str, Any]:
+    return {
+        "name": field.name,
+        "location": field.location,
+        "value_kind": field.value_kind,
+        "required": field.required,
+        "description": field.description,
+        "enum_values": list(field.enum_values),
+    }
+
+
+def _argument_schema_dict(schema: PublicMcpArgumentSchema | None) -> dict[str, Any] | None:
+    if schema is None:
+        return None
+    return schema.to_dict()
+
+
 def _normalize_string_mapping(values: Mapping[str, object] | None) -> Mapping[str, str]:
     if not values:
         return {}
@@ -798,6 +887,7 @@ def _normalize_public_mcp_arguments(
     path_template: str,
     arguments: Mapping[str, Any] | None,
     kind: str,
+    schema: PublicMcpArgumentSchema | None = None,
 ) -> dict[str, Any]:
     raw_arguments = dict(arguments or {})
     path_keys = set(_path_template_keys(path_template))
@@ -842,11 +932,69 @@ def _normalize_public_mcp_arguments(
                 )
             json_body = None
 
-    return {
+    normalized = {
         "path_params": _normalize_string_mapping(path_params),
         "query_params": _normalize_string_mapping(query_params),
         "json_body": json_body,
     }
+    if schema is not None:
+        _validate_public_mcp_arguments_against_schema(schema, normalized)
+    return normalized
+
+
+def _validate_public_mcp_arguments_against_schema(
+    schema: PublicMcpArgumentSchema,
+    normalized: Mapping[str, Any],
+) -> None:
+    path_params = dict(normalized.get("path_params") or {})
+    query_params = dict(normalized.get("query_params") or {})
+    body = normalized.get("json_body")
+    body_mapping = dict(body) if isinstance(body, Mapping) else {}
+
+    _validate_required_field_presence(path_params, schema.path_fields, location="path")
+    _validate_required_field_presence(query_params, schema.query_fields, location="query")
+    _validate_required_field_presence(body_mapping, schema.body_fields, location="body")
+    _validate_unknown_field_names(
+        query_params,
+        schema.query_fields,
+        allow_additional=schema.allow_additional_query_params,
+        location="query",
+        route_name=schema.route_name,
+    )
+    _validate_unknown_field_names(
+        body_mapping,
+        schema.body_fields,
+        allow_additional=schema.allow_additional_body_fields,
+        location="body",
+        route_name=schema.route_name,
+    )
+
+
+def _validate_required_field_presence(
+    values: Mapping[str, Any],
+    fields: tuple[PublicMcpArgumentField, ...],
+    *,
+    location: str,
+) -> None:
+    missing = [field.name for field in fields if field.required and field.name not in values]
+    if missing:
+        raise ValueError(f"Missing required {location} field(s) for public MCP export: {', '.join(sorted(missing))}")
+
+
+def _validate_unknown_field_names(
+    values: Mapping[str, Any],
+    fields: tuple[PublicMcpArgumentField, ...],
+    *,
+    allow_additional: bool,
+    location: str,
+    route_name: str,
+) -> None:
+    if allow_additional:
+        return
+    allowed = {field.name for field in fields}
+    extras = sorted(set(values) - allowed)
+    if extras:
+        raise ValueError(f"Unexpected {location} field(s) for public route {route_name}: {', '.join(extras)}")
 
 
 def _coerce_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
@@ -1039,6 +1187,113 @@ def _framework_handler_name(route_name: str) -> str:
         return _FRAMEWORK_HANDLER_BY_ROUTE_NAME[route_name]
     except KeyError as exc:
         raise ValueError(f"Unknown framework handler mapping for public route_name: {route_name}") from exc
+
+
+def _schema_field(
+    name: str,
+    location: str,
+    value_kind: str,
+    *,
+    required: bool = False,
+    description: str = "",
+    enum_values: tuple[str, ...] = (),
+) -> PublicMcpArgumentField:
+    return PublicMcpArgumentField(
+        name=name,
+        location=location,
+        value_kind=value_kind,
+        required=required,
+        description=description,
+        enum_values=enum_values,
+    )
+
+
+_ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
+    "launch_run": {
+        "body_fields": (
+            _schema_field("workspace_id", "body", "string", required=True, description="Workspace to launch against."),
+            _schema_field("execution_target", "body", "object", required=True, description="Target artifact identity and role."),
+            _schema_field("input_payload", "body", "any", description="Optional launch input payload."),
+            _schema_field("launch_options", "body", "object", description="Optional launch mode and priority options."),
+            _schema_field("client_context", "body", "object", description="Optional client/source correlation metadata."),
+        ),
+    },
+    "launch_workspace_shell": {
+        "path_fields": (
+            _schema_field("workspace_id", "path", "string", required=True, description="Workspace shell owner."),
+        ),
+        "body_fields": (
+            _schema_field("input_payload", "body", "object", description="Optional shell launch input payload."),
+            _schema_field("launch_options", "body", "object", description="Optional shell launch options."),
+            _schema_field("client_context", "body", "object", description="Optional client/source metadata."),
+            _schema_field("app_language", "body", "string", description="Optional compatibility app language hint."),
+            _schema_field("execution_target", "body", "object", description="Optional compatibility execution target hint."),
+        ),
+    },
+    "commit_workspace_shell": {
+        "path_fields": (
+            _schema_field("workspace_id", "path", "string", required=True, description="Workspace whose shell is being committed."),
+        ),
+        "body_fields": (
+            _schema_field("commit_id", "body", "string", required=True, description="New commit snapshot identifier."),
+            _schema_field("parent_commit_id", "body", "string", description="Optional parent commit identifier."),
+        ),
+    },
+    "checkout_workspace_shell": {
+        "path_fields": (
+            _schema_field("workspace_id", "path", "string", required=True, description="Workspace whose shell is being checked out."),
+        ),
+        "body_fields": (
+            _schema_field("working_save_id", "body", "string", description="Optional reopened working_save identifier."),
+        ),
+    },
+    "retry_run": {
+        "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run to retry."),),
+        "allow_additional_query_params": True,
+    },
+    "force_reset_run": {
+        "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run to force-reset."),),
+        "allow_additional_query_params": True,
+    },
+    "mark_run_reviewed": {
+        "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run to mark reviewed."),),
+        "allow_additional_query_params": True,
+    },
+    "get_run_status": {
+        "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run whose status should be read."),),
+        "query_fields": (
+            _schema_field("include", "query", "string", description="Optional response expansion hint."),
+            _schema_field("lang", "query", "string", description="Optional language hint."),
+        ),
+    },
+    "get_run_result": {
+        "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run whose result should be read."),),
+        "allow_additional_query_params": True,
+    },
+    "list_workspace_runs": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose runs should be listed."),),
+        "allow_additional_query_params": True,
+    },
+    "get_run_trace": {
+        "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run whose trace should be read."),),
+        "allow_additional_query_params": True,
+    },
+    "list_run_artifacts": {
+        "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run whose artifacts should be listed."),),
+        "allow_additional_query_params": True,
+    },
+    "get_artifact_detail": {
+        "path_fields": (_schema_field("artifact_id", "path", "string", required=True, description="Artifact to read."),),
+        "allow_additional_query_params": True,
+    },
+    "get_run_actions": {
+        "path_fields": (_schema_field("run_id", "path", "string", required=True, description="Run whose actions should be listed."),),
+        "allow_additional_query_params": True,
+    },
+    "get_recent_activity": {
+        "allow_additional_query_params": True,
+    },
+}
 
 
 _TOOL_SPECS: tuple[dict[str, object], ...] = (

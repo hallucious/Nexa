@@ -52,7 +52,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.5"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.6"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -115,6 +115,17 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.0"
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
+    launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
+    assert launch_manifest.argument_schema is not None
+    assert launch_manifest.argument_schema.body_fields[0].name == "workspace_id"
+
+
+def test_sdk_root_exposes_public_mcp_argument_schema_types() -> None:
+    schema = sdk.build_public_mcp_adapter_scaffold().export_tool_schema("launch_run")
+
+    assert isinstance(schema, sdk.PublicMcpArgumentSchema)
+    assert isinstance(schema.body_fields[0], sdk.PublicMcpArgumentField)
+    assert schema.body_fields[0].name == "workspace_id"
 
 
 def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
@@ -124,7 +135,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.1"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.2"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"

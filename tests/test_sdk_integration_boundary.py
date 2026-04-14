@@ -9,6 +9,7 @@ from src.sdk.integration import (
     PUBLIC_MCP_MANIFEST_VERSION,
     PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
     PublicMcpAdapterScaffold,
+    PublicMcpArgumentSchema,
     PublicMcpCompatibilitySurface,
     PublicMcpFrameworkDispatch,
     PublicMcpHostBridgeScaffold,
@@ -26,7 +27,7 @@ from src.sdk.integration import (
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.5"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.6"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -60,9 +61,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.3"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.4"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.3"
+    assert surface.version == "1.4"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -131,10 +132,30 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert direct_manifest.to_dict() == manifest_dict
 
 
+def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
+    scaffold = build_public_mcp_adapter_scaffold(base_url="https://api.nexa.test")
+
+    launch_schema = scaffold.export_tool_schema("launch_run")
+    status_schema = scaffold.export_resource_schema("get_run_status")
+    manifest = scaffold.export_manifest()
+
+    assert isinstance(launch_schema, PublicMcpArgumentSchema)
+    assert [field.name for field in launch_schema.body_fields if field.required] == ["workspace_id", "execution_target"]
+    assert status_schema is not None
+    assert [field.name for field in status_schema.path_fields] == ["run_id"]
+    assert [field.name for field in status_schema.query_fields] == ["include", "lang"]
+    launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
+    assert launch_manifest.argument_schema is not None
+    assert launch_manifest.argument_schema.to_dict()["body_fields"][0]["name"] == "workspace_id"
+    manifest_dict = manifest.to_dict()
+    manifest_tool = next(tool for tool in manifest_dict["tools"] if tool["route_name"] == "launch_run")
+    assert manifest_tool["argument_schema"]["body_fields"][1]["name"] == "execution_target"
+
+
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.1"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.2"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -238,6 +259,48 @@ def test_build_public_mcp_host_bridge_scaffold_builds_dispatch_plans() -> None:
     assert http_dispatch.route_name == "retry_run"
     assert http_dispatch.request.path == "/api/runs/run-1/retry"
     assert http_dispatch.request.query_params == {"reason": "host"}
+
+
+def test_build_public_mcp_host_bridge_scaffold_rejects_missing_required_body_fields() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    try:
+        bridge.build_framework_tool_request_from_arguments(
+            "launch_run",
+            {"workspace_id": "ws-1"},
+        )
+    except ValueError as exc:
+        assert "Missing required body field(s)" in str(exc)
+    else:
+        raise AssertionError("Expected required body field validation")
+
+
+def test_build_public_mcp_host_bridge_scaffold_rejects_unexpected_body_fields() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    try:
+        bridge.build_framework_tool_request_from_arguments(
+            "launch_workspace_shell",
+            {"workspace_id": "ws-1", "unexpected": True},
+        )
+    except ValueError as exc:
+        assert "Unexpected body field(s)" in str(exc)
+    else:
+        raise AssertionError("Expected unexpected body field validation")
+
+
+def test_build_public_mcp_host_bridge_scaffold_rejects_unexpected_query_fields() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    try:
+        bridge.build_http_resource_request_from_arguments(
+            "get_run_status",
+            {"run_id": "run-1", "include": "summary", "unexpected": "boom"},
+        )
+    except ValueError as exc:
+        assert "Unexpected query field(s)" in str(exc)
+    else:
+        raise AssertionError("Expected unexpected query field validation")
 
 
 def test_build_public_mcp_host_bridge_scaffold_rejects_conflicting_argument_sources() -> None:

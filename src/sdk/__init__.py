@@ -31,6 +31,8 @@ from src.sdk.integration import (
     MCP_ADAPTER_SCAFFOLD_VERSION,
     MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
     PUBLIC_MCP_MANIFEST_VERSION,
+    PublicMcpArgumentField,
+    PublicMcpArgumentSchema,
     PublicMcpCompatibilitySurface,
     PublicMcpManifestTool,
     PublicMcpManifestResource,
@@ -67,7 +69,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.5"
+PUBLIC_SDK_SURFACE_VERSION = "1.6"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -79,6 +81,8 @@ __all__ = [
     "MCP_ADAPTER_SCAFFOLD_VERSION",
     "MCP_HOST_BRIDGE_SCAFFOLD_VERSION",
     "PUBLIC_MCP_MANIFEST_VERSION",
+    "PublicMcpArgumentField",
+    "PublicMcpArgumentSchema",
     "artifacts",
     "server",
     "integration",
@@ -106,6 +110,8 @@ __all__ = [
     "ProductWorkspaceRunListResponse",
     "PublicMcpToolDescriptor",
     "PublicMcpResourceDescriptor",
+    "PublicMcpArgumentField",
+    "PublicMcpArgumentSchema",
     "PublicMcpCompatibilitySurface",
     "PublicMcpManifestTool",
     "PublicMcpManifestResource",
