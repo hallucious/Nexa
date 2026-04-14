@@ -54,6 +54,7 @@ class ProductRunActionLogResponse:
     workspace_title: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
+    source_artifact: Optional[dict[str, object]] = None
 
     def __post_init__(self) -> None:
         if not self.run_id:
@@ -74,6 +75,7 @@ class ProductRunActionLogRejectedResponse:
     workspace_title: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
+    source_artifact: Optional[dict[str, object]] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_FAILURE_FAMILIES:

@@ -89,6 +89,9 @@ def test_run_control_service_retry_requeues_and_increments_attempt() -> None:
     assert outcome.accepted.worker_attempt_number == 2
     assert outcome.accepted.actions is not None
     assert outcome.accepted.actions.can_retry is True
+    assert outcome.accepted.source_artifact is not None
+    assert outcome.accepted.source_artifact.storage_role == "commit_snapshot"
+    assert outcome.accepted.source_artifact.canonical_ref == "snap-001"
     assert written["queue_job_id"] == "job-002"
     assert written["worker_attempt_number"] == 2
     assert len(written["action_log"]) == 1
@@ -157,6 +160,8 @@ def test_run_control_route_surface_round_trip() -> None:
     )
     assert response.status_code == 200
     assert response.body["queue_job_id"] == "job-002"
+    assert response.body["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert response.body["source_artifact"]["canonical_ref"] == "snap-001"
     assert stored["queue_job_id"] == "job-002"
 
 

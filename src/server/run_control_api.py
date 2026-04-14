@@ -12,7 +12,7 @@ from src.server.run_control_models import (
     ProductRunControlRejectedResponse,
     RunControlOutcome,
 )
-from src.server.run_read_models import ProductRunControlActionsView, ProductRunRecoveryView
+from src.server.run_read_models import ProductRunControlActionsView, ProductRunRecoveryView, ProductSourceArtifactView
 from src.server.run_recovery_projection import recovery_projection_from_run_row
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
 from src.server.run_action_log_api import latest_action_from_run_record
@@ -56,6 +56,46 @@ def _recovery_view_from_run_row(run_record_row: Mapping[str, Any]) -> ProductRun
 
 def _is_worker_infra_failure(run_record_row: Mapping[str, Any]) -> bool:
     return str(run_record_row.get("latest_error_family") or "").strip() == "worker_infrastructure_failure"
+
+
+def _source_artifact_view_from_run_row(run_record_row: Mapping[str, Any] | None) -> ProductSourceArtifactView | None:
+    if not isinstance(run_record_row, Mapping):
+        return None
+    metrics = run_record_row.get("metrics")
+    source_payload = metrics.get("source_artifact") if isinstance(metrics, Mapping) else None
+    storage_role = None
+    canonical_ref = None
+    working_save_id = None
+    commit_id = None
+    source_working_save_id = None
+    if isinstance(source_payload, Mapping):
+        storage_role = str(source_payload.get("storage_role") or "").strip() or None
+        canonical_ref = str(source_payload.get("canonical_ref") or "").strip() or None
+        working_save_id = str(source_payload.get("working_save_id") or "").strip() or None
+        commit_id = str(source_payload.get("commit_id") or "").strip() or None
+        source_working_save_id = str(source_payload.get("source_working_save_id") or "").strip() or None
+    target_type = str(run_record_row.get("execution_target_type") or "").strip() or None
+    target_ref = str(run_record_row.get("execution_target_ref") or "").strip() or None
+    if storage_role is None and target_type in {"working_save", "commit_snapshot"}:
+        storage_role = target_type
+    if canonical_ref is None and target_ref:
+        canonical_ref = target_ref
+    if working_save_id is None and storage_role == "working_save" and target_ref:
+        working_save_id = target_ref
+    if commit_id is None and storage_role == "commit_snapshot" and target_ref:
+        commit_id = target_ref
+    row_source_ws = str(run_record_row.get("source_working_save_id") or "").strip() or None
+    if source_working_save_id is None and row_source_ws:
+        source_working_save_id = row_source_ws
+    if storage_role not in {"working_save", "commit_snapshot"} or not canonical_ref:
+        return None
+    return ProductSourceArtifactView(
+        storage_role=storage_role,
+        canonical_ref=canonical_ref,
+        working_save_id=working_save_id,
+        commit_id=commit_id,
+        source_working_save_id=source_working_save_id,
+    )
 
 
 def _append_action_log(updated_row: dict[str, Any], *, action: str, actor_user_id: str, timestamp: str | None, before_row: Mapping[str, Any], after_row: Mapping[str, Any]) -> None:
@@ -255,5 +295,6 @@ class RunControlService:
                 message=message,
                 provider_continuity=_provider_continuity_summary_for_workspace(run_context.workspace_context.workspace_id, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows),
                 activity_continuity=_activity_continuity_summary_for_workspace(run_context.workspace_context.workspace_id, user_id=request_auth.requested_by_user_ref or "", recent_run_rows=recent_run_rows, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, onboarding_rows=onboarding_rows),
+                source_artifact=_source_artifact_view_from_run_row(updated_row),
             )
         )

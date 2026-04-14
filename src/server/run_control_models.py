@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
-from src.server.run_read_models import ProductRunControlActionsView, ProductRunRecoveryView
+from src.server.run_read_models import ProductRunControlActionsView, ProductRunRecoveryView, ProductSourceArtifactView
 from src.server.workspace_onboarding_models import ProductActivityContinuitySummary, ProductProviderContinuitySummary
 
 RunControlFailureFamily = Literal["product_write_failure", "run_not_found"]
@@ -26,6 +26,7 @@ class ProductRunControlAcceptedResponse:
     message: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
+    source_artifact: Optional[ProductSourceArtifactView] = None
 
     def __post_init__(self) -> None:
         if not self.run_id:
@@ -51,6 +52,7 @@ class ProductRunControlRejectedResponse:
     workspace_id: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
+    source_artifact: Optional[ProductSourceArtifactView] = None
 
     def __post_init__(self) -> None:
         if self.failure_family not in _ALLOWED_FAILURE_FAMILIES:

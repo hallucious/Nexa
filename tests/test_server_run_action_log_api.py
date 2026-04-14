@@ -77,6 +77,9 @@ def test_run_action_log_read_service_returns_events() -> None:
     assert outcome.response is not None
     assert outcome.response.returned_count == 1
     assert outcome.response.actions[0].action == "retry"
+    assert outcome.response.source_artifact is not None
+    assert outcome.response.source_artifact["storage_role"] == "commit_snapshot"
+    assert outcome.response.source_artifact["canonical_ref"] == "snap-001"
 
 
 def test_run_http_route_surface_returns_action_log() -> None:
@@ -95,3 +98,5 @@ def test_run_http_route_surface_returns_action_log() -> None:
     assert response.status_code == 200
     assert response.body["returned_count"] == 1
     assert response.body["actions"][0]["event_id"] == "act-001"
+    assert response.body["source_artifact"]["storage_role"] == "commit_snapshot"
+    assert response.body["source_artifact"]["canonical_ref"] == "snap-001"
