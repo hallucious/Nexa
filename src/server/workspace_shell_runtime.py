@@ -92,6 +92,30 @@ def _execution_target_for(model: Any) -> dict[str, Any] | None:
     return None
 
 
+def _workspace_shell_action_availability(model: Any) -> dict[str, dict[str, Any]]:
+    storage_role = _storage_role(model)
+    if isinstance(model, WorkingSaveModel):
+        return {
+            "draft_write": {"allowed": True, "reason_code": None},
+            "commit": {"allowed": True, "reason_code": None},
+            "checkout": {"allowed": False, "reason_code": "workspace_shell.checkout_requires_commit_snapshot"},
+            "launch": {"allowed": True, "reason_code": None},
+        }
+    if isinstance(model, CommitSnapshotModel):
+        return {
+            "draft_write": {"allowed": False, "reason_code": "workspace_shell.draft_requires_working_save"},
+            "commit": {"allowed": False, "reason_code": "workspace_shell.already_commit_snapshot"},
+            "checkout": {"allowed": True, "reason_code": None},
+            "launch": {"allowed": True, "reason_code": None},
+        }
+    return {
+        "draft_write": {"allowed": False, "reason_code": f"workspace_shell.unsupported_source_role:{storage_role}"},
+        "commit": {"allowed": False, "reason_code": f"workspace_shell.unsupported_source_role:{storage_role}"},
+        "checkout": {"allowed": False, "reason_code": f"workspace_shell.unsupported_source_role:{storage_role}"},
+        "launch": {"allowed": False, "reason_code": f"workspace_shell.unsupported_source_role:{storage_role}"},
+    }
+
+
 def _last_run_id(recent_run_rows: Sequence[Mapping[str, Any]], workspace_id: str) -> str | None:
     for row in recent_run_rows:
         if str(row.get("workspace_id") or "").strip() == workspace_id:
@@ -1287,6 +1311,7 @@ def build_workspace_shell_runtime_payload(
         "workspace_title": workspace_title,
         "app_language": app_language,
         "storage_role": _storage_role(model),
+        "action_availability": _workspace_shell_action_availability(model),
         "click_test_ready": launch_request_template is not None,
         "working_save_id": getattr(getattr(model, "meta", None), "working_save_id", None),
         "commit_id": getattr(getattr(model, "meta", None), "commit_id", None),

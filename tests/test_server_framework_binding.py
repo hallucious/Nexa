@@ -823,3 +823,33 @@ def test_framework_binding_launch_workspace_shell_round_trip() -> None:
     assert parsed['execution_target']['target_type'] == 'working_save'
     assert parsed['execution_target']['target_ref'] == 'ws-framework-launch'
     assert parsed['launch_context']['action'] == 'launch_workspace_shell'
+
+
+def test_framework_binding_workspace_shell_draft_rejects_commit_snapshot_source() -> None:
+    artifact_store = {'ws-001': _commit_snapshot('snap-framework-draft-001')}
+    response = FrameworkRouteBindings.handle_put_workspace_shell_draft(
+        request=_request(method='PUT', path='/api/workspaces/ws-001/shell/draft', path_params={'workspace_id': 'ws-001'}, json_body={'request_text': 'Revise this snapshot.'}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=artifact_store['ws-001'],
+        workspace_artifact_source_writer=lambda workspace_id, artifact_source: artifact_store.__setitem__(workspace_id, artifact_source) or artifact_source,
+    )
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 409
+    assert parsed['reason_code'] == 'workspace_shell.draft_requires_working_save'
+    assert artifact_store['ws-001']['meta']['storage_role'] == 'commit_snapshot'
+
+
+def test_framework_binding_workspace_shell_payload_exposes_role_aware_action_availability() -> None:
+    response = FrameworkRouteBindings.handle_workspace_shell(
+        request=_request(method='GET', path='/api/workspaces/ws-001/shell', path_params={'workspace_id': 'ws-001'}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=_commit_snapshot('snap-framework-actions-001'),
+    )
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed['storage_role'] == 'commit_snapshot'
+    assert parsed['action_availability']['draft_write']['allowed'] is False
+    assert parsed['action_availability']['checkout']['allowed'] is True
+    assert parsed['action_availability']['launch']['allowed'] is True

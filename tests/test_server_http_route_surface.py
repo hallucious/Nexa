@@ -435,3 +435,30 @@ def test_launch_workspace_shell_route_uses_current_public_commit_snapshot() -> N
     assert response.body['execution_target']['target_type'] == 'commit_snapshot'
     assert response.body['execution_target']['target_ref'] == 'snap-shell-launch-001'
     assert response.body['launch_context']['storage_role'] == 'commit_snapshot'
+
+
+def test_workspace_shell_draft_route_rejects_commit_snapshot_source() -> None:
+    artifact_store = {'ws-001': _commit_snapshot('snap-http-draft-001')}
+    response = RunHttpRouteSurface.handle_put_workspace_shell_draft(
+        http_request=_auth_request(method='PUT', path='/api/workspaces/ws-001/shell/draft', path_params={'workspace_id': 'ws-001'}, json_body={'request_text': 'Revise this snapshot.'}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=artifact_store['ws-001'],
+        workspace_artifact_source_writer=lambda workspace_id, artifact_source: artifact_store.__setitem__(workspace_id, artifact_source) or artifact_source,
+    )
+    assert response.status_code == 409
+    assert response.body['reason_code'] == 'workspace_shell.draft_requires_working_save'
+    assert artifact_store['ws-001']['meta']['storage_role'] == 'commit_snapshot'
+
+
+def test_workspace_shell_payload_exposes_role_aware_action_availability() -> None:
+    payload = RunHttpRouteSurface.handle_workspace_shell(
+        http_request=_auth_request(method='GET', path='/api/workspaces/ws-001/shell', path_params={'workspace_id': 'ws-001'}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=_commit_snapshot('snap-http-actions-001'),
+    ).body
+    assert payload['storage_role'] == 'commit_snapshot'
+    assert payload['action_availability']['draft_write']['allowed'] is False
+    assert payload['action_availability']['checkout']['allowed'] is True
+    assert payload['action_availability']['launch']['allowed'] is True

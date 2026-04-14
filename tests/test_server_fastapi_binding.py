@@ -1460,3 +1460,22 @@ def test_fastapi_binding_workspace_shell_launch_round_trip() -> None:
     assert payload['execution_target']['target_type'] == 'working_save'
     assert payload['execution_target']['target_ref'] == 'ws-001-draft'
     assert payload['launch_context']['action'] == 'launch_workspace_shell'
+
+
+def test_fastapi_binding_workspace_shell_draft_rejects_commit_snapshot_source() -> None:
+    client = _make_client(artifact_source=_commit_snapshot('snap-fastapi-draft-001'))
+    response = client.put('/api/workspaces/ws-001/shell/draft', headers=_session_headers(), json={'request_text': 'Revise this snapshot.'})
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload['reason_code'] == 'workspace_shell.draft_requires_working_save'
+
+
+def test_fastapi_binding_workspace_shell_payload_exposes_role_aware_action_availability() -> None:
+    client = _make_client(artifact_source=_commit_snapshot('snap-fastapi-actions-001'))
+    response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['storage_role'] == 'commit_snapshot'
+    assert payload['action_availability']['draft_write']['allowed'] is False
+    assert payload['action_availability']['checkout']['allowed'] is True
+    assert payload['action_availability']['launch']['allowed'] is True

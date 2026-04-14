@@ -285,6 +285,9 @@ class RunHttpRouteSurface:
 
     @staticmethod
     def _parse_launch_request(http_request: HttpRouteRequest) -> ProductRunLaunchRequest:
+        from src.storage.models.commit_snapshot_model import CommitSnapshotModel
+        from src.storage.models.working_save_model import WorkingSaveModel
+        from src.storage.validators.shared_validator import load_nex
         body = http_request.json_body
         if not isinstance(body, Mapping):
             raise ValueError("launch.request_body_invalid")
@@ -446,6 +449,9 @@ class RunHttpRouteSurface:
                 "message": "Current user is not allowed to update the requested workspace shell draft.",
                 "workspace_id": workspace_context.workspace_id,
             })
+        from src.storage.models.commit_snapshot_model import CommitSnapshotModel
+        from src.storage.models.working_save_model import WorkingSaveModel
+        from src.storage.validators.shared_validator import load_nex
         body = http_request.json_body
         if not isinstance(body, Mapping):
             return _route_response(400, {
@@ -455,12 +461,40 @@ class RunHttpRouteSurface:
                 "message": "Workspace shell draft update payload is invalid.",
                 "workspace_id": workspace_context.workspace_id,
             })
+        current_source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+        if isinstance(model, CommitSnapshotModel):
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": "workspace_shell.draft_requires_working_save",
+                "message": "Workspace shell draft write requires a working_save source; current workspace shell resolves to a commit_snapshot.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        if not isinstance(model, WorkingSaveModel):
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": "workspace_shell.unsupported_source_role",
+                "message": "Workspace shell draft write requires a working_save source.",
+                "workspace_id": workspace_context.workspace_id,
+            })
         updated_source = _apply_workspace_shell_draft_patch(
-            _workspace_artifact_mapping(workspace_row, artifact_source),
+            _workspace_artifact_mapping(workspace_row, current_source),
             body,
             str(body.get("updated_at") or "").strip() or None,
         )
-        persisted_source = workspace_artifact_source_writer(workspace_context.workspace_id, updated_source) if workspace_artifact_source_writer is not None else updated_source
+        normalized_loaded = load_nex(updated_source)
+        normalized_model = getattr(normalized_loaded, "parsed_model", None)
+        if not isinstance(normalized_model, WorkingSaveModel):
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": "workspace_shell.draft_write_invalid",
+                "message": "Workspace shell draft write produced an invalid working_save artifact.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        persisted_source = updated_source
+        persisted_source = workspace_artifact_source_writer(workspace_context.workspace_id, persisted_source) if workspace_artifact_source_writer is not None else persisted_source
         payload = build_workspace_shell_runtime_payload(
             workspace_row=workspace_row,
             artifact_source=persisted_source,
