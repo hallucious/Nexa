@@ -244,6 +244,8 @@ def test_circuit_library_and_result_history_localize_surface_labels_for_korean()
     library_vm = read_circuit_library_view_model(response, app_language="ko")
     assert library_vm.items[0].status_label == "실행 중"
     assert library_vm.items[0].role_label == "권한: 소유자"
+    assert library_vm.items[0].updated_label == "업데이트됨: 2026-04-13 10:00"
+    assert any("최근 실행 기록이 있습니다." == line for line in library_vm.items[0].summary_lines)
     assert any("최근 결과 이력" in line for line in [library_vm.items[0].result_history_label or ""])
 
     runs = ProductWorkspaceRunListResponse(
@@ -264,4 +266,5 @@ def test_circuit_library_and_result_history_localize_surface_labels_for_korean()
     history_vm = read_result_history_view_model(runs, app_language="ko", selected_run_id="run-002")
     assert history_vm.items[0].status_label == "결과 준비됨"
     assert history_vm.items[0].result_title == "실행 완료"
+    assert history_vm.items[0].timestamp_label == "마지막 업데이트: 2026-04-11 12:01"
     assert any("성공적으로 완료되었습니다." == line for line in history_vm.items[0].summary_lines)

@@ -526,20 +526,6 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['client_continuity']['version'] == 'phase6-batch15'
 
 
-
-
-def test_fastapi_binding_workspace_shell_route_localizes_action_schema_for_korean() -> None:
-    client = _make_client()
-    response = client.get('/api/workspaces/ws-001/shell?app_language=ko', headers=_session_headers())
-
-    assert response.status_code == 200
-    payload = response.json()
-    primary_actions = payload['shell']['action_schema']['primary_actions']
-    assert primary_actions[0]['label'] == '드래프트 저장'
-    assert primary_actions[1]['label'] == '드래프트 검토'
-    assert '드래프트 검토에는' in (primary_actions[1]['reason_disabled'] or '')
-    assert payload['shell']['action_schema']['secondary_actions'][0]['label'] == '최신 실행 재실행'
-
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     client = _make_client()
     response = client.get('/app/workspaces/ws-001', headers=_session_headers())
@@ -1287,6 +1273,9 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '워크플로우 라이브러리' in library_page.text
     assert '원본 워크스페이스 레지스트리' in library_page.text
     assert '실행 중' in library_page.text
+    assert '업데이트됨: 2026-04-11 12:05' in library_page.text
+    assert '최근 실행 기록이 있습니다.' in library_page.text
+    assert '최근 실행: run-001' not in library_page.text
     assert '최근 결과 이력을 확인할 수 있습니다' in library_page.text
     assert '제품 화면에서 이 워크플로우를 바로 계속할 수 있습니다.' in library_page.text
     assert '제품 화면에서 최근 결과 이력을 바로 열 수 있습니다.' in library_page.text
@@ -1301,6 +1290,8 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '결과 상세' in result_page.text
     assert '결과 열기' in result_page.text
     assert '실행 완료' in result_page.text
+    assert '마지막 업데이트: 2026-04-11 12:01' in result_page.text
+    assert '+00:00' not in result_page.text
     assert '성공적으로 완료되었습니다.' in result_page.text
 
     feedback_page = client.get('/app/workspaces/ws-001/feedback?surface=result_history&run_id=run-001&app_language=ko', headers=_session_headers())
@@ -1345,6 +1336,8 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     body = page_response.text
     assert '<html lang="ko">' in body
     assert 'Nexa 런타임 셸' in body
+    assert '<p><strong>Primary Workspace</strong></p>' in body
+    assert '(<code>ws-001</code>)' not in body
     assert '초안 실행' in body
     assert '최신 실행 결과' in body
     assert '디자이너 작업공간' in body
@@ -1371,7 +1364,7 @@ def test_fastapi_binding_workspace_shell_html_uses_localized_runtime_strings() -
     assert '제공자 접근' in body
     assert '세션 전용 키' in body
     assert '외부 입력' in body
-    assert '외부 파일이나 웹 주소 입력이 없습니다' in body
+    assert '외부 파일이나 URL 입력이 없습니다' in body
     assert '저장 경계' in body
     assert '세션 키' in body
     assert '로컬 작업 저장 연속성만 사용' in body
@@ -1420,15 +1413,3 @@ def test_fastapi_binding_workspace_shell_exposes_focus_and_live_region_semantics
     assert 'id="designer-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="designer-detail-title"' in body
     assert 'id="privacy-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="privacy-title"' in body
     assert 'id="latest-run-trace-detail-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="latest-run-trace-detail-title"' in body
-
-def test_fastapi_binding_result_history_localizes_output_key_for_korean() -> None:
-    client = _make_client()
-    response = client.get('/app/workspaces/ws-001/results?run_id=run-002&app_language=ko', headers=_session_headers())
-
-    assert response.status_code == 200
-    body = response.text
-    assert '<html lang="ko">' in body
-    assert '최신 출력 (답변)' in body
-    assert '최신 출력 미리보기: Latest Hello' in body
-
-

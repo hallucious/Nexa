@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Mapping, Sequence
 
 from src.ui.i18n import ui_text
@@ -52,6 +53,18 @@ _READY_FAILURE = {"ready_failure", "terminal_failure", "failed"}
 _ACTIVE_STATES = {"pending", "active", "not_ready", "queued", "running"}
 
 
+def _format_surface_timestamp(value: str | None) -> str | None:
+    raw = str(value or "").strip() or None
+    if raw is None:
+        return None
+    candidate = raw.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(candidate).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return raw
+
+
+
 _SYSTEM_RESULT_TITLES = {
     "Run completed": ("result_history.system_title.run_completed", "Run completed"),
     "Run failed": ("result_history.system_title.run_failed", "Run failed"),
@@ -84,25 +97,6 @@ def _localized_system_result_summary(value: str, *, app_language: str) -> str:
     key_fallback = _SYSTEM_RESULT_SUMMARIES.get(value)
     if key_fallback is None:
         return value
-    key, fallback = key_fallback
-    return ui_text(key, app_language=app_language, fallback_text=fallback)
-
-
-
-
-def _localized_output_key(value: str | None, *, app_language: str) -> str | None:
-    if value is None:
-        return None
-    normalized = str(value).strip()
-    if not normalized:
-        return None
-    lookup = {
-        "answer": ("result_history.output_key.answer", normalized),
-        "result": ("result_history.output_key.result", normalized),
-    }
-    key_fallback = lookup.get(normalized.lower())
-    if key_fallback is None:
-        return normalized
     key, fallback = key_fallback
     return ui_text(key, app_language=app_language, fallback_text=fallback)
 
@@ -161,7 +155,8 @@ def _result_history_status_label(status_key: str, *, app_language: str) -> str:
 
 def _run_timestamp_label(item: object, result: object | None, *, app_language: str) -> str:
     timestamp = _field(item, "completed_at") or (_field(result, "updated_at") if result is not None else None) or _field(item, "updated_at") or _field(item, "created_at")
-    return ui_text("result_history.timestamp", app_language=app_language, fallback_text=f"Last updated: {timestamp}", updated_at=timestamp)
+    formatted_timestamp = _format_surface_timestamp(timestamp) or str(timestamp or "")
+    return ui_text("result_history.timestamp", app_language=app_language, fallback_text=f"Last updated: {formatted_timestamp}", updated_at=formatted_timestamp)
 
 
 def _result_title(item: object, result: object | None, *, app_language: str) -> str:
@@ -208,8 +203,7 @@ def _result_history_item(item: object, result: object | None, *, app_language: s
     if final_output is not None:
         output_preview = _field(final_output, "value_preview")
         output_key = _field(final_output, "output_key")
-        display_output_key = _localized_output_key(output_key, app_language=app_language) or output_key
-        output_label = ui_text("result_history.output_label", app_language=app_language, fallback_text=f"Latest output ({display_output_key})", output_key=display_output_key)
+        output_label = ui_text("result_history.output_label", app_language=app_language, fallback_text=f"Latest output ({output_key})", output_key=output_key)
     workspace_id = str(_field(item, "workspace_id") or "")
     run_id = str(_field(item, "run_id") or "")
     open_result_href = f"/app/workspaces/{workspace_id}/results?run_id={run_id}"

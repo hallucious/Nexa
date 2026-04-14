@@ -1478,7 +1478,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
 <body>
   <main class=\"shell\" role=\"main\" aria-labelledby=\"workspace-shell-title\">
     <h1 id="workspace-shell-title">{escape(ui_text("server.shell.title", app_language=app_language, fallback_text="Nexa Runtime Shell"))}</h1>
-    <p><strong>{workspace_title}</strong> (<code>{workspace_id}</code>)</p>
+    <p><strong>{workspace_title}</strong></p>
     <p>{escape(ui_text("server.shell.status", app_language=app_language, fallback_text="Status"))}: <strong>{shell_status}</strong></p>
     <div class="actions" role="toolbar" aria-label="{escape(ui_text("server.shell.actions", app_language=app_language, fallback_text="Workspace shell actions"))}">
       <button id="run-draft" {'disabled' if payload.get('launch_request_template') is None else ''}>{escape(ui_text("server.shell.run_draft", app_language=app_language, fallback_text="Run draft"))}</button>

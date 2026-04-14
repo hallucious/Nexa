@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Mapping, Sequence
 
 from src.server.workspace_onboarding_models import (
@@ -67,6 +68,18 @@ class CircuitLibraryViewModel:
     empty_summary: str | None = None
     explanation: str | None = None
 
+
+
+
+def _format_surface_timestamp(value: str | None) -> str | None:
+    raw = str(value or "").strip() or None
+    if raw is None:
+        return None
+    candidate = raw.replace("Z", "+00:00")
+    try:
+        return datetime.fromisoformat(candidate).strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return raw
 
 def _activity(summary: ProductWorkspaceSummaryView) -> ProductActivityContinuitySummary | None:
     return summary.activity_continuity if isinstance(summary.activity_continuity, ProductActivityContinuitySummary) else None
@@ -242,7 +255,7 @@ def _summary_lines(summary: ProductWorkspaceSummaryView, *, app_language: str, o
             ui_text(
                 "circuit_library.summary.latest_run",
                 app_language=app_language,
-                fallback_text=f"Latest run: {summary.last_run_id}",
+                fallback_text="A recent run is available.",
                 run_id=summary.last_run_id,
             )
         )
@@ -304,8 +317,8 @@ def _items_from_summaries(
                 updated_label=ui_text(
                     "circuit_library.updated",
                     app_language=app_language,
-                    fallback_text=f"Updated: {summary.updated_at}",
-                    updated_at=summary.updated_at,
+                    fallback_text=f"Updated: {_format_surface_timestamp(summary.updated_at) or summary.updated_at}",
+                    updated_at=_format_surface_timestamp(summary.updated_at) or summary.updated_at,
                 ),
                 continue_label=continue_label,
                 continue_href=continue_href,
