@@ -10,7 +10,9 @@ from src.sdk.integration import (
     PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
     PublicMcpAdapterScaffold,
     PublicMcpCompatibilitySurface,
+    PublicMcpFrameworkDispatch,
     PublicMcpHostBridgeScaffold,
+    PublicMcpHttpDispatch,
     PublicMcpManifest,
     PublicMcpResourceDescriptor,
     PublicMcpToolDescriptor,
@@ -24,7 +26,7 @@ from src.sdk.integration import (
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.4"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.5"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -58,9 +60,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.2"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.3"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.2"
+    assert surface.version == "1.3"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -132,7 +134,7 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.0"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.1"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -171,3 +173,96 @@ def test_build_public_mcp_host_bridge_scaffold_rejects_missing_path_params() -> 
         assert "Missing path parameters" in str(exc)
     else:
         raise AssertionError("Expected missing path parameter validation")
+
+
+def test_build_public_mcp_host_bridge_scaffold_normalizes_flat_tool_arguments() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+
+    request = bridge.build_framework_tool_request_from_arguments(
+        "launch_workspace_shell",
+        {
+            "workspace_id": "ws-1",
+            "app_language": "ko",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-1"},
+            "launch_options": {"mode": "standard", "priority": "normal"},
+        },
+    )
+
+    assert request.method == "POST"
+    assert request.path == "/api/workspaces/ws-1/shell/launch"
+    assert request.path_params == {"workspace_id": "ws-1"}
+    assert request.json_body == {
+        "app_language": "ko",
+        "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-1"},
+        "launch_options": {"mode": "standard", "priority": "normal"},
+    }
+
+
+def test_build_public_mcp_host_bridge_scaffold_normalizes_flat_resource_arguments() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+
+    request = bridge.build_http_resource_request_from_arguments(
+        "get_run_status",
+        {
+            "run_id": "run-1",
+            "include": "summary",
+            "lang": "ko",
+        },
+    )
+
+    assert request.method == "GET"
+    assert request.path == "/api/runs/run-1"
+    assert request.path_params == {"run_id": "run-1"}
+    assert request.query_params == {"include": "summary", "lang": "ko"}
+    assert request.json_body is None
+
+
+def test_build_public_mcp_host_bridge_scaffold_builds_dispatch_plans() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    framework_dispatch = bridge.build_framework_resource_dispatch(
+        "get_run_status",
+        {"run_id": "run-1", "include": "summary"},
+    )
+    http_dispatch = bridge.build_http_tool_dispatch(
+        "retry_run",
+        {"run_id": "run-1", "query_params": {"reason": "host"}},
+    )
+
+    assert isinstance(framework_dispatch, PublicMcpFrameworkDispatch)
+    assert framework_dispatch.handler_name == "handle_run_status"
+    assert framework_dispatch.request.path == "/api/runs/run-1"
+    assert framework_dispatch.request.query_params == {"include": "summary"}
+
+    assert isinstance(http_dispatch, PublicMcpHttpDispatch)
+    assert http_dispatch.route_name == "retry_run"
+    assert http_dispatch.request.path == "/api/runs/run-1/retry"
+    assert http_dispatch.request.query_params == {"reason": "host"}
+
+
+def test_build_public_mcp_host_bridge_scaffold_rejects_conflicting_argument_sources() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    try:
+        bridge.build_framework_resource_request_from_arguments(
+            "get_run_status",
+            {"path_params": {"run_id": "run-1"}, "run_id": "run-2"},
+        )
+    except ValueError as exc:
+        assert "Duplicate path_params value" in str(exc)
+    else:
+        raise AssertionError("Expected duplicate path parameter validation")
+
+
+def test_build_public_mcp_host_bridge_scaffold_rejects_body_on_resource_arguments() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    try:
+        bridge.build_http_resource_request_from_arguments(
+            "get_run_status",
+            {"run_id": "run-1", "json_body": {"unexpected": True}},
+        )
+    except ValueError as exc:
+        assert "does not accept json_body/body" in str(exc)
+    else:
+        raise AssertionError("Expected body rejection for resource arguments")

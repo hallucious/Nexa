@@ -52,7 +52,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.4"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.5"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -119,11 +119,13 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
 
 def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
     bridge = sdk.build_public_mcp_host_bridge_scaffold()
-    framework_request = bridge.build_framework_resource_request(
+    dispatch = bridge.build_framework_resource_dispatch(
         "get_run_status",
-        path_params={"run_id": "run-1"},
+        {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.0"
-    assert framework_request.path == "/api/runs/run-1"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.1"
+    assert dispatch.request.path == "/api/runs/run-1"
+    assert dispatch.request.query_params == {"include": "summary"}
+    assert dispatch.handler_name == "handle_run_status"
     assert any(binding.route_name == "get_run_status" for binding in bridge.export().resource_bindings)

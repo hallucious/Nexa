@@ -41,6 +41,8 @@ from src.sdk.integration import (
     PublicMcpAdapterExport,
     PublicMcpAdapterScaffold,
     PublicMcpHostRouteBinding,
+    PublicMcpFrameworkDispatch,
+    PublicMcpHttpDispatch,
     PublicMcpHostBridgeExport,
     PublicMcpHostBridgeScaffold,
     PublicMcpResourceDescriptor,
@@ -65,7 +67,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.4"
+PUBLIC_SDK_SURFACE_VERSION = "1.5"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -114,6 +116,8 @@ __all__ = [
     "PublicMcpAdapterExport",
     "PublicMcpAdapterScaffold",
     "PublicMcpHostRouteBinding",
+    "PublicMcpFrameworkDispatch",
+    "PublicMcpHttpDispatch",
     "PublicMcpHostBridgeExport",
     "PublicMcpHostBridgeScaffold",
     "build_public_mcp_tools",

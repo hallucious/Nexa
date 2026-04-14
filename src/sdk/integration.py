@@ -20,7 +20,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.2"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.3"
 
 
 @dataclass(frozen=True)
@@ -145,7 +145,11 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.0"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.1"
+
+
+_HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
+_HTTP_BODY_CAPABLE_METHODS = frozenset({"POST", "PUT", "PATCH"})
 
 
 @dataclass(frozen=True)
@@ -157,6 +161,21 @@ class PublicMcpHostRouteBinding:
     path_template: str
     framework_handler_name: str
     path_param_names: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class PublicMcpFrameworkDispatch:
+    name: str
+    route_name: str
+    handler_name: str
+    request: FrameworkInboundRequest
+
+
+@dataclass(frozen=True)
+class PublicMcpHttpDispatch:
+    name: str
+    route_name: str
+    request: HttpRouteRequest
 
 
 @dataclass(frozen=True)
@@ -206,6 +225,21 @@ class PublicMcpHostBridgeScaffold:
             session_claims=session_claims,
         )
 
+    def build_framework_tool_request_from_arguments(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> FrameworkInboundRequest:
+        export = self.adapter_scaffold.export_tool_from_arguments(tool_name, arguments)
+        return self._framework_request_from_invocation(
+            export.invocation,
+            headers=headers,
+            session_claims=session_claims,
+        )
+
     def build_framework_resource_request(
         self,
         resource_name: str,
@@ -220,6 +254,21 @@ class PublicMcpHostBridgeScaffold:
             path_params=path_params,
             query_params=query_params,
         )
+        return self._framework_request_from_invocation(
+            export.invocation,
+            headers=headers,
+            session_claims=session_claims,
+        )
+
+    def build_framework_resource_request_from_arguments(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> FrameworkInboundRequest:
+        export = self.adapter_scaffold.export_resource_from_arguments(resource_name, arguments)
         return self._framework_request_from_invocation(
             export.invocation,
             headers=headers,
@@ -248,6 +297,21 @@ class PublicMcpHostBridgeScaffold:
             session_claims=session_claims,
         )
 
+    def build_http_tool_request_from_arguments(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> HttpRouteRequest:
+        export = self.adapter_scaffold.export_tool_from_arguments(tool_name, arguments)
+        return self._http_request_from_invocation(
+            export.invocation,
+            headers=headers,
+            session_claims=session_claims,
+        )
+
     def build_http_resource_request(
         self,
         resource_name: str,
@@ -266,6 +330,105 @@ class PublicMcpHostBridgeScaffold:
             export.invocation,
             headers=headers,
             session_claims=session_claims,
+        )
+
+    def build_http_resource_request_from_arguments(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> HttpRouteRequest:
+        export = self.adapter_scaffold.export_resource_from_arguments(resource_name, arguments)
+        return self._http_request_from_invocation(
+            export.invocation,
+            headers=headers,
+            session_claims=session_claims,
+        )
+
+    def build_framework_tool_dispatch(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpFrameworkDispatch:
+        request = self.build_framework_tool_request_from_arguments(
+            tool_name,
+            arguments,
+            headers=headers,
+            session_claims=session_claims,
+        )
+        route_name = self.adapter_scaffold._tool_by_name(tool_name).route_name
+        return PublicMcpFrameworkDispatch(
+            name=tool_name,
+            route_name=route_name,
+            handler_name=_framework_handler_name(route_name),
+            request=request,
+        )
+
+    def build_framework_resource_dispatch(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpFrameworkDispatch:
+        request = self.build_framework_resource_request_from_arguments(
+            resource_name,
+            arguments,
+            headers=headers,
+            session_claims=session_claims,
+        )
+        route_name = self.adapter_scaffold._resource_by_name(resource_name).route_name
+        return PublicMcpFrameworkDispatch(
+            name=resource_name,
+            route_name=route_name,
+            handler_name=_framework_handler_name(route_name),
+            request=request,
+        )
+
+    def build_http_tool_dispatch(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpHttpDispatch:
+        request = self.build_http_tool_request_from_arguments(
+            tool_name,
+            arguments,
+            headers=headers,
+            session_claims=session_claims,
+        )
+        return PublicMcpHttpDispatch(
+            name=tool_name,
+            route_name=self.adapter_scaffold._tool_by_name(tool_name).route_name,
+            request=request,
+        )
+
+    def build_http_resource_dispatch(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpHttpDispatch:
+        request = self.build_http_resource_request_from_arguments(
+            resource_name,
+            arguments,
+            headers=headers,
+            session_claims=session_claims,
+        )
+        return PublicMcpHttpDispatch(
+            name=resource_name,
+            route_name=self.adapter_scaffold._resource_by_name(resource_name).route_name,
+            request=request,
         )
 
     def _framework_request_from_invocation(
@@ -464,6 +627,43 @@ class PublicMcpAdapterScaffold:
             tags=descriptor.tags,
         )
 
+    def export_tool_from_arguments(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+    ) -> PublicMcpToolExport:
+        descriptor = self._tool_by_name(tool_name)
+        normalized = _normalize_public_mcp_arguments(
+            method=descriptor.method,
+            path_template=descriptor.path,
+            arguments=arguments,
+            kind="tool",
+        )
+        return self.export_tool(
+            tool_name,
+            path_params=normalized["path_params"],
+            query_params=normalized["query_params"],
+            json_body=normalized["json_body"],
+        )
+
+    def export_resource_from_arguments(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+    ) -> PublicMcpResourceExport:
+        descriptor = self._resource_by_name(resource_name)
+        normalized = _normalize_public_mcp_arguments(
+            method=descriptor.method,
+            path_template=descriptor.path,
+            arguments=arguments,
+            kind="resource",
+        )
+        return self.export_resource(
+            resource_name,
+            path_params=normalized["path_params"],
+            query_params=normalized["query_params"],
+        )
+
 
     def _export_tool_descriptor(self, descriptor: PublicMcpToolDescriptor) -> PublicMcpToolExport:
         invocation = self._build_invocation(
@@ -590,6 +790,85 @@ def _normalize_string_mapping(values: Mapping[str, object] | None) -> Mapping[st
     if not values:
         return {}
     return {str(key): str(value) for key, value in values.items()}
+
+
+def _normalize_public_mcp_arguments(
+    *,
+    method: str,
+    path_template: str,
+    arguments: Mapping[str, Any] | None,
+    kind: str,
+) -> dict[str, Any]:
+    raw_arguments = dict(arguments or {})
+    path_keys = set(_path_template_keys(path_template))
+
+    nested_path_params = _coerce_mapping(raw_arguments.pop("path_params", None), field_name="path_params")
+    nested_query_params = _coerce_mapping(raw_arguments.pop("query_params", None), field_name="query_params")
+    body = raw_arguments.pop("json_body", None)
+    legacy_body = raw_arguments.pop("body", None)
+    if body is not None and legacy_body is not None:
+        raise ValueError("Only one of json_body or body may be provided for public MCP export")
+    if body is None:
+        body = legacy_body
+    if body is not None and not isinstance(body, Mapping):
+        raise ValueError("json_body/body must be a mapping for public MCP export")
+
+    flat_path_params = {key: raw_arguments.pop(key) for key in list(raw_arguments.keys()) if key in path_keys}
+    path_params = _merge_argument_mappings(nested_path_params, flat_path_params, field_name="path_params")
+
+    normalized_method = method.upper()
+    if normalized_method in _HTTP_QUERY_CAPABLE_METHODS:
+        query_params = _merge_argument_mappings(nested_query_params, raw_arguments, field_name="query_params")
+        if body is not None:
+            raise ValueError(f"{kind} route {path_template} does not accept json_body/body for method {normalized_method}")
+        json_body = None
+    else:
+        query_params = dict(_normalize_string_mapping(nested_query_params))
+        if normalized_method in _HTTP_BODY_CAPABLE_METHODS:
+            if body is None and raw_arguments:
+                body = dict(raw_arguments)
+                raw_arguments = {}
+            elif body is not None and raw_arguments:
+                raise ValueError(
+                    f"Unexpected flat arguments for public {kind} route {path_template}; use json_body/body or query_params"
+                )
+            json_body = dict(body) if body is not None else None
+        else:
+            if body is not None:
+                raise ValueError(f"{kind} route {path_template} does not accept json_body/body for method {normalized_method}")
+            if raw_arguments:
+                raise ValueError(
+                    f"Unexpected flat arguments for public {kind} route {path_template}: {', '.join(sorted(map(str, raw_arguments)))}"
+                )
+            json_body = None
+
+    return {
+        "path_params": _normalize_string_mapping(path_params),
+        "query_params": _normalize_string_mapping(query_params),
+        "json_body": json_body,
+    }
+
+
+def _coerce_mapping(value: Any, *, field_name: str) -> Mapping[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{field_name} must be a mapping for public MCP export")
+    return {str(key): item for key, item in value.items()}
+
+
+def _merge_argument_mappings(
+    primary: Mapping[str, Any],
+    secondary: Mapping[str, Any],
+    *,
+    field_name: str,
+) -> Mapping[str, Any]:
+    merged = dict(primary)
+    for key, value in secondary.items():
+        if key in merged:
+            raise ValueError(f"Duplicate {field_name} value for key: {key}")
+        merged[str(key)] = value
+    return merged
 
 
 def _path_template_keys(path_template: str) -> tuple[str, ...]:
