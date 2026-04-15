@@ -9,11 +9,12 @@ from src.storage.models.shared_sections import CircuitModel, ResourcesModel, Sta
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.share_api import (
     describe_public_nex_link_share,
+    ensure_public_nex_link_share_operation_allowed,
     export_public_nex_link_share,
     get_public_nex_share_boundary,
     load_public_nex_link_share,
+    revoke_public_nex_link_share,
     save_public_nex_link_share_file,
-    ensure_public_nex_link_share_operation_allowed,
 )
 
 
@@ -168,3 +169,30 @@ def test_ensure_public_nex_link_share_operation_allowed_rejects_expired_share() 
 
     with pytest.raises(ValueError, match="not active"):
         ensure_public_nex_link_share_operation_allowed(payload, "checkout_working_copy")
+
+
+def test_describe_public_nex_link_share_marks_expired_when_expires_at_is_in_past() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-expiry-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        expires_at="2026-04-10T00:00:00+00:00",
+    )
+
+    descriptor = describe_public_nex_link_share(payload)
+
+    assert descriptor.lifecycle_state == "expired"
+
+
+def test_revoke_public_nex_link_share_updates_lifecycle_state_and_timestamp() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-revoke-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
+
+    revoked = revoke_public_nex_link_share(payload, now_iso="2026-04-15T14:00:00+00:00")
+    descriptor = describe_public_nex_link_share(revoked, now_iso="2026-04-15T14:00:00+00:00")
+
+    assert revoked["share"]["lifecycle"]["state"] == "revoked"
+    assert revoked["share"]["lifecycle"]["updated_at"] == "2026-04-15T14:00:00+00:00"
+    assert descriptor.lifecycle_state == "revoked"

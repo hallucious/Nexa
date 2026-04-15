@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Mapping
@@ -18,6 +19,7 @@ from src.storage.nex_api import (
 )
 
 _ALLOWED_SHARE_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("active", "expired", "revoked")
+_UNSET = object()
 
 _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
     share_family="nex.public-link-share",
@@ -52,6 +54,36 @@ def _optional_string(value: Any, *, field_name: str) -> str | None:
     return resolved or None
 
 
+def _parse_iso_datetime(value: str, *, field_name: str) -> datetime:
+    raw = value.strip()
+    if not raw:
+        raise ValueError(f"{field_name} must be a non-empty ISO datetime string")
+    normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+    try:
+        resolved = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must be a valid ISO datetime string") from exc
+    if resolved.tzinfo is None:
+        resolved = resolved.replace(tzinfo=UTC)
+    return resolved.astimezone(UTC)
+
+
+def _resolve_now(now_iso: str | None = None) -> datetime:
+    if now_iso is None:
+        return datetime.now(UTC)
+    return _parse_iso_datetime(now_iso, field_name="now_iso")
+
+
+def _effective_share_lifecycle_state(*, stored_state: ShareLifecycleState, expires_at: str | None, now_iso: str | None = None) -> ShareLifecycleState:
+    if stored_state != "active":
+        return stored_state
+    if not expires_at:
+        return stored_state
+    expires_at_dt = _parse_iso_datetime(expires_at, field_name="public link share payload share.lifecycle.expires_at")
+    now_dt = _resolve_now(now_iso)
+    return "expired" if expires_at_dt <= now_dt else stored_state
+
+
 def _canonicalize_share_lifecycle(
     share: Mapping[str, Any],
     *,
@@ -75,11 +107,18 @@ def _canonicalize_share_lifecycle(
     updated = _optional_string(lifecycle.get("updated_at"), field_name="public link share payload share.lifecycle.updated_at")
     expires = _optional_string(lifecycle.get("expires_at"), field_name="public link share payload share.lifecycle.expires_at")
     issued_by = _optional_string(lifecycle.get("issued_by_user_ref"), field_name="public link share payload share.lifecycle.issued_by_user_ref")
+    if created_at is not None:
+        _parse_iso_datetime(created_at, field_name="public link share payload share.lifecycle.created_at")
+    if updated_at is not None:
+        _parse_iso_datetime(updated_at, field_name="public link share payload share.lifecycle.updated_at")
+    effective_expires = expires_at if expires_at is not None else expires
+    if effective_expires is not None:
+        _parse_iso_datetime(effective_expires, field_name="public link share payload share.lifecycle.expires_at")
     return {
         "state": state_value,
         "created_at": created_at or created,
         "updated_at": updated_at or updated or created_at or created,
-        "expires_at": expires_at if expires_at is not None else expires,
+        "expires_at": effective_expires,
         "issued_by_user_ref": issued_by_user_ref if issued_by_user_ref is not None else issued_by,
     }
 
@@ -87,8 +126,10 @@ def _canonicalize_share_lifecycle(
 def ensure_public_nex_link_share_operation_allowed(
     source: str | Path | dict[str, Any],
     operation: ShareOperation,
+    *,
+    now_iso: str | None = None,
 ) -> PublicNexShareDescriptor:
-    descriptor = describe_public_nex_link_share(source)
+    descriptor = describe_public_nex_link_share(source, now_iso=now_iso)
     if descriptor.lifecycle_state != "active":
         raise ValueError(
             f"public link share is not active (state={descriptor.lifecycle_state}); operation={operation} is not allowed"
@@ -211,11 +252,21 @@ def load_public_nex_link_share(source: str | Path | dict[str, Any]) -> dict[str,
     )
 
 
-def describe_public_nex_link_share(source: str | Path | dict[str, Any]) -> PublicNexShareDescriptor:
+def describe_public_nex_link_share(
+    source: str | Path | dict[str, Any],
+    *,
+    now_iso: str | None = None,
+) -> PublicNexShareDescriptor:
     payload = load_public_nex_link_share(source)
     share = payload["share"]
     descriptor = describe_public_nex_artifact(payload["artifact"])
     lifecycle = share.get("lifecycle", {}) if isinstance(share.get("lifecycle"), dict) else {}
+    stored_state = lifecycle.get("state", "active")
+    effective_state = _effective_share_lifecycle_state(
+        stored_state=stored_state,
+        expires_at=lifecycle.get("expires_at"),
+        now_iso=now_iso,
+    )
     return PublicNexShareDescriptor(
         share_id=share["share_id"],
         share_path=share["share_path"],
@@ -228,12 +279,49 @@ def describe_public_nex_link_share(source: str | Path | dict[str, Any]) -> Publi
         artifact_format_family=_PUBLIC_NEX_SHARE_BOUNDARY.artifact_format_family,
         viewer_capabilities=_PUBLIC_NEX_SHARE_BOUNDARY.viewer_capabilities,
         operation_capabilities=_operation_capabilities_for_role(descriptor.storage_role),
-        lifecycle_state=lifecycle.get("state", "active"),
+        lifecycle_state=effective_state,
         created_at=lifecycle.get("created_at"),
         updated_at=lifecycle.get("updated_at"),
         expires_at=lifecycle.get("expires_at"),
         issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
         source_working_save_id=descriptor.source_working_save_id,
+    )
+
+
+def update_public_nex_link_share_lifecycle(
+    source: str | Path | dict[str, Any],
+    *,
+    lifecycle_state: ShareLifecycleState | None = None,
+    expires_at: str | None | object = _UNSET,
+    updated_at: str | None = None,
+) -> dict[str, Any]:
+    payload = load_public_nex_link_share(source)
+    share = payload["share"]
+    lifecycle = share.get("lifecycle", {}) if isinstance(share.get("lifecycle"), dict) else {}
+    next_state = lifecycle_state or lifecycle.get("state", "active")
+    next_expires = lifecycle.get("expires_at") if expires_at is _UNSET else expires_at
+    return export_public_nex_link_share(
+        payload["artifact"],
+        share_id=share["share_id"],
+        title=share.get("title"),
+        summary=share.get("summary"),
+        lifecycle_state=next_state,
+        created_at=lifecycle.get("created_at"),
+        updated_at=updated_at or lifecycle.get("updated_at"),
+        expires_at=next_expires,
+        issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
+    )
+
+
+def revoke_public_nex_link_share(
+    source: str | Path | dict[str, Any],
+    *,
+    now_iso: str | None = None,
+) -> dict[str, Any]:
+    return update_public_nex_link_share_lifecycle(
+        source,
+        lifecycle_state="revoked",
+        updated_at=now_iso or datetime.now(UTC).isoformat(),
     )
 
 
@@ -263,6 +351,8 @@ __all__ = [
     "export_public_nex_link_share",
     "load_public_nex_link_share",
     "describe_public_nex_link_share",
+    "update_public_nex_link_share_lifecycle",
+    "revoke_public_nex_link_share",
     "save_public_nex_link_share_file",
     "ensure_public_nex_link_share_operation_allowed",
 ]

@@ -127,6 +127,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "launch_workspace_shell",
         "get_public_share",
         "get_public_share_artifact",
+        "revoke_public_share",
         "launch_run",
         "get_run_status",
         "get_run_result",
@@ -930,3 +931,25 @@ def test_framework_binding_workspace_shell_payload_exposes_role_aware_action_ava
     assert parsed['action_availability']['draft_write']['allowed'] is False
     assert parsed['action_availability']['checkout']['allowed'] is True
     assert parsed['action_availability']['launch']['allowed'] is True
+
+
+def test_framework_binding_revoke_public_share_round_trip() -> None:
+    share_store: dict[str, dict] = {"share-framework-revoke-001": _share_payload("share-framework-revoke-001")}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    response = FrameworkRouteBindings.handle_revoke_public_share(
+        request=_request(method="POST", path="/api/public-shares/share-framework-revoke-001/revoke", path_params={"share_id": "share-framework-revoke-001"}),
+        share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_writer=_writer,
+        now_iso="2026-04-15T13:30:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["share_id"] == "share-framework-revoke-001"
+    assert parsed["lifecycle"]["state"] == "revoked"
+    assert parsed["lifecycle"]["updated_at"] == "2026-04-15T13:30:00+00:00"
+    assert share_store["share-framework-revoke-001"]["share"]["lifecycle"]["state"] == "revoked"

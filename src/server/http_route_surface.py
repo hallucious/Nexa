@@ -40,6 +40,7 @@ from src.storage.share_api import (
     ensure_public_nex_link_share_operation_allowed,
     export_public_nex_link_share,
     load_public_nex_link_share,
+    revoke_public_nex_link_share,
 )
 from src.ui.i18n import normalize_ui_language
 
@@ -317,6 +318,7 @@ class RunHttpRouteSurface:
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
         ("get_public_share", "GET", "/api/public-shares/{share_id}"),
         ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
+        ("revoke_public_share", "POST", "/api/public-shares/{share_id}/revoke"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
@@ -1012,6 +1014,86 @@ class RunHttpRouteSurface:
             "links": {
                 "share": f"/api/public-shares/{descriptor.share_id}",
                 "public_share_path": descriptor.share_path,
+            },
+        })
+
+    @classmethod
+    def handle_revoke_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_provider=None,
+        public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share revoke route only supports POST."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/revoke"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.authentication_required",
+                "message": "Public share lifecycle updates require an authenticated session.",
+                "share_id": share_id,
+            })
+        payload, descriptor, error = _resolve_public_share_payload(share_id, share_payload_provider)
+        if error is not None:
+            return error
+        assert payload is not None and descriptor is not None
+        if not descriptor.issued_by_user_ref:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.management_not_supported",
+                "message": "Public share lifecycle management requires issuer metadata.",
+                "share_id": share_id,
+            })
+        if descriptor.issued_by_user_ref != request_auth.requested_by_user_ref:
+            return _route_response(403, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.forbidden",
+                "message": "Current user is not allowed to update this public share.",
+                "share_id": share_id,
+            })
+        revoked_payload = revoke_public_nex_link_share(payload, now_iso=now_iso)
+        persisted = public_share_payload_writer(revoked_payload) if public_share_payload_writer is not None else revoked_payload
+        revoked_descriptor = describe_public_nex_link_share(persisted, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "updated",
+            "share_id": revoked_descriptor.share_id,
+            "share_path": revoked_descriptor.share_path,
+            "title": revoked_descriptor.title,
+            "summary": revoked_descriptor.summary,
+            "transport": revoked_descriptor.transport,
+            "access_mode": revoked_descriptor.access_mode,
+            "viewer_capabilities": list(revoked_descriptor.viewer_capabilities),
+            "operation_capabilities": list(revoked_descriptor.operation_capabilities),
+            "lifecycle": {
+                "state": revoked_descriptor.lifecycle_state,
+                "created_at": revoked_descriptor.created_at,
+                "updated_at": revoked_descriptor.updated_at,
+                "expires_at": revoked_descriptor.expires_at,
+                "issued_by_user_ref": revoked_descriptor.issued_by_user_ref,
+            },
+            "source_artifact": {
+                "storage_role": revoked_descriptor.storage_role,
+                "canonical_ref": revoked_descriptor.canonical_ref,
+                "artifact_format_family": revoked_descriptor.artifact_format_family,
+                "source_working_save_id": revoked_descriptor.source_working_save_id,
+            },
+            "links": {
+                "self": f"/api/public-shares/{revoked_descriptor.share_id}",
+                "artifact": f"/api/public-shares/{revoked_descriptor.share_id}/artifact",
+                "public_share_path": revoked_descriptor.share_path,
+                "revoke": expected_path,
             },
         })
 

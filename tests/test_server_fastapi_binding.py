@@ -1562,3 +1562,41 @@ def test_fastapi_binding_workspace_shell_payload_exposes_role_aware_action_avail
     assert payload['action_availability']['draft_write']['allowed'] is False
     assert payload['action_availability']['checkout']['allowed'] is True
     assert payload['action_availability']['launch']['allowed'] is True
+
+
+def test_fastapi_binding_public_share_revoke_round_trip() -> None:
+    share_store: dict[str, dict] = {"share-fastapi-revoke-001": _share_payload("share-fastapi-revoke-001")}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    client = _make_client(
+        public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_writer=_writer,
+    )
+    response = client.post('/api/public-shares/share-fastapi-revoke-001/revoke', headers=_session_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['share_id'] == 'share-fastapi-revoke-001'
+    assert payload['lifecycle']['state'] == 'revoked'
+    assert payload['lifecycle']['updated_at'] == '2026-04-11T12:09:00+00:00'
+    assert share_store['share-fastapi-revoke-001']['share']['lifecycle']['state'] == 'revoked'
+
+
+def test_fastapi_binding_public_share_artifact_rejects_expired_share() -> None:
+    client = _make_client(public_share_payload_provider=lambda share_id: export_public_nex_link_share(
+        _commit_snapshot('snap-fastapi-expired-share-001'),
+        share_id=share_id,
+        title='Expired FastAPI Share',
+        created_at='2026-04-15T12:00:00+00:00',
+        expires_at='2026-04-10T00:00:00+00:00',
+        issued_by_user_ref='user-owner',
+    ))
+
+    response = client.get('/api/public-shares/share-fastapi-expired/artifact')
+
+    assert response.status_code == 409
+    payload = response.json()
+    assert payload['reason_code'] == 'public_share.download_not_allowed'
