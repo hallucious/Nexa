@@ -45,3 +45,42 @@ class ValidationReport:
     blocking_count: int
     warning_count: int
     result: ValidationResult
+
+
+@dataclass(frozen=True)
+class PublicNexRoleBoundary:
+    storage_role: StorageRole
+    required_sections: tuple[str, ...]
+    optional_sections: tuple[str, ...]
+    forbidden_sections: tuple[str, ...]
+    identity_field: str
+
+
+@dataclass(frozen=True)
+class PublicNexFormatBoundary:
+    format_family: str
+    shared_backbone_sections: tuple[str, ...]
+    supported_roles: tuple[StorageRole, ...]
+    legacy_default_role: StorageRole
+    working_save: PublicNexRoleBoundary
+    commit_snapshot: PublicNexRoleBoundary
+
+    def role_boundary(self, storage_role: StorageRole) -> PublicNexRoleBoundary:
+        if storage_role == WORKING_SAVE_ROLE:
+            return self.working_save
+        if storage_role == COMMIT_SNAPSHOT_ROLE:
+            return self.commit_snapshot
+        raise ValueError(f"Unsupported public .nex storage_role: {storage_role}")
+
+
+@dataclass(frozen=True)
+class PublicNexArtifactDescriptor:
+    storage_role: StorageRole
+    canonical_ref: str
+    identity_field: str
+    top_level_sections: tuple[str, ...]
+    required_sections: tuple[str, ...]
+    optional_sections: tuple[str, ...]
+    forbidden_sections: tuple[str, ...]
+    export_ready: bool
+    source_working_save_id: Optional[str] = None

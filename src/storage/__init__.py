@@ -22,12 +22,22 @@ from src.storage.lifecycle_api import (
     create_serialized_audit_bundle_contents,
     create_serialized_audit_replay_components,
 )
-from src.storage.nex_api import load_nex, validate_commit_snapshot, validate_working_save
+from src.storage.nex_api import (
+    describe_public_nex_artifact,
+    export_public_nex_artifact,
+    get_public_nex_format_boundary,
+    load_nex,
+    validate_commit_snapshot,
+    validate_working_save,
+)
 
 __all__ = [
     'load_nex',
     'validate_working_save',
     'validate_commit_snapshot',
+    'get_public_nex_format_boundary',
+    'describe_public_nex_artifact',
+    'export_public_nex_artifact',
     'create_execution_record_from_snapshot',
     'summarize_execution_record_for_working_save',
     'serialize_execution_record',
