@@ -104,6 +104,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_history_summary",
         "list_issuer_public_shares",
         "get_issuer_public_share_summary",
+        "list_issuer_public_share_action_reports",
+        "get_issuer_public_share_action_report_summary",
         "revoke_issuer_public_shares",
         "extend_issuer_public_shares",
         "delete_issuer_public_shares",
@@ -208,6 +210,78 @@ def _issuer_share_rows() -> tuple[dict, ...]:
     )
 
 
+
+
+def _issuer_action_report_rows() -> tuple[dict, ...]:
+    return (
+        {
+            "report_id": "share-report-001",
+            "issuer_user_ref": "user-owner",
+            "action": "revoke",
+            "scope": "issuer_bulk",
+            "created_at": "2026-04-15T13:00:00+00:00",
+            "requested_share_ids": ["share-framework-owner-active"],
+            "affected_share_ids": ["share-framework-owner-active"],
+            "affected_share_count": 1,
+            "before_total_share_count": 2,
+            "after_total_share_count": 1,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": None,
+        },
+        {
+            "report_id": "share-report-002",
+            "issuer_user_ref": "user-owner",
+            "action": "archive",
+            "scope": "single_share",
+            "created_at": "2026-04-15T14:00:00+00:00",
+            "requested_share_ids": ["share-framework-owner-expired"],
+            "affected_share_ids": ["share-framework-owner-expired"],
+            "affected_share_count": 1,
+            "before_total_share_count": 2,
+            "after_total_share_count": 2,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": True,
+        },
+    )
+
+
+
+def _issuer_action_report_rows() -> tuple[dict, ...]:
+    return (
+        {
+            "report_id": "share-report-001",
+            "issuer_user_ref": "user-owner",
+            "action": "revoke",
+            "scope": "issuer_bulk",
+            "created_at": "2026-04-15T13:00:00+00:00",
+            "requested_share_ids": ["share-framework-owner-active"],
+            "affected_share_ids": ["share-framework-owner-active"],
+            "affected_share_count": 1,
+            "before_total_share_count": 2,
+            "after_total_share_count": 1,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": None,
+        },
+        {
+            "report_id": "share-report-002",
+            "issuer_user_ref": "user-owner",
+            "action": "archive",
+            "scope": "single_share",
+            "created_at": "2026-04-15T14:00:00+00:00",
+            "requested_share_ids": ["share-framework-owner-expired"],
+            "affected_share_ids": ["share-framework-owner-expired"],
+            "affected_share_count": 1,
+            "before_total_share_count": 2,
+            "after_total_share_count": 2,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": True,
+        },
+    )
+
 def test_framework_binding_handles_issuer_public_share_management_round_trip() -> None:
     response = FrameworkRouteBindings.handle_list_issuer_public_shares(
         request=_request(method="GET", path="/api/users/me/public-shares"),
@@ -237,6 +311,32 @@ def test_framework_binding_handles_issuer_public_share_summary_round_trip() -> N
     parsed = json.loads(response.body_text)
     assert parsed["summary"]["total_share_count"] == 2
     assert parsed["summary"]["latest_updated_at"] == "2026-04-15T12:30:00+00:00"
+
+
+def test_framework_binding_handles_issuer_public_share_action_report_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_issuer_public_share_action_reports(
+        request=_request(method="GET", path="/api/users/me/public-shares/action-reports", query_params={"action": "archive"}),
+        action_report_rows_provider=_issuer_action_report_rows,
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["summary"]["total_report_count"] == 1
+    assert parsed["inventory_summary"]["total_report_count"] == 2
+    assert parsed["reports"][0]["action"] == "archive"
+
+
+def test_framework_binding_handles_issuer_public_share_action_report_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_issuer_public_share_action_reports(
+        request=_request(method="GET", path="/api/users/me/public-shares/action-reports", query_params={"action": "archive"}),
+        action_report_rows_provider=_issuer_action_report_rows,
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["summary"]["total_report_count"] == 1
+    assert parsed["inventory_summary"]["total_report_count"] == 2
+    assert parsed["reports"][0]["action"] == "archive"
 
 
 def test_framework_binding_handles_filtered_paginated_issuer_public_share_management_round_trip() -> None:
@@ -293,6 +393,8 @@ def test_framework_binding_handles_extend_issuer_public_shares_round_trip() -> N
     assert parsed["affected_share_count"] == 2
     assert parsed["shares"][0]["lifecycle"]["expires_at"] == "2026-04-25T00:00:00+00:00"
     assert parsed["summary"]["active_share_count"] == 2
+    assert parsed["action_report"]["action"] == "extend_expiration"
+    assert parsed["action_report"]["action"] == "extend_expiration"
 
 def test_framework_binding_handles_public_share_round_trip() -> None:
     response = FrameworkRouteBindings.handle_get_public_share(

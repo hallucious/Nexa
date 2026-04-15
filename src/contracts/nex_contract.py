@@ -28,6 +28,7 @@ ShareTransport = Literal["link"]
 ShareAccessMode = Literal["public_readonly"]
 ShareOperation = Literal["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy", "extend_expiration"]
 IssuerShareManagementAction = Literal["revoke", "extend_expiration", "delete", "archive"]
+ManagementActionScope = Literal["issuer_bulk", "single_share"]
 
 WORKING_SAVE_ROLE: StorageRole = "working_save"
 COMMIT_SNAPSHOT_ROLE: StorageRole = "commit_snapshot"
@@ -181,6 +182,36 @@ class IssuerPublicShareManagementSummary:
     latest_created_at: Optional[str] = None
     latest_updated_at: Optional[str] = None
     latest_audit_event_at: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class IssuerPublicShareManagementActionReportEntry:
+    report_id: str
+    issuer_user_ref: str
+    action: IssuerShareManagementAction
+    scope: ManagementActionScope
+    created_at: str
+    requested_share_ids: tuple[str, ...]
+    affected_share_ids: tuple[str, ...]
+    affected_share_count: int
+    before_total_share_count: int
+    after_total_share_count: int
+    actor_user_ref: Optional[str] = None
+    expires_at: Optional[str] = None
+    archived: Optional[bool] = None
+
+
+@dataclass(frozen=True)
+class IssuerPublicShareManagementActionReportSummary:
+    issuer_user_ref: str
+    total_report_count: int
+    revoke_report_count: int
+    extend_report_count: int
+    archive_report_count: int
+    delete_report_count: int
+    total_requested_share_count: int
+    total_affected_share_count: int
+    latest_report_at: Optional[str] = None
 
 
 @dataclass(frozen=True)

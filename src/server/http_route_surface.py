@@ -36,6 +36,7 @@ from src.server.workspace_shell_runtime import build_workspace_shell_runtime_pay
 from src.server.circuit_library_runtime import build_circuit_library_payload
 from src.server.result_history_runtime import build_workspace_result_history_payload
 from src.storage.share_api import (
+    build_issuer_public_share_management_action_report,
     describe_public_nex_link_share,
     ensure_public_nex_link_share_operation_allowed,
     export_public_nex_link_share,
@@ -44,12 +45,15 @@ from src.storage.share_api import (
     update_public_nex_link_share_archive,
     archive_public_nex_link_shares_for_issuer,
     delete_public_nex_link_shares_for_issuer,
+    list_issuer_public_share_management_action_reports_for_issuer,
     list_public_nex_link_share_audit_history,
     list_public_nex_link_shares_for_issuer,
+    normalize_issuer_public_share_management_action_report_pagination,
     normalize_issuer_public_share_management_pagination,
     load_public_nex_link_share,
     revoke_public_nex_link_share,
     revoke_public_nex_link_shares_for_issuer,
+    summarize_issuer_public_share_management_action_reports_for_issuer,
     summarize_public_nex_link_shares_for_issuer,
 )
 from src.ui.i18n import normalize_ui_language
@@ -347,6 +351,35 @@ def _issuer_share_management_summary_body(summary) -> dict[str, Any]:
     }
 
 
+def _build_public_share_management_action_report(
+    *,
+    issuer_user_ref: str,
+    action: str,
+    scope: str,
+    created_at: str,
+    requested_share_ids: tuple[str, ...],
+    affected_share_ids: tuple[str, ...],
+    before_summary,
+    after_summary,
+    actor_user_ref: str | None = None,
+    expires_at: str | None = None,
+    archived: bool | None = None,
+) -> dict[str, Any]:
+    return build_issuer_public_share_management_action_report(
+        issuer_user_ref=issuer_user_ref,
+        action=action,
+        scope=scope,
+        created_at=created_at,
+        requested_share_ids=requested_share_ids,
+        affected_share_ids=affected_share_ids,
+        before_summary=before_summary,
+        after_summary=after_summary,
+        actor_user_ref=actor_user_ref,
+        expires_at=expires_at,
+        archived=archived,
+    )
+
+
 def _parse_non_negative_int_query_param(query_params: Mapping[str, Any], key: str) -> int | None:
     raw_value = query_params.get(key)
     if raw_value is None or str(raw_value).strip() == "":
@@ -478,6 +511,8 @@ class RunHttpRouteSurface:
         ("get_history_summary", "GET", "/api/users/me/history-summary"),
         ("list_issuer_public_shares", "GET", "/api/users/me/public-shares"),
         ("get_issuer_public_share_summary", "GET", "/api/users/me/public-shares/summary"),
+        ("list_issuer_public_share_action_reports", "GET", "/api/users/me/public-shares/action-reports"),
+        ("get_issuer_public_share_action_report_summary", "GET", "/api/users/me/public-shares/action-reports/summary"),
         ("revoke_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/revoke"),
         ("extend_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/extend"),
         ("delete_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/delete"),
@@ -1167,12 +1202,119 @@ class RunHttpRouteSurface:
         })
 
     @classmethod
+    def handle_list_issuer_public_share_action_reports(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        action_report_rows_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share action reports route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/users/me/public-shares/action-reports":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Issuer share management routes require an authenticated session.",
+            })
+        query_params = http_request.query_params or {}
+        action = str(query_params.get("action") or "").strip() or None
+        rows = tuple(action_report_rows_provider() or ()) if action_report_rows_provider is not None else ()
+        try:
+            limit = _parse_non_negative_int_query_param(query_params, "limit")
+            offset = _parse_non_negative_int_query_param(query_params, "offset") or 0
+            reports = list_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref, action=action, limit=limit, offset=offset)
+            summary = summarize_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref, action=action)
+            inventory_summary = summarize_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref)
+            resolved_limit, resolved_offset = normalize_issuer_public_share_management_action_report_pagination(limit=limit, offset=offset)
+        except ValueError as exc:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.invalid_query",
+                "message": str(exc),
+            })
+        filtered_count = summary.total_report_count
+        returned_count = len(reports)
+        has_more = resolved_offset + returned_count < filtered_count
+        return _route_response(200, {
+            "status": "ready",
+            "issuer_user_ref": request_auth.requested_by_user_ref,
+            "summary": summary,
+            "inventory_summary": inventory_summary,
+            "applied_filters": {"action": action},
+            "pagination": {
+                "limit": resolved_limit,
+                "offset": resolved_offset,
+                "returned_count": returned_count,
+                "filtered_report_count": filtered_count,
+                "has_more": has_more,
+                "next_offset": resolved_offset + returned_count if has_more else None,
+            },
+            "reports": reports,
+            "links": {
+                "self": "/api/users/me/public-shares/action-reports",
+                "summary": "/api/users/me/public-shares/action-reports/summary",
+                "shares": "/api/users/me/public-shares",
+            },
+        })
+
+    @classmethod
+    def handle_get_issuer_public_share_action_report_summary(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        action_report_rows_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share action report summary route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/users/me/public-shares/action-reports/summary":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Issuer share management routes require an authenticated session.",
+            })
+        query_params = http_request.query_params or {}
+        action = str(query_params.get("action") or "").strip() or None
+        rows = tuple(action_report_rows_provider() or ()) if action_report_rows_provider is not None else ()
+        try:
+            summary = summarize_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref, action=action)
+            inventory_summary = summarize_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref)
+        except ValueError as exc:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.invalid_query",
+                "message": str(exc),
+            })
+        return _route_response(200, {
+            "status": "ready",
+            "issuer_user_ref": request_auth.requested_by_user_ref,
+            "summary": summary,
+            "inventory_summary": inventory_summary,
+            "applied_filters": {"action": action},
+            "links": {
+                "self": "/api/users/me/public-shares/action-reports/summary",
+                "reports": "/api/users/me/public-shares/action-reports",
+                "shares": "/api/users/me/public-shares",
+            },
+        })
+
+    @classmethod
     def handle_revoke_issuer_public_shares(
         cls,
         *,
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -1192,6 +1334,7 @@ class RunHttpRouteSurface:
             return error
         assert share_ids is not None
         rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        before_summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
         try:
             updated_payloads = revoke_public_nex_link_shares_for_issuer(
                 rows,
@@ -1216,6 +1359,18 @@ class RunHttpRouteSurface:
         merged_rows = _merge_public_share_rows(rows, persisted)
         summary = summarize_public_nex_link_shares_for_issuer(merged_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
         entries = list_public_nex_link_shares_for_issuer(persisted, request_auth.requested_by_user_ref, now_iso=now_iso)
+        action_report = _build_public_share_management_action_report(
+            issuer_user_ref=request_auth.requested_by_user_ref,
+            action="revoke",
+            scope="issuer_bulk",
+            created_at=now_iso or summary.latest_updated_at or before_summary.latest_updated_at or datetime.now(UTC).isoformat(),
+            requested_share_ids=share_ids,
+            affected_share_ids=tuple(entry.share_id for entry in entries),
+            before_summary=before_summary,
+            after_summary=summary,
+            actor_user_ref=request_auth.requested_by_user_ref,
+        )
+        persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -1224,6 +1379,7 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
+            "action_report": persisted_action_report,
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
@@ -1238,6 +1394,7 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -1268,6 +1425,7 @@ class RunHttpRouteSurface:
                 "requested_share_ids": list(share_ids),
             })
         rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        before_summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
         try:
             updated_payloads = extend_public_nex_link_shares_for_issuer_expiration(
                 rows,
@@ -1293,6 +1451,19 @@ class RunHttpRouteSurface:
         merged_rows = _merge_public_share_rows(rows, persisted)
         summary = summarize_public_nex_link_shares_for_issuer(merged_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
         entries = list_public_nex_link_shares_for_issuer(persisted, request_auth.requested_by_user_ref, now_iso=now_iso)
+        action_report = _build_public_share_management_action_report(
+            issuer_user_ref=request_auth.requested_by_user_ref,
+            action="extend_expiration",
+            scope="issuer_bulk",
+            created_at=now_iso or summary.latest_updated_at or before_summary.latest_updated_at or datetime.now(UTC).isoformat(),
+            requested_share_ids=share_ids,
+            affected_share_ids=tuple(entry.share_id for entry in entries),
+            before_summary=before_summary,
+            after_summary=summary,
+            actor_user_ref=request_auth.requested_by_user_ref,
+            expires_at=expires_at,
+        )
+        persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -1302,6 +1473,7 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
+            "action_report": persisted_action_report,
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
@@ -1316,6 +1488,7 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -1337,6 +1510,7 @@ class RunHttpRouteSurface:
         body = http_request.json_body if isinstance(http_request.json_body, Mapping) else {}
         archived = bool(body.get("archived", True))
         rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        before_summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
         try:
             updated_payloads = archive_public_nex_link_shares_for_issuer(
                 rows,
@@ -1362,6 +1536,19 @@ class RunHttpRouteSurface:
         merged_rows = _merge_public_share_rows(rows, persisted)
         summary = summarize_public_nex_link_shares_for_issuer(merged_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
         entries = list_public_nex_link_shares_for_issuer(persisted, request_auth.requested_by_user_ref, now_iso=now_iso)
+        action_report = _build_public_share_management_action_report(
+            issuer_user_ref=request_auth.requested_by_user_ref,
+            action="archive",
+            scope="issuer_bulk",
+            created_at=now_iso or summary.latest_updated_at or before_summary.latest_updated_at or datetime.now(UTC).isoformat(),
+            requested_share_ids=share_ids,
+            affected_share_ids=tuple(entry.share_id for entry in entries),
+            before_summary=before_summary,
+            after_summary=summary,
+            actor_user_ref=request_auth.requested_by_user_ref,
+            archived=archived,
+        )
+        persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -1371,6 +1558,7 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
+            "action_report": persisted_action_report,
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
@@ -1386,6 +1574,7 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
         public_share_payload_deleter: Callable[[str], bool] | None = None,
+        public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -1412,6 +1601,7 @@ class RunHttpRouteSurface:
             return error
         assert share_ids is not None
         rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        before_summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
         try:
             deleted_entries = delete_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, share_ids, now_iso=now_iso)
         except ValueError as exc:
@@ -1432,6 +1622,18 @@ class RunHttpRouteSurface:
                 })
         refreshed_rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
         summary = summarize_public_nex_link_shares_for_issuer(refreshed_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        action_report = _build_public_share_management_action_report(
+            issuer_user_ref=request_auth.requested_by_user_ref,
+            action="delete",
+            scope="issuer_bulk",
+            created_at=now_iso or summary.latest_updated_at or before_summary.latest_updated_at or datetime.now(UTC).isoformat(),
+            requested_share_ids=share_ids,
+            affected_share_ids=tuple(entry.share_id for entry in deleted_entries),
+            before_summary=before_summary,
+            after_summary=summary,
+            actor_user_ref=request_auth.requested_by_user_ref,
+        )
+        persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
         return _route_response(200, {
             "status": "updated",
             "action": "delete",
@@ -1440,6 +1642,7 @@ class RunHttpRouteSurface:
             "affected_share_count": len(deleted_entries),
             "summary": _issuer_share_management_summary_body(summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in deleted_entries],
+            "action_report": persisted_action_report,
             "links": {
                 "self": "/api/users/me/public-shares/actions/delete",
                 "shares": "/api/users/me/public-shares",
@@ -1668,6 +1871,7 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         share_payload_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -1737,6 +1941,21 @@ class RunHttpRouteSurface:
             })
         persisted = public_share_payload_writer(extended_payload) if public_share_payload_writer is not None else extended_payload
         extended_descriptor = describe_public_nex_link_share(persisted, now_iso=now_iso)
+        before_summary = summarize_public_nex_link_shares_for_issuer((payload,), request_auth.requested_by_user_ref, now_iso=now_iso)
+        after_summary = summarize_public_nex_link_shares_for_issuer((persisted,), request_auth.requested_by_user_ref, now_iso=now_iso)
+        action_report = _build_public_share_management_action_report(
+            issuer_user_ref=request_auth.requested_by_user_ref,
+            action="extend_expiration",
+            scope="single_share",
+            created_at=now_iso or extended_descriptor.updated_at or datetime.now(UTC).isoformat(),
+            requested_share_ids=(share_id,),
+            affected_share_ids=(share_id,),
+            before_summary=before_summary,
+            after_summary=after_summary,
+            actor_user_ref=request_auth.requested_by_user_ref,
+            expires_at=expires_at,
+        )
+        persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
         return _route_response(200, {
             "status": "updated",
             "share_id": extended_descriptor.share_id,
@@ -1783,6 +2002,7 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         share_payload_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -1825,6 +2045,20 @@ class RunHttpRouteSurface:
         revoked_payload = revoke_public_nex_link_share(payload, now_iso=now_iso, actor_user_ref=request_auth.requested_by_user_ref)
         persisted = public_share_payload_writer(revoked_payload) if public_share_payload_writer is not None else revoked_payload
         revoked_descriptor = describe_public_nex_link_share(persisted, now_iso=now_iso)
+        before_summary = summarize_public_nex_link_shares_for_issuer((payload,), request_auth.requested_by_user_ref, now_iso=now_iso)
+        after_summary = summarize_public_nex_link_shares_for_issuer((persisted,), request_auth.requested_by_user_ref, now_iso=now_iso)
+        action_report = _build_public_share_management_action_report(
+            issuer_user_ref=request_auth.requested_by_user_ref,
+            action="revoke",
+            scope="single_share",
+            created_at=now_iso or revoked_descriptor.updated_at or datetime.now(UTC).isoformat(),
+            requested_share_ids=(share_id,),
+            affected_share_ids=(share_id,),
+            before_summary=before_summary,
+            after_summary=after_summary,
+            actor_user_ref=request_auth.requested_by_user_ref,
+        )
+        persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
         return _route_response(200, {
             "status": "updated",
             "share_id": revoked_descriptor.share_id,
@@ -1871,6 +2105,7 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         share_payload_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
@@ -1921,6 +2156,21 @@ class RunHttpRouteSurface:
         )
         persisted = public_share_payload_writer(updated_payload) if public_share_payload_writer is not None else updated_payload
         updated_descriptor = describe_public_nex_link_share(persisted, now_iso=now_iso)
+        before_summary = summarize_public_nex_link_shares_for_issuer((payload,), request_auth.requested_by_user_ref, now_iso=now_iso)
+        after_summary = summarize_public_nex_link_shares_for_issuer((persisted,), request_auth.requested_by_user_ref, now_iso=now_iso)
+        action_report = _build_public_share_management_action_report(
+            issuer_user_ref=request_auth.requested_by_user_ref,
+            action="archive",
+            scope="single_share",
+            created_at=now_iso or updated_descriptor.updated_at or datetime.now(UTC).isoformat(),
+            requested_share_ids=(share_id,),
+            affected_share_ids=(share_id,),
+            before_summary=before_summary,
+            after_summary=after_summary,
+            actor_user_ref=request_auth.requested_by_user_ref,
+            archived=archived,
+        )
+        persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
         return _route_response(200, {
             "status": "updated",
             "share_id": updated_descriptor.share_id,
@@ -1967,6 +2217,8 @@ class RunHttpRouteSurface:
         http_request: HttpRouteRequest,
         share_payload_provider=None,
         public_share_payload_deleter: Callable[[str], bool] | None = None,
+        public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "DELETE":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share delete route only supports DELETE."})
@@ -2021,6 +2273,20 @@ class RunHttpRouteSurface:
                 "message": "Public share delete did not persist.",
                 "share_id": share_id,
             })
+        before_summary = summarize_public_nex_link_shares_for_issuer((payload,), request_auth.requested_by_user_ref, now_iso=now_iso)
+        after_summary = summarize_public_nex_link_shares_for_issuer((), request_auth.requested_by_user_ref, now_iso=now_iso)
+        action_report = _build_public_share_management_action_report(
+            issuer_user_ref=request_auth.requested_by_user_ref,
+            action="delete",
+            scope="single_share",
+            created_at=now_iso or descriptor.updated_at or datetime.now(UTC).isoformat(),
+            requested_share_ids=(share_id,),
+            affected_share_ids=(share_id,),
+            before_summary=before_summary,
+            after_summary=after_summary,
+            actor_user_ref=request_auth.requested_by_user_ref,
+        )
+        persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
         return _route_response(200, {
             "status": "deleted",
             "share_id": descriptor.share_id,

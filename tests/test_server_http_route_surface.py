@@ -131,6 +131,78 @@ def _issuer_share_rows() -> tuple[dict, ...]:
     )
 
 
+
+
+def _issuer_action_report_rows() -> tuple[dict, ...]:
+    return (
+        {
+            "report_id": "share-report-http-001",
+            "issuer_user_ref": "user-owner",
+            "action": "revoke",
+            "scope": "issuer_bulk",
+            "created_at": "2026-04-15T13:00:00+00:00",
+            "requested_share_ids": ["share-owner-active"],
+            "affected_share_ids": ["share-owner-active"],
+            "affected_share_count": 1,
+            "before_total_share_count": 3,
+            "after_total_share_count": 2,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": None,
+        },
+        {
+            "report_id": "share-report-http-002",
+            "issuer_user_ref": "user-owner",
+            "action": "delete",
+            "scope": "single_share",
+            "created_at": "2026-04-15T14:00:00+00:00",
+            "requested_share_ids": ["share-owner-expired"],
+            "affected_share_ids": ["share-owner-expired"],
+            "affected_share_count": 1,
+            "before_total_share_count": 2,
+            "after_total_share_count": 1,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": None,
+        },
+    )
+
+
+
+def _issuer_action_report_rows() -> tuple[dict, ...]:
+    return (
+        {
+            "report_id": "share-report-http-001",
+            "issuer_user_ref": "user-owner",
+            "action": "revoke",
+            "scope": "issuer_bulk",
+            "created_at": "2026-04-15T13:00:00+00:00",
+            "requested_share_ids": ["share-owner-active"],
+            "affected_share_ids": ["share-owner-active"],
+            "affected_share_count": 1,
+            "before_total_share_count": 3,
+            "after_total_share_count": 2,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": None,
+        },
+        {
+            "report_id": "share-report-http-002",
+            "issuer_user_ref": "user-owner",
+            "action": "delete",
+            "scope": "single_share",
+            "created_at": "2026-04-15T14:00:00+00:00",
+            "requested_share_ids": ["share-owner-expired"],
+            "affected_share_ids": ["share-owner-expired"],
+            "affected_share_count": 1,
+            "before_total_share_count": 2,
+            "after_total_share_count": 1,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": None,
+        },
+    )
+
 def test_http_route_definitions_are_unique() -> None:
     definitions = RunHttpRouteSurface.route_definitions()
     route_names = [route_name for route_name, _method, _path in definitions]
@@ -240,6 +312,30 @@ def test_issuer_public_share_management_routes_apply_filters_and_pagination() ->
     assert [entry["share_id"] for entry in response.body["shares"]] == ["share-owner-active"]
 
 
+def test_issuer_public_share_action_report_routes_return_filtered_results() -> None:
+    response = RunHttpRouteSurface.handle_list_issuer_public_share_action_reports(
+        http_request=_auth_request(method="GET", path="/api/users/me/public-shares/action-reports", query_params={"action": "delete", "limit": "1", "offset": "0"}),
+        action_report_rows_provider=_issuer_action_report_rows,
+    )
+
+    assert response.status_code == 200
+    assert response.body["summary"]["total_report_count"] == 1
+    assert response.body["inventory_summary"]["total_report_count"] == 2
+    assert response.body["reports"][0]["action"] == "delete"
+
+
+def test_issuer_public_share_action_report_routes_return_filtered_results() -> None:
+    response = RunHttpRouteSurface.handle_list_issuer_public_share_action_reports(
+        http_request=_auth_request(method="GET", path="/api/users/me/public-shares/action-reports", query_params={"action": "delete", "limit": "1", "offset": "0"}),
+        action_report_rows_provider=_issuer_action_report_rows,
+    )
+
+    assert response.status_code == 200
+    assert response.body["summary"]["total_report_count"] == 1
+    assert response.body["inventory_summary"]["total_report_count"] == 2
+    assert response.body["reports"][0]["action"] == "delete"
+
+
 def test_issuer_public_share_management_revoke_action_updates_selected_shares() -> None:
     share_store = {
         "share-owner-action-a": export_public_nex_link_share(
@@ -280,6 +376,8 @@ def test_issuer_public_share_management_revoke_action_updates_selected_shares() 
     assert response.body["action"] == "revoke"
     assert response.body["affected_share_count"] == 2
     assert response.body["summary"]["revoked_share_count"] == 2
+    assert response.body["action_report"]["action"] == "revoke"
+    assert response.body["action_report"]["action"] == "revoke"
     assert share_store["share-owner-action-a"]["share"]["lifecycle"]["state"] == "revoked"
     assert share_store["share-owner-action-b"]["share"]["lifecycle"]["state"] == "revoked"
     assert share_store["share-other-action-c"]["share"]["lifecycle"]["state"] == "active"

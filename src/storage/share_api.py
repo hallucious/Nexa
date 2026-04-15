@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 from src.contracts.nex_contract import (
+    IssuerPublicShareManagementActionReportEntry,
+    IssuerPublicShareManagementActionReportSummary,
     IssuerPublicShareManagementEntry,
     IssuerPublicShareManagementSummary,
     PublicNexShareBoundary,
@@ -28,6 +30,7 @@ _MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration", "delet
 _ALLOWED_AUDIT_EVENT_TYPES: tuple[ShareAuditEventType, ...] = ("created", "expiration_extended", "revoked", "archived", "unarchived")
 _MAX_ISSUER_MANAGEMENT_ACTION_SHARES = 20
 _MAX_ISSUER_MANAGEMENT_PAGE_LIMIT = 50
+_MAX_ISSUER_ACTION_REPORT_PAGE_LIMIT = 50
 _UNSET = object()
 
 _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
@@ -579,6 +582,22 @@ def _stable_share_id(artifact_payload: dict[str, Any]) -> str:
     return f"share_{sha256(canonical.encode('utf-8')).hexdigest()[:16]}"
 
 
+def _stable_action_report_id(*, issuer_user_ref: str, action: str, created_at: str, requested_share_ids: Sequence[str], affected_share_ids: Sequence[str]) -> str:
+    canonical = json.dumps(
+        {
+            "issuer_user_ref": issuer_user_ref,
+            "action": action,
+            "created_at": created_at,
+            "requested_share_ids": list(requested_share_ids),
+            "affected_share_ids": list(affected_share_ids),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return f"share_report_{sha256(canonical.encode('utf-8')).hexdigest()[:16]}"
+
+
 def export_public_nex_link_share(
     model_or_data: Any,
     *,
@@ -910,6 +929,175 @@ def delete_public_nex_link_shares_for_issuer(
     )
 
 
+def build_issuer_public_share_management_action_report(
+    *,
+    issuer_user_ref: str,
+    action: str,
+    scope: str,
+    created_at: str,
+    requested_share_ids: Sequence[str],
+    affected_share_ids: Sequence[str],
+    before_summary: IssuerPublicShareManagementSummary,
+    after_summary: IssuerPublicShareManagementSummary,
+    actor_user_ref: str | None = None,
+    expires_at: str | None = None,
+    archived: bool | None = None,
+) -> dict[str, Any]:
+    issuer = issuer_user_ref.strip()
+    if not issuer:
+        raise ValueError("issuer_user_ref must be non-empty")
+    requested = _normalize_requested_share_ids(requested_share_ids)
+    affected = _normalize_requested_share_ids(affected_share_ids) if affected_share_ids else ()
+    _parse_iso_datetime(created_at, field_name="issuer public share management action report created_at")
+    if expires_at is not None:
+        _parse_iso_datetime(expires_at, field_name="issuer public share management action report expires_at")
+    return {
+        "report_id": _stable_action_report_id(
+            issuer_user_ref=issuer,
+            action=action,
+            created_at=created_at,
+            requested_share_ids=requested,
+            affected_share_ids=affected,
+        ),
+        "issuer_user_ref": issuer,
+        "action": action,
+        "scope": scope,
+        "created_at": created_at,
+        "requested_share_ids": list(requested),
+        "affected_share_ids": list(affected),
+        "affected_share_count": len(affected),
+        "before_total_share_count": before_summary.total_share_count,
+        "after_total_share_count": after_summary.total_share_count,
+        "actor_user_ref": actor_user_ref or issuer,
+        "expires_at": expires_at,
+        "archived": archived,
+    }
+
+
+def _canonicalize_management_action_report_row(row: Mapping[str, Any]) -> IssuerPublicShareManagementActionReportEntry:
+    report_id = _optional_string(row.get("report_id"), field_name="issuer public share management action report report_id")
+    issuer_user_ref = _optional_string(row.get("issuer_user_ref"), field_name="issuer public share management action report issuer_user_ref")
+    action = _optional_string(row.get("action"), field_name="issuer public share management action report action")
+    scope = _optional_string(row.get("scope"), field_name="issuer public share management action report scope")
+    created_at = _optional_string(row.get("created_at"), field_name="issuer public share management action report created_at")
+    if not report_id or not issuer_user_ref or not action or not scope or not created_at:
+        raise ValueError("issuer public share management action report is missing required fields")
+    if action not in _MANAGEMENT_OPERATIONS:
+        raise ValueError("issuer public share management action report action is unsupported")
+    if scope not in ("issuer_bulk", "single_share"):
+        raise ValueError("issuer public share management action report scope is unsupported")
+    _parse_iso_datetime(created_at, field_name="issuer public share management action report created_at")
+    requested_raw = row.get("requested_share_ids") or ()
+    if not isinstance(requested_raw, (list, tuple)):
+        raise ValueError("issuer public share management action report requested_share_ids must be a list")
+    requested_share_ids = _normalize_requested_share_ids(requested_raw) if requested_raw else ()
+    affected_raw = row.get("affected_share_ids") or ()
+    if not isinstance(affected_raw, (list, tuple)):
+        raise ValueError("issuer public share management action report affected_share_ids must be a list")
+    affected_share_ids = _normalize_requested_share_ids(affected_raw) if affected_raw else ()
+    affected_share_count = row.get("affected_share_count", len(affected_share_ids))
+    if not isinstance(affected_share_count, int) or affected_share_count < 0:
+        raise ValueError("issuer public share management action report affected_share_count must be a non-negative integer")
+    before_total = row.get("before_total_share_count")
+    after_total = row.get("after_total_share_count")
+    if not isinstance(before_total, int) or before_total < 0 or not isinstance(after_total, int) or after_total < 0:
+        raise ValueError("issuer public share management action report before/after totals must be non-negative integers")
+    expires_at = _optional_string(row.get("expires_at"), field_name="issuer public share management action report expires_at")
+    if expires_at is not None:
+        _parse_iso_datetime(expires_at, field_name="issuer public share management action report expires_at")
+    archived = row.get("archived")
+    if archived is not None and not isinstance(archived, bool):
+        raise ValueError("issuer public share management action report archived must be a boolean when present")
+    actor_user_ref = _optional_string(row.get("actor_user_ref"), field_name="issuer public share management action report actor_user_ref")
+    return IssuerPublicShareManagementActionReportEntry(
+        report_id=report_id,
+        issuer_user_ref=issuer_user_ref,
+        action=action,
+        scope=scope,
+        created_at=created_at,
+        requested_share_ids=requested_share_ids,
+        affected_share_ids=affected_share_ids,
+        affected_share_count=affected_share_count,
+        before_total_share_count=before_total,
+        after_total_share_count=after_total,
+        actor_user_ref=actor_user_ref,
+        expires_at=expires_at,
+        archived=archived,
+    )
+
+
+def normalize_issuer_public_share_management_action_report_pagination(*, limit: int | None = None, offset: int = 0) -> tuple[int, int]:
+    resolved_limit = 20 if limit is None else limit
+    resolved_offset = offset
+    if resolved_limit <= 0:
+        raise ValueError("issuer public share management action report limit must be > 0")
+    if resolved_limit > _MAX_ISSUER_ACTION_REPORT_PAGE_LIMIT:
+        raise ValueError(f"issuer public share management action report limit exceeds bounded page limit ({_MAX_ISSUER_ACTION_REPORT_PAGE_LIMIT})")
+    if resolved_offset < 0:
+        raise ValueError("issuer public share management action report offset must be >= 0")
+    return resolved_limit, resolved_offset
+
+
+def list_issuer_public_share_management_action_reports_for_issuer(
+    rows: Sequence[Mapping[str, Any]],
+    issuer_user_ref: str,
+    *,
+    action: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+) -> tuple[IssuerPublicShareManagementActionReportEntry, ...]:
+    issuer = issuer_user_ref.strip()
+    if not issuer:
+        raise ValueError("issuer_user_ref must be non-empty")
+    normalized_action = _normalize_issuer_management_filter_value(action, field_name="action")
+    if normalized_action is not None and normalized_action not in _MANAGEMENT_OPERATIONS:
+        raise ValueError("issuer public share management action report action filter is unsupported")
+    entries=[]
+    for row in rows:
+        entry = _canonicalize_management_action_report_row(row)
+        if entry.issuer_user_ref != issuer:
+            continue
+        if normalized_action is not None and entry.action != normalized_action:
+            continue
+        entries.append(entry)
+    entries.sort(key=lambda entry: (entry.created_at, entry.report_id), reverse=True)
+    resolved_limit, resolved_offset = normalize_issuer_public_share_management_action_report_pagination(limit=limit, offset=offset)
+    return tuple(entries[resolved_offset: resolved_offset + resolved_limit])
+
+
+def summarize_issuer_public_share_management_action_reports_for_issuer(
+    rows: Sequence[Mapping[str, Any]],
+    issuer_user_ref: str,
+    *,
+    action: str | None = None,
+) -> IssuerPublicShareManagementActionReportSummary:
+    issuer = issuer_user_ref.strip()
+    if not issuer:
+        raise ValueError("issuer_user_ref must be non-empty")
+    normalized_action = _normalize_issuer_management_filter_value(action, field_name="action")
+    if normalized_action is not None and normalized_action not in _MANAGEMENT_OPERATIONS:
+        raise ValueError("issuer public share management action report action filter is unsupported")
+    entries=[]
+    for row in rows:
+        entry = _canonicalize_management_action_report_row(row)
+        if entry.issuer_user_ref != issuer:
+            continue
+        if normalized_action is not None and entry.action != normalized_action:
+            continue
+        entries.append(entry)
+    return IssuerPublicShareManagementActionReportSummary(
+        issuer_user_ref=issuer,
+        total_report_count=len(entries),
+        revoke_report_count=sum(1 for entry in entries if entry.action == "revoke"),
+        extend_report_count=sum(1 for entry in entries if entry.action == "extend_expiration"),
+        archive_report_count=sum(1 for entry in entries if entry.action == "archive"),
+        delete_report_count=sum(1 for entry in entries if entry.action == "delete"),
+        total_requested_share_count=sum(len(entry.requested_share_ids) for entry in entries),
+        total_affected_share_count=sum(entry.affected_share_count for entry in entries),
+        latest_report_at=max((entry.created_at for entry in entries), default=None),
+    )
+
+
 def save_public_nex_link_share_file(
     model_or_data: Any,
     destination: str | Path,
@@ -942,6 +1130,10 @@ __all__ = [
     "list_public_nex_link_shares_for_issuer",
     "summarize_public_nex_link_shares_for_issuer",
     "normalize_issuer_public_share_management_pagination",
+    "build_issuer_public_share_management_action_report",
+    "normalize_issuer_public_share_management_action_report_pagination",
+    "list_issuer_public_share_management_action_reports_for_issuer",
+    "summarize_issuer_public_share_management_action_reports_for_issuer",
     "revoke_public_nex_link_shares_for_issuer",
     "extend_public_nex_link_shares_for_issuer_expiration",
     "archive_public_nex_link_shares_for_issuer",

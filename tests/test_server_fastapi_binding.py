@@ -109,6 +109,38 @@ def _share_payload(share_id: str = "share-fastapi-001") -> dict:
     )
 
 
+def _issuer_action_report_rows() -> list[dict]:
+    return [
+        {
+            "report_id": "report-fastapi-revoke-001",
+            "issuer_user_ref": "user-owner",
+            "action": "revoke",
+            "scope": "issuer_bulk",
+            "created_at": "2026-04-15T12:10:00+00:00",
+            "requested_share_ids": ["share-fastapi-001"],
+            "affected_share_ids": ["share-fastapi-001"],
+            "affected_share_count": 1,
+            "before_total_share_count": 3,
+            "after_total_share_count": 3,
+            "actor_user_ref": "user-owner",
+        },
+        {
+            "report_id": "report-fastapi-archive-001",
+            "issuer_user_ref": "user-owner",
+            "action": "archive",
+            "scope": "issuer_bulk",
+            "created_at": "2026-04-15T12:20:00+00:00",
+            "requested_share_ids": ["share-fastapi-002"],
+            "affected_share_ids": ["share-fastapi-002"],
+            "affected_share_count": 1,
+            "before_total_share_count": 3,
+            "after_total_share_count": 3,
+            "actor_user_ref": "user-owner",
+            "archived": True,
+        },
+    ]
+
+
 def _session_headers(user_id: str = "user-owner") -> dict[str, str]:
     return {
         "Authorization": "Bearer token",
@@ -153,7 +185,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -369,6 +401,8 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
         public_share_payload_rows_provider=public_share_payload_rows_provider or (lambda: (_share_payload('share-fastapi-001'),)),
         public_share_payload_writer=public_share_payload_writer or (lambda payload: dict(payload)),
         public_share_payload_deleter=public_share_payload_deleter or (lambda _share_id: False),
+        public_share_action_report_rows_provider=public_share_action_report_rows_provider or (lambda: ()),
+        public_share_action_report_writer=public_share_action_report_writer or (lambda row: dict(row)),
         run_id_factory=lambda: "run-001",
         run_request_id_factory=lambda: "req-001",
         workspace_id_factory=lambda: 'ws-new',
@@ -1503,7 +1537,7 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
             issued_by_user_ref='user-other',
         ),
     )
-    client = _make_client(public_share_payload_rows_provider=lambda: rows)
+    client = _make_client(public_share_payload_rows_provider=lambda: rows, public_share_action_report_rows_provider=_issuer_action_report_rows)
 
     list_response = client.get('/api/users/me/public-shares', headers=_session_headers())
     assert list_response.status_code == 200
@@ -1536,6 +1570,13 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
     filtered_summary_payload = filtered_summary_response.json()
     assert filtered_summary_payload['summary']['total_share_count'] == 2
     assert filtered_summary_payload['applied_filters']['operation'] == 'checkout_working_copy'
+
+    action_report_response = client.get('/api/users/me/public-shares/action-reports?action=archive', headers=_session_headers())
+    assert action_report_response.status_code == 200
+    action_report_payload = action_report_response.json()
+    assert action_report_payload['summary']['total_report_count'] == 1
+    assert action_report_payload['inventory_summary']['total_report_count'] == 2
+    assert action_report_payload['reports'][0]['action'] == 'archive'
 
 
 def test_fastapi_binding_issuer_public_share_revoke_action_round_trip() -> None:
@@ -1571,6 +1612,8 @@ def test_fastapi_binding_issuer_public_share_revoke_action_round_trip() -> None:
     assert payload['action'] == 'revoke'
     assert payload['affected_share_count'] == 2
     assert payload['summary']['revoked_share_count'] == 2
+    assert payload['action_report']['action'] == 'revoke'
+    assert payload['action_report']['action'] == 'revoke'
     assert share_store['share-fastapi-owner-action-a']['share']['lifecycle']['state'] == 'revoked'
     assert share_store['share-fastapi-owner-action-b']['share']['lifecycle']['state'] == 'revoked'
 

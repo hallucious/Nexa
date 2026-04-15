@@ -41,6 +41,18 @@ class FrameworkRouteBindings:
             summary="Read bounded public share management summary for the current authenticated user.",
         ),
         FrameworkRouteDefinition(
+            route_name="list_issuer_public_share_action_reports",
+            method="GET",
+            path_template="/api/users/me/public-shares/action-reports",
+            summary="List bounded public share management action reports for the current authenticated user.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_issuer_public_share_action_report_summary",
+            method="GET",
+            path_template="/api/users/me/public-shares/action-reports/summary",
+            summary="Read bounded public share management action report summary for the current authenticated user.",
+        ),
+        FrameworkRouteDefinition(
             route_name="revoke_issuer_public_shares",
             method="POST",
             path_template="/api/users/me/public-shares/actions/revoke",
@@ -1040,18 +1052,46 @@ class FrameworkRouteBindings:
         return cls.to_framework_response(response)
 
     @classmethod
+    def handle_list_issuer_public_share_action_reports(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        action_report_rows_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_issuer_public_share_action_reports(
+            http_request=cls.to_http_route_request(request),
+            action_report_rows_provider=action_report_rows_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_issuer_public_share_action_report_summary(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        action_report_rows_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_issuer_public_share_action_report_summary(
+            http_request=cls.to_http_route_request(request),
+            action_report_rows_provider=action_report_rows_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
     def handle_revoke_issuer_public_shares(
         cls,
         *,
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_revoke_issuer_public_shares(
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             public_share_payload_writer=public_share_payload_writer,
+            public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
@@ -1063,12 +1103,14 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_extend_issuer_public_shares(
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             public_share_payload_writer=public_share_payload_writer,
+            public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
@@ -1080,12 +1122,14 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_archive_issuer_public_shares(
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             public_share_payload_writer=public_share_payload_writer,
+            public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
@@ -1097,12 +1141,14 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
         public_share_payload_deleter=None,
+        public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_delete_issuer_public_shares(
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             public_share_payload_deleter=public_share_payload_deleter,
+            public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
@@ -1174,12 +1220,14 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_extend_public_share(
             http_request=cls.to_http_route_request(request),
             share_payload_provider=share_payload_provider,
             public_share_payload_writer=public_share_payload_writer,
+            public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
@@ -1191,12 +1239,14 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_revoke_public_share(
             http_request=cls.to_http_route_request(request),
             share_payload_provider=share_payload_provider,
             public_share_payload_writer=public_share_payload_writer,
+            public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
@@ -1208,12 +1258,14 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_archive_public_share(
             http_request=cls.to_http_route_request(request),
             share_payload_provider=share_payload_provider,
             public_share_payload_writer=public_share_payload_writer,
+            public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
@@ -1225,11 +1277,15 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_provider=None,
         public_share_payload_deleter=None,
+        public_share_action_report_writer=None,
+        now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_delete_public_share(
             http_request=cls.to_http_route_request(request),
             share_payload_provider=share_payload_provider,
             public_share_payload_deleter=public_share_payload_deleter,
+            public_share_action_report_writer=public_share_action_report_writer,
+            now_iso=now_iso,
         )
         return cls.to_framework_response(response)
 
