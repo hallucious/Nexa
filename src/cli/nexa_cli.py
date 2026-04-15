@@ -855,6 +855,7 @@ def _public_artifact_payload(loaded, *, input_path: Path) -> dict:
 def _public_share_payload(share_payload: dict, loaded, *, input_path: Path) -> dict:
     payload = _public_artifact_payload(loaded, input_path=input_path)
     share = share_payload.get("share", {}) if isinstance(share_payload.get("share"), dict) else {}
+    lifecycle = share.get("lifecycle", {}) if isinstance(share.get("lifecycle"), dict) else {}
     payload.update({
         "input_mode": "public_link_share",
         "share_id": share.get("share_id"),
@@ -863,6 +864,11 @@ def _public_share_payload(share_payload: dict, loaded, *, input_path: Path) -> d
         "share_summary": share.get("summary"),
         "viewer_capabilities": share.get("viewer_capabilities", []),
         "operation_capabilities": share.get("operation_capabilities", []),
+        "lifecycle_state": lifecycle.get("state"),
+        "created_at": lifecycle.get("created_at"),
+        "updated_at": lifecycle.get("updated_at"),
+        "expires_at": lifecycle.get("expires_at"),
+        "issued_by_user_ref": lifecycle.get("issued_by_user_ref"),
     })
     return payload
 
@@ -1168,6 +1174,11 @@ def savefile_share_export_command(args) -> int:
         "summary": descriptor.summary,
         "viewer_capabilities": list(descriptor.viewer_capabilities),
         "operation_capabilities": list(descriptor.operation_capabilities),
+        "lifecycle_state": descriptor.lifecycle_state,
+        "created_at": descriptor.created_at,
+        "updated_at": descriptor.updated_at,
+        "expires_at": descriptor.expires_at,
+        "issued_by_user_ref": descriptor.issued_by_user_ref,
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0

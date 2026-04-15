@@ -490,6 +490,19 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.post("/api/workspaces/{workspace_id}/shell/share")
+        async def create_workspace_shell_share(request: Request, workspace_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_create_workspace_shell_share(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+                public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
         @router.post("/api/workspaces/{workspace_id}/shell/launch")
         async def launch_workspace_shell(request: Request, workspace_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
             inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id}, json_body=payload)

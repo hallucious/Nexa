@@ -155,6 +155,12 @@ class FrameworkRouteBindings:
             summary="Checkout the current workspace shell commit snapshot into a public working save.",
         ),
         FrameworkRouteDefinition(
+            route_name="create_workspace_shell_share",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/shell/share",
+            summary="Create a bounded public share from the current workspace shell public artifact.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_workspace_shell",
             method="POST",
             path_template="/api/workspaces/{workspace_id}/shell/launch",
@@ -934,6 +940,27 @@ class FrameworkRouteBindings:
             trace_rows_lookup=trace_rows_lookup,
             workspace_artifact_source_writer=workspace_artifact_source_writer,
             public_share_payload_provider=public_share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_create_workspace_shell_share(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        artifact_source: Any | None = None,
+        public_share_payload_writer=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_create_workspace_shell_share(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            artifact_source=artifact_source,
+            public_share_payload_writer=public_share_payload_writer,
+            now_iso=now_iso,
         )
         return cls.to_framework_response(response)
 

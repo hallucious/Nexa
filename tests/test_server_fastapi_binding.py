@@ -100,7 +100,13 @@ def _valid_working_save_artifact() -> dict:
     }
 
 def _share_payload(share_id: str = "share-fastapi-001") -> dict:
-    return export_public_nex_link_share(_commit_snapshot("snap-fastapi-share-001"), share_id=share_id, title="FastAPI share")
+    return export_public_nex_link_share(
+        _commit_snapshot("snap-fastapi-share-001"),
+        share_id=share_id,
+        title="FastAPI share",
+        created_at="2026-04-15T12:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
 
 
 def _session_headers(user_id: str = "user-owner") -> dict[str, str]:
@@ -147,7 +153,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_writer=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -360,6 +366,7 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
             failure_info=None,
         ) if run_id == "run-001" else None,
         public_share_payload_provider=public_share_payload_provider or (lambda share_id: _share_payload(share_id)),
+        public_share_payload_writer=public_share_payload_writer or (lambda payload: dict(payload)),
         run_id_factory=lambda: "run-001",
         run_request_id_factory=lambda: "req-001",
         workspace_id_factory=lambda: 'ws-new',
@@ -1473,12 +1480,47 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     payload = response.json()
     assert payload['share_id'] == 'share-fastapi-001'
     assert payload['operation_capabilities'] == ['inspect_metadata', 'download_artifact', 'import_copy', 'run_artifact', 'checkout_working_copy']
+    assert payload['lifecycle']['state'] == 'active'
     assert payload['source_artifact']['storage_role'] == 'commit_snapshot'
 
     artifact_response = client.get('/api/public-shares/share-fastapi-001/artifact')
     assert artifact_response.status_code == 200
     artifact_payload = artifact_response.json()
     assert artifact_payload['artifact']['meta']['commit_id'] == 'snap-fastapi-share-001'
+
+
+def test_fastapi_binding_workspace_shell_share_creation_round_trip() -> None:
+    share_store: dict[str, dict] = {}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    client = _make_client(
+        artifact_source=_commit_snapshot('snap-fastapi-created-share-001'),
+        public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_writer=_writer,
+    )
+    response = client.post(
+        '/api/workspaces/ws-001/shell/share',
+        headers=_session_headers(),
+        json={'share_id': 'share-fastapi-created-001', 'title': 'FastAPI Shared Snapshot', 'expires_at': '2026-04-20T00:00:00+00:00'},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload['share_id'] == 'share-fastapi-created-001'
+    assert payload['lifecycle']['state'] == 'active'
+    assert payload['lifecycle']['created_at'] == '2026-04-11T12:09:00+00:00'
+    assert payload['lifecycle']['expires_at'] == '2026-04-20T00:00:00+00:00'
+    assert payload['lifecycle']['issued_by_user_ref'] == 'user-owner'
+    assert payload['source_artifact']['canonical_ref'] == 'snap-fastapi-created-share-001'
+
+    get_response = client.get('/api/public-shares/share-fastapi-created-001')
+    assert get_response.status_code == 200
+    get_payload = get_response.json()
+    assert get_payload['share_id'] == 'share-fastapi-created-001'
+    assert get_payload['lifecycle']['issued_by_user_ref'] == 'user-owner'
 
 
 def test_fastapi_binding_workspace_shell_checkout_accepts_public_share_snapshot() -> None:

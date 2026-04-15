@@ -38,6 +38,7 @@ from src.server.result_history_runtime import build_workspace_result_history_pay
 from src.storage.share_api import (
     describe_public_nex_link_share,
     ensure_public_nex_link_share_operation_allowed,
+    export_public_nex_link_share,
     load_public_nex_link_share,
 )
 from src.ui.i18n import normalize_ui_language
@@ -312,6 +313,7 @@ class RunHttpRouteSurface:
         ("put_workspace_shell_draft", "PUT", "/api/workspaces/{workspace_id}/shell/draft"),
         ("commit_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/commit"),
         ("checkout_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/checkout"),
+        ("create_workspace_shell_share", "POST", "/api/workspaces/{workspace_id}/shell/share"),
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
         ("get_public_share", "GET", "/api/public-shares/{share_id}"),
         ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
@@ -848,6 +850,83 @@ class RunHttpRouteSurface:
         return _route_response(200, payload)
 
     @classmethod
+    def handle_create_workspace_shell_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        artifact_source: Any | None = None,
+        public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        guard = cls._workspace_shell_write_guard(
+            http_request,
+            workspace_context,
+            workspace_row,
+            expected_path="/api/workspaces/{workspace_id}/shell/share",
+            method_label="Workspace shell share creation",
+        )
+        if isinstance(guard, HttpRouteResponse):
+            return guard
+        workspace_id, workspace_row, workspace_context = guard
+        body = http_request.json_body
+        if body is not None and not isinstance(body, Mapping):
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "workspace_shell_write_failure",
+                "reason_code": "workspace_shell.invalid_request",
+                "message": "Workspace shell share payload is invalid.",
+                "workspace_id": workspace_context.workspace_id,
+            })
+        request_auth = _request_auth(http_request)
+        _source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+        lifecycle_created_at = now_iso
+        payload = export_public_nex_link_share(
+            model,
+            share_id=str((body or {}).get("share_id") or "").strip() or None,
+            title=str((body or {}).get("title") or "").strip() or None,
+            summary=str((body or {}).get("summary") or "").strip() or None,
+            expires_at=str((body or {}).get("expires_at") or "").strip() or None,
+            created_at=lifecycle_created_at,
+            updated_at=lifecycle_created_at,
+            issued_by_user_ref=request_auth.requested_by_user_ref,
+        )
+        persisted = public_share_payload_writer(payload) if public_share_payload_writer is not None else payload
+        descriptor = describe_public_nex_link_share(persisted)
+        return _route_response(201, {
+            "status": "created",
+            "workspace_id": workspace_context.workspace_id,
+            "share_id": descriptor.share_id,
+            "share_path": descriptor.share_path,
+            "title": descriptor.title,
+            "summary": descriptor.summary,
+            "transport": descriptor.transport,
+            "access_mode": descriptor.access_mode,
+            "viewer_capabilities": list(descriptor.viewer_capabilities),
+            "operation_capabilities": list(descriptor.operation_capabilities),
+            "lifecycle": {
+                "state": descriptor.lifecycle_state,
+                "created_at": descriptor.created_at,
+                "updated_at": descriptor.updated_at,
+                "expires_at": descriptor.expires_at,
+                "issued_by_user_ref": descriptor.issued_by_user_ref,
+            },
+            "source_artifact": {
+                "storage_role": descriptor.storage_role,
+                "canonical_ref": descriptor.canonical_ref,
+                "artifact_format_family": descriptor.artifact_format_family,
+                "source_working_save_id": descriptor.source_working_save_id,
+            },
+            "links": {
+                "self": f"/api/public-shares/{descriptor.share_id}",
+                "artifact": f"/api/public-shares/{descriptor.share_id}/artifact",
+                "public_share_path": descriptor.share_path,
+                "workspace_shell_share": f"/api/workspaces/{workspace_context.workspace_id}/shell/share",
+            },
+        })
+
+    @classmethod
     def handle_get_public_share(
         cls,
         *,
@@ -876,6 +955,13 @@ class RunHttpRouteSurface:
             "access_mode": descriptor.access_mode,
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
+            "lifecycle": {
+                "state": descriptor.lifecycle_state,
+                "created_at": descriptor.created_at,
+                "updated_at": descriptor.updated_at,
+                "expires_at": descriptor.expires_at,
+                "issued_by_user_ref": descriptor.issued_by_user_ref,
+            },
             "source_artifact": {
                 "storage_role": descriptor.storage_role,
                 "canonical_ref": descriptor.canonical_ref,
@@ -908,6 +994,16 @@ class RunHttpRouteSurface:
         if error is not None:
             return error
         assert payload is not None and descriptor is not None
+        try:
+            ensure_public_nex_link_share_operation_allowed(payload, "download_artifact")
+        except ValueError as exc:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_invalid",
+                "reason_code": "public_share.download_not_allowed",
+                "message": str(exc),
+                "share_id": share_id,
+            })
         return _route_response(200, {
             "status": "ready",
             "share_id": descriptor.share_id,

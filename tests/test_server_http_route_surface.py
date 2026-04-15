@@ -82,7 +82,13 @@ def _auth_request(*, method: str, path: str, path_params: dict | None = None, js
 
 
 def _share_payload(share_id: str = "share-http-001") -> dict:
-    return export_public_nex_link_share(_commit_snapshot("snap-share-001"), share_id=share_id, title="Public share")
+    return export_public_nex_link_share(
+        _commit_snapshot("snap-share-001"),
+        share_id=share_id,
+        title="Public share",
+        created_at="2026-04-15T12:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
 
 
 def test_http_route_definitions_are_unique() -> None:
@@ -105,6 +111,8 @@ def test_public_share_route_returns_descriptor_without_authentication() -> None:
     assert response.body["status"] == "ready"
     assert response.body["share_id"] == "share-http-001"
     assert response.body["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
+    assert response.body["lifecycle"]["state"] == "active"
+    assert response.body["lifecycle"]["issued_by_user_ref"] == "user-owner"
     assert response.body["source_artifact"]["canonical_ref"] == "snap-share-001"
 
 
@@ -142,6 +150,44 @@ def test_workspace_shell_checkout_accepts_public_share_snapshot() -> None:
     assert response.body["storage_role"] == "working_save"
     assert response.body["working_save_id"] == "ws-share-restored"
     assert response.body["transition"]["source_share_id"] == "share-http-001"
+
+
+def test_workspace_shell_share_creation_returns_persisted_public_share_descriptor() -> None:
+    share_store: dict[str, dict] = {}
+
+    def _writer(payload: dict) -> dict:
+        share = payload.get("share", {}) if isinstance(payload.get("share"), dict) else {}
+        share_store[str(share.get("share_id"))] = dict(payload)
+        return dict(payload)
+
+    response = RunHttpRouteSurface.handle_create_workspace_shell_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/workspaces/ws-001/shell/share",
+            path_params={"workspace_id": "ws-001"},
+            json_body={"share_id": "share-created-http-001", "title": "Shared Workspace", "expires_at": "2026-04-20T00:00:00+00:00"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "continuity_source": "server",
+            "archived": False,
+        },
+        artifact_source=_commit_snapshot("snap-create-share-001"),
+        public_share_payload_writer=_writer,
+        now_iso="2026-04-15T12:30:00+00:00",
+    )
+
+    assert response.status_code == 201
+    assert response.body["share_id"] == "share-created-http-001"
+    assert response.body["lifecycle"]["state"] == "active"
+    assert response.body["lifecycle"]["created_at"] == "2026-04-15T12:30:00+00:00"
+    assert response.body["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
+    assert response.body["lifecycle"]["issued_by_user_ref"] == "user-owner"
+    assert response.body["source_artifact"]["canonical_ref"] == "snap-create-share-001"
+    assert "share-created-http-001" in share_store
 
 
 def test_circuit_library_route_returns_registry_backed_return_use_payload() -> None:

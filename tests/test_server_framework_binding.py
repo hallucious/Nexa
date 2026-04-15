@@ -123,6 +123,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "put_workspace_shell_draft",
         "commit_workspace_shell",
         "checkout_workspace_shell",
+        "create_workspace_shell_share",
         "launch_workspace_shell",
         "get_public_share",
         "get_public_share_artifact",
@@ -157,7 +158,13 @@ def test_framework_route_definitions_are_unique() -> None:
 
 
 def _share_payload(share_id: str = "share-framework-001") -> dict:
-    return export_public_nex_link_share(_commit_snapshot("snap-share-001"), share_id=share_id, title="Public share")
+    return export_public_nex_link_share(
+        _commit_snapshot("snap-share-001"),
+        share_id=share_id,
+        title="Public share",
+        created_at="2026-04-15T12:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
 
 
 def test_framework_binding_handles_public_share_round_trip() -> None:
@@ -171,6 +178,7 @@ def test_framework_binding_handles_public_share_round_trip() -> None:
     assert parsed["status"] == "ready"
     assert parsed["share_id"] == "share-framework-001"
     assert parsed["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
+    assert parsed["lifecycle"]["state"] == "active"
     assert parsed["source_artifact"]["storage_role"] == "commit_snapshot"
 
 
@@ -184,6 +192,38 @@ def test_framework_binding_handles_public_share_artifact_round_trip() -> None:
     parsed = json.loads(response.body_text)
     assert parsed["artifact"]["meta"]["storage_role"] == "commit_snapshot"
     assert parsed["artifact"]["meta"]["commit_id"] == "snap-share-001"
+
+
+def test_framework_binding_handles_workspace_shell_share_creation_round_trip() -> None:
+    share_store: dict[str, dict] = {}
+
+    response = FrameworkRouteBindings.handle_create_workspace_shell_share(
+        request=_request(
+            method="POST",
+            path="/api/workspaces/ws-001/shell/share",
+            path_params={"workspace_id": "ws-001"},
+            json_body={"share_id": "share-framework-created-001", "title": "Framework Shared Snapshot"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "continuity_source": "server",
+            "archived": False,
+        },
+        artifact_source=_commit_snapshot("snap-framework-share-001"),
+        public_share_payload_writer=lambda payload: share_store.setdefault(payload["share"]["share_id"], dict(payload)),
+        now_iso="2026-04-15T12:15:00+00:00",
+    )
+
+    assert response.status_code == 201
+    parsed = json.loads(response.body_text)
+    assert parsed["share_id"] == "share-framework-created-001"
+    assert parsed["lifecycle"]["created_at"] == "2026-04-15T12:15:00+00:00"
+    assert parsed["lifecycle"]["issued_by_user_ref"] == "user-owner"
+    assert parsed["source_artifact"]["canonical_ref"] == "snap-framework-share-001"
+    assert "share-framework-created-001" in share_store
 
 
 def test_framework_binding_normalizes_request_to_http_route_request() -> None:

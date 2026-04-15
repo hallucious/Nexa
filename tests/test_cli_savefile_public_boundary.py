@@ -440,6 +440,8 @@ def test_savefile_share_export_writes_public_link_share_payload(tmp_path, monkey
     assert raw["share"]["transport"] == "link"
     assert raw["share"]["title"] == "Shared Demo"
     assert payload["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact"]
+    assert payload["lifecycle_state"] == "active"
+    assert raw["share"]["lifecycle"]["state"] == "active"
     assert raw["artifact"]["meta"]["storage_role"] == "working_save"
 
 
@@ -462,6 +464,7 @@ def test_savefile_info_reports_public_link_share_summary(tmp_path, monkeypatch, 
     assert payload["storage_role"] == "working_save"
     assert payload["viewer_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy"]
     assert payload["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact"]
+    assert payload["lifecycle_state"] == "active"
 
 
 def test_savefile_share_import_materializes_public_artifact(tmp_path, monkeypatch, capsys):

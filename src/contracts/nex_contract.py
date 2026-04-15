@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal, Optional
 
+ShareLifecycleState = Literal["active", "expired", "revoked"]
+
 StorageRole = Literal["working_save", "commit_snapshot"]
 FindingCategory = Literal[
     "parse",
@@ -98,6 +100,7 @@ class PublicNexShareBoundary:
     artifact_format_family: str
     viewer_capabilities: tuple[str, ...]
     supported_operations: tuple[ShareOperation, ...]
+    supported_lifecycle_states: tuple[ShareLifecycleState, ...]
 
 
 @dataclass(frozen=True)
@@ -113,4 +116,9 @@ class PublicNexShareDescriptor:
     artifact_format_family: str
     viewer_capabilities: tuple[str, ...]
     operation_capabilities: tuple[ShareOperation, ...]
+    lifecycle_state: ShareLifecycleState
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    issued_by_user_ref: Optional[str] = None
     source_working_save_id: Optional[str] = None

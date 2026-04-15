@@ -61,17 +61,21 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.artifact_format_family == ".nex"
     assert boundary.viewer_capabilities == ("inspect_metadata", "download_artifact", "import_copy")
     assert boundary.supported_operations == ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
+    assert boundary.supported_lifecycle_states == ("active", "expired", "revoked")
 
 
 def test_export_public_nex_link_share_is_deterministic_for_same_artifact() -> None:
-    share_a = export_public_nex_link_share(_working_save())
-    share_b = export_public_nex_link_share(_working_save(), title="ignored title override")
+    share_a = export_public_nex_link_share(_working_save(), created_at="2026-04-15T12:00:00+00:00", issued_by_user_ref="user-owner")
+    share_b = export_public_nex_link_share(_working_save(), title="ignored title override", created_at="2026-04-15T12:00:00+00:00", issued_by_user_ref="user-owner")
 
     assert share_a["share"]["share_id"] == share_b["share"]["share_id"]
     assert share_a["share"]["transport"] == "link"
     assert share_a["share"]["access_mode"] == "public_readonly"
     assert share_a["share"]["storage_role"] == "working_save"
     assert share_a["share"]["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact"]
+    assert share_a["share"]["lifecycle"]["state"] == "active"
+    assert share_a["share"]["lifecycle"]["created_at"] == "2026-04-15T12:00:00+00:00"
+    assert share_a["share"]["lifecycle"]["issued_by_user_ref"] == "user-owner"
     assert share_a["artifact"]["meta"]["storage_role"] == "working_save"
 
 
@@ -88,6 +92,7 @@ def test_load_public_nex_link_share_round_trips_commit_snapshot() -> None:
     assert descriptor.storage_role == "commit_snapshot"
     assert descriptor.operation_capabilities == ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
     assert descriptor.canonical_ref == "commit-share-1"
+    assert descriptor.lifecycle_state == "active"
     assert descriptor.source_working_save_id == "ws-share-1"
 
 
@@ -133,3 +138,33 @@ def test_ensure_public_nex_link_share_operation_allowed_accepts_checkout_for_com
     descriptor = ensure_public_nex_link_share_operation_allowed(payload, "checkout_working_copy")
 
     assert descriptor.storage_role == "commit_snapshot"
+
+
+
+def test_load_public_nex_link_share_canonicalizes_lifecycle_metadata() -> None:
+    payload = export_public_nex_link_share(_working_save())
+    payload["share"]["lifecycle"] = {
+        "state": "active",
+        "created_at": "2026-04-15T13:00:00+00:00",
+        "updated_at": "2026-04-15T13:05:00+00:00",
+        "expires_at": "2026-04-20T00:00:00+00:00",
+        "issued_by_user_ref": "user-share",
+    }
+
+    loaded = load_public_nex_link_share(payload)
+    descriptor = describe_public_nex_link_share(loaded)
+
+    assert loaded["share"]["lifecycle"]["created_at"] == "2026-04-15T13:00:00+00:00"
+    assert descriptor.updated_at == "2026-04-15T13:05:00+00:00"
+    assert descriptor.expires_at == "2026-04-20T00:00:00+00:00"
+    assert descriptor.issued_by_user_ref == "user-share"
+
+
+def test_ensure_public_nex_link_share_operation_allowed_rejects_expired_share() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-expired-1"),
+        lifecycle_state="expired",
+    )
+
+    with pytest.raises(ValueError, match="not active"):
+        ensure_public_nex_link_share_operation_allowed(payload, "checkout_working_copy")
