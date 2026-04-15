@@ -19,6 +19,7 @@ from src.storage.share_api import (
     revoke_public_nex_link_share,
     save_public_nex_link_share_file,
     extend_public_nex_link_share_expiration,
+    delete_public_nex_link_shares_for_issuer,
 )
 
 
@@ -68,7 +69,7 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.supported_operations == ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
     assert boundary.supported_lifecycle_states == ("active", "expired", "revoked")
     assert boundary.terminal_lifecycle_states == ("expired", "revoked")
-    assert boundary.management_operations == ("revoke", "extend_expiration")
+    assert boundary.management_operations == ("revoke", "extend_expiration", "delete")
 
 
 def test_export_public_nex_link_share_is_deterministic_for_same_artifact() -> None:
@@ -371,3 +372,16 @@ def test_extend_public_nex_link_shares_for_issuer_expiration_updates_all_request
     descriptors = [describe_public_nex_link_share(payload, now_iso="2026-04-15T13:00:00+00:00") for payload in updated]
     assert [descriptor.share_id for descriptor in descriptors] == ["share-owner-a2", "share-owner-b2"]
     assert all(descriptor.expires_at == "2026-04-25T00:00:00+00:00" for descriptor in descriptors)
+
+
+def test_delete_public_nex_link_shares_for_issuer_returns_deleted_entries() -> None:
+    sources = (
+        export_public_nex_link_share(_working_save(name="owner a"), share_id="share-delete-a", issued_by_user_ref="user-owner", created_at="2026-04-15T12:00:00+00:00"),
+        export_public_nex_link_share(_working_save(name="owner b"), share_id="share-delete-b", issued_by_user_ref="user-owner", created_at="2026-04-15T12:01:00+00:00"),
+        export_public_nex_link_share(_working_save(name="other c"), share_id="share-delete-c", issued_by_user_ref="user-other", created_at="2026-04-15T12:02:00+00:00"),
+    )
+
+    deleted = delete_public_nex_link_shares_for_issuer(sources, "user-owner", ["share-delete-a", "share-delete-b"], now_iso="2026-04-15T13:00:00+00:00")
+
+    assert [entry.share_id for entry in deleted] == ["share-delete-a", "share-delete-b"]
+    assert all(entry.lifecycle_state == "active" for entry in deleted)

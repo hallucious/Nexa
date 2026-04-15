@@ -39,6 +39,7 @@ from src.storage.share_api import (
     normalize_issuer_public_share_management_pagination,
     revoke_public_nex_link_shares_for_issuer,
     extend_public_nex_link_shares_for_issuer_expiration,
+    delete_public_nex_link_shares_for_issuer,
     extend_public_nex_link_share_expiration,
     extract_public_nex_link_share_artifact,
     export_public_nex_link_share,

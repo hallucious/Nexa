@@ -41,6 +41,7 @@ from src.storage.share_api import (
     export_public_nex_link_share,
     extend_public_nex_link_share_expiration,
     extend_public_nex_link_shares_for_issuer_expiration,
+    delete_public_nex_link_shares_for_issuer,
     list_public_nex_link_share_audit_history,
     list_public_nex_link_shares_for_issuer,
     normalize_issuer_public_share_management_pagination,
@@ -459,6 +460,7 @@ class RunHttpRouteSurface:
         ("get_issuer_public_share_summary", "GET", "/api/users/me/public-shares/summary"),
         ("revoke_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/revoke"),
         ("extend_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/extend"),
+        ("delete_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/delete"),
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
@@ -487,6 +489,7 @@ class RunHttpRouteSurface:
         ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
         ("extend_public_share", "POST", "/api/public-shares/{share_id}/extend"),
         ("revoke_public_share", "POST", "/api/public-shares/{share_id}/revoke"),
+        ("delete_public_share", "DELETE", "/api/public-shares/{share_id}"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
@@ -1282,6 +1285,75 @@ class RunHttpRouteSurface:
         })
 
     @classmethod
+    def handle_delete_issuer_public_shares(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_rows_provider=None,
+        public_share_payload_deleter: Callable[[str], bool] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share delete route only supports POST."})
+        if http_request.path.rstrip("/") != "/api/users/me/public-shares/actions/delete":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Issuer share management routes require an authenticated session.",
+            })
+        if public_share_payload_deleter is None:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.delete_not_supported",
+                "message": "Issuer public share delete requires a persistence deleter.",
+            })
+        share_ids, error = _parse_management_share_ids(http_request.json_body)
+        if error is not None:
+            return error
+        assert share_ids is not None
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        try:
+            deleted_entries = delete_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, share_ids, now_iso=now_iso)
+        except ValueError as exc:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.delete_not_allowed",
+                "message": str(exc),
+            })
+        for entry in deleted_entries:
+            if public_share_payload_deleter(entry.share_id) is False:
+                return _route_response(409, {
+                    "status": "rejected",
+                    "error_family": "public_share_management_rejected",
+                    "reason_code": "public_share.delete_not_persisted",
+                    "message": "Issuer public share delete did not persist.",
+                    "share_id": entry.share_id,
+                })
+        refreshed_rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        summary = summarize_public_nex_link_shares_for_issuer(refreshed_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "updated",
+            "action": "delete",
+            "issuer_user_ref": request_auth.requested_by_user_ref,
+            "requested_share_ids": list(share_ids),
+            "affected_share_count": len(deleted_entries),
+            "summary": _issuer_share_management_summary_body(summary),
+            "shares": [_issuer_share_management_entry_body(entry) for entry in deleted_entries],
+            "links": {
+                "self": "/api/users/me/public-shares/actions/delete",
+                "shares": "/api/users/me/public-shares",
+                "summary": "/api/users/me/public-shares/summary",
+            },
+        })
+
+
+    @classmethod
     def handle_create_workspace_shell_share(
         cls,
         *,
@@ -1677,6 +1749,99 @@ class RunHttpRouteSurface:
                 "revoke": expected_path,
             },
         })
+
+    @classmethod
+    def handle_delete_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_provider=None,
+        public_share_payload_deleter: Callable[[str], bool] | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "DELETE":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share delete route only supports DELETE."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.authentication_required",
+                "message": "Public share delete requires an authenticated session.",
+                "share_id": share_id,
+            })
+        if public_share_payload_deleter is None:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.delete_not_supported",
+                "message": "Public share delete requires a persistence deleter.",
+                "share_id": share_id,
+            })
+        payload, descriptor, error = _resolve_public_share_payload(share_id, share_payload_provider)
+        if error is not None:
+            return error
+        assert payload is not None and descriptor is not None
+        if not descriptor.issued_by_user_ref:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.management_not_supported",
+                "message": "Public share lifecycle management requires issuer metadata.",
+                "share_id": share_id,
+            })
+        if descriptor.issued_by_user_ref != request_auth.requested_by_user_ref:
+            return _route_response(403, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.forbidden",
+                "message": "Current user is not allowed to delete this public share.",
+                "share_id": share_id,
+            })
+        if public_share_payload_deleter(share_id) is False:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.delete_not_persisted",
+                "message": "Public share delete did not persist.",
+                "share_id": share_id,
+            })
+        return _route_response(200, {
+            "status": "deleted",
+            "share_id": descriptor.share_id,
+            "share_path": descriptor.share_path,
+            "title": descriptor.title,
+            "summary": descriptor.summary,
+            "transport": descriptor.transport,
+            "access_mode": descriptor.access_mode,
+            "viewer_capabilities": list(descriptor.viewer_capabilities),
+            "operation_capabilities": list(descriptor.operation_capabilities),
+            "lifecycle": {
+                "stored_state": descriptor.stored_lifecycle_state,
+                "state": descriptor.lifecycle_state,
+                "created_at": descriptor.created_at,
+                "updated_at": descriptor.updated_at,
+                "expires_at": descriptor.expires_at,
+                "issued_by_user_ref": descriptor.issued_by_user_ref,
+            },
+            "audit_summary": _share_audit_summary(payload),
+            "source_artifact": {
+                "storage_role": descriptor.storage_role,
+                "canonical_ref": descriptor.canonical_ref,
+                "artifact_format_family": descriptor.artifact_format_family,
+                "source_working_save_id": descriptor.source_working_save_id,
+            },
+            "links": {
+                "shares": "/api/users/me/public-shares",
+                "summary": "/api/users/me/public-shares/summary",
+            },
+        })
+
 
     @classmethod
     def handle_launch(

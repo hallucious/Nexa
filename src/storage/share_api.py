@@ -23,7 +23,7 @@ from src.storage.nex_api import (
 
 _ALLOWED_SHARE_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("active", "expired", "revoked")
 _TERMINAL_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("expired", "revoked")
-_MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration")
+_MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration", "delete")
 
 _ALLOWED_AUDIT_EVENT_TYPES: tuple[ShareAuditEventType, ...] = ("created", "expiration_extended", "revoked")
 _MAX_ISSUER_MANAGEMENT_ACTION_SHARES = 20
@@ -73,6 +73,26 @@ def _normalize_requested_share_ids(share_ids: list[str] | tuple[str, ...] | Sequ
     if len(resolved) > _MAX_ISSUER_MANAGEMENT_ACTION_SHARES:
         raise ValueError(f"share_ids exceeds bounded action limit ({_MAX_ISSUER_MANAGEMENT_ACTION_SHARES})")
     return tuple(resolved)
+
+
+def _issuer_public_share_management_entry_from_descriptor(descriptor: PublicNexShareDescriptor) -> IssuerPublicShareManagementEntry:
+    return IssuerPublicShareManagementEntry(
+        share_id=descriptor.share_id,
+        share_path=descriptor.share_path,
+        title=descriptor.title,
+        summary=descriptor.summary,
+        storage_role=descriptor.storage_role,
+        lifecycle_state=descriptor.lifecycle_state,
+        stored_lifecycle_state=descriptor.stored_lifecycle_state,
+        operation_capabilities=descriptor.operation_capabilities,
+        canonical_ref=descriptor.canonical_ref,
+        created_at=descriptor.created_at,
+        updated_at=descriptor.updated_at,
+        expires_at=descriptor.expires_at,
+        audit_event_count=descriptor.audit_event_count,
+        last_audit_event_type=descriptor.last_audit_event_type,
+        last_audit_event_at=descriptor.last_audit_event_at,
+    )
 
 
 def _resolve_issuer_share_targets(
@@ -412,23 +432,7 @@ def list_public_nex_link_shares_for_issuer(
         descriptor = describe_public_nex_link_share(source, now_iso=now_iso)
         if descriptor.issued_by_user_ref != issuer:
             continue
-        resolved.append(IssuerPublicShareManagementEntry(
-            share_id=descriptor.share_id,
-            share_path=descriptor.share_path,
-            title=descriptor.title,
-            summary=descriptor.summary,
-            storage_role=descriptor.storage_role,
-            lifecycle_state=descriptor.lifecycle_state,
-            stored_lifecycle_state=descriptor.stored_lifecycle_state,
-            operation_capabilities=descriptor.operation_capabilities,
-            canonical_ref=descriptor.canonical_ref,
-            created_at=descriptor.created_at,
-            updated_at=descriptor.updated_at,
-            expires_at=descriptor.expires_at,
-            audit_event_count=descriptor.audit_event_count,
-            last_audit_event_type=descriptor.last_audit_event_type,
-            last_audit_event_at=descriptor.last_audit_event_at,
-        ))
+        resolved.append(_issuer_public_share_management_entry_from_descriptor(descriptor))
     resolved.sort(key=lambda entry: (
         entry.updated_at or "",
         entry.created_at or "",
@@ -778,6 +782,20 @@ def extend_public_nex_link_shares_for_issuer_expiration(
         for payload in targets
     )
 
+def delete_public_nex_link_shares_for_issuer(
+    sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
+    issuer_user_ref: str,
+    share_ids: list[str] | tuple[str, ...] | Sequence[str],
+    *,
+    now_iso: str | None = None,
+) -> tuple[IssuerPublicShareManagementEntry, ...]:
+    targets = _resolve_issuer_share_targets(sources, issuer_user_ref, share_ids, now_iso=now_iso)
+    return tuple(
+        _issuer_public_share_management_entry_from_descriptor(describe_public_nex_link_share(payload, now_iso=now_iso))
+        for payload in targets
+    )
+
+
 def save_public_nex_link_share_file(
     model_or_data: Any,
     destination: str | Path,
@@ -810,6 +828,7 @@ __all__ = [
     "normalize_issuer_public_share_management_pagination",
     "revoke_public_nex_link_shares_for_issuer",
     "extend_public_nex_link_shares_for_issuer_expiration",
+    "delete_public_nex_link_shares_for_issuer",
     "update_public_nex_link_share_lifecycle",
     "revoke_public_nex_link_share",
     "extend_public_nex_link_share_expiration",

@@ -835,3 +835,41 @@ def test_public_share_history_route_returns_audit_entries() -> None:
     assert response.status_code == 200
     assert response.body["audit_summary"]["event_count"] == 1
     assert response.body["history"][0]["event_type"] == "created"
+
+
+def test_issuer_public_share_management_delete_action_removes_selected_shares() -> None:
+    share_store = {
+        "share-owner-delete-a": export_public_nex_link_share(_commit_snapshot("snap-owner-delete-a"), share_id="share-owner-delete-a", title="Owner Delete A", created_at="2026-04-15T12:00:00+00:00", issued_by_user_ref="user-owner"),
+        "share-owner-delete-b": export_public_nex_link_share(_commit_snapshot("snap-owner-delete-b"), share_id="share-owner-delete-b", title="Owner Delete B", created_at="2026-04-15T12:05:00+00:00", issued_by_user_ref="user-owner"),
+        "share-other-delete-c": export_public_nex_link_share(_commit_snapshot("snap-other-delete-c"), share_id="share-other-delete-c", title="Other Delete C", created_at="2026-04-15T12:10:00+00:00", issued_by_user_ref="user-other"),
+    }
+
+    response = RunHttpRouteSurface.handle_delete_issuer_public_shares(
+        http_request=_auth_request(method="POST", path="/api/users/me/public-shares/actions/delete", json_body={"share_ids": ["share-owner-delete-a", "share-owner-delete-b"]}),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["action"] == "delete"
+    assert response.body["affected_share_count"] == 2
+    assert response.body["summary"]["total_share_count"] == 0
+    assert "share-owner-delete-a" not in share_store
+    assert "share-owner-delete-b" not in share_store
+    assert "share-other-delete-c" in share_store
+
+
+def test_public_share_delete_route_removes_share_for_issuer() -> None:
+    share_store = {"share-delete-http-001": _share_payload("share-delete-http-001")}
+
+    response = RunHttpRouteSurface.handle_delete_public_share(
+        http_request=_auth_request(method="DELETE", path="/api/public-shares/share-delete-http-001", path_params={"share_id": "share-delete-http-001"}),
+        share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "deleted"
+    assert response.body["share_id"] == "share-delete-http-001"
+    assert "share-delete-http-001" not in share_store

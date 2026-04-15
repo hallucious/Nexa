@@ -153,7 +153,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -368,6 +368,7 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
         public_share_payload_provider=public_share_payload_provider or (lambda share_id: _share_payload(share_id)),
         public_share_payload_rows_provider=public_share_payload_rows_provider or (lambda: (_share_payload('share-fastapi-001'),)),
         public_share_payload_writer=public_share_payload_writer or (lambda payload: dict(payload)),
+        public_share_payload_deleter=public_share_payload_deleter or (lambda _share_id: False),
         run_id_factory=lambda: "run-001",
         run_request_id_factory=lambda: "req-001",
         workspace_id_factory=lambda: 'ws-new',
@@ -1738,3 +1739,37 @@ def test_fastapi_binding_public_share_extend_round_trip() -> None:
     assert payload['lifecycle']['expires_at'] == '2026-04-20T00:00:00+00:00'
     assert payload['audit_summary']['event_count'] == 2
 
+
+
+def test_fastapi_binding_delete_issuer_public_shares_round_trip() -> None:
+    share_store = {
+        "share-fastapi-delete-a": export_public_nex_link_share(_commit_snapshot("snap-fastapi-delete-a"), share_id="share-fastapi-delete-a", title="FastAPI Delete A", created_at="2026-04-15T12:00:00+00:00", issued_by_user_ref="user-owner"),
+        "share-fastapi-delete-b": export_public_nex_link_share(_commit_snapshot("snap-fastapi-delete-b"), share_id="share-fastapi-delete-b", title="FastAPI Delete B", created_at="2026-04-15T12:05:00+00:00", issued_by_user_ref="user-owner"),
+    }
+
+    client = _make_client(
+        public_share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+    )
+    response = client.post('/api/users/me/public-shares/actions/delete', headers=_session_headers(), json={'share_ids': ['share-fastapi-delete-a', 'share-fastapi-delete-b']})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['action'] == 'delete'
+    assert payload['affected_share_count'] == 2
+    assert payload['summary']['total_share_count'] == 0
+
+
+def test_fastapi_binding_public_share_delete_round_trip() -> None:
+    share_store = {"share-fastapi-delete-001": _share_payload("share-fastapi-delete-001")}
+
+    client = _make_client(
+        public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+    )
+    response = client.delete('/api/public-shares/share-fastapi-delete-001', headers=_session_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['status'] == 'deleted'
+    assert payload['share_id'] == 'share-fastapi-delete-001'

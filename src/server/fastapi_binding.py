@@ -568,6 +568,17 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.post("/api/users/me/public-shares/actions/delete")
+        async def delete_issuer_public_shares(request: Request, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_delete_issuer_public_shares(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_payload_deleter=self.dependencies.public_share_payload_deleter,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/public-shares/{share_id}")
         async def get_public_share(request: Request, share_id: str) -> Response:
             inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
@@ -614,6 +625,16 @@ class FastApiRouteBindings:
                 share_payload_provider=self.dependencies.public_share_payload_provider,
                 public_share_payload_writer=self.dependencies.public_share_payload_writer,
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
+        @router.delete("/api/public-shares/{share_id}")
+        async def delete_public_share(request: Request, share_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
+            outbound = FrameworkRouteBindings.handle_delete_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                public_share_payload_deleter=self.dependencies.public_share_payload_deleter,
             )
             return self._framework_response(outbound)
 

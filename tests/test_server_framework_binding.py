@@ -106,6 +106,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_issuer_public_share_summary",
         "revoke_issuer_public_shares",
         "extend_issuer_public_shares",
+        "delete_issuer_public_shares",
         "list_workspaces",
         "get_circuit_library",
         "get_workspace_result_history",
@@ -134,6 +135,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_public_share_artifact",
         "extend_public_share",
         "revoke_public_share",
+        "delete_public_share",
         "launch_run",
         "get_run_status",
         "get_run_result",
@@ -1118,3 +1120,38 @@ def test_framework_binding_extend_public_share_round_trip() -> None:
     assert parsed["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
     assert share_store["share-framework-extend-001"]["share"]["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
 
+
+
+def test_framework_binding_handles_delete_issuer_public_shares_round_trip() -> None:
+    share_store = {
+        "share-framework-delete-a": export_public_nex_link_share(_commit_snapshot("snap-framework-delete-a"), share_id="share-framework-delete-a", title="Framework Delete A", created_at="2026-04-15T12:00:00+00:00", issued_by_user_ref="user-owner"),
+        "share-framework-delete-b": export_public_nex_link_share(_commit_snapshot("snap-framework-delete-b"), share_id="share-framework-delete-b", title="Framework Delete B", created_at="2026-04-15T12:05:00+00:00", issued_by_user_ref="user-owner"),
+    }
+
+    response = FrameworkRouteBindings.handle_delete_issuer_public_shares(
+        request=_request(method="POST", path="/api/users/me/public-shares/actions/delete", json_body={"share_ids": ["share-framework-delete-a", "share-framework-delete-b"]}),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["action"] == "delete"
+    assert parsed["affected_share_count"] == 2
+    assert parsed["summary"]["total_share_count"] == 0
+
+
+def test_framework_binding_handles_public_share_delete_round_trip() -> None:
+    share_store = {"share-framework-delete-001": _share_payload("share-framework-delete-001")}
+
+    response = FrameworkRouteBindings.handle_delete_public_share(
+        request=_request(method="DELETE", path="/api/public-shares/share-framework-delete-001", path_params={"share_id": "share-framework-delete-001"}),
+        share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["status"] == "deleted"
+    assert parsed["share_id"] == "share-framework-delete-001"

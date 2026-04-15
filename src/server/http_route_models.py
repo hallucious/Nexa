@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal, Mapping, Optional
 
-HttpMethod = Literal["GET", "POST", "PUT"]
+HttpMethod = Literal["GET", "POST", "PUT", "DELETE"]
 
-_ALLOWED_HTTP_METHODS = {"GET", "POST", "PUT"}
+_ALLOWED_HTTP_METHODS = {"GET", "POST", "PUT", "DELETE"}
 
 
 @dataclass(frozen=True)

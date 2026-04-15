@@ -72,6 +72,7 @@ NowIsoProvider = Callable[[], str]
 PublicSharePayloadProvider = Callable[[str], Optional[Mapping[str, Any]]]
 PublicSharePayloadRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 PublicSharePayloadWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
+PublicSharePayloadDeleter = Callable[[str], bool]
 
 
 def _none_workspace(_: str) -> Optional[WorkspaceAuthorizationContext]:
@@ -174,6 +175,10 @@ def _noop_public_share_payload_writer(payload: Mapping[str, Any]) -> Mapping[str
     return dict(payload)
 
 
+def _noop_public_share_payload_deleter(_: str) -> bool:
+    return False
+
+
 @dataclass(frozen=True)
 class FastApiRouteDependencies:
     workspace_context_provider: WorkspaceContextProvider = _none_workspace
@@ -217,6 +222,7 @@ class FastApiRouteDependencies:
     public_share_payload_provider: PublicSharePayloadProvider = _none_public_share_payload
     public_share_payload_rows_provider: PublicSharePayloadRowsProvider = _empty_public_share_payload_rows
     public_share_payload_writer: PublicSharePayloadWriter = _noop_public_share_payload_writer
+    public_share_payload_deleter: PublicSharePayloadDeleter = _noop_public_share_payload_deleter
     admission_policy: ProductAdmissionPolicy = field(default_factory=ProductAdmissionPolicy)
     engine_launch_decider: Optional[EngineLaunchDecider] = None
     run_id_factory: Optional[IdentifierFactory] = None

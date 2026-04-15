@@ -27,7 +27,7 @@ LoadStatus = Literal["loaded", "loaded_with_findings", "rejected"]
 ShareTransport = Literal["link"]
 ShareAccessMode = Literal["public_readonly"]
 ShareOperation = Literal["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy", "extend_expiration"]
-IssuerShareManagementAction = Literal["revoke", "extend_expiration"]
+IssuerShareManagementAction = Literal["revoke", "extend_expiration", "delete"]
 
 WORKING_SAVE_ROLE: StorageRole = "working_save"
 COMMIT_SNAPSHOT_ROLE: StorageRole = "commit_snapshot"
