@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 
 ShareLifecycleState = Literal["active", "expired", "revoked"]
-ShareAuditEventType = Literal["created", "expiration_extended", "revoked"]
+ShareAuditEventType = Literal["created", "expiration_extended", "revoked", "archived", "unarchived"]
 
 StorageRole = Literal["working_save", "commit_snapshot"]
 FindingCategory = Literal[
@@ -27,7 +27,7 @@ LoadStatus = Literal["loaded", "loaded_with_findings", "rejected"]
 ShareTransport = Literal["link"]
 ShareAccessMode = Literal["public_readonly"]
 ShareOperation = Literal["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy", "extend_expiration"]
-IssuerShareManagementAction = Literal["revoke", "extend_expiration", "delete"]
+IssuerShareManagementAction = Literal["revoke", "extend_expiration", "delete", "archive"]
 
 WORKING_SAVE_ROLE: StorageRole = "working_save"
 COMMIT_SNAPSHOT_ROLE: StorageRole = "commit_snapshot"
@@ -137,6 +137,8 @@ class PublicNexShareDescriptor:
     updated_at: Optional[str] = None
     expires_at: Optional[str] = None
     issued_by_user_ref: Optional[str] = None
+    archived: bool = False
+    archived_at: Optional[str] = None
     source_working_save_id: Optional[str] = None
     audit_event_count: int = 0
     last_audit_event_type: Optional[ShareAuditEventType] = None
@@ -157,6 +159,8 @@ class IssuerPublicShareManagementEntry:
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
     expires_at: Optional[str] = None
+    archived: bool = False
+    archived_at: Optional[str] = None
     audit_event_count: int = 0
     last_audit_event_type: Optional[ShareAuditEventType] = None
     last_audit_event_at: Optional[str] = None
@@ -169,6 +173,7 @@ class IssuerPublicShareManagementSummary:
     active_share_count: int
     expired_share_count: int
     revoked_share_count: int
+    archived_share_count: int
     working_save_share_count: int
     commit_snapshot_share_count: int
     runnable_share_count: int

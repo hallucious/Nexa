@@ -59,6 +59,12 @@ class FrameworkRouteBindings:
             summary="Delete bounded public shares issued by the current authenticated user.",
         ),
         FrameworkRouteDefinition(
+            route_name="archive_issuer_public_shares",
+            method="POST",
+            path_template="/api/users/me/public-shares/actions/archive",
+            summary="Archive or unarchive bounded public shares issued by the current authenticated user.",
+        ),
+        FrameworkRouteDefinition(
             route_name="list_workspaces",
             method="GET",
             path_template="/api/workspaces",
@@ -225,6 +231,12 @@ class FrameworkRouteBindings:
             method="POST",
             path_template="/api/public-shares/{share_id}/revoke",
             summary="Revoke a bounded public share when requested by the issuing user.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="archive_public_share",
+            method="POST",
+            path_template="/api/public-shares/{share_id}/archive",
+            summary="Archive or unarchive a bounded public share when requested by the issuing user.",
         ),
         FrameworkRouteDefinition(
             route_name="delete_public_share",
@@ -1062,6 +1074,23 @@ class FrameworkRouteBindings:
         return cls.to_framework_response(response)
 
     @classmethod
+    def handle_archive_issuer_public_shares(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_rows_provider=None,
+        public_share_payload_writer=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_archive_issuer_public_shares(
+            http_request=cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            public_share_payload_writer=public_share_payload_writer,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
     def handle_delete_issuer_public_shares(
         cls,
         *,
@@ -1165,6 +1194,23 @@ class FrameworkRouteBindings:
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_revoke_public_share(
+            http_request=cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+            public_share_payload_writer=public_share_payload_writer,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_archive_public_share(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_provider=None,
+        public_share_payload_writer=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_archive_public_share(
             http_request=cls.to_http_route_request(request),
             share_payload_provider=share_payload_provider,
             public_share_payload_writer=public_share_payload_writer,

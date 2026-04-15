@@ -20,6 +20,8 @@ from src.storage.share_api import (
     save_public_nex_link_share_file,
     extend_public_nex_link_share_expiration,
     delete_public_nex_link_shares_for_issuer,
+    update_public_nex_link_share_archive,
+    archive_public_nex_link_shares_for_issuer,
 )
 
 
@@ -69,7 +71,7 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.supported_operations == ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
     assert boundary.supported_lifecycle_states == ("active", "expired", "revoked")
     assert boundary.terminal_lifecycle_states == ("expired", "revoked")
-    assert boundary.management_operations == ("revoke", "extend_expiration", "delete")
+    assert boundary.management_operations == ("revoke", "extend_expiration", "delete", "archive")
 
 
 def test_export_public_nex_link_share_is_deterministic_for_same_artifact() -> None:
@@ -84,6 +86,7 @@ def test_export_public_nex_link_share_is_deterministic_for_same_artifact() -> No
     assert share_a["share"]["lifecycle"]["state"] == "active"
     assert share_a["share"]["lifecycle"]["created_at"] == "2026-04-15T12:00:00+00:00"
     assert share_a["share"]["lifecycle"]["issued_by_user_ref"] == "user-owner"
+    assert share_a["share"]["management"]["archived"] is False
     assert share_a["share"]["audit"]["history"][0]["event_type"] == "created"
     assert share_a["artifact"]["meta"]["storage_role"] == "working_save"
 
@@ -385,3 +388,55 @@ def test_delete_public_nex_link_shares_for_issuer_returns_deleted_entries() -> N
 
     assert [entry.share_id for entry in deleted] == ["share-delete-a", "share-delete-b"]
     assert all(entry.lifecycle_state == "active" for entry in deleted)
+
+
+def test_update_public_nex_link_share_archive_sets_management_flag_and_audit() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-archive-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
+
+    archived = update_public_nex_link_share_archive(
+        payload,
+        archived=True,
+        updated_at="2026-04-15T15:00:00+00:00",
+        actor_user_ref="user-owner",
+    )
+    descriptor = describe_public_nex_link_share(archived)
+
+    assert archived["share"]["management"]["archived"] is True
+    assert archived["share"]["management"]["archived_at"] == "2026-04-15T15:00:00+00:00"
+    assert descriptor.archived is True
+    assert descriptor.archived_at == "2026-04-15T15:00:00+00:00"
+    assert list_public_nex_link_share_audit_history(archived)[-1]["event_type"] == "archived"
+
+
+def test_archive_public_nex_link_shares_for_issuer_updates_requested_targets() -> None:
+    sources = (
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(name="owner_archive_a"), commit_id="commit-owner-archive-a"),
+            share_id="share-owner-archive-a",
+            issued_by_user_ref="user-owner",
+            created_at="2026-04-15T12:00:00+00:00",
+        ),
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(name="owner_archive_b"), commit_id="commit-owner-archive-b"),
+            share_id="share-owner-archive-b",
+            issued_by_user_ref="user-owner",
+            created_at="2026-04-15T12:05:00+00:00",
+        ),
+    )
+
+    updated = archive_public_nex_link_shares_for_issuer(
+        sources,
+        "user-owner",
+        ["share-owner-archive-a", "share-owner-archive-b"],
+        archived=True,
+        now_iso="2026-04-15T13:00:00+00:00",
+        actor_user_ref="user-owner",
+    )
+
+    descriptors = [describe_public_nex_link_share(payload, now_iso="2026-04-15T13:00:00+00:00") for payload in updated]
+    assert [descriptor.share_id for descriptor in descriptors] == ["share-owner-archive-a", "share-owner-archive-b"]
+    assert all(descriptor.archived is True for descriptor in descriptors)

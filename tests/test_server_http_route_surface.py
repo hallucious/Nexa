@@ -155,6 +155,7 @@ def test_public_share_route_returns_descriptor_without_authentication() -> None:
     assert response.body["lifecycle"]["state"] == "active"
     assert response.body["audit_summary"]["event_count"] == 1
     assert response.body["lifecycle"]["issued_by_user_ref"] == "user-owner"
+    assert response.body["management"]["archived"] is False
     assert response.body["source_artifact"]["canonical_ref"] == "snap-share-001"
 
 

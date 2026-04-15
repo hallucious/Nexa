@@ -41,6 +41,8 @@ from src.storage.share_api import (
     export_public_nex_link_share,
     extend_public_nex_link_share_expiration,
     extend_public_nex_link_shares_for_issuer_expiration,
+    update_public_nex_link_share_archive,
+    archive_public_nex_link_shares_for_issuer,
     delete_public_nex_link_shares_for_issuer,
     list_public_nex_link_share_audit_history,
     list_public_nex_link_shares_for_issuer,
@@ -315,6 +317,10 @@ def _issuer_share_management_entry_body(entry) -> dict[str, Any]:
             "updated_at": entry.updated_at,
             "expires_at": entry.expires_at,
         },
+        "management": {
+            "archived": entry.archived,
+            "archived_at": entry.archived_at,
+        },
         "audit_summary": {
             "event_count": entry.audit_event_count,
             "last_event_type": entry.last_audit_event_type,
@@ -330,6 +336,7 @@ def _issuer_share_management_summary_body(summary) -> dict[str, Any]:
         "active_share_count": summary.active_share_count,
         "expired_share_count": summary.expired_share_count,
         "revoked_share_count": summary.revoked_share_count,
+        "archived_share_count": summary.archived_share_count,
         "working_save_share_count": summary.working_save_share_count,
         "commit_snapshot_share_count": summary.commit_snapshot_share_count,
         "runnable_share_count": summary.runnable_share_count,
@@ -361,12 +368,25 @@ def _parse_optional_string_query_param(query_params: Mapping[str, Any], key: str
     return resolved or None
 
 
+def _parse_optional_bool_query_param(query_params: Mapping[str, Any], key: str) -> bool | None:
+    raw_value = query_params.get(key)
+    if raw_value is None or str(raw_value).strip() == "":
+        return None
+    resolved = str(raw_value).strip().lower()
+    if resolved in {"true", "1", "yes"}:
+        return True
+    if resolved in {"false", "0", "no"}:
+        return False
+    raise ValueError(f"issuer public share management query parameter '{key}' must be a boolean")
+
+
 def _issuer_public_share_management_filters(query_params: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "lifecycle_state": _parse_optional_string_query_param(query_params, "lifecycle_state"),
         "stored_lifecycle_state": _parse_optional_string_query_param(query_params, "stored_lifecycle_state"),
         "storage_role": _parse_optional_string_query_param(query_params, "storage_role"),
         "operation": _parse_optional_string_query_param(query_params, "operation"),
+        "archived": _parse_optional_bool_query_param(query_params, "archived"),
     }
 
 
@@ -461,6 +481,7 @@ class RunHttpRouteSurface:
         ("revoke_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/revoke"),
         ("extend_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/extend"),
         ("delete_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/delete"),
+        ("archive_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/archive"),
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
@@ -489,6 +510,7 @@ class RunHttpRouteSurface:
         ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
         ("extend_public_share", "POST", "/api/public-shares/{share_id}/extend"),
         ("revoke_public_share", "POST", "/api/public-shares/{share_id}/revoke"),
+        ("archive_public_share", "POST", "/api/public-shares/{share_id}/archive"),
         ("delete_public_share", "DELETE", "/api/public-shares/{share_id}"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
@@ -1056,6 +1078,7 @@ class RunHttpRouteSurface:
                 stored_lifecycle_state=filters["stored_lifecycle_state"],
                 storage_role=filters["storage_role"],
                 requires_operation=filters["operation"],
+                archived=filters["archived"],
             )
             entries = list_public_nex_link_shares_for_issuer(
                 rows,
@@ -1065,6 +1088,7 @@ class RunHttpRouteSurface:
                 stored_lifecycle_state=filters["stored_lifecycle_state"],
                 storage_role=filters["storage_role"],
                 requires_operation=filters["operation"],
+                archived=filters["archived"],
             )
         except ValueError as exc:
             return _route_response(400, {
@@ -1121,6 +1145,7 @@ class RunHttpRouteSurface:
                 stored_lifecycle_state=filters["stored_lifecycle_state"],
                 storage_role=filters["storage_role"],
                 requires_operation=filters["operation"],
+                archived=filters["archived"],
             )
         except ValueError as exc:
             return _route_response(400, {
@@ -1285,6 +1310,76 @@ class RunHttpRouteSurface:
         })
 
     @classmethod
+    def handle_archive_issuer_public_shares(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_rows_provider=None,
+        public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share archive action route only supports POST."})
+        if http_request.path.rstrip("/") != "/api/users/me/public-shares/actions/archive":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Issuer share management routes require an authenticated session.",
+            })
+        share_ids, error = _parse_management_share_ids(http_request.json_body)
+        if error is not None:
+            return error
+        assert share_ids is not None
+        body = http_request.json_body if isinstance(http_request.json_body, Mapping) else {}
+        archived = bool(body.get("archived", True))
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        try:
+            updated_payloads = archive_public_nex_link_shares_for_issuer(
+                rows,
+                request_auth.requested_by_user_ref,
+                share_ids,
+                archived=archived,
+                now_iso=now_iso,
+                actor_user_ref=request_auth.requested_by_user_ref,
+            )
+        except ValueError as exc:
+            message = str(exc)
+            reason_code = "public_share.share_not_found" if "not found or not owned" in message else "public_share.management_action_rejected"
+            status_code = 404 if reason_code.endswith("share_not_found") else 409
+            return _route_response(status_code, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": reason_code,
+                "message": message,
+                "issuer_user_ref": request_auth.requested_by_user_ref,
+                "requested_share_ids": list(share_ids),
+            })
+        persisted = tuple(public_share_payload_writer(payload) if public_share_payload_writer is not None else payload for payload in updated_payloads)
+        merged_rows = _merge_public_share_rows(rows, persisted)
+        summary = summarize_public_nex_link_shares_for_issuer(merged_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        entries = list_public_nex_link_shares_for_issuer(persisted, request_auth.requested_by_user_ref, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "updated",
+            "issuer_user_ref": request_auth.requested_by_user_ref,
+            "action": "archive",
+            "archived": archived,
+            "requested_share_ids": list(share_ids),
+            "affected_share_count": len(entries),
+            "summary": _issuer_share_management_summary_body(summary),
+            "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
+            "links": {
+                "shares": "/api/users/me/public-shares",
+                "summary": "/api/users/me/public-shares/summary",
+                "self": "/api/users/me/public-shares/actions/archive",
+            },
+        })
+
+
+    @classmethod
     def handle_delete_issuer_public_shares(
         cls,
         *,
@@ -1417,6 +1512,10 @@ class RunHttpRouteSurface:
                 "expires_at": descriptor.expires_at,
                 "issued_by_user_ref": descriptor.issued_by_user_ref,
             },
+            "management": {
+                "archived": descriptor.archived,
+                "archived_at": descriptor.archived_at,
+            },
             "audit_summary": _share_audit_summary(persisted),
             "source_artifact": {
                 "storage_role": descriptor.storage_role,
@@ -1469,6 +1568,10 @@ class RunHttpRouteSurface:
                 "expires_at": descriptor.expires_at,
                 "issued_by_user_ref": descriptor.issued_by_user_ref,
             },
+            "management": {
+                "archived": descriptor.archived,
+                "archived_at": descriptor.archived_at,
+            },
             "audit_summary": _share_audit_summary(payload),
             "source_artifact": {
                 "storage_role": descriptor.storage_role,
@@ -1481,6 +1584,7 @@ class RunHttpRouteSurface:
                 "history": f"{expected_path}/history",
                 "artifact": f"{expected_path}/artifact",
                 "public_share_path": descriptor.share_path,
+                "archive": f"/api/public-shares/{descriptor.share_id}/archive",
             },
         })
 
@@ -1651,6 +1755,10 @@ class RunHttpRouteSurface:
                 "expires_at": extended_descriptor.expires_at,
                 "issued_by_user_ref": extended_descriptor.issued_by_user_ref,
             },
+            "management": {
+                "archived": extended_descriptor.archived,
+                "archived_at": extended_descriptor.archived_at,
+            },
             "audit_summary": _share_audit_summary(persisted),
             "source_artifact": {
                 "storage_role": extended_descriptor.storage_role,
@@ -1664,6 +1772,7 @@ class RunHttpRouteSurface:
                 "artifact": f"/api/public-shares/{extended_descriptor.share_id}/artifact",
                 "public_share_path": extended_descriptor.share_path,
                 "extend": expected_path,
+                "archive": f"/api/public-shares/{extended_descriptor.share_id}/archive",
             },
         })
 
@@ -1734,6 +1843,10 @@ class RunHttpRouteSurface:
                 "expires_at": revoked_descriptor.expires_at,
                 "issued_by_user_ref": revoked_descriptor.issued_by_user_ref,
             },
+            "management": {
+                "archived": revoked_descriptor.archived,
+                "archived_at": revoked_descriptor.archived_at,
+            },
             "audit_summary": _share_audit_summary(persisted),
             "source_artifact": {
                 "storage_role": revoked_descriptor.storage_role,
@@ -1747,8 +1860,105 @@ class RunHttpRouteSurface:
                 "artifact": f"/api/public-shares/{revoked_descriptor.share_id}/artifact",
                 "public_share_path": revoked_descriptor.share_path,
                 "revoke": expected_path,
+                "archive": f"/api/public-shares/{revoked_descriptor.share_id}/archive",
             },
         })
+
+    @classmethod
+    def handle_archive_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_provider=None,
+        public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share archive route only supports POST."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/archive"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.authentication_required",
+                "message": "Public share archive requires an authenticated session.",
+                "share_id": share_id,
+            })
+        payload, descriptor, error = _resolve_public_share_payload(share_id, share_payload_provider)
+        if error is not None:
+            return error
+        assert payload is not None and descriptor is not None
+        if not descriptor.issued_by_user_ref:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.management_not_supported",
+                "message": "Public share archive requires issuer metadata.",
+                "share_id": share_id,
+            })
+        if descriptor.issued_by_user_ref != request_auth.requested_by_user_ref:
+            return _route_response(403, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.forbidden",
+                "message": "Current user is not allowed to archive this public share.",
+                "share_id": share_id,
+            })
+        body = http_request.json_body if isinstance(http_request.json_body, Mapping) else {}
+        archived = bool(body.get("archived", True))
+        updated_payload = update_public_nex_link_share_archive(
+            payload,
+            archived=archived,
+            updated_at=now_iso or None,
+            now_iso=now_iso,
+            actor_user_ref=request_auth.requested_by_user_ref,
+        )
+        persisted = public_share_payload_writer(updated_payload) if public_share_payload_writer is not None else updated_payload
+        updated_descriptor = describe_public_nex_link_share(persisted, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "updated",
+            "share_id": updated_descriptor.share_id,
+            "share_path": updated_descriptor.share_path,
+            "title": updated_descriptor.title,
+            "summary": updated_descriptor.summary,
+            "transport": updated_descriptor.transport,
+            "access_mode": updated_descriptor.access_mode,
+            "viewer_capabilities": list(updated_descriptor.viewer_capabilities),
+            "operation_capabilities": list(updated_descriptor.operation_capabilities),
+            "lifecycle": {
+                "stored_state": updated_descriptor.stored_lifecycle_state,
+                "state": updated_descriptor.lifecycle_state,
+                "created_at": updated_descriptor.created_at,
+                "updated_at": updated_descriptor.updated_at,
+                "expires_at": updated_descriptor.expires_at,
+                "issued_by_user_ref": updated_descriptor.issued_by_user_ref,
+            },
+            "management": {
+                "archived": updated_descriptor.archived,
+                "archived_at": updated_descriptor.archived_at,
+            },
+            "audit_summary": _share_audit_summary(persisted),
+            "source_artifact": {
+                "storage_role": updated_descriptor.storage_role,
+                "canonical_ref": updated_descriptor.canonical_ref,
+                "artifact_format_family": updated_descriptor.artifact_format_family,
+                "source_working_save_id": updated_descriptor.source_working_save_id,
+            },
+            "links": {
+                "self": f"/api/public-shares/{updated_descriptor.share_id}",
+                "history": f"/api/public-shares/{updated_descriptor.share_id}/history",
+                "artifact": f"/api/public-shares/{updated_descriptor.share_id}/artifact",
+                "public_share_path": updated_descriptor.share_path,
+                "archive": expected_path,
+            },
+        })
+
 
     @classmethod
     def handle_delete_public_share(
@@ -1828,6 +2038,10 @@ class RunHttpRouteSurface:
                 "updated_at": descriptor.updated_at,
                 "expires_at": descriptor.expires_at,
                 "issued_by_user_ref": descriptor.issued_by_user_ref,
+            },
+            "management": {
+                "archived": descriptor.archived,
+                "archived_at": descriptor.archived_at,
             },
             "audit_summary": _share_audit_summary(payload),
             "source_artifact": {

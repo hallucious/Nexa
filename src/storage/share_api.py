@@ -23,9 +23,9 @@ from src.storage.nex_api import (
 
 _ALLOWED_SHARE_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("active", "expired", "revoked")
 _TERMINAL_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("expired", "revoked")
-_MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration", "delete")
+_MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration", "delete", "archive")
 
-_ALLOWED_AUDIT_EVENT_TYPES: tuple[ShareAuditEventType, ...] = ("created", "expiration_extended", "revoked")
+_ALLOWED_AUDIT_EVENT_TYPES: tuple[ShareAuditEventType, ...] = ("created", "expiration_extended", "revoked", "archived", "unarchived")
 _MAX_ISSUER_MANAGEMENT_ACTION_SHARES = 20
 _MAX_ISSUER_MANAGEMENT_PAGE_LIMIT = 50
 _UNSET = object()
@@ -228,6 +228,38 @@ def _canonicalize_share_lifecycle(
     }
 
 
+def _canonicalize_share_management(
+    share: Mapping[str, Any],
+    *,
+    archived: bool | None = None,
+    archived_at: str | None | object = _UNSET,
+) -> dict[str, Any]:
+    raw_management = share.get("management")
+    if raw_management is None:
+        management: dict[str, Any] = {}
+    elif isinstance(raw_management, Mapping):
+        management = dict(raw_management)
+    else:
+        raise ValueError("public link share payload share.management must be an object when present")
+    existing_archived = bool(management.get("archived", False))
+    resolved_archived = existing_archived if archived is None else bool(archived)
+    existing_archived_at = _optional_string(management.get("archived_at"), field_name="public link share payload share.management.archived_at")
+    if archived_at is _UNSET:
+        resolved_archived_at = existing_archived_at
+    else:
+        resolved_archived_at = archived_at
+    if resolved_archived_at is not None:
+        _parse_iso_datetime(resolved_archived_at, field_name="public link share payload share.management.archived_at")
+    if not resolved_archived:
+        resolved_archived_at = None
+    elif resolved_archived_at is None:
+        resolved_archived_at = existing_archived_at
+    return {
+        "archived": resolved_archived,
+        "archived_at": resolved_archived_at,
+    }
+
+
 def _canonicalize_audit_history(
     share: Mapping[str, Any],
     *,
@@ -334,6 +366,7 @@ def _with_appended_audit_event(
         "details": dict(details) if details is not None else None,
     }
     audit_history.append(entry)
+    management = share.get("management", {}) if isinstance(share.get("management"), Mapping) else {}
     exported = export_public_nex_link_share(
         payload["artifact"],
         share_id=share.get("share_id"),
@@ -345,6 +378,8 @@ def _with_appended_audit_event(
         expires_at=lifecycle.get("expires_at"),
         issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
         audit_history=audit_history,
+        archived=bool(management.get("archived", False)),
+        archived_at=management.get("archived_at"),
     )
     return exported
 
@@ -375,11 +410,13 @@ def _filter_issuer_public_share_entries(
     stored_lifecycle_state: ShareLifecycleState | None = None,
     storage_role: str | None = None,
     requires_operation: ShareOperation | None = None,
+    archived: bool | None = None,
 ) -> tuple[IssuerPublicShareManagementEntry, ...]:
     normalized_lifecycle_state = _normalize_issuer_management_filter_value(lifecycle_state, field_name="lifecycle_state")
     normalized_stored_state = _normalize_issuer_management_filter_value(stored_lifecycle_state, field_name="stored_lifecycle_state")
     normalized_storage_role = _normalize_issuer_management_filter_value(storage_role, field_name="storage_role")
     normalized_operation = _normalize_issuer_management_filter_value(requires_operation, field_name="requires_operation")
+    normalized_archived = archived
     if normalized_lifecycle_state is not None and normalized_lifecycle_state not in _ALLOWED_SHARE_LIFECYCLE_STATES:
         raise ValueError("issuer public share lifecycle_state filter is unsupported")
     if normalized_stored_state is not None and normalized_stored_state not in _ALLOWED_SHARE_LIFECYCLE_STATES:
@@ -397,6 +434,8 @@ def _filter_issuer_public_share_entries(
         if normalized_storage_role is not None and entry.storage_role != normalized_storage_role:
             continue
         if normalized_operation is not None and normalized_operation not in entry.operation_capabilities:
+            continue
+        if normalized_archived is not None and entry.archived is not normalized_archived:
             continue
         resolved.append(entry)
     return tuple(resolved)
@@ -423,6 +462,7 @@ def list_public_nex_link_shares_for_issuer(
     stored_lifecycle_state: ShareLifecycleState | None = None,
     storage_role: str | None = None,
     requires_operation: ShareOperation | None = None,
+    archived: bool | None = None,
 ) -> tuple[IssuerPublicShareManagementEntry, ...]:
     issuer = issuer_user_ref.strip()
     if not issuer:
@@ -445,6 +485,7 @@ def list_public_nex_link_shares_for_issuer(
         stored_lifecycle_state=stored_lifecycle_state,
         storage_role=storage_role,
         requires_operation=requires_operation,
+        archived=archived,
     )
 
 
@@ -457,6 +498,7 @@ def summarize_public_nex_link_shares_for_issuer(
     stored_lifecycle_state: ShareLifecycleState | None = None,
     storage_role: str | None = None,
     requires_operation: ShareOperation | None = None,
+    archived: bool | None = None,
 ) -> IssuerPublicShareManagementSummary:
     entries = list_public_nex_link_shares_for_issuer(
         sources,
@@ -466,10 +508,12 @@ def summarize_public_nex_link_shares_for_issuer(
         stored_lifecycle_state=stored_lifecycle_state,
         storage_role=storage_role,
         requires_operation=requires_operation,
+        archived=archived,
     )
     active_count = sum(1 for entry in entries if entry.lifecycle_state == "active")
     expired_count = sum(1 for entry in entries if entry.lifecycle_state == "expired")
     revoked_count = sum(1 for entry in entries if entry.lifecycle_state == "revoked")
+    archived_count = sum(1 for entry in entries if entry.archived)
     working_save_count = sum(1 for entry in entries if entry.storage_role == "working_save")
     commit_snapshot_count = sum(1 for entry in entries if entry.storage_role == "commit_snapshot")
     runnable_count = sum(1 for entry in entries if entry.lifecycle_state == "active" and "run_artifact" in entry.operation_capabilities)
@@ -483,6 +527,7 @@ def summarize_public_nex_link_shares_for_issuer(
         active_share_count=active_count,
         expired_share_count=expired_count,
         revoked_share_count=revoked_count,
+        archived_share_count=archived_count,
         working_save_share_count=working_save_count,
         commit_snapshot_share_count=commit_snapshot_count,
         runnable_share_count=runnable_count,
@@ -546,6 +591,8 @@ def export_public_nex_link_share(
     expires_at: str | None = None,
     issued_by_user_ref: str | None = None,
     audit_history: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] | None = None,
+    archived: bool = False,
+    archived_at: str | None = None,
 ) -> dict[str, Any]:
     artifact = export_public_nex_artifact(model_or_data)
     descriptor = describe_public_nex_artifact(artifact)
@@ -556,6 +603,7 @@ def export_public_nex_link_share(
     resolved_title = title or str(meta.get("name") or descriptor.canonical_ref)
     resolved_summary = summary if summary is not None else (str(meta.get("description")) if meta.get("description") is not None else None)
     lifecycle = _canonicalize_share_lifecycle({}, created_at=created_at, updated_at=updated_at, expires_at=expires_at, issued_by_user_ref=issued_by_user_ref, lifecycle_state=lifecycle_state)
+    management = _canonicalize_share_management({}, archived=archived, archived_at=archived_at)
     audit_payload = {"history": _canonicalize_audit_history({}, lifecycle=lifecycle, audit_history=audit_history)}
     return {
         "share": {
@@ -572,6 +620,7 @@ def export_public_nex_link_share(
             "viewer_capabilities": list(_PUBLIC_NEX_SHARE_BOUNDARY.viewer_capabilities),
             "operation_capabilities": list(_operation_capabilities_for_role(descriptor.storage_role)),
             "lifecycle": lifecycle,
+            "management": management,
             "audit": audit_payload,
         },
         "artifact": artifact,
@@ -612,6 +661,7 @@ def load_public_nex_link_share(source: str | Path | dict[str, Any]) -> dict[str,
     if summary is not None and not isinstance(summary, str):
         raise ValueError("public link share payload share.summary must be a string when present")
     lifecycle = _canonicalize_share_lifecycle(share)
+    management = _canonicalize_share_management(share)
     audit_history = _canonicalize_audit_history(share, lifecycle=lifecycle)
     return export_public_nex_link_share(
         exported_artifact,
@@ -624,6 +674,8 @@ def load_public_nex_link_share(source: str | Path | dict[str, Any]) -> dict[str,
         expires_at=lifecycle["expires_at"],
         issued_by_user_ref=lifecycle["issued_by_user_ref"],
         audit_history=audit_history,
+        archived=management["archived"],
+        archived_at=management["archived_at"],
     )
 
 
@@ -637,6 +689,7 @@ def describe_public_nex_link_share(
     descriptor = describe_public_nex_artifact(payload["artifact"])
     lifecycle = share.get("lifecycle", {}) if isinstance(share.get("lifecycle"), dict) else {}
     history = list_public_nex_link_share_audit_history(payload)
+    management = share.get("management", {}) if isinstance(share.get("management"), dict) else {}
     stored_state = lifecycle.get("state", "active")
     effective_state = _effective_share_lifecycle_state(
         stored_state=stored_state,
@@ -661,6 +714,8 @@ def describe_public_nex_link_share(
         updated_at=lifecycle.get("updated_at"),
         expires_at=lifecycle.get("expires_at"),
         issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
+        archived=bool(management.get("archived", False)),
+        archived_at=management.get("archived_at"),
         source_working_save_id=descriptor.source_working_save_id,
         audit_event_count=len(history),
         last_audit_event_type=history[-1]["event_type"] if history else None,
@@ -696,6 +751,7 @@ def update_public_nex_link_share_lifecycle(
                 if new_expires_at <= current_expires_dt:
                     raise ValueError("public link share expiration extension must move forward")
     next_expires = lifecycle.get("expires_at") if expires_at is _UNSET else expires_at
+    management = share.get("management", {}) if isinstance(share.get("management"), Mapping) else {}
     return export_public_nex_link_share(
         payload["artifact"],
         share_id=share["share_id"],
@@ -707,6 +763,8 @@ def update_public_nex_link_share_lifecycle(
         expires_at=next_expires,
         issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
         audit_history=_canonicalize_audit_history(share, lifecycle=lifecycle),
+        archived=bool(management.get("archived", False)),
+        archived_at=management.get("archived_at"),
     )
 
 
@@ -782,6 +840,62 @@ def extend_public_nex_link_shares_for_issuer_expiration(
         for payload in targets
     )
 
+
+def update_public_nex_link_share_archive(
+    source: str | Path | dict[str, Any],
+    *,
+    archived: bool = True,
+    updated_at: str | None = None,
+    now_iso: str | None = None,
+    actor_user_ref: str | None = None,
+) -> dict[str, Any]:
+    payload = load_public_nex_link_share(source)
+    share = payload["share"]
+    lifecycle = share.get("lifecycle", {}) if isinstance(share.get("lifecycle"), Mapping) else {}
+    management = share.get("management", {}) if isinstance(share.get("management"), Mapping) else {}
+    event_at = updated_at or now_iso or datetime.now(UTC).isoformat()
+    next_archived_at = event_at if archived else None
+    updated = export_public_nex_link_share(
+        payload["artifact"],
+        share_id=share.get("share_id"),
+        title=share.get("title"),
+        summary=share.get("summary"),
+        lifecycle_state=lifecycle.get("state", "active"),
+        created_at=lifecycle.get("created_at"),
+        updated_at=event_at,
+        expires_at=lifecycle.get("expires_at"),
+        issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
+        audit_history=_canonicalize_audit_history(share, lifecycle=lifecycle),
+        archived=archived,
+        archived_at=next_archived_at,
+    )
+    event_type: ShareAuditEventType = "archived" if archived else "unarchived"
+    return _with_appended_audit_event(updated, event_type=event_type, actor_user_ref=actor_user_ref, at=event_at)
+
+
+def archive_public_nex_link_shares_for_issuer(
+    sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
+    issuer_user_ref: str,
+    share_ids: list[str] | tuple[str, ...] | Sequence[str],
+    *,
+    archived: bool = True,
+    now_iso: str | None = None,
+    actor_user_ref: str | None = None,
+) -> tuple[dict[str, Any], ...]:
+    targets = _resolve_issuer_share_targets(sources, issuer_user_ref, share_ids, now_iso=now_iso)
+    return tuple(
+        update_public_nex_link_share_archive(
+            payload,
+            archived=archived,
+            updated_at=now_iso or datetime.now(UTC).isoformat(),
+            now_iso=now_iso,
+            actor_user_ref=actor_user_ref or issuer_user_ref.strip(),
+        )
+        for payload in targets
+    )
+
+
+
 def delete_public_nex_link_shares_for_issuer(
     sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
     issuer_user_ref: str,
@@ -808,9 +922,11 @@ def save_public_nex_link_share_file(
     updated_at: str | None = None,
     expires_at: str | None = None,
     issued_by_user_ref: str | None = None,
+    archived: bool = False,
+    archived_at: str | None = None,
 ) -> Path:
     path = Path(destination)
-    payload = export_public_nex_link_share(model_or_data, share_id=share_id, title=title, summary=summary, lifecycle_state=lifecycle_state, created_at=created_at, updated_at=updated_at, expires_at=expires_at, issued_by_user_ref=issued_by_user_ref)
+    payload = export_public_nex_link_share(model_or_data, share_id=share_id, title=title, summary=summary, lifecycle_state=lifecycle_state, created_at=created_at, updated_at=updated_at, expires_at=expires_at, issued_by_user_ref=issued_by_user_ref, archived=archived, archived_at=archived_at)
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
 
@@ -828,10 +944,12 @@ __all__ = [
     "normalize_issuer_public_share_management_pagination",
     "revoke_public_nex_link_shares_for_issuer",
     "extend_public_nex_link_shares_for_issuer_expiration",
+    "archive_public_nex_link_shares_for_issuer",
     "delete_public_nex_link_shares_for_issuer",
     "update_public_nex_link_share_lifecycle",
     "revoke_public_nex_link_share",
     "extend_public_nex_link_share_expiration",
+    "update_public_nex_link_share_archive",
     "save_public_nex_link_share_file",
     "ensure_public_nex_link_share_operation_allowed",
 ]
