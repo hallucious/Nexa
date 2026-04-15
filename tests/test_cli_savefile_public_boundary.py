@@ -417,3 +417,111 @@ def test_savefile_upgrade_rejects_public_artifact_input(tmp_path, monkeypatch, c
     assert payload["status"] == "error"
     assert payload["subcommand"] == "upgrade"
     assert "legacy savefiles" in payload["message"]
+
+
+def test_savefile_share_export_writes_public_link_share_payload(tmp_path, monkeypatch, capsys):
+    artifact_path = tmp_path / "public_share_source.nex"
+    share_path = tmp_path / "public_share.json"
+    save_nex_artifact_file(_working_save(name="share_source"), artifact_path)
+
+    monkeypatch.setattr(
+        "sys.argv",
+        ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path), "--title", "Shared Demo"],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["share_id"].startswith("share_")
+    assert payload["storage_role"] == "working_save"
+    raw = json.loads(share_path.read_text(encoding="utf-8"))
+    assert raw["share"]["transport"] == "link"
+    assert raw["share"]["title"] == "Shared Demo"
+    assert raw["artifact"]["meta"]["storage_role"] == "working_save"
+
+
+def test_savefile_info_reports_public_link_share_summary(tmp_path, monkeypatch, capsys):
+    artifact_path = tmp_path / "public_share_source.nex"
+    share_path = tmp_path / "public_share.json"
+    save_nex_artifact_file(_working_save(name="share_source"), artifact_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path)])
+    assert main() == 0
+    capsys.readouterr()
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "info", str(share_path)])
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["input_mode"] == "public_link_share"
+    assert payload["share_id"].startswith("share_")
+    assert payload["storage_role"] == "working_save"
+    assert payload["viewer_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy"]
+
+
+def test_savefile_share_import_materializes_public_artifact(tmp_path, monkeypatch, capsys):
+    artifact_path = tmp_path / "public_commit_source.nex"
+    share_path = tmp_path / "public_share.json"
+    imported_path = tmp_path / "imported_snapshot.nex"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(name="share_source"), commit_id="commit-share-import")
+    save_nex_artifact_file(snapshot, artifact_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path)])
+    assert main() == 0
+    capsys.readouterr()
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "import", str(share_path), str(imported_path)])
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["input_mode"] == "public_share"
+    assert payload["storage_role"] == "commit_snapshot"
+    raw = json.loads(imported_path.read_text(encoding="utf-8"))
+    assert raw["meta"]["storage_role"] == "commit_snapshot"
+    assert raw["meta"]["commit_id"] == "commit-share-import"
+
+
+def test_engine_cli_run_public_link_share_emits_share_identity(tmp_path, monkeypatch):
+    artifact_path = tmp_path / "public_run_source.nex"
+    share_path = tmp_path / "public_share.json"
+    out_path = tmp_path / "result.json"
+    save_nex_artifact_file(_working_save(name="share_source"), artifact_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path)])
+    assert main() == 0
+
+    monkeypatch.setattr("sys.argv", ["nexa", "run", str(share_path), "--out", str(out_path)])
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(out_path.read_text(encoding="utf-8"))
+    assert payload["storage_role"] == "working_save"
+    assert payload["source_share_id"].startswith("share_")
+    assert payload["source_artifact"]["share_id"] == payload["source_share_id"]
+    assert payload["replay_payload"]["source_artifact"]["share_id"] == payload["source_share_id"]
+
+
+def test_savefile_checkout_accepts_public_link_share_commit_snapshot(tmp_path, monkeypatch, capsys):
+    artifact_path = tmp_path / "public_checkout_source.nex"
+    share_path = tmp_path / "public_checkout_share.json"
+    checkout_path = tmp_path / "checked_out.nex"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(name="checkout_share"), commit_id="commit-share-checkout")
+    save_nex_artifact_file(snapshot, artifact_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path)])
+    assert main() == 0
+    capsys.readouterr()
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "checkout", str(share_path), str(checkout_path)])
+    exit_code = main()
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["input_mode"] == "public_share"
+    assert payload["storage_role"] == "working_save"
+    raw = json.loads(checkout_path.read_text(encoding="utf-8"))
+    assert raw["meta"]["storage_role"] == "working_save"

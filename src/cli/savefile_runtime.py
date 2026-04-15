@@ -13,6 +13,7 @@ from src.circuit.runtime_adapter import (
 from src.contracts.savefile_executor_aligned import SavefileExecutor
 from src.contracts.savefile_loader import load_savefile_from_path
 from src.storage.nex_api import load_nex
+from src.storage.share_api import load_public_nex_link_share, is_public_nex_link_share_payload
 from src.storage.legacy_savefile_bridge import savefile_from_loaded_nex_artifact
 from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
 from src.contracts.savefile_validator import validate_savefile
@@ -27,6 +28,9 @@ def is_savefile_contract(circuit_path: str) -> bool:
 
     if not isinstance(data, dict):
         return False
+
+    if is_public_nex_link_share_payload(data):
+        return True
 
     meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
     if meta.get("storage_role") in {"working_save", "commit_snapshot"}:
@@ -44,6 +48,7 @@ class SavefileExecutionContext:
     public_load_status: str | None = None
     working_save_id: str | None = None
     commit_id: str | None = None
+    share_id: str | None = None
 
 
 def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
@@ -53,10 +58,20 @@ def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
         data = None
 
     if isinstance(data, dict):
-        meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
-        storage_role = meta.get("storage_role")
-        if storage_role in {"working_save", "commit_snapshot"}:
-            loaded = load_nex(circuit_path)
+        share_id = None
+        loaded = None
+        if is_public_nex_link_share_payload(data):
+            share_payload = load_public_nex_link_share(circuit_path)
+            share = share_payload.get("share", {}) if isinstance(share_payload.get("share"), dict) else {}
+            share_id = share.get("share_id") if isinstance(share.get("share_id"), str) else None
+            loaded = load_nex(share_payload["artifact"])
+        else:
+            meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
+            storage_role = meta.get("storage_role")
+            if storage_role in {"working_save", "commit_snapshot"}:
+                loaded = load_nex(circuit_path)
+
+        if loaded is not None:
             if loaded.parsed_model is None:
                 blocking_messages = [finding.message for finding in loaded.findings if getattr(finding, "blocking", False)]
                 detail = blocking_messages[0] if blocking_messages else f"public .nex artifact could not be loaded ({loaded.load_status})"
@@ -80,6 +95,7 @@ def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
                 public_load_status=loaded.load_status,
                 working_save_id=working_save_id,
                 commit_id=commit_id,
+                share_id=share_id,
             )
 
     return SavefileExecutionContext(savefile=load_savefile_from_path(circuit_path))

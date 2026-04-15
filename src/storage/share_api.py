@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from hashlib import sha256
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from src.contracts.nex_contract import (
     PublicNexShareBoundary,
@@ -27,6 +27,24 @@ _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
 
 def get_public_nex_share_boundary() -> PublicNexShareBoundary:
     return _PUBLIC_NEX_SHARE_BOUNDARY
+
+
+def is_public_nex_link_share_payload(data: Mapping[str, Any]) -> bool:
+    if not isinstance(data, Mapping):
+        return False
+    share = data.get("share")
+    artifact = data.get("artifact")
+    if not isinstance(share, Mapping) or not isinstance(artifact, Mapping):
+        return False
+    return share.get("share_family") == _PUBLIC_NEX_SHARE_BOUNDARY.share_family
+
+
+def extract_public_nex_link_share_artifact(source: str | Path | dict[str, Any]) -> dict[str, Any]:
+    payload = load_public_nex_link_share(source)
+    artifact = payload.get("artifact")
+    if not isinstance(artifact, dict):
+        raise ValueError("public link share payload must contain a canonical artifact object")
+    return dict(artifact)
 
 
 def _stable_share_id(artifact_payload: dict[str, Any]) -> str:
@@ -147,6 +165,8 @@ def save_public_nex_link_share_file(
 
 __all__ = [
     "get_public_nex_share_boundary",
+    "is_public_nex_link_share_payload",
+    "extract_public_nex_link_share_artifact",
     "export_public_nex_link_share",
     "load_public_nex_link_share",
     "describe_public_nex_link_share",

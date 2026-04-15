@@ -293,6 +293,25 @@ def build_parser():
     savefile_template_sub = savefile_template.add_subparsers(dest="savefile_template_command")
     savefile_template_sub.add_parser("list")
 
+    savefile_share = savefile_sub.add_parser("share")
+    savefile_share_sub = savefile_share.add_subparsers(dest="savefile_share_command")
+
+    savefile_share_export = savefile_share_sub.add_parser("export")
+    savefile_share_export.add_argument("input", help="Path to input public .nex artifact")
+    savefile_share_export.add_argument("output", help="Path to output public link-share payload")
+    savefile_share_export.add_argument("--share-id", help="Optional share identifier override")
+    savefile_share_export.add_argument("--title", help="Optional share title override")
+    savefile_share_export.add_argument("--summary", help="Optional share summary override")
+    savefile_share_export.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
+
+    savefile_share_info = savefile_share_sub.add_parser("info")
+    savefile_share_info.add_argument("input", help="Path to input public link-share payload")
+
+    savefile_share_import = savefile_share_sub.add_parser("import")
+    savefile_share_import.add_argument("input", help="Path to input public link-share payload")
+    savefile_share_import.add_argument("output", help="Path to output imported public .nex artifact")
+    savefile_share_import.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
+
     task_parser = sub.add_parser("task")
     task_sub = task_parser.add_subparsers(dest="task_command")
 
@@ -717,6 +736,12 @@ def _is_public_nex_payload(data: dict) -> bool:
     return meta.get("storage_role") in {"working_save", "commit_snapshot"}
 
 
+def _is_public_nex_link_share_payload(data: dict) -> bool:
+    from src.storage.share_api import is_public_nex_link_share_payload
+
+    return is_public_nex_link_share_payload(data)
+
+
 def _load_public_nex_artifact(input_path: Path):
     from src.storage.nex_api import load_nex
 
@@ -728,21 +753,52 @@ def _load_public_nex_artifact(input_path: Path):
     return loaded
 
 
+def _load_public_nex_link_share(input_path: Path) -> dict:
+    from src.storage.nex_api import load_nex
+    from src.storage.share_api import load_public_nex_link_share
+
+    share_payload = load_public_nex_link_share(input_path)
+    loaded = load_nex(share_payload["artifact"])
+    if loaded.parsed_model is None:
+        blocking_messages = [finding.message for finding in loaded.findings if getattr(finding, "blocking", False)]
+        detail = blocking_messages[0] if blocking_messages else f"public link share artifact could not be loaded ({loaded.load_status})"
+        raise ValueError(detail)
+    return {"share_payload": share_payload, "loaded": loaded}
+
+
 def _load_cli_savefile_source(input_value: str):
     from src.contracts.savefile_loader import load_savefile_from_path
 
     input_path = Path(input_value)
-    if input_path.suffix != ".nex":
-        raise ValueError("savefile input must use .nex extension")
+    if input_path.suffix not in {".nex", ".json"}:
+        raise ValueError("savefile input must use .nex extension unless it is a public link-share payload")
+    if input_path.suffix == ".json" and not input_path.exists():
+        raise ValueError(
+            "savefile input must use .nex extension unless it is an existing public link-share payload"
+        )
 
     raw_data = _read_json_object(input_path)
+    if _is_public_nex_link_share_payload(raw_data):
+        share_source = _load_public_nex_link_share(input_path)
+        return {
+            "mode": "public_share",
+            "input_path": input_path,
+            "raw_data": raw_data,
+            "share_payload": share_source["share_payload"],
+            "loaded": share_source["loaded"],
+        }
     if _is_public_nex_payload(raw_data):
+        if input_path.suffix != ".nex":
+            raise ValueError("public .nex artifact input must use .nex extension")
         return {
             "mode": "public",
             "input_path": input_path,
             "raw_data": raw_data,
             "loaded": _load_public_nex_artifact(input_path),
         }
+
+    if input_path.suffix != ".nex":
+        raise ValueError("savefile input must use .nex extension unless it is a public link-share payload")
 
     return {
         "mode": "legacy",
@@ -796,6 +852,20 @@ def _public_artifact_payload(loaded, *, input_path: Path) -> dict:
     return payload
 
 
+def _public_share_payload(share_payload: dict, loaded, *, input_path: Path) -> dict:
+    payload = _public_artifact_payload(loaded, input_path=input_path)
+    share = share_payload.get("share", {}) if isinstance(share_payload.get("share"), dict) else {}
+    payload.update({
+        "input_mode": "public_link_share",
+        "share_id": share.get("share_id"),
+        "share_path": share.get("share_path"),
+        "share_title": share.get("title"),
+        "share_summary": share.get("summary"),
+        "viewer_capabilities": share.get("viewer_capabilities", []),
+    })
+    return payload
+
+
 def _persist_public_working_save(model, input_path: Path) -> None:
     from src.storage.nex_api import validate_working_save
     from src.storage.serialization import save_nex_artifact_file
@@ -846,7 +916,7 @@ def savefile_validate_command(args) -> int:
     loaded_source = _load_cli_savefile_source(args.input)
     input_path = loaded_source["input_path"]
 
-    if loaded_source["mode"] == "public":
+    if loaded_source["mode"] in {"public", "public_share"}:
         loaded = loaded_source["loaded"]
         parsed = loaded.parsed_model
         if loaded.storage_role == "working_save":
@@ -894,6 +964,10 @@ def savefile_info_command(args) -> int:
         payload = _public_artifact_payload(loaded_source["loaded"], input_path=input_path)
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
+    if loaded_source["mode"] == "public_share":
+        payload = _public_share_payload(loaded_source["share_payload"], loaded_source["loaded"], input_path=input_path)
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+        return 0
 
     savefile = loaded_source["savefile"]
 
@@ -921,6 +995,8 @@ def savefile_info_command(args) -> int:
 
 def _load_editable_savefile(input_value: str):
     source = _load_cli_savefile_source(input_value)
+    if source["mode"] == "public_share":
+        raise ValueError("savefile edit commands do not modify public link shares; import or checkout first")
     if source["mode"] == "public":
         loaded = source["loaded"]
         if loaded.storage_role != "working_save":
@@ -946,6 +1022,8 @@ def _load_commit_source(input_value: str):
     from src.storage.legacy_savefile_bridge import working_save_model_from_legacy_savefile
 
     source = _load_cli_savefile_source(input_value)
+    if source["mode"] == "public_share":
+        raise ValueError("savefile commit does not accept public link shares directly; import the shared artifact first")
     if source["mode"] == "public":
         loaded = source["loaded"]
         if loaded.storage_role != "working_save":
@@ -957,12 +1035,13 @@ def _load_commit_source(input_value: str):
 
 def _load_checkout_source(input_value: str):
     source = _load_cli_savefile_source(input_value)
-    if source["mode"] != "public":
-        raise ValueError("savefile checkout only supports public commit_snapshot artifacts")
+    if source["mode"] not in {"public", "public_share"}:
+        raise ValueError("savefile checkout only supports public commit_snapshot artifacts or public link shares")
     loaded = source["loaded"]
     if loaded.storage_role != "commit_snapshot":
         raise ValueError("savefile checkout only supports commit_snapshot artifacts")
-    return source["input_path"], loaded.parsed_model
+    resolved_mode = "public_commit_snapshot" if source["mode"] == "public" else "public_share"
+    return source["input_path"], loaded.parsed_model, resolved_mode
 
 
 
@@ -971,7 +1050,7 @@ def savefile_checkout_command(args) -> int:
     from src.storage.nex_api import validate_working_save
     from src.storage.serialization import save_nex_artifact_file
 
-    input_path, commit_snapshot = _load_checkout_source(args.input)
+    input_path, commit_snapshot, source_mode = _load_checkout_source(args.input)
     output_path = Path(args.output)
     if output_path.suffix != ".nex":
         raise ValueError("working save output must use .nex extension")
@@ -994,7 +1073,7 @@ def savefile_checkout_command(args) -> int:
         "status": "ok",
         "input": str(input_path),
         "output": str(output_path),
-        "input_mode": "public_commit_snapshot",
+        "input_mode": source_mode,
         "storage_role": "working_save",
         "canonical_ref": working_save.meta.working_save_id,
         "working_save_id": working_save.meta.working_save_id,
@@ -1013,8 +1092,8 @@ def savefile_upgrade_command(args) -> int:
     from src.storage.serialization import save_nex_artifact_file
 
     source = _load_cli_savefile_source(args.input)
-    if source["mode"] == "public":
-        raise ValueError("savefile upgrade only supports legacy savefiles; public artifacts are already role-aware")
+    if source["mode"] != "legacy":
+        raise ValueError("savefile upgrade only supports legacy savefiles; public artifacts or shares are already role-aware")
 
     input_path = source["input_path"]
     working_save = working_save_model_from_legacy_savefile(
@@ -1045,6 +1124,88 @@ def savefile_upgrade_command(args) -> int:
         "working_save_id": working_save.meta.working_save_id,
         "name": working_save.meta.name,
         "entry": working_save.circuit.entry,
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+def savefile_share_export_command(args) -> int:
+    from src.storage.share_api import describe_public_nex_link_share, save_public_nex_link_share_file
+
+    source = _load_cli_savefile_source(args.input)
+    if source["mode"] not in {"public", "public_share"}:
+        raise ValueError("savefile share export only supports public .nex artifacts or existing public link shares")
+
+    output_path = Path(args.output)
+    if output_path.exists() and not args.force:
+        raise FileExistsError(f"output already exists: {output_path}")
+
+    model_or_data = source["share_payload"]["artifact"] if source["mode"] == "public_share" else source["loaded"].parsed_model
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    written = save_public_nex_link_share_file(
+        model_or_data,
+        output_path,
+        share_id=getattr(args, "share_id", None),
+        title=getattr(args, "title", None),
+        summary=getattr(args, "summary", None),
+    )
+    descriptor = describe_public_nex_link_share(written)
+    payload = {
+        "status": "ok",
+        "input": str(source["input_path"]),
+        "output": str(written),
+        "input_mode": source["mode"],
+        "share_id": descriptor.share_id,
+        "share_path": descriptor.share_path,
+        "storage_role": descriptor.storage_role,
+        "canonical_ref": descriptor.canonical_ref,
+        "title": descriptor.title,
+        "summary": descriptor.summary,
+        "viewer_capabilities": list(descriptor.viewer_capabilities),
+    }
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+def savefile_share_info_command(args) -> int:
+    loaded_source = _load_cli_savefile_source(args.input)
+    if loaded_source["mode"] != "public_share":
+        raise ValueError("savefile share info only supports public link-share payloads")
+    payload = _public_share_payload(loaded_source["share_payload"], loaded_source["loaded"], input_path=loaded_source["input_path"])
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    return 0
+
+
+def savefile_share_import_command(args) -> int:
+    from src.storage.serialization import save_nex_artifact_file
+
+    loaded_source = _load_cli_savefile_source(args.input)
+    if loaded_source["mode"] != "public_share":
+        raise ValueError("savefile share import only supports public link-share payloads")
+
+    output_path = Path(args.output)
+    if output_path.suffix != ".nex":
+        raise ValueError("share import output must use .nex extension")
+    if output_path.exists() and not args.force:
+        raise FileExistsError(f"output already exists: {output_path}")
+
+    parsed_model = loaded_source["loaded"].parsed_model
+    if parsed_model is None:
+        raise ValueError("public link share artifact is not loadable")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    save_nex_artifact_file(parsed_model, output_path)
+    share = loaded_source["share_payload"].get("share", {}) if isinstance(loaded_source["share_payload"].get("share"), dict) else {}
+    payload = {
+        "status": "ok",
+        "input": str(loaded_source["input_path"]),
+        "output": str(output_path),
+        "input_mode": "public_share",
+        "share_id": share.get("share_id"),
+        "storage_role": loaded_source["loaded"].storage_role,
+        "canonical_ref": getattr(getattr(parsed_model, "meta", None), "working_save_id", None) or getattr(getattr(parsed_model, "meta", None), "commit_id", None),
+        "name": getattr(getattr(parsed_model, "meta", None), "name", None),
+        "entry": getattr(getattr(parsed_model, "circuit", None), "entry", None),
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
@@ -1382,6 +1543,9 @@ def _is_savefile_contract(circuit_path: str) -> bool:
     if not isinstance(data, dict):
         return False
 
+    if _is_public_nex_link_share_payload(data):
+        return True
+
     meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
     if meta.get("storage_role") in {"working_save", "commit_snapshot"}:
         return True
@@ -1419,6 +1583,7 @@ def _savefile_payload(
     canonical_ref: str | None = None,
     working_save_id: str | None = None,
     commit_id: str | None = None,
+    source_share_id: str | None = None,
 ):
     payload = create_serialized_savefile_execution_payload(
         savefile,
@@ -1434,6 +1599,10 @@ def _savefile_payload(
         payload["storage_role"] = storage_role
     if canonical_ref is not None:
         payload["canonical_ref"] = canonical_ref
+    if source_share_id is not None:
+        payload["source_share_id"] = source_share_id
+        payload.setdefault("source_artifact", {})["share_id"] = source_share_id
+        payload.setdefault("replay_payload", {}).setdefault("source_artifact", {})["share_id"] = source_share_id
     return payload
 
 
@@ -1456,6 +1625,7 @@ def _run_savefile_command(args):
         canonical_ref=execution_context.canonical_ref,
         working_save_id=execution_context.working_save_id,
         commit_id=execution_context.commit_id,
+        source_share_id=getattr(execution_context, "share_id", None),
     )
 
     if args.out:
@@ -1779,6 +1949,13 @@ def main():
             if getattr(args, "savefile_command", None) == "template":
                 if getattr(args, "savefile_template_command", None) == "list":
                     return savefile_template_list_command(args)
+            if getattr(args, "savefile_command", None) == "share":
+                if getattr(args, "savefile_share_command", None) == "export":
+                    return savefile_share_export_command(args)
+                if getattr(args, "savefile_share_command", None) == "info":
+                    return savefile_share_info_command(args)
+                if getattr(args, "savefile_share_command", None) == "import":
+                    return savefile_share_import_command(args)
             parser.print_help()
             return 1
         except Exception as exc:
