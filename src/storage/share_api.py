@@ -27,6 +27,7 @@ _MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration")
 
 _ALLOWED_AUDIT_EVENT_TYPES: tuple[ShareAuditEventType, ...] = ("created", "expiration_extended", "revoked")
 _MAX_ISSUER_MANAGEMENT_ACTION_SHARES = 20
+_MAX_ISSUER_MANAGEMENT_PAGE_LIMIT = 50
 _UNSET = object()
 
 _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
@@ -340,11 +341,68 @@ def list_public_nex_link_share_audit_history(
     return tuple(dict(entry) for entry in history)
 
 
+def _normalize_issuer_management_filter_value(value: str | None, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    resolved = value.strip()
+    return resolved or None
+
+
+def _filter_issuer_public_share_entries(
+    entries: Sequence[IssuerPublicShareManagementEntry],
+    *,
+    lifecycle_state: ShareLifecycleState | None = None,
+    stored_lifecycle_state: ShareLifecycleState | None = None,
+    storage_role: str | None = None,
+    requires_operation: ShareOperation | None = None,
+) -> tuple[IssuerPublicShareManagementEntry, ...]:
+    normalized_lifecycle_state = _normalize_issuer_management_filter_value(lifecycle_state, field_name="lifecycle_state")
+    normalized_stored_state = _normalize_issuer_management_filter_value(stored_lifecycle_state, field_name="stored_lifecycle_state")
+    normalized_storage_role = _normalize_issuer_management_filter_value(storage_role, field_name="storage_role")
+    normalized_operation = _normalize_issuer_management_filter_value(requires_operation, field_name="requires_operation")
+    if normalized_lifecycle_state is not None and normalized_lifecycle_state not in _ALLOWED_SHARE_LIFECYCLE_STATES:
+        raise ValueError("issuer public share lifecycle_state filter is unsupported")
+    if normalized_stored_state is not None and normalized_stored_state not in _ALLOWED_SHARE_LIFECYCLE_STATES:
+        raise ValueError("issuer public share stored_lifecycle_state filter is unsupported")
+    if normalized_storage_role is not None and normalized_storage_role not in get_public_nex_format_boundary().supported_roles:
+        raise ValueError("issuer public share storage_role filter is unsupported")
+    if normalized_operation is not None and normalized_operation not in _PUBLIC_NEX_SHARE_BOUNDARY.supported_operations:
+        raise ValueError("issuer public share operation filter is unsupported")
+    resolved: list[IssuerPublicShareManagementEntry] = []
+    for entry in entries:
+        if normalized_lifecycle_state is not None and entry.lifecycle_state != normalized_lifecycle_state:
+            continue
+        if normalized_stored_state is not None and entry.stored_lifecycle_state != normalized_stored_state:
+            continue
+        if normalized_storage_role is not None and entry.storage_role != normalized_storage_role:
+            continue
+        if normalized_operation is not None and normalized_operation not in entry.operation_capabilities:
+            continue
+        resolved.append(entry)
+    return tuple(resolved)
+
+
+def normalize_issuer_public_share_management_pagination(*, limit: int | None = None, offset: int = 0) -> tuple[int, int]:
+    resolved_limit = 20 if limit is None else limit
+    resolved_offset = offset
+    if resolved_limit <= 0:
+        raise ValueError("issuer public share management limit must be > 0")
+    if resolved_limit > _MAX_ISSUER_MANAGEMENT_PAGE_LIMIT:
+        raise ValueError(f"issuer public share management limit exceeds bounded page limit ({_MAX_ISSUER_MANAGEMENT_PAGE_LIMIT})")
+    if resolved_offset < 0:
+        raise ValueError("issuer public share management offset must be >= 0")
+    return resolved_limit, resolved_offset
+
+
 def list_public_nex_link_shares_for_issuer(
     sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
     issuer_user_ref: str,
     *,
     now_iso: str | None = None,
+    lifecycle_state: ShareLifecycleState | None = None,
+    stored_lifecycle_state: ShareLifecycleState | None = None,
+    storage_role: str | None = None,
+    requires_operation: ShareOperation | None = None,
 ) -> tuple[IssuerPublicShareManagementEntry, ...]:
     issuer = issuer_user_ref.strip()
     if not issuer:
@@ -377,7 +435,13 @@ def list_public_nex_link_shares_for_issuer(
         entry.last_audit_event_at or "",
         entry.share_id,
     ), reverse=True)
-    return tuple(resolved)
+    return _filter_issuer_public_share_entries(
+        tuple(resolved),
+        lifecycle_state=lifecycle_state,
+        stored_lifecycle_state=stored_lifecycle_state,
+        storage_role=storage_role,
+        requires_operation=requires_operation,
+    )
 
 
 def summarize_public_nex_link_shares_for_issuer(
@@ -385,8 +449,20 @@ def summarize_public_nex_link_shares_for_issuer(
     issuer_user_ref: str,
     *,
     now_iso: str | None = None,
+    lifecycle_state: ShareLifecycleState | None = None,
+    stored_lifecycle_state: ShareLifecycleState | None = None,
+    storage_role: str | None = None,
+    requires_operation: ShareOperation | None = None,
 ) -> IssuerPublicShareManagementSummary:
-    entries = list_public_nex_link_shares_for_issuer(sources, issuer_user_ref, now_iso=now_iso)
+    entries = list_public_nex_link_shares_for_issuer(
+        sources,
+        issuer_user_ref,
+        now_iso=now_iso,
+        lifecycle_state=lifecycle_state,
+        stored_lifecycle_state=stored_lifecycle_state,
+        storage_role=storage_role,
+        requires_operation=requires_operation,
+    )
     active_count = sum(1 for entry in entries if entry.lifecycle_state == "active")
     expired_count = sum(1 for entry in entries if entry.lifecycle_state == "expired")
     revoked_count = sum(1 for entry in entries if entry.lifecycle_state == "revoked")
@@ -731,6 +807,7 @@ __all__ = [
     "list_public_nex_link_share_audit_history",
     "list_public_nex_link_shares_for_issuer",
     "summarize_public_nex_link_shares_for_issuer",
+    "normalize_issuer_public_share_management_pagination",
     "revoke_public_nex_link_shares_for_issuer",
     "extend_public_nex_link_shares_for_issuer_expiration",
     "update_public_nex_link_share_lifecycle",

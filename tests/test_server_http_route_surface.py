@@ -68,13 +68,14 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
     }
 
 
-def _auth_request(*, method: str, path: str, path_params: dict | None = None, json_body=None, user_id: str = "user-owner") -> HttpRouteRequest:
+def _auth_request(*, method: str, path: str, path_params: dict | None = None, query_params: dict | None = None, json_body=None, user_id: str = "user-owner") -> HttpRouteRequest:
     return HttpRouteRequest(
         method=method,
         path=path,
         headers={"Authorization": "Bearer token", "X-Request-Id": "req-http-1"},
         session_claims={"sub": user_id, "sid": "sess-001", "exp": 4102444800, "roles": ["editor"]},
         path_params=path_params or {},
+        query_params=query_params or {},
         json_body=json_body,
     )
 
@@ -216,6 +217,26 @@ def test_issuer_public_share_summary_route_returns_compact_management_summary() 
     assert response.body["links"]["shares"] == "/api/users/me/public-shares"
 
 
+def test_issuer_public_share_management_routes_apply_filters_and_pagination() -> None:
+    response = RunHttpRouteSurface.handle_list_issuer_public_shares(
+        http_request=_auth_request(
+            method="GET",
+            path="/api/users/me/public-shares",
+            query_params={"lifecycle_state": "active", "operation": "checkout_working_copy", "limit": "1", "offset": "0"},
+        ),
+        share_payload_rows_provider=_issuer_share_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["summary"]["total_share_count"] == 1
+    assert response.body["inventory_summary"]["total_share_count"] == 3
+    assert response.body["pagination"]["filtered_share_count"] == 1
+    assert response.body["pagination"]["returned_count"] == 1
+    assert response.body["pagination"]["has_more"] is False
+    assert response.body["applied_filters"]["lifecycle_state"] == "active"
+    assert response.body["applied_filters"]["operation"] == "checkout_working_copy"
+    assert [entry["share_id"] for entry in response.body["shares"]] == ["share-owner-active"]
 
 
 def test_issuer_public_share_management_revoke_action_updates_selected_shares() -> None:

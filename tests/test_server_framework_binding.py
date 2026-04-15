@@ -235,6 +235,25 @@ def test_framework_binding_handles_issuer_public_share_summary_round_trip() -> N
     assert parsed["summary"]["latest_updated_at"] == "2026-04-15T12:30:00+00:00"
 
 
+def test_framework_binding_handles_filtered_paginated_issuer_public_share_management_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_issuer_public_shares(
+        request=_request(
+            method="GET",
+            path="/api/users/me/public-shares",
+            query_params={"stored_lifecycle_state": "active", "limit": "1", "offset": "1"},
+        ),
+        share_payload_rows_provider=_issuer_share_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["summary"]["total_share_count"] == 2
+    assert parsed["inventory_summary"]["total_share_count"] == 2
+    assert parsed["pagination"]["filtered_share_count"] == 2
+    assert parsed["pagination"]["returned_count"] == 1
+    assert parsed["pagination"]["has_more"] is False
+    assert parsed["shares"][0]["share_id"] == "share-framework-owner-expired"
 
 
 def test_framework_binding_handles_extend_issuer_public_shares_round_trip() -> None:

@@ -43,6 +43,7 @@ from src.storage.share_api import (
     extend_public_nex_link_shares_for_issuer_expiration,
     list_public_nex_link_share_audit_history,
     list_public_nex_link_shares_for_issuer,
+    normalize_issuer_public_share_management_pagination,
     load_public_nex_link_share,
     revoke_public_nex_link_share,
     revoke_public_nex_link_shares_for_issuer,
@@ -335,6 +336,55 @@ def _issuer_share_management_summary_body(summary) -> dict[str, Any]:
         "latest_created_at": summary.latest_created_at,
         "latest_updated_at": summary.latest_updated_at,
         "latest_audit_event_at": summary.latest_audit_event_at,
+    }
+
+
+def _parse_non_negative_int_query_param(query_params: Mapping[str, Any], key: str) -> int | None:
+    raw_value = query_params.get(key)
+    if raw_value is None or str(raw_value).strip() == "":
+        return None
+    try:
+        resolved = int(str(raw_value))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"issuer public share management query parameter '{key}' must be an integer") from exc
+    if resolved < 0:
+        raise ValueError(f"issuer public share management query parameter '{key}' must be >= 0")
+    return resolved
+
+
+def _parse_optional_string_query_param(query_params: Mapping[str, Any], key: str) -> str | None:
+    raw_value = query_params.get(key)
+    if raw_value is None:
+        return None
+    resolved = str(raw_value).strip()
+    return resolved or None
+
+
+def _issuer_public_share_management_filters(query_params: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "lifecycle_state": _parse_optional_string_query_param(query_params, "lifecycle_state"),
+        "stored_lifecycle_state": _parse_optional_string_query_param(query_params, "stored_lifecycle_state"),
+        "storage_role": _parse_optional_string_query_param(query_params, "storage_role"),
+        "operation": _parse_optional_string_query_param(query_params, "operation"),
+    }
+
+
+def _issuer_public_share_management_pagination(query_params: Mapping[str, Any]) -> tuple[int, int]:
+    limit = _parse_non_negative_int_query_param(query_params, "limit")
+    offset = _parse_non_negative_int_query_param(query_params, "offset")
+    return normalize_issuer_public_share_management_pagination(limit=limit, offset=offset or 0)
+
+
+def _apply_issuer_public_share_management_page(entries: tuple[Any, ...], *, limit: int, offset: int) -> tuple[tuple[Any, ...], dict[str, Any]]:
+    page_entries = tuple(entries[offset: offset + limit])
+    filtered_count = len(entries)
+    return page_entries, {
+        "limit": limit,
+        "offset": offset,
+        "returned_count": len(page_entries),
+        "filtered_share_count": filtered_count,
+        "has_more": offset + len(page_entries) < filtered_count,
+        "next_offset": offset + len(page_entries) if offset + len(page_entries) < filtered_count else None,
     }
 
 
@@ -990,13 +1040,45 @@ class RunHttpRouteSurface:
                 "message": "Issuer share management routes require an authenticated session.",
             })
         rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
-        summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
-        entries = list_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        query_params = http_request.query_params or {}
+        try:
+            filters = _issuer_public_share_management_filters(query_params)
+            limit, offset = _issuer_public_share_management_pagination(query_params)
+            total_summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+            summary = summarize_public_nex_link_shares_for_issuer(
+                rows,
+                request_auth.requested_by_user_ref,
+                now_iso=now_iso,
+                lifecycle_state=filters["lifecycle_state"],
+                stored_lifecycle_state=filters["stored_lifecycle_state"],
+                storage_role=filters["storage_role"],
+                requires_operation=filters["operation"],
+            )
+            entries = list_public_nex_link_shares_for_issuer(
+                rows,
+                request_auth.requested_by_user_ref,
+                now_iso=now_iso,
+                lifecycle_state=filters["lifecycle_state"],
+                stored_lifecycle_state=filters["stored_lifecycle_state"],
+                storage_role=filters["storage_role"],
+                requires_operation=filters["operation"],
+            )
+        except ValueError as exc:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.invalid_management_filter",
+                "message": str(exc),
+            })
+        page_entries, pagination = _apply_issuer_public_share_management_page(entries, limit=limit, offset=offset)
         return _route_response(200, {
             "status": "ready",
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": _issuer_share_management_summary_body(summary),
-            "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
+            "inventory_summary": _issuer_share_management_summary_body(total_summary),
+            "shares": [_issuer_share_management_entry_body(entry) for entry in page_entries],
+            "applied_filters": filters,
+            "pagination": pagination,
             "links": {
                 "self": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
@@ -1024,11 +1106,32 @@ class RunHttpRouteSurface:
                 "message": "Issuer share management routes require an authenticated session.",
             })
         rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
-        summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        query_params = http_request.query_params or {}
+        try:
+            filters = _issuer_public_share_management_filters(query_params)
+            total_summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+            summary = summarize_public_nex_link_shares_for_issuer(
+                rows,
+                request_auth.requested_by_user_ref,
+                now_iso=now_iso,
+                lifecycle_state=filters["lifecycle_state"],
+                stored_lifecycle_state=filters["stored_lifecycle_state"],
+                storage_role=filters["storage_role"],
+                requires_operation=filters["operation"],
+            )
+        except ValueError as exc:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.invalid_management_filter",
+                "message": str(exc),
+            })
         return _route_response(200, {
             "status": "ready",
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": _issuer_share_management_summary_body(summary),
+            "inventory_summary": _issuer_share_management_summary_body(total_summary),
+            "applied_filters": filters,
             "links": {
                 "self": "/api/users/me/public-shares/summary",
                 "shares": "/api/users/me/public-shares",

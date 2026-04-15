@@ -1521,7 +1521,20 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
     assert summary_payload['summary']['total_share_count'] == 2
     assert summary_payload['summary']['latest_updated_at'] == '2026-04-15T12:30:00+00:00'
 
+    filtered_list_response = client.get('/api/users/me/public-shares?lifecycle_state=active&limit=1&offset=0', headers=_session_headers())
+    assert filtered_list_response.status_code == 200
+    filtered_list_payload = filtered_list_response.json()
+    assert filtered_list_payload['summary']['total_share_count'] == 1
+    assert filtered_list_payload['inventory_summary']['total_share_count'] == 2
+    assert filtered_list_payload['pagination']['filtered_share_count'] == 1
+    assert filtered_list_payload['pagination']['returned_count'] == 1
+    assert filtered_list_payload['shares'][0]['share_id'] == 'share-fastapi-owner-active'
 
+    filtered_summary_response = client.get('/api/users/me/public-shares/summary?storage_role=commit_snapshot&operation=checkout_working_copy', headers=_session_headers())
+    assert filtered_summary_response.status_code == 200
+    filtered_summary_payload = filtered_summary_response.json()
+    assert filtered_summary_payload['summary']['total_share_count'] == 2
+    assert filtered_summary_payload['applied_filters']['operation'] == 'checkout_working_copy'
 
 
 def test_fastapi_binding_issuer_public_share_revoke_action_round_trip() -> None:
