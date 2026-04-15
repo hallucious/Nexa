@@ -553,7 +553,9 @@ class FastApiRouteBindings:
             inbound = self._inbound_request(request=request, path_params={})
             outbound = FrameworkRouteBindings.handle_list_issuer_public_share_action_reports(
                 request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
                 action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )
             return self._framework_response(outbound)
 
@@ -562,7 +564,9 @@ class FastApiRouteBindings:
             inbound = self._inbound_request(request=request, path_params={})
             outbound = FrameworkRouteBindings.handle_get_issuer_public_share_action_report_summary(
                 request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
                 action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )
             return self._framework_response(outbound)
 
@@ -573,6 +577,7 @@ class FastApiRouteBindings:
                 request=inbound,
                 share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
                 public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
                 public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )
@@ -585,6 +590,7 @@ class FastApiRouteBindings:
                 request=inbound,
                 share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
                 public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
                 public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )
@@ -597,6 +603,7 @@ class FastApiRouteBindings:
                 request=inbound,
                 share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
                 public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
                 public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )
@@ -609,6 +616,7 @@ class FastApiRouteBindings:
                 request=inbound,
                 share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
                 public_share_payload_deleter=self.dependencies.public_share_payload_deleter,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
                 public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )

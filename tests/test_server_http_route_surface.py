@@ -327,25 +327,35 @@ def test_issuer_public_share_management_routes_apply_filters_and_pagination() ->
 def test_issuer_public_share_action_report_routes_return_filtered_results() -> None:
     response = RunHttpRouteSurface.handle_list_issuer_public_share_action_reports(
         http_request=_auth_request(method="GET", path="/api/users/me/public-shares/action-reports", query_params={"action": "delete", "limit": "1", "offset": "0"}),
+        share_payload_rows_provider=_issuer_share_rows,
         action_report_rows_provider=_issuer_action_report_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
     )
 
     assert response.status_code == 200
     assert response.body["summary"]["total_report_count"] == 1
     assert response.body["inventory_summary"]["total_report_count"] == 2
+    assert response.body["governance_summary"]["total_share_count"] == 3
+    assert response.body["governance_summary"]["total_action_report_count"] == 2
     assert response.body["reports"][0]["action"] == "delete"
+    assert response.body["links"]["share_summary"] == "/api/users/me/public-shares/summary"
 
 
 def test_issuer_public_share_action_report_routes_return_filtered_results() -> None:
     response = RunHttpRouteSurface.handle_list_issuer_public_share_action_reports(
         http_request=_auth_request(method="GET", path="/api/users/me/public-shares/action-reports", query_params={"action": "delete", "limit": "1", "offset": "0"}),
+        share_payload_rows_provider=_issuer_share_rows,
         action_report_rows_provider=_issuer_action_report_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
     )
 
     assert response.status_code == 200
     assert response.body["summary"]["total_report_count"] == 1
     assert response.body["inventory_summary"]["total_report_count"] == 2
+    assert response.body["governance_summary"]["total_share_count"] == 3
+    assert response.body["governance_summary"]["total_action_report_count"] == 2
     assert response.body["reports"][0]["action"] == "delete"
+    assert response.body["links"]["share_summary"] == "/api/users/me/public-shares/summary"
 
 
 def test_issuer_public_share_management_revoke_action_updates_selected_shares() -> None:
@@ -380,7 +390,9 @@ def test_issuer_public_share_management_revoke_action_updates_selected_shares() 
     response = RunHttpRouteSurface.handle_revoke_issuer_public_shares(
         http_request=_auth_request(method="POST", path="/api/users/me/public-shares/actions/revoke", json_body={"share_ids": ["share-owner-action-a", "share-owner-action-b"]}),
         share_payload_rows_provider=lambda: tuple(share_store.values()),
+        action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
         now_iso="2026-04-15T13:00:00+00:00",
     )
 
@@ -958,7 +970,9 @@ def test_issuer_public_share_management_delete_action_removes_selected_shares() 
     response = RunHttpRouteSurface.handle_delete_issuer_public_shares(
         http_request=_auth_request(method="POST", path="/api/users/me/public-shares/actions/delete", json_body={"share_ids": ["share-owner-delete-a", "share-owner-delete-b"]}),
         share_payload_rows_provider=lambda: tuple(share_store.values()),
+        action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+        public_share_action_report_writer=lambda row: dict(row),
         now_iso="2026-04-15T13:00:00+00:00",
     )
 
@@ -966,6 +980,8 @@ def test_issuer_public_share_management_delete_action_removes_selected_shares() 
     assert response.body["action"] == "delete"
     assert response.body["affected_share_count"] == 2
     assert response.body["summary"]["total_share_count"] == 0
+    assert response.body["governance_summary"]["total_share_count"] == 0
+    assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
     assert "share-owner-delete-a" not in share_store
     assert "share-owner-delete-b" not in share_store
     assert "share-other-delete-c" in share_store

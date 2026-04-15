@@ -1060,11 +1060,15 @@ class FrameworkRouteBindings:
         cls,
         *,
         request: FrameworkInboundRequest,
+        share_payload_rows_provider=None,
         action_report_rows_provider=None,
+        now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_list_issuer_public_share_action_reports(
             http_request=cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
             action_report_rows_provider=action_report_rows_provider,
+            now_iso=now_iso,
         )
         return cls.to_framework_response(response)
 
@@ -1073,11 +1077,15 @@ class FrameworkRouteBindings:
         cls,
         *,
         request: FrameworkInboundRequest,
+        share_payload_rows_provider=None,
         action_report_rows_provider=None,
+        now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_get_issuer_public_share_action_report_summary(
             http_request=cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
             action_report_rows_provider=action_report_rows_provider,
+            now_iso=now_iso,
         )
         return cls.to_framework_response(response)
 
@@ -1088,6 +1096,7 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_rows_provider=None,
         public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
@@ -1095,6 +1104,7 @@ class FrameworkRouteBindings:
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             public_share_payload_writer=public_share_payload_writer,
+            action_report_rows_provider=public_share_action_report_rows_provider,
             public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
@@ -1107,6 +1117,7 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_rows_provider=None,
         public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
@@ -1114,6 +1125,7 @@ class FrameworkRouteBindings:
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             public_share_payload_writer=public_share_payload_writer,
+            action_report_rows_provider=public_share_action_report_rows_provider,
             public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
@@ -1126,6 +1138,7 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
         public_share_payload_writer=None,
+        public_share_action_report_rows_provider=None,
         public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
@@ -1133,6 +1146,7 @@ class FrameworkRouteBindings:
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             public_share_payload_writer=public_share_payload_writer,
+            action_report_rows_provider=public_share_action_report_rows_provider,
             public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )
@@ -1145,6 +1159,7 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
         public_share_payload_deleter=None,
+        public_share_action_report_rows_provider=None,
         public_share_action_report_writer=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
@@ -1152,6 +1167,7 @@ class FrameworkRouteBindings:
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             public_share_payload_deleter=public_share_payload_deleter,
+            action_report_rows_provider=public_share_action_report_rows_provider,
             public_share_action_report_writer=public_share_action_report_writer,
             now_iso=now_iso,
         )

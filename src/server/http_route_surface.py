@@ -377,6 +377,28 @@ def _issuer_share_governance_summary_body(summary) -> dict[str, Any]:
     }
 
 
+def _effective_action_report_rows(
+    action_report_rows_provider=None,
+    *,
+    fallback_rows: tuple[Mapping[str, Any], ...] = (),
+) -> tuple[Mapping[str, Any], ...]:
+    provider_rows = tuple(action_report_rows_provider() or ()) if action_report_rows_provider is not None else ()
+    if not fallback_rows:
+        return provider_rows
+    merged: list[Mapping[str, Any]] = list(provider_rows)
+    seen_report_ids = {str(row.get("report_id") or "").strip() for row in provider_rows if isinstance(row, Mapping)}
+    for row in fallback_rows:
+        if not isinstance(row, Mapping):
+            continue
+        report_id = str(row.get("report_id") or "").strip()
+        if report_id and report_id in seen_report_ids:
+            continue
+        merged.append(row)
+        if report_id:
+            seen_report_ids.add(report_id)
+    return tuple(merged)
+
+
 def _build_public_share_management_action_report(
     *,
     issuer_user_ref: str,
@@ -1250,7 +1272,9 @@ class RunHttpRouteSurface:
         cls,
         *,
         http_request: HttpRouteRequest,
+        share_payload_rows_provider=None,
         action_report_rows_provider=None,
+        now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share action reports route only supports GET."})
@@ -1266,6 +1290,7 @@ class RunHttpRouteSurface:
             })
         query_params = http_request.query_params or {}
         action = str(query_params.get("action") or "").strip() or None
+        share_rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
         rows = tuple(action_report_rows_provider() or ()) if action_report_rows_provider is not None else ()
         try:
             limit = _parse_non_negative_int_query_param(query_params, "limit")
@@ -1273,6 +1298,12 @@ class RunHttpRouteSurface:
             reports = list_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref, action=action, limit=limit, offset=offset)
             summary = summarize_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref, action=action)
             inventory_summary = summarize_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref)
+            governance_summary = summarize_issuer_public_share_governance_for_issuer(
+                share_rows,
+                rows,
+                request_auth.requested_by_user_ref,
+                now_iso=now_iso,
+            )
             resolved_limit, resolved_offset = normalize_issuer_public_share_management_action_report_pagination(limit=limit, offset=offset)
         except ValueError as exc:
             return _route_response(400, {
@@ -1289,6 +1320,7 @@ class RunHttpRouteSurface:
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": summary,
             "inventory_summary": inventory_summary,
+            "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "applied_filters": {"action": action},
             "pagination": {
                 "limit": resolved_limit,
@@ -1303,6 +1335,7 @@ class RunHttpRouteSurface:
                 "self": "/api/users/me/public-shares/action-reports",
                 "summary": "/api/users/me/public-shares/action-reports/summary",
                 "shares": "/api/users/me/public-shares",
+                "share_summary": "/api/users/me/public-shares/summary",
             },
         })
 
@@ -1311,7 +1344,9 @@ class RunHttpRouteSurface:
         cls,
         *,
         http_request: HttpRouteRequest,
+        share_payload_rows_provider=None,
         action_report_rows_provider=None,
+        now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share action report summary route only supports GET."})
@@ -1327,10 +1362,17 @@ class RunHttpRouteSurface:
             })
         query_params = http_request.query_params or {}
         action = str(query_params.get("action") or "").strip() or None
+        share_rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
         rows = tuple(action_report_rows_provider() or ()) if action_report_rows_provider is not None else ()
         try:
             summary = summarize_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref, action=action)
             inventory_summary = summarize_issuer_public_share_management_action_reports_for_issuer(rows, request_auth.requested_by_user_ref)
+            governance_summary = summarize_issuer_public_share_governance_for_issuer(
+                share_rows,
+                rows,
+                request_auth.requested_by_user_ref,
+                now_iso=now_iso,
+            )
         except ValueError as exc:
             return _route_response(400, {
                 "status": "rejected",
@@ -1343,11 +1385,13 @@ class RunHttpRouteSurface:
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": summary,
             "inventory_summary": inventory_summary,
+            "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "applied_filters": {"action": action},
             "links": {
                 "self": "/api/users/me/public-shares/action-reports/summary",
                 "reports": "/api/users/me/public-shares/action-reports",
                 "shares": "/api/users/me/public-shares",
+                "share_summary": "/api/users/me/public-shares/summary",
             },
         })
 
@@ -1357,6 +1401,7 @@ class RunHttpRouteSurface:
         *,
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
+        action_report_rows_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
@@ -1415,6 +1460,16 @@ class RunHttpRouteSurface:
             actor_user_ref=request_auth.requested_by_user_ref,
         )
         persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
+        governance_rows = _effective_action_report_rows(
+            action_report_rows_provider,
+            fallback_rows=(persisted_action_report,),
+        )
+        governance_summary = summarize_issuer_public_share_governance_for_issuer(
+            merged_rows if 'merged_rows' in locals() else refreshed_rows,
+            governance_rows,
+            request_auth.requested_by_user_ref,
+            now_iso=now_iso,
+        )
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -1422,11 +1477,14 @@ class RunHttpRouteSurface:
             "requested_share_ids": list(share_ids),
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
+            "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
             "action_report": persisted_action_report,
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
+                "action_reports": "/api/users/me/public-shares/action-reports",
+                "action_report_summary": "/api/users/me/public-shares/action-reports/summary",
                 "self": "/api/users/me/public-shares/actions/revoke",
             },
         })
@@ -1437,6 +1495,7 @@ class RunHttpRouteSurface:
         *,
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
+        action_report_rows_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
@@ -1508,6 +1567,16 @@ class RunHttpRouteSurface:
             expires_at=expires_at,
         )
         persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
+        governance_rows = _effective_action_report_rows(
+            action_report_rows_provider,
+            fallback_rows=(persisted_action_report,),
+        )
+        governance_summary = summarize_issuer_public_share_governance_for_issuer(
+            merged_rows if 'merged_rows' in locals() else refreshed_rows,
+            governance_rows,
+            request_auth.requested_by_user_ref,
+            now_iso=now_iso,
+        )
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -1516,11 +1585,14 @@ class RunHttpRouteSurface:
             "requested_share_ids": list(share_ids),
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
+            "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
             "action_report": persisted_action_report,
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
+                "action_reports": "/api/users/me/public-shares/action-reports",
+                "action_report_summary": "/api/users/me/public-shares/action-reports/summary",
                 "self": "/api/users/me/public-shares/actions/extend",
             },
         })
@@ -1531,6 +1603,7 @@ class RunHttpRouteSurface:
         *,
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
+        action_report_rows_provider=None,
         public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
@@ -1593,6 +1666,16 @@ class RunHttpRouteSurface:
             archived=archived,
         )
         persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
+        governance_rows = _effective_action_report_rows(
+            action_report_rows_provider,
+            fallback_rows=(persisted_action_report,),
+        )
+        governance_summary = summarize_issuer_public_share_governance_for_issuer(
+            merged_rows if 'merged_rows' in locals() else refreshed_rows,
+            governance_rows,
+            request_auth.requested_by_user_ref,
+            now_iso=now_iso,
+        )
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -1601,11 +1684,14 @@ class RunHttpRouteSurface:
             "requested_share_ids": list(share_ids),
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
+            "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
             "action_report": persisted_action_report,
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
+                "action_reports": "/api/users/me/public-shares/action-reports",
+                "action_report_summary": "/api/users/me/public-shares/action-reports/summary",
                 "self": "/api/users/me/public-shares/actions/archive",
             },
         })
@@ -1617,6 +1703,7 @@ class RunHttpRouteSurface:
         *,
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
+        action_report_rows_provider=None,
         public_share_payload_deleter: Callable[[str], bool] | None = None,
         public_share_action_report_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
         now_iso: str | None = None,
@@ -1678,6 +1765,16 @@ class RunHttpRouteSurface:
             actor_user_ref=request_auth.requested_by_user_ref,
         )
         persisted_action_report = public_share_action_report_writer(action_report) if public_share_action_report_writer is not None else action_report
+        governance_rows = _effective_action_report_rows(
+            action_report_rows_provider,
+            fallback_rows=(persisted_action_report,),
+        )
+        governance_summary = summarize_issuer_public_share_governance_for_issuer(
+            merged_rows if 'merged_rows' in locals() else refreshed_rows,
+            governance_rows,
+            request_auth.requested_by_user_ref,
+            now_iso=now_iso,
+        )
         return _route_response(200, {
             "status": "updated",
             "action": "delete",
@@ -1685,12 +1782,15 @@ class RunHttpRouteSurface:
             "requested_share_ids": list(share_ids),
             "affected_share_count": len(deleted_entries),
             "summary": _issuer_share_management_summary_body(summary),
+            "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in deleted_entries],
             "action_report": persisted_action_report,
             "links": {
                 "self": "/api/users/me/public-shares/actions/delete",
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
+                "action_reports": "/api/users/me/public-shares/action-reports",
+                "action_report_summary": "/api/users/me/public-shares/action-reports/summary",
             },
         })
 

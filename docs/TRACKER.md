@@ -8,7 +8,7 @@ Version: 3.4.0
 
 ## Release Snapshot (current convergence baseline)
 
-The current repository state should now be read from the `e6ee133` / `2321 passed, 14 skipped` baseline rather than from the older `ffc479d` / `2285 passed, 14 skipped` snapshot or earlier Phase 4.5-only / Phase 7-only closure snapshots.
+The current repository state should now be read from the `503d977` / `2472 passed, 14 skipped` baseline rather than from the older `e6ee133` / `2321 passed, 14 skipped` snapshot (or earlier `ffc479d` / `2285 passed, 14 skipped` closure points).
 
 ### 1. Core Execution Engine
 
