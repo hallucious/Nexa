@@ -14,6 +14,7 @@ from src.server import (
     RunAuthorizationContext,
     WorkspaceAuthorizationContext,
 )
+from src.storage.share_api import export_public_nex_link_share
 
 
 def _workspace() -> WorkspaceAuthorizationContext:
@@ -123,6 +124,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "commit_workspace_shell",
         "checkout_workspace_shell",
         "launch_workspace_shell",
+        "get_public_share",
+        "get_public_share_artifact",
         "launch_run",
         "get_run_status",
         "get_run_result",
@@ -151,6 +154,35 @@ def test_framework_route_definitions_are_unique() -> None:
 
     assert len(route_names) == len(set(route_names))
     assert len(route_identities) == len(set(route_identities))
+
+
+def _share_payload(share_id: str = "share-framework-001") -> dict:
+    return export_public_nex_link_share(_commit_snapshot("snap-share-001"), share_id=share_id, title="Public share")
+
+
+def test_framework_binding_handles_public_share_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_get_public_share(
+        request=_request(method="GET", path="/api/public-shares/share-framework-001", path_params={"share_id": "share-framework-001"}),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["status"] == "ready"
+    assert parsed["share_id"] == "share-framework-001"
+    assert parsed["source_artifact"]["storage_role"] == "commit_snapshot"
+
+
+def test_framework_binding_handles_public_share_artifact_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_get_public_share_artifact(
+        request=_request(method="GET", path="/api/public-shares/share-framework-001/artifact", path_params={"share_id": "share-framework-001"}),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["artifact"]["meta"]["storage_role"] == "commit_snapshot"
+    assert parsed["artifact"]["meta"]["commit_id"] == "snap-share-001"
 
 
 def test_framework_binding_normalizes_request_to_http_route_request() -> None:

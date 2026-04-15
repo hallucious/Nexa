@@ -35,6 +35,7 @@ from src.server.run_action_log_api import RunActionLogReadService
 from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
 from src.server.circuit_library_runtime import build_circuit_library_payload
 from src.server.result_history_runtime import build_workspace_result_history_payload
+from src.storage.share_api import describe_public_nex_link_share, load_public_nex_link_share
 from src.ui.i18n import normalize_ui_language
 
 
@@ -234,6 +235,47 @@ def _reason_to_status_code(reason_code: str) -> int:
     return 409
 
 
+def _resolve_public_share_payload(share_id: str, share_payload_provider) -> tuple[dict[str, Any] | None, Any | None, HttpRouteResponse | None]:
+    if share_payload_provider is None:
+        return None, None, _route_response(404, {
+            "status": "rejected",
+            "error_family": "public_share_not_found",
+            "reason_code": "public_share.share_not_found",
+            "message": "Requested public share was not found.",
+            "share_id": share_id,
+        })
+    raw_payload = share_payload_provider(share_id)
+    if raw_payload is None:
+        return None, None, _route_response(404, {
+            "status": "rejected",
+            "error_family": "public_share_not_found",
+            "reason_code": "public_share.share_not_found",
+            "message": "Requested public share was not found.",
+            "share_id": share_id,
+        })
+    try:
+        payload = load_public_nex_link_share(raw_payload)
+        descriptor = describe_public_nex_link_share(payload)
+    except Exception as exc:  # noqa: BLE001
+        return None, None, _route_response(409, {
+            "status": "rejected",
+            "error_family": "public_share_invalid",
+            "reason_code": "public_share.malformed_payload",
+            "message": str(exc) or "Requested public share payload is malformed.",
+            "share_id": share_id,
+        })
+    if descriptor.share_id != share_id:
+        return None, None, _route_response(409, {
+            "status": "rejected",
+            "error_family": "public_share_invalid",
+            "reason_code": "public_share.share_id_mismatch",
+            "message": "Requested public share payload does not match the requested share_id.",
+            "share_id": share_id,
+            "resolved_share_id": descriptor.share_id,
+        })
+    return payload, descriptor, None
+
+
 def _request_auth(request: HttpRouteRequest):
     return RequestAuthResolver.resolve(
         headers=request.headers,
@@ -267,6 +309,8 @@ class RunHttpRouteSurface:
         ("commit_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/commit"),
         ("checkout_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/checkout"),
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
+        ("get_public_share", "GET", "/api/public-shares/{share_id}"),
+        ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
         ("get_run_result", "GET", "/api/runs/{run_id}/result"),
@@ -756,6 +800,7 @@ class RunHttpRouteSurface:
         artifact_rows_lookup=None,
         trace_rows_lookup=None,
         workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+        public_share_payload_provider=None,
     ) -> HttpRouteResponse:
         guard = cls._workspace_shell_write_guard(http_request, workspace_context, workspace_row, expected_path="/api/workspaces/{workspace_id}/shell/checkout", method_label="Workspace shell checkout")
         if isinstance(guard, HttpRouteResponse):
@@ -768,15 +813,102 @@ class RunHttpRouteSurface:
         if body is not None and not isinstance(body, Mapping):
             return _route_response(400, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.invalid_request", "message": "Workspace shell checkout payload is invalid.", "workspace_id": workspace_context.workspace_id})
         working_save_id = str((body or {}).get("working_save_id") or "").strip() or None
-        _source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+        source_share_id = str((body or {}).get("share_id") or "").strip() or None
+        if source_share_id:
+            share_payload, _descriptor, error = _resolve_public_share_payload(source_share_id, public_share_payload_provider)
+            if error is not None:
+                status_code = 404 if error.status_code == 404 else 409
+                error_body = dict(error.body)
+                error_body.setdefault("workspace_id", workspace_context.workspace_id)
+                error_body["error_family"] = "workspace_shell_write_failure"
+                error_body["reason_code"] = "workspace_shell.share_not_found" if status_code == 404 else "workspace_shell.invalid_share_payload"
+                error_body["message"] = "Workspace shell checkout could not resolve the requested public share." if status_code == 404 else "Workspace shell checkout rejected the requested public share payload."
+                return _route_response(status_code, error_body)
+            assert share_payload is not None
+            from src.storage.validators.shared_validator import load_nex
+            loaded_share = load_nex(share_payload["artifact"])
+            model = loaded_share.parsed_model
+        else:
+            _source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
         if not isinstance(model, CommitSnapshotModel):
             return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.checkout_requires_commit_snapshot", "message": "Workspace shell checkout requires a commit_snapshot source.", "workspace_id": workspace_context.workspace_id})
         working_save = create_working_save_from_commit_snapshot(model, working_save_id=working_save_id)
         serialized = serialize_working_save(working_save)
         persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
         payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, app_language_override=_request_app_language(http_request.query_params))
-        payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": model.meta.commit_id, "working_save_id": working_save.meta.working_save_id}
+        payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": model.meta.commit_id, "working_save_id": working_save.meta.working_save_id, "source_share_id": source_share_id}
         return _route_response(200, payload)
+
+    @classmethod
+    def handle_get_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share route only supports GET."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        payload, descriptor, error = _resolve_public_share_payload(share_id, share_payload_provider)
+        if error is not None:
+            return error
+        assert payload is not None and descriptor is not None
+        return _route_response(200, {
+            "status": "ready",
+            "share_id": descriptor.share_id,
+            "share_path": descriptor.share_path,
+            "title": descriptor.title,
+            "summary": descriptor.summary,
+            "transport": descriptor.transport,
+            "access_mode": descriptor.access_mode,
+            "viewer_capabilities": list(descriptor.viewer_capabilities),
+            "source_artifact": {
+                "storage_role": descriptor.storage_role,
+                "canonical_ref": descriptor.canonical_ref,
+                "artifact_format_family": descriptor.artifact_format_family,
+                "source_working_save_id": descriptor.source_working_save_id,
+            },
+            "links": {
+                "self": expected_path,
+                "artifact": f"{expected_path}/artifact",
+                "public_share_path": descriptor.share_path,
+            },
+        })
+
+    @classmethod
+    def handle_get_public_share_artifact(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share artifact route only supports GET."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/artifact"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        payload, descriptor, error = _resolve_public_share_payload(share_id, share_payload_provider)
+        if error is not None:
+            return error
+        assert payload is not None and descriptor is not None
+        return _route_response(200, {
+            "status": "ready",
+            "share_id": descriptor.share_id,
+            "share_title": descriptor.title,
+            "artifact": payload["artifact"],
+            "links": {
+                "share": f"/api/public-shares/{descriptor.share_id}",
+                "public_share_path": descriptor.share_path,
+            },
+        })
 
     @classmethod
     def handle_launch(

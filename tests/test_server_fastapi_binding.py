@@ -27,6 +27,7 @@ from src.server import (
     WorkspaceAuthorizationContext,
     create_fastapi_app,
 )
+from src.storage.share_api import export_public_nex_link_share
 
 
 def _workspace() -> WorkspaceAuthorizationContext:
@@ -98,6 +99,10 @@ def _valid_working_save_artifact() -> dict:
         "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
     }
 
+def _share_payload(share_id: str = "share-fastapi-001") -> dict:
+    return export_public_nex_link_share(_commit_snapshot("snap-fastapi-share-001"), share_id=share_id, title="FastAPI share")
+
+
 def _session_headers(user_id: str = "user-owner") -> dict[str, str]:
     return {
         "Authorization": "Bearer token",
@@ -142,7 +147,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -354,6 +359,7 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
             artifact_refs=(EngineArtifactReference(artifact_id="artifact-1", artifact_type="report", metadata={"label": "Primary report"}),),
             failure_info=None,
         ) if run_id == "run-001" else None,
+        public_share_payload_provider=public_share_payload_provider or (lambda share_id: _share_payload(share_id)),
         run_id_factory=lambda: "run-001",
         run_request_id_factory=lambda: "req-001",
         workspace_id_factory=lambda: 'ws-new',
@@ -1458,6 +1464,30 @@ def test_fastapi_binding_workspace_shell_checkout_round_trip() -> None:
     assert payload['working_save_id'] == 'ws-fastapi-restored'
     assert payload['transition']['action'] == 'checkout_workspace_shell'
     assert payload['routes']['workspace_shell_checkout'] == '/api/workspaces/ws-001/shell/checkout'
+
+
+def test_fastapi_binding_public_share_routes_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/api/public-shares/share-fastapi-001')
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['share_id'] == 'share-fastapi-001'
+    assert payload['source_artifact']['storage_role'] == 'commit_snapshot'
+
+    artifact_response = client.get('/api/public-shares/share-fastapi-001/artifact')
+    assert artifact_response.status_code == 200
+    artifact_payload = artifact_response.json()
+    assert artifact_payload['artifact']['meta']['commit_id'] == 'snap-fastapi-share-001'
+
+
+def test_fastapi_binding_workspace_shell_checkout_accepts_public_share_snapshot() -> None:
+    client = _make_client(artifact_source=_valid_working_save_artifact())
+    response = client.post('/api/workspaces/ws-001/shell/checkout', headers=_session_headers(), json={'share_id': 'share-fastapi-001', 'working_save_id': 'ws-share-fastapi-restored'})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['storage_role'] == 'working_save'
+    assert payload['working_save_id'] == 'ws-share-fastapi-restored'
+    assert payload['transition']['source_share_id'] == 'share-fastapi-001'
 
 
 def test_fastapi_binding_workspace_shell_launch_round_trip() -> None:

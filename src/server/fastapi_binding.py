@@ -486,6 +486,7 @@ class FastApiRouteBindings:
                 artifact_rows_lookup=self.dependencies.artifact_rows_provider,
                 trace_rows_lookup=self.dependencies.trace_rows_provider,
                 workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+                public_share_payload_provider=self.dependencies.public_share_payload_provider,
             )
             return self._framework_response(outbound)
 
@@ -507,6 +508,24 @@ class FastApiRouteBindings:
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/public-shares/{share_id}")
+        async def get_public_share(request: Request, share_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
+            outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/public-shares/{share_id}/artifact")
+        async def get_public_share_artifact(request: Request, share_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
+            outbound = FrameworkRouteBindings.handle_get_public_share_artifact(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
             )
             return self._framework_response(outbound)
 

@@ -161,6 +161,18 @@ class FrameworkRouteBindings:
             summary="Launch a run directly from the current workspace shell public artifact.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_public_share",
+            method="GET",
+            path_template="/api/public-shares/{share_id}",
+            summary="Read bounded public share metadata.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_public_share_artifact",
+            method="GET",
+            path_template="/api/public-shares/{share_id}/artifact",
+            summary="Read the canonical public artifact for a bounded public share.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_run",
             method="POST",
             path_template="/api/runs",
@@ -908,6 +920,7 @@ class FrameworkRouteBindings:
         artifact_rows_lookup=None,
         trace_rows_lookup=None,
         workspace_artifact_source_writer=None,
+        public_share_payload_provider=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_checkout_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -920,6 +933,33 @@ class FrameworkRouteBindings:
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
             workspace_artifact_source_writer=workspace_artifact_source_writer,
+            public_share_payload_provider=public_share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_public_share(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_public_share(
+            http_request=cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_public_share_artifact(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_public_share_artifact(
+            http_request=cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
         )
         return cls.to_framework_response(response)
 

@@ -15,6 +15,7 @@ from src.server import (
     RunHttpRouteSurface,
     WorkspaceAuthorizationContext,
 )
+from src.storage.share_api import export_public_nex_link_share
 
 
 def _workspace() -> WorkspaceAuthorizationContext:
@@ -80,6 +81,10 @@ def _auth_request(*, method: str, path: str, path_params: dict | None = None, js
 
 
 
+def _share_payload(share_id: str = "share-http-001") -> dict:
+    return export_public_nex_link_share(_commit_snapshot("snap-share-001"), share_id=share_id, title="Public share")
+
+
 def test_http_route_definitions_are_unique() -> None:
     definitions = RunHttpRouteSurface.route_definitions()
     route_names = [route_name for route_name, _method, _path in definitions]
@@ -88,6 +93,54 @@ def test_http_route_definitions_are_unique() -> None:
     assert len(definitions) == len(set(definitions))
 
 
+
+
+def test_public_share_route_returns_descriptor_without_authentication() -> None:
+    response = RunHttpRouteSurface.handle_get_public_share(
+        http_request=HttpRouteRequest(method="GET", path="/api/public-shares/share-http-001", path_params={"share_id": "share-http-001"}),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["share_id"] == "share-http-001"
+    assert response.body["source_artifact"]["canonical_ref"] == "snap-share-001"
+
+
+def test_public_share_artifact_route_returns_canonical_artifact_without_authentication() -> None:
+    response = RunHttpRouteSurface.handle_get_public_share_artifact(
+        http_request=HttpRouteRequest(method="GET", path="/api/public-shares/share-http-001/artifact", path_params={"share_id": "share-http-001"}),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+
+    assert response.status_code == 200
+    assert response.body["artifact"]["meta"]["storage_role"] == "commit_snapshot"
+    assert response.body["artifact"]["meta"]["commit_id"] == "snap-share-001"
+
+
+def test_workspace_shell_checkout_accepts_public_share_snapshot() -> None:
+    response = RunHttpRouteSurface.handle_checkout_workspace_shell(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/workspaces/ws-001/shell/checkout",
+            path_params={"workspace_id": "ws-001"},
+            json_body={"share_id": "share-http-001", "working_save_id": "ws-share-restored"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "continuity_source": "server",
+            "archived": False,
+        },
+        public_share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+
+    assert response.status_code == 200
+    assert response.body["storage_role"] == "working_save"
+    assert response.body["working_save_id"] == "ws-share-restored"
+    assert response.body["transition"]["source_share_id"] == "share-http-001"
 
 
 def test_circuit_library_route_returns_registry_backed_return_use_payload() -> None:
