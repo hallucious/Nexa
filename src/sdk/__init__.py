@@ -43,6 +43,7 @@ from src.sdk.integration import (
     PublicMcpTransportAssessment,
     PublicMcpPreflightAssessment,
     PublicMcpOrchestrationSummary,
+    PublicMcpResultShapeProfile,
     PublicMcpResponseContract,
     PublicMcpRecoveryPolicy,
     PublicMcpNormalizedResponse,
@@ -72,6 +73,7 @@ from src.sdk.integration import (
     build_public_mcp_route_contracts,
     build_public_mcp_transport_contracts,
     build_public_mcp_response_contracts,
+    build_public_mcp_result_shape_profiles,
     build_public_mcp_recovery_policies,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
@@ -94,7 +96,7 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.17"
+PUBLIC_SDK_SURFACE_VERSION = "1.18"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
@@ -118,6 +120,7 @@ __all__ = [
     "PublicMcpTransportAssessment",
     "PublicMcpPreflightAssessment",
     "PublicMcpOrchestrationSummary",
+    "PublicMcpResultShapeProfile",
     "PublicMcpResponseContract",
     "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
@@ -179,6 +182,7 @@ __all__ = [
     "build_public_mcp_route_contracts",
     "build_public_mcp_transport_contracts",
     "build_public_mcp_response_contracts",
+    "build_public_mcp_result_shape_profiles",
     "build_public_mcp_recovery_policies",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_resources",

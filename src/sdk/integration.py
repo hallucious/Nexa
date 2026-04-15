@@ -22,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.15"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.16"
 
 
 @dataclass(frozen=True)
@@ -138,6 +138,36 @@ class PublicMcpNormalizedArguments:
 
 
 @dataclass(frozen=True)
+class PublicMcpResultShapeProfile:
+    name: str
+    route_name: str
+    kind: str
+    route_family: str
+    response_shape: str
+    profile_kind: str
+    identity_keys: tuple[str, ...] = ()
+    state_keys: tuple[str, ...] = ()
+    collection_field_name: str | None = None
+    count_field_name: str | None = None
+    collection_item_identity_keys: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "route_family": self.route_family,
+            "response_shape": self.response_shape,
+            "profile_kind": self.profile_kind,
+            "identity_keys": list(self.identity_keys),
+            "state_keys": list(self.state_keys),
+            "collection_field_name": self.collection_field_name,
+            "count_field_name": self.count_field_name,
+            "collection_item_identity_keys": list(self.collection_item_identity_keys),
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpResponseContract:
     name: str
     route_name: str
@@ -148,6 +178,7 @@ class PublicMcpResponseContract:
     response_media_type: str = "application/json"
     body_kind: str = "object"
     required_top_level_keys: tuple[str, ...] = ()
+    result_shape_profile: PublicMcpResultShapeProfile | None = None
     response_type: PublicTypeRef | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -161,6 +192,7 @@ class PublicMcpResponseContract:
             "response_media_type": self.response_media_type,
             "body_kind": self.body_kind,
             "required_top_level_keys": list(self.required_top_level_keys),
+            "result_shape_profile": self.result_shape_profile.to_dict() if self.result_shape_profile is not None else None,
             "response_type": _type_ref_dict(self.response_type),
         }
 
@@ -570,8 +602,8 @@ class PublicMcpOrchestrationSummary:
         }
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.7"
-PUBLIC_MCP_SCHEMA_VERSION = "1.7"
+PUBLIC_MCP_MANIFEST_VERSION = "1.8"
+PUBLIC_MCP_SCHEMA_VERSION = "1.8"
 PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
@@ -682,7 +714,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.13"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.14"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -2090,6 +2122,14 @@ class PublicMcpAdapterScaffold:
         descriptor = self._resource_by_name(resource_name)
         return self._response_contract_for_descriptor(descriptor, kind="resource")
 
+    def export_tool_result_shape_profile(self, tool_name: str) -> PublicMcpResultShapeProfile:
+        descriptor = self._tool_by_name(tool_name)
+        return self._result_shape_profile_for_descriptor(descriptor, kind="tool")
+
+    def export_resource_result_shape_profile(self, resource_name: str) -> PublicMcpResultShapeProfile:
+        descriptor = self._resource_by_name(resource_name)
+        return self._result_shape_profile_for_descriptor(descriptor, kind="resource")
+
     def export_tool_recovery_policy(self, tool_name: str) -> PublicMcpRecoveryPolicy:
         descriptor = self._tool_by_name(tool_name)
         return self._recovery_policy_for_descriptor(descriptor, kind="tool")
@@ -2462,7 +2502,33 @@ class PublicMcpAdapterScaffold:
             response_media_type=str(spec.get("response_media_type", "application/json")),
             body_kind=str(spec.get("body_kind", "object")),
             required_top_level_keys=tuple(str(key) for key in spec.get("required_top_level_keys", ())),
+            result_shape_profile=self._result_shape_profile_for_descriptor(descriptor, kind=kind),
             response_type=getattr(descriptor, "response_type", None),
+        )
+
+    def _result_shape_profile_for_descriptor(
+        self,
+        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
+        *,
+        kind: str,
+    ) -> PublicMcpResultShapeProfile:
+        spec = _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME.get(descriptor.route_name)
+        if spec is None:
+            raise ValueError(f"Missing public MCP result-shape profile for route_name: {descriptor.route_name}")
+        route_contract = self._route_contract_for_descriptor(descriptor, kind=kind)
+        response_spec = _RESPONSE_CONTRACT_BY_ROUTE_NAME.get(descriptor.route_name, {})
+        return PublicMcpResultShapeProfile(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            kind=kind,
+            route_family=route_contract.route_family,
+            response_shape=str(response_spec.get("response_shape", route_contract.route_family)),
+            profile_kind=str(spec["profile_kind"]),
+            identity_keys=tuple(str(key) for key in spec.get("identity_keys", ())),
+            state_keys=tuple(str(key) for key in spec.get("state_keys", ())),
+            collection_field_name=(str(spec["collection_field_name"]) if spec.get("collection_field_name") is not None else None),
+            count_field_name=(str(spec["count_field_name"]) if spec.get("count_field_name") is not None else None),
+            collection_item_identity_keys=tuple(str(key) for key in spec.get("collection_item_identity_keys", ())),
         )
 
     def _recovery_policy_for_descriptor(
@@ -2843,6 +2909,54 @@ def _assert_public_response_body_matches_contract(
             raise ValueError(
                 f"Missing required response keys for public route {response_contract.route_name}: {', '.join(missing)}"
             )
+
+    profile = response_contract.result_shape_profile
+    if profile is None:
+        return
+    if not isinstance(body, Mapping):
+        raise ValueError(
+            f"Result shape profile cannot be checked for public route {response_contract.route_name}: body is not an object"
+        )
+    missing_identity = [key for key in profile.identity_keys if key not in body]
+    if missing_identity:
+        raise ValueError(
+            f"Missing result identity keys for public route {response_contract.route_name}: {', '.join(missing_identity)}"
+        )
+    missing_state = [key for key in profile.state_keys if key not in body]
+    if missing_state:
+        raise ValueError(
+            f"Missing result state keys for public route {response_contract.route_name}: {', '.join(missing_state)}"
+        )
+    if profile.count_field_name is not None:
+        if profile.count_field_name not in body:
+            raise ValueError(
+                f"Missing result count field for public route {response_contract.route_name}: {profile.count_field_name}"
+            )
+        if not isinstance(body[profile.count_field_name], int):
+            raise ValueError(
+                f"Unexpected result count field type for public route {response_contract.route_name}: expected int at {profile.count_field_name}"
+            )
+    if profile.collection_field_name is not None:
+        if profile.collection_field_name not in body:
+            raise ValueError(
+                f"Missing result collection field for public route {response_contract.route_name}: {profile.collection_field_name}"
+            )
+        collection = body[profile.collection_field_name]
+        if not isinstance(collection, list):
+            raise ValueError(
+                f"Unexpected result collection field type for public route {response_contract.route_name}: expected list at {profile.collection_field_name}"
+            )
+        if profile.collection_item_identity_keys:
+            for index, item in enumerate(collection):
+                if not isinstance(item, Mapping):
+                    raise ValueError(
+                        f"Unexpected collection item type for public route {response_contract.route_name}: expected object items at {profile.collection_field_name}[{index}]"
+                    )
+                missing_item_keys = [key for key in profile.collection_item_identity_keys if key not in item]
+                if missing_item_keys:
+                    raise ValueError(
+                        f"Missing result collection item keys for public route {response_contract.route_name}: {', '.join(missing_item_keys)}"
+                    )
 
 
 def _normalize_public_framework_response(
@@ -3561,6 +3675,100 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
 }
 
 
+_RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
+    "launch_run": {
+        "profile_kind": "accepted-object",
+        "identity_keys": ("run_id",),
+        "state_keys": ("status",),
+    },
+    "launch_workspace_shell": {
+        "profile_kind": "workspace-shell-launch",
+        "identity_keys": ("run_id",),
+        "state_keys": (),
+    },
+    "commit_workspace_shell": {
+        "profile_kind": "workspace-transition",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("storage_role",),
+    },
+    "checkout_workspace_shell": {
+        "profile_kind": "workspace-transition",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("storage_role",),
+    },
+    "retry_run": {
+        "profile_kind": "run-control",
+        "identity_keys": ("run_id",),
+        "state_keys": ("status",),
+    },
+    "force_reset_run": {
+        "profile_kind": "run-control",
+        "identity_keys": ("run_id",),
+        "state_keys": ("status",),
+    },
+    "mark_run_reviewed": {
+        "profile_kind": "run-control",
+        "identity_keys": ("run_id",),
+        "state_keys": ("status",),
+    },
+    "get_run_status": {
+        "profile_kind": "run-status",
+        "identity_keys": ("run_id",),
+        "state_keys": ("status",),
+    },
+    "get_run_result": {
+        "profile_kind": "run-result",
+        "identity_keys": ("run_id",),
+        "state_keys": ("result_state",),
+    },
+    "list_workspace_runs": {
+        "profile_kind": "workspace-run-list",
+        "identity_keys": ("workspace_id",),
+        "collection_field_name": "runs",
+        "count_field_name": "returned_count",
+        "collection_item_identity_keys": ("run_id",),
+    },
+    "get_run_trace": {
+        "profile_kind": "run-trace",
+        "identity_keys": ("workspace_id",),
+        "collection_field_name": "events",
+        "collection_item_identity_keys": ("sequence",),
+    },
+    "list_run_artifacts": {
+        "profile_kind": "run-artifact-list",
+        "collection_field_name": "artifacts",
+        "count_field_name": "artifact_count",
+        "collection_item_identity_keys": ("artifact_id",),
+    },
+    "get_artifact_detail": {
+        "profile_kind": "artifact-detail",
+        "identity_keys": ("artifact_id",),
+        "state_keys": (),
+    },
+    "get_run_actions": {
+        "profile_kind": "run-action-log",
+        "count_field_name": "returned_count",
+        "collection_field_name": "actions",
+        "collection_item_identity_keys": ("event_id",),
+    },
+    "get_recent_activity": {
+        "profile_kind": "recent-activity",
+        "count_field_name": "returned_count",
+        "collection_field_name": "activities",
+    },
+    "get_workspace": {
+        "profile_kind": "workspace-detail",
+        "identity_keys": ("workspace_id",),
+    },
+    "list_workspaces": {
+        "profile_kind": "workspace-list",
+        "count_field_name": "returned_count",
+        "collection_field_name": "workspaces",
+        "collection_item_identity_keys": ("workspace_id",),
+    },
+}
+
+
 _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "launch_run": {
         "response_shape": "accepted",
@@ -3602,6 +3810,18 @@ def build_public_mcp_response_contracts() -> tuple[PublicMcpResponseContract, ..
     for resource in build_public_mcp_resources():
         contracts.append(adapter.export_resource_response_contract(resource.name))
     return tuple(contracts)
+
+
+def build_public_mcp_result_shape_profiles() -> tuple[PublicMcpResultShapeProfile, ...]:
+    """Return exported result-shape profiles for the curated public MCP surface."""
+
+    adapter = build_public_mcp_adapter_scaffold()
+    profiles: list[PublicMcpResultShapeProfile] = []
+    for tool in build_public_mcp_tools():
+        profiles.append(adapter.export_tool_result_shape_profile(tool.name))
+    for resource in build_public_mcp_resources():
+        profiles.append(adapter.export_resource_result_shape_profile(resource.name))
+    return tuple(profiles)
 
 
 def build_public_mcp_transport_contracts() -> tuple[PublicMcpTransportContract, ...]:
@@ -3866,6 +4086,7 @@ __all__ = [
     "PublicMcpTransportAssessment",
     "PublicMcpPreflightAssessment",
     "PublicMcpOrchestrationSummary",
+    "PublicMcpResultShapeProfile",
     "PublicMcpResponseContract",
     "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
@@ -3895,6 +4116,7 @@ __all__ = [
     "build_public_mcp_route_contracts",
     "build_public_mcp_transport_contracts",
     "build_public_mcp_response_contracts",
+    "build_public_mcp_result_shape_profiles",
     "build_public_mcp_recovery_policies",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_compatibility_surface",

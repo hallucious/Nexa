@@ -34,6 +34,7 @@ from src.sdk.integration import (
     PublicMcpTransportAssessment,
     PublicMcpPreflightAssessment,
     PublicMcpOrchestrationSummary,
+    PublicMcpResultShapeProfile,
     PublicMcpFrameworkEnvelope,
     PublicMcpHttpEnvelope,
     PublicMcpResponseContract,
@@ -45,6 +46,7 @@ from src.sdk.integration import (
     build_public_mcp_route_contracts,
     build_public_mcp_transport_contracts,
     build_public_mcp_response_contracts,
+    build_public_mcp_result_shape_profiles,
     build_public_mcp_recovery_policies,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
@@ -91,7 +93,7 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.17"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.18"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -125,9 +127,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.15"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.16"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.15"
+    assert surface.version == "1.16"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -182,12 +184,12 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.7"
-    assert PUBLIC_MCP_SCHEMA_VERSION == "1.7"
+    assert PUBLIC_MCP_MANIFEST_VERSION == "1.8"
+    assert PUBLIC_MCP_SCHEMA_VERSION == "1.8"
     assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.7"
-    assert manifest.schema_version == "1.7"
+    assert manifest.manifest_version == "1.8"
+    assert manifest.schema_version == "1.8"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -195,8 +197,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
-    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.7"
-    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.7"
+    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.8"
+    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.8"
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -224,7 +226,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.13"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.14"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -433,9 +435,9 @@ def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> N
 
     assert isinstance(policy, PublicMcpCompatibilityPolicy)
     assert policy.policy_version == "1.0"
-    assert policy.supports_manifest_version("1.7") is True
-    assert policy.supports_schema_version("1.7") is True
-    policy.assert_supported(manifest_version="1.7", schema_version="1.7")
+    assert policy.supports_manifest_version("1.8") is True
+    assert policy.supports_schema_version("1.8") is True
+    policy.assert_supported(manifest_version="1.8", schema_version="1.8")
 
 
 def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
@@ -460,9 +462,9 @@ def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
     export = bridge.export()
 
-    assert export.schema_version == "1.7"
+    assert export.schema_version == "1.8"
     assert export.compatibility_policy.policy_version == "1.0"
-    bridge.assert_consumer_compatibility(manifest_version="1.7", schema_version="1.7")
+    bridge.assert_consumer_compatibility(manifest_version="1.8", schema_version="1.8")
 
     try:
         bridge.assert_consumer_compatibility(manifest_version="0.9")
@@ -643,6 +645,32 @@ def test_response_contract_exports_body_kind_and_required_keys() -> None:
     assert indexed["get_run_status"].body_kind == "object"
     assert indexed["get_run_status"].required_top_level_keys == ("run_id", "status")
     assert indexed["launch_run"].required_top_level_keys == ("status",)
+    assert indexed["list_workspace_runs"].result_shape_profile is not None
+    assert indexed["list_workspace_runs"].result_shape_profile.collection_field_name == "runs"
+
+
+def test_build_public_mcp_result_shape_profiles_exports_family_profiles() -> None:
+    profiles = build_public_mcp_result_shape_profiles()
+    indexed = {profile.route_name: profile for profile in profiles}
+
+    assert isinstance(indexed["list_workspace_runs"], PublicMcpResultShapeProfile)
+    assert indexed["list_workspace_runs"].collection_field_name == "runs"
+    assert indexed["list_workspace_runs"].count_field_name == "returned_count"
+    assert indexed["list_workspace_runs"].collection_item_identity_keys == ("run_id",)
+    assert indexed["get_run_trace"].collection_field_name == "events"
+    assert indexed["get_artifact_detail"].identity_keys == ("artifact_id",)
+
+
+def test_manifest_includes_result_shape_profiles_inside_response_contracts() -> None:
+    manifest = build_public_mcp_manifest()
+    run_list_resource = next(resource for resource in manifest.resources if resource.route_name == "list_workspace_runs")
+    manifest_dict = manifest.to_dict()
+    run_list_dict = next(resource for resource in manifest_dict["resources"] if resource["route_name"] == "list_workspace_runs")
+
+    assert run_list_resource.response_contract is not None
+    assert run_list_resource.response_contract.result_shape_profile is not None
+    assert run_list_resource.response_contract.result_shape_profile.collection_field_name == "runs"
+    assert run_list_dict["response_contract"]["result_shape_profile"]["collection_field_name"] == "runs"
 
 
 def test_adapter_scaffold_rejects_framework_response_with_wrong_body_kind() -> None:
@@ -662,6 +690,42 @@ def test_adapter_scaffold_rejects_framework_response_with_wrong_body_kind() -> N
         assert "expected object" in str(exc)
     else:
         raise AssertionError("Expected response body kind validation")
+
+
+def test_adapter_scaffold_rejects_response_missing_collection_field_from_result_shape_profile() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    try:
+        adapter.normalize_http_resource_response(
+            "list_workspace_runs",
+            HttpRouteResponse(
+                status_code=200,
+                body={"workspace_id": "ws-001", "returned_count": 1},
+                headers={"content-type": "application/json"},
+            ),
+        )
+    except ValueError as exc:
+        assert "Missing result collection field" in str(exc)
+    else:
+        raise AssertionError("Expected result-shape collection validation")
+
+
+def test_adapter_scaffold_rejects_response_with_missing_collection_item_identity_keys() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    try:
+        adapter.normalize_http_resource_response(
+            "list_workspace_runs",
+            HttpRouteResponse(
+                status_code=200,
+                body={"workspace_id": "ws-001", "returned_count": 1, "runs": [{"status": "running"}]},
+                headers={"content-type": "application/json"},
+            ),
+        )
+    except ValueError as exc:
+        assert "Missing result collection item keys" in str(exc)
+    else:
+        raise AssertionError("Expected result-shape item identity validation")
 
 
 def test_host_bridge_can_execute_framework_resource_and_normalize_response() -> None:
