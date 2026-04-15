@@ -19,6 +19,8 @@ from src.storage.nex_api import (
 )
 
 _ALLOWED_SHARE_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("active", "expired", "revoked")
+_TERMINAL_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("expired", "revoked")
+_MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration")
 _UNSET = object()
 
 _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
@@ -30,6 +32,8 @@ _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
     viewer_capabilities=("inspect_metadata", "download_artifact", "import_copy"),
     supported_operations=("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"),
     supported_lifecycle_states=_ALLOWED_SHARE_LIFECYCLE_STATES,
+    terminal_lifecycle_states=_TERMINAL_LIFECYCLE_STATES,
+    management_operations=_MANAGEMENT_OPERATIONS,
 )
 
 
@@ -82,6 +86,16 @@ def _effective_share_lifecycle_state(*, stored_state: ShareLifecycleState, expir
     expires_at_dt = _parse_iso_datetime(expires_at, field_name="public link share payload share.lifecycle.expires_at")
     now_dt = _resolve_now(now_iso)
     return "expired" if expires_at_dt <= now_dt else stored_state
+
+
+def _validate_lifecycle_mutation_allowed(*, descriptor: PublicNexShareDescriptor, target_operation: ShareOperation, target_state: ShareLifecycleState | None = None) -> None:
+    effective_state = descriptor.lifecycle_state
+    if effective_state == "revoked":
+        raise ValueError(f"public link share lifecycle is terminal (state={effective_state}); operation={target_operation} is not allowed")
+    if effective_state == "expired":
+        raise ValueError(f"public link share lifecycle is terminal (state={effective_state}); operation={target_operation} is not allowed")
+    if target_state == "expired":
+        raise ValueError("public link share lifecycle state 'expired' is time-derived and cannot be set directly")
 
 
 def _canonicalize_share_lifecycle(
@@ -279,6 +293,7 @@ def describe_public_nex_link_share(
         artifact_format_family=_PUBLIC_NEX_SHARE_BOUNDARY.artifact_format_family,
         viewer_capabilities=_PUBLIC_NEX_SHARE_BOUNDARY.viewer_capabilities,
         operation_capabilities=_operation_capabilities_for_role(descriptor.storage_role),
+        stored_lifecycle_state=stored_state,
         lifecycle_state=effective_state,
         created_at=lifecycle.get("created_at"),
         updated_at=lifecycle.get("updated_at"),
@@ -294,20 +309,36 @@ def update_public_nex_link_share_lifecycle(
     lifecycle_state: ShareLifecycleState | None = None,
     expires_at: str | None | object = _UNSET,
     updated_at: str | None = None,
+    now_iso: str | None = None,
 ) -> dict[str, Any]:
     payload = load_public_nex_link_share(source)
     share = payload["share"]
     lifecycle = share.get("lifecycle", {}) if isinstance(share.get("lifecycle"), dict) else {}
-    next_state = lifecycle_state or lifecycle.get("state", "active")
+    descriptor = describe_public_nex_link_share(payload, now_iso=now_iso or updated_at)
+    target_state = lifecycle_state or descriptor.stored_lifecycle_state
+    if lifecycle_state is not None:
+        _validate_lifecycle_mutation_allowed(descriptor=descriptor, target_operation="revoke" if lifecycle_state == "revoked" else "extend_expiration", target_state=target_state)
+    if expires_at is not _UNSET:
+        _validate_lifecycle_mutation_allowed(descriptor=descriptor, target_operation="extend_expiration", target_state=target_state)
+        if expires_at is not None:
+            new_expires_at = _parse_iso_datetime(expires_at, field_name="public link share payload share.lifecycle.expires_at")
+            reference_now = _resolve_now(now_iso or updated_at)
+            if new_expires_at <= reference_now:
+                raise ValueError("public link share expiration extension must be in the future")
+            current_expires_at = lifecycle.get("expires_at")
+            if current_expires_at:
+                current_expires_dt = _parse_iso_datetime(current_expires_at, field_name="public link share payload share.lifecycle.expires_at")
+                if new_expires_at <= current_expires_dt:
+                    raise ValueError("public link share expiration extension must move forward")
     next_expires = lifecycle.get("expires_at") if expires_at is _UNSET else expires_at
     return export_public_nex_link_share(
         payload["artifact"],
         share_id=share["share_id"],
         title=share.get("title"),
         summary=share.get("summary"),
-        lifecycle_state=next_state,
+        lifecycle_state=target_state,
         created_at=lifecycle.get("created_at"),
-        updated_at=updated_at or lifecycle.get("updated_at"),
+        updated_at=updated_at or lifecycle.get("updated_at") or now_iso,
         expires_at=next_expires,
         issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
     )
@@ -322,6 +353,21 @@ def revoke_public_nex_link_share(
         source,
         lifecycle_state="revoked",
         updated_at=now_iso or datetime.now(UTC).isoformat(),
+        now_iso=now_iso,
+    )
+
+
+def extend_public_nex_link_share_expiration(
+    source: str | Path | dict[str, Any],
+    *,
+    expires_at: str,
+    now_iso: str | None = None,
+) -> dict[str, Any]:
+    return update_public_nex_link_share_lifecycle(
+        source,
+        expires_at=expires_at,
+        updated_at=now_iso or datetime.now(UTC).isoformat(),
+        now_iso=now_iso,
     )
 
 
@@ -353,6 +399,7 @@ __all__ = [
     "describe_public_nex_link_share",
     "update_public_nex_link_share_lifecycle",
     "revoke_public_nex_link_share",
+    "extend_public_nex_link_share_expiration",
     "save_public_nex_link_share_file",
     "ensure_public_nex_link_share_operation_allowed",
 ]

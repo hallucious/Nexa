@@ -302,6 +302,9 @@ def build_parser():
     savefile_share_export.add_argument("--share-id", help="Optional share identifier override")
     savefile_share_export.add_argument("--title", help="Optional share title override")
     savefile_share_export.add_argument("--summary", help="Optional share summary override")
+    savefile_share_export.add_argument("--expires-at", help="Optional ISO expiry timestamp for the shared artifact")
+    savefile_share_export.add_argument("--created-at", help="Optional ISO creation timestamp override for the shared artifact")
+    savefile_share_export.add_argument("--issued-by-user-ref", help="Optional issuer reference for bounded lifecycle management")
     savefile_share_export.add_argument("--force", action="store_true", help="Overwrite output file if it already exists")
 
     savefile_share_info = savefile_share_sub.add_parser("info")
@@ -865,6 +868,7 @@ def _public_share_payload(share_payload: dict, loaded, *, input_path: Path) -> d
         "share_summary": descriptor.summary,
         "viewer_capabilities": list(descriptor.viewer_capabilities),
         "operation_capabilities": list(descriptor.operation_capabilities),
+        "stored_lifecycle_state": descriptor.stored_lifecycle_state,
         "lifecycle_state": descriptor.lifecycle_state,
         "created_at": descriptor.created_at,
         "updated_at": descriptor.updated_at,
@@ -1160,6 +1164,9 @@ def savefile_share_export_command(args) -> int:
         share_id=getattr(args, "share_id", None),
         title=getattr(args, "title", None),
         summary=getattr(args, "summary", None),
+        expires_at=getattr(args, "expires_at", None),
+        created_at=getattr(args, "created_at", None),
+        issued_by_user_ref=getattr(args, "issued_by_user_ref", None),
     )
     descriptor = describe_public_nex_link_share(written)
     payload = {
@@ -1175,6 +1182,7 @@ def savefile_share_export_command(args) -> int:
         "summary": descriptor.summary,
         "viewer_capabilities": list(descriptor.viewer_capabilities),
         "operation_capabilities": list(descriptor.operation_capabilities),
+        "stored_lifecycle_state": descriptor.stored_lifecycle_state,
         "lifecycle_state": descriptor.lifecycle_state,
         "created_at": descriptor.created_at,
         "updated_at": descriptor.updated_at,

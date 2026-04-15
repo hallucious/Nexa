@@ -179,6 +179,12 @@ class FrameworkRouteBindings:
             summary="Read the canonical public artifact for a bounded public share.",
         ),
         FrameworkRouteDefinition(
+            route_name="extend_public_share",
+            method="POST",
+            path_template="/api/public-shares/{share_id}/extend",
+            summary="Extend a bounded public share expiration when requested by the issuing user.",
+        ),
+        FrameworkRouteDefinition(
             route_name="revoke_public_share",
             method="POST",
             path_template="/api/public-shares/{share_id}/revoke",
@@ -993,6 +999,23 @@ class FrameworkRouteBindings:
         response = RunHttpRouteSurface.handle_get_public_share_artifact(
             http_request=cls.to_http_route_request(request),
             share_payload_provider=share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_extend_public_share(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_provider=None,
+        public_share_payload_writer=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_extend_public_share(
+            http_request=cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+            public_share_payload_writer=public_share_payload_writer,
+            now_iso=now_iso,
         )
         return cls.to_framework_response(response)
 

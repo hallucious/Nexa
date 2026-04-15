@@ -39,6 +39,7 @@ from src.storage.share_api import (
     describe_public_nex_link_share,
     ensure_public_nex_link_share_operation_allowed,
     export_public_nex_link_share,
+    extend_public_nex_link_share_expiration,
     load_public_nex_link_share,
     revoke_public_nex_link_share,
 )
@@ -318,6 +319,7 @@ class RunHttpRouteSurface:
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
         ("get_public_share", "GET", "/api/public-shares/{share_id}"),
         ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
+        ("extend_public_share", "POST", "/api/public-shares/{share_id}/extend"),
         ("revoke_public_share", "POST", "/api/public-shares/{share_id}/revoke"),
         ("launch_run", "POST", "/api/runs"),
         ("get_run_status", "GET", "/api/runs/{run_id}"),
@@ -908,6 +910,7 @@ class RunHttpRouteSurface:
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
             "lifecycle": {
+                "stored_state": descriptor.stored_lifecycle_state,
                 "state": descriptor.lifecycle_state,
                 "created_at": descriptor.created_at,
                 "updated_at": descriptor.updated_at,
@@ -958,6 +961,7 @@ class RunHttpRouteSurface:
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
             "lifecycle": {
+                "stored_state": descriptor.stored_lifecycle_state,
                 "state": descriptor.lifecycle_state,
                 "created_at": descriptor.created_at,
                 "updated_at": descriptor.updated_at,
@@ -1014,6 +1018,114 @@ class RunHttpRouteSurface:
             "links": {
                 "share": f"/api/public-shares/{descriptor.share_id}",
                 "public_share_path": descriptor.share_path,
+            },
+        })
+
+    @classmethod
+    def handle_extend_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_provider=None,
+        public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share extend route only supports POST."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/extend"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.authentication_required",
+                "message": "Public share lifecycle updates require an authenticated session.",
+                "share_id": share_id,
+            })
+        payload, descriptor, error = _resolve_public_share_payload(share_id, share_payload_provider)
+        if error is not None:
+            return error
+        assert payload is not None and descriptor is not None
+        if not descriptor.issued_by_user_ref:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.management_not_supported",
+                "message": "Public share lifecycle management requires issuer metadata.",
+                "share_id": share_id,
+            })
+        if descriptor.issued_by_user_ref != request_auth.requested_by_user_ref:
+            return _route_response(403, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.forbidden",
+                "message": "Current user is not allowed to update this public share.",
+                "share_id": share_id,
+            })
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.invalid_request",
+                "message": "Public share extend payload is invalid.",
+                "share_id": share_id,
+            })
+        expires_at = str(body.get("expires_at") or "").strip()
+        if not expires_at:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.expires_at_missing",
+                "message": "Public share extension requires expires_at.",
+                "share_id": share_id,
+            })
+        try:
+            extended_payload = extend_public_nex_link_share_expiration(payload, expires_at=expires_at, now_iso=now_iso)
+        except ValueError as exc:
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "public_share_write_failure",
+                "reason_code": "public_share.transition_not_allowed",
+                "message": str(exc),
+                "share_id": share_id,
+            })
+        persisted = public_share_payload_writer(extended_payload) if public_share_payload_writer is not None else extended_payload
+        extended_descriptor = describe_public_nex_link_share(persisted, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "updated",
+            "share_id": extended_descriptor.share_id,
+            "share_path": extended_descriptor.share_path,
+            "title": extended_descriptor.title,
+            "summary": extended_descriptor.summary,
+            "transport": extended_descriptor.transport,
+            "access_mode": extended_descriptor.access_mode,
+            "viewer_capabilities": list(extended_descriptor.viewer_capabilities),
+            "operation_capabilities": list(extended_descriptor.operation_capabilities),
+            "lifecycle": {
+                "stored_state": extended_descriptor.stored_lifecycle_state,
+                "state": extended_descriptor.lifecycle_state,
+                "created_at": extended_descriptor.created_at,
+                "updated_at": extended_descriptor.updated_at,
+                "expires_at": extended_descriptor.expires_at,
+                "issued_by_user_ref": extended_descriptor.issued_by_user_ref,
+            },
+            "source_artifact": {
+                "storage_role": extended_descriptor.storage_role,
+                "canonical_ref": extended_descriptor.canonical_ref,
+                "artifact_format_family": extended_descriptor.artifact_format_family,
+                "source_working_save_id": extended_descriptor.source_working_save_id,
+            },
+            "links": {
+                "self": f"/api/public-shares/{extended_descriptor.share_id}",
+                "artifact": f"/api/public-shares/{extended_descriptor.share_id}/artifact",
+                "public_share_path": extended_descriptor.share_path,
+                "extend": expected_path,
             },
         })
 
@@ -1077,6 +1189,7 @@ class RunHttpRouteSurface:
             "viewer_capabilities": list(revoked_descriptor.viewer_capabilities),
             "operation_capabilities": list(revoked_descriptor.operation_capabilities),
             "lifecycle": {
+                "stored_state": revoked_descriptor.stored_lifecycle_state,
                 "state": revoked_descriptor.lifecycle_state,
                 "created_at": revoked_descriptor.created_at,
                 "updated_at": revoked_descriptor.updated_at,

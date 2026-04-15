@@ -15,6 +15,7 @@ from src.storage.share_api import (
     load_public_nex_link_share,
     revoke_public_nex_link_share,
     save_public_nex_link_share_file,
+    extend_public_nex_link_share_expiration,
 )
 
 
@@ -63,6 +64,8 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.viewer_capabilities == ("inspect_metadata", "download_artifact", "import_copy")
     assert boundary.supported_operations == ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
     assert boundary.supported_lifecycle_states == ("active", "expired", "revoked")
+    assert boundary.terminal_lifecycle_states == ("expired", "revoked")
+    assert boundary.management_operations == ("revoke", "extend_expiration")
 
 
 def test_export_public_nex_link_share_is_deterministic_for_same_artifact() -> None:
@@ -196,3 +199,68 @@ def test_revoke_public_nex_link_share_updates_lifecycle_state_and_timestamp() ->
     assert revoked["share"]["lifecycle"]["state"] == "revoked"
     assert revoked["share"]["lifecycle"]["updated_at"] == "2026-04-15T14:00:00+00:00"
     assert descriptor.lifecycle_state == "revoked"
+
+
+def test_describe_public_nex_link_share_preserves_stored_state_when_effectively_expired() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-stored-expiry-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        expires_at="2026-04-10T00:00:00+00:00",
+    )
+
+    descriptor = describe_public_nex_link_share(payload)
+
+    assert descriptor.stored_lifecycle_state == "active"
+    assert descriptor.lifecycle_state == "expired"
+
+
+def test_extend_public_nex_link_share_expiration_updates_future_expiry_for_active_share() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-extend-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        expires_at="2026-04-20T00:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
+
+    extended = extend_public_nex_link_share_expiration(
+        payload,
+        expires_at="2026-04-25T00:00:00+00:00",
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+    descriptor = describe_public_nex_link_share(extended, now_iso="2026-04-15T13:00:00+00:00")
+
+    assert extended["share"]["lifecycle"]["expires_at"] == "2026-04-25T00:00:00+00:00"
+    assert descriptor.stored_lifecycle_state == "active"
+    assert descriptor.lifecycle_state == "active"
+
+
+def test_extend_public_nex_link_share_expiration_rejects_effectively_expired_share() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-expired-extend-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        expires_at="2026-04-10T00:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
+
+    with pytest.raises(ValueError, match="terminal"):
+        extend_public_nex_link_share_expiration(
+            payload,
+            expires_at="2026-04-25T00:00:00+00:00",
+            now_iso="2026-04-15T13:00:00+00:00",
+        )
+
+
+def test_extend_public_nex_link_share_expiration_rejects_non_forward_extension() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-forward-extend-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        expires_at="2026-04-20T00:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
+
+    with pytest.raises(ValueError, match="move forward"):
+        extend_public_nex_link_share_expiration(
+            payload,
+            expires_at="2026-04-19T00:00:00+00:00",
+            now_iso="2026-04-15T13:00:00+00:00",
+        )

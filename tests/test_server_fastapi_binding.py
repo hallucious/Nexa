@@ -1480,6 +1480,7 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     payload = response.json()
     assert payload['share_id'] == 'share-fastapi-001'
     assert payload['operation_capabilities'] == ['inspect_metadata', 'download_artifact', 'import_copy', 'run_artifact', 'checkout_working_copy']
+    assert payload['lifecycle']['stored_state'] == 'active'
     assert payload['lifecycle']['state'] == 'active'
     assert payload['source_artifact']['storage_role'] == 'commit_snapshot'
 
@@ -1600,3 +1601,29 @@ def test_fastapi_binding_public_share_artifact_rejects_expired_share() -> None:
     assert response.status_code == 409
     payload = response.json()
     assert payload['reason_code'] == 'public_share.download_not_allowed'
+
+
+def test_fastapi_binding_public_share_extend_round_trip() -> None:
+    share_store: dict[str, dict] = {"share-fastapi-extend-001": _share_payload("share-fastapi-extend-001")}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    client = _make_client(
+        public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_writer=_writer,
+    )
+    response = client.post(
+        '/api/public-shares/share-fastapi-extend-001/extend',
+        headers=_session_headers(),
+        json={"expires_at": "2026-04-20T00:00:00+00:00"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['share_id'] == 'share-fastapi-extend-001'
+    assert payload['lifecycle']['stored_state'] == 'active'
+    assert payload['lifecycle']['state'] == 'active'
+    assert payload['lifecycle']['expires_at'] == '2026-04-20T00:00:00+00:00'
+

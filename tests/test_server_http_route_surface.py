@@ -111,6 +111,7 @@ def test_public_share_route_returns_descriptor_without_authentication() -> None:
     assert response.body["status"] == "ready"
     assert response.body["share_id"] == "share-http-001"
     assert response.body["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
+    assert response.body["lifecycle"]["stored_state"] == "active"
     assert response.body["lifecycle"]["state"] == "active"
     assert response.body["lifecycle"]["issued_by_user_ref"] == "user-owner"
     assert response.body["source_artifact"]["canonical_ref"] == "snap-share-001"
@@ -617,3 +618,53 @@ def test_public_share_revoke_route_rejects_non_issuer() -> None:
 
     assert response.status_code == 403
     assert response.body["reason_code"] == "public_share.forbidden"
+
+
+def test_public_share_extend_route_updates_expiration_for_issuer() -> None:
+    share_store: dict[str, dict] = {"share-extend-http-001": _share_payload("share-extend-http-001")}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    response = RunHttpRouteSurface.handle_extend_public_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/public-shares/share-extend-http-001/extend",
+            path_params={"share_id": "share-extend-http-001"},
+            json_body={"expires_at": "2026-04-20T00:00:00+00:00"},
+        ),
+        share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_writer=_writer,
+        now_iso="2026-04-15T13:30:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["lifecycle"]["stored_state"] == "active"
+    assert response.body["lifecycle"]["state"] == "active"
+    assert response.body["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
+
+
+def test_public_share_extend_route_rejects_effectively_expired_share() -> None:
+    response = RunHttpRouteSurface.handle_extend_public_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/public-shares/share-expired-http/extend",
+            path_params={"share_id": "share-expired-http"},
+            json_body={"expires_at": "2026-04-25T00:00:00+00:00"},
+        ),
+        share_payload_provider=lambda share_id: export_public_nex_link_share(
+            _commit_snapshot("snap-expired-http-extend-001"),
+            share_id=share_id,
+            title="Expired HTTP Share",
+            created_at="2026-04-15T12:00:00+00:00",
+            expires_at="2026-04-10T00:00:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        public_share_payload_writer=lambda payload: payload,
+        now_iso="2026-04-15T13:30:00+00:00",
+    )
+
+    assert response.status_code == 409
+    assert response.body["reason_code"] == "public_share.transition_not_allowed"
+

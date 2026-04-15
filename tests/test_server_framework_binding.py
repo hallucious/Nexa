@@ -127,6 +127,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "launch_workspace_shell",
         "get_public_share",
         "get_public_share_artifact",
+        "extend_public_share",
         "revoke_public_share",
         "launch_run",
         "get_run_status",
@@ -179,6 +180,7 @@ def test_framework_binding_handles_public_share_round_trip() -> None:
     assert parsed["status"] == "ready"
     assert parsed["share_id"] == "share-framework-001"
     assert parsed["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
+    assert parsed["lifecycle"]["stored_state"] == "active"
     assert parsed["lifecycle"]["state"] == "active"
     assert parsed["source_artifact"]["storage_role"] == "commit_snapshot"
 
@@ -953,3 +955,32 @@ def test_framework_binding_revoke_public_share_round_trip() -> None:
     assert parsed["lifecycle"]["state"] == "revoked"
     assert parsed["lifecycle"]["updated_at"] == "2026-04-15T13:30:00+00:00"
     assert share_store["share-framework-revoke-001"]["share"]["lifecycle"]["state"] == "revoked"
+
+
+def test_framework_binding_extend_public_share_round_trip() -> None:
+    share_store: dict[str, dict] = {"share-framework-extend-001": _share_payload("share-framework-extend-001")}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    response = FrameworkRouteBindings.handle_extend_public_share(
+        request=_request(
+            method="POST",
+            path="/api/public-shares/share-framework-extend-001/extend",
+            path_params={"share_id": "share-framework-extend-001"},
+            json_body={"expires_at": "2026-04-20T00:00:00+00:00"},
+        ),
+        share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_writer=_writer,
+        now_iso="2026-04-15T13:30:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["share_id"] == "share-framework-extend-001"
+    assert parsed["lifecycle"]["stored_state"] == "active"
+    assert parsed["lifecycle"]["state"] == "active"
+    assert parsed["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
+    assert share_store["share-framework-extend-001"]["share"]["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
+
