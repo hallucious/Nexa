@@ -54,7 +54,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.17"
+    assert not hasattr(sdk, "PUBLIC_SDK_SURFACE_VERSION")
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -114,9 +114,9 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
 
-    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.7"
-    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.7"
-    assert sdk.PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
+    assert not hasattr(sdk, "PUBLIC_MCP_MANIFEST_VERSION")
+    assert not hasattr(sdk, "PUBLIC_MCP_SCHEMA_VERSION")
+    assert not hasattr(sdk, "PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION")
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
@@ -139,7 +139,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.13"
+    assert not hasattr(sdk, "MCP_HOST_BRIDGE_SCAFFOLD_VERSION")
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
@@ -158,9 +158,9 @@ def test_sdk_root_exposes_public_mcp_compatibility_policy() -> None:
     policy = sdk.build_public_mcp_compatibility_policy()
 
     assert isinstance(policy, sdk.PublicMcpCompatibilityPolicy)
-    assert policy.supported_manifest_versions == ("1.7",)
-    assert policy.supported_schema_versions == ("1.7",)
-    policy.assert_supported(manifest_version="1.7", schema_version="1.7")
+    assert "argument-schema" in policy.supported_contract_markers
+    assert "execution-report" in policy.supported_runtime_markers
+    policy.assert_supported(required_contract_markers=("argument-schema",), required_runtime_markers=("execution-report",), transport_kind="http-route-bridge")
 
 
 def test_sdk_root_exposes_public_mcp_lifecycle_control_profiles() -> None:

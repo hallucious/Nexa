@@ -27,12 +27,6 @@ from src.sdk.artifacts import (
     validate_working_save,
 )
 from src.sdk.integration import (
-    PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
-    MCP_ADAPTER_SCAFFOLD_VERSION,
-    MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
-    PUBLIC_MCP_MANIFEST_VERSION,
-    PUBLIC_MCP_SCHEMA_VERSION,
-    PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION,
     PublicMcpArgumentField,
     PublicMcpArgumentSchema,
     PublicMcpRouteContract,
@@ -75,6 +69,8 @@ from src.sdk.integration import (
     build_public_mcp_response_contracts,
     build_public_mcp_recovery_policies,
     build_public_mcp_lifecycle_control_profiles,
+    build_public_mcp_contract_markers,
+    build_public_mcp_runtime_markers,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
     build_public_mcp_adapter_scaffold,
@@ -96,20 +92,12 @@ from src.sdk.server import (
     RunHttpRouteSurface,
 )
 
-PUBLIC_SDK_SURFACE_VERSION = "1.17"
 PUBLIC_SDK_MODULES = ("artifacts", "server", "integration")
 
 __all__ = [
-    "PUBLIC_SDK_SURFACE_VERSION",
     "PUBLIC_SDK_MODULES",
     "PUBLIC_ARTIFACT_SDK_SURFACE_VERSION",
     "PUBLIC_SERVER_SDK_SURFACE_VERSION",
-    "PUBLIC_INTEGRATION_SDK_SURFACE_VERSION",
-    "MCP_ADAPTER_SCAFFOLD_VERSION",
-    "MCP_HOST_BRIDGE_SCAFFOLD_VERSION",
-    "PUBLIC_MCP_MANIFEST_VERSION",
-    "PUBLIC_MCP_SCHEMA_VERSION",
-    "PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION",
     "PublicMcpArgumentField",
     "PublicMcpArgumentSchema",
     "PublicMcpRouteContract",
@@ -184,6 +172,8 @@ __all__ = [
     "build_public_mcp_response_contracts",
     "build_public_mcp_recovery_policies",
     "build_public_mcp_lifecycle_control_profiles",
+    "build_public_mcp_contract_markers",
+    "build_public_mcp_runtime_markers",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_resources",
     "build_public_mcp_compatibility_surface",

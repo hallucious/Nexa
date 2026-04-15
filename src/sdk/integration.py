@@ -22,9 +22,6 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.15"
-
-
 @dataclass(frozen=True)
 class PublicTypeRef:
     module: str
@@ -330,53 +327,68 @@ class PublicMcpExecutionReport:
 
 @dataclass(frozen=True)
 class PublicMcpCompatibilitySurface:
-    version: str
+    contract_markers: tuple[str, ...]
+    runtime_markers: tuple[str, ...]
     tools: tuple[PublicMcpToolDescriptor, ...]
     resources: tuple[PublicMcpResourceDescriptor, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "contract_markers": list(self.contract_markers),
+            "runtime_markers": list(self.runtime_markers),
+            "tools": [tool.route_name for tool in self.tools],
+            "resources": [resource.route_name for resource in self.resources],
+        }
 
 
 @dataclass(frozen=True)
 class PublicMcpCompatibilityPolicy:
-    policy_version: str
-    manifest_version: str
-    schema_version: str
-    surface_version: str
-    adapter_version: str
-    host_bridge_version: str
-    supported_manifest_versions: tuple[str, ...] = ()
-    supported_schema_versions: tuple[str, ...] = ()
+    supported_contract_markers: tuple[str, ...] = ()
+    supported_runtime_markers: tuple[str, ...] = ()
+    supported_transport_kinds: tuple[str, ...] = ()
 
-    def supports_manifest_version(self, version: str) -> bool:
-        return version in self.supported_manifest_versions
+    def supports_contract_marker(self, marker: str) -> bool:
+        return marker in self.supported_contract_markers
 
-    def supports_schema_version(self, version: str) -> bool:
-        return version in self.supported_schema_versions
+    def supports_runtime_marker(self, marker: str) -> bool:
+        return marker in self.supported_runtime_markers
+
+    def supports_transport_kind(self, transport_kind: str) -> bool:
+        return transport_kind in self.supported_transport_kinds
 
     def assert_supported(
         self,
         *,
-        manifest_version: str | None = None,
-        schema_version: str | None = None,
+        required_contract_markers: tuple[str, ...] = (),
+        required_runtime_markers: tuple[str, ...] = (),
+        transport_kind: str | None = None,
     ) -> None:
-        if manifest_version is not None and not self.supports_manifest_version(manifest_version):
+        missing_contract = [marker for marker in required_contract_markers if marker not in self.supported_contract_markers]
+        if missing_contract:
             raise ValueError(
-                f"Unsupported public MCP manifest version: {manifest_version}; supported versions: {', '.join(self.supported_manifest_versions)}"
+                "Unsupported public MCP contract markers: "
+                + ", ".join(missing_contract)
+                + "; supported markers: "
+                + ", ".join(self.supported_contract_markers)
             )
-        if schema_version is not None and not self.supports_schema_version(schema_version):
+        missing_runtime = [marker for marker in required_runtime_markers if marker not in self.supported_runtime_markers]
+        if missing_runtime:
             raise ValueError(
-                f"Unsupported public MCP schema version: {schema_version}; supported versions: {', '.join(self.supported_schema_versions)}"
+                "Unsupported public MCP runtime markers: "
+                + ", ".join(missing_runtime)
+                + "; supported markers: "
+                + ", ".join(self.supported_runtime_markers)
+            )
+        if transport_kind is not None and transport_kind not in self.supported_transport_kinds:
+            raise ValueError(
+                f"Unsupported public MCP transport kind: {transport_kind}; supported kinds: {', '.join(self.supported_transport_kinds)}"
             )
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "policy_version": self.policy_version,
-            "manifest_version": self.manifest_version,
-            "schema_version": self.schema_version,
-            "surface_version": self.surface_version,
-            "adapter_version": self.adapter_version,
-            "host_bridge_version": self.host_bridge_version,
-            "supported_manifest_versions": list(self.supported_manifest_versions),
-            "supported_schema_versions": list(self.supported_schema_versions),
+            "supported_contract_markers": list(self.supported_contract_markers),
+            "supported_runtime_markers": list(self.supported_runtime_markers),
+            "supported_transport_kinds": list(self.supported_transport_kinds),
         }
 
 
@@ -608,11 +620,6 @@ class PublicMcpOrchestrationSummary:
         }
 
 
-PUBLIC_MCP_MANIFEST_VERSION = "1.7"
-PUBLIC_MCP_SCHEMA_VERSION = "1.7"
-PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
-
-
 @dataclass(frozen=True)
 class PublicMcpManifestTool:
     name: str
@@ -651,10 +658,6 @@ class PublicMcpManifestResource:
 
 @dataclass(frozen=True)
 class PublicMcpManifest:
-    manifest_version: str
-    schema_version: str
-    adapter_version: str
-    surface_version: str
     compatibility_policy: PublicMcpCompatibilityPolicy
     server_name: str
     server_title: str
@@ -667,10 +670,6 @@ class PublicMcpManifest:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "manifest_version": self.manifest_version,
-            "schema_version": self.schema_version,
-            "adapter_version": self.adapter_version,
-            "surface_version": self.surface_version,
             "compatibility_policy": self.compatibility_policy.to_dict(),
             "server": {
                 "name": self.server_name,
@@ -719,12 +718,6 @@ class PublicMcpManifest:
                 for resource in self.resources
             ],
         }
-
-
-MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
-
-
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.13"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -795,10 +788,6 @@ class PublicMcpHttpEnvelope:
 
 @dataclass(frozen=True)
 class PublicMcpHostBridgeExport:
-    bridge_version: str
-    adapter_version: str
-    schema_version: str
-    surface_version: str
     compatibility_policy: PublicMcpCompatibilityPolicy
     framework_binding_class: str
     tool_bindings: tuple[PublicMcpHostRouteBinding, ...]
@@ -807,15 +796,10 @@ class PublicMcpHostBridgeExport:
 
 @dataclass(frozen=True)
 class PublicMcpHostBridgeScaffold:
-    bridge_version: str
     adapter_scaffold: PublicMcpAdapterScaffold
 
     def export(self) -> PublicMcpHostBridgeExport:
         return PublicMcpHostBridgeExport(
-            bridge_version=self.bridge_version,
-            adapter_version=self.adapter_scaffold.adapter_version,
-            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
-            surface_version=self.adapter_scaffold.surface.version,
             compatibility_policy=self.adapter_scaffold.compatibility_policy(),
             framework_binding_class="FrameworkRouteBindings",
             tool_bindings=tuple(self._tool_binding(tool) for tool in self.adapter_scaffold.surface.tools),
@@ -825,12 +809,14 @@ class PublicMcpHostBridgeScaffold:
     def assert_consumer_compatibility(
         self,
         *,
-        manifest_version: str | None = None,
-        schema_version: str | None = None,
+        required_contract_markers: tuple[str, ...] = (),
+        required_runtime_markers: tuple[str, ...] = (),
+        transport_kind: str | None = None,
     ) -> None:
         self.adapter_scaffold.assert_consumer_compatibility(
-            manifest_version=manifest_version,
-            schema_version=schema_version,
+            required_contract_markers=required_contract_markers,
+            required_runtime_markers=required_runtime_markers,
+            transport_kind=transport_kind,
         )
 
     def build_framework_tool_request(
@@ -2062,9 +2048,6 @@ class PublicMcpResourceExport:
 
 @dataclass(frozen=True)
 class PublicMcpAdapterExport:
-    adapter_version: str
-    schema_version: str
-    surface_version: str
     transport_kind: str
     stability: str
     compatibility_policy: PublicMcpCompatibilityPolicy
@@ -2074,16 +2057,12 @@ class PublicMcpAdapterExport:
 
 @dataclass(frozen=True)
 class PublicMcpAdapterScaffold:
-    adapter_version: str
     surface: PublicMcpCompatibilitySurface
     base_url: str | None = None
     resource_uri_prefix: str = "nexa://public"
 
     def export(self) -> PublicMcpAdapterExport:
         return PublicMcpAdapterExport(
-            adapter_version=self.adapter_version,
-            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
-            surface_version=self.surface.version,
             transport_kind="http-route-bridge",
             stability="scaffold",
             compatibility_policy=self.compatibility_policy(),
@@ -2098,10 +2077,6 @@ class PublicMcpAdapterScaffold:
         server_title: str = "Nexa Public Integration Surface",
     ) -> PublicMcpManifest:
         return PublicMcpManifest(
-            manifest_version=PUBLIC_MCP_MANIFEST_VERSION,
-            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
-            adapter_version=self.adapter_version,
-            surface_version=self.surface.version,
             compatibility_policy=self.compatibility_policy(),
             server_name=server_name,
             server_title=server_title,
@@ -2115,25 +2090,22 @@ class PublicMcpAdapterScaffold:
 
     def compatibility_policy(self) -> PublicMcpCompatibilityPolicy:
         return PublicMcpCompatibilityPolicy(
-            policy_version=PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION,
-            manifest_version=PUBLIC_MCP_MANIFEST_VERSION,
-            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
-            surface_version=self.surface.version,
-            adapter_version=self.adapter_version,
-            host_bridge_version=MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
-            supported_manifest_versions=(PUBLIC_MCP_MANIFEST_VERSION,),
-            supported_schema_versions=(PUBLIC_MCP_SCHEMA_VERSION,),
+            supported_contract_markers=build_public_mcp_contract_markers(),
+            supported_runtime_markers=build_public_mcp_runtime_markers(),
+            supported_transport_kinds=("http-route-bridge", "framework-bridge"),
         )
 
     def assert_consumer_compatibility(
         self,
         *,
-        manifest_version: str | None = None,
-        schema_version: str | None = None,
+        required_contract_markers: tuple[str, ...] = (),
+        required_runtime_markers: tuple[str, ...] = (),
+        transport_kind: str | None = None,
     ) -> None:
         self.compatibility_policy().assert_supported(
-            manifest_version=manifest_version,
-            schema_version=schema_version,
+            required_contract_markers=required_contract_markers,
+            required_runtime_markers=required_runtime_markers,
+            transport_kind=transport_kind,
         )
 
     def export_tool_schema(self, tool_name: str) -> PublicMcpArgumentSchema | None:
@@ -3303,7 +3275,6 @@ def build_public_mcp_adapter_scaffold(
     """Return the minimal MCP adapter/export scaffold over the public SDK surface."""
 
     return PublicMcpAdapterScaffold(
-        adapter_version=MCP_ADAPTER_SCAFFOLD_VERSION,
         surface=surface or build_public_mcp_compatibility_surface(),
         base_url=base_url,
         resource_uri_prefix=resource_uri_prefix,
@@ -3336,7 +3307,6 @@ def build_public_mcp_host_bridge_scaffold(
     """Return the minimal in-process host bridge over the public MCP adapter scaffold."""
 
     return PublicMcpHostBridgeScaffold(
-        bridge_version=MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
         adapter_scaffold=build_public_mcp_adapter_scaffold(
             base_url=base_url,
             surface=surface,
@@ -4067,8 +4037,36 @@ def build_public_mcp_route_contracts() -> tuple[PublicMcpRouteContract, ...]:
     return tuple(contracts)
 
 
+
+def build_public_mcp_contract_markers() -> tuple[str, ...]:
+    """Return exported contract capability markers for the curated public MCP surface."""
+
+    return (
+        "argument-schema",
+        "route-contract",
+        "response-contract",
+        "transport-contract",
+        "recovery-policy",
+        "lifecycle-control-profile",
+    )
+
+
+def build_public_mcp_runtime_markers() -> tuple[str, ...]:
+    """Return exported runtime capability markers for the curated public MCP surface."""
+
+    return (
+        "request-normalization",
+        "transport-assessment",
+        "preflight-assessment",
+        "dispatch-planning",
+        "dispatch-execution",
+        "execution-report",
+        "recovery-hints",
+        "orchestration-summary",
+    )
+
 def build_public_mcp_compatibility_policy() -> PublicMcpCompatibilityPolicy:
-    """Return the version-compatibility policy for the curated public MCP surface."""
+    """Return the capability-based compatibility policy for the curated public MCP surface."""
 
     return build_public_mcp_adapter_scaffold().compatibility_policy()
 
@@ -4077,19 +4075,14 @@ def build_public_mcp_compatibility_surface() -> PublicMcpCompatibilitySurface:
     """Return the complete MCP compatibility shape for the public SDK boundary."""
 
     return PublicMcpCompatibilitySurface(
-        version=PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
+        contract_markers=build_public_mcp_contract_markers(),
+        runtime_markers=build_public_mcp_runtime_markers(),
         tools=build_public_mcp_tools(),
         resources=build_public_mcp_resources(),
     )
 
 
 __all__ = [
-    "PUBLIC_INTEGRATION_SDK_SURFACE_VERSION",
-    "MCP_ADAPTER_SCAFFOLD_VERSION",
-    "MCP_HOST_BRIDGE_SCAFFOLD_VERSION",
-    "PUBLIC_MCP_MANIFEST_VERSION",
-    "PUBLIC_MCP_SCHEMA_VERSION",
-    "PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION",
     "PublicTypeRef",
     "PublicMcpToolDescriptor",
     "PublicMcpResourceDescriptor",
@@ -4135,6 +4128,8 @@ __all__ = [
     "build_public_mcp_response_contracts",
     "build_public_mcp_recovery_policies",
     "build_public_mcp_lifecycle_control_profiles",
+    "build_public_mcp_contract_markers",
+    "build_public_mcp_runtime_markers",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_compatibility_surface",
     "build_public_mcp_adapter_scaffold",
