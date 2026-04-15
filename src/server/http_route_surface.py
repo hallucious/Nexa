@@ -41,8 +41,10 @@ from src.storage.share_api import (
     export_public_nex_link_share,
     extend_public_nex_link_share_expiration,
     list_public_nex_link_share_audit_history,
+    list_public_nex_link_shares_for_issuer,
     load_public_nex_link_share,
     revoke_public_nex_link_share,
+    summarize_public_nex_link_shares_for_issuer,
 )
 from src.ui.i18n import normalize_ui_language
 
@@ -293,6 +295,47 @@ def _share_audit_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _issuer_share_management_entry_body(entry) -> dict[str, Any]:
+    return {
+        "share_id": entry.share_id,
+        "share_path": entry.share_path,
+        "title": entry.title,
+        "summary": entry.summary,
+        "storage_role": entry.storage_role,
+        "canonical_ref": entry.canonical_ref,
+        "operation_capabilities": list(entry.operation_capabilities),
+        "lifecycle": {
+            "stored_state": entry.stored_lifecycle_state,
+            "state": entry.lifecycle_state,
+            "created_at": entry.created_at,
+            "updated_at": entry.updated_at,
+            "expires_at": entry.expires_at,
+        },
+        "audit_summary": {
+            "event_count": entry.audit_event_count,
+            "last_event_type": entry.last_audit_event_type,
+            "last_event_at": entry.last_audit_event_at,
+        },
+    }
+
+
+def _issuer_share_management_summary_body(summary) -> dict[str, Any]:
+    return {
+        "issuer_user_ref": summary.issuer_user_ref,
+        "total_share_count": summary.total_share_count,
+        "active_share_count": summary.active_share_count,
+        "expired_share_count": summary.expired_share_count,
+        "revoked_share_count": summary.revoked_share_count,
+        "working_save_share_count": summary.working_save_share_count,
+        "commit_snapshot_share_count": summary.commit_snapshot_share_count,
+        "runnable_share_count": summary.runnable_share_count,
+        "checkoutable_share_count": summary.checkoutable_share_count,
+        "latest_created_at": summary.latest_created_at,
+        "latest_updated_at": summary.latest_updated_at,
+        "latest_audit_event_at": summary.latest_audit_event_at,
+    }
+
+
 def _request_auth(request: HttpRouteRequest):
     return RequestAuthResolver.resolve(
         headers=request.headers,
@@ -304,6 +347,8 @@ class RunHttpRouteSurface:
     _ROUTE_DEFINITIONS: tuple[tuple[str, str, str], ...] = (
         ("get_recent_activity", "GET", "/api/users/me/activity"),
         ("get_history_summary", "GET", "/api/users/me/history-summary"),
+        ("list_issuer_public_shares", "GET", "/api/users/me/public-shares"),
+        ("get_issuer_public_share_summary", "GET", "/api/users/me/public-shares/summary"),
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
@@ -863,6 +908,72 @@ class RunHttpRouteSurface:
         payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, app_language_override=_request_app_language(http_request.query_params))
         payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": model.meta.commit_id, "working_save_id": working_save.meta.working_save_id, "source_share_id": source_share_id}
         return _route_response(200, payload)
+
+    @classmethod
+    def handle_list_issuer_public_shares(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public shares route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/users/me/public-shares":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Issuer share management routes require an authenticated session.",
+            })
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        entries = list_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "ready",
+            "issuer_user_ref": request_auth.requested_by_user_ref,
+            "summary": _issuer_share_management_summary_body(summary),
+            "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
+            "links": {
+                "self": "/api/users/me/public-shares",
+                "summary": "/api/users/me/public-shares/summary",
+            },
+        })
+
+    @classmethod
+    def handle_get_issuer_public_share_summary(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share summary route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/users/me/public-shares/summary":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Issuer share management routes require an authenticated session.",
+            })
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "ready",
+            "issuer_user_ref": request_auth.requested_by_user_ref,
+            "summary": _issuer_share_management_summary_body(summary),
+            "links": {
+                "self": "/api/users/me/public-shares/summary",
+                "shares": "/api/users/me/public-shares",
+            },
+        })
 
     @classmethod
     def handle_create_workspace_shell_share(

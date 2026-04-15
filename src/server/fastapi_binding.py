@@ -524,6 +524,26 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/users/me/public-shares")
+        async def list_issuer_public_shares(request: Request) -> Response:
+            inbound = self._inbound_request(request=request, path_params={})
+            outbound = FrameworkRouteBindings.handle_list_issuer_public_shares(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/users/me/public-shares/summary")
+        async def get_issuer_public_share_summary(request: Request) -> Response:
+            inbound = self._inbound_request(request=request, path_params={})
+            outbound = FrameworkRouteBindings.handle_get_issuer_public_share_summary(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/public-shares/{share_id}")
         async def get_public_share(request: Request, share_id: str) -> Response:
             inbound = self._inbound_request(request=request, path_params={"share_id": share_id})

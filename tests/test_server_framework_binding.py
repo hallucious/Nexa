@@ -102,6 +102,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
     assert [d.route_name for d in definitions] == [
         "get_recent_activity",
         "get_history_summary",
+        "list_issuer_public_shares",
+        "get_issuer_public_share_summary",
         "list_workspaces",
         "get_circuit_library",
         "get_workspace_result_history",
@@ -168,6 +170,67 @@ def _share_payload(share_id: str = "share-framework-001") -> dict:
         created_at="2026-04-15T12:00:00+00:00",
         issued_by_user_ref="user-owner",
     )
+
+
+def _issuer_share_rows() -> tuple[dict, ...]:
+    return (
+        export_public_nex_link_share(
+            _commit_snapshot("snap-framework-owner-active"),
+            share_id="share-framework-owner-active",
+            title="Framework Owner Active",
+            created_at="2026-04-15T12:00:00+00:00",
+            updated_at="2026-04-15T12:30:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot("snap-framework-owner-expired"),
+            share_id="share-framework-owner-expired",
+            title="Framework Owner Expired",
+            created_at="2026-04-10T12:00:00+00:00",
+            updated_at="2026-04-10T12:15:00+00:00",
+            expires_at="2026-04-11T00:00:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot("snap-framework-other-active"),
+            share_id="share-framework-other-active",
+            title="Framework Other Active",
+            created_at="2026-04-16T12:00:00+00:00",
+            updated_at="2026-04-16T12:30:00+00:00",
+            issued_by_user_ref="user-other",
+        ),
+    )
+
+
+def test_framework_binding_handles_issuer_public_share_management_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_issuer_public_shares(
+        request=_request(method="GET", path="/api/users/me/public-shares"),
+        share_payload_rows_provider=_issuer_share_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["summary"]["total_share_count"] == 2
+    assert parsed["summary"]["active_share_count"] == 1
+    assert parsed["summary"]["expired_share_count"] == 1
+    assert [entry["share_id"] for entry in parsed["shares"]] == [
+        "share-framework-owner-active",
+        "share-framework-owner-expired",
+    ]
+
+
+def test_framework_binding_handles_issuer_public_share_summary_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_get_issuer_public_share_summary(
+        request=_request(method="GET", path="/api/users/me/public-shares/summary"),
+        share_payload_rows_provider=_issuer_share_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["summary"]["total_share_count"] == 2
+    assert parsed["summary"]["latest_updated_at"] == "2026-04-15T12:30:00+00:00"
 
 
 def test_framework_binding_handles_public_share_round_trip() -> None:

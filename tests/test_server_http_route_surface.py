@@ -91,6 +91,45 @@ def _share_payload(share_id: str = "share-http-001") -> dict:
     )
 
 
+def _issuer_share_rows() -> tuple[dict, ...]:
+    return (
+        export_public_nex_link_share(
+            _commit_snapshot("snap-share-owner-active"),
+            share_id="share-owner-active",
+            title="Owner Active Share",
+            created_at="2026-04-15T12:00:00+00:00",
+            updated_at="2026-04-15T12:30:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot("snap-share-owner-expired"),
+            share_id="share-owner-expired",
+            title="Owner Expired Share",
+            created_at="2026-04-10T12:00:00+00:00",
+            updated_at="2026-04-10T12:15:00+00:00",
+            expires_at="2026-04-11T00:00:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot("snap-share-owner-revoked"),
+            share_id="share-owner-revoked",
+            title="Owner Revoked Share",
+            created_at="2026-04-09T12:00:00+00:00",
+            updated_at="2026-04-09T12:15:00+00:00",
+            lifecycle_state="revoked",
+            issued_by_user_ref="user-owner",
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot("snap-share-other-active"),
+            share_id="share-other-active",
+            title="Other Active Share",
+            created_at="2026-04-16T12:00:00+00:00",
+            updated_at="2026-04-16T12:30:00+00:00",
+            issued_by_user_ref="user-other",
+        ),
+    )
+
+
 def test_http_route_definitions_are_unique() -> None:
     definitions = RunHttpRouteSurface.route_definitions()
     route_names = [route_name for route_name, _method, _path in definitions]
@@ -127,6 +166,54 @@ def test_public_share_artifact_route_returns_canonical_artifact_without_authenti
     assert response.status_code == 200
     assert response.body["artifact"]["meta"]["storage_role"] == "commit_snapshot"
     assert response.body["artifact"]["meta"]["commit_id"] == "snap-share-001"
+
+
+def test_issuer_public_share_management_routes_require_authentication() -> None:
+    response = RunHttpRouteSurface.handle_list_issuer_public_shares(
+        http_request=HttpRouteRequest(method="GET", path="/api/users/me/public-shares", headers={}, session_claims=None, path_params={}, query_params={}, json_body=None),
+        share_payload_rows_provider=_issuer_share_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 401
+    assert response.body["reason_code"] == "public_share.authentication_required"
+
+
+def test_issuer_public_share_management_routes_return_bounded_summary_and_entries() -> None:
+    response = RunHttpRouteSurface.handle_list_issuer_public_shares(
+        http_request=_auth_request(method="GET", path="/api/users/me/public-shares"),
+        share_payload_rows_provider=_issuer_share_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["issuer_user_ref"] == "user-owner"
+    assert response.body["summary"]["total_share_count"] == 3
+    assert response.body["summary"]["active_share_count"] == 1
+    assert response.body["summary"]["expired_share_count"] == 1
+    assert response.body["summary"]["revoked_share_count"] == 1
+    assert response.body["summary"]["commit_snapshot_share_count"] == 3
+    assert response.body["summary"]["checkoutable_share_count"] == 1
+    assert [entry["share_id"] for entry in response.body["shares"]] == [
+        "share-owner-active",
+        "share-owner-expired",
+        "share-owner-revoked",
+    ]
+    assert response.body["shares"][1]["lifecycle"]["state"] == "expired"
+    assert response.body["shares"][2]["lifecycle"]["state"] == "revoked"
+
+
+def test_issuer_public_share_summary_route_returns_compact_management_summary() -> None:
+    response = RunHttpRouteSurface.handle_get_issuer_public_share_summary(
+        http_request=_auth_request(method="GET", path="/api/users/me/public-shares/summary"),
+        share_payload_rows_provider=_issuer_share_rows,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["summary"]["total_share_count"] == 3
+    assert response.body["summary"]["latest_updated_at"] == "2026-04-15T12:30:00+00:00"
+    assert response.body["links"]["shares"] == "/api/users/me/public-shares"
 
 
 def test_workspace_shell_checkout_accepts_public_share_snapshot() -> None:

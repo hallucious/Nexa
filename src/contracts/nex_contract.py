@@ -140,3 +140,38 @@ class PublicNexShareDescriptor:
     audit_event_count: int = 0
     last_audit_event_type: Optional[ShareAuditEventType] = None
     last_audit_event_at: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class IssuerPublicShareManagementEntry:
+    share_id: str
+    share_path: str
+    title: str
+    summary: Optional[str]
+    storage_role: StorageRole
+    lifecycle_state: ShareLifecycleState
+    stored_lifecycle_state: ShareLifecycleState
+    operation_capabilities: tuple[ShareOperation, ...]
+    canonical_ref: str
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    audit_event_count: int = 0
+    last_audit_event_type: Optional[ShareAuditEventType] = None
+    last_audit_event_at: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class IssuerPublicShareManagementSummary:
+    issuer_user_ref: str
+    total_share_count: int
+    active_share_count: int
+    expired_share_count: int
+    revoked_share_count: int
+    working_save_share_count: int
+    commit_snapshot_share_count: int
+    runnable_share_count: int
+    checkoutable_share_count: int
+    latest_created_at: Optional[str] = None
+    latest_updated_at: Optional[str] = None
+    latest_audit_event_at: Optional[str] = None

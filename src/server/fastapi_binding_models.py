@@ -70,6 +70,7 @@ EngineLaunchDecider = Callable[..., EngineRunLaunchResponse]
 IdentifierFactory = Callable[[], str]
 NowIsoProvider = Callable[[], str]
 PublicSharePayloadProvider = Callable[[str], Optional[Mapping[str, Any]]]
+PublicSharePayloadRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 PublicSharePayloadWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
 
 
@@ -165,6 +166,10 @@ def _none_public_share_payload(_: str) -> Optional[Mapping[str, Any]]:
     return None
 
 
+def _empty_public_share_payload_rows() -> Sequence[Mapping[str, Any]]:
+    return ()
+
+
 def _noop_public_share_payload_writer(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     return dict(payload)
 
@@ -210,6 +215,7 @@ class FastApiRouteDependencies:
     engine_status_provider: EngineStatusProvider = _none_status
     engine_result_provider: EngineResultProvider = _none_result
     public_share_payload_provider: PublicSharePayloadProvider = _none_public_share_payload
+    public_share_payload_rows_provider: PublicSharePayloadRowsProvider = _empty_public_share_payload_rows
     public_share_payload_writer: PublicSharePayloadWriter = _noop_public_share_payload_writer
     admission_policy: ProductAdmissionPolicy = field(default_factory=ProductAdmissionPolicy)
     engine_launch_decider: Optional[EngineLaunchDecider] = None

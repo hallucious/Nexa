@@ -29,6 +29,18 @@ class FrameworkRouteBindings:
             summary="Read aggregate history summary for the current user.",
         ),
         FrameworkRouteDefinition(
+            route_name="list_issuer_public_shares",
+            method="GET",
+            path_template="/api/users/me/public-shares",
+            summary="List bounded public shares issued by the current authenticated user.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_issuer_public_share_summary",
+            method="GET",
+            path_template="/api/users/me/public-shares/summary",
+            summary="Read bounded public share management summary for the current authenticated user.",
+        ),
+        FrameworkRouteDefinition(
             route_name="list_workspaces",
             method="GET",
             path_template="/api/workspaces",
@@ -958,6 +970,36 @@ class FrameworkRouteBindings:
             trace_rows_lookup=trace_rows_lookup,
             workspace_artifact_source_writer=workspace_artifact_source_writer,
             public_share_payload_provider=public_share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_list_issuer_public_shares(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_issuer_public_shares(
+            http_request=cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_issuer_public_share_summary(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_issuer_public_share_summary(
+            http_request=cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            now_iso=now_iso,
         )
         return cls.to_framework_response(response)
 

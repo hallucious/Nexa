@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from src.contracts.nex_contract import (
+    IssuerPublicShareManagementEntry,
+    IssuerPublicShareManagementSummary,
     PublicNexShareBoundary,
     PublicNexShareDescriptor,
     ShareAuditEventType,
@@ -270,6 +272,79 @@ def list_public_nex_link_share_audit_history(
         raise ValueError("public link share payload must include object section 'share'")
     history = _canonicalize_audit_history(share, lifecycle=lifecycle)
     return tuple(dict(entry) for entry in history)
+
+
+def list_public_nex_link_shares_for_issuer(
+    sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
+    issuer_user_ref: str,
+    *,
+    now_iso: str | None = None,
+) -> tuple[IssuerPublicShareManagementEntry, ...]:
+    issuer = issuer_user_ref.strip()
+    if not issuer:
+        raise ValueError("issuer_user_ref must be non-empty")
+    resolved: list[IssuerPublicShareManagementEntry] = []
+    for source in sources:
+        descriptor = describe_public_nex_link_share(source, now_iso=now_iso)
+        if descriptor.issued_by_user_ref != issuer:
+            continue
+        resolved.append(IssuerPublicShareManagementEntry(
+            share_id=descriptor.share_id,
+            share_path=descriptor.share_path,
+            title=descriptor.title,
+            summary=descriptor.summary,
+            storage_role=descriptor.storage_role,
+            lifecycle_state=descriptor.lifecycle_state,
+            stored_lifecycle_state=descriptor.stored_lifecycle_state,
+            operation_capabilities=descriptor.operation_capabilities,
+            canonical_ref=descriptor.canonical_ref,
+            created_at=descriptor.created_at,
+            updated_at=descriptor.updated_at,
+            expires_at=descriptor.expires_at,
+            audit_event_count=descriptor.audit_event_count,
+            last_audit_event_type=descriptor.last_audit_event_type,
+            last_audit_event_at=descriptor.last_audit_event_at,
+        ))
+    resolved.sort(key=lambda entry: (
+        entry.updated_at or "",
+        entry.created_at or "",
+        entry.last_audit_event_at or "",
+        entry.share_id,
+    ), reverse=True)
+    return tuple(resolved)
+
+
+def summarize_public_nex_link_shares_for_issuer(
+    sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
+    issuer_user_ref: str,
+    *,
+    now_iso: str | None = None,
+) -> IssuerPublicShareManagementSummary:
+    entries = list_public_nex_link_shares_for_issuer(sources, issuer_user_ref, now_iso=now_iso)
+    active_count = sum(1 for entry in entries if entry.lifecycle_state == "active")
+    expired_count = sum(1 for entry in entries if entry.lifecycle_state == "expired")
+    revoked_count = sum(1 for entry in entries if entry.lifecycle_state == "revoked")
+    working_save_count = sum(1 for entry in entries if entry.storage_role == "working_save")
+    commit_snapshot_count = sum(1 for entry in entries if entry.storage_role == "commit_snapshot")
+    runnable_count = sum(1 for entry in entries if entry.lifecycle_state == "active" and "run_artifact" in entry.operation_capabilities)
+    checkoutable_count = sum(1 for entry in entries if entry.lifecycle_state == "active" and "checkout_working_copy" in entry.operation_capabilities)
+    latest_created_at = max((entry.created_at for entry in entries if entry.created_at), default=None)
+    latest_updated_at = max((entry.updated_at for entry in entries if entry.updated_at), default=None)
+    latest_audit_event_at = max((entry.last_audit_event_at for entry in entries if entry.last_audit_event_at), default=None)
+    return IssuerPublicShareManagementSummary(
+        issuer_user_ref=issuer_user_ref.strip(),
+        total_share_count=len(entries),
+        active_share_count=active_count,
+        expired_share_count=expired_count,
+        revoked_share_count=revoked_count,
+        working_save_share_count=working_save_count,
+        commit_snapshot_share_count=commit_snapshot_count,
+        runnable_share_count=runnable_count,
+        checkoutable_share_count=checkoutable_count,
+        latest_created_at=latest_created_at,
+        latest_updated_at=latest_updated_at,
+        latest_audit_event_at=latest_audit_event_at,
+    )
 
 
 def ensure_public_nex_link_share_operation_allowed(
@@ -547,6 +622,8 @@ __all__ = [
     "load_public_nex_link_share",
     "describe_public_nex_link_share",
     "list_public_nex_link_share_audit_history",
+    "list_public_nex_link_shares_for_issuer",
+    "summarize_public_nex_link_shares_for_issuer",
     "update_public_nex_link_share_lifecycle",
     "revoke_public_nex_link_share",
     "extend_public_nex_link_share_expiration",

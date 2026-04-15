@@ -153,7 +153,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_writer=None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -366,6 +366,7 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
             failure_info=None,
         ) if run_id == "run-001" else None,
         public_share_payload_provider=public_share_payload_provider or (lambda share_id: _share_payload(share_id)),
+        public_share_payload_rows_provider=public_share_payload_rows_provider or (lambda: (_share_payload('share-fastapi-001'),)),
         public_share_payload_writer=public_share_payload_writer or (lambda payload: dict(payload)),
         run_id_factory=lambda: "run-001",
         run_request_id_factory=lambda: "req-001",
@@ -1471,6 +1472,54 @@ def test_fastapi_binding_workspace_shell_checkout_round_trip() -> None:
     assert payload['working_save_id'] == 'ws-fastapi-restored'
     assert payload['transition']['action'] == 'checkout_workspace_shell'
     assert payload['routes']['workspace_shell_checkout'] == '/api/workspaces/ws-001/shell/checkout'
+
+
+def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> None:
+    rows = (
+        export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-active'),
+            share_id='share-fastapi-owner-active',
+            title='FastAPI Owner Active',
+            created_at='2026-04-15T12:00:00+00:00',
+            updated_at='2026-04-15T12:30:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-expired'),
+            share_id='share-fastapi-owner-expired',
+            title='FastAPI Owner Expired',
+            created_at='2026-04-10T12:00:00+00:00',
+            updated_at='2026-04-10T12:15:00+00:00',
+            expires_at='2026-04-11T00:00:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-other-active'),
+            share_id='share-fastapi-other-active',
+            title='FastAPI Other Active',
+            created_at='2026-04-16T12:00:00+00:00',
+            updated_at='2026-04-16T12:30:00+00:00',
+            issued_by_user_ref='user-other',
+        ),
+    )
+    client = _make_client(public_share_payload_rows_provider=lambda: rows)
+
+    list_response = client.get('/api/users/me/public-shares', headers=_session_headers())
+    assert list_response.status_code == 200
+    list_payload = list_response.json()
+    assert list_payload['summary']['total_share_count'] == 2
+    assert list_payload['summary']['active_share_count'] == 1
+    assert list_payload['summary']['expired_share_count'] == 1
+    assert [entry['share_id'] for entry in list_payload['shares']] == [
+        'share-fastapi-owner-active',
+        'share-fastapi-owner-expired',
+    ]
+
+    summary_response = client.get('/api/users/me/public-shares/summary', headers=_session_headers())
+    assert summary_response.status_code == 200
+    summary_payload = summary_response.json()
+    assert summary_payload['summary']['total_share_count'] == 2
+    assert summary_payload['summary']['latest_updated_at'] == '2026-04-15T12:30:00+00:00'
 
 
 def test_fastapi_binding_public_share_routes_round_trip() -> None:
