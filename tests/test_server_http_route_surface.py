@@ -877,13 +877,20 @@ def test_public_share_revoke_route_updates_lifecycle_for_issuer() -> None:
     response = RunHttpRouteSurface.handle_revoke_public_share(
         http_request=_auth_request(method="POST", path="/api/public-shares/share-revoke-http-001/revoke", path_params={"share_id": "share-revoke-http-001"}),
         share_payload_provider=lambda share_id: share_store.get(share_id),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
         now_iso="2026-04-15T13:00:00+00:00",
     )
 
     assert response.status_code == 200
     assert response.body["lifecycle"]["state"] == "revoked"
     assert response.body["lifecycle"]["updated_at"] == "2026-04-15T13:00:00+00:00"
+    assert response.body["action_report"]["action"] == "revoke"
+    assert response.body["governance_summary"]["total_share_count"] == 1
+    assert response.body["governance_summary"]["total_action_report_count"] == 3
+    assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
     assert share_store["share-revoke-http-001"]["share"]["lifecycle"]["state"] == "revoked"
 
 
@@ -914,7 +921,10 @@ def test_public_share_extend_route_updates_expiration_for_issuer() -> None:
             json_body={"expires_at": "2026-04-20T00:00:00+00:00"},
         ),
         share_payload_provider=lambda share_id: share_store.get(share_id),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
         now_iso="2026-04-15T13:30:00+00:00",
     )
 
@@ -922,6 +932,10 @@ def test_public_share_extend_route_updates_expiration_for_issuer() -> None:
     assert response.body["lifecycle"]["stored_state"] == "active"
     assert response.body["lifecycle"]["state"] == "active"
     assert response.body["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
+    assert response.body["action_report"]["action"] == "extend_expiration"
+    assert response.body["governance_summary"]["total_share_count"] == 1
+    assert response.body["governance_summary"]["total_action_report_count"] == 3
+    assert response.body["links"]["action_report_summary"] == "/api/users/me/public-shares/action-reports/summary"
 
 
 def test_public_share_extend_route_rejects_effectively_expired_share() -> None:
@@ -947,6 +961,31 @@ def test_public_share_extend_route_rejects_effectively_expired_share() -> None:
     assert response.status_code == 409
     assert response.body["reason_code"] == "public_share.transition_not_allowed"
 
+
+
+def test_public_share_archive_route_updates_archive_state_for_issuer() -> None:
+    share_store: dict[str, dict] = {"share-archive-http-001": _share_payload("share-archive-http-001")}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    response = RunHttpRouteSurface.handle_archive_public_share(
+        http_request=_auth_request(method="POST", path="/api/public-shares/share-archive-http-001/archive", path_params={"share_id": "share-archive-http-001"}, json_body={"archived": True}),
+        share_payload_provider=lambda share_id: share_store.get(share_id),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        action_report_rows_provider=_issuer_action_report_rows,
+        public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
+        now_iso="2026-04-15T13:45:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["management"]["archived"] is True
+    assert response.body["action_report"]["action"] == "archive"
+    assert response.body["governance_summary"]["total_share_count"] == 1
+    assert response.body["governance_summary"]["total_action_report_count"] == 3
+    assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
 
 
 def test_public_share_history_route_returns_audit_entries() -> None:
@@ -993,10 +1032,17 @@ def test_public_share_delete_route_removes_share_for_issuer() -> None:
     response = RunHttpRouteSurface.handle_delete_public_share(
         http_request=_auth_request(method="DELETE", path="/api/public-shares/share-delete-http-001", path_params={"share_id": "share-delete-http-001"}),
         share_payload_provider=lambda share_id: share_store.get(share_id),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+        public_share_action_report_writer=lambda row: dict(row),
     )
 
     assert response.status_code == 200
     assert response.body["status"] == "deleted"
     assert response.body["share_id"] == "share-delete-http-001"
+    assert response.body["action_report"]["action"] == "delete"
+    assert response.body["governance_summary"]["total_share_count"] == 0
+    assert response.body["governance_summary"]["total_action_report_count"] == 3
+    assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
     assert "share-delete-http-001" not in share_store

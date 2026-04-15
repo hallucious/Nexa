@@ -1196,7 +1196,10 @@ def test_framework_binding_revoke_public_share_round_trip() -> None:
     response = FrameworkRouteBindings.handle_revoke_public_share(
         request=_request(method="POST", path="/api/public-shares/share-framework-revoke-001/revoke", path_params={"share_id": "share-framework-revoke-001"}),
         share_payload_provider=lambda share_id: share_store.get(share_id),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
         now_iso="2026-04-15T13:30:00+00:00",
     )
 
@@ -1205,6 +1208,9 @@ def test_framework_binding_revoke_public_share_round_trip() -> None:
     assert parsed["share_id"] == "share-framework-revoke-001"
     assert parsed["lifecycle"]["state"] == "revoked"
     assert parsed["lifecycle"]["updated_at"] == "2026-04-15T13:30:00+00:00"
+    assert parsed["action_report"]["action"] == "revoke"
+    assert parsed["governance_summary"]["total_action_report_count"] == 3
+    assert parsed["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
     assert share_store["share-framework-revoke-001"]["share"]["lifecycle"]["state"] == "revoked"
 
 
@@ -1223,7 +1229,10 @@ def test_framework_binding_extend_public_share_round_trip() -> None:
             json_body={"expires_at": "2026-04-20T00:00:00+00:00"},
         ),
         share_payload_provider=lambda share_id: share_store.get(share_id),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
         now_iso="2026-04-15T13:30:00+00:00",
     )
 
@@ -1233,6 +1242,9 @@ def test_framework_binding_extend_public_share_round_trip() -> None:
     assert parsed["lifecycle"]["stored_state"] == "active"
     assert parsed["lifecycle"]["state"] == "active"
     assert parsed["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
+    assert parsed["action_report"]["action"] == "extend_expiration"
+    assert parsed["governance_summary"]["total_action_report_count"] == 3
+    assert parsed["links"]["action_report_summary"] == "/api/users/me/public-shares/action-reports/summary"
     assert share_store["share-framework-extend-001"]["share"]["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
 
 
@@ -1267,10 +1279,16 @@ def test_framework_binding_handles_public_share_delete_round_trip() -> None:
     response = FrameworkRouteBindings.handle_delete_public_share(
         request=_request(method="DELETE", path="/api/public-shares/share-framework-delete-001", path_params={"share_id": "share-framework-delete-001"}),
         share_payload_provider=lambda share_id: share_store.get(share_id),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+        public_share_action_report_writer=lambda row: dict(row),
     )
 
     assert response.status_code == 200
     parsed = json.loads(response.body_text)
     assert parsed["status"] == "deleted"
     assert parsed["share_id"] == "share-framework-delete-001"
+    assert parsed["action_report"]["action"] == "delete"
+    assert parsed["governance_summary"]["total_share_count"] == 0
+    assert parsed["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"

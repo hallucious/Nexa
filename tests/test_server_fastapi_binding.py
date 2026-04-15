@@ -1741,7 +1741,10 @@ def test_fastapi_binding_public_share_revoke_round_trip() -> None:
 
     client = _make_client(
         public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
     )
     response = client.post('/api/public-shares/share-fastapi-revoke-001/revoke', headers=_session_headers())
 
@@ -1751,6 +1754,9 @@ def test_fastapi_binding_public_share_revoke_round_trip() -> None:
     assert payload['lifecycle']['state'] == 'revoked'
     assert payload['lifecycle']['updated_at'] == '2026-04-11T12:09:00+00:00'
     assert payload['audit_summary']['event_count'] == 2
+    assert payload['action_report']['action'] == 'revoke'
+    assert payload['governance_summary']['total_action_report_count'] == 3
+    assert payload['links']['action_reports'] == '/api/users/me/public-shares/action-reports'
     assert share_store['share-fastapi-revoke-001']['share']['lifecycle']['state'] == 'revoked'
 
 
@@ -1780,7 +1786,10 @@ def test_fastapi_binding_public_share_extend_round_trip() -> None:
 
     client = _make_client(
         public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
     )
     response = client.post(
         '/api/public-shares/share-fastapi-extend-001/extend',
@@ -1795,6 +1804,9 @@ def test_fastapi_binding_public_share_extend_round_trip() -> None:
     assert payload['lifecycle']['state'] == 'active'
     assert payload['lifecycle']['expires_at'] == '2026-04-20T00:00:00+00:00'
     assert payload['audit_summary']['event_count'] == 2
+    assert payload['action_report']['action'] == 'extend_expiration'
+    assert payload['governance_summary']['total_action_report_count'] == 3
+    assert payload['links']['action_report_summary'] == '/api/users/me/public-shares/action-reports/summary'
 
 
 
@@ -1821,12 +1833,40 @@ def test_fastapi_binding_delete_issuer_public_shares_round_trip() -> None:
     assert payload['links']['action_reports'] == '/api/users/me/public-shares/action-reports'
 
 
+def test_fastapi_binding_public_share_archive_round_trip() -> None:
+    share_store: dict[str, dict] = {"share-fastapi-archive-001": _share_payload("share-fastapi-archive-001")}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    client = _make_client(
+        public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_action_report_rows_provider=_issuer_action_report_rows,
+        public_share_payload_writer=_writer,
+        public_share_action_report_writer=lambda row: dict(row),
+    )
+    response = client.post('/api/public-shares/share-fastapi-archive-001/archive', headers=_session_headers(), json={'archived': True})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['management']['archived'] is True
+    assert payload['action_report']['action'] == 'archive'
+    assert payload['governance_summary']['total_share_count'] == 1
+    assert payload['governance_summary']['total_action_report_count'] == 3
+    assert payload['links']['action_reports'] == '/api/users/me/public-shares/action-reports'
+
+
 def test_fastapi_binding_public_share_delete_round_trip() -> None:
     share_store = {"share-fastapi-delete-001": _share_payload("share-fastapi-delete-001")}
 
     client = _make_client(
         public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_action_report_rows_provider=_issuer_action_report_rows,
         public_share_payload_deleter=lambda share_id: share_store.pop(share_id, None) is not None,
+        public_share_action_report_writer=lambda row: dict(row),
     )
     response = client.delete('/api/public-shares/share-fastapi-delete-001', headers=_session_headers())
 
@@ -1834,3 +1874,6 @@ def test_fastapi_binding_public_share_delete_round_trip() -> None:
     payload = response.json()
     assert payload['status'] == 'deleted'
     assert payload['share_id'] == 'share-fastapi-delete-001'
+    assert payload['action_report']['action'] == 'delete'
+    assert payload['governance_summary']['total_share_count'] == 0
+    assert payload['links']['action_reports'] == '/api/users/me/public-shares/action-reports'
