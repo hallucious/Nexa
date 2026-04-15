@@ -173,6 +173,12 @@ class FrameworkRouteBindings:
             summary="Read bounded public share metadata.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_public_share_history",
+            method="GET",
+            path_template="/api/public-shares/{share_id}/history",
+            summary="Read bounded public share lifecycle audit history.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_public_share_artifact",
             method="GET",
             path_template="/api/public-shares/{share_id}/artifact",
@@ -984,6 +990,19 @@ class FrameworkRouteBindings:
         share_payload_provider=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_get_public_share(
+            http_request=cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_public_share_history(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_public_share_history(
             http_request=cls.to_http_route_request(request),
             share_payload_provider=share_payload_provider,
         )

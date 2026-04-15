@@ -126,6 +126,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "create_workspace_shell_share",
         "launch_workspace_shell",
         "get_public_share",
+        "get_public_share_history",
         "get_public_share_artifact",
         "extend_public_share",
         "revoke_public_share",
@@ -182,7 +183,20 @@ def test_framework_binding_handles_public_share_round_trip() -> None:
     assert parsed["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
     assert parsed["lifecycle"]["stored_state"] == "active"
     assert parsed["lifecycle"]["state"] == "active"
+    assert parsed["audit_summary"]["event_count"] == 1
     assert parsed["source_artifact"]["storage_role"] == "commit_snapshot"
+
+
+def test_framework_binding_handles_public_share_history_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_get_public_share_history(
+        request=_request(method="GET", path="/api/public-shares/share-framework-001/history", path_params={"share_id": "share-framework-001"}),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["audit_summary"]["event_count"] == 1
+    assert parsed["history"][0]["event_type"] == "created"
 
 
 def test_framework_binding_handles_public_share_artifact_round_trip() -> None:

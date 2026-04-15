@@ -40,6 +40,7 @@ from src.storage.share_api import (
     ensure_public_nex_link_share_operation_allowed,
     export_public_nex_link_share,
     extend_public_nex_link_share_expiration,
+    list_public_nex_link_share_audit_history,
     load_public_nex_link_share,
     revoke_public_nex_link_share,
 )
@@ -283,6 +284,15 @@ def _resolve_public_share_payload(share_id: str, share_payload_provider) -> tupl
     return payload, descriptor, None
 
 
+def _share_audit_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
+    history = list_public_nex_link_share_audit_history(payload)
+    return {
+        "event_count": len(history),
+        "last_event_type": history[-1]["event_type"] if history else None,
+        "last_event_at": history[-1]["at"] if history else None,
+    }
+
+
 def _request_auth(request: HttpRouteRequest):
     return RequestAuthResolver.resolve(
         headers=request.headers,
@@ -318,6 +328,7 @@ class RunHttpRouteSurface:
         ("create_workspace_shell_share", "POST", "/api/workspaces/{workspace_id}/shell/share"),
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
         ("get_public_share", "GET", "/api/public-shares/{share_id}"),
+        ("get_public_share_history", "GET", "/api/public-shares/{share_id}/history"),
         ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
         ("extend_public_share", "POST", "/api/public-shares/{share_id}/extend"),
         ("revoke_public_share", "POST", "/api/public-shares/{share_id}/revoke"),
@@ -917,6 +928,7 @@ class RunHttpRouteSurface:
                 "expires_at": descriptor.expires_at,
                 "issued_by_user_ref": descriptor.issued_by_user_ref,
             },
+            "audit_summary": _share_audit_summary(persisted),
             "source_artifact": {
                 "storage_role": descriptor.storage_role,
                 "canonical_ref": descriptor.canonical_ref,
@@ -968,6 +980,7 @@ class RunHttpRouteSurface:
                 "expires_at": descriptor.expires_at,
                 "issued_by_user_ref": descriptor.issued_by_user_ref,
             },
+            "audit_summary": _share_audit_summary(payload),
             "source_artifact": {
                 "storage_role": descriptor.storage_role,
                 "canonical_ref": descriptor.canonical_ref,
@@ -976,7 +989,41 @@ class RunHttpRouteSurface:
             },
             "links": {
                 "self": expected_path,
+                "history": f"{expected_path}/history",
                 "artifact": f"{expected_path}/artifact",
+                "public_share_path": descriptor.share_path,
+            },
+        })
+
+    @classmethod
+    def handle_get_public_share_history(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share history route only supports GET."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/history"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        payload, descriptor, error = _resolve_public_share_payload(share_id, share_payload_provider)
+        if error is not None:
+            return error
+        assert payload is not None and descriptor is not None
+        history = list_public_nex_link_share_audit_history(payload)
+        return _route_response(200, {
+            "status": "ready",
+            "share_id": descriptor.share_id,
+            "share_path": descriptor.share_path,
+            "audit_summary": _share_audit_summary(payload),
+            "history": list(history),
+            "links": {
+                "share": f"/api/public-shares/{descriptor.share_id}",
+                "artifact": f"/api/public-shares/{descriptor.share_id}/artifact",
                 "public_share_path": descriptor.share_path,
             },
         })
@@ -1086,7 +1133,7 @@ class RunHttpRouteSurface:
                 "share_id": share_id,
             })
         try:
-            extended_payload = extend_public_nex_link_share_expiration(payload, expires_at=expires_at, now_iso=now_iso)
+            extended_payload = extend_public_nex_link_share_expiration(payload, expires_at=expires_at, now_iso=now_iso, actor_user_ref=request_auth.requested_by_user_ref)
         except ValueError as exc:
             return _route_response(409, {
                 "status": "rejected",
@@ -1115,6 +1162,7 @@ class RunHttpRouteSurface:
                 "expires_at": extended_descriptor.expires_at,
                 "issued_by_user_ref": extended_descriptor.issued_by_user_ref,
             },
+            "audit_summary": _share_audit_summary(persisted),
             "source_artifact": {
                 "storage_role": extended_descriptor.storage_role,
                 "canonical_ref": extended_descriptor.canonical_ref,
@@ -1123,6 +1171,7 @@ class RunHttpRouteSurface:
             },
             "links": {
                 "self": f"/api/public-shares/{extended_descriptor.share_id}",
+                "history": f"/api/public-shares/{extended_descriptor.share_id}/history",
                 "artifact": f"/api/public-shares/{extended_descriptor.share_id}/artifact",
                 "public_share_path": extended_descriptor.share_path,
                 "extend": expected_path,
@@ -1175,7 +1224,7 @@ class RunHttpRouteSurface:
                 "message": "Current user is not allowed to update this public share.",
                 "share_id": share_id,
             })
-        revoked_payload = revoke_public_nex_link_share(payload, now_iso=now_iso)
+        revoked_payload = revoke_public_nex_link_share(payload, now_iso=now_iso, actor_user_ref=request_auth.requested_by_user_ref)
         persisted = public_share_payload_writer(revoked_payload) if public_share_payload_writer is not None else revoked_payload
         revoked_descriptor = describe_public_nex_link_share(persisted, now_iso=now_iso)
         return _route_response(200, {
@@ -1196,6 +1245,7 @@ class RunHttpRouteSurface:
                 "expires_at": revoked_descriptor.expires_at,
                 "issued_by_user_ref": revoked_descriptor.issued_by_user_ref,
             },
+            "audit_summary": _share_audit_summary(persisted),
             "source_artifact": {
                 "storage_role": revoked_descriptor.storage_role,
                 "canonical_ref": revoked_descriptor.canonical_ref,
@@ -1204,6 +1254,7 @@ class RunHttpRouteSurface:
             },
             "links": {
                 "self": f"/api/public-shares/{revoked_descriptor.share_id}",
+                "history": f"/api/public-shares/{revoked_descriptor.share_id}/history",
                 "artifact": f"/api/public-shares/{revoked_descriptor.share_id}/artifact",
                 "public_share_path": revoked_descriptor.share_path,
                 "revoke": expected_path,

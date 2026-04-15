@@ -9,6 +9,7 @@ from typing import Any, Mapping
 from src.contracts.nex_contract import (
     PublicNexShareBoundary,
     PublicNexShareDescriptor,
+    ShareAuditEventType,
     ShareLifecycleState,
     ShareOperation,
 )
@@ -21,6 +22,7 @@ from src.storage.nex_api import (
 _ALLOWED_SHARE_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("active", "expired", "revoked")
 _TERMINAL_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("expired", "revoked")
 _MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration")
+_ALLOWED_AUDIT_EVENT_TYPES: tuple[ShareAuditEventType, ...] = ("created", "expiration_extended", "revoked")
 _UNSET = object()
 
 _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
@@ -137,6 +139,139 @@ def _canonicalize_share_lifecycle(
     }
 
 
+def _canonicalize_audit_history(
+    share: Mapping[str, Any],
+    *,
+    lifecycle: Mapping[str, Any],
+    audit_history: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] | None = None,
+) -> list[dict[str, Any]]:
+    raw_audit = share.get("audit")
+    if raw_audit is None:
+        audit_obj: dict[str, Any] = {}
+    elif isinstance(raw_audit, Mapping):
+        audit_obj = dict(raw_audit)
+    else:
+        raise ValueError("public link share payload share.audit must be an object when present")
+    history_source = audit_history if audit_history is not None else audit_obj.get("history")
+    if history_source is None:
+        default_at = lifecycle.get("created_at") or lifecycle.get("updated_at")
+        if default_at:
+            history_source = [{
+                "sequence": 1,
+                "event_type": "created",
+                "at": default_at,
+                "actor_user_ref": lifecycle.get("issued_by_user_ref"),
+                "stored_lifecycle_state": lifecycle.get("state", "active"),
+                "effective_lifecycle_state": _effective_share_lifecycle_state(stored_state=lifecycle.get("state", "active"), expires_at=lifecycle.get("expires_at"), now_iso=default_at),
+                "details": None,
+            }]
+        else:
+            history_source = []
+    if not isinstance(history_source, (list, tuple)):
+        raise ValueError("public link share payload share.audit.history must be a list when present")
+    resolved: list[dict[str, Any]] = []
+    for index, entry in enumerate(history_source, start=1):
+        if not isinstance(entry, Mapping):
+            raise ValueError("public link share payload share.audit.history entries must be objects")
+        sequence_value = entry.get("sequence", index)
+        if not isinstance(sequence_value, int) or sequence_value <= 0:
+            raise ValueError("public link share payload share.audit.history.sequence must be a positive integer")
+        event_type = _optional_string(entry.get("event_type"), field_name="public link share payload share.audit.history.event_type")
+        if event_type not in _ALLOWED_AUDIT_EVENT_TYPES:
+            raise ValueError("public link share payload share.audit.history.event_type is unsupported")
+        at_value = _optional_string(entry.get("at"), field_name="public link share payload share.audit.history.at")
+        if not at_value:
+            raise ValueError("public link share payload share.audit.history.at must be present")
+        _parse_iso_datetime(at_value, field_name="public link share payload share.audit.history.at")
+        actor_user_ref = _optional_string(entry.get("actor_user_ref"), field_name="public link share payload share.audit.history.actor_user_ref")
+        stored_state = _optional_string(entry.get("stored_lifecycle_state"), field_name="public link share payload share.audit.history.stored_lifecycle_state") or lifecycle.get("state", "active")
+        if stored_state not in _ALLOWED_SHARE_LIFECYCLE_STATES:
+            raise ValueError("public link share payload share.audit.history.stored_lifecycle_state is unsupported")
+        effective_state = _optional_string(entry.get("effective_lifecycle_state"), field_name="public link share payload share.audit.history.effective_lifecycle_state")
+        if effective_state is None:
+            effective_state = _effective_share_lifecycle_state(stored_state=stored_state, expires_at=lifecycle.get("expires_at"), now_iso=at_value)
+        if effective_state not in _ALLOWED_SHARE_LIFECYCLE_STATES:
+            raise ValueError("public link share payload share.audit.history.effective_lifecycle_state is unsupported")
+        details_raw = entry.get("details")
+        details: dict[str, str] | None
+        if details_raw is None:
+            details = None
+        elif isinstance(details_raw, Mapping):
+            details = {}
+            for k, v in details_raw.items():
+                if not isinstance(k, str) or not isinstance(v, str):
+                    raise ValueError("public link share payload share.audit.history.details must be a string map when present")
+                details[k] = v
+        else:
+            raise ValueError("public link share payload share.audit.history.details must be an object when present")
+        resolved.append({
+            "sequence": index,
+            "event_type": event_type,
+            "at": at_value,
+            "actor_user_ref": actor_user_ref,
+            "stored_lifecycle_state": stored_state,
+            "effective_lifecycle_state": effective_state,
+            "details": details,
+        })
+    return resolved
+
+
+def _with_appended_audit_event(
+    payload: dict[str, Any],
+    *,
+    event_type: ShareAuditEventType,
+    actor_user_ref: str | None = None,
+    at: str | None = None,
+    details: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    share = payload.get("share")
+    if not isinstance(share, dict):
+        raise ValueError("public link share payload must include object section 'share'")
+    lifecycle = share.get("lifecycle")
+    if not isinstance(lifecycle, Mapping):
+        raise ValueError("public link share payload share.lifecycle must be an object")
+    audit_history = _canonicalize_audit_history(share, lifecycle=lifecycle)
+    event_at = at or lifecycle.get("updated_at") or lifecycle.get("created_at")
+    if not event_at:
+        raise ValueError("public link share audit event requires a timestamp")
+    _parse_iso_datetime(event_at, field_name="public link share payload share.audit.history.at")
+    entry = {
+        "sequence": len(audit_history) + 1,
+        "event_type": event_type,
+        "at": event_at,
+        "actor_user_ref": actor_user_ref or lifecycle.get("issued_by_user_ref"),
+        "stored_lifecycle_state": lifecycle.get("state", "active"),
+        "effective_lifecycle_state": _effective_share_lifecycle_state(stored_state=lifecycle.get("state", "active"), expires_at=lifecycle.get("expires_at"), now_iso=event_at),
+        "details": dict(details) if details is not None else None,
+    }
+    audit_history.append(entry)
+    exported = export_public_nex_link_share(
+        payload["artifact"],
+        share_id=share.get("share_id"),
+        title=share.get("title"),
+        summary=share.get("summary"),
+        lifecycle_state=lifecycle.get("state", "active"),
+        created_at=lifecycle.get("created_at"),
+        updated_at=lifecycle.get("updated_at"),
+        expires_at=lifecycle.get("expires_at"),
+        issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
+        audit_history=audit_history,
+    )
+    return exported
+
+
+def list_public_nex_link_share_audit_history(
+    source: str | Path | dict[str, Any],
+) -> tuple[dict[str, Any], ...]:
+    payload = load_public_nex_link_share(source)
+    share = payload.get("share")
+    lifecycle = share.get("lifecycle", {}) if isinstance(share, dict) and isinstance(share.get("lifecycle"), Mapping) else {}
+    if not isinstance(share, Mapping):
+        raise ValueError("public link share payload must include object section 'share'")
+    history = _canonicalize_audit_history(share, lifecycle=lifecycle)
+    return tuple(dict(entry) for entry in history)
+
+
 def ensure_public_nex_link_share_operation_allowed(
     source: str | Path | dict[str, Any],
     operation: ShareOperation,
@@ -189,6 +324,7 @@ def export_public_nex_link_share(
     updated_at: str | None = None,
     expires_at: str | None = None,
     issued_by_user_ref: str | None = None,
+    audit_history: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] | None = None,
 ) -> dict[str, Any]:
     artifact = export_public_nex_artifact(model_or_data)
     descriptor = describe_public_nex_artifact(artifact)
@@ -199,6 +335,7 @@ def export_public_nex_link_share(
     resolved_title = title or str(meta.get("name") or descriptor.canonical_ref)
     resolved_summary = summary if summary is not None else (str(meta.get("description")) if meta.get("description") is not None else None)
     lifecycle = _canonicalize_share_lifecycle({}, created_at=created_at, updated_at=updated_at, expires_at=expires_at, issued_by_user_ref=issued_by_user_ref, lifecycle_state=lifecycle_state)
+    audit_payload = {"history": _canonicalize_audit_history({}, lifecycle=lifecycle, audit_history=audit_history)}
     return {
         "share": {
             "share_family": _PUBLIC_NEX_SHARE_BOUNDARY.share_family,
@@ -214,6 +351,7 @@ def export_public_nex_link_share(
             "viewer_capabilities": list(_PUBLIC_NEX_SHARE_BOUNDARY.viewer_capabilities),
             "operation_capabilities": list(_operation_capabilities_for_role(descriptor.storage_role)),
             "lifecycle": lifecycle,
+            "audit": audit_payload,
         },
         "artifact": artifact,
     }
@@ -253,6 +391,7 @@ def load_public_nex_link_share(source: str | Path | dict[str, Any]) -> dict[str,
     if summary is not None and not isinstance(summary, str):
         raise ValueError("public link share payload share.summary must be a string when present")
     lifecycle = _canonicalize_share_lifecycle(share)
+    audit_history = _canonicalize_audit_history(share, lifecycle=lifecycle)
     return export_public_nex_link_share(
         exported_artifact,
         share_id=share_id.strip(),
@@ -263,6 +402,7 @@ def load_public_nex_link_share(source: str | Path | dict[str, Any]) -> dict[str,
         updated_at=lifecycle["updated_at"],
         expires_at=lifecycle["expires_at"],
         issued_by_user_ref=lifecycle["issued_by_user_ref"],
+        audit_history=audit_history,
     )
 
 
@@ -275,6 +415,7 @@ def describe_public_nex_link_share(
     share = payload["share"]
     descriptor = describe_public_nex_artifact(payload["artifact"])
     lifecycle = share.get("lifecycle", {}) if isinstance(share.get("lifecycle"), dict) else {}
+    history = list_public_nex_link_share_audit_history(payload)
     stored_state = lifecycle.get("state", "active")
     effective_state = _effective_share_lifecycle_state(
         stored_state=stored_state,
@@ -300,6 +441,9 @@ def describe_public_nex_link_share(
         expires_at=lifecycle.get("expires_at"),
         issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
         source_working_save_id=descriptor.source_working_save_id,
+        audit_event_count=len(history),
+        last_audit_event_type=history[-1]["event_type"] if history else None,
+        last_audit_event_at=history[-1]["at"] if history else None,
     )
 
 
@@ -341,6 +485,7 @@ def update_public_nex_link_share_lifecycle(
         updated_at=updated_at or lifecycle.get("updated_at") or now_iso,
         expires_at=next_expires,
         issued_by_user_ref=lifecycle.get("issued_by_user_ref"),
+        audit_history=_canonicalize_audit_history(share, lifecycle=lifecycle),
     )
 
 
@@ -348,13 +493,15 @@ def revoke_public_nex_link_share(
     source: str | Path | dict[str, Any],
     *,
     now_iso: str | None = None,
+    actor_user_ref: str | None = None,
 ) -> dict[str, Any]:
-    return update_public_nex_link_share_lifecycle(
+    updated = update_public_nex_link_share_lifecycle(
         source,
         lifecycle_state="revoked",
         updated_at=now_iso or datetime.now(UTC).isoformat(),
         now_iso=now_iso,
     )
+    return _with_appended_audit_event(updated, event_type="revoked", actor_user_ref=actor_user_ref, at=now_iso or datetime.now(UTC).isoformat())
 
 
 def extend_public_nex_link_share_expiration(
@@ -362,13 +509,15 @@ def extend_public_nex_link_share_expiration(
     *,
     expires_at: str,
     now_iso: str | None = None,
+    actor_user_ref: str | None = None,
 ) -> dict[str, Any]:
-    return update_public_nex_link_share_lifecycle(
+    updated = update_public_nex_link_share_lifecycle(
         source,
         expires_at=expires_at,
         updated_at=now_iso or datetime.now(UTC).isoformat(),
         now_iso=now_iso,
     )
+    return _with_appended_audit_event(updated, event_type="expiration_extended", actor_user_ref=actor_user_ref, at=now_iso or datetime.now(UTC).isoformat(), details={"expires_at": expires_at})
 
 
 def save_public_nex_link_share_file(
@@ -397,6 +546,7 @@ __all__ = [
     "export_public_nex_link_share",
     "load_public_nex_link_share",
     "describe_public_nex_link_share",
+    "list_public_nex_link_share_audit_history",
     "update_public_nex_link_share_lifecycle",
     "revoke_public_nex_link_share",
     "extend_public_nex_link_share_expiration",

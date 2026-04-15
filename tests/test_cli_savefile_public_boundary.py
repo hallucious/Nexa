@@ -442,6 +442,8 @@ def test_savefile_share_export_writes_public_link_share_payload(tmp_path, monkey
     assert payload["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact"]
     assert payload["stored_lifecycle_state"] == "active"
     assert payload["lifecycle_state"] == "active"
+    assert payload["audit_summary"]["event_count"] == 0
+    assert payload["audit_history"] == []
     assert payload["expires_at"] == "2026-04-20T00:00:00+00:00"
     assert payload["issued_by_user_ref"] == "user-owner"
     assert raw["share"]["lifecycle"]["state"] == "active"

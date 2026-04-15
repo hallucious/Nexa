@@ -12,6 +12,7 @@ from src.storage.share_api import (
     ensure_public_nex_link_share_operation_allowed,
     export_public_nex_link_share,
     get_public_nex_share_boundary,
+    list_public_nex_link_share_audit_history,
     load_public_nex_link_share,
     revoke_public_nex_link_share,
     save_public_nex_link_share_file,
@@ -80,6 +81,7 @@ def test_export_public_nex_link_share_is_deterministic_for_same_artifact() -> No
     assert share_a["share"]["lifecycle"]["state"] == "active"
     assert share_a["share"]["lifecycle"]["created_at"] == "2026-04-15T12:00:00+00:00"
     assert share_a["share"]["lifecycle"]["issued_by_user_ref"] == "user-owner"
+    assert share_a["share"]["audit"]["history"][0]["event_type"] == "created"
     assert share_a["artifact"]["meta"]["storage_role"] == "working_save"
 
 
@@ -264,3 +266,39 @@ def test_extend_public_nex_link_share_expiration_rejects_non_forward_extension()
             expires_at="2026-04-19T00:00:00+00:00",
             now_iso="2026-04-15T13:00:00+00:00",
         )
+
+
+def test_describe_public_nex_link_share_exposes_audit_summary() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-audit-summary-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
+
+    descriptor = describe_public_nex_link_share(payload)
+
+    assert descriptor.audit_event_count == 1
+    assert descriptor.last_audit_event_type == "created"
+    assert descriptor.last_audit_event_at == "2026-04-15T12:00:00+00:00"
+
+
+def test_share_audit_history_appends_extend_and_revoke_events() -> None:
+    payload = export_public_nex_link_share(
+        create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-audit-flow-1"),
+        created_at="2026-04-15T12:00:00+00:00",
+        expires_at="2026-04-20T00:00:00+00:00",
+        issued_by_user_ref="user-owner",
+    )
+
+    payload = extend_public_nex_link_share_expiration(
+        payload,
+        expires_at="2026-04-25T00:00:00+00:00",
+        now_iso="2026-04-15T13:00:00+00:00",
+        actor_user_ref="user-owner",
+    )
+    payload = revoke_public_nex_link_share(payload, now_iso="2026-04-15T14:00:00+00:00", actor_user_ref="user-owner")
+
+    history = list_public_nex_link_share_audit_history(payload)
+
+    assert [entry["event_type"] for entry in history] == ["created", "expiration_extended", "revoked"]
+    assert history[-1]["actor_user_ref"] == "user-owner"

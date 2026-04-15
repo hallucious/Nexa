@@ -33,6 +33,7 @@ from src.storage.nex_api import (
 from src.storage.share_api import (
     describe_public_nex_link_share,
     ensure_public_nex_link_share_operation_allowed,
+    list_public_nex_link_share_audit_history,
     extend_public_nex_link_share_expiration,
     extract_public_nex_link_share_artifact,
     export_public_nex_link_share,
@@ -55,6 +56,7 @@ __all__ = [
     'export_public_nex_link_share',
     'load_public_nex_link_share',
     'describe_public_nex_link_share',
+    'list_public_nex_link_share_audit_history',
     'update_public_nex_link_share_lifecycle',
     'revoke_public_nex_link_share',
     'extend_public_nex_link_share_expiration',

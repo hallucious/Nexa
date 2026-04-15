@@ -1482,7 +1482,14 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     assert payload['operation_capabilities'] == ['inspect_metadata', 'download_artifact', 'import_copy', 'run_artifact', 'checkout_working_copy']
     assert payload['lifecycle']['stored_state'] == 'active'
     assert payload['lifecycle']['state'] == 'active'
+    assert payload['audit_summary']['event_count'] == 1
     assert payload['source_artifact']['storage_role'] == 'commit_snapshot'
+
+    history_response = client.get('/api/public-shares/share-fastapi-001/history')
+    assert history_response.status_code == 200
+    history_payload = history_response.json()
+    assert history_payload['audit_summary']['event_count'] == 1
+    assert history_payload['history'][0]['event_type'] == 'created'
 
     artifact_response = client.get('/api/public-shares/share-fastapi-001/artifact')
     assert artifact_response.status_code == 200
@@ -1514,7 +1521,9 @@ def test_fastapi_binding_workspace_shell_share_creation_round_trip() -> None:
     assert payload['lifecycle']['state'] == 'active'
     assert payload['lifecycle']['created_at'] == '2026-04-11T12:09:00+00:00'
     assert payload['lifecycle']['expires_at'] == '2026-04-20T00:00:00+00:00'
+    assert payload['audit_summary']['event_count'] == 1
     assert payload['lifecycle']['issued_by_user_ref'] == 'user-owner'
+    assert payload['audit_summary']['event_count'] == 1
     assert payload['source_artifact']['canonical_ref'] == 'snap-fastapi-created-share-001'
 
     get_response = client.get('/api/public-shares/share-fastapi-created-001')
@@ -1583,6 +1592,7 @@ def test_fastapi_binding_public_share_revoke_round_trip() -> None:
     assert payload['share_id'] == 'share-fastapi-revoke-001'
     assert payload['lifecycle']['state'] == 'revoked'
     assert payload['lifecycle']['updated_at'] == '2026-04-11T12:09:00+00:00'
+    assert payload['audit_summary']['event_count'] == 2
     assert share_store['share-fastapi-revoke-001']['share']['lifecycle']['state'] == 'revoked'
 
 
@@ -1626,4 +1636,5 @@ def test_fastapi_binding_public_share_extend_round_trip() -> None:
     assert payload['lifecycle']['stored_state'] == 'active'
     assert payload['lifecycle']['state'] == 'active'
     assert payload['lifecycle']['expires_at'] == '2026-04-20T00:00:00+00:00'
+    assert payload['audit_summary']['event_count'] == 2
 

@@ -113,6 +113,7 @@ def test_public_share_route_returns_descriptor_without_authentication() -> None:
     assert response.body["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
     assert response.body["lifecycle"]["stored_state"] == "active"
     assert response.body["lifecycle"]["state"] == "active"
+    assert response.body["audit_summary"]["event_count"] == 1
     assert response.body["lifecycle"]["issued_by_user_ref"] == "user-owner"
     assert response.body["source_artifact"]["canonical_ref"] == "snap-share-001"
 
@@ -185,6 +186,7 @@ def test_workspace_shell_share_creation_returns_persisted_public_share_descripto
     assert response.body["share_id"] == "share-created-http-001"
     assert response.body["lifecycle"]["state"] == "active"
     assert response.body["lifecycle"]["created_at"] == "2026-04-15T12:30:00+00:00"
+    assert response.body["audit_summary"]["event_count"] == 1
     assert response.body["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
     assert response.body["lifecycle"]["issued_by_user_ref"] == "user-owner"
     assert response.body["source_artifact"]["canonical_ref"] == "snap-create-share-001"
@@ -668,3 +670,14 @@ def test_public_share_extend_route_rejects_effectively_expired_share() -> None:
     assert response.status_code == 409
     assert response.body["reason_code"] == "public_share.transition_not_allowed"
 
+
+
+def test_public_share_history_route_returns_audit_entries() -> None:
+    response = RunHttpRouteSurface.handle_get_public_share_history(
+        http_request=HttpRouteRequest(method="GET", path="/api/public-shares/share-http-001/history", path_params={"share_id": "share-http-001"}),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+
+    assert response.status_code == 200
+    assert response.body["audit_summary"]["event_count"] == 1
+    assert response.body["history"][0]["event_type"] == "created"

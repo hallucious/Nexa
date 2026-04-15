@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 
 ShareLifecycleState = Literal["active", "expired", "revoked"]
+ShareAuditEventType = Literal["created", "expiration_extended", "revoked"]
 
 StorageRole = Literal["working_save", "commit_snapshot"]
 FindingCategory = Literal[
@@ -106,6 +107,17 @@ class PublicNexShareBoundary:
 
 
 @dataclass(frozen=True)
+class PublicNexShareAuditEntry:
+    sequence: int
+    event_type: ShareAuditEventType
+    at: str
+    actor_user_ref: Optional[str]
+    stored_lifecycle_state: ShareLifecycleState
+    effective_lifecycle_state: ShareLifecycleState
+    details: Optional[dict[str, str]] = None
+
+
+@dataclass(frozen=True)
 class PublicNexShareDescriptor:
     share_id: str
     share_path: str
@@ -125,3 +137,6 @@ class PublicNexShareDescriptor:
     expires_at: Optional[str] = None
     issued_by_user_ref: Optional[str] = None
     source_working_save_id: Optional[str] = None
+    audit_event_count: int = 0
+    last_audit_event_type: Optional[ShareAuditEventType] = None
+    last_audit_event_at: Optional[str] = None

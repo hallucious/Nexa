@@ -856,10 +856,11 @@ def _public_artifact_payload(loaded, *, input_path: Path) -> dict:
 
 
 def _public_share_payload(share_payload: dict, loaded, *, input_path: Path) -> dict:
-    from src.storage.share_api import describe_public_nex_link_share
+    from src.storage.share_api import describe_public_nex_link_share, list_public_nex_link_share_audit_history
 
     payload = _public_artifact_payload(loaded, input_path=input_path)
     descriptor = describe_public_nex_link_share(share_payload)
+    history = list_public_nex_link_share_audit_history(share_payload)
     payload.update({
         "input_mode": "public_link_share",
         "share_id": descriptor.share_id,
@@ -874,6 +875,12 @@ def _public_share_payload(share_payload: dict, loaded, *, input_path: Path) -> d
         "updated_at": descriptor.updated_at,
         "expires_at": descriptor.expires_at,
         "issued_by_user_ref": descriptor.issued_by_user_ref,
+        "audit_summary": {
+            "event_count": descriptor.audit_event_count,
+            "last_event_type": descriptor.last_audit_event_type,
+            "last_event_at": descriptor.last_audit_event_at,
+        },
+        "audit_history": list(history),
     })
     return payload
 
@@ -1146,7 +1153,7 @@ def savefile_upgrade_command(args) -> int:
 
 
 def savefile_share_export_command(args) -> int:
-    from src.storage.share_api import describe_public_nex_link_share, save_public_nex_link_share_file
+    from src.storage.share_api import describe_public_nex_link_share, list_public_nex_link_share_audit_history, save_public_nex_link_share_file
 
     source = _load_cli_savefile_source(args.input)
     if source["mode"] not in {"public", "public_share"}:
@@ -1169,6 +1176,7 @@ def savefile_share_export_command(args) -> int:
         issued_by_user_ref=getattr(args, "issued_by_user_ref", None),
     )
     descriptor = describe_public_nex_link_share(written)
+    history = list_public_nex_link_share_audit_history(written)
     payload = {
         "status": "ok",
         "input": str(source["input_path"]),
@@ -1188,6 +1196,12 @@ def savefile_share_export_command(args) -> int:
         "updated_at": descriptor.updated_at,
         "expires_at": descriptor.expires_at,
         "issued_by_user_ref": descriptor.issued_by_user_ref,
+        "audit_summary": {
+            "event_count": descriptor.audit_event_count,
+            "last_event_type": descriptor.last_audit_event_type,
+            "last_event_at": descriptor.last_audit_event_at,
+        },
+        "audit_history": list(history),
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0

@@ -533,6 +533,15 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/public-shares/{share_id}/history")
+        async def get_public_share_history(request: Request, share_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
+            outbound = FrameworkRouteBindings.handle_get_public_share_history(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/public-shares/{share_id}/artifact")
         async def get_public_share_artifact(request: Request, share_id: str) -> Response:
             inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
