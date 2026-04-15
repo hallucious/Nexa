@@ -257,6 +257,7 @@ def test_issuer_public_share_management_routes_return_bounded_summary_and_entrie
     response = RunHttpRouteSurface.handle_list_issuer_public_shares(
         http_request=_auth_request(method="GET", path="/api/users/me/public-shares"),
         share_payload_rows_provider=_issuer_share_rows,
+        action_report_rows_provider=_issuer_action_report_rows,
         now_iso="2026-04-15T13:00:00+00:00",
     )
 
@@ -275,18 +276,29 @@ def test_issuer_public_share_management_routes_return_bounded_summary_and_entrie
     ]
     assert response.body["shares"][1]["lifecycle"]["state"] == "expired"
     assert response.body["shares"][2]["lifecycle"]["state"] == "revoked"
+    assert response.body["governance_summary"]["total_action_report_count"] == 2
+    assert response.body["governance_summary"]["latest_action_report_at"] == "2026-04-15T14:00:00+00:00"
+    assert [report["report_id"] for report in response.body["governance_summary"]["recent_action_reports"]] == [
+        "share-report-http-002",
+        "share-report-http-001",
+    ]
 
 
 def test_issuer_public_share_summary_route_returns_compact_management_summary() -> None:
     response = RunHttpRouteSurface.handle_get_issuer_public_share_summary(
         http_request=_auth_request(method="GET", path="/api/users/me/public-shares/summary"),
         share_payload_rows_provider=_issuer_share_rows,
+        action_report_rows_provider=_issuer_action_report_rows,
         now_iso="2026-04-15T13:00:00+00:00",
     )
 
     assert response.status_code == 200
     assert response.body["summary"]["total_share_count"] == 3
     assert response.body["summary"]["latest_updated_at"] == "2026-04-15T12:30:00+00:00"
+    assert response.body["governance_summary"]["total_share_count"] == 3
+    assert response.body["governance_summary"]["total_action_report_count"] == 2
+    assert response.body["governance_summary"]["delete_action_report_count"] == 1
+    assert response.body["governance_summary"]["latest_action_report_at"] == "2026-04-15T14:00:00+00:00"
     assert response.body["links"]["shares"] == "/api/users/me/public-shares"
 
 

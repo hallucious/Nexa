@@ -1555,6 +1555,9 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
     summary_payload = summary_response.json()
     assert summary_payload['summary']['total_share_count'] == 2
     assert summary_payload['summary']['latest_updated_at'] == '2026-04-15T12:30:00+00:00'
+    assert summary_payload['governance_summary']['total_action_report_count'] == 2
+    assert summary_payload['governance_summary']['archive_action_report_count'] == 1
+    assert summary_payload['governance_summary']['recent_action_reports'][0]['report_id'] == 'report-fastapi-archive-001'
 
     filtered_list_response = client.get('/api/users/me/public-shares?lifecycle_state=active&limit=1&offset=0', headers=_session_headers())
     assert filtered_list_response.status_code == 200

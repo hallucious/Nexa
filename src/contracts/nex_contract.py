@@ -215,6 +215,30 @@ class IssuerPublicShareManagementActionReportSummary:
 
 
 @dataclass(frozen=True)
+class IssuerPublicShareGovernanceSummary:
+    issuer_user_ref: str
+    total_share_count: int
+    active_share_count: int
+    expired_share_count: int
+    revoked_share_count: int
+    archived_share_count: int
+    working_save_share_count: int
+    commit_snapshot_share_count: int
+    runnable_share_count: int
+    checkoutable_share_count: int
+    total_action_report_count: int
+    revoke_action_report_count: int
+    extend_action_report_count: int
+    archive_action_report_count: int
+    delete_action_report_count: int
+    latest_created_at: Optional[str] = None
+    latest_updated_at: Optional[str] = None
+    latest_audit_event_at: Optional[str] = None
+    latest_action_report_at: Optional[str] = None
+    recent_action_reports: tuple[IssuerPublicShareManagementActionReportEntry, ...] = ()
+
+
+@dataclass(frozen=True)
 class IssuerPublicShareManagementActionResult:
     issuer_user_ref: str
     action: IssuerShareManagementAction

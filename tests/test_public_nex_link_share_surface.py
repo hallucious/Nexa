@@ -8,20 +8,21 @@ from src.storage.lifecycle_api import create_commit_snapshot_from_working_save
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.share_api import (
+    archive_public_nex_link_shares_for_issuer,
+    delete_public_nex_link_shares_for_issuer,
     describe_public_nex_link_share,
     ensure_public_nex_link_share_operation_allowed,
     export_public_nex_link_share,
+    extend_public_nex_link_share_expiration,
+    extend_public_nex_link_shares_for_issuer_expiration,
     get_public_nex_share_boundary,
     list_public_nex_link_share_audit_history,
     load_public_nex_link_share,
-    revoke_public_nex_link_shares_for_issuer,
-    extend_public_nex_link_shares_for_issuer_expiration,
     revoke_public_nex_link_share,
+    revoke_public_nex_link_shares_for_issuer,
     save_public_nex_link_share_file,
-    extend_public_nex_link_share_expiration,
-    delete_public_nex_link_shares_for_issuer,
+    summarize_issuer_public_share_governance_for_issuer,
     update_public_nex_link_share_archive,
-    archive_public_nex_link_shares_for_issuer,
 )
 
 
@@ -440,3 +441,108 @@ def test_archive_public_nex_link_shares_for_issuer_updates_requested_targets() -
     descriptors = [describe_public_nex_link_share(payload, now_iso="2026-04-15T13:00:00+00:00") for payload in updated]
     assert [descriptor.share_id for descriptor in descriptors] == ["share-owner-archive-a", "share-owner-archive-b"]
     assert all(descriptor.archived is True for descriptor in descriptors)
+
+
+def test_summarize_issuer_public_share_governance_for_issuer_combines_inventory_and_recent_activity() -> None:
+    shares = (
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-gov-a"),
+            share_id="share-gov-a",
+            created_at="2026-04-15T12:00:00+00:00",
+            updated_at="2026-04-15T12:30:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-gov-b"),
+            share_id="share-gov-b",
+            created_at="2026-04-14T12:00:00+00:00",
+            updated_at="2026-04-14T12:15:00+00:00",
+            lifecycle_state="revoked",
+            issued_by_user_ref="user-owner",
+        ),
+    )
+    action_reports = (
+        {
+            "report_id": "gov-report-001",
+            "issuer_user_ref": "user-owner",
+            "action": "revoke",
+            "scope": "single_share",
+            "created_at": "2026-04-15T13:00:00+00:00",
+            "requested_share_ids": ["share-gov-a"],
+            "affected_share_ids": ["share-gov-a"],
+            "affected_share_count": 1,
+            "before_total_share_count": 2,
+            "after_total_share_count": 1,
+        },
+        {
+            "report_id": "gov-report-002",
+            "issuer_user_ref": "user-owner",
+            "action": "archive",
+            "scope": "single_share",
+            "created_at": "2026-04-15T14:00:00+00:00",
+            "requested_share_ids": ["share-gov-b"],
+            "affected_share_ids": ["share-gov-b"],
+            "affected_share_count": 1,
+            "before_total_share_count": 1,
+            "after_total_share_count": 1,
+            "archived": True,
+        },
+    )
+
+    summary = summarize_issuer_public_share_governance_for_issuer(
+        shares,
+        action_reports,
+        "user-owner",
+        now_iso="2026-04-15T15:00:00+00:00",
+    )
+
+    assert summary.total_share_count == 2
+    assert summary.revoked_share_count == 1
+    assert summary.total_action_report_count == 2
+    assert summary.revoke_action_report_count == 1
+    assert summary.archive_action_report_count == 1
+    assert summary.latest_updated_at == "2026-04-15T12:30:00+00:00"
+    assert summary.latest_action_report_at == "2026-04-15T14:00:00+00:00"
+    assert [report.report_id for report in summary.recent_action_reports] == ["gov-report-002", "gov-report-001"]
+
+
+def test_summarize_issuer_public_share_governance_for_issuer_bounds_recent_activity_slice() -> None:
+    shares = (
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-gov-bound"),
+            share_id="share-gov-bound",
+            created_at="2026-04-15T12:00:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+    )
+    action_reports = tuple(
+        {
+            "report_id": f"gov-report-{index:03d}",
+            "issuer_user_ref": "user-owner",
+            "action": "delete" if index % 2 else "revoke",
+            "scope": "single_share",
+            "created_at": f"2026-04-15T{12 + index:02d}:00:00+00:00",
+            "requested_share_ids": ["share-gov-bound"],
+            "affected_share_ids": ["share-gov-bound"],
+            "affected_share_count": 1,
+            "before_total_share_count": 1,
+            "after_total_share_count": 1,
+        }
+        for index in range(1, 8)
+    )
+
+    summary = summarize_issuer_public_share_governance_for_issuer(
+        shares,
+        action_reports,
+        "user-owner",
+        recent_action_report_limit=5,
+    )
+
+    assert len(summary.recent_action_reports) == 5
+    assert [report.report_id for report in summary.recent_action_reports] == [
+        "gov-report-007",
+        "gov-report-006",
+        "gov-report-005",
+        "gov-report-004",
+        "gov-report-003",
+    ]

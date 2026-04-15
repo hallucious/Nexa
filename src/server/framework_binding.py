@@ -1027,11 +1027,13 @@ class FrameworkRouteBindings:
         *,
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
+        action_report_rows_provider=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_list_issuer_public_shares(
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
+            action_report_rows_provider=action_report_rows_provider,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)
@@ -1042,11 +1044,13 @@ class FrameworkRouteBindings:
         *,
         request: FrameworkInboundRequest,
         share_payload_rows_provider=None,
+        action_report_rows_provider=None,
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_get_issuer_public_share_summary(
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
+            action_report_rows_provider=action_report_rows_provider,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)

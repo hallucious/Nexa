@@ -9,6 +9,7 @@ from typing import Any, Mapping, Sequence
 from src.contracts.nex_contract import (
     IssuerPublicShareManagementActionReportEntry,
     IssuerPublicShareManagementActionReportSummary,
+    IssuerPublicShareGovernanceSummary,
     IssuerPublicShareManagementEntry,
     IssuerPublicShareManagementSummary,
     PublicNexShareBoundary,
@@ -31,6 +32,7 @@ _ALLOWED_AUDIT_EVENT_TYPES: tuple[ShareAuditEventType, ...] = ("created", "expir
 _MAX_ISSUER_MANAGEMENT_ACTION_SHARES = 20
 _MAX_ISSUER_MANAGEMENT_PAGE_LIMIT = 50
 _MAX_ISSUER_ACTION_REPORT_PAGE_LIMIT = 50
+_DEFAULT_RECENT_GOVERNANCE_ACTION_REPORT_LIMIT = 5
 _UNSET = object()
 
 _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
@@ -1098,6 +1100,55 @@ def summarize_issuer_public_share_management_action_reports_for_issuer(
     )
 
 
+def summarize_issuer_public_share_governance_for_issuer(
+    share_sources: Sequence[str | Path | dict[str, Any]],
+    action_report_rows: Sequence[Mapping[str, Any]],
+    issuer_user_ref: str,
+    *,
+    now_iso: str | None = None,
+    recent_action_report_limit: int = _DEFAULT_RECENT_GOVERNANCE_ACTION_REPORT_LIMIT,
+) -> IssuerPublicShareGovernanceSummary:
+    issuer = issuer_user_ref.strip()
+    if not issuer:
+        raise ValueError("issuer_user_ref must be non-empty")
+    if recent_action_report_limit <= 0:
+        raise ValueError("recent_action_report_limit must be > 0")
+    if recent_action_report_limit > _MAX_ISSUER_ACTION_REPORT_PAGE_LIMIT:
+        raise ValueError(
+            f"recent_action_report_limit exceeds bounded page limit ({_MAX_ISSUER_ACTION_REPORT_PAGE_LIMIT})"
+        )
+    inventory_summary = summarize_public_nex_link_shares_for_issuer(share_sources, issuer, now_iso=now_iso)
+    action_report_summary = summarize_issuer_public_share_management_action_reports_for_issuer(action_report_rows, issuer)
+    recent_action_reports = list_issuer_public_share_management_action_reports_for_issuer(
+        action_report_rows,
+        issuer,
+        limit=recent_action_report_limit,
+        offset=0,
+    )
+    return IssuerPublicShareGovernanceSummary(
+        issuer_user_ref=issuer,
+        total_share_count=inventory_summary.total_share_count,
+        active_share_count=inventory_summary.active_share_count,
+        expired_share_count=inventory_summary.expired_share_count,
+        revoked_share_count=inventory_summary.revoked_share_count,
+        archived_share_count=inventory_summary.archived_share_count,
+        working_save_share_count=inventory_summary.working_save_share_count,
+        commit_snapshot_share_count=inventory_summary.commit_snapshot_share_count,
+        runnable_share_count=inventory_summary.runnable_share_count,
+        checkoutable_share_count=inventory_summary.checkoutable_share_count,
+        total_action_report_count=action_report_summary.total_report_count,
+        revoke_action_report_count=action_report_summary.revoke_report_count,
+        extend_action_report_count=action_report_summary.extend_report_count,
+        archive_action_report_count=action_report_summary.archive_report_count,
+        delete_action_report_count=action_report_summary.delete_report_count,
+        latest_created_at=inventory_summary.latest_created_at,
+        latest_updated_at=inventory_summary.latest_updated_at,
+        latest_audit_event_at=inventory_summary.latest_audit_event_at,
+        latest_action_report_at=action_report_summary.latest_report_at,
+        recent_action_reports=recent_action_reports,
+    )
+
+
 def save_public_nex_link_share_file(
     model_or_data: Any,
     destination: str | Path,
@@ -1134,6 +1185,7 @@ __all__ = [
     "normalize_issuer_public_share_management_action_report_pagination",
     "list_issuer_public_share_management_action_reports_for_issuer",
     "summarize_issuer_public_share_management_action_reports_for_issuer",
+    "summarize_issuer_public_share_governance_for_issuer",
     "revoke_public_nex_link_shares_for_issuer",
     "extend_public_nex_link_shares_for_issuer_expiration",
     "archive_public_nex_link_shares_for_issuer",

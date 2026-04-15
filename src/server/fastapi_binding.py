@@ -530,6 +530,7 @@ class FastApiRouteBindings:
             outbound = FrameworkRouteBindings.handle_list_issuer_public_shares(
                 request=inbound,
                 share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )
             return self._framework_response(outbound)
@@ -540,6 +541,7 @@ class FastApiRouteBindings:
             outbound = FrameworkRouteBindings.handle_get_issuer_public_share_summary(
                 request=inbound,
                 share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )
             return self._framework_response(outbound)

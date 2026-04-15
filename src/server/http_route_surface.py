@@ -54,6 +54,7 @@ from src.storage.share_api import (
     revoke_public_nex_link_share,
     revoke_public_nex_link_shares_for_issuer,
     summarize_issuer_public_share_management_action_reports_for_issuer,
+    summarize_issuer_public_share_governance_for_issuer,
     summarize_public_nex_link_shares_for_issuer,
 )
 from src.ui.i18n import normalize_ui_language
@@ -348,6 +349,31 @@ def _issuer_share_management_summary_body(summary) -> dict[str, Any]:
         "latest_created_at": summary.latest_created_at,
         "latest_updated_at": summary.latest_updated_at,
         "latest_audit_event_at": summary.latest_audit_event_at,
+    }
+
+
+def _issuer_share_governance_summary_body(summary) -> dict[str, Any]:
+    return {
+        "issuer_user_ref": summary.issuer_user_ref,
+        "total_share_count": summary.total_share_count,
+        "active_share_count": summary.active_share_count,
+        "expired_share_count": summary.expired_share_count,
+        "revoked_share_count": summary.revoked_share_count,
+        "archived_share_count": summary.archived_share_count,
+        "working_save_share_count": summary.working_save_share_count,
+        "commit_snapshot_share_count": summary.commit_snapshot_share_count,
+        "runnable_share_count": summary.runnable_share_count,
+        "checkoutable_share_count": summary.checkoutable_share_count,
+        "total_action_report_count": summary.total_action_report_count,
+        "revoke_action_report_count": summary.revoke_action_report_count,
+        "extend_action_report_count": summary.extend_action_report_count,
+        "archive_action_report_count": summary.archive_action_report_count,
+        "delete_action_report_count": summary.delete_action_report_count,
+        "latest_created_at": summary.latest_created_at,
+        "latest_updated_at": summary.latest_updated_at,
+        "latest_audit_event_at": summary.latest_audit_event_at,
+        "latest_action_report_at": summary.latest_action_report_at,
+        "recent_action_reports": [_to_jsonable(report) for report in summary.recent_action_reports],
     }
 
 
@@ -1085,6 +1111,7 @@ class RunHttpRouteSurface:
         *,
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
+        action_report_rows_provider=None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
@@ -1100,11 +1127,18 @@ class RunHttpRouteSurface:
                 "message": "Issuer share management routes require an authenticated session.",
             })
         rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        action_report_rows = tuple(action_report_rows_provider() or ()) if action_report_rows_provider is not None else ()
         query_params = http_request.query_params or {}
         try:
             filters = _issuer_public_share_management_filters(query_params)
             limit, offset = _issuer_public_share_management_pagination(query_params)
             total_summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+            governance_summary = summarize_issuer_public_share_governance_for_issuer(
+                rows,
+                action_report_rows,
+                request_auth.requested_by_user_ref,
+                now_iso=now_iso,
+            )
             summary = summarize_public_nex_link_shares_for_issuer(
                 rows,
                 request_auth.requested_by_user_ref,
@@ -1138,6 +1172,7 @@ class RunHttpRouteSurface:
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": _issuer_share_management_summary_body(summary),
             "inventory_summary": _issuer_share_management_summary_body(total_summary),
+            "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "shares": [_issuer_share_management_entry_body(entry) for entry in page_entries],
             "applied_filters": filters,
             "pagination": pagination,
@@ -1153,6 +1188,7 @@ class RunHttpRouteSurface:
         *,
         http_request: HttpRouteRequest,
         share_payload_rows_provider=None,
+        action_report_rows_provider=None,
         now_iso: str | None = None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
@@ -1168,10 +1204,17 @@ class RunHttpRouteSurface:
                 "message": "Issuer share management routes require an authenticated session.",
             })
         rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        action_report_rows = tuple(action_report_rows_provider() or ()) if action_report_rows_provider is not None else ()
         query_params = http_request.query_params or {}
         try:
             filters = _issuer_public_share_management_filters(query_params)
             total_summary = summarize_public_nex_link_shares_for_issuer(rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+            governance_summary = summarize_issuer_public_share_governance_for_issuer(
+                rows,
+                action_report_rows,
+                request_auth.requested_by_user_ref,
+                now_iso=now_iso,
+            )
             summary = summarize_public_nex_link_shares_for_issuer(
                 rows,
                 request_auth.requested_by_user_ref,
@@ -1194,6 +1237,7 @@ class RunHttpRouteSurface:
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": _issuer_share_management_summary_body(summary),
             "inventory_summary": _issuer_share_management_summary_body(total_summary),
+            "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "applied_filters": filters,
             "links": {
                 "self": "/api/users/me/public-shares/summary",
