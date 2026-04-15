@@ -33,6 +33,7 @@ from src.sdk.integration import (
     PublicMcpTransportContext,
     PublicMcpTransportAssessment,
     PublicMcpPreflightAssessment,
+    PublicMcpOrchestrationSummary,
     PublicMcpFrameworkEnvelope,
     PublicMcpHttpEnvelope,
     PublicMcpResponseContract,
@@ -90,7 +91,7 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.16"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.17"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -124,9 +125,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.14"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.15"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.14"
+    assert surface.version == "1.15"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -223,7 +224,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.12"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.13"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -1074,3 +1075,61 @@ def test_execution_report_includes_preflight_assessment_for_launch_run() -> None
     assert report.preflight_assessment.risk_level == "high"
     assert "attach_identity_context_before_execution" in report.preflight_assessment.suggested_actions
     assert report.to_dict()["preflight_assessment"]["risk_level"] == "high"
+
+
+def test_framework_tool_envelope_includes_orchestration_summary() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    envelope = bridge.build_framework_tool_envelope(
+        "launch_run",
+        {
+            "workspace_id": "ws-001",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-001"},
+        },
+        headers={"X-Request-Id": "req-300"},
+    )
+
+    assert isinstance(envelope.orchestration_summary, PublicMcpOrchestrationSummary)
+    assert envelope.orchestration_summary.route_family == "run-launch"
+    assert envelope.orchestration_summary.idempotency_class == "launch-non-idempotent"
+    assert envelope.orchestration_summary.ready is True
+    assert envelope.orchestration_summary.risk_level == "high"
+    assert envelope.orchestration_summary.authorization_present is False
+    assert envelope.orchestration_summary.session_subject_present is False
+    assert "run-launch" in envelope.orchestration_summary.summary_labels
+    assert "risk:high" in envelope.orchestration_summary.summary_labels
+    assert "attach_authorization_before_execution" in envelope.orchestration_summary.next_actions
+    assert envelope.orchestration_summary.to_dict()["ready"] is True
+
+
+def test_execution_report_includes_orchestration_summary_for_launch_run() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    report = bridge.execute_framework_tool_report(
+        "launch_run",
+        {
+            "workspace_id": "ws-001",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-001"},
+        },
+        headers={"X-Request-Id": "req-301"},
+    )
+
+    assert report.orchestration_summary is not None
+    assert report.orchestration_summary.route_family == "run-launch"
+    assert report.orchestration_summary.recommended_action == "attach_identity_context_before_execution"
+    assert "attach_authorization_before_execution" in report.orchestration_summary.next_actions
+    assert report.to_dict()["orchestration_summary"]["risk_level"] == "high"
+
+
+def test_summarize_framework_resource_orchestration_returns_low_risk_read_profile() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    summary = bridge.summarize_framework_resource_orchestration(
+        "get_run_status",
+        {"run_id": "run-001"},
+        headers={"X-Request-Id": "req-302", "Accept-Language": "ko"},
+    )
+
+    assert isinstance(summary, PublicMcpOrchestrationSummary)
+    assert summary.route_family == "run-read"
+    assert summary.risk_level == "low"
+    assert summary.ready is True
+    assert summary.authorization_present is False
+    assert summary.next_actions == ("retry_same_request",)
