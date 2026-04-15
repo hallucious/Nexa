@@ -22,25 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-_PUBLIC_MCP_CONTRACT_MARKERS: tuple[str, ...] = (
-    "argument-schema",
-    "route-contract",
-    "transport-contract",
-    "response-contract",
-    "result-shape-profile",
-    "recovery-policy",
-)
-
-_PUBLIC_MCP_RUNTIME_MARKERS: tuple[str, ...] = (
-    "request-normalization",
-    "dispatch-planning",
-    "dispatch-execution",
-    "execution-report",
-    "recovery-hints",
-    "transport-assessment",
-    "preflight-assessment",
-    "orchestration-summary",
-)
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.15"
 
 
 @dataclass(frozen=True)
@@ -156,36 +138,6 @@ class PublicMcpNormalizedArguments:
 
 
 @dataclass(frozen=True)
-class PublicMcpResultShapeProfile:
-    name: str
-    route_name: str
-    kind: str
-    route_family: str
-    response_shape: str
-    profile_kind: str
-    identity_keys: tuple[str, ...] = ()
-    state_keys: tuple[str, ...] = ()
-    collection_field_name: str | None = None
-    count_field_name: str | None = None
-    collection_item_identity_keys: tuple[str, ...] = ()
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "name": self.name,
-            "route_name": self.route_name,
-            "kind": self.kind,
-            "route_family": self.route_family,
-            "response_shape": self.response_shape,
-            "profile_kind": self.profile_kind,
-            "identity_keys": list(self.identity_keys),
-            "state_keys": list(self.state_keys),
-            "collection_field_name": self.collection_field_name,
-            "count_field_name": self.count_field_name,
-            "collection_item_identity_keys": list(self.collection_item_identity_keys),
-        }
-
-
-@dataclass(frozen=True)
 class PublicMcpResponseContract:
     name: str
     route_name: str
@@ -196,7 +148,6 @@ class PublicMcpResponseContract:
     response_media_type: str = "application/json"
     body_kind: str = "object"
     required_top_level_keys: tuple[str, ...] = ()
-    result_shape_profile: PublicMcpResultShapeProfile | None = None
     response_type: PublicTypeRef | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -210,7 +161,6 @@ class PublicMcpResponseContract:
             "response_media_type": self.response_media_type,
             "body_kind": self.body_kind,
             "required_top_level_keys": list(self.required_top_level_keys),
-            "result_shape_profile": self.result_shape_profile.to_dict() if self.result_shape_profile is not None else None,
             "response_type": _type_ref_dict(self.response_type),
         }
 
@@ -331,6 +281,7 @@ class PublicMcpExecutionReport:
     transport_assessment: PublicMcpTransportAssessment | None = None
     preflight_assessment: PublicMcpPreflightAssessment | None = None
     orchestration_summary: PublicMcpOrchestrationSummary | None = None
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
     normalized_response: PublicMcpNormalizedResponse | None = None
     error: PublicMcpExecutionError | None = None
 
@@ -371,6 +322,7 @@ class PublicMcpExecutionReport:
             "transport_assessment": self.transport_assessment.to_dict() if self.transport_assessment is not None else None,
             "preflight_assessment": self.preflight_assessment.to_dict() if self.preflight_assessment is not None else None,
             "orchestration_summary": self.orchestration_summary.to_dict() if self.orchestration_summary is not None else None,
+            "lifecycle_control_profile": self.lifecycle_control_profile.to_dict() if self.lifecycle_control_profile is not None else None,
             "normalized_response": self.normalized_response.to_dict() if self.normalized_response is not None else None,
             "error": self.error.to_dict() if self.error is not None else None,
         }
@@ -378,62 +330,53 @@ class PublicMcpExecutionReport:
 
 @dataclass(frozen=True)
 class PublicMcpCompatibilitySurface:
-    contract_markers: tuple[str, ...]
-    runtime_markers: tuple[str, ...]
+    version: str
     tools: tuple[PublicMcpToolDescriptor, ...]
     resources: tuple[PublicMcpResourceDescriptor, ...]
 
 
 @dataclass(frozen=True)
 class PublicMcpCompatibilityPolicy:
-    supported_contract_markers: tuple[str, ...] = ()
-    supported_runtime_markers: tuple[str, ...] = ()
-    supported_transport_kinds: tuple[str, ...] = ()
+    policy_version: str
+    manifest_version: str
+    schema_version: str
+    surface_version: str
+    adapter_version: str
+    host_bridge_version: str
+    supported_manifest_versions: tuple[str, ...] = ()
+    supported_schema_versions: tuple[str, ...] = ()
 
-    def supports_contract_markers(self, required: tuple[str, ...] | list[str] | set[str]) -> bool:
-        return all(marker in self.supported_contract_markers for marker in required)
+    def supports_manifest_version(self, version: str) -> bool:
+        return version in self.supported_manifest_versions
 
-    def supports_runtime_markers(self, required: tuple[str, ...] | list[str] | set[str]) -> bool:
-        return all(marker in self.supported_runtime_markers for marker in required)
-
-    def supports_transport_kind(self, transport_kind: str) -> bool:
-        return transport_kind in self.supported_transport_kinds
+    def supports_schema_version(self, version: str) -> bool:
+        return version in self.supported_schema_versions
 
     def assert_supported(
         self,
         *,
-        required_contract_markers: tuple[str, ...] | list[str] | set[str] | None = None,
-        required_runtime_markers: tuple[str, ...] | list[str] | set[str] | None = None,
-        required_transport_kind: str | None = None,
+        manifest_version: str | None = None,
+        schema_version: str | None = None,
     ) -> None:
-        required_contract_markers = tuple(required_contract_markers or ())
-        required_runtime_markers = tuple(required_runtime_markers or ())
-        missing_contract_markers = [marker for marker in required_contract_markers if marker not in self.supported_contract_markers]
-        if missing_contract_markers:
+        if manifest_version is not None and not self.supports_manifest_version(manifest_version):
             raise ValueError(
-                "Unsupported public MCP contract markers: "
-                + ", ".join(missing_contract_markers)
-                + "; supported markers: "
-                + ", ".join(self.supported_contract_markers)
+                f"Unsupported public MCP manifest version: {manifest_version}; supported versions: {', '.join(self.supported_manifest_versions)}"
             )
-        missing_runtime_markers = [marker for marker in required_runtime_markers if marker not in self.supported_runtime_markers]
-        if missing_runtime_markers:
+        if schema_version is not None and not self.supports_schema_version(schema_version):
             raise ValueError(
-                "Unsupported public MCP runtime markers: "
-                + ", ".join(missing_runtime_markers)
-                + "; supported markers: "
-                + ", ".join(self.supported_runtime_markers)
-            )
-        if required_transport_kind is not None and required_transport_kind not in self.supported_transport_kinds:
-            raise ValueError(
-                f"Unsupported public MCP transport kind: {required_transport_kind}; supported transport kinds: {', '.join(self.supported_transport_kinds)}"
+                f"Unsupported public MCP schema version: {schema_version}; supported versions: {', '.join(self.supported_schema_versions)}"
             )
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "supported_contract_markers": list(self.supported_contract_markers),
-            "supported_runtime_markers": list(self.supported_runtime_markers),
-            "supported_transport_kinds": list(self.supported_transport_kinds),
+            "policy_version": self.policy_version,
+            "manifest_version": self.manifest_version,
+            "schema_version": self.schema_version,
+            "surface_version": self.surface_version,
+            "adapter_version": self.adapter_version,
+            "host_bridge_version": self.host_bridge_version,
+            "supported_manifest_versions": list(self.supported_manifest_versions),
+            "supported_schema_versions": list(self.supported_schema_versions),
         }
 
 
@@ -594,6 +537,40 @@ class PublicMcpPreflightAssessment:
 
 
 @dataclass(frozen=True)
+class PublicMcpLifecycleControlProfile:
+    name: str
+    route_name: str
+    kind: str
+    route_family: str
+    lifecycle_class: str
+    status_resource_name: str | None = None
+    result_resource_name: str | None = None
+    actions_resource_name: str | None = None
+    trace_resource_name: str | None = None
+    artifacts_resource_name: str | None = None
+    preferred_control_tool_names: tuple[str, ...] = ()
+    followup_route_names: tuple[str, ...] = ()
+    review_tool_name: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "route_family": self.route_family,
+            "lifecycle_class": self.lifecycle_class,
+            "status_resource_name": self.status_resource_name,
+            "result_resource_name": self.result_resource_name,
+            "actions_resource_name": self.actions_resource_name,
+            "trace_resource_name": self.trace_resource_name,
+            "artifacts_resource_name": self.artifacts_resource_name,
+            "preferred_control_tool_names": list(self.preferred_control_tool_names),
+            "followup_route_names": list(self.followup_route_names),
+            "review_tool_name": self.review_tool_name,
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpOrchestrationSummary:
     name: str
     route_name: str
@@ -607,6 +584,7 @@ class PublicMcpOrchestrationSummary:
     session_present: bool
     session_subject_present: bool
     recommended_action: str | None
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
     summary_labels: tuple[str, ...] = ()
     next_actions: tuple[str, ...] = ()
 
@@ -624,9 +602,15 @@ class PublicMcpOrchestrationSummary:
             "session_present": self.session_present,
             "session_subject_present": self.session_subject_present,
             "recommended_action": self.recommended_action,
+            "lifecycle_control_profile": self.lifecycle_control_profile.to_dict() if self.lifecycle_control_profile is not None else None,
             "summary_labels": list(self.summary_labels),
             "next_actions": list(self.next_actions),
         }
+
+
+PUBLIC_MCP_MANIFEST_VERSION = "1.7"
+PUBLIC_MCP_SCHEMA_VERSION = "1.7"
+PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
 
 
 @dataclass(frozen=True)
@@ -643,6 +627,7 @@ class PublicMcpManifestTool:
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
     transport_contract: PublicMcpTransportContract | None = None
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -660,14 +645,16 @@ class PublicMcpManifestResource:
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
     transport_contract: PublicMcpTransportContract | None = None
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
     tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class PublicMcpManifest:
-    contract_markers: tuple[str, ...]
-    runtime_markers: tuple[str, ...]
-    adapter_label: str
+    manifest_version: str
+    schema_version: str
+    adapter_version: str
+    surface_version: str
     compatibility_policy: PublicMcpCompatibilityPolicy
     server_name: str
     server_title: str
@@ -680,9 +667,10 @@ class PublicMcpManifest:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "contract_markers": list(self.contract_markers),
-            "runtime_markers": list(self.runtime_markers),
-            "adapter_label": self.adapter_label,
+            "manifest_version": self.manifest_version,
+            "schema_version": self.schema_version,
+            "adapter_version": self.adapter_version,
+            "surface_version": self.surface_version,
             "compatibility_policy": self.compatibility_policy.to_dict(),
             "server": {
                 "name": self.server_name,
@@ -706,6 +694,7 @@ class PublicMcpManifest:
                     "response_contract": tool.response_contract.to_dict() if tool.response_contract is not None else None,
                     "recovery_policy": tool.recovery_policy.to_dict() if tool.recovery_policy is not None else None,
                     "transport_contract": tool.transport_contract.to_dict() if tool.transport_contract is not None else None,
+                    "lifecycle_control_profile": tool.lifecycle_control_profile.to_dict() if tool.lifecycle_control_profile is not None else None,
                     "tags": list(tool.tags),
                 }
                 for tool in self.tools
@@ -724,6 +713,7 @@ class PublicMcpManifest:
                     "response_contract": resource.response_contract.to_dict() if resource.response_contract is not None else None,
                     "recovery_policy": resource.recovery_policy.to_dict() if resource.recovery_policy is not None else None,
                     "transport_contract": resource.transport_contract.to_dict() if resource.transport_contract is not None else None,
+                    "lifecycle_control_profile": resource.lifecycle_control_profile.to_dict() if resource.lifecycle_control_profile is not None else None,
                     "tags": list(resource.tags),
                 }
                 for resource in self.resources
@@ -732,6 +722,9 @@ class PublicMcpManifest:
 
 
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
+
+
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.13"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -783,6 +776,7 @@ class PublicMcpFrameworkEnvelope:
     preflight_assessment: PublicMcpPreflightAssessment
     orchestration_summary: PublicMcpOrchestrationSummary
     dispatch: PublicMcpFrameworkDispatch
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
 
 
 @dataclass(frozen=True)
@@ -796,14 +790,15 @@ class PublicMcpHttpEnvelope:
     preflight_assessment: PublicMcpPreflightAssessment
     orchestration_summary: PublicMcpOrchestrationSummary
     dispatch: PublicMcpHttpDispatch
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
 
 
 @dataclass(frozen=True)
 class PublicMcpHostBridgeExport:
-    bridge_label: str
-    adapter_label: str
-    contract_markers: tuple[str, ...]
-    runtime_markers: tuple[str, ...]
+    bridge_version: str
+    adapter_version: str
+    schema_version: str
+    surface_version: str
     compatibility_policy: PublicMcpCompatibilityPolicy
     framework_binding_class: str
     tool_bindings: tuple[PublicMcpHostRouteBinding, ...]
@@ -812,14 +807,15 @@ class PublicMcpHostBridgeExport:
 
 @dataclass(frozen=True)
 class PublicMcpHostBridgeScaffold:
+    bridge_version: str
     adapter_scaffold: PublicMcpAdapterScaffold
 
     def export(self) -> PublicMcpHostBridgeExport:
         return PublicMcpHostBridgeExport(
-            bridge_label="mcp-host-bridge-scaffold",
-            adapter_label=self.adapter_scaffold.adapter_label,
-            contract_markers=self.adapter_scaffold.surface.contract_markers,
-            runtime_markers=self.adapter_scaffold.surface.runtime_markers,
+            bridge_version=self.bridge_version,
+            adapter_version=self.adapter_scaffold.adapter_version,
+            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
+            surface_version=self.adapter_scaffold.surface.version,
             compatibility_policy=self.adapter_scaffold.compatibility_policy(),
             framework_binding_class="FrameworkRouteBindings",
             tool_bindings=tuple(self._tool_binding(tool) for tool in self.adapter_scaffold.surface.tools),
@@ -829,14 +825,12 @@ class PublicMcpHostBridgeScaffold:
     def assert_consumer_compatibility(
         self,
         *,
-        required_contract_markers: tuple[str, ...] | list[str] | set[str] | None = None,
-        required_runtime_markers: tuple[str, ...] | list[str] | set[str] | None = None,
-        required_transport_kind: str | None = None,
+        manifest_version: str | None = None,
+        schema_version: str | None = None,
     ) -> None:
         self.adapter_scaffold.assert_consumer_compatibility(
-            required_contract_markers=required_contract_markers,
-            required_runtime_markers=required_runtime_markers,
-            required_transport_kind=required_transport_kind,
+            manifest_version=manifest_version,
+            schema_version=schema_version,
         )
 
     def build_framework_tool_request(
@@ -1256,6 +1250,7 @@ class PublicMcpHostBridgeScaffold:
         transport_kind: str,
         route_contract: PublicMcpRouteContract | None,
         recovery_policy: PublicMcpRecoveryPolicy | None,
+        lifecycle_control_profile: PublicMcpLifecycleControlProfile | None,
         transport_context: PublicMcpTransportContext | None,
         preflight_assessment: PublicMcpPreflightAssessment | None,
     ) -> PublicMcpOrchestrationSummary:
@@ -1266,6 +1261,7 @@ class PublicMcpHostBridgeScaffold:
             transport_kind=transport_kind,
             route_contract=route_contract,
             recovery_policy=recovery_policy,
+            lifecycle_control_profile=lifecycle_control_profile,
             transport_context=transport_context,
             preflight_assessment=preflight_assessment,
         )
@@ -1360,10 +1356,12 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="framework",
                 route_contract=dispatch.route_contract,
                 recovery_policy=dispatch.recovery_policy,
+                lifecycle_control_profile=self.adapter_scaffold.export_tool_lifecycle_control_profile(tool_name),
                 transport_context=transport_context,
                 preflight_assessment=preflight_assessment,
             ),
             dispatch=dispatch,
+            lifecycle_control_profile=self.adapter_scaffold.export_tool_lifecycle_control_profile(tool_name),
         )
 
     def build_framework_resource_envelope(
@@ -1412,10 +1410,12 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="framework",
                 route_contract=dispatch.route_contract,
                 recovery_policy=dispatch.recovery_policy,
+                lifecycle_control_profile=self.adapter_scaffold.export_resource_lifecycle_control_profile(resource_name),
                 transport_context=transport_context,
                 preflight_assessment=preflight_assessment,
             ),
             dispatch=dispatch,
+            lifecycle_control_profile=self.adapter_scaffold.export_resource_lifecycle_control_profile(resource_name),
         )
 
     def build_http_tool_envelope(
@@ -1464,10 +1464,12 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="http",
                 route_contract=dispatch.route_contract,
                 recovery_policy=dispatch.recovery_policy,
+                lifecycle_control_profile=self.adapter_scaffold.export_tool_lifecycle_control_profile(tool_name),
                 transport_context=transport_context,
                 preflight_assessment=preflight_assessment,
             ),
             dispatch=dispatch,
+            lifecycle_control_profile=self.adapter_scaffold.export_tool_lifecycle_control_profile(tool_name),
         )
 
     def build_http_resource_envelope(
@@ -1516,10 +1518,12 @@ class PublicMcpHostBridgeScaffold:
                 transport_kind="http",
                 route_contract=dispatch.route_contract,
                 recovery_policy=dispatch.recovery_policy,
+                lifecycle_control_profile=self.adapter_scaffold.export_resource_lifecycle_control_profile(resource_name),
                 transport_context=transport_context,
                 preflight_assessment=preflight_assessment,
             ),
             dispatch=dispatch,
+            lifecycle_control_profile=self.adapter_scaffold.export_resource_lifecycle_control_profile(resource_name),
         )
 
     def execute_framework_dispatch(
@@ -1693,6 +1697,7 @@ class PublicMcpHostBridgeScaffold:
         transport_assessment: PublicMcpTransportAssessment | None = None,
         preflight_assessment: PublicMcpPreflightAssessment | None = None,
         orchestration_summary: PublicMcpOrchestrationSummary | None = None,
+        lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None,
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
@@ -1710,6 +1715,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_assessment=transport_assessment,
                 preflight_assessment=preflight_assessment,
                 orchestration_summary=orchestration_summary,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         try:
             response = handler(request=dispatch.request, **handler_kwargs)
@@ -1726,6 +1732,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_assessment=transport_assessment,
                 preflight_assessment=preflight_assessment,
                 orchestration_summary=orchestration_summary,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         response_contract = dispatch.response_contract
         if response_contract is None:
@@ -1740,6 +1747,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
                 preflight_assessment=preflight_assessment,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         try:
             normalized = _normalize_public_framework_response(
@@ -1761,6 +1769,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
                 preflight_assessment=preflight_assessment,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         return PublicMcpExecutionReport(
             name=dispatch.name,
@@ -1771,6 +1780,7 @@ class PublicMcpHostBridgeScaffold:
             transport_context=transport_context,
             transport_assessment=transport_assessment,
             preflight_assessment=preflight_assessment,
+            lifecycle_control_profile=lifecycle_control_profile,
             normalized_response=normalized,
         )
 
@@ -1805,6 +1815,7 @@ class PublicMcpHostBridgeScaffold:
             transport_assessment=envelope.transport_assessment,
             preflight_assessment=envelope.preflight_assessment,
             orchestration_summary=envelope.orchestration_summary,
+            lifecycle_control_profile=envelope.lifecycle_control_profile,
             **handler_kwargs,
         )
 
@@ -1839,6 +1850,7 @@ class PublicMcpHostBridgeScaffold:
             transport_assessment=envelope.transport_assessment,
             preflight_assessment=envelope.preflight_assessment,
             orchestration_summary=envelope.orchestration_summary,
+            lifecycle_control_profile=envelope.lifecycle_control_profile,
             **handler_kwargs,
         )
 
@@ -1850,6 +1862,7 @@ class PublicMcpHostBridgeScaffold:
         transport_assessment: PublicMcpTransportAssessment | None = None,
         preflight_assessment: PublicMcpPreflightAssessment | None = None,
         orchestration_summary: PublicMcpOrchestrationSummary | None = None,
+        lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None,
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
@@ -1866,6 +1879,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
                 preflight_assessment=preflight_assessment,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         try:
             response = handler(http_request=dispatch.request, **handler_kwargs)
@@ -1881,6 +1895,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
                 preflight_assessment=preflight_assessment,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         response_contract = dispatch.response_contract
         if response_contract is None:
@@ -1895,6 +1910,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
                 preflight_assessment=preflight_assessment,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         try:
             normalized = _normalize_public_http_response(
@@ -1916,6 +1932,7 @@ class PublicMcpHostBridgeScaffold:
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
                 preflight_assessment=preflight_assessment,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         return PublicMcpExecutionReport(
             name=dispatch.name,
@@ -1926,6 +1943,7 @@ class PublicMcpHostBridgeScaffold:
             transport_context=transport_context,
             transport_assessment=transport_assessment,
             preflight_assessment=preflight_assessment,
+            lifecycle_control_profile=lifecycle_control_profile,
             normalized_response=normalized,
         )
 
@@ -2021,6 +2039,7 @@ class PublicMcpToolExport:
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
     transport_contract: PublicMcpTransportContract | None = None
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
     tags: tuple[str, ...] = ()
 
 
@@ -2037,14 +2056,15 @@ class PublicMcpResourceExport:
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
     transport_contract: PublicMcpTransportContract | None = None
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
     tags: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class PublicMcpAdapterExport:
-    adapter_label: str
-    contract_markers: tuple[str, ...]
-    runtime_markers: tuple[str, ...]
+    adapter_version: str
+    schema_version: str
+    surface_version: str
     transport_kind: str
     stability: str
     compatibility_policy: PublicMcpCompatibilityPolicy
@@ -2054,16 +2074,16 @@ class PublicMcpAdapterExport:
 
 @dataclass(frozen=True)
 class PublicMcpAdapterScaffold:
-    adapter_label: str
+    adapter_version: str
     surface: PublicMcpCompatibilitySurface
     base_url: str | None = None
     resource_uri_prefix: str = "nexa://public"
 
     def export(self) -> PublicMcpAdapterExport:
         return PublicMcpAdapterExport(
-            adapter_label=self.adapter_label,
-            contract_markers=self.surface.contract_markers,
-            runtime_markers=self.surface.runtime_markers,
+            adapter_version=self.adapter_version,
+            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
+            surface_version=self.surface.version,
             transport_kind="http-route-bridge",
             stability="scaffold",
             compatibility_policy=self.compatibility_policy(),
@@ -2078,9 +2098,10 @@ class PublicMcpAdapterScaffold:
         server_title: str = "Nexa Public Integration Surface",
     ) -> PublicMcpManifest:
         return PublicMcpManifest(
-            contract_markers=self.surface.contract_markers,
-            runtime_markers=self.surface.runtime_markers,
-            adapter_label=self.adapter_label,
+            manifest_version=PUBLIC_MCP_MANIFEST_VERSION,
+            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
+            adapter_version=self.adapter_version,
+            surface_version=self.surface.version,
             compatibility_policy=self.compatibility_policy(),
             server_name=server_name,
             server_title=server_title,
@@ -2094,22 +2115,25 @@ class PublicMcpAdapterScaffold:
 
     def compatibility_policy(self) -> PublicMcpCompatibilityPolicy:
         return PublicMcpCompatibilityPolicy(
-            supported_contract_markers=self.surface.contract_markers,
-            supported_runtime_markers=self.surface.runtime_markers,
-            supported_transport_kinds=("http-route-bridge",),
+            policy_version=PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION,
+            manifest_version=PUBLIC_MCP_MANIFEST_VERSION,
+            schema_version=PUBLIC_MCP_SCHEMA_VERSION,
+            surface_version=self.surface.version,
+            adapter_version=self.adapter_version,
+            host_bridge_version=MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
+            supported_manifest_versions=(PUBLIC_MCP_MANIFEST_VERSION,),
+            supported_schema_versions=(PUBLIC_MCP_SCHEMA_VERSION,),
         )
 
     def assert_consumer_compatibility(
         self,
         *,
-        required_contract_markers: tuple[str, ...] | list[str] | set[str] | None = None,
-        required_runtime_markers: tuple[str, ...] | list[str] | set[str] | None = None,
-        required_transport_kind: str | None = None,
+        manifest_version: str | None = None,
+        schema_version: str | None = None,
     ) -> None:
         self.compatibility_policy().assert_supported(
-            required_contract_markers=required_contract_markers,
-            required_runtime_markers=required_runtime_markers,
-            required_transport_kind=required_transport_kind,
+            manifest_version=manifest_version,
+            schema_version=schema_version,
         )
 
     def export_tool_schema(self, tool_name: str) -> PublicMcpArgumentSchema | None:
@@ -2136,14 +2160,6 @@ class PublicMcpAdapterScaffold:
         descriptor = self._resource_by_name(resource_name)
         return self._response_contract_for_descriptor(descriptor, kind="resource")
 
-    def export_tool_result_shape_profile(self, tool_name: str) -> PublicMcpResultShapeProfile:
-        descriptor = self._tool_by_name(tool_name)
-        return self._result_shape_profile_for_descriptor(descriptor, kind="tool")
-
-    def export_resource_result_shape_profile(self, resource_name: str) -> PublicMcpResultShapeProfile:
-        descriptor = self._resource_by_name(resource_name)
-        return self._result_shape_profile_for_descriptor(descriptor, kind="resource")
-
     def export_tool_recovery_policy(self, tool_name: str) -> PublicMcpRecoveryPolicy:
         descriptor = self._tool_by_name(tool_name)
         return self._recovery_policy_for_descriptor(descriptor, kind="tool")
@@ -2159,6 +2175,14 @@ class PublicMcpAdapterScaffold:
     def export_resource_transport_contract(self, resource_name: str) -> PublicMcpTransportContract:
         descriptor = self._resource_by_name(resource_name)
         return self._transport_contract_for_descriptor(descriptor, kind="resource")
+
+    def export_tool_lifecycle_control_profile(self, tool_name: str) -> PublicMcpLifecycleControlProfile:
+        descriptor = self._tool_by_name(tool_name)
+        return self._lifecycle_control_profile_for_descriptor(descriptor, kind="tool")
+
+    def export_resource_lifecycle_control_profile(self, resource_name: str) -> PublicMcpLifecycleControlProfile:
+        descriptor = self._resource_by_name(resource_name)
+        return self._lifecycle_control_profile_for_descriptor(descriptor, kind="resource")
 
     def normalize_tool_arguments(
         self,
@@ -2296,6 +2320,7 @@ class PublicMcpAdapterScaffold:
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
             transport_contract=self._transport_contract_for_descriptor(descriptor, kind="tool"),
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -2329,6 +2354,7 @@ class PublicMcpAdapterScaffold:
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
             transport_contract=self._transport_contract_for_descriptor(descriptor, kind="resource"),
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -2381,6 +2407,7 @@ class PublicMcpAdapterScaffold:
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
             transport_contract=self._transport_contract_for_descriptor(descriptor, kind="tool"),
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -2407,6 +2434,7 @@ class PublicMcpAdapterScaffold:
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
             transport_contract=self._transport_contract_for_descriptor(descriptor, kind="resource"),
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
         )
 
@@ -2424,6 +2452,7 @@ class PublicMcpAdapterScaffold:
             response_contract=self._response_contract_for_descriptor(descriptor, kind="tool"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="tool"),
             transport_contract=self._transport_contract_for_descriptor(descriptor, kind="tool"),
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="tool"),
             tags=descriptor.tags,
         )
 
@@ -2441,7 +2470,34 @@ class PublicMcpAdapterScaffold:
             response_contract=self._response_contract_for_descriptor(descriptor, kind="resource"),
             recovery_policy=self._recovery_policy_for_descriptor(descriptor, kind="resource"),
             transport_contract=self._transport_contract_for_descriptor(descriptor, kind="resource"),
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="resource"),
             tags=descriptor.tags,
+        )
+
+    def _lifecycle_control_profile_for_descriptor(
+        self,
+        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
+        *,
+        kind: str,
+    ) -> PublicMcpLifecycleControlProfile:
+        route_contract = self._route_contract_for_descriptor(descriptor, kind=kind)
+        spec = _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY.get(route_contract.route_family)
+        if spec is None:
+            raise ValueError(f"Missing public MCP lifecycle control profile for route_family: {route_contract.route_family}")
+        return PublicMcpLifecycleControlProfile(
+            name=descriptor.name,
+            route_name=descriptor.route_name,
+            kind=kind,
+            route_family=route_contract.route_family,
+            lifecycle_class=str(spec["lifecycle_class"]),
+            status_resource_name=spec.get("status_resource_name"),
+            result_resource_name=spec.get("result_resource_name"),
+            actions_resource_name=spec.get("actions_resource_name"),
+            trace_resource_name=spec.get("trace_resource_name"),
+            artifacts_resource_name=spec.get("artifacts_resource_name"),
+            preferred_control_tool_names=tuple(spec.get("preferred_control_tool_names", ())),
+            followup_route_names=tuple(spec.get("followup_route_names", ())),
+            review_tool_name=spec.get("review_tool_name"),
         )
 
     def _tool_by_name(self, tool_name: str) -> PublicMcpToolDescriptor:
@@ -2516,33 +2572,7 @@ class PublicMcpAdapterScaffold:
             response_media_type=str(spec.get("response_media_type", "application/json")),
             body_kind=str(spec.get("body_kind", "object")),
             required_top_level_keys=tuple(str(key) for key in spec.get("required_top_level_keys", ())),
-            result_shape_profile=self._result_shape_profile_for_descriptor(descriptor, kind=kind),
             response_type=getattr(descriptor, "response_type", None),
-        )
-
-    def _result_shape_profile_for_descriptor(
-        self,
-        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
-        *,
-        kind: str,
-    ) -> PublicMcpResultShapeProfile:
-        spec = _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME.get(descriptor.route_name)
-        if spec is None:
-            raise ValueError(f"Missing public MCP result-shape profile for route_name: {descriptor.route_name}")
-        route_contract = self._route_contract_for_descriptor(descriptor, kind=kind)
-        response_spec = _RESPONSE_CONTRACT_BY_ROUTE_NAME.get(descriptor.route_name, {})
-        return PublicMcpResultShapeProfile(
-            name=descriptor.name,
-            route_name=descriptor.route_name,
-            kind=kind,
-            route_family=route_contract.route_family,
-            response_shape=str(response_spec.get("response_shape", route_contract.route_family)),
-            profile_kind=str(spec["profile_kind"]),
-            identity_keys=tuple(str(key) for key in spec.get("identity_keys", ())),
-            state_keys=tuple(str(key) for key in spec.get("state_keys", ())),
-            collection_field_name=(str(spec["collection_field_name"]) if spec.get("collection_field_name") is not None else None),
-            count_field_name=(str(spec["count_field_name"]) if spec.get("count_field_name") is not None else None),
-            collection_item_identity_keys=tuple(str(key) for key in spec.get("collection_item_identity_keys", ())),
         )
 
     def _recovery_policy_for_descriptor(
@@ -2774,6 +2804,7 @@ def _build_public_orchestration_summary(
     transport_kind: str,
     route_contract: PublicMcpRouteContract | None,
     recovery_policy: PublicMcpRecoveryPolicy | None,
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None,
     transport_context: PublicMcpTransportContext | None,
     preflight_assessment: PublicMcpPreflightAssessment | None,
 ) -> PublicMcpOrchestrationSummary:
@@ -2786,6 +2817,8 @@ def _build_public_orchestration_summary(
 
     if route_family:
         labels.append(route_family)
+    if lifecycle_control_profile is not None:
+        labels.append(f"lifecycle:{lifecycle_control_profile.lifecycle_class}")
     if idempotency_class:
         labels.append(idempotency_class)
     labels.append(f"transport:{transport_kind}")
@@ -2809,6 +2842,13 @@ def _build_public_orchestration_summary(
             _append_unique(next_actions, "resolve_preflight_blockers")
     if recovery_policy is not None:
         _append_unique(next_actions, recovery_policy.timeout_recommended_action)
+    if lifecycle_control_profile is not None:
+        for route_name_candidate in lifecycle_control_profile.followup_route_names:
+            _append_unique(next_actions, route_name_candidate)
+        for control_name in lifecycle_control_profile.preferred_control_tool_names:
+            _append_unique(next_actions, control_name)
+        if lifecycle_control_profile.review_tool_name is not None:
+            _append_unique(next_actions, lifecycle_control_profile.review_tool_name)
     if not authorization_present and route_family in {"run-launch", "run-control", "workspace-shell-control"}:
         _append_unique(next_actions, "attach_authorization_before_execution")
     if not session_subject_present and route_family in {"run-launch", "run-control", "workspace-shell-control"}:
@@ -2843,6 +2883,7 @@ def _build_public_orchestration_summary(
         session_present=session_present,
         session_subject_present=session_subject_present,
         recommended_action=recommended_action,
+        lifecycle_control_profile=lifecycle_control_profile,
         summary_labels=tuple(labels),
         next_actions=tuple(next_actions),
     )
@@ -2861,6 +2902,7 @@ def _public_mcp_execution_report_error(
     transport_assessment: PublicMcpTransportAssessment | None = None,
     preflight_assessment: PublicMcpPreflightAssessment | None = None,
     orchestration_summary: PublicMcpOrchestrationSummary | None = None,
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None,
 ) -> PublicMcpExecutionReport:
     category = _classify_public_mcp_execution_error(phase=phase, exc=exc)
     return PublicMcpExecutionReport(
@@ -2873,6 +2915,7 @@ def _public_mcp_execution_report_error(
         transport_assessment=transport_assessment,
         preflight_assessment=preflight_assessment,
         orchestration_summary=orchestration_summary,
+        lifecycle_control_profile=lifecycle_control_profile,
         error=PublicMcpExecutionError(
             category=category,
             phase=phase,
@@ -2923,54 +2966,6 @@ def _assert_public_response_body_matches_contract(
             raise ValueError(
                 f"Missing required response keys for public route {response_contract.route_name}: {', '.join(missing)}"
             )
-
-    profile = response_contract.result_shape_profile
-    if profile is None:
-        return
-    if not isinstance(body, Mapping):
-        raise ValueError(
-            f"Result shape profile cannot be checked for public route {response_contract.route_name}: body is not an object"
-        )
-    missing_identity = [key for key in profile.identity_keys if key not in body]
-    if missing_identity:
-        raise ValueError(
-            f"Missing result identity keys for public route {response_contract.route_name}: {', '.join(missing_identity)}"
-        )
-    missing_state = [key for key in profile.state_keys if key not in body]
-    if missing_state:
-        raise ValueError(
-            f"Missing result state keys for public route {response_contract.route_name}: {', '.join(missing_state)}"
-        )
-    if profile.count_field_name is not None:
-        if profile.count_field_name not in body:
-            raise ValueError(
-                f"Missing result count field for public route {response_contract.route_name}: {profile.count_field_name}"
-            )
-        if not isinstance(body[profile.count_field_name], int):
-            raise ValueError(
-                f"Unexpected result count field type for public route {response_contract.route_name}: expected int at {profile.count_field_name}"
-            )
-    if profile.collection_field_name is not None:
-        if profile.collection_field_name not in body:
-            raise ValueError(
-                f"Missing result collection field for public route {response_contract.route_name}: {profile.collection_field_name}"
-            )
-        collection = body[profile.collection_field_name]
-        if not isinstance(collection, list):
-            raise ValueError(
-                f"Unexpected result collection field type for public route {response_contract.route_name}: expected list at {profile.collection_field_name}"
-            )
-        if profile.collection_item_identity_keys:
-            for index, item in enumerate(collection):
-                if not isinstance(item, Mapping):
-                    raise ValueError(
-                        f"Unexpected collection item type for public route {response_contract.route_name}: expected object items at {profile.collection_field_name}[{index}]"
-                    )
-                missing_item_keys = [key for key in profile.collection_item_identity_keys if key not in item]
-                if missing_item_keys:
-                    raise ValueError(
-                        f"Missing result collection item keys for public route {response_contract.route_name}: {', '.join(missing_item_keys)}"
-                    )
 
 
 def _normalize_public_framework_response(
@@ -3308,7 +3303,7 @@ def build_public_mcp_adapter_scaffold(
     """Return the minimal MCP adapter/export scaffold over the public SDK surface."""
 
     return PublicMcpAdapterScaffold(
-        adapter_label="mcp-adapter-scaffold",
+        adapter_version=MCP_ADAPTER_SCAFFOLD_VERSION,
         surface=surface or build_public_mcp_compatibility_surface(),
         base_url=base_url,
         resource_uri_prefix=resource_uri_prefix,
@@ -3341,6 +3336,7 @@ def build_public_mcp_host_bridge_scaffold(
     """Return the minimal in-process host bridge over the public MCP adapter scaffold."""
 
     return PublicMcpHostBridgeScaffold(
+        bridge_version=MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
         adapter_scaffold=build_public_mcp_adapter_scaffold(
             base_url=base_url,
             surface=surface,
@@ -3688,96 +3684,104 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
 }
 
 
-_RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
-    "launch_run": {
-        "profile_kind": "accepted-object",
-        "identity_keys": ("run_id",),
-        "state_keys": ("status",),
+_LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
+    "run-launch": {
+        "lifecycle_class": "run-entry",
+        "status_resource_name": "get_run_status",
+        "result_resource_name": "get_run_result",
+        "actions_resource_name": "get_run_actions",
+        "trace_resource_name": "get_run_trace",
+        "artifacts_resource_name": "list_run_artifacts",
+        "preferred_control_tool_names": ("retry_run", "force_reset_run", "mark_run_reviewed"),
+        "followup_route_names": ("get_run_status", "get_run_result", "get_run_actions", "list_run_artifacts", "get_run_trace"),
+        "review_tool_name": "mark_run_reviewed",
     },
-    "launch_workspace_shell": {
-        "profile_kind": "workspace-shell-launch",
-        "identity_keys": ("run_id",),
-        "state_keys": (),
+    "workspace-shell-launch": {
+        "lifecycle_class": "run-entry",
+        "status_resource_name": "get_run_status",
+        "result_resource_name": "get_run_result",
+        "actions_resource_name": "get_run_actions",
+        "trace_resource_name": "get_run_trace",
+        "artifacts_resource_name": "list_run_artifacts",
+        "preferred_control_tool_names": ("retry_run", "force_reset_run", "mark_run_reviewed"),
+        "followup_route_names": ("get_run_status", "get_run_result", "get_run_actions", "list_run_artifacts", "get_run_trace"),
+        "review_tool_name": "mark_run_reviewed",
     },
-    "commit_workspace_shell": {
-        "profile_kind": "workspace-transition",
-        "identity_keys": ("workspace_id",),
-        "state_keys": ("storage_role",),
+    "run-control": {
+        "lifecycle_class": "run-control",
+        "status_resource_name": "get_run_status",
+        "result_resource_name": "get_run_result",
+        "actions_resource_name": "get_run_actions",
+        "trace_resource_name": "get_run_trace",
+        "artifacts_resource_name": "list_run_artifacts",
+        "preferred_control_tool_names": ("retry_run", "force_reset_run", "mark_run_reviewed"),
+        "followup_route_names": ("get_run_status", "get_run_actions", "get_run_result"),
+        "review_tool_name": "mark_run_reviewed",
     },
-    "checkout_workspace_shell": {
-        "profile_kind": "workspace-transition",
-        "identity_keys": ("workspace_id",),
-        "state_keys": ("storage_role",),
+    "run-read": {
+        "lifecycle_class": "run-read",
+        "status_resource_name": "get_run_status",
+        "result_resource_name": "get_run_result",
+        "actions_resource_name": "get_run_actions",
+        "trace_resource_name": "get_run_trace",
+        "artifacts_resource_name": "list_run_artifacts",
+        "preferred_control_tool_names": ("retry_run", "force_reset_run", "mark_run_reviewed"),
+        "followup_route_names": ("get_run_result", "get_run_actions", "list_run_artifacts", "get_run_trace"),
+        "review_tool_name": "mark_run_reviewed",
     },
-    "retry_run": {
-        "profile_kind": "run-control",
-        "identity_keys": ("run_id",),
-        "state_keys": ("status",),
+    "run-trace": {
+        "lifecycle_class": "run-observability",
+        "status_resource_name": "get_run_status",
+        "actions_resource_name": "get_run_actions",
+        "trace_resource_name": "get_run_trace",
+        "artifacts_resource_name": "list_run_artifacts",
+        "followup_route_names": ("get_run_status", "get_run_actions"),
     },
-    "force_reset_run": {
-        "profile_kind": "run-control",
-        "identity_keys": ("run_id",),
-        "state_keys": ("status",),
+    "run-artifacts": {
+        "lifecycle_class": "run-observability",
+        "status_resource_name": "get_run_status",
+        "actions_resource_name": "get_run_actions",
+        "trace_resource_name": "get_run_trace",
+        "artifacts_resource_name": "list_run_artifacts",
+        "followup_route_names": ("get_run_status", "get_run_actions", "get_artifact_detail"),
     },
-    "mark_run_reviewed": {
-        "profile_kind": "run-control",
-        "identity_keys": ("run_id",),
-        "state_keys": ("status",),
+    "artifact-read": {
+        "lifecycle_class": "artifact-read",
+        "status_resource_name": "get_run_status",
+        "actions_resource_name": "get_run_actions",
+        "artifacts_resource_name": "list_run_artifacts",
+        "followup_route_names": ("list_run_artifacts", "get_run_status"),
     },
-    "get_run_status": {
-        "profile_kind": "run-status",
-        "identity_keys": ("run_id",),
-        "state_keys": ("status",),
+    "run-actions": {
+        "lifecycle_class": "run-control-introspection",
+        "status_resource_name": "get_run_status",
+        "actions_resource_name": "get_run_actions",
+        "followup_route_names": ("retry_run", "force_reset_run", "mark_run_reviewed"),
+        "review_tool_name": "mark_run_reviewed",
     },
-    "get_run_result": {
-        "profile_kind": "run-result",
-        "identity_keys": ("run_id",),
-        "state_keys": ("result_state",),
+    "workspace-shell-commit": {
+        "lifecycle_class": "workspace-shell-lifecycle",
+        "followup_route_names": ("get_workspace",),
     },
-    "list_workspace_runs": {
-        "profile_kind": "workspace-run-list",
-        "identity_keys": ("workspace_id",),
-        "collection_field_name": "runs",
-        "count_field_name": "returned_count",
-        "collection_item_identity_keys": ("run_id",),
+    "workspace-shell-checkout": {
+        "lifecycle_class": "workspace-shell-lifecycle",
+        "followup_route_names": ("get_workspace",),
     },
-    "get_run_trace": {
-        "profile_kind": "run-trace",
-        "identity_keys": ("workspace_id",),
-        "collection_field_name": "events",
-        "collection_item_identity_keys": ("sequence",),
+    "workspace-run-list": {
+        "lifecycle_class": "workspace-observability",
+        "followup_route_names": ("get_run_status", "get_run_result"),
     },
-    "list_run_artifacts": {
-        "profile_kind": "run-artifact-list",
-        "collection_field_name": "artifacts",
-        "count_field_name": "artifact_count",
-        "collection_item_identity_keys": ("artifact_id",),
+    "workspace-read": {
+        "lifecycle_class": "workspace-read",
+        "followup_route_names": ("list_workspace_runs",),
     },
-    "get_artifact_detail": {
-        "profile_kind": "artifact-detail",
-        "identity_keys": ("artifact_id",),
-        "state_keys": (),
+    "workspace-list": {
+        "lifecycle_class": "workspace-list",
+        "followup_route_names": ("get_workspace",),
     },
-    "get_run_actions": {
-        "profile_kind": "run-action-log",
-        "count_field_name": "returned_count",
-        "collection_field_name": "actions",
-        "collection_item_identity_keys": ("event_id",),
-    },
-    "get_recent_activity": {
-        "profile_kind": "recent-activity",
-        "count_field_name": "returned_count",
-        "collection_field_name": "activities",
-    },
-    "get_workspace": {
-        "profile_kind": "workspace-detail",
-        "identity_keys": ("workspace_id",),
-    },
-    "list_workspaces": {
-        "profile_kind": "workspace-list",
-        "count_field_name": "returned_count",
-        "collection_field_name": "workspaces",
-        "collection_item_identity_keys": ("workspace_id",),
+    "activity-read": {
+        "lifecycle_class": "activity-read",
+        "followup_route_names": ("get_workspace", "list_workspace_runs"),
     },
 }
 
@@ -3825,18 +3829,6 @@ def build_public_mcp_response_contracts() -> tuple[PublicMcpResponseContract, ..
     return tuple(contracts)
 
 
-def build_public_mcp_result_shape_profiles() -> tuple[PublicMcpResultShapeProfile, ...]:
-    """Return exported result-shape profiles for the curated public MCP surface."""
-
-    adapter = build_public_mcp_adapter_scaffold()
-    profiles: list[PublicMcpResultShapeProfile] = []
-    for tool in build_public_mcp_tools():
-        profiles.append(adapter.export_tool_result_shape_profile(tool.name))
-    for resource in build_public_mcp_resources():
-        profiles.append(adapter.export_resource_result_shape_profile(resource.name))
-    return tuple(profiles)
-
-
 def build_public_mcp_transport_contracts() -> tuple[PublicMcpTransportContract, ...]:
     """Return exported transport/session contracts for the curated public MCP surface."""
 
@@ -3859,6 +3851,18 @@ def build_public_mcp_recovery_policies() -> tuple[PublicMcpRecoveryPolicy, ...]:
     for resource in build_public_mcp_resources():
         policies.append(adapter.export_resource_recovery_policy(resource.name))
     return tuple(policies)
+
+
+def build_public_mcp_lifecycle_control_profiles() -> tuple[PublicMcpLifecycleControlProfile, ...]:
+    """Return exported lifecycle control profiles for the curated public MCP surface."""
+
+    adapter = build_public_mcp_adapter_scaffold()
+    profiles: list[PublicMcpLifecycleControlProfile] = []
+    for tool in build_public_mcp_tools():
+        profiles.append(adapter.export_tool_lifecycle_control_profile(tool.name))
+    for resource in build_public_mcp_resources():
+        profiles.append(adapter.export_resource_lifecycle_control_profile(resource.name))
+    return tuple(profiles)
 
 
 _TOOL_SPECS: tuple[dict[str, object], ...] = (
@@ -4063,20 +4067,8 @@ def build_public_mcp_route_contracts() -> tuple[PublicMcpRouteContract, ...]:
     return tuple(contracts)
 
 
-def build_public_mcp_contract_markers() -> tuple[str, ...]:
-    """Return the exported contract markers for the curated public MCP surface."""
-
-    return _PUBLIC_MCP_CONTRACT_MARKERS
-
-
-def build_public_mcp_runtime_markers() -> tuple[str, ...]:
-    """Return the exported runtime markers for the curated public MCP surface."""
-
-    return _PUBLIC_MCP_RUNTIME_MARKERS
-
-
 def build_public_mcp_compatibility_policy() -> PublicMcpCompatibilityPolicy:
-    """Return the marker-based compatibility policy for the curated public MCP surface."""
+    """Return the version-compatibility policy for the curated public MCP surface."""
 
     return build_public_mcp_adapter_scaffold().compatibility_policy()
 
@@ -4085,15 +4077,19 @@ def build_public_mcp_compatibility_surface() -> PublicMcpCompatibilitySurface:
     """Return the complete MCP compatibility shape for the public SDK boundary."""
 
     return PublicMcpCompatibilitySurface(
-        contract_markers=build_public_mcp_contract_markers(),
-        runtime_markers=build_public_mcp_runtime_markers(),
+        version=PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
         tools=build_public_mcp_tools(),
         resources=build_public_mcp_resources(),
     )
 
 
 __all__ = [
+    "PUBLIC_INTEGRATION_SDK_SURFACE_VERSION",
     "MCP_ADAPTER_SCAFFOLD_VERSION",
+    "MCP_HOST_BRIDGE_SCAFFOLD_VERSION",
+    "PUBLIC_MCP_MANIFEST_VERSION",
+    "PUBLIC_MCP_SCHEMA_VERSION",
+    "PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION",
     "PublicTypeRef",
     "PublicMcpToolDescriptor",
     "PublicMcpResourceDescriptor",
@@ -4106,8 +4102,8 @@ __all__ = [
     "PublicMcpTransportContext",
     "PublicMcpTransportAssessment",
     "PublicMcpPreflightAssessment",
+    "PublicMcpLifecycleControlProfile",
     "PublicMcpOrchestrationSummary",
-    "PublicMcpResultShapeProfile",
     "PublicMcpResponseContract",
     "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
@@ -4134,13 +4130,11 @@ __all__ = [
     "build_public_mcp_tools",
     "build_public_mcp_resources",
     "build_public_mcp_argument_schemas",
-    "build_public_mcp_contract_markers",
-    "build_public_mcp_runtime_markers",
     "build_public_mcp_route_contracts",
     "build_public_mcp_transport_contracts",
     "build_public_mcp_response_contracts",
-    "build_public_mcp_result_shape_profiles",
     "build_public_mcp_recovery_policies",
+    "build_public_mcp_lifecycle_control_profiles",
     "build_public_mcp_compatibility_policy",
     "build_public_mcp_compatibility_surface",
     "build_public_mcp_adapter_scaffold",

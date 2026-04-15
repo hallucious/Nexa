@@ -54,6 +54,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.17"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -113,9 +114,9 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
 
-    assert manifest.contract_markers == sdk.build_public_mcp_contract_markers()
-    assert manifest.runtime_markers == sdk.build_public_mcp_runtime_markers()
-    assert manifest.adapter_label == "mcp-adapter-scaffold"
+    assert sdk.PUBLIC_MCP_MANIFEST_VERSION == "1.7"
+    assert sdk.PUBLIC_MCP_SCHEMA_VERSION == "1.7"
+    assert sdk.PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
@@ -138,11 +139,10 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.13"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
-    assert bridge.export().bridge_label == "mcp-host-bridge-scaffold"
-    assert bridge.export().contract_markers == sdk.build_public_mcp_contract_markers()
     assert any(binding.route_name == "get_run_status" for binding in bridge.export().resource_bindings)
 
 
@@ -158,12 +158,19 @@ def test_sdk_root_exposes_public_mcp_compatibility_policy() -> None:
     policy = sdk.build_public_mcp_compatibility_policy()
 
     assert isinstance(policy, sdk.PublicMcpCompatibilityPolicy)
-    assert policy.supported_contract_markers == sdk.build_public_mcp_contract_markers()
-    assert policy.supported_runtime_markers == sdk.build_public_mcp_runtime_markers()
-    policy.assert_supported(
-        required_contract_markers=("argument-schema",),
-        required_runtime_markers=("execution-report",),
-    )
+    assert policy.supported_manifest_versions == ("1.7",)
+    assert policy.supported_schema_versions == ("1.7",)
+    policy.assert_supported(manifest_version="1.7", schema_version="1.7")
+
+
+def test_sdk_root_exposes_public_mcp_lifecycle_control_profiles() -> None:
+    profiles = sdk.build_public_mcp_lifecycle_control_profiles()
+    indexed = {(profile.kind, profile.route_name): profile for profile in profiles}
+
+    assert isinstance(indexed[("tool", "launch_run")], sdk.PublicMcpLifecycleControlProfile)
+    assert indexed[("tool", "launch_run")].status_resource_name == "get_run_status"
+    assert "retry_run" in indexed[("tool", "launch_run")].preferred_control_tool_names
+    assert indexed[("resource", "get_run_status")].result_resource_name == "get_run_result"
 
 
 def test_sdk_root_exposes_public_mcp_transport_contracts() -> None:
@@ -189,6 +196,8 @@ def test_sdk_root_exposes_public_mcp_transport_envelopes() -> None:
     assert isinstance(envelope.transport_context, sdk.PublicMcpTransportContext)
     assert envelope.transport_context.request_id == "req-789"
     assert envelope.transport_context.session_subject == "user-789"
+    assert envelope.lifecycle_control_profile is not None
+    assert envelope.lifecycle_control_profile.status_resource_name == "get_run_status"
 
 
 def test_sdk_root_exposes_public_mcp_transport_assessment() -> None:
@@ -261,6 +270,7 @@ def test_sdk_root_exposes_public_mcp_execution_report_types() -> None:
     assert report.phase == "dispatch_build"
     assert report.error.category == "request_contract_error"
     assert report.retryable is False
+    assert report.lifecycle_control_profile is None or report.lifecycle_control_profile.status_resource_name == "get_run_status"
     assert report.recommended_action == "fix_request_arguments"
 
 
