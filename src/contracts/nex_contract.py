@@ -99,6 +99,10 @@ class PublicNexShareBoundary:
     share_family: str
     transport_modes: tuple[ShareTransport, ...]
     access_modes: tuple[ShareAccessMode, ...]
+    public_access_posture: str
+    management_access_posture: str
+    history_access_posture: str
+    artifact_access_posture: str
     supported_roles: tuple[StorageRole, ...]
     artifact_format_family: str
     viewer_capabilities: tuple[str, ...]

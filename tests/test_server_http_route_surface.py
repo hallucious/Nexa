@@ -243,6 +243,8 @@ def test_public_share_artifact_route_returns_canonical_artifact_without_authenti
     assert response.body["artifact"]["meta"]["storage_role"] == "commit_snapshot"
     assert response.body["artifact"]["meta"]["commit_id"] == "snap-share-001"
     assert response.body["share_boundary"]["artifact_format_family"] == ".nex"
+    assert response.body["share_boundary"]["public_access_posture"] == "anonymous_readonly"
+    assert response.body["share_boundary"]["management_access_posture"] == "issuer_authenticated_lifecycle_management"
     assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
 
 

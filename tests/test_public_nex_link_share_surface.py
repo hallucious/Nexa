@@ -66,6 +66,10 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.share_family == "nex.public-link-share"
     assert boundary.transport_modes == ("link",)
     assert boundary.access_modes == ("public_readonly",)
+    assert boundary.public_access_posture == "anonymous_readonly"
+    assert boundary.management_access_posture == "issuer_authenticated_lifecycle_management"
+    assert boundary.history_access_posture == "public_audit_history"
+    assert boundary.artifact_access_posture == "capability_bounded_artifact_access"
     assert boundary.supported_roles == ("working_save", "commit_snapshot")
     assert boundary.artifact_format_family == ".nex"
     assert boundary.viewer_capabilities == ("inspect_metadata", "download_artifact", "import_copy")

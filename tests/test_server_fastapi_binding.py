@@ -1643,6 +1643,8 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     assert payload['audit_summary']['event_count'] == 1
     assert payload['source_artifact']['storage_role'] == 'commit_snapshot'
     assert payload['share_boundary']['share_family'] == 'nex.public-link-share'
+    assert payload['share_boundary']['public_access_posture'] == 'anonymous_readonly'
+    assert payload['share_boundary']['management_access_posture'] == 'issuer_authenticated_lifecycle_management'
     assert payload['artifact_boundary']['role_boundary']['identity_field'] == 'commit_id'
 
     history_response = client.get('/api/public-shares/share-fastapi-001/history')

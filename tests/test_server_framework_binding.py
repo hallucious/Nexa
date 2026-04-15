@@ -423,6 +423,8 @@ def test_framework_binding_handles_public_share_round_trip() -> None:
     assert parsed["audit_summary"]["event_count"] == 1
     assert parsed["source_artifact"]["storage_role"] == "commit_snapshot"
     assert parsed["share_boundary"]["share_family"] == "nex.public-link-share"
+    assert parsed["share_boundary"]["public_access_posture"] == "anonymous_readonly"
+    assert parsed["share_boundary"]["management_access_posture"] == "issuer_authenticated_lifecycle_management"
     assert parsed["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
 
 
