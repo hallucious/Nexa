@@ -22,7 +22,7 @@ from src.server.framework_binding_models import FrameworkInboundRequest, Framewo
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 
-PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.13"
+PUBLIC_INTEGRATION_SDK_SURFACE_VERSION = "1.14"
 
 
 @dataclass(frozen=True)
@@ -279,6 +279,7 @@ class PublicMcpExecutionReport:
     phase: str
     transport_context: PublicMcpTransportContext | None = None
     transport_assessment: PublicMcpTransportAssessment | None = None
+    preflight_assessment: PublicMcpPreflightAssessment | None = None
     normalized_response: PublicMcpNormalizedResponse | None = None
     error: PublicMcpExecutionError | None = None
 
@@ -317,6 +318,7 @@ class PublicMcpExecutionReport:
             "recommended_action": self.recommended_action,
             "transport_context": self.transport_context.to_dict() if self.transport_context is not None else None,
             "transport_assessment": self.transport_assessment.to_dict() if self.transport_assessment is not None else None,
+            "preflight_assessment": self.preflight_assessment.to_dict() if self.preflight_assessment is not None else None,
             "normalized_response": self.normalized_response.to_dict() if self.normalized_response is not None else None,
             "error": self.error.to_dict() if self.error is not None else None,
         }
@@ -489,6 +491,47 @@ class PublicMcpTransportAssessment:
         }
 
 
+@dataclass(frozen=True)
+class PublicMcpPreflightAssessment:
+    name: str
+    route_name: str
+    kind: str
+    transport_kind: str
+    route_contract: PublicMcpRouteContract | None
+    response_contract: PublicMcpResponseContract | None
+    recovery_policy: PublicMcpRecoveryPolicy | None
+    transport_contract: PublicMcpTransportContract | None
+    transport_context: PublicMcpTransportContext | None
+    transport_assessment: PublicMcpTransportAssessment | None
+    blockers: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    suggested_actions: tuple[str, ...] = ()
+    risk_level: str = "low"
+
+    @property
+    def ready(self) -> bool:
+        return len(self.blockers) == 0
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "transport_kind": self.transport_kind,
+            "route_contract": self.route_contract.to_dict() if self.route_contract is not None else None,
+            "response_contract": self.response_contract.to_dict() if self.response_contract is not None else None,
+            "recovery_policy": self.recovery_policy.to_dict() if self.recovery_policy is not None else None,
+            "transport_contract": self.transport_contract.to_dict() if self.transport_contract is not None else None,
+            "transport_context": self.transport_context.to_dict() if self.transport_context is not None else None,
+            "transport_assessment": self.transport_assessment.to_dict() if self.transport_assessment is not None else None,
+            "ready": self.ready,
+            "blockers": list(self.blockers),
+            "warnings": list(self.warnings),
+            "suggested_actions": list(self.suggested_actions),
+            "risk_level": self.risk_level,
+        }
+
+
 PUBLIC_MCP_MANIFEST_VERSION = "1.7"
 PUBLIC_MCP_SCHEMA_VERSION = "1.7"
 PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION = "1.0"
@@ -601,7 +644,7 @@ class PublicMcpManifest:
 MCP_ADAPTER_SCAFFOLD_VERSION = "1.0"
 
 
-MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.11"
+MCP_HOST_BRIDGE_SCAFFOLD_VERSION = "1.12"
 
 
 _HTTP_QUERY_CAPABLE_METHODS = frozenset({"GET", "DELETE"})
@@ -650,6 +693,7 @@ class PublicMcpFrameworkEnvelope:
     transport_contract: PublicMcpTransportContract | None
     transport_context: PublicMcpTransportContext
     transport_assessment: PublicMcpTransportAssessment
+    preflight_assessment: PublicMcpPreflightAssessment
     dispatch: PublicMcpFrameworkDispatch
 
 
@@ -661,6 +705,7 @@ class PublicMcpHttpEnvelope:
     transport_contract: PublicMcpTransportContract | None
     transport_context: PublicMcpTransportContext
     transport_assessment: PublicMcpTransportAssessment
+    preflight_assessment: PublicMcpPreflightAssessment
     dispatch: PublicMcpHttpDispatch
 
 
@@ -1041,6 +1086,77 @@ class PublicMcpHostBridgeScaffold:
             transport_contract=contract,
         )
 
+    def assess_preflight(
+        self,
+        *,
+        name: str,
+        route_name: str,
+        kind: str,
+        transport_kind: str,
+        route_contract: PublicMcpRouteContract | None,
+        response_contract: PublicMcpResponseContract | None,
+        recovery_policy: PublicMcpRecoveryPolicy | None,
+        transport_contract: PublicMcpTransportContract | None,
+        transport_context: PublicMcpTransportContext | None,
+        transport_assessment: PublicMcpTransportAssessment | None,
+    ) -> PublicMcpPreflightAssessment:
+        return _build_public_preflight_assessment(
+            name=name,
+            route_name=route_name,
+            kind=kind,
+            transport_kind=transport_kind,
+            route_contract=route_contract,
+            response_contract=response_contract,
+            recovery_policy=recovery_policy,
+            transport_contract=transport_contract,
+            transport_context=transport_context,
+            transport_assessment=transport_assessment,
+        )
+
+    def preflight_framework_tool(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpPreflightAssessment:
+        envelope = self.build_framework_tool_envelope(tool_name, arguments, headers=headers, session_claims=session_claims)
+        return envelope.preflight_assessment
+
+    def preflight_framework_resource(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpPreflightAssessment:
+        envelope = self.build_framework_resource_envelope(resource_name, arguments, headers=headers, session_claims=session_claims)
+        return envelope.preflight_assessment
+
+    def preflight_http_tool(
+        self,
+        tool_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpPreflightAssessment:
+        envelope = self.build_http_tool_envelope(tool_name, arguments, headers=headers, session_claims=session_claims)
+        return envelope.preflight_assessment
+
+    def preflight_http_resource(
+        self,
+        resource_name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        headers: Mapping[str, Any] | None = None,
+        session_claims: Mapping[str, Any] | None = None,
+    ) -> PublicMcpPreflightAssessment:
+        envelope = self.build_http_resource_envelope(resource_name, arguments, headers=headers, session_claims=session_claims)
+        return envelope.preflight_assessment
+
     def build_framework_tool_envelope(
         self,
         tool_name: str,
@@ -1059,13 +1175,26 @@ class PublicMcpHostBridgeScaffold:
             session_claims=session_claims,
             transport_contract=transport_contract,
         )
+        transport_assessment = _assess_public_transport_context(transport_context)
         return PublicMcpFrameworkEnvelope(
             name=dispatch.name,
             route_name=dispatch.route_name,
             kind=dispatch.kind,
             transport_contract=transport_contract,
             transport_context=transport_context,
-            transport_assessment=_assess_public_transport_context(transport_context),
+            transport_assessment=transport_assessment,
+            preflight_assessment=self.assess_preflight(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="framework",
+                route_contract=dispatch.route_contract,
+                response_contract=dispatch.response_contract,
+                recovery_policy=dispatch.recovery_policy,
+                transport_contract=transport_contract,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
+            ),
             dispatch=dispatch,
         )
 
@@ -1087,13 +1216,26 @@ class PublicMcpHostBridgeScaffold:
             session_claims=session_claims,
             transport_contract=transport_contract,
         )
+        transport_assessment = _assess_public_transport_context(transport_context)
         return PublicMcpFrameworkEnvelope(
             name=dispatch.name,
             route_name=dispatch.route_name,
             kind=dispatch.kind,
             transport_contract=transport_contract,
             transport_context=transport_context,
-            transport_assessment=_assess_public_transport_context(transport_context),
+            transport_assessment=transport_assessment,
+            preflight_assessment=self.assess_preflight(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="framework",
+                route_contract=dispatch.route_contract,
+                response_contract=dispatch.response_contract,
+                recovery_policy=dispatch.recovery_policy,
+                transport_contract=transport_contract,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
+            ),
             dispatch=dispatch,
         )
 
@@ -1115,13 +1257,26 @@ class PublicMcpHostBridgeScaffold:
             session_claims=session_claims,
             transport_contract=transport_contract,
         )
+        transport_assessment = _assess_public_transport_context(transport_context)
         return PublicMcpHttpEnvelope(
             name=dispatch.name,
             route_name=dispatch.route_name,
             kind=dispatch.kind,
             transport_contract=transport_contract,
             transport_context=transport_context,
-            transport_assessment=_assess_public_transport_context(transport_context),
+            transport_assessment=transport_assessment,
+            preflight_assessment=self.assess_preflight(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="http",
+                route_contract=dispatch.route_contract,
+                response_contract=dispatch.response_contract,
+                recovery_policy=dispatch.recovery_policy,
+                transport_contract=transport_contract,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
+            ),
             dispatch=dispatch,
         )
 
@@ -1143,13 +1298,26 @@ class PublicMcpHostBridgeScaffold:
             session_claims=session_claims,
             transport_contract=transport_contract,
         )
+        transport_assessment = _assess_public_transport_context(transport_context)
         return PublicMcpHttpEnvelope(
             name=dispatch.name,
             route_name=dispatch.route_name,
             kind=dispatch.kind,
             transport_contract=transport_contract,
             transport_context=transport_context,
-            transport_assessment=_assess_public_transport_context(transport_context),
+            transport_assessment=transport_assessment,
+            preflight_assessment=self.assess_preflight(
+                name=dispatch.name,
+                route_name=dispatch.route_name,
+                kind=dispatch.kind,
+                transport_kind="http",
+                route_contract=dispatch.route_contract,
+                response_contract=dispatch.response_contract,
+                recovery_policy=dispatch.recovery_policy,
+                transport_contract=transport_contract,
+                transport_context=transport_context,
+                transport_assessment=transport_assessment,
+            ),
             dispatch=dispatch,
         )
 
@@ -1322,6 +1490,7 @@ class PublicMcpHostBridgeScaffold:
         *,
         transport_context: PublicMcpTransportContext | None = None,
         transport_assessment: PublicMcpTransportAssessment | None = None,
+        preflight_assessment: PublicMcpPreflightAssessment | None = None,
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
@@ -1337,6 +1506,7 @@ class PublicMcpHostBridgeScaffold:
                 recovery_policy=dispatch.recovery_policy,
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
+                preflight_assessment=preflight_assessment,
             )
         try:
             response = handler(request=dispatch.request, **handler_kwargs)
@@ -1351,6 +1521,7 @@ class PublicMcpHostBridgeScaffold:
                 recovery_policy=dispatch.recovery_policy,
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
+                preflight_assessment=preflight_assessment,
             )
         response_contract = dispatch.response_contract
         if response_contract is None:
@@ -1364,6 +1535,7 @@ class PublicMcpHostBridgeScaffold:
                 recovery_policy=dispatch.recovery_policy,
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
+                preflight_assessment=preflight_assessment,
             )
         try:
             normalized = _normalize_public_framework_response(
@@ -1384,6 +1556,7 @@ class PublicMcpHostBridgeScaffold:
                 recovery_policy=dispatch.recovery_policy,
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
+                preflight_assessment=preflight_assessment,
             )
         return PublicMcpExecutionReport(
             name=dispatch.name,
@@ -1393,6 +1566,7 @@ class PublicMcpHostBridgeScaffold:
             phase="completed",
             transport_context=transport_context,
             transport_assessment=transport_assessment,
+            preflight_assessment=preflight_assessment,
             normalized_response=normalized,
         )
 
@@ -1425,6 +1599,7 @@ class PublicMcpHostBridgeScaffold:
             envelope.dispatch,
             transport_context=envelope.transport_context,
             transport_assessment=envelope.transport_assessment,
+            preflight_assessment=envelope.preflight_assessment,
             **handler_kwargs,
         )
 
@@ -1457,6 +1632,7 @@ class PublicMcpHostBridgeScaffold:
             envelope.dispatch,
             transport_context=envelope.transport_context,
             transport_assessment=envelope.transport_assessment,
+            preflight_assessment=envelope.preflight_assessment,
             **handler_kwargs,
         )
 
@@ -1466,6 +1642,7 @@ class PublicMcpHostBridgeScaffold:
         *,
         transport_context: PublicMcpTransportContext | None = None,
         transport_assessment: PublicMcpTransportAssessment | None = None,
+        preflight_assessment: PublicMcpPreflightAssessment | None = None,
         **handler_kwargs: Any,
     ) -> PublicMcpExecutionReport:
         try:
@@ -1481,6 +1658,7 @@ class PublicMcpHostBridgeScaffold:
                 recovery_policy=dispatch.recovery_policy,
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
+                preflight_assessment=preflight_assessment,
             )
         try:
             response = handler(http_request=dispatch.request, **handler_kwargs)
@@ -1495,6 +1673,7 @@ class PublicMcpHostBridgeScaffold:
                 recovery_policy=dispatch.recovery_policy,
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
+                preflight_assessment=preflight_assessment,
             )
         response_contract = dispatch.response_contract
         if response_contract is None:
@@ -1508,6 +1687,7 @@ class PublicMcpHostBridgeScaffold:
                 recovery_policy=dispatch.recovery_policy,
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
+                preflight_assessment=preflight_assessment,
             )
         try:
             normalized = _normalize_public_http_response(
@@ -1528,6 +1708,7 @@ class PublicMcpHostBridgeScaffold:
                 recovery_policy=dispatch.recovery_policy,
                 transport_context=transport_context,
                 transport_assessment=transport_assessment,
+                preflight_assessment=preflight_assessment,
             )
         return PublicMcpExecutionReport(
             name=dispatch.name,
@@ -1537,6 +1718,7 @@ class PublicMcpHostBridgeScaffold:
             phase="completed",
             transport_context=transport_context,
             transport_assessment=transport_assessment,
+            preflight_assessment=preflight_assessment,
             normalized_response=normalized,
         )
 
@@ -1569,6 +1751,7 @@ class PublicMcpHostBridgeScaffold:
             envelope.dispatch,
             transport_context=envelope.transport_context,
             transport_assessment=envelope.transport_assessment,
+            preflight_assessment=envelope.preflight_assessment,
             **handler_kwargs,
         )
 
@@ -1601,6 +1784,7 @@ class PublicMcpHostBridgeScaffold:
             envelope.dispatch,
             transport_context=envelope.transport_context,
             transport_assessment=envelope.transport_assessment,
+            preflight_assessment=envelope.preflight_assessment,
             **handler_kwargs,
         )
 
@@ -2356,6 +2540,7 @@ def _public_mcp_execution_report_error(
     recovery_policy: PublicMcpRecoveryPolicy | None = None,
     transport_context: PublicMcpTransportContext | None = None,
     transport_assessment: PublicMcpTransportAssessment | None = None,
+    preflight_assessment: PublicMcpPreflightAssessment | None = None,
 ) -> PublicMcpExecutionReport:
     category = _classify_public_mcp_execution_error(phase=phase, exc=exc)
     return PublicMcpExecutionReport(
@@ -2366,6 +2551,7 @@ def _public_mcp_execution_report_error(
         phase=phase,
         transport_context=transport_context,
         transport_assessment=transport_assessment,
+        preflight_assessment=preflight_assessment,
         error=PublicMcpExecutionError(
             category=category,
             phase=phase,
@@ -3437,6 +3623,7 @@ __all__ = [
     "PublicMcpTransportContract",
     "PublicMcpTransportContext",
     "PublicMcpTransportAssessment",
+    "PublicMcpPreflightAssessment",
     "PublicMcpResponseContract",
     "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
@@ -3512,5 +3699,74 @@ def _assess_public_transport_context(context: PublicMcpTransportContext) -> Publ
         transport_context=context,
         warnings=tuple(warnings),
         suggested_actions=tuple(actions),
+    )
+
+
+def _build_public_preflight_assessment(
+    *,
+    name: str,
+    route_name: str,
+    kind: str,
+    transport_kind: str,
+    route_contract: PublicMcpRouteContract | None,
+    response_contract: PublicMcpResponseContract | None,
+    recovery_policy: PublicMcpRecoveryPolicy | None,
+    transport_contract: PublicMcpTransportContract | None,
+    transport_context: PublicMcpTransportContext | None,
+    transport_assessment: PublicMcpTransportAssessment | None,
+) -> PublicMcpPreflightAssessment:
+    blockers: list[str] = []
+    warnings: list[str] = []
+    actions: list[str] = []
+
+    if transport_assessment is not None:
+        warnings.extend(list(transport_assessment.warnings))
+        actions.extend(list(transport_assessment.suggested_actions))
+
+    idempotency = recovery_policy.idempotency_class if recovery_policy is not None else "unknown"
+    if idempotency != "read-only":
+        _append_unique(warnings, "non_idempotent_route_family")
+        _append_unique(actions, "verify_execution_intent")
+
+    if transport_assessment is not None and transport_contract is not None and idempotency != "read-only":
+        if "missing_identity_context" in transport_assessment.warnings:
+            _append_unique(warnings, "missing_identity_context_for_mutation_route")
+            _append_unique(actions, "attach_identity_context_before_execution")
+        if "missing_request_id" in transport_assessment.warnings:
+            _append_unique(warnings, "missing_request_id_for_mutation_route")
+            _append_unique(actions, "attach_request_id_before_execution")
+
+    if transport_contract is not None and transport_context is not None:
+        if transport_contract.authorization_mode == "required-pass-through" and not transport_context.authorization_present:
+            blockers.append("authorization_header_required")
+            _append_unique(actions, "forward_authorization_header")
+        if transport_contract.session_subject_mode == "required-pass-through" and transport_context.session_subject is None:
+            blockers.append("session_subject_required")
+            _append_unique(actions, "forward_subject_session_claim")
+        if transport_contract.request_id_mode == "required" and not transport_context.request_id:
+            blockers.append("request_id_required")
+            _append_unique(actions, "attach_request_id")
+
+    risk_level = "low"
+    if warnings:
+        risk_level = "elevated"
+    if blockers or any(flag in warnings for flag in ("missing_identity_context_for_mutation_route", "missing_request_id_for_mutation_route")):
+        risk_level = "high"
+
+    return PublicMcpPreflightAssessment(
+        name=name,
+        route_name=route_name,
+        kind=kind,
+        transport_kind=transport_kind,
+        route_contract=route_contract,
+        response_contract=response_contract,
+        recovery_policy=recovery_policy,
+        transport_contract=transport_contract,
+        transport_context=transport_context,
+        transport_assessment=transport_assessment,
+        blockers=tuple(blockers),
+        warnings=tuple(warnings),
+        suggested_actions=tuple(actions),
+        risk_level=risk_level,
     )
 

@@ -32,6 +32,7 @@ from src.sdk.integration import (
     PublicMcpTransportContract,
     PublicMcpTransportContext,
     PublicMcpTransportAssessment,
+    PublicMcpPreflightAssessment,
     PublicMcpFrameworkEnvelope,
     PublicMcpHttpEnvelope,
     PublicMcpResponseContract,
@@ -89,7 +90,7 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.15"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.16"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -123,9 +124,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.13"
+    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.14"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.13"
+    assert surface.version == "1.14"
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -222,7 +223,7 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.11"
+    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.12"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -1024,3 +1025,52 @@ def test_execution_report_includes_transport_assessment_for_launch_run() -> None
     assert "missing_identity_context" in report.transport_assessment.warnings
 
 
+
+
+def test_framework_tool_envelope_includes_preflight_assessment() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    envelope = bridge.build_framework_tool_envelope(
+        "launch_run",
+        {
+            "workspace_id": "ws-001",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-001"},
+        },
+        headers={"X-Request-Id": "req-100"},
+    )
+
+    assert isinstance(envelope.preflight_assessment, PublicMcpPreflightAssessment)
+    assert envelope.preflight_assessment.ready is True
+    assert envelope.preflight_assessment.risk_level == "high"
+    assert "non_idempotent_route_family" in envelope.preflight_assessment.warnings
+    assert "missing_identity_context_for_mutation_route" in envelope.preflight_assessment.warnings
+    assert "attach_identity_context_before_execution" in envelope.preflight_assessment.suggested_actions
+
+
+def test_preflight_framework_resource_low_risk_with_full_transport_context() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    preflight = bridge.preflight_framework_resource(
+        "get_run_status",
+        {"run_id": "run-001"},
+        headers={"X-Request-Id": "req-200", "Accept-Language": "ko"},
+    )
+
+    assert preflight.ready is True
+    assert preflight.risk_level == "low"
+    assert preflight.warnings == ()
+
+
+def test_execution_report_includes_preflight_assessment_for_launch_run() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+    report = bridge.execute_framework_tool_report(
+        "launch_run",
+        {
+            "workspace_id": "ws-001",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-001"},
+        },
+        headers={"X-Request-Id": "req-111"},
+    )
+
+    assert report.preflight_assessment is not None
+    assert report.preflight_assessment.risk_level == "high"
+    assert "attach_identity_context_before_execution" in report.preflight_assessment.suggested_actions
+    assert report.to_dict()["preflight_assessment"]["risk_level"] == "high"

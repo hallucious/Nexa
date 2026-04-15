@@ -54,7 +54,7 @@ def _working_save_model() -> WorkingSaveModel:
 
 
 def test_sdk_root_exposes_curated_public_modules() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.15"
+    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.16"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.artifacts is artifacts
     assert sdk.server is server
@@ -139,7 +139,7 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
         {"run_id": "run-1", "include": "summary"},
     )
 
-    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.11"
+    assert sdk.MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.12"
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
@@ -285,3 +285,36 @@ def test_sdk_root_exposes_public_mcp_recovery_policies() -> None:
     assert isinstance(indexed["launch_run"], sdk.PublicMcpRecoveryPolicy)
     assert indexed["launch_run"].timeout_recommended_action == "inspect_launch_outcome_before_retry"
     assert indexed["get_run_status"].safe_to_retry_same_request_on_timeout is True
+
+
+def test_sdk_root_exposes_public_mcp_preflight_assessment() -> None:
+    bridge = sdk.build_public_mcp_host_bridge_scaffold()
+    preflight = bridge.preflight_framework_tool(
+        "launch_run",
+        {
+            "workspace_id": "ws-1",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-1"},
+        },
+        headers={"X-Request-Id": "req-500"},
+    )
+
+    assert isinstance(preflight, sdk.PublicMcpPreflightAssessment)
+    assert preflight.risk_level == "high"
+    assert preflight.ready is True
+    assert "non_idempotent_route_family" in preflight.warnings
+
+
+def test_sdk_root_execution_report_includes_preflight_assessment() -> None:
+    bridge = sdk.build_public_mcp_host_bridge_scaffold()
+    report = bridge.execute_framework_tool_report(
+        "launch_run",
+        {
+            "workspace_id": "ws-1",
+            "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-1"},
+        },
+        headers={"X-Request-Id": "req-501"},
+    )
+
+    assert isinstance(report.preflight_assessment, sdk.PublicMcpPreflightAssessment)
+    assert report.preflight_assessment is not None
+    assert report.preflight_assessment.risk_level == "high"
