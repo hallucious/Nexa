@@ -21,6 +21,8 @@ FindingCategory = Literal[
 FindingSeverity = Literal["low", "medium", "high"]
 ValidationResult = Literal["passed", "passed_with_findings", "failed"]
 LoadStatus = Literal["loaded", "loaded_with_findings", "rejected"]
+ShareTransport = Literal["link"]
+ShareAccessMode = Literal["public_readonly"]
 
 WORKING_SAVE_ROLE: StorageRole = "working_save"
 COMMIT_SNAPSHOT_ROLE: StorageRole = "commit_snapshot"
@@ -83,4 +85,29 @@ class PublicNexArtifactDescriptor:
     optional_sections: tuple[str, ...]
     forbidden_sections: tuple[str, ...]
     export_ready: bool
+    source_working_save_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PublicNexShareBoundary:
+    share_family: str
+    transport_modes: tuple[ShareTransport, ...]
+    access_modes: tuple[ShareAccessMode, ...]
+    supported_roles: tuple[StorageRole, ...]
+    artifact_format_family: str
+    viewer_capabilities: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PublicNexShareDescriptor:
+    share_id: str
+    share_path: str
+    transport: ShareTransport
+    access_mode: ShareAccessMode
+    storage_role: StorageRole
+    canonical_ref: str
+    title: str
+    summary: Optional[str]
+    artifact_format_family: str
+    viewer_capabilities: tuple[str, ...]
     source_working_save_id: Optional[str] = None

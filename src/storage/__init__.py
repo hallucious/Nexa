@@ -30,6 +30,13 @@ from src.storage.nex_api import (
     validate_commit_snapshot,
     validate_working_save,
 )
+from src.storage.share_api import (
+    describe_public_nex_link_share,
+    export_public_nex_link_share,
+    get_public_nex_share_boundary,
+    load_public_nex_link_share,
+    save_public_nex_link_share_file,
+)
 
 __all__ = [
     'load_nex',
@@ -38,6 +45,11 @@ __all__ = [
     'get_public_nex_format_boundary',
     'describe_public_nex_artifact',
     'export_public_nex_artifact',
+    'get_public_nex_share_boundary',
+    'export_public_nex_link_share',
+    'load_public_nex_link_share',
+    'describe_public_nex_link_share',
+    'save_public_nex_link_share_file',
     'create_execution_record_from_snapshot',
     'summarize_execution_record_for_working_save',
     'serialize_execution_record',
