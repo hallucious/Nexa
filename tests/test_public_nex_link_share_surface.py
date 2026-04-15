@@ -14,6 +14,8 @@ from src.storage.share_api import (
     get_public_nex_share_boundary,
     list_public_nex_link_share_audit_history,
     load_public_nex_link_share,
+    revoke_public_nex_link_shares_for_issuer,
+    extend_public_nex_link_shares_for_issuer_expiration,
     revoke_public_nex_link_share,
     save_public_nex_link_share_file,
     extend_public_nex_link_share_expiration,
@@ -302,3 +304,70 @@ def test_share_audit_history_appends_extend_and_revoke_events() -> None:
 
     assert [entry["event_type"] for entry in history] == ["created", "expiration_extended", "revoked"]
     assert history[-1]["actor_user_ref"] == "user-owner"
+
+
+def test_revoke_public_nex_link_shares_for_issuer_updates_all_requested_targets() -> None:
+    sources = (
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(name="owner_a"), commit_id="commit-owner-a"),
+            share_id="share-owner-a",
+            issued_by_user_ref="user-owner",
+            created_at="2026-04-15T12:00:00+00:00",
+        ),
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(name="owner_b"), commit_id="commit-owner-b"),
+            share_id="share-owner-b",
+            issued_by_user_ref="user-owner",
+            created_at="2026-04-15T12:05:00+00:00",
+        ),
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(name="other_c"), commit_id="commit-other-c"),
+            share_id="share-other-c",
+            issued_by_user_ref="user-other",
+            created_at="2026-04-15T12:10:00+00:00",
+        ),
+    )
+
+    updated = revoke_public_nex_link_shares_for_issuer(
+        sources,
+        "user-owner",
+        ["share-owner-a", "share-owner-b"],
+        now_iso="2026-04-15T13:00:00+00:00",
+        actor_user_ref="user-owner",
+    )
+
+    descriptors = [describe_public_nex_link_share(payload, now_iso="2026-04-15T13:00:00+00:00") for payload in updated]
+    assert [descriptor.share_id for descriptor in descriptors] == ["share-owner-a", "share-owner-b"]
+    assert all(descriptor.lifecycle_state == "revoked" for descriptor in descriptors)
+
+
+def test_extend_public_nex_link_shares_for_issuer_expiration_updates_all_requested_targets() -> None:
+    sources = (
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(name="owner_a"), commit_id="commit-owner-a2"),
+            share_id="share-owner-a2",
+            issued_by_user_ref="user-owner",
+            created_at="2026-04-15T12:00:00+00:00",
+            expires_at="2026-04-20T00:00:00+00:00",
+        ),
+        export_public_nex_link_share(
+            create_commit_snapshot_from_working_save(_working_save(name="owner_b"), commit_id="commit-owner-b2"),
+            share_id="share-owner-b2",
+            issued_by_user_ref="user-owner",
+            created_at="2026-04-15T12:05:00+00:00",
+            expires_at="2026-04-20T00:00:00+00:00",
+        ),
+    )
+
+    updated = extend_public_nex_link_shares_for_issuer_expiration(
+        sources,
+        "user-owner",
+        ["share-owner-a2", "share-owner-b2"],
+        expires_at="2026-04-25T00:00:00+00:00",
+        now_iso="2026-04-15T13:00:00+00:00",
+        actor_user_ref="user-owner",
+    )
+
+    descriptors = [describe_public_nex_link_share(payload, now_iso="2026-04-15T13:00:00+00:00") for payload in updated]
+    assert [descriptor.share_id for descriptor in descriptors] == ["share-owner-a2", "share-owner-b2"]
+    assert all(descriptor.expires_at == "2026-04-25T00:00:00+00:00" for descriptor in descriptors)

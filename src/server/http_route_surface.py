@@ -40,10 +40,12 @@ from src.storage.share_api import (
     ensure_public_nex_link_share_operation_allowed,
     export_public_nex_link_share,
     extend_public_nex_link_share_expiration,
+    extend_public_nex_link_shares_for_issuer_expiration,
     list_public_nex_link_share_audit_history,
     list_public_nex_link_shares_for_issuer,
     load_public_nex_link_share,
     revoke_public_nex_link_share,
+    revoke_public_nex_link_shares_for_issuer,
     summarize_public_nex_link_shares_for_issuer,
 )
 from src.ui.i18n import normalize_ui_language
@@ -336,6 +338,62 @@ def _issuer_share_management_summary_body(summary) -> dict[str, Any]:
     }
 
 
+def _merge_public_share_rows(rows: Sequence[Mapping[str, Any]], updated_payloads: Sequence[Mapping[str, Any]]) -> tuple[dict[str, Any], ...]:
+    replacements = {describe_public_nex_link_share(payload).share_id: load_public_nex_link_share(payload) for payload in updated_payloads}
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in rows:
+        payload = load_public_nex_link_share(row)
+        share_id = describe_public_nex_link_share(payload).share_id
+        if share_id in replacements:
+            merged.append(replacements[share_id])
+            seen.add(share_id)
+        else:
+            merged.append(payload)
+    for share_id, payload in replacements.items():
+        if share_id not in seen:
+            merged.append(payload)
+    return tuple(merged)
+
+
+def _parse_management_share_ids(body: Any) -> tuple[tuple[str, ...] | None, HttpRouteResponse | None]:
+    if not isinstance(body, Mapping):
+        return None, _route_response(400, {
+            "status": "rejected",
+            "error_family": "public_share_management_rejected",
+            "reason_code": "public_share.invalid_request",
+            "message": "Issuer share management action payload is invalid.",
+        })
+    raw_share_ids = body.get("share_ids")
+    if not isinstance(raw_share_ids, (list, tuple)):
+        return None, _route_response(400, {
+            "status": "rejected",
+            "error_family": "public_share_management_rejected",
+            "reason_code": "public_share.share_ids_missing",
+            "message": "Issuer share management action requires share_ids.",
+        })
+    resolved: list[str] = []
+    for raw in raw_share_ids:
+        if not isinstance(raw, str) or not raw.strip():
+            return None, _route_response(400, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.invalid_share_ids",
+                "message": "Issuer share management action share_ids must contain non-empty strings.",
+            })
+        share_id = raw.strip()
+        if share_id not in resolved:
+            resolved.append(share_id)
+    if not resolved:
+        return None, _route_response(400, {
+            "status": "rejected",
+            "error_family": "public_share_management_rejected",
+            "reason_code": "public_share.share_ids_missing",
+            "message": "Issuer share management action requires at least one share id.",
+        })
+    return tuple(resolved), None
+
+
 def _request_auth(request: HttpRouteRequest):
     return RequestAuthResolver.resolve(
         headers=request.headers,
@@ -349,6 +407,8 @@ class RunHttpRouteSurface:
         ("get_history_summary", "GET", "/api/users/me/history-summary"),
         ("list_issuer_public_shares", "GET", "/api/users/me/public-shares"),
         ("get_issuer_public_share_summary", "GET", "/api/users/me/public-shares/summary"),
+        ("revoke_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/revoke"),
+        ("extend_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/extend"),
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
@@ -972,6 +1032,149 @@ class RunHttpRouteSurface:
             "links": {
                 "self": "/api/users/me/public-shares/summary",
                 "shares": "/api/users/me/public-shares",
+            },
+        })
+
+    @classmethod
+    def handle_revoke_issuer_public_shares(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_rows_provider=None,
+        public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share revoke action route only supports POST."})
+        if http_request.path.rstrip("/") != "/api/users/me/public-shares/actions/revoke":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Issuer share management routes require an authenticated session.",
+            })
+        share_ids, error = _parse_management_share_ids(http_request.json_body)
+        if error is not None:
+            return error
+        assert share_ids is not None
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        try:
+            updated_payloads = revoke_public_nex_link_shares_for_issuer(
+                rows,
+                request_auth.requested_by_user_ref,
+                share_ids,
+                now_iso=now_iso,
+                actor_user_ref=request_auth.requested_by_user_ref,
+            )
+        except ValueError as exc:
+            message = str(exc)
+            reason_code = "public_share.share_not_found" if "not found or not owned" in message else "public_share.management_action_rejected"
+            status_code = 404 if reason_code.endswith("share_not_found") else 409
+            return _route_response(status_code, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": reason_code,
+                "message": message,
+                "issuer_user_ref": request_auth.requested_by_user_ref,
+                "requested_share_ids": list(share_ids),
+            })
+        persisted = tuple(public_share_payload_writer(payload) if public_share_payload_writer is not None else payload for payload in updated_payloads)
+        merged_rows = _merge_public_share_rows(rows, persisted)
+        summary = summarize_public_nex_link_shares_for_issuer(merged_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        entries = list_public_nex_link_shares_for_issuer(persisted, request_auth.requested_by_user_ref, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "updated",
+            "issuer_user_ref": request_auth.requested_by_user_ref,
+            "action": "revoke",
+            "requested_share_ids": list(share_ids),
+            "affected_share_count": len(entries),
+            "summary": _issuer_share_management_summary_body(summary),
+            "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
+            "links": {
+                "shares": "/api/users/me/public-shares",
+                "summary": "/api/users/me/public-shares/summary",
+                "self": "/api/users/me/public-shares/actions/revoke",
+            },
+        })
+
+    @classmethod
+    def handle_extend_issuer_public_shares(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        share_payload_rows_provider=None,
+        public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Issuer public share extend action route only supports POST."})
+        if http_request.path.rstrip("/") != "/api/users/me/public-shares/actions/extend":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated or not request_auth.requested_by_user_ref:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Issuer share management routes require an authenticated session.",
+            })
+        body = http_request.json_body
+        share_ids, error = _parse_management_share_ids(body)
+        if error is not None:
+            return error
+        assert share_ids is not None and isinstance(body, Mapping)
+        expires_at = str(body.get("expires_at") or "").strip()
+        if not expires_at:
+            return _route_response(400, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": "public_share.expires_at_missing",
+                "message": "Issuer share management extend action requires expires_at.",
+                "issuer_user_ref": request_auth.requested_by_user_ref,
+                "requested_share_ids": list(share_ids),
+            })
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        try:
+            updated_payloads = extend_public_nex_link_shares_for_issuer_expiration(
+                rows,
+                request_auth.requested_by_user_ref,
+                share_ids,
+                expires_at=expires_at,
+                now_iso=now_iso,
+                actor_user_ref=request_auth.requested_by_user_ref,
+            )
+        except ValueError as exc:
+            message = str(exc)
+            reason_code = "public_share.share_not_found" if "not found or not owned" in message else "public_share.management_action_rejected"
+            status_code = 404 if reason_code.endswith("share_not_found") else 409
+            return _route_response(status_code, {
+                "status": "rejected",
+                "error_family": "public_share_management_rejected",
+                "reason_code": reason_code,
+                "message": message,
+                "issuer_user_ref": request_auth.requested_by_user_ref,
+                "requested_share_ids": list(share_ids),
+            })
+        persisted = tuple(public_share_payload_writer(payload) if public_share_payload_writer is not None else payload for payload in updated_payloads)
+        merged_rows = _merge_public_share_rows(rows, persisted)
+        summary = summarize_public_nex_link_shares_for_issuer(merged_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
+        entries = list_public_nex_link_shares_for_issuer(persisted, request_auth.requested_by_user_ref, now_iso=now_iso)
+        return _route_response(200, {
+            "status": "updated",
+            "issuer_user_ref": request_auth.requested_by_user_ref,
+            "action": "extend_expiration",
+            "expires_at": expires_at,
+            "requested_share_ids": list(share_ids),
+            "affected_share_count": len(entries),
+            "summary": _issuer_share_management_summary_body(summary),
+            "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
+            "links": {
+                "shares": "/api/users/me/public-shares",
+                "summary": "/api/users/me/public-shares/summary",
+                "self": "/api/users/me/public-shares/actions/extend",
             },
         })
 

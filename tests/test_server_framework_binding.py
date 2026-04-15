@@ -104,6 +104,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_history_summary",
         "list_issuer_public_shares",
         "get_issuer_public_share_summary",
+        "revoke_issuer_public_shares",
+        "extend_issuer_public_shares",
         "list_workspaces",
         "get_circuit_library",
         "get_workspace_result_history",
@@ -232,6 +234,42 @@ def test_framework_binding_handles_issuer_public_share_summary_round_trip() -> N
     assert parsed["summary"]["total_share_count"] == 2
     assert parsed["summary"]["latest_updated_at"] == "2026-04-15T12:30:00+00:00"
 
+
+
+
+def test_framework_binding_handles_extend_issuer_public_shares_round_trip() -> None:
+    share_store = {
+        "share-framework-owner-a": export_public_nex_link_share(
+            _commit_snapshot("snap-framework-owner-a"),
+            share_id="share-framework-owner-a",
+            title="Framework Owner A",
+            created_at="2026-04-15T12:00:00+00:00",
+            expires_at="2026-04-20T00:00:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        "share-framework-owner-b": export_public_nex_link_share(
+            _commit_snapshot("snap-framework-owner-b"),
+            share_id="share-framework-owner-b",
+            title="Framework Owner B",
+            created_at="2026-04-15T12:05:00+00:00",
+            expires_at="2026-04-20T00:00:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+    }
+
+    response = FrameworkRouteBindings.handle_extend_issuer_public_shares(
+        request=_request(method="POST", path="/api/users/me/public-shares/actions/extend", json_body={"share_ids": ["share-framework-owner-a", "share-framework-owner-b"], "expires_at": "2026-04-25T00:00:00+00:00"}),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_payload_writer=lambda payload: share_store.setdefault(payload["share"]["share_id"], dict(payload)) if payload["share"]["share_id"] not in share_store else share_store.__setitem__(payload["share"]["share_id"], dict(payload)) or dict(payload),
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["action"] == "extend_expiration"
+    assert parsed["affected_share_count"] == 2
+    assert parsed["shares"][0]["lifecycle"]["expires_at"] == "2026-04-25T00:00:00+00:00"
+    assert parsed["summary"]["active_share_count"] == 2
 
 def test_framework_binding_handles_public_share_round_trip() -> None:
     response = FrameworkRouteBindings.handle_get_public_share(

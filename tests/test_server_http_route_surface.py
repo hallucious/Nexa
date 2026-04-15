@@ -216,6 +216,52 @@ def test_issuer_public_share_summary_route_returns_compact_management_summary() 
     assert response.body["links"]["shares"] == "/api/users/me/public-shares"
 
 
+
+
+def test_issuer_public_share_management_revoke_action_updates_selected_shares() -> None:
+    share_store = {
+        "share-owner-action-a": export_public_nex_link_share(
+            _commit_snapshot("snap-owner-action-a"),
+            share_id="share-owner-action-a",
+            title="Owner Action A",
+            created_at="2026-04-15T12:00:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        "share-owner-action-b": export_public_nex_link_share(
+            _commit_snapshot("snap-owner-action-b"),
+            share_id="share-owner-action-b",
+            title="Owner Action B",
+            created_at="2026-04-15T12:05:00+00:00",
+            issued_by_user_ref="user-owner",
+        ),
+        "share-other-action-c": export_public_nex_link_share(
+            _commit_snapshot("snap-other-action-c"),
+            share_id="share-other-action-c",
+            title="Other Action C",
+            created_at="2026-04-15T12:10:00+00:00",
+            issued_by_user_ref="user-other",
+        ),
+    }
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    response = RunHttpRouteSurface.handle_revoke_issuer_public_shares(
+        http_request=_auth_request(method="POST", path="/api/users/me/public-shares/actions/revoke", json_body={"share_ids": ["share-owner-action-a", "share-owner-action-b"]}),
+        share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_payload_writer=_writer,
+        now_iso="2026-04-15T13:00:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["action"] == "revoke"
+    assert response.body["affected_share_count"] == 2
+    assert response.body["summary"]["revoked_share_count"] == 2
+    assert share_store["share-owner-action-a"]["share"]["lifecycle"]["state"] == "revoked"
+    assert share_store["share-owner-action-b"]["share"]["lifecycle"]["state"] == "revoked"
+    assert share_store["share-other-action-c"]["share"]["lifecycle"]["state"] == "active"
+
 def test_workspace_shell_checkout_accepts_public_share_snapshot() -> None:
     response = RunHttpRouteSurface.handle_checkout_workspace_shell(
         http_request=_auth_request(

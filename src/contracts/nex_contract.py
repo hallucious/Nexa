@@ -27,6 +27,7 @@ LoadStatus = Literal["loaded", "loaded_with_findings", "rejected"]
 ShareTransport = Literal["link"]
 ShareAccessMode = Literal["public_readonly"]
 ShareOperation = Literal["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy", "extend_expiration"]
+IssuerShareManagementAction = Literal["revoke", "extend_expiration"]
 
 WORKING_SAVE_ROLE: StorageRole = "working_save"
 COMMIT_SNAPSHOT_ROLE: StorageRole = "commit_snapshot"
@@ -175,3 +176,13 @@ class IssuerPublicShareManagementSummary:
     latest_created_at: Optional[str] = None
     latest_updated_at: Optional[str] = None
     latest_audit_event_at: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class IssuerPublicShareManagementActionResult:
+    issuer_user_ref: str
+    action: IssuerShareManagementAction
+    requested_share_ids: tuple[str, ...]
+    affected_share_count: int
+    summary: IssuerPublicShareManagementSummary
+    shares: tuple[IssuerPublicShareManagementEntry, ...]

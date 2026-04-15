@@ -1522,6 +1522,44 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
     assert summary_payload['summary']['latest_updated_at'] == '2026-04-15T12:30:00+00:00'
 
 
+
+
+def test_fastapi_binding_issuer_public_share_revoke_action_round_trip() -> None:
+    share_store: dict[str, dict] = {
+        "share-fastapi-owner-action-a": export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-action-a'),
+            share_id='share-fastapi-owner-action-a',
+            title='FastAPI Owner Action A',
+            created_at='2026-04-15T12:00:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+        "share-fastapi-owner-action-b": export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-action-b'),
+            share_id='share-fastapi-owner-action-b',
+            title='FastAPI Owner Action B',
+            created_at='2026-04-15T12:05:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+    }
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    client = _make_client(
+        public_share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_payload_writer=_writer,
+    )
+    response = client.post('/api/users/me/public-shares/actions/revoke', headers=_session_headers(), json={'share_ids': ['share-fastapi-owner-action-a', 'share-fastapi-owner-action-b']})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['action'] == 'revoke'
+    assert payload['affected_share_count'] == 2
+    assert payload['summary']['revoked_share_count'] == 2
+    assert share_store['share-fastapi-owner-action-a']['share']['lifecycle']['state'] == 'revoked'
+    assert share_store['share-fastapi-owner-action-b']['share']['lifecycle']['state'] == 'revoked'
+
 def test_fastapi_binding_public_share_routes_round_trip() -> None:
     client = _make_client()
     response = client.get('/api/public-shares/share-fastapi-001')

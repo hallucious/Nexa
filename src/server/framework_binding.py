@@ -41,6 +41,18 @@ class FrameworkRouteBindings:
             summary="Read bounded public share management summary for the current authenticated user.",
         ),
         FrameworkRouteDefinition(
+            route_name="revoke_issuer_public_shares",
+            method="POST",
+            path_template="/api/users/me/public-shares/actions/revoke",
+            summary="Revoke bounded public shares issued by the current authenticated user.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="extend_issuer_public_shares",
+            method="POST",
+            path_template="/api/users/me/public-shares/actions/extend",
+            summary="Extend bounded public share expirations issued by the current authenticated user.",
+        ),
+        FrameworkRouteDefinition(
             route_name="list_workspaces",
             method="GET",
             path_template="/api/workspaces",
@@ -999,6 +1011,40 @@ class FrameworkRouteBindings:
         response = RunHttpRouteSurface.handle_get_issuer_public_share_summary(
             http_request=cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_revoke_issuer_public_shares(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_rows_provider=None,
+        public_share_payload_writer=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_revoke_issuer_public_shares(
+            http_request=cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            public_share_payload_writer=public_share_payload_writer,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_extend_issuer_public_shares(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        share_payload_rows_provider=None,
+        public_share_payload_writer=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_extend_issuer_public_shares(
+            http_request=cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            public_share_payload_writer=public_share_payload_writer,
             now_iso=now_iso,
         )
         return cls.to_framework_response(response)

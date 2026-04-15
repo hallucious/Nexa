@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from src.contracts.nex_contract import (
     IssuerPublicShareManagementEntry,
@@ -24,7 +24,9 @@ from src.storage.nex_api import (
 _ALLOWED_SHARE_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("active", "expired", "revoked")
 _TERMINAL_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("expired", "revoked")
 _MANAGEMENT_OPERATIONS: tuple[str, ...] = ("revoke", "extend_expiration")
+
 _ALLOWED_AUDIT_EVENT_TYPES: tuple[ShareAuditEventType, ...] = ("created", "expiration_extended", "revoked")
+_MAX_ISSUER_MANAGEMENT_ACTION_SHARES = 20
 _UNSET = object()
 
 _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
@@ -52,6 +54,70 @@ def _operation_capabilities_for_role(storage_role: str) -> tuple[ShareOperation,
         return ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
     raise ValueError(f"Unsupported public link share storage_role: {storage_role}")
 
+
+
+
+def _normalize_requested_share_ids(share_ids: list[str] | tuple[str, ...] | Sequence[str]) -> tuple[str, ...]:
+    resolved: list[str] = []
+    for raw in share_ids:
+        if not isinstance(raw, str):
+            raise ValueError("share_ids must contain only strings")
+        share_id = raw.strip()
+        if not share_id:
+            raise ValueError("share_ids must not contain empty values")
+        if share_id not in resolved:
+            resolved.append(share_id)
+    if not resolved:
+        raise ValueError("share_ids must contain at least one share id")
+    if len(resolved) > _MAX_ISSUER_MANAGEMENT_ACTION_SHARES:
+        raise ValueError(f"share_ids exceeds bounded action limit ({_MAX_ISSUER_MANAGEMENT_ACTION_SHARES})")
+    return tuple(resolved)
+
+
+def _resolve_issuer_share_targets(
+    sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
+    issuer_user_ref: str,
+    share_ids: list[str] | tuple[str, ...] | Sequence[str],
+    *,
+    now_iso: str | None = None,
+) -> tuple[dict[str, Any], ...]:
+    issuer = issuer_user_ref.strip()
+    if not issuer:
+        raise ValueError("issuer_user_ref must be non-empty")
+    requested_ids = _normalize_requested_share_ids(share_ids)
+    matched: dict[str, dict[str, Any]] = {}
+    for source in sources:
+        payload = load_public_nex_link_share(source)
+        descriptor = describe_public_nex_link_share(payload, now_iso=now_iso)
+        if descriptor.issued_by_user_ref != issuer:
+            continue
+        if descriptor.share_id in requested_ids and descriptor.share_id not in matched:
+            matched[descriptor.share_id] = payload
+    missing = [share_id for share_id in requested_ids if share_id not in matched]
+    if missing:
+        raise ValueError("requested issuer public shares were not found or not owned: " + ", ".join(missing))
+    return tuple(matched[share_id] for share_id in requested_ids)
+
+
+def _merge_updated_share_sources(
+    sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
+    updated_payloads: tuple[dict[str, Any], ...],
+) -> tuple[dict[str, Any], ...]:
+    replacements = {describe_public_nex_link_share(payload).share_id: load_public_nex_link_share(payload) for payload in updated_payloads}
+    merged: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for source in sources:
+        payload = load_public_nex_link_share(source)
+        share_id = describe_public_nex_link_share(payload).share_id
+        if share_id in replacements:
+            merged.append(replacements[share_id])
+            seen.add(share_id)
+        else:
+            merged.append(payload)
+    for share_id, payload in replacements.items():
+        if share_id not in seen:
+            merged.append(payload)
+    return tuple(merged)
 
 def _optional_string(value: Any, *, field_name: str) -> str | None:
     if value is None:
@@ -595,6 +661,47 @@ def extend_public_nex_link_share_expiration(
     return _with_appended_audit_event(updated, event_type="expiration_extended", actor_user_ref=actor_user_ref, at=now_iso or datetime.now(UTC).isoformat(), details={"expires_at": expires_at})
 
 
+
+
+def revoke_public_nex_link_shares_for_issuer(
+    sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
+    issuer_user_ref: str,
+    share_ids: list[str] | tuple[str, ...] | Sequence[str],
+    *,
+    now_iso: str | None = None,
+    actor_user_ref: str | None = None,
+) -> tuple[dict[str, Any], ...]:
+    targets = _resolve_issuer_share_targets(sources, issuer_user_ref, share_ids, now_iso=now_iso)
+    return tuple(
+        revoke_public_nex_link_share(
+            payload,
+            now_iso=now_iso,
+            actor_user_ref=actor_user_ref or issuer_user_ref.strip(),
+        )
+        for payload in targets
+    )
+
+
+def extend_public_nex_link_shares_for_issuer_expiration(
+    sources: list[str | Path | dict[str, Any]] | tuple[str | Path | dict[str, Any], ...],
+    issuer_user_ref: str,
+    share_ids: list[str] | tuple[str, ...] | Sequence[str],
+    *,
+    expires_at: str,
+    now_iso: str | None = None,
+    actor_user_ref: str | None = None,
+) -> tuple[dict[str, Any], ...]:
+    targets = _resolve_issuer_share_targets(sources, issuer_user_ref, share_ids, now_iso=now_iso)
+    return tuple(
+        extend_public_nex_link_share_expiration(
+            payload,
+            expires_at=expires_at,
+            now_iso=now_iso,
+            actor_user_ref=actor_user_ref or issuer_user_ref.strip(),
+        )
+        for payload in targets
+    )
+
 def save_public_nex_link_share_file(
     model_or_data: Any,
     destination: str | Path,
@@ -624,6 +731,8 @@ __all__ = [
     "list_public_nex_link_share_audit_history",
     "list_public_nex_link_shares_for_issuer",
     "summarize_public_nex_link_shares_for_issuer",
+    "revoke_public_nex_link_shares_for_issuer",
+    "extend_public_nex_link_shares_for_issuer_expiration",
     "update_public_nex_link_share_lifecycle",
     "revoke_public_nex_link_share",
     "extend_public_nex_link_share_expiration",
