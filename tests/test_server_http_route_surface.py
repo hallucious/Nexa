@@ -104,6 +104,7 @@ def test_public_share_route_returns_descriptor_without_authentication() -> None:
     assert response.status_code == 200
     assert response.body["status"] == "ready"
     assert response.body["share_id"] == "share-http-001"
+    assert response.body["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
     assert response.body["source_artifact"]["canonical_ref"] == "snap-share-001"
 
 

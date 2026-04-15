@@ -13,6 +13,7 @@ from src.storage.share_api import (
     get_public_nex_share_boundary,
     load_public_nex_link_share,
     save_public_nex_link_share_file,
+    ensure_public_nex_link_share_operation_allowed,
 )
 
 
@@ -59,6 +60,7 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.supported_roles == ("working_save", "commit_snapshot")
     assert boundary.artifact_format_family == ".nex"
     assert boundary.viewer_capabilities == ("inspect_metadata", "download_artifact", "import_copy")
+    assert boundary.supported_operations == ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
 
 
 def test_export_public_nex_link_share_is_deterministic_for_same_artifact() -> None:
@@ -69,6 +71,7 @@ def test_export_public_nex_link_share_is_deterministic_for_same_artifact() -> No
     assert share_a["share"]["transport"] == "link"
     assert share_a["share"]["access_mode"] == "public_readonly"
     assert share_a["share"]["storage_role"] == "working_save"
+    assert share_a["share"]["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact"]
     assert share_a["artifact"]["meta"]["storage_role"] == "working_save"
 
 
@@ -83,6 +86,7 @@ def test_load_public_nex_link_share_round_trips_commit_snapshot() -> None:
     assert descriptor.share_id == payload["share"]["share_id"]
     assert descriptor.share_path == f"/share/{descriptor.share_id}"
     assert descriptor.storage_role == "commit_snapshot"
+    assert descriptor.operation_capabilities == ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
     assert descriptor.canonical_ref == "commit-share-1"
     assert descriptor.source_working_save_id == "ws-share-1"
 
@@ -105,3 +109,27 @@ def test_save_public_nex_link_share_file_writes_loadable_bundle(tmp_path) -> Non
     loaded = load_public_nex_link_share(raw)
     assert loaded["share"]["share_id"].startswith("share_")
     assert loaded["share"]["title"] == "share_demo"
+
+
+def test_load_public_nex_link_share_canonicalizes_operation_capabilities() -> None:
+    payload = export_public_nex_link_share(_working_save())
+    payload["share"]["operation_capabilities"] = ["checkout_working_copy"]
+
+    loaded = load_public_nex_link_share(payload)
+
+    assert loaded["share"]["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact"]
+
+
+def test_ensure_public_nex_link_share_operation_allowed_rejects_checkout_for_working_save() -> None:
+    payload = export_public_nex_link_share(_working_save())
+
+    with pytest.raises(ValueError, match="checkout_working_copy"):
+        ensure_public_nex_link_share_operation_allowed(payload, "checkout_working_copy")
+
+
+def test_ensure_public_nex_link_share_operation_allowed_accepts_checkout_for_commit_snapshot() -> None:
+    payload = export_public_nex_link_share(create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-op-1"))
+
+    descriptor = ensure_public_nex_link_share_operation_allowed(payload, "checkout_working_copy")
+
+    assert descriptor.storage_role == "commit_snapshot"

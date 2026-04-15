@@ -170,6 +170,7 @@ def test_framework_binding_handles_public_share_round_trip() -> None:
     parsed = json.loads(response.body_text)
     assert parsed["status"] == "ready"
     assert parsed["share_id"] == "share-framework-001"
+    assert parsed["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
     assert parsed["source_artifact"]["storage_role"] == "commit_snapshot"
 
 

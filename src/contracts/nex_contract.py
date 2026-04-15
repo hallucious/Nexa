@@ -23,6 +23,7 @@ ValidationResult = Literal["passed", "passed_with_findings", "failed"]
 LoadStatus = Literal["loaded", "loaded_with_findings", "rejected"]
 ShareTransport = Literal["link"]
 ShareAccessMode = Literal["public_readonly"]
+ShareOperation = Literal["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
 
 WORKING_SAVE_ROLE: StorageRole = "working_save"
 COMMIT_SNAPSHOT_ROLE: StorageRole = "commit_snapshot"
@@ -96,6 +97,7 @@ class PublicNexShareBoundary:
     supported_roles: tuple[StorageRole, ...]
     artifact_format_family: str
     viewer_capabilities: tuple[str, ...]
+    supported_operations: tuple[ShareOperation, ...]
 
 
 @dataclass(frozen=True)
@@ -110,4 +112,5 @@ class PublicNexShareDescriptor:
     summary: Optional[str]
     artifact_format_family: str
     viewer_capabilities: tuple[str, ...]
+    operation_capabilities: tuple[ShareOperation, ...]
     source_working_save_id: Optional[str] = None

@@ -1472,6 +1472,7 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload['share_id'] == 'share-fastapi-001'
+    assert payload['operation_capabilities'] == ['inspect_metadata', 'download_artifact', 'import_copy', 'run_artifact', 'checkout_working_copy']
     assert payload['source_artifact']['storage_role'] == 'commit_snapshot'
 
     artifact_response = client.get('/api/public-shares/share-fastapi-001/artifact')

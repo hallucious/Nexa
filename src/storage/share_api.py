@@ -8,6 +8,7 @@ from typing import Any, Mapping
 from src.contracts.nex_contract import (
     PublicNexShareBoundary,
     PublicNexShareDescriptor,
+    ShareOperation,
 )
 from src.storage.nex_api import (
     describe_public_nex_artifact,
@@ -22,11 +23,32 @@ _PUBLIC_NEX_SHARE_BOUNDARY = PublicNexShareBoundary(
     supported_roles=get_public_nex_format_boundary().supported_roles,
     artifact_format_family=get_public_nex_format_boundary().format_family,
     viewer_capabilities=("inspect_metadata", "download_artifact", "import_copy"),
+    supported_operations=("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"),
 )
 
 
 def get_public_nex_share_boundary() -> PublicNexShareBoundary:
     return _PUBLIC_NEX_SHARE_BOUNDARY
+
+
+def _operation_capabilities_for_role(storage_role: str) -> tuple[ShareOperation, ...]:
+    if storage_role == "working_save":
+        return ("inspect_metadata", "download_artifact", "import_copy", "run_artifact")
+    if storage_role == "commit_snapshot":
+        return ("inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy")
+    raise ValueError(f"Unsupported public link share storage_role: {storage_role}")
+
+
+def ensure_public_nex_link_share_operation_allowed(
+    source: str | Path | dict[str, Any],
+    operation: ShareOperation,
+) -> PublicNexShareDescriptor:
+    descriptor = describe_public_nex_link_share(source)
+    if operation not in descriptor.operation_capabilities:
+        raise ValueError(
+            f"public link share does not allow operation={operation} for storage_role={descriptor.storage_role}"
+        )
+    return descriptor
 
 
 def is_public_nex_link_share_payload(data: Mapping[str, Any]) -> bool:
@@ -69,6 +91,7 @@ def export_public_nex_link_share(
     resolved_summary = summary if summary is not None else (
         str(meta.get("description")) if meta.get("description") is not None else None
     )
+    operation_capabilities = _operation_capabilities_for_role(descriptor.storage_role)
     return {
         "share": {
             "share_family": _PUBLIC_NEX_SHARE_BOUNDARY.share_family,
@@ -82,6 +105,7 @@ def export_public_nex_link_share(
             "title": resolved_title,
             "summary": resolved_summary,
             "viewer_capabilities": list(_PUBLIC_NEX_SHARE_BOUNDARY.viewer_capabilities),
+            "operation_capabilities": list(operation_capabilities),
         },
         "artifact": artifact,
     }
@@ -143,6 +167,7 @@ def describe_public_nex_link_share(source: str | Path | dict[str, Any]) -> Publi
         summary=share.get("summary"),
         artifact_format_family=_PUBLIC_NEX_SHARE_BOUNDARY.artifact_format_family,
         viewer_capabilities=_PUBLIC_NEX_SHARE_BOUNDARY.viewer_capabilities,
+        operation_capabilities=_operation_capabilities_for_role(descriptor.storage_role),
         source_working_save_id=descriptor.source_working_save_id,
     )
 
@@ -171,4 +196,5 @@ __all__ = [
     "load_public_nex_link_share",
     "describe_public_nex_link_share",
     "save_public_nex_link_share_file",
+    "ensure_public_nex_link_share_operation_allowed",
 ]

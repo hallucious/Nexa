@@ -13,7 +13,11 @@ from src.circuit.runtime_adapter import (
 from src.contracts.savefile_executor_aligned import SavefileExecutor
 from src.contracts.savefile_loader import load_savefile_from_path
 from src.storage.nex_api import load_nex
-from src.storage.share_api import load_public_nex_link_share, is_public_nex_link_share_payload
+from src.storage.share_api import (
+    ensure_public_nex_link_share_operation_allowed,
+    load_public_nex_link_share,
+    is_public_nex_link_share_payload,
+)
 from src.storage.legacy_savefile_bridge import savefile_from_loaded_nex_artifact
 from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
 from src.contracts.savefile_validator import validate_savefile
@@ -62,6 +66,7 @@ def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
         loaded = None
         if is_public_nex_link_share_payload(data):
             share_payload = load_public_nex_link_share(circuit_path)
+            ensure_public_nex_link_share_operation_allowed(share_payload, "run_artifact")
             share = share_payload.get("share", {}) if isinstance(share_payload.get("share"), dict) else {}
             share_id = share.get("share_id") if isinstance(share.get("share_id"), str) else None
             loaded = load_nex(share_payload["artifact"])

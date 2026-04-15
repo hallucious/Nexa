@@ -32,6 +32,7 @@ from src.storage.nex_api import (
 )
 from src.storage.share_api import (
     describe_public_nex_link_share,
+    ensure_public_nex_link_share_operation_allowed,
     extract_public_nex_link_share_artifact,
     export_public_nex_link_share,
     get_public_nex_share_boundary,
@@ -51,6 +52,7 @@ __all__ = [
     'export_public_nex_link_share',
     'load_public_nex_link_share',
     'describe_public_nex_link_share',
+    'ensure_public_nex_link_share_operation_allowed',
     'save_public_nex_link_share_file',
     'create_execution_record_from_snapshot',
     'summarize_execution_record_for_working_save',

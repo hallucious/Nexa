@@ -35,7 +35,11 @@ from src.server.run_action_log_api import RunActionLogReadService
 from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
 from src.server.circuit_library_runtime import build_circuit_library_payload
 from src.server.result_history_runtime import build_workspace_result_history_payload
-from src.storage.share_api import describe_public_nex_link_share, load_public_nex_link_share
+from src.storage.share_api import (
+    describe_public_nex_link_share,
+    ensure_public_nex_link_share_operation_allowed,
+    load_public_nex_link_share,
+)
 from src.ui.i18n import normalize_ui_language
 
 
@@ -825,6 +829,10 @@ class RunHttpRouteSurface:
                 error_body["message"] = "Workspace shell checkout could not resolve the requested public share." if status_code == 404 else "Workspace shell checkout rejected the requested public share payload."
                 return _route_response(status_code, error_body)
             assert share_payload is not None
+            try:
+                ensure_public_nex_link_share_operation_allowed(share_payload, "checkout_working_copy")
+            except ValueError as exc:
+                return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.share_operation_not_allowed", "message": str(exc), "workspace_id": workspace_context.workspace_id, "share_id": source_share_id})
             from src.storage.validators.shared_validator import load_nex
             loaded_share = load_nex(share_payload["artifact"])
             model = loaded_share.parsed_model
@@ -867,6 +875,7 @@ class RunHttpRouteSurface:
             "transport": descriptor.transport,
             "access_mode": descriptor.access_mode,
             "viewer_capabilities": list(descriptor.viewer_capabilities),
+            "operation_capabilities": list(descriptor.operation_capabilities),
             "source_artifact": {
                 "storage_role": descriptor.storage_role,
                 "canonical_ref": descriptor.canonical_ref,

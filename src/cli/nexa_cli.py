@@ -862,6 +862,7 @@ def _public_share_payload(share_payload: dict, loaded, *, input_path: Path) -> d
         "share_title": share.get("title"),
         "share_summary": share.get("summary"),
         "viewer_capabilities": share.get("viewer_capabilities", []),
+        "operation_capabilities": share.get("operation_capabilities", []),
     })
     return payload
 
@@ -1037,6 +1038,10 @@ def _load_checkout_source(input_value: str):
     source = _load_cli_savefile_source(input_value)
     if source["mode"] not in {"public", "public_share"}:
         raise ValueError("savefile checkout only supports public commit_snapshot artifacts or public link shares")
+    if source["mode"] == "public_share":
+        from src.storage.share_api import ensure_public_nex_link_share_operation_allowed
+
+        ensure_public_nex_link_share_operation_allowed(source["share_payload"], "checkout_working_copy")
     loaded = source["loaded"]
     if loaded.storage_role != "commit_snapshot":
         raise ValueError("savefile checkout only supports commit_snapshot artifacts")
@@ -1162,6 +1167,7 @@ def savefile_share_export_command(args) -> int:
         "title": descriptor.title,
         "summary": descriptor.summary,
         "viewer_capabilities": list(descriptor.viewer_capabilities),
+        "operation_capabilities": list(descriptor.operation_capabilities),
     }
     print(json.dumps(payload, indent=2, ensure_ascii=False))
     return 0
@@ -1188,6 +1194,10 @@ def savefile_share_import_command(args) -> int:
         raise ValueError("share import output must use .nex extension")
     if output_path.exists() and not args.force:
         raise FileExistsError(f"output already exists: {output_path}")
+
+    from src.storage.share_api import ensure_public_nex_link_share_operation_allowed
+
+    ensure_public_nex_link_share_operation_allowed(loaded_source["share_payload"], "import_copy")
 
     parsed_model = loaded_source["loaded"].parsed_model
     if parsed_model is None:
