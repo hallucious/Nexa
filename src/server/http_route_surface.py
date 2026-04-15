@@ -51,12 +51,14 @@ from src.storage.share_api import (
     normalize_issuer_public_share_management_action_report_pagination,
     normalize_issuer_public_share_management_pagination,
     load_public_nex_link_share,
+    get_public_nex_share_boundary,
     revoke_public_nex_link_share,
     revoke_public_nex_link_shares_for_issuer,
     summarize_issuer_public_share_management_action_reports_for_issuer,
     summarize_issuer_public_share_governance_for_issuer,
     summarize_public_nex_link_shares_for_issuer,
 )
+from src.storage.nex_api import describe_public_nex_artifact, get_public_nex_format_boundary
 from src.ui.i18n import normalize_ui_language
 
 
@@ -303,6 +305,41 @@ def _share_audit_summary(payload: Mapping[str, Any]) -> dict[str, Any]:
         "event_count": len(history),
         "last_event_type": history[-1]["event_type"] if history else None,
         "last_event_at": history[-1]["at"] if history else None,
+    }
+
+
+def _public_share_boundary_body() -> dict[str, Any]:
+    boundary = get_public_nex_share_boundary()
+    return {
+        "share_family": boundary.share_family,
+        "transport_modes": list(boundary.transport_modes),
+        "access_modes": list(boundary.access_modes),
+        "supported_roles": list(boundary.supported_roles),
+        "artifact_format_family": boundary.artifact_format_family,
+        "viewer_capabilities": list(boundary.viewer_capabilities),
+        "supported_operations": list(boundary.supported_operations),
+        "supported_lifecycle_states": list(boundary.supported_lifecycle_states),
+        "terminal_lifecycle_states": list(boundary.terminal_lifecycle_states),
+        "management_operations": list(boundary.management_operations),
+    }
+
+
+
+def _public_artifact_boundary_body(model_or_data: Any) -> dict[str, Any]:
+    descriptor = describe_public_nex_artifact(model_or_data)
+    format_boundary = get_public_nex_format_boundary()
+    return {
+        "format_family": format_boundary.format_family,
+        "shared_backbone_sections": list(format_boundary.shared_backbone_sections),
+        "supported_roles": list(format_boundary.supported_roles),
+        "legacy_default_role": format_boundary.legacy_default_role,
+        "role_boundary": {
+            "storage_role": descriptor.storage_role,
+            "identity_field": descriptor.identity_field,
+            "required_sections": list(descriptor.required_sections),
+            "optional_sections": list(descriptor.optional_sections),
+            "forbidden_sections": list(descriptor.forbidden_sections),
+        },
     }
 
 
@@ -1870,6 +1907,8 @@ class RunHttpRouteSurface:
                 "artifact_format_family": descriptor.artifact_format_family,
                 "source_working_save_id": descriptor.source_working_save_id,
             },
+            "share_boundary": _public_share_boundary_body(),
+            "artifact_boundary": _public_artifact_boundary_body(persisted["artifact"]),
             "links": {
                 "self": f"/api/public-shares/{descriptor.share_id}",
                 "artifact": f"/api/public-shares/{descriptor.share_id}/artifact",
@@ -1926,6 +1965,8 @@ class RunHttpRouteSurface:
                 "artifact_format_family": descriptor.artifact_format_family,
                 "source_working_save_id": descriptor.source_working_save_id,
             },
+            "share_boundary": _public_share_boundary_body(),
+            "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
             "links": {
                 "self": expected_path,
                 "history": f"{expected_path}/history",
@@ -1960,6 +2001,8 @@ class RunHttpRouteSurface:
             "share_id": descriptor.share_id,
             "share_path": descriptor.share_path,
             "audit_summary": _share_audit_summary(payload),
+            "share_boundary": _public_share_boundary_body(),
+            "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
             "history": list(history),
             "links": {
                 "share": f"/api/public-shares/{descriptor.share_id}",
@@ -2001,6 +2044,8 @@ class RunHttpRouteSurface:
             "status": "ready",
             "share_id": descriptor.share_id,
             "share_title": descriptor.title,
+            "share_boundary": _public_share_boundary_body(),
+            "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
             "artifact": payload["artifact"],
             "links": {
                 "share": f"/api/public-shares/{descriptor.share_id}",
@@ -2144,6 +2189,8 @@ class RunHttpRouteSurface:
                 "source_working_save_id": extended_descriptor.source_working_save_id,
             },
             "action_report": persisted_action_report,
+            "share_boundary": _public_share_boundary_body(),
+            "artifact_boundary": _public_artifact_boundary_body(persisted["artifact"]),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "links": {
                 "self": f"/api/public-shares/{extended_descriptor.share_id}",
@@ -2267,6 +2314,8 @@ class RunHttpRouteSurface:
                 "source_working_save_id": revoked_descriptor.source_working_save_id,
             },
             "action_report": persisted_action_report,
+            "share_boundary": _public_share_boundary_body(),
+            "artifact_boundary": _public_artifact_boundary_body(persisted["artifact"]),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "links": {
                 "self": f"/api/public-shares/{revoked_descriptor.share_id}",
@@ -2399,6 +2448,8 @@ class RunHttpRouteSurface:
                 "source_working_save_id": updated_descriptor.source_working_save_id,
             },
             "action_report": persisted_action_report,
+            "share_boundary": _public_share_boundary_body(),
+            "artifact_boundary": _public_artifact_boundary_body(persisted["artifact"]),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "links": {
                 "self": f"/api/public-shares/{updated_descriptor.share_id}",
@@ -2540,6 +2591,8 @@ class RunHttpRouteSurface:
                 "artifact_format_family": descriptor.artifact_format_family,
                 "source_working_save_id": descriptor.source_working_save_id,
             },
+            "share_boundary": _public_share_boundary_body(),
+            "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
             "action_report": persisted_action_report,
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "links": {

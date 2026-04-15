@@ -229,6 +229,8 @@ def test_public_share_route_returns_descriptor_without_authentication() -> None:
     assert response.body["lifecycle"]["issued_by_user_ref"] == "user-owner"
     assert response.body["management"]["archived"] is False
     assert response.body["source_artifact"]["canonical_ref"] == "snap-share-001"
+    assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
+    assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
 
 
 def test_public_share_artifact_route_returns_canonical_artifact_without_authentication() -> None:
@@ -240,6 +242,8 @@ def test_public_share_artifact_route_returns_canonical_artifact_without_authenti
     assert response.status_code == 200
     assert response.body["artifact"]["meta"]["storage_role"] == "commit_snapshot"
     assert response.body["artifact"]["meta"]["commit_id"] == "snap-share-001"
+    assert response.body["share_boundary"]["artifact_format_family"] == ".nex"
+    assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
 
 
 def test_issuer_public_share_management_routes_require_authentication() -> None:
@@ -890,6 +894,8 @@ def test_public_share_revoke_route_updates_lifecycle_for_issuer() -> None:
     assert response.body["action_report"]["action"] == "revoke"
     assert response.body["governance_summary"]["total_share_count"] == 1
     assert response.body["governance_summary"]["total_action_report_count"] == 3
+    assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
+    assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
     assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
     assert share_store["share-revoke-http-001"]["share"]["lifecycle"]["state"] == "revoked"
 
@@ -935,6 +941,8 @@ def test_public_share_extend_route_updates_expiration_for_issuer() -> None:
     assert response.body["action_report"]["action"] == "extend_expiration"
     assert response.body["governance_summary"]["total_share_count"] == 1
     assert response.body["governance_summary"]["total_action_report_count"] == 3
+    assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
+    assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
     assert response.body["links"]["action_report_summary"] == "/api/users/me/public-shares/action-reports/summary"
 
 
@@ -985,6 +993,8 @@ def test_public_share_archive_route_updates_archive_state_for_issuer() -> None:
     assert response.body["action_report"]["action"] == "archive"
     assert response.body["governance_summary"]["total_share_count"] == 1
     assert response.body["governance_summary"]["total_action_report_count"] == 3
+    assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
+    assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
     assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
 
 
@@ -997,6 +1007,8 @@ def test_public_share_history_route_returns_audit_entries() -> None:
     assert response.status_code == 200
     assert response.body["audit_summary"]["event_count"] == 1
     assert response.body["history"][0]["event_type"] == "created"
+    assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
+    assert response.body["artifact_boundary"]["role_boundary"]["storage_role"] == "commit_snapshot"
 
 
 def test_issuer_public_share_management_delete_action_removes_selected_shares() -> None:
