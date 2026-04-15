@@ -237,6 +237,7 @@ class PublicMcpNormalizedResponse:
     status_code: int
     media_type: str
     body: Any
+    lifecycle_state_hint: PublicMcpLifecycleStateHint | None = None
 
     @property
     def ok(self) -> bool:
@@ -252,6 +253,7 @@ class PublicMcpNormalizedResponse:
             "media_type": self.media_type,
             "ok": self.ok,
             "body": self.body,
+            "lifecycle_state_hint": self.lifecycle_state_hint.to_dict() if self.lifecycle_state_hint is not None else None,
         }
 
 
@@ -301,6 +303,7 @@ class PublicMcpExecutionReport:
     preflight_assessment: PublicMcpPreflightAssessment | None = None
     orchestration_summary: PublicMcpOrchestrationSummary | None = None
     lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
+    lifecycle_state_hint: PublicMcpLifecycleStateHint | None = None
     normalized_response: PublicMcpNormalizedResponse | None = None
     error: PublicMcpExecutionError | None = None
 
@@ -342,6 +345,7 @@ class PublicMcpExecutionReport:
             "preflight_assessment": self.preflight_assessment.to_dict() if self.preflight_assessment is not None else None,
             "orchestration_summary": self.orchestration_summary.to_dict() if self.orchestration_summary is not None else None,
             "lifecycle_control_profile": self.lifecycle_control_profile.to_dict() if self.lifecycle_control_profile is not None else None,
+            "lifecycle_state_hint": self.lifecycle_state_hint.to_dict() if self.lifecycle_state_hint is not None else None,
             "normalized_response": self.normalized_response.to_dict() if self.normalized_response is not None else None,
             "error": self.error.to_dict() if self.error is not None else None,
         }
@@ -605,6 +609,32 @@ class PublicMcpLifecycleControlProfile:
 
 
 @dataclass(frozen=True)
+class PublicMcpLifecycleStateHint:
+    route_name: str
+    kind: str
+    lifecycle_class: str | None
+    observed_state: str | None
+    state_family: str
+    terminal: bool
+    recommended_followup_route_names: tuple[str, ...] = ()
+    recommended_control_tool_names: tuple[str, ...] = ()
+    recommended_action: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "route_name": self.route_name,
+            "kind": self.kind,
+            "lifecycle_class": self.lifecycle_class,
+            "observed_state": self.observed_state,
+            "state_family": self.state_family,
+            "terminal": self.terminal,
+            "recommended_followup_route_names": list(self.recommended_followup_route_names),
+            "recommended_control_tool_names": list(self.recommended_control_tool_names),
+            "recommended_action": self.recommended_action,
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpOrchestrationSummary:
     name: str
     route_name: str
@@ -767,6 +797,7 @@ class PublicMcpFrameworkDispatch:
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
 
 
 @dataclass(frozen=True)
@@ -778,6 +809,7 @@ class PublicMcpHttpDispatch:
     route_contract: PublicMcpRouteContract | None = None
     response_contract: PublicMcpResponseContract | None = None
     recovery_policy: PublicMcpRecoveryPolicy | None = None
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None
 
 
 @dataclass(frozen=True)
@@ -1009,6 +1041,7 @@ class PublicMcpHostBridgeScaffold:
             route_contract=self.adapter_scaffold.export_tool_contract(tool_name),
             response_contract=self.adapter_scaffold.export_tool_response_contract(tool_name),
             recovery_policy=self.adapter_scaffold.export_tool_recovery_policy(tool_name),
+            lifecycle_control_profile=self.adapter_scaffold.export_tool_lifecycle_control_profile(tool_name),
         )
 
     def build_framework_resource_dispatch(
@@ -1035,6 +1068,7 @@ class PublicMcpHostBridgeScaffold:
             route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
             response_contract=self.adapter_scaffold.export_resource_response_contract(resource_name),
             recovery_policy=self.adapter_scaffold.export_resource_recovery_policy(resource_name),
+            lifecycle_control_profile=self.adapter_scaffold.export_resource_lifecycle_control_profile(resource_name),
         )
 
     def build_http_tool_dispatch(
@@ -1060,6 +1094,7 @@ class PublicMcpHostBridgeScaffold:
             route_contract=self.adapter_scaffold.export_tool_contract(tool_name),
             response_contract=self.adapter_scaffold.export_tool_response_contract(tool_name),
             recovery_policy=self.adapter_scaffold.export_tool_recovery_policy(tool_name),
+            lifecycle_control_profile=self.adapter_scaffold.export_tool_lifecycle_control_profile(tool_name),
         )
 
     def build_http_resource_dispatch(
@@ -1085,6 +1120,7 @@ class PublicMcpHostBridgeScaffold:
             route_contract=self.adapter_scaffold.export_resource_contract(resource_name),
             response_contract=self.adapter_scaffold.export_resource_response_contract(resource_name),
             recovery_policy=self.adapter_scaffold.export_resource_recovery_policy(resource_name),
+            lifecycle_control_profile=self.adapter_scaffold.export_resource_lifecycle_control_profile(resource_name),
         )
 
     def normalize_transport_context(
@@ -1550,6 +1586,7 @@ class PublicMcpHostBridgeScaffold:
             dispatch.kind,
             response_contract,
             response,
+            lifecycle_control_profile=dispatch.lifecycle_control_profile,
         )
 
     def execute_framework_tool(
@@ -1602,6 +1639,7 @@ class PublicMcpHostBridgeScaffold:
             dispatch.kind,
             response_contract,
             response,
+            lifecycle_control_profile=dispatch.lifecycle_control_profile,
         )
 
     def execute_http_tool(
@@ -1764,6 +1802,7 @@ class PublicMcpHostBridgeScaffold:
                 dispatch.kind,
                 response_contract,
                 response,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         except Exception as exc:
             return _public_mcp_execution_report_error(
@@ -1789,6 +1828,7 @@ class PublicMcpHostBridgeScaffold:
             transport_assessment=transport_assessment,
             preflight_assessment=preflight_assessment,
             lifecycle_control_profile=lifecycle_control_profile,
+            lifecycle_state_hint=normalized.lifecycle_state_hint,
             normalized_response=normalized,
         )
 
@@ -1927,6 +1967,7 @@ class PublicMcpHostBridgeScaffold:
                 dispatch.kind,
                 response_contract,
                 response,
+                lifecycle_control_profile=lifecycle_control_profile,
             )
         except Exception as exc:
             return _public_mcp_execution_report_error(
@@ -1952,6 +1993,7 @@ class PublicMcpHostBridgeScaffold:
             transport_assessment=transport_assessment,
             preflight_assessment=preflight_assessment,
             lifecycle_control_profile=lifecycle_control_profile,
+            lifecycle_state_hint=normalized.lifecycle_state_hint,
             normalized_response=normalized,
         )
 
@@ -2240,6 +2282,7 @@ class PublicMcpAdapterScaffold:
             "tool",
             self._response_contract_for_descriptor(descriptor, kind="tool"),
             response,
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="tool"),
         )
 
     def normalize_framework_resource_response(
@@ -2254,6 +2297,7 @@ class PublicMcpAdapterScaffold:
             "resource",
             self._response_contract_for_descriptor(descriptor, kind="resource"),
             response,
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="resource"),
         )
 
     def normalize_http_tool_response(
@@ -2268,6 +2312,7 @@ class PublicMcpAdapterScaffold:
             "tool",
             self._response_contract_for_descriptor(descriptor, kind="tool"),
             response,
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="tool"),
         )
 
     def normalize_http_resource_response(
@@ -2282,6 +2327,7 @@ class PublicMcpAdapterScaffold:
             "resource",
             self._response_contract_for_descriptor(descriptor, kind="resource"),
             response,
+            lifecycle_control_profile=self._lifecycle_control_profile_for_descriptor(descriptor, kind="resource"),
         )
 
     def export_tool(
@@ -2959,6 +3005,81 @@ def _build_public_orchestration_summary(
     )
 
 
+def _extract_public_lifecycle_observed_state(body: Any) -> str | None:
+    if not isinstance(body, Mapping):
+        return None
+    for key in ("status", "initial_run_status", "final_status", "result_state"):
+        value = body.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _classify_public_lifecycle_state_family(observed_state: str | None) -> tuple[str, bool]:
+    if observed_state is None:
+        return ("unknown", False)
+    value = observed_state.lower()
+    if value in {"accepted", "queued", "pending"}:
+        return ("accepted", False)
+    if value in {"running", "in_progress", "streaming"}:
+        return ("running", False)
+    if value in {"not_ready"}:
+        return ("not-ready", False)
+    if value in {"succeeded", "completed", "ready"}:
+        return ("succeeded", True)
+    if value in {"failed", "cancelled", "blocked"}:
+        return ("failed", True)
+    return ("unknown", False)
+
+
+def _build_public_lifecycle_state_hint(*, route_name: str, kind: str, lifecycle_control_profile: PublicMcpLifecycleControlProfile | None, body: Any) -> PublicMcpLifecycleStateHint | None:
+    if lifecycle_control_profile is None:
+        return None
+    observed_state = _extract_public_lifecycle_observed_state(body)
+    if observed_state is None:
+        return None
+    state_family, terminal = _classify_public_lifecycle_state_family(observed_state)
+    followup: list[str] = []
+    controls: list[str] = []
+    recommended_action: str | None = None
+    if state_family in {"accepted", "running", "not-ready"}:
+        _append_unique(followup, lifecycle_control_profile.status_resource_name)
+        _append_unique(followup, lifecycle_control_profile.trace_resource_name)
+        _append_unique(followup, lifecycle_control_profile.actions_resource_name)
+        recommended_action = lifecycle_control_profile.status_resource_name or lifecycle_control_profile.trace_resource_name
+    elif state_family == "succeeded":
+        _append_unique(followup, lifecycle_control_profile.result_resource_name)
+        _append_unique(followup, lifecycle_control_profile.artifacts_resource_name)
+        _append_unique(followup, lifecycle_control_profile.trace_resource_name)
+        if lifecycle_control_profile.review_tool_name is not None:
+            _append_unique(controls, lifecycle_control_profile.review_tool_name)
+        recommended_action = lifecycle_control_profile.result_resource_name or lifecycle_control_profile.artifacts_resource_name or lifecycle_control_profile.review_tool_name
+    elif state_family == "failed":
+        _append_unique(followup, lifecycle_control_profile.result_resource_name)
+        _append_unique(followup, lifecycle_control_profile.trace_resource_name)
+        _append_unique(followup, lifecycle_control_profile.actions_resource_name)
+        for control_name in lifecycle_control_profile.preferred_control_tool_names:
+            _append_unique(controls, control_name)
+        recommended_action = lifecycle_control_profile.trace_resource_name or (controls[0] if controls else None)
+    else:
+        for route_name_candidate in lifecycle_control_profile.followup_route_names:
+            _append_unique(followup, route_name_candidate)
+        for control_name in lifecycle_control_profile.preferred_control_tool_names:
+            _append_unique(controls, control_name)
+        recommended_action = followup[0] if followup else (controls[0] if controls else None)
+    return PublicMcpLifecycleStateHint(
+        route_name=route_name,
+        kind=kind,
+        lifecycle_class=lifecycle_control_profile.lifecycle_class,
+        observed_state=observed_state,
+        state_family=state_family,
+        terminal=terminal,
+        recommended_followup_route_names=tuple(followup),
+        recommended_control_tool_names=tuple(controls),
+        recommended_action=recommended_action,
+    )
+
+
 def _public_mcp_execution_report_error(
     *,
     name: str,
@@ -2986,6 +3107,7 @@ def _public_mcp_execution_report_error(
         preflight_assessment=preflight_assessment,
         orchestration_summary=orchestration_summary,
         lifecycle_control_profile=lifecycle_control_profile,
+        lifecycle_state_hint=None,
         error=PublicMcpExecutionError(
             category=category,
             phase=phase,
@@ -3049,6 +3171,7 @@ def _normalize_public_framework_response(
     kind: str,
     response_contract: PublicMcpResponseContract,
     response: "FrameworkOutboundResponse",
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None,
 ) -> PublicMcpNormalizedResponse:
     _assert_public_response_matches_contract(
         response_contract,
@@ -3065,6 +3188,7 @@ def _normalize_public_framework_response(
         status_code=response.status_code,
         media_type=response.media_type,
         body=decoded_body,
+        lifecycle_state_hint=_build_public_lifecycle_state_hint(route_name=route_name, kind=kind, lifecycle_control_profile=lifecycle_control_profile, body=decoded_body),
     )
 
 
@@ -3074,6 +3198,7 @@ def _normalize_public_http_response(
     kind: str,
     response_contract: PublicMcpResponseContract,
     response: "HttpRouteResponse",
+    lifecycle_control_profile: PublicMcpLifecycleControlProfile | None = None,
 ) -> PublicMcpNormalizedResponse:
     media_type = str(dict(response.headers).get("content-type", "application/json"))
     _assert_public_response_matches_contract(
@@ -3091,6 +3216,7 @@ def _normalize_public_http_response(
         status_code=response.status_code,
         media_type=media_type,
         body=decoded_body,
+        lifecycle_state_hint=_build_public_lifecycle_state_hint(route_name=route_name, kind=kind, lifecycle_control_profile=lifecycle_control_profile, body=decoded_body),
     )
 
 
@@ -4272,6 +4398,7 @@ def build_public_mcp_runtime_markers() -> tuple[str, ...]:
         "dispatch-execution",
         "execution-report",
         "recovery-hints",
+        "lifecycle-state-hint",
         "orchestration-summary",
     )
 
@@ -4306,6 +4433,7 @@ __all__ = [
     "PublicMcpTransportAssessment",
     "PublicMcpPreflightAssessment",
     "PublicMcpLifecycleControlProfile",
+    "PublicMcpLifecycleStateHint",
     "PublicMcpOrchestrationSummary",
     "PublicMcpResultShapeProfile",
     "PublicMcpResponseContract",

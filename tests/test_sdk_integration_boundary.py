@@ -28,6 +28,7 @@ from src.sdk.integration import (
     PublicMcpTransportAssessment,
     PublicMcpPreflightAssessment,
     PublicMcpLifecycleControlProfile,
+    PublicMcpLifecycleStateHint,
     PublicMcpOrchestrationSummary,
     PublicMcpFrameworkEnvelope,
     PublicMcpHttpEnvelope,
@@ -784,6 +785,37 @@ def test_host_bridge_can_execute_http_resource_and_normalize_response() -> None:
     assert normalized.body["status"] == "running"
 
 
+def test_host_bridge_framework_resource_normalized_response_includes_lifecycle_state_hint() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    normalized = bridge.execute_framework_resource(
+        "get_run_status",
+        {"run_id": "run-001"},
+        headers={"Authorization": "Bearer token", "X-Request-Id": "req-framework-bridge-2"},
+        session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["editor"]},
+        run_context=_run_context(),
+        run_record_row=_run_row(),
+        engine_status=EngineRunStatusSnapshot(
+            run_id="run-001",
+            status="running",
+            active_node_id="node-1",
+            active_node_label="Node 1",
+            progress_percent=35,
+            progress_summary="Still running",
+            latest_signal=EngineSignal(severity="info", code="NODE_RUNNING", message="Node 1 is executing."),
+            trace_ref="trace://run-001",
+            artifact_count=0,
+        ),
+    )
+
+    assert isinstance(normalized.lifecycle_state_hint, PublicMcpLifecycleStateHint)
+    assert normalized.lifecycle_state_hint.observed_state == "running"
+    assert normalized.lifecycle_state_hint.state_family == "running"
+    assert normalized.lifecycle_state_hint.terminal is False
+    assert "get_run_status" in normalized.lifecycle_state_hint.recommended_followup_route_names
+    assert normalized.lifecycle_state_hint.recommended_action == "get_run_status"
+
+
 def test_host_bridge_framework_resource_report_successfully_tracks_completed_lifecycle() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
 
@@ -813,6 +845,35 @@ def test_host_bridge_framework_resource_report_successfully_tracks_completed_lif
     assert report.normalized_response is not None
     assert report.normalized_response.body["status"] == "running"
     assert report.error is None
+
+
+def test_execution_report_includes_lifecycle_state_hint_for_running_status() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold()
+
+    report = bridge.execute_framework_resource_report(
+        "get_run_status",
+        {"run_id": "run-001"},
+        headers={"Authorization": "Bearer token", "X-Request-Id": "req-framework-report-2"},
+        session_claims={"sub": "user-owner", "sid": "sess-001", "exp": 4102444800, "roles": ["editor"]},
+        run_context=_run_context(),
+        run_record_row=_run_row(),
+        engine_status=EngineRunStatusSnapshot(
+            run_id="run-001",
+            status="running",
+            active_node_id="node-1",
+            active_node_label="Node 1",
+            progress_percent=20,
+            progress_summary="Working",
+            latest_signal=EngineSignal(severity="info", code="NODE_RUNNING", message="Node 1 is executing."),
+            trace_ref="trace://run-001",
+            artifact_count=0,
+        ),
+    )
+
+    assert report.lifecycle_state_hint is not None
+    assert report.lifecycle_state_hint.state_family == "running"
+    assert report.lifecycle_state_hint.recommended_action == "get_run_status"
+    assert report.to_dict()["lifecycle_state_hint"]["state_family"] == "running"
 
 
 def test_host_bridge_resource_report_captures_dispatch_build_error_category() -> None:
