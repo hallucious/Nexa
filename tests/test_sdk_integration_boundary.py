@@ -11,11 +11,6 @@ from src.server.http_route_models import HttpRouteResponse
 
 from src.sdk.integration import (
     MCP_ADAPTER_SCAFFOLD_VERSION,
-    MCP_HOST_BRIDGE_SCAFFOLD_VERSION,
-    PUBLIC_MCP_MANIFEST_VERSION,
-    PUBLIC_MCP_SCHEMA_VERSION,
-    PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION,
-    PUBLIC_INTEGRATION_SDK_SURFACE_VERSION,
     PublicMcpAdapterScaffold,
     PublicMcpArgumentSchema,
     PublicMcpCompatibilitySurface,
@@ -43,6 +38,8 @@ from src.sdk.integration import (
     PublicMcpToolDescriptor,
     build_public_mcp_adapter_scaffold,
     build_public_mcp_argument_schemas,
+    build_public_mcp_contract_markers,
+    build_public_mcp_runtime_markers,
     build_public_mcp_route_contracts,
     build_public_mcp_transport_contracts,
     build_public_mcp_response_contracts,
@@ -93,7 +90,6 @@ def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
 
 
 def test_sdk_root_exposes_integration_module() -> None:
-    assert sdk.PUBLIC_SDK_SURFACE_VERSION == "1.18"
     assert sdk.PUBLIC_SDK_MODULES == ("artifacts", "server", "integration")
     assert sdk.integration is integration
     assert root_integration is integration
@@ -127,9 +123,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
     surface = build_public_mcp_compatibility_surface()
 
-    assert PUBLIC_INTEGRATION_SDK_SURFACE_VERSION == "1.16"
     assert isinstance(surface, PublicMcpCompatibilitySurface)
-    assert surface.version == "1.16"
+    assert surface.contract_markers == build_public_mcp_contract_markers()
+    assert surface.runtime_markers == build_public_mcp_runtime_markers()
     assert len(surface.tools) >= 5
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
@@ -184,12 +180,10 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
         server_title="Nexa Phase 9.2",
     )
 
-    assert PUBLIC_MCP_MANIFEST_VERSION == "1.8"
-    assert PUBLIC_MCP_SCHEMA_VERSION == "1.8"
-    assert PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION == "1.0"
     assert isinstance(manifest, PublicMcpManifest)
-    assert manifest.manifest_version == "1.8"
-    assert manifest.schema_version == "1.8"
+    assert manifest.contract_markers == build_public_mcp_contract_markers()
+    assert manifest.runtime_markers == build_public_mcp_runtime_markers()
+    assert manifest.adapter_label == "mcp-adapter-scaffold"
     assert manifest.server_name == "nexa-phase92"
     assert manifest.server_title == "Nexa Phase 9.2"
     assert manifest.base_url == "https://api.nexa.test"
@@ -197,8 +191,8 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(resource.uri_template == "nexa://phase92/api/runs/{run_id}" for resource in manifest.resources)
     assert manifest_dict["server"]["name"] == "nexa-phase92"
-    assert manifest_dict["compatibility_policy"]["manifest_version"] == "1.8"
-    assert manifest_dict["compatibility_policy"]["schema_version"] == "1.8"
+    assert manifest_dict["compatibility_policy"]["supported_contract_markers"] == list(build_public_mcp_contract_markers())
+    assert manifest_dict["compatibility_policy"]["supported_runtime_markers"] == list(build_public_mcp_runtime_markers())
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
     assert direct_manifest.to_dict() == manifest_dict
 
@@ -226,7 +220,6 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
 def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_requests() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
-    assert MCP_HOST_BRIDGE_SCAFFOLD_VERSION == "1.14"
     assert isinstance(bridge, PublicMcpHostBridgeScaffold)
 
     framework_request = bridge.build_framework_tool_request(
@@ -251,6 +244,10 @@ def test_build_public_mcp_host_bridge_scaffold_builds_framework_and_http_request
     assert http_request.path == "/api/runs/run-1"
     assert http_request.path_params == {"run_id": "run-1"}
     assert http_request.query_params == {"include": "summary"}
+    assert export.bridge_label == "mcp-host-bridge-scaffold"
+    assert export.adapter_label == "mcp-adapter-scaffold"
+    assert export.contract_markers == build_public_mcp_contract_markers()
+    assert export.runtime_markers == build_public_mcp_runtime_markers()
     assert export.framework_binding_class == "FrameworkRouteBindings"
     assert any(binding.route_name == "launch_run" and binding.framework_handler_name == "handle_launch" for binding in export.tool_bindings)
     assert any(binding.route_name == "get_run_status" and binding.framework_handler_name == "handle_run_status" for binding in export.resource_bindings)
@@ -430,48 +427,58 @@ def test_build_public_mcp_argument_schemas_returns_curated_contract_set() -> Non
     assert indexed["get_recent_activity"].query_fields[1].name == "limit"
 
 
-def test_build_public_mcp_compatibility_policy_exports_supported_versions() -> None:
+def test_build_public_mcp_compatibility_policy_exports_supported_markers() -> None:
     policy = build_public_mcp_compatibility_policy()
 
     assert isinstance(policy, PublicMcpCompatibilityPolicy)
-    assert policy.policy_version == "1.0"
-    assert policy.supports_manifest_version("1.8") is True
-    assert policy.supports_schema_version("1.8") is True
-    policy.assert_supported(manifest_version="1.8", schema_version="1.8")
+    assert policy.supported_contract_markers == build_public_mcp_contract_markers()
+    assert policy.supported_runtime_markers == build_public_mcp_runtime_markers()
+    assert policy.supported_transport_kinds == ("http-route-bridge",)
+    assert policy.supports_contract_markers(("argument-schema", "response-contract")) is True
+    assert policy.supports_runtime_markers(("execution-report",)) is True
+    policy.assert_supported(
+        required_contract_markers=("argument-schema", "route-contract"),
+        required_runtime_markers=("dispatch-execution",),
+        required_transport_kind="http-route-bridge",
+    )
 
 
-def test_build_public_mcp_compatibility_policy_rejects_unsupported_versions() -> None:
+def test_build_public_mcp_compatibility_policy_rejects_unsupported_markers() -> None:
     policy = build_public_mcp_compatibility_policy()
 
     try:
-        policy.assert_supported(manifest_version="0.9")
+        policy.assert_supported(required_contract_markers=("imaginary-contract",))
     except ValueError as exc:
-        assert "Unsupported public MCP manifest version" in str(exc)
+        assert "Unsupported public MCP contract markers" in str(exc)
     else:
-        raise AssertionError("Expected unsupported manifest version rejection")
+        raise AssertionError("Expected unsupported contract marker rejection")
 
     try:
-        policy.assert_supported(schema_version="0.9")
+        policy.assert_supported(required_runtime_markers=("imaginary-runtime",))
     except ValueError as exc:
-        assert "Unsupported public MCP schema version" in str(exc)
+        assert "Unsupported public MCP runtime markers" in str(exc)
     else:
-        raise AssertionError("Expected unsupported schema version rejection")
+        raise AssertionError("Expected unsupported runtime marker rejection")
 
 
 def test_host_bridge_exposes_and_enforces_compatibility_policy() -> None:
     bridge = build_public_mcp_host_bridge_scaffold()
     export = bridge.export()
 
-    assert export.schema_version == "1.8"
-    assert export.compatibility_policy.policy_version == "1.0"
-    bridge.assert_consumer_compatibility(manifest_version="1.8", schema_version="1.8")
+    assert export.contract_markers == build_public_mcp_contract_markers()
+    assert export.runtime_markers == build_public_mcp_runtime_markers()
+    bridge.assert_consumer_compatibility(
+        required_contract_markers=("route-contract",),
+        required_runtime_markers=("execution-report",),
+        required_transport_kind="http-route-bridge",
+    )
 
     try:
-        bridge.assert_consumer_compatibility(manifest_version="0.9")
+        bridge.assert_consumer_compatibility(required_runtime_markers=("missing-runtime",))
     except ValueError as exc:
-        assert "Unsupported public MCP manifest version" in str(exc)
+        assert "Unsupported public MCP runtime markers" in str(exc)
     else:
-        raise AssertionError("Expected bridge manifest compatibility rejection")
+        raise AssertionError("Expected bridge runtime marker rejection")
 
 
 def test_build_public_mcp_route_contracts_exports_transport_profiles() -> None:
