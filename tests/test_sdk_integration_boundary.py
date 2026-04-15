@@ -31,6 +31,7 @@ from src.sdk.integration import (
     PublicMcpOrchestrationSummary,
     PublicMcpFrameworkEnvelope,
     PublicMcpHttpEnvelope,
+    PublicMcpResultShapeProfile,
     PublicMcpResponseContract,
     PublicMcpResourceDescriptor,
     PublicMcpRouteContract,
@@ -39,6 +40,7 @@ from src.sdk.integration import (
     build_public_mcp_argument_schemas,
     build_public_mcp_route_contracts,
     build_public_mcp_transport_contracts,
+    build_public_mcp_result_shape_profiles,
     build_public_mcp_response_contracts,
     build_public_mcp_recovery_policies,
     build_public_mcp_lifecycle_control_profiles,
@@ -557,6 +559,14 @@ def test_route_contract_rejects_query_params_for_path_only_resource() -> None:
         raise AssertionError("Expected path-only route contract validation")
 
 
+def test_build_public_mcp_result_shape_profiles_exports_family_profiles() -> None:
+    profiles = build_public_mcp_result_shape_profiles()
+
+    assert any(isinstance(profile, PublicMcpResultShapeProfile) for profile in profiles)
+    assert any(profile.profile_kind == "run-status-detail" and profile.identity_keys == ("run_id",) for profile in profiles)
+    assert any(profile.collection_field_name == "runs" and profile.collection_item_identity_keys == ("run_id",) for profile in profiles)
+
+
 def test_build_public_mcp_response_contracts_exports_curated_success_shapes() -> None:
     contracts = build_public_mcp_response_contracts()
     indexed = {contract.route_name: contract for contract in contracts}
@@ -566,6 +576,8 @@ def test_build_public_mcp_response_contracts_exports_curated_success_shapes() ->
     assert indexed["launch_run"].success_status_codes == (202,)
     assert indexed["get_run_status"].response_shape == "status"
     assert indexed["get_run_status"].success_status_codes == (200,)
+    assert indexed["get_run_status"].result_shape_profile is not None
+    assert indexed["get_run_status"].result_shape_profile.identity_keys == ("run_id",)
 
 
 def test_manifest_includes_response_contracts() -> None:
@@ -579,7 +591,9 @@ def test_manifest_includes_response_contracts() -> None:
     assert launch_tool.response_contract.success_status_codes == (202,)
     assert status_resource.response_contract is not None
     assert status_resource.response_contract.response_shape == "status"
+    assert status_resource.response_contract.result_shape_profile is not None
     assert status_dict["response_contract"]["success_status_codes"] == [200]
+    assert status_dict["response_contract"]["result_shape_profile"]["identity_keys"] == ["run_id"]
 
 
 def test_adapter_scaffold_normalizes_framework_response_against_public_contract() -> None:
@@ -644,6 +658,53 @@ def test_response_contract_exports_body_kind_and_required_keys() -> None:
     assert indexed["get_run_status"].body_kind == "object"
     assert indexed["get_run_status"].required_top_level_keys == ("run_id", "status")
     assert indexed["launch_run"].required_top_level_keys == ("status",)
+
+
+def test_response_contract_exports_result_shape_profiles() -> None:
+    contracts = build_public_mcp_response_contracts()
+    indexed = {contract.route_name: contract for contract in contracts}
+
+    workspace_runs = indexed["list_workspace_runs"].result_shape_profile
+    assert workspace_runs is not None
+    assert workspace_runs.collection_field_name == "runs"
+    assert workspace_runs.count_field_name == "returned_count"
+    assert workspace_runs.collection_item_identity_keys == ("run_id",)
+
+
+def test_adapter_scaffold_rejects_response_missing_collection_item_identity_key() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    try:
+        adapter.normalize_http_resource_response(
+            "list_workspace_runs",
+            HttpRouteResponse(
+                status_code=200,
+                body={"workspace_id": "ws-1", "returned_count": 1, "runs": [{"status": "queued"}]},
+                headers={"content-type": "application/json"},
+            ),
+        )
+    except ValueError as exc:
+        assert "Missing collection item identity keys" in str(exc)
+    else:
+        raise AssertionError("Expected collection item identity validation")
+
+
+def test_adapter_scaffold_rejects_response_with_invalid_count_field_type() -> None:
+    adapter = build_public_mcp_adapter_scaffold()
+
+    try:
+        adapter.normalize_http_resource_response(
+            "list_workspaces",
+            HttpRouteResponse(
+                status_code=200,
+                body={"returned_count": "1", "workspaces": [{"workspace_id": "ws-1"}]},
+                headers={"content-type": "application/json"},
+            ),
+        )
+    except ValueError as exc:
+        assert "must be int" in str(exc)
+    else:
+        raise AssertionError("Expected count field type validation")
 
 
 def test_adapter_scaffold_rejects_framework_response_with_wrong_body_kind() -> None:

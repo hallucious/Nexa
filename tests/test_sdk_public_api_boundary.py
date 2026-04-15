@@ -331,3 +331,8 @@ def test_sdk_root_execution_report_includes_preflight_assessment() -> None:
     assert isinstance(report.preflight_assessment, sdk.PublicMcpPreflightAssessment)
     assert report.preflight_assessment is not None
     assert report.preflight_assessment.risk_level == "high"
+
+
+def test_sdk_root_exposes_result_shape_profile_builder() -> None:
+    assert hasattr(sdk, "PublicMcpResultShapeProfile")
+    assert hasattr(sdk, "build_public_mcp_result_shape_profiles")

@@ -135,6 +135,26 @@ class PublicMcpNormalizedArguments:
 
 
 @dataclass(frozen=True)
+class PublicMcpResultShapeProfile:
+    profile_kind: str
+    identity_keys: tuple[str, ...] = ()
+    state_keys: tuple[str, ...] = ()
+    collection_field_name: str | None = None
+    count_field_name: str | None = None
+    collection_item_identity_keys: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "profile_kind": self.profile_kind,
+            "identity_keys": list(self.identity_keys),
+            "state_keys": list(self.state_keys),
+            "collection_field_name": self.collection_field_name,
+            "count_field_name": self.count_field_name,
+            "collection_item_identity_keys": list(self.collection_item_identity_keys),
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpResponseContract:
     name: str
     route_name: str
@@ -145,6 +165,7 @@ class PublicMcpResponseContract:
     response_media_type: str = "application/json"
     body_kind: str = "object"
     required_top_level_keys: tuple[str, ...] = ()
+    result_shape_profile: PublicMcpResultShapeProfile | None = None
     response_type: PublicTypeRef | None = None
 
     def to_dict(self) -> dict[str, Any]:
@@ -158,6 +179,7 @@ class PublicMcpResponseContract:
             "response_media_type": self.response_media_type,
             "body_kind": self.body_kind,
             "required_top_level_keys": list(self.required_top_level_keys),
+            "result_shape_profile": self.result_shape_profile.to_dict() if self.result_shape_profile is not None else None,
             "response_type": _type_ref_dict(self.response_type),
         }
 
@@ -2544,7 +2566,27 @@ class PublicMcpAdapterScaffold:
             response_media_type=str(spec.get("response_media_type", "application/json")),
             body_kind=str(spec.get("body_kind", "object")),
             required_top_level_keys=tuple(str(key) for key in spec.get("required_top_level_keys", ())),
+            result_shape_profile=self._result_shape_profile_for_descriptor(descriptor, kind=kind),
             response_type=getattr(descriptor, "response_type", None),
+        )
+
+    def _result_shape_profile_for_descriptor(
+        self,
+        descriptor: PublicMcpToolDescriptor | PublicMcpResourceDescriptor,
+        *,
+        kind: str,
+    ) -> PublicMcpResultShapeProfile:
+        route_contract = self._route_contract_for_descriptor(descriptor, kind=kind)
+        spec = _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME.get(descriptor.route_name)
+        if spec is None:
+            raise ValueError(f"Missing public MCP result-shape profile for route_name: {descriptor.route_name}")
+        return PublicMcpResultShapeProfile(
+            profile_kind=str(spec["profile_kind"]),
+            identity_keys=tuple(str(key) for key in spec.get("identity_keys", ())),
+            state_keys=tuple(str(key) for key in spec.get("state_keys", ())),
+            collection_field_name=(str(spec["collection_field_name"]) if spec.get("collection_field_name") is not None else None),
+            count_field_name=(str(spec["count_field_name"]) if spec.get("count_field_name") is not None else None),
+            collection_item_identity_keys=tuple(str(key) for key in spec.get("collection_item_identity_keys", ())),
         )
 
     def _recovery_policy_for_descriptor(
@@ -2676,6 +2718,62 @@ def _argument_schema_dict(schema: PublicMcpArgumentSchema | None) -> dict[str, A
         return None
     return schema.to_dict()
 
+
+
+def _assert_public_result_shape_profile_matches_body(
+    result_shape_profile: PublicMcpResultShapeProfile | None,
+    *,
+    route_name: str,
+    body: Any,
+) -> None:
+    if result_shape_profile is None:
+        return
+    if not isinstance(body, Mapping):
+        raise ValueError(
+            f"Result-shape profile cannot be checked for public route {route_name}: body is not an object"
+        )
+    missing_identity = [key for key in result_shape_profile.identity_keys if key not in body]
+    if missing_identity:
+        raise ValueError(
+            f"Missing required identity keys for public route {route_name}: {', '.join(missing_identity)}"
+        )
+    missing_state = [key for key in result_shape_profile.state_keys if key not in body]
+    if missing_state:
+        raise ValueError(
+            f"Missing required state keys for public route {route_name}: {', '.join(missing_state)}"
+        )
+    if result_shape_profile.count_field_name is not None:
+        if result_shape_profile.count_field_name not in body:
+            raise ValueError(
+                f"Missing required count field for public route {route_name}: {result_shape_profile.count_field_name}"
+            )
+        if not isinstance(body[result_shape_profile.count_field_name], int):
+            raise ValueError(
+                f"Invalid count field for public route {route_name}: {result_shape_profile.count_field_name} must be int"
+            )
+    if result_shape_profile.collection_field_name is not None:
+        if result_shape_profile.collection_field_name not in body:
+            raise ValueError(
+                f"Missing required collection field for public route {route_name}: {result_shape_profile.collection_field_name}"
+            )
+        collection = body[result_shape_profile.collection_field_name]
+        if not isinstance(collection, list):
+            raise ValueError(
+                f"Invalid collection field for public route {route_name}: {result_shape_profile.collection_field_name} must be list"
+            )
+        if result_shape_profile.collection_item_identity_keys:
+            for index, item in enumerate(collection):
+                if not isinstance(item, Mapping):
+                    raise ValueError(
+                        f"Invalid collection item for public route {route_name}: item {index} is not an object"
+                    )
+                missing_item_keys = [
+                    key for key in result_shape_profile.collection_item_identity_keys if key not in item
+                ]
+                if missing_item_keys:
+                    raise ValueError(
+                        f"Missing collection item identity keys for public route {route_name} item {index}: {', '.join(missing_item_keys)}"
+                    )
 
 
 def _classify_public_mcp_execution_error(*, phase: str, exc: Exception) -> str:
@@ -2938,6 +3036,11 @@ def _assert_public_response_body_matches_contract(
             raise ValueError(
                 f"Missing required response keys for public route {response_contract.route_name}: {', '.join(missing)}"
             )
+    _assert_public_result_shape_profile_matches_body(
+        response_contract.result_shape_profile,
+        route_name=response_contract.route_name,
+        body=body,
+    )
 
 
 def _normalize_public_framework_response(
@@ -3756,6 +3859,90 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
 }
 
 
+_RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
+    "launch_run": {
+        "profile_kind": "accepted-status",
+        "state_keys": ("status",),
+    },
+    "launch_workspace_shell": {
+        "profile_kind": "accepted-status",
+        "state_keys": ("status",),
+    },
+    "commit_workspace_shell": {
+        "profile_kind": "workspace-commit",
+    },
+    "checkout_workspace_shell": {
+        "profile_kind": "workspace-checkout",
+    },
+    "retry_run": {
+        "profile_kind": "run-control-status",
+        "state_keys": ("status",),
+    },
+    "force_reset_run": {
+        "profile_kind": "run-control-status",
+        "state_keys": ("status",),
+    },
+    "mark_run_reviewed": {
+        "profile_kind": "run-control-status",
+        "state_keys": ("status",),
+    },
+    "get_run_status": {
+        "profile_kind": "run-status-detail",
+        "identity_keys": ("run_id",),
+        "state_keys": ("status",),
+    },
+    "get_run_result": {
+        "profile_kind": "run-result-detail",
+        "identity_keys": ("run_id",),
+        "state_keys": ("result_state",),
+    },
+    "list_workspace_runs": {
+        "profile_kind": "workspace-run-collection",
+        "identity_keys": ("workspace_id",),
+        "collection_field_name": "runs",
+        "count_field_name": "returned_count",
+        "collection_item_identity_keys": ("run_id",),
+    },
+    "get_run_trace": {
+        "profile_kind": "run-trace-events",
+        "collection_field_name": "events",
+        "collection_item_identity_keys": ("sequence",),
+    },
+    "list_run_artifacts": {
+        "profile_kind": "run-artifact-collection",
+        "collection_field_name": "artifacts",
+        "count_field_name": "returned_count",
+        "collection_item_identity_keys": ("artifact_id",),
+    },
+    "get_artifact_detail": {
+        "profile_kind": "artifact-detail",
+        "identity_keys": ("artifact_id",),
+    },
+    "get_run_actions": {
+        "profile_kind": "run-action-log",
+        "collection_field_name": "actions",
+        "count_field_name": "returned_count",
+        "collection_item_identity_keys": ("action_id",),
+    },
+    "get_recent_activity": {
+        "profile_kind": "activity-collection",
+        "collection_field_name": "activities",
+        "count_field_name": "returned_count",
+        "collection_item_identity_keys": ("activity_id",),
+    },
+    "get_workspace": {
+        "profile_kind": "workspace-detail",
+        "identity_keys": ("workspace_id",),
+    },
+    "list_workspaces": {
+        "profile_kind": "workspace-collection",
+        "collection_field_name": "workspaces",
+        "count_field_name": "returned_count",
+        "collection_item_identity_keys": ("workspace_id",),
+    },
+}
+
+
 _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "launch_run": {
         "response_shape": "accepted",
@@ -3785,6 +3972,28 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_workspace": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object"},
     "list_workspaces": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object"},
 }
+
+
+def build_public_mcp_result_shape_profiles() -> tuple[PublicMcpResultShapeProfile, ...]:
+    """Return exported response result-shape profiles for the curated public MCP surface."""
+
+    adapter = build_public_mcp_adapter_scaffold()
+    profiles: list[PublicMcpResultShapeProfile] = []
+    seen: set[tuple[str, tuple[str, ...], tuple[str, ...], str | None, str | None, tuple[str, ...]]] = set()
+    for descriptor in (*build_public_mcp_tools(), *build_public_mcp_resources()):
+        profile = adapter._result_shape_profile_for_descriptor(descriptor, kind=("tool" if isinstance(descriptor, PublicMcpToolDescriptor) else "resource"))
+        sig = (
+            profile.profile_kind,
+            profile.identity_keys,
+            profile.state_keys,
+            profile.collection_field_name,
+            profile.count_field_name,
+            profile.collection_item_identity_keys,
+        )
+        if sig not in seen:
+            seen.add(sig)
+            profiles.append(profile)
+    return tuple(profiles)
 
 
 def build_public_mcp_response_contracts() -> tuple[PublicMcpResponseContract, ...]:
@@ -4045,6 +4254,7 @@ def build_public_mcp_contract_markers() -> tuple[str, ...]:
         "argument-schema",
         "route-contract",
         "response-contract",
+        "result-shape-profile",
         "transport-contract",
         "recovery-policy",
         "lifecycle-control-profile",
@@ -4097,6 +4307,7 @@ __all__ = [
     "PublicMcpPreflightAssessment",
     "PublicMcpLifecycleControlProfile",
     "PublicMcpOrchestrationSummary",
+    "PublicMcpResultShapeProfile",
     "PublicMcpResponseContract",
     "PublicMcpRecoveryPolicy",
     "PublicMcpNormalizedResponse",
@@ -4125,6 +4336,7 @@ __all__ = [
     "build_public_mcp_argument_schemas",
     "build_public_mcp_route_contracts",
     "build_public_mcp_transport_contracts",
+    "build_public_mcp_result_shape_profiles",
     "build_public_mcp_response_contracts",
     "build_public_mcp_recovery_policies",
     "build_public_mcp_lifecycle_control_profiles",
