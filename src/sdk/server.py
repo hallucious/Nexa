@@ -20,6 +20,11 @@ from src.server.artifact_trace_read_models import (
 )
 from src.server.recent_activity_models import ProductRecentActivityResponse
 from src.server.public_share_models import (
+    ProductIssuerPublicShareActionReportListResponse,
+    ProductIssuerPublicShareActionReportSummaryResponse,
+    ProductIssuerPublicShareBulkMutationResponse,
+    ProductIssuerPublicShareListResponse,
+    ProductIssuerPublicShareSummaryResponse,
     ProductPublicShareArtifactResponse,
     ProductPublicShareDetailResponse,
     ProductPublicShareHistoryResponse,
@@ -82,4 +87,9 @@ __all__ = [
     "ProductPublicShareHistoryResponse",
     "ProductPublicShareArtifactResponse",
     "ProductPublicShareMutationResponse",
+    "ProductIssuerPublicShareListResponse",
+    "ProductIssuerPublicShareSummaryResponse",
+    "ProductIssuerPublicShareActionReportListResponse",
+    "ProductIssuerPublicShareActionReportSummaryResponse",
+    "ProductIssuerPublicShareBulkMutationResponse",
 ]

@@ -3585,6 +3585,14 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "revoke_public_share": "handle_revoke_public_share",
     "archive_public_share": "handle_archive_public_share",
     "delete_public_share": "handle_delete_public_share",
+    "list_issuer_public_shares": "handle_list_issuer_public_shares",
+    "get_issuer_public_share_summary": "handle_get_issuer_public_share_summary",
+    "list_issuer_public_share_action_reports": "handle_list_issuer_public_share_action_reports",
+    "get_issuer_public_share_action_report_summary": "handle_get_issuer_public_share_action_report_summary",
+    "revoke_issuer_public_shares": "handle_revoke_issuer_public_shares",
+    "extend_issuer_public_shares": "handle_extend_issuer_public_shares",
+    "archive_issuer_public_shares": "handle_archive_issuer_public_shares",
+    "delete_issuer_public_shares": "handle_delete_issuer_public_shares",
     "put_onboarding": "handle_put_onboarding",
     "list_workspace_runs": "handle_list_workspace_runs",
     "get_workspace_shell": "handle_workspace_shell",
@@ -3775,6 +3783,60 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "delete_public_share": {
         "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share to delete."),),
     },
+    "list_issuer_public_shares": {
+        "query_fields": (
+            _schema_field("lifecycle_state", "query", "string", description="Optional effective lifecycle filter."),
+            _schema_field("stored_lifecycle_state", "query", "string", description="Optional stored lifecycle filter."),
+            _schema_field("storage_role", "query", "string", description="Optional storage role filter."),
+            _schema_field("operation", "query", "string", description="Optional required operation capability filter."),
+            _schema_field("archived", "query", "boolean", description="Optional archived-state filter."),
+            _schema_field("limit", "query", "integer", description="Optional page size hint."),
+            _schema_field("offset", "query", "integer", description="Optional pagination offset."),
+        ),
+    },
+    "get_issuer_public_share_summary": {
+        "query_fields": (
+            _schema_field("lifecycle_state", "query", "string", description="Optional effective lifecycle filter."),
+            _schema_field("stored_lifecycle_state", "query", "string", description="Optional stored lifecycle filter."),
+            _schema_field("storage_role", "query", "string", description="Optional storage role filter."),
+            _schema_field("operation", "query", "string", description="Optional required operation capability filter."),
+            _schema_field("archived", "query", "boolean", description="Optional archived-state filter."),
+        ),
+    },
+    "list_issuer_public_share_action_reports": {
+        "query_fields": (
+            _schema_field("action", "query", "string", description="Optional action filter."),
+            _schema_field("limit", "query", "integer", description="Optional page size hint."),
+            _schema_field("offset", "query", "integer", description="Optional pagination offset."),
+        ),
+    },
+    "get_issuer_public_share_action_report_summary": {
+        "query_fields": (
+            _schema_field("action", "query", "string", description="Optional action filter."),
+        ),
+    },
+    "revoke_issuer_public_shares": {
+        "body_fields": (
+            _schema_field("share_ids", "body", "array[string]", required=True, description="Issuer-owned public shares to revoke."),
+        ),
+    },
+    "extend_issuer_public_shares": {
+        "body_fields": (
+            _schema_field("share_ids", "body", "array[string]", required=True, description="Issuer-owned public shares to extend."),
+            _schema_field("expires_at", "body", "string", required=True, description="New expiration timestamp."),
+        ),
+    },
+    "archive_issuer_public_shares": {
+        "body_fields": (
+            _schema_field("share_ids", "body", "array[string]", required=True, description="Issuer-owned public shares to archive or unarchive."),
+            _schema_field("archived", "body", "boolean", description="Whether the requested shares should be archived."),
+        ),
+    },
+    "delete_issuer_public_shares": {
+        "body_fields": (
+            _schema_field("share_ids", "body", "array[string]", required=True, description="Issuer-owned public shares to delete."),
+        ),
+    },
     "list_workspaces": {
     },
 }
@@ -3805,6 +3867,14 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "revoke_public_share": {"route_family": "public-share-management", "transport_profile": "path-only"},
     "archive_public_share": {"route_family": "public-share-management", "transport_profile": "path-and-body"},
     "delete_public_share": {"route_family": "public-share-management", "transport_profile": "path-only"},
+    "list_issuer_public_shares": {"route_family": "issuer-public-share-list", "transport_profile": "query-only"},
+    "get_issuer_public_share_summary": {"route_family": "issuer-public-share-summary", "transport_profile": "query-only"},
+    "list_issuer_public_share_action_reports": {"route_family": "issuer-public-share-action-reports", "transport_profile": "query-only"},
+    "get_issuer_public_share_action_report_summary": {"route_family": "issuer-public-share-action-report-summary", "transport_profile": "query-only"},
+    "revoke_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
+    "extend_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
+    "archive_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
+    "delete_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
     "list_workspaces": {"route_family": "workspace-list", "transport_profile": "no-arguments"},
 }
 
@@ -3972,6 +4042,51 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "safe_to_retry_same_request_on_response_timeout": False,
         "response_timeout_recommended_action": "inspect_public_share_state_before_retry",
     },
+    "issuer-public-share-list": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "issuer-public-share-summary": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "issuer-public-share-action-reports": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "issuer-public-share-action-report-summary": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "issuer-public-share-management": {
+        "idempotency_class": "mutation-non-idempotent",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_issuer_share_state_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_issuer_share_state_before_retry",
+    },
     "workspace-list": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
@@ -4118,6 +4233,41 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "preferred_control_tool_names": ("extend_public_share", "revoke_public_share", "archive_public_share", "delete_public_share"),
         "followup_route_names": ("get_public_share", "get_public_share_history", "get_public_share_artifact"),
     },
+    "issuer-public-share-list": {
+        "lifecycle_class": "issuer-public-share-read",
+        "status_resource_name": "get_issuer_public_share_summary",
+        "actions_resource_name": "list_issuer_public_share_action_reports",
+        "preferred_control_tool_names": ("extend_issuer_public_shares", "revoke_issuer_public_shares", "archive_issuer_public_shares", "delete_issuer_public_shares"),
+        "followup_route_names": ("get_issuer_public_share_summary", "list_issuer_public_share_action_reports", "get_issuer_public_share_action_report_summary"),
+    },
+    "issuer-public-share-summary": {
+        "lifecycle_class": "issuer-public-share-read",
+        "status_resource_name": "get_issuer_public_share_summary",
+        "actions_resource_name": "list_issuer_public_share_action_reports",
+        "preferred_control_tool_names": ("extend_issuer_public_shares", "revoke_issuer_public_shares", "archive_issuer_public_shares", "delete_issuer_public_shares"),
+        "followup_route_names": ("list_issuer_public_shares", "list_issuer_public_share_action_reports", "get_issuer_public_share_action_report_summary"),
+    },
+    "issuer-public-share-action-reports": {
+        "lifecycle_class": "issuer-public-share-governance",
+        "status_resource_name": "get_issuer_public_share_summary",
+        "actions_resource_name": "list_issuer_public_share_action_reports",
+        "preferred_control_tool_names": ("extend_issuer_public_shares", "revoke_issuer_public_shares", "archive_issuer_public_shares", "delete_issuer_public_shares"),
+        "followup_route_names": ("list_issuer_public_shares", "get_issuer_public_share_summary", "get_issuer_public_share_action_report_summary"),
+    },
+    "issuer-public-share-action-report-summary": {
+        "lifecycle_class": "issuer-public-share-governance",
+        "status_resource_name": "get_issuer_public_share_summary",
+        "actions_resource_name": "list_issuer_public_share_action_reports",
+        "preferred_control_tool_names": ("extend_issuer_public_shares", "revoke_issuer_public_shares", "archive_issuer_public_shares", "delete_issuer_public_shares"),
+        "followup_route_names": ("list_issuer_public_shares", "get_issuer_public_share_summary", "list_issuer_public_share_action_reports"),
+    },
+    "issuer-public-share-management": {
+        "lifecycle_class": "issuer-public-share-management",
+        "status_resource_name": "get_issuer_public_share_summary",
+        "actions_resource_name": "list_issuer_public_share_action_reports",
+        "preferred_control_tool_names": ("extend_issuer_public_shares", "revoke_issuer_public_shares", "archive_issuer_public_shares", "delete_issuer_public_shares"),
+        "followup_route_names": ("list_issuer_public_shares", "get_issuer_public_share_summary", "list_issuer_public_share_action_reports", "get_issuer_public_share_action_report_summary"),
+    },
 }
 
 
@@ -4238,6 +4388,50 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "identity_keys": ("share_id",),
         "state_keys": ("status",),
     },
+    "list_issuer_public_shares": {
+        "profile_kind": "issuer-public-share-collection",
+        "identity_keys": ("issuer_user_ref",),
+        "collection_field_name": "shares",
+        "count_field_name": "returned_count",
+        "collection_item_identity_keys": ("share_id",),
+    },
+    "get_issuer_public_share_summary": {
+        "profile_kind": "issuer-public-share-summary",
+        "identity_keys": ("issuer_user_ref",),
+        "state_keys": ("status",),
+    },
+    "list_issuer_public_share_action_reports": {
+        "profile_kind": "issuer-public-share-action-report-collection",
+        "identity_keys": ("issuer_user_ref",),
+        "collection_field_name": "reports",
+        "count_field_name": "returned_count",
+        "collection_item_identity_keys": ("report_id",),
+    },
+    "get_issuer_public_share_action_report_summary": {
+        "profile_kind": "issuer-public-share-action-report-summary",
+        "identity_keys": ("issuer_user_ref",),
+        "state_keys": ("status",),
+    },
+    "revoke_issuer_public_shares": {
+        "profile_kind": "issuer-public-share-bulk-mutation",
+        "identity_keys": ("issuer_user_ref",),
+        "state_keys": ("status",),
+    },
+    "extend_issuer_public_shares": {
+        "profile_kind": "issuer-public-share-bulk-mutation",
+        "identity_keys": ("issuer_user_ref",),
+        "state_keys": ("status",),
+    },
+    "archive_issuer_public_shares": {
+        "profile_kind": "issuer-public-share-bulk-mutation",
+        "identity_keys": ("issuer_user_ref",),
+        "state_keys": ("status",),
+    },
+    "delete_issuer_public_shares": {
+        "profile_kind": "issuer-public-share-bulk-mutation",
+        "identity_keys": ("issuer_user_ref",),
+        "state_keys": ("status",),
+    },
     "list_workspaces": {
         "profile_kind": "workspace-collection",
         "collection_field_name": "workspaces",
@@ -4282,6 +4476,14 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "revoke_public_share": {"response_shape": "public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
     "archive_public_share": {"response_shape": "public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
     "delete_public_share": {"response_shape": "public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
+    "list_issuer_public_shares": {"response_shape": "issuer-public-share-list", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "shares", "status")},
+    "get_issuer_public_share_summary": {"response_shape": "issuer-public-share-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "summary", "status")},
+    "list_issuer_public_share_action_reports": {"response_shape": "issuer-public-share-action-report-list", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "reports", "status")},
+    "get_issuer_public_share_action_report_summary": {"response_shape": "issuer-public-share-action-report-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "summary", "status")},
+    "revoke_issuer_public_shares": {"response_shape": "issuer-public-share-bulk-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "status", "action")},
+    "extend_issuer_public_shares": {"response_shape": "issuer-public-share-bulk-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "status", "action")},
+    "archive_issuer_public_shares": {"response_shape": "issuer-public-share-bulk-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "status", "action")},
+    "delete_issuer_public_shares": {"response_shape": "issuer-public-share-bulk-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "status", "action")},
     "list_workspaces": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object"},
 }
 
@@ -4441,6 +4643,34 @@ _TOOL_SPECS: tuple[dict[str, object], ...] = (
         "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareMutationResponse"),
         "tags": ("sharing", "public-boundary", "lifecycle"),
     },
+    {
+        "name": "revoke_issuer_public_shares",
+        "route_name": "revoke_issuer_public_shares",
+        "description": "Revoke multiple issuer-owned public shares in one authenticated management action.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareBulkMutationResponse"),
+        "tags": ("sharing", "issuer-management", "bulk-action"),
+    },
+    {
+        "name": "extend_issuer_public_shares",
+        "route_name": "extend_issuer_public_shares",
+        "description": "Extend expiration for multiple issuer-owned public shares in one authenticated management action.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareBulkMutationResponse"),
+        "tags": ("sharing", "issuer-management", "bulk-action"),
+    },
+    {
+        "name": "archive_issuer_public_shares",
+        "route_name": "archive_issuer_public_shares",
+        "description": "Archive or unarchive multiple issuer-owned public shares in one authenticated management action.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareBulkMutationResponse"),
+        "tags": ("sharing", "issuer-management", "bulk-action"),
+    },
+    {
+        "name": "delete_issuer_public_shares",
+        "route_name": "delete_issuer_public_shares",
+        "description": "Delete multiple issuer-owned public shares in one authenticated management action.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareBulkMutationResponse"),
+        "tags": ("sharing", "issuer-management", "bulk-action"),
+    },
 )
 
 _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
@@ -4520,6 +4750,34 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read the shared artifact payload and boundary metadata for a public share.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareArtifactResponse"),
         "tags": ("sharing", "public-boundary", "artifact"),
+    },
+    {
+        "name": "list_issuer_public_shares",
+        "route_name": "list_issuer_public_shares",
+        "description": "List issuer-owned public shares together with management and governance summaries.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareListResponse"),
+        "tags": ("sharing", "issuer-management", "list"),
+    },
+    {
+        "name": "get_issuer_public_share_summary",
+        "route_name": "get_issuer_public_share_summary",
+        "description": "Read issuer share inventory and governance summary for authenticated public-share management.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareSummaryResponse"),
+        "tags": ("sharing", "issuer-management", "summary"),
+    },
+    {
+        "name": "list_issuer_public_share_action_reports",
+        "route_name": "list_issuer_public_share_action_reports",
+        "description": "List issuer public-share action reports with governance summary and pagination context.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareActionReportListResponse"),
+        "tags": ("sharing", "issuer-management", "governance"),
+    },
+    {
+        "name": "get_issuer_public_share_action_report_summary",
+        "route_name": "get_issuer_public_share_action_report_summary",
+        "description": "Read issuer public-share action-report summary with governance rollup context.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareActionReportSummaryResponse"),
+        "tags": ("sharing", "issuer-management", "governance"),
     },
     {
         "name": "get_workspace",

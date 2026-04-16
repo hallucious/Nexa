@@ -109,6 +109,10 @@ def test_mcp_tool_descriptors_follow_public_route_surface() -> None:
     assert indexed["checkout_workspace_shell"].path.endswith("/shell/checkout")
     assert "public-consumption" in indexed["checkout_workspace_shell"].tags
     assert indexed["retry_run"].response_type is not None
+    assert indexed["revoke_issuer_public_shares"].path == "/api/users/me/public-shares/actions/revoke"
+    assert indexed["extend_issuer_public_shares"].path == "/api/users/me/public-shares/actions/extend"
+    assert indexed["archive_issuer_public_shares"].path == "/api/users/me/public-shares/actions/archive"
+    assert indexed["delete_issuer_public_shares"].path == "/api/users/me/public-shares/actions/delete"
 
 
 def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
@@ -121,6 +125,10 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert indexed["get_run_result"].response_type is not None
     assert indexed["list_run_artifacts"].path.endswith("/artifacts")
     assert indexed["get_recent_activity"].path == "/api/users/me/activity"
+    assert indexed["list_issuer_public_shares"].path == "/api/users/me/public-shares"
+    assert indexed["get_issuer_public_share_summary"].path == "/api/users/me/public-shares/summary"
+    assert indexed["list_issuer_public_share_action_reports"].path == "/api/users/me/public-shares/action-reports"
+    assert indexed["get_issuer_public_share_action_report_summary"].path == "/api/users/me/public-shares/action-reports/summary"
 
 
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:

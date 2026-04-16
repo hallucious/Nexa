@@ -172,3 +172,154 @@ class ProductPublicShareMutationResponse(ProductPublicShareDetailResponse):
     action_report: Optional[dict[str, Any]] = None
     governance_summary: Optional[dict[str, Any]] = None
 
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareManagementEntryView:
+    share_id: str
+    share_path: str
+    storage_role: str
+    canonical_ref: str
+    lifecycle: ProductPublicShareLifecycleView
+    management: ProductPublicShareManagementView
+    audit_summary: ProductPublicShareAuditSummaryView
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    operation_capabilities: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if not self.share_id:
+            raise ValueError("ProductIssuerPublicShareManagementEntryView.share_id must be non-empty")
+        if not self.share_path:
+            raise ValueError("ProductIssuerPublicShareManagementEntryView.share_path must be non-empty")
+        if not self.storage_role:
+            raise ValueError("ProductIssuerPublicShareManagementEntryView.storage_role must be non-empty")
+        if not self.canonical_ref:
+            raise ValueError("ProductIssuerPublicShareManagementEntryView.canonical_ref must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareSummaryView:
+    issuer_user_ref: str
+    total_share_count: int
+    active_share_count: int
+    expired_share_count: int
+    revoked_share_count: int
+    archived_share_count: int
+    working_save_share_count: int
+    commit_snapshot_share_count: int
+    runnable_share_count: int
+    checkoutable_share_count: int
+    latest_created_at: Optional[str] = None
+    latest_updated_at: Optional[str] = None
+    latest_audit_event_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not self.issuer_user_ref:
+            raise ValueError("ProductIssuerPublicShareSummaryView.issuer_user_ref must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareGovernanceSummaryView(ProductIssuerPublicShareSummaryView):
+    total_action_report_count: int = 0
+    revoke_action_report_count: int = 0
+    extend_action_report_count: int = 0
+    archive_action_report_count: int = 0
+    delete_action_report_count: int = 0
+    latest_action_report_at: Optional[str] = None
+    recent_action_reports: tuple[dict[str, Any], ...] = ()
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareListResponse:
+    status: str
+    issuer_user_ref: str
+    summary: ProductIssuerPublicShareSummaryView
+    inventory_summary: ProductIssuerPublicShareSummaryView
+    governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    shares: tuple[ProductIssuerPublicShareManagementEntryView, ...] = ()
+    applied_filters: dict[str, Any] = field(default_factory=dict)
+    pagination: dict[str, Any] = field(default_factory=dict)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductIssuerPublicShareListResponse.status must be non-empty")
+        if not self.issuer_user_ref:
+            raise ValueError("ProductIssuerPublicShareListResponse.issuer_user_ref must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareSummaryResponse:
+    status: str
+    issuer_user_ref: str
+    summary: ProductIssuerPublicShareSummaryView
+    inventory_summary: ProductIssuerPublicShareSummaryView
+    governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    applied_filters: dict[str, Any] = field(default_factory=dict)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductIssuerPublicShareSummaryResponse.status must be non-empty")
+        if not self.issuer_user_ref:
+            raise ValueError("ProductIssuerPublicShareSummaryResponse.issuer_user_ref must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareActionReportListResponse:
+    status: str
+    issuer_user_ref: str
+    summary: dict[str, Any]
+    inventory_summary: dict[str, Any]
+    governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    reports: tuple[dict[str, Any], ...] = ()
+    applied_filters: dict[str, Any] = field(default_factory=dict)
+    pagination: dict[str, Any] = field(default_factory=dict)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductIssuerPublicShareActionReportListResponse.status must be non-empty")
+        if not self.issuer_user_ref:
+            raise ValueError("ProductIssuerPublicShareActionReportListResponse.issuer_user_ref must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareActionReportSummaryResponse:
+    status: str
+    issuer_user_ref: str
+    summary: dict[str, Any]
+    inventory_summary: dict[str, Any]
+    governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    applied_filters: dict[str, Any] = field(default_factory=dict)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductIssuerPublicShareActionReportSummaryResponse.status must be non-empty")
+        if not self.issuer_user_ref:
+            raise ValueError("ProductIssuerPublicShareActionReportSummaryResponse.issuer_user_ref must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareBulkMutationResponse:
+    status: str
+    issuer_user_ref: str
+    action: str
+    summary: ProductIssuerPublicShareSummaryView
+    governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    shares: tuple[ProductIssuerPublicShareManagementEntryView, ...] = ()
+    action_report: Optional[dict[str, Any]] = None
+    requested_share_ids: tuple[str, ...] = ()
+    affected_share_count: int = 0
+    expires_at: Optional[str] = None
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductIssuerPublicShareBulkMutationResponse.status must be non-empty")
+        if not self.issuer_user_ref:
+            raise ValueError("ProductIssuerPublicShareBulkMutationResponse.issuer_user_ref must be non-empty")
+        if not self.action:
+            raise ValueError("ProductIssuerPublicShareBulkMutationResponse.action must be non-empty")
+

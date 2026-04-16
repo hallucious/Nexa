@@ -23,6 +23,11 @@ from src.server.framework_binding_models import FrameworkOutboundResponse
 
 from src.sdk.server import (
     ProductExecutionTarget,
+    ProductIssuerPublicShareActionReportListResponse,
+    ProductIssuerPublicShareActionReportSummaryResponse,
+    ProductIssuerPublicShareBulkMutationResponse,
+    ProductIssuerPublicShareListResponse,
+    ProductIssuerPublicShareSummaryResponse,
     ProductLaunchOptions,
     ProductPublicShareArtifactResponse,
     ProductPublicShareDetailResponse,
@@ -122,6 +127,11 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert status.source_artifact is not None
     assert status.source_artifact.canonical_ref == "working_save:ws-1"
     assert ProductWorkspaceRunListResponse is not None
+    assert ProductIssuerPublicShareListResponse is not None
+    assert ProductIssuerPublicShareSummaryResponse is not None
+    assert ProductIssuerPublicShareActionReportListResponse is not None
+    assert ProductIssuerPublicShareActionReportSummaryResponse is not None
+    assert ProductIssuerPublicShareBulkMutationResponse is not None
 
 
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
