@@ -136,6 +136,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     contracts = {contract.route_name: contract for contract in build_public_mcp_response_contracts()}
     assert contracts["get_starter_circuit_template"].result_shape_profile.identity_keys == ("template.template_ref", "template.template_id")
     assert contracts["list_starter_circuit_templates"].result_shape_profile.collection_item_identity_keys == ("template_ref", "template_id")
+    assert contracts["get_public_share"].result_shape_profile.identity_keys == ("share_id", "identity")
+    assert contracts["list_issuer_public_shares"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
+    assert contracts["list_issuer_public_shares"].result_shape_profile.collection_item_identity_keys == ("share_id", "identity")
     assert indexed["get_public_nex_format"].path == "/api/formats/public-nex"
     assert indexed["list_issuer_public_shares"].path == "/api/users/me/public-shares"
     assert indexed["get_issuer_public_share_summary"].path == "/api/users/me/public-shares/summary"

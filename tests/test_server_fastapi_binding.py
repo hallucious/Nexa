@@ -1598,6 +1598,9 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
     assert list_payload['summary']['total_share_count'] == 2
     assert list_payload['summary']['active_share_count'] == 1
     assert list_payload['summary']['expired_share_count'] == 1
+    assert list_payload['identity_policy']['canonical_key'] == 'share_id'
+    assert list_payload['namespace_policy']['public_path_format'] == '/share/{share_id}'
+    assert list_payload['shares'][0]['identity']['canonical_key'] == 'share_id'
     assert [entry['share_id'] for entry in list_payload['shares']] == [
         'share-fastapi-owner-active',
         'share-fastapi-owner-expired',
@@ -1832,6 +1835,7 @@ def test_fastapi_binding_public_share_revoke_round_trip() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload['share_id'] == 'share-fastapi-revoke-001'
+    assert payload['identity']['share_family'] == 'public_nex_link_share'
     assert payload['lifecycle']['state'] == 'revoked'
     assert payload['lifecycle']['updated_at'] == '2026-04-11T12:09:00+00:00'
     assert payload['audit_summary']['event_count'] == 2
@@ -1887,6 +1891,7 @@ def test_fastapi_binding_public_share_extend_round_trip() -> None:
     assert response.status_code == 200
     payload = response.json()
     assert payload['share_id'] == 'share-fastapi-extend-001'
+    assert payload['identity']['share_family'] == 'public_nex_link_share'
     assert payload['lifecycle']['stored_state'] == 'active'
     assert payload['lifecycle']['state'] == 'active'
     assert payload['lifecycle']['expires_at'] == '2026-04-20T00:00:00+00:00'
@@ -1973,6 +1978,7 @@ def test_fastapi_binding_public_share_delete_round_trip() -> None:
     payload = response.json()
     assert payload['status'] == 'deleted'
     assert payload['share_id'] == 'share-fastapi-delete-001'
+    assert payload['identity']['canonical_key'] == 'share_id'
     assert payload['action_report']['action'] == 'delete'
     assert payload['governance_summary']['total_share_count'] == 0
     assert payload['links']['action_reports'] == '/api/users/me/public-shares/action-reports'

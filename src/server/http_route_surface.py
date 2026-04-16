@@ -525,6 +525,35 @@ def _public_nex_format_body() -> dict[str, Any]:
     }
 
 
+def _public_share_identity_body(descriptor) -> dict[str, Any]:
+    return {
+        "canonical_key": "share_id",
+        "canonical_value": descriptor.share_id,
+        "public_path_key": "share_path",
+        "public_path_value": descriptor.share_path,
+        "lookup_mode": "share_id_only",
+        "share_family": "public_nex_link_share",
+    }
+
+
+def _public_share_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "share_id",
+        "public_path_key": "share_path",
+        "lookup_mode": "share_id_only",
+        "share_family": "public_nex_link_share",
+    }
+
+
+def _public_share_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "share_family": "public_nex_link_share",
+        "canonical_route": "/api/public-shares/{share_id}",
+        "public_path_format": "/share/{share_id}",
+        "id_kind": "opaque-share-id",
+    }
+
+
 def _public_artifact_boundary_body(model_or_data: Any) -> dict[str, Any]:
     descriptor = describe_public_nex_artifact(model_or_data)
     format_boundary = get_public_nex_format_boundary()
@@ -564,6 +593,7 @@ def _issuer_share_management_entry_body(entry) -> dict[str, Any]:
     return {
         "share_id": entry.share_id,
         "share_path": entry.share_path,
+        "identity": _public_share_identity_body(entry),
         "title": entry.title,
         "summary": entry.summary,
         "storage_role": entry.storage_role,
@@ -1455,6 +1485,8 @@ class RunHttpRouteSurface:
             "summary": _issuer_share_management_summary_body(summary),
             "inventory_summary": _issuer_share_management_summary_body(total_summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "identity_policy": _public_share_identity_policy_body(),
+            "namespace_policy": _public_share_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in page_entries],
             "applied_filters": filters,
             "pagination": pagination,
@@ -1520,6 +1552,8 @@ class RunHttpRouteSurface:
             "summary": _issuer_share_management_summary_body(summary),
             "inventory_summary": _issuer_share_management_summary_body(total_summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "identity_policy": _public_share_identity_policy_body(),
+            "namespace_policy": _public_share_namespace_policy_body(),
             "applied_filters": filters,
             "links": {
                 "self": "/api/users/me/public-shares/summary",
@@ -2111,6 +2145,7 @@ class RunHttpRouteSurface:
             "access_mode": descriptor.access_mode,
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
+            "identity": _public_share_identity_body(descriptor),
             "lifecycle": {
                 "stored_state": descriptor.stored_lifecycle_state,
                 "state": descriptor.lifecycle_state,
@@ -2169,6 +2204,7 @@ class RunHttpRouteSurface:
             "access_mode": descriptor.access_mode,
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
+            "identity": _public_share_identity_body(descriptor),
             "lifecycle": {
                 "stored_state": descriptor.stored_lifecycle_state,
                 "state": descriptor.lifecycle_state,
@@ -2226,6 +2262,7 @@ class RunHttpRouteSurface:
             "audit_summary": _share_audit_summary(payload),
             "share_boundary": _public_share_boundary_body(),
             "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
+            "identity": _public_share_identity_body(descriptor),
             "history": list(history),
             "links": {
                 "share": f"/api/public-shares/{descriptor.share_id}",
@@ -2269,6 +2306,7 @@ class RunHttpRouteSurface:
             "share_title": descriptor.title,
             "share_boundary": _public_share_boundary_body(),
             "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
+            "identity": _public_share_identity_body(descriptor),
             "artifact": payload["artifact"],
             "links": {
                 "share": f"/api/public-shares/{descriptor.share_id}",
@@ -2392,6 +2430,7 @@ class RunHttpRouteSurface:
             "access_mode": extended_descriptor.access_mode,
             "viewer_capabilities": list(extended_descriptor.viewer_capabilities),
             "operation_capabilities": list(extended_descriptor.operation_capabilities),
+            "identity": _public_share_identity_body(extended_descriptor),
             "lifecycle": {
                 "stored_state": extended_descriptor.stored_lifecycle_state,
                 "state": extended_descriptor.lifecycle_state,
@@ -2517,6 +2556,7 @@ class RunHttpRouteSurface:
             "access_mode": revoked_descriptor.access_mode,
             "viewer_capabilities": list(revoked_descriptor.viewer_capabilities),
             "operation_capabilities": list(revoked_descriptor.operation_capabilities),
+            "identity": _public_share_identity_body(revoked_descriptor),
             "lifecycle": {
                 "stored_state": revoked_descriptor.stored_lifecycle_state,
                 "state": revoked_descriptor.lifecycle_state,
@@ -2651,6 +2691,7 @@ class RunHttpRouteSurface:
             "access_mode": updated_descriptor.access_mode,
             "viewer_capabilities": list(updated_descriptor.viewer_capabilities),
             "operation_capabilities": list(updated_descriptor.operation_capabilities),
+            "identity": _public_share_identity_body(updated_descriptor),
             "lifecycle": {
                 "stored_state": updated_descriptor.stored_lifecycle_state,
                 "state": updated_descriptor.lifecycle_state,
@@ -2795,6 +2836,7 @@ class RunHttpRouteSurface:
             "access_mode": descriptor.access_mode,
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
+            "identity": _public_share_identity_body(descriptor),
             "lifecycle": {
                 "stored_state": descriptor.stored_lifecycle_state,
                 "state": descriptor.lifecycle_state,

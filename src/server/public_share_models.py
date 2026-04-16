@@ -87,6 +87,7 @@ class ProductPublicShareDetailResponse:
     summary: Optional[str] = None
     viewer_capabilities: tuple[str, ...] = ()
     operation_capabilities: tuple[str, ...] = ()
+    identity: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -140,6 +141,7 @@ class ProductPublicShareHistoryResponse:
     artifact_boundary: dict[str, Any]
     history: tuple[ProductPublicShareHistoryEntryView, ...] = ()
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -159,6 +161,7 @@ class ProductPublicShareArtifactResponse:
     artifact_boundary: dict[str, Any]
     artifact: dict[str, Any]
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -185,6 +188,7 @@ class ProductIssuerPublicShareManagementEntryView:
     title: Optional[str] = None
     summary: Optional[str] = None
     operation_capabilities: tuple[str, ...] = ()
+    identity: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.share_id:
@@ -240,6 +244,8 @@ class ProductIssuerPublicShareListResponse:
     applied_filters: dict[str, Any] = field(default_factory=dict)
     pagination: dict[str, Any] = field(default_factory=dict)
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -257,6 +263,8 @@ class ProductIssuerPublicShareSummaryResponse:
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
     applied_filters: dict[str, Any] = field(default_factory=dict)
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:

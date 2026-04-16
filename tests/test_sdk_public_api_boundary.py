@@ -489,6 +489,7 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
         share_boundary={"share_family": "public_nex_link_share"},
         artifact_boundary={"format_family": ".nex"},
         links=ProductPublicShareLinks({"self": "/api/public-shares/share-1"}),
+        identity={"canonical_key": "share_id", "canonical_value": "share-1"},
     )
     created = ProductWorkspaceShellShareCreatedResponse(
         status="created",
@@ -504,6 +505,7 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
         share_boundary=detail.share_boundary,
         artifact_boundary=detail.artifact_boundary,
         links=detail.links,
+        identity=detail.identity,
     )
     history = ProductPublicShareHistoryResponse(
         status="ready",
@@ -520,6 +522,7 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
             ),
         ),
         links=detail.links,
+        identity=detail.identity,
     )
     artifact = ProductPublicShareArtifactResponse(
         status="ready",
@@ -544,6 +547,7 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
         artifact_boundary=detail.artifact_boundary,
         links=detail.links,
         governance_summary={"total_share_count": 1},
+        identity=detail.identity,
     )
 
     assert server.PUBLIC_SERVER_SDK_SURFACE_VERSION == "1.0"
@@ -551,6 +555,7 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
     assert history.history[0].event_id == "evt-1"
     assert artifact.artifact["meta"]["storage_role"] == "commit_snapshot"
     assert mutation.governance_summary == {"total_share_count": 1}
+    assert detail.identity == {"canonical_key": "share_id", "canonical_value": "share-1"}
 
 
 def test_server_sdk_surface_exposes_workspace_shell_models() -> None:

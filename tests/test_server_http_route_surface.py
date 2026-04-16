@@ -284,6 +284,7 @@ def test_public_share_artifact_route_returns_canonical_artifact_without_authenti
     assert response.body["share_boundary"]["management_operation_boundaries"][0]["denial_reason_code"] == "public_share.transition_not_allowed"
     assert response.body["share_boundary"]["history_boundary"]["ordering"] == "ascending_sequence"
     assert response.body["share_boundary"]["history_boundary"]["canonical_http_method"] == "GET"
+    assert response.body["identity"]["share_family"] == "public_nex_link_share"
     assert response.body["share_boundary"]["history_boundary"]["canonical_route"] == "/api/public-shares/{share_id}/history"
     assert response.body["share_boundary"]["history_boundary"]["result_surface"] == "public_share_history"
     assert response.body["share_boundary"]["history_boundary"]["entry_boundary"]["entry_surface"] == "public_share_audit_entry"
@@ -326,6 +327,9 @@ def test_issuer_public_share_management_routes_return_bounded_summary_and_entrie
     assert response.body["summary"]["revoked_share_count"] == 1
     assert response.body["summary"]["commit_snapshot_share_count"] == 3
     assert response.body["summary"]["checkoutable_share_count"] == 1
+    assert response.body["identity_policy"]["canonical_key"] == "share_id"
+    assert response.body["namespace_policy"]["public_path_format"] == "/share/{share_id}"
+    assert response.body["shares"][0]["identity"]["canonical_key"] == "share_id"
     assert [entry["share_id"] for entry in response.body["shares"]] == [
         "share-owner-active",
         "share-owner-expired",
@@ -1184,6 +1188,7 @@ def test_public_share_history_route_returns_audit_entries() -> None:
     assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
     assert response.body["share_boundary"]["history_access_posture"] == "public_audit_history"
     assert response.body["share_boundary"]["history_boundary"]["canonical_http_method"] == "GET"
+    assert response.body["identity"]["share_family"] == "public_nex_link_share"
     assert response.body["share_boundary"]["history_boundary"]["canonical_route"] == "/api/public-shares/{share_id}/history"
     assert response.body["share_boundary"]["history_boundary"]["result_surface"] == "public_share_history"
     assert response.body["share_boundary"]["history_boundary"]["entry_boundary"]["entry_surface"] == "public_share_audit_entry"
@@ -1232,6 +1237,7 @@ def test_public_share_delete_route_removes_share_for_issuer() -> None:
     assert response.status_code == 200
     assert response.body["status"] == "deleted"
     assert response.body["share_id"] == "share-delete-http-001"
+    assert response.body["identity"]["canonical_key"] == "share_id"
     assert response.body["action_report"]["action"] == "delete"
     assert response.body["governance_summary"]["total_share_count"] == 0
     assert response.body["governance_summary"]["total_action_report_count"] == 3

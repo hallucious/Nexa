@@ -319,6 +319,9 @@ def test_framework_binding_handles_issuer_public_share_management_round_trip() -
     assert parsed["summary"]["total_share_count"] == 2
     assert parsed["summary"]["active_share_count"] == 1
     assert parsed["summary"]["expired_share_count"] == 1
+    assert parsed["identity_policy"]["canonical_key"] == "share_id"
+    assert parsed["namespace_policy"]["public_path_format"] == "/share/{share_id}"
+    assert parsed["shares"][0]["identity"]["canonical_key"] == "share_id"
     assert [entry["share_id"] for entry in parsed["shares"]] == [
         "share-framework-owner-active",
         "share-framework-owner-expired",
@@ -485,6 +488,7 @@ def test_framework_binding_handles_public_share_artifact_round_trip() -> None:
 
     assert response.status_code == 200
     parsed = json.loads(response.body_text)
+    assert parsed["identity"]["public_path_value"] == "/share/share-framework-001"
     assert parsed["artifact"]["meta"]["storage_role"] == "commit_snapshot"
     assert parsed["artifact"]["meta"]["commit_id"] == "snap-share-001"
     assert parsed["share_boundary"]["artifact_format_family"] == ".nex"
@@ -521,6 +525,7 @@ def test_framework_binding_handles_workspace_shell_share_creation_round_trip() -
     assert response.status_code == 201
     parsed = json.loads(response.body_text)
     assert parsed["share_id"] == "share-framework-created-001"
+    assert parsed["identity"]["public_path_value"] == "/share/share-framework-created-001"
     assert parsed["lifecycle"]["created_at"] == "2026-04-15T12:15:00+00:00"
     assert parsed["lifecycle"]["issued_by_user_ref"] == "user-owner"
     assert parsed["source_artifact"]["canonical_ref"] == "snap-framework-share-001"
@@ -1330,6 +1335,7 @@ def test_framework_binding_revoke_public_share_round_trip() -> None:
     assert response.status_code == 200
     parsed = json.loads(response.body_text)
     assert parsed["share_id"] == "share-framework-revoke-001"
+    assert parsed["identity"]["share_family"] == "public_nex_link_share"
     assert parsed["lifecycle"]["state"] == "revoked"
     assert parsed["lifecycle"]["updated_at"] == "2026-04-15T13:30:00+00:00"
     assert parsed["action_report"]["action"] == "revoke"
@@ -1369,6 +1375,7 @@ def test_framework_binding_extend_public_share_round_trip() -> None:
     assert response.status_code == 200
     parsed = json.loads(response.body_text)
     assert parsed["share_id"] == "share-framework-extend-001"
+    assert parsed["identity"]["share_family"] == "public_nex_link_share"
     assert parsed["lifecycle"]["stored_state"] == "active"
     assert parsed["lifecycle"]["state"] == "active"
     assert parsed["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
@@ -1425,6 +1432,7 @@ def test_framework_binding_handles_public_share_delete_round_trip() -> None:
     parsed = json.loads(response.body_text)
     assert parsed["status"] == "deleted"
     assert parsed["share_id"] == "share-framework-delete-001"
+    assert parsed["identity"]["canonical_key"] == "share_id"
     assert parsed["action_report"]["action"] == "delete"
     assert parsed["governance_summary"]["total_share_count"] == 0
     assert parsed["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
