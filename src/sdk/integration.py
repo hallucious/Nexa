@@ -3574,6 +3574,14 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "probe_workspace_provider": "handle_probe_workspace_provider",
     "list_provider_probe_history": "handle_list_provider_probe_history",
     "get_onboarding": "handle_get_onboarding",
+    "create_workspace_shell_share": "handle_create_workspace_shell_share",
+    "get_public_share": "handle_get_public_share",
+    "get_public_share_history": "handle_get_public_share_history",
+    "get_public_share_artifact": "handle_get_public_share_artifact",
+    "extend_public_share": "handle_extend_public_share",
+    "revoke_public_share": "handle_revoke_public_share",
+    "archive_public_share": "handle_archive_public_share",
+    "delete_public_share": "handle_delete_public_share",
     "put_onboarding": "handle_put_onboarding",
     "list_workspace_runs": "handle_list_workspace_runs",
     "get_workspace_shell": "handle_workspace_shell",
@@ -3727,6 +3735,42 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_workspace": {
         "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace to read."),),
     },
+    "create_workspace_shell_share": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose shell should be shared publicly."),),
+        "body_fields": (
+            _schema_field("share_id", "body", "string", description="Optional explicit public share identifier."),
+            _schema_field("title", "body", "string", description="Optional public share title."),
+            _schema_field("summary", "body", "string", description="Optional public share summary."),
+            _schema_field("expires_at", "body", "string", description="Optional expiration timestamp for the share."),
+        ),
+    },
+    "get_public_share": {
+        "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share to read."),),
+    },
+    "get_public_share_history": {
+        "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share whose history should be read."),),
+    },
+    "get_public_share_artifact": {
+        "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share whose artifact should be read."),),
+    },
+    "extend_public_share": {
+        "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share whose expiration should be extended."),),
+        "body_fields": (
+            _schema_field("expires_at", "body", "string", required=True, description="New expiration timestamp."),
+        ),
+    },
+    "revoke_public_share": {
+        "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share to revoke."),),
+    },
+    "archive_public_share": {
+        "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share to archive or unarchive."),),
+        "body_fields": (
+            _schema_field("archived", "body", "boolean", description="Whether the share should be archived."),
+        ),
+    },
+    "delete_public_share": {
+        "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share to delete."),),
+    },
     "list_workspaces": {
     },
 }
@@ -3749,6 +3793,14 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "get_run_actions": {"route_family": "run-actions", "transport_profile": "path-and-query"},
     "get_recent_activity": {"route_family": "activity-read", "transport_profile": "query-only"},
     "get_workspace": {"route_family": "workspace-read", "transport_profile": "path-only"},
+    "create_workspace_shell_share": {"route_family": "public-share-create", "transport_profile": "path-and-body"},
+    "get_public_share": {"route_family": "public-share-read", "transport_profile": "path-only"},
+    "get_public_share_history": {"route_family": "public-share-history", "transport_profile": "path-only"},
+    "get_public_share_artifact": {"route_family": "public-share-artifact", "transport_profile": "path-only"},
+    "extend_public_share": {"route_family": "public-share-management", "transport_profile": "path-and-body"},
+    "revoke_public_share": {"route_family": "public-share-management", "transport_profile": "path-only"},
+    "archive_public_share": {"route_family": "public-share-management", "transport_profile": "path-and-body"},
+    "delete_public_share": {"route_family": "public-share-management", "transport_profile": "path-only"},
     "list_workspaces": {"route_family": "workspace-list", "transport_profile": "no-arguments"},
 }
 
@@ -3871,6 +3923,51 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "safe_to_retry_same_request_on_response_timeout": True,
         "response_timeout_recommended_action": "retry_same_request",
     },
+    "public-share-create": {
+        "idempotency_class": "create-non-idempotent",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_share_creation_outcome_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_share_creation_outcome_before_retry",
+    },
+    "public-share-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-share-history": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-share-artifact": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-share-management": {
+        "idempotency_class": "mutation-non-idempotent",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_public_share_state_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_public_share_state_before_retry",
+    },
     "workspace-list": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
@@ -3982,6 +4079,40 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "lifecycle_class": "activity-read",
         "followup_route_names": ("get_workspace", "list_workspace_runs"),
     },
+    "public-share-create": {
+        "lifecycle_class": "public-share-entry",
+        "status_resource_name": "get_public_share",
+        "result_resource_name": "get_public_share_artifact",
+        "actions_resource_name": "get_public_share_history",
+        "followup_route_names": ("get_public_share", "get_public_share_history", "get_public_share_artifact"),
+    },
+    "public-share-read": {
+        "lifecycle_class": "public-share-read",
+        "status_resource_name": "get_public_share",
+        "result_resource_name": "get_public_share_artifact",
+        "actions_resource_name": "get_public_share_history",
+        "followup_route_names": ("get_public_share_history", "get_public_share_artifact"),
+    },
+    "public-share-history": {
+        "lifecycle_class": "public-share-history",
+        "status_resource_name": "get_public_share",
+        "actions_resource_name": "get_public_share_history",
+        "followup_route_names": ("get_public_share", "get_public_share_artifact"),
+    },
+    "public-share-artifact": {
+        "lifecycle_class": "public-share-artifact",
+        "status_resource_name": "get_public_share",
+        "result_resource_name": "get_public_share_artifact",
+        "followup_route_names": ("get_public_share", "get_public_share_history"),
+    },
+    "public-share-management": {
+        "lifecycle_class": "public-share-management",
+        "status_resource_name": "get_public_share",
+        "result_resource_name": "get_public_share_artifact",
+        "actions_resource_name": "get_public_share_history",
+        "preferred_control_tool_names": ("extend_public_share", "revoke_public_share", "archive_public_share", "delete_public_share"),
+        "followup_route_names": ("get_public_share", "get_public_share_history", "get_public_share_artifact"),
+    },
 }
 
 
@@ -4060,6 +4191,48 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "profile_kind": "workspace-detail",
         "identity_keys": ("workspace_id",),
     },
+    "create_workspace_shell_share": {
+        "profile_kind": "public-share-created",
+        "identity_keys": ("share_id",),
+        "state_keys": ("status",),
+    },
+    "get_public_share": {
+        "profile_kind": "public-share-detail",
+        "identity_keys": ("share_id",),
+        "state_keys": ("status",),
+    },
+    "get_public_share_history": {
+        "profile_kind": "public-share-history",
+        "identity_keys": ("share_id",),
+        "collection_field_name": "history",
+        "count_field_name": "event_count",
+        "collection_item_identity_keys": ("event_id",),
+    },
+    "get_public_share_artifact": {
+        "profile_kind": "public-share-artifact",
+        "identity_keys": ("share_id",),
+        "state_keys": ("status",),
+    },
+    "extend_public_share": {
+        "profile_kind": "public-share-mutation",
+        "identity_keys": ("share_id",),
+        "state_keys": ("status",),
+    },
+    "revoke_public_share": {
+        "profile_kind": "public-share-mutation",
+        "identity_keys": ("share_id",),
+        "state_keys": ("status",),
+    },
+    "archive_public_share": {
+        "profile_kind": "public-share-mutation",
+        "identity_keys": ("share_id",),
+        "state_keys": ("status",),
+    },
+    "delete_public_share": {
+        "profile_kind": "public-share-mutation",
+        "identity_keys": ("share_id",),
+        "state_keys": ("status",),
+    },
     "list_workspaces": {
         "profile_kind": "workspace-collection",
         "collection_field_name": "workspaces",
@@ -4096,6 +4269,14 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_run_actions": {"response_shape": "action-log", "success_status_codes": (200,), "body_kind": "object"},
     "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object"},
     "get_workspace": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object"},
+    "create_workspace_shell_share": {"response_shape": "public-share-created", "success_status_codes": (201,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
+    "get_public_share": {"response_shape": "public-share-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
+    "get_public_share_history": {"response_shape": "public-share-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "history")},
+    "get_public_share_artifact": {"response_shape": "public-share-artifact", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "artifact")},
+    "extend_public_share": {"response_shape": "public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
+    "revoke_public_share": {"response_shape": "public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
+    "archive_public_share": {"response_shape": "public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
+    "delete_public_share": {"response_shape": "public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status")},
     "list_workspaces": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object"},
 }
 
@@ -4194,6 +4375,13 @@ _TOOL_SPECS: tuple[dict[str, object], ...] = (
         "tags": ("workspace-shell", "lifecycle", "commit"),
     },
     {
+        "name": "create_workspace_shell_share",
+        "route_name": "create_workspace_shell_share",
+        "description": "Create a public share for the current workspace shell artifact.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceShellShareCreatedResponse"),
+        "tags": ("workspace-shell", "sharing", "public-boundary"),
+    },
+    {
         "name": "checkout_workspace_shell",
         "route_name": "checkout_workspace_shell",
         "description": "Reopen the current workspace shell commit_snapshot as a working_save.",
@@ -4219,6 +4407,34 @@ _TOOL_SPECS: tuple[dict[str, object], ...] = (
         "description": "Mark a run as reviewed without mutating its source artifact role.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductRunControlAcceptedResponse"),
         "tags": ("runs", "control", "review"),
+    },
+    {
+        "name": "extend_public_share",
+        "route_name": "extend_public_share",
+        "description": "Extend the expiration of a public share you issued.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareMutationResponse"),
+        "tags": ("sharing", "public-boundary", "lifecycle"),
+    },
+    {
+        "name": "revoke_public_share",
+        "route_name": "revoke_public_share",
+        "description": "Revoke a public share you issued.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareMutationResponse"),
+        "tags": ("sharing", "public-boundary", "lifecycle"),
+    },
+    {
+        "name": "archive_public_share",
+        "route_name": "archive_public_share",
+        "description": "Archive or unarchive a public share you issued.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareMutationResponse"),
+        "tags": ("sharing", "public-boundary", "lifecycle"),
+    },
+    {
+        "name": "delete_public_share",
+        "route_name": "delete_public_share",
+        "description": "Delete a public share you issued.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareMutationResponse"),
+        "tags": ("sharing", "public-boundary", "lifecycle"),
     },
 )
 
@@ -4278,6 +4494,27 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read recent user activity with public run source identity when available.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductRecentActivityResponse"),
         "tags": ("history", "activity", "reentry"),
+    },
+    {
+        "name": "get_public_share",
+        "route_name": "get_public_share",
+        "description": "Read the public share descriptor and contract surface for a shared artifact.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareDetailResponse"),
+        "tags": ("sharing", "public-boundary", "read"),
+    },
+    {
+        "name": "get_public_share_history",
+        "route_name": "get_public_share_history",
+        "description": "Read the public audit history for a shared artifact.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareHistoryResponse"),
+        "tags": ("sharing", "public-boundary", "history"),
+    },
+    {
+        "name": "get_public_share_artifact",
+        "route_name": "get_public_share_artifact",
+        "description": "Read the shared artifact payload and boundary metadata for a public share.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareArtifactResponse"),
+        "tags": ("sharing", "public-boundary", "artifact"),
     },
     {
         "name": "get_workspace",

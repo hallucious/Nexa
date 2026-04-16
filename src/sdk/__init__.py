@@ -92,6 +92,11 @@ from src.sdk.server import (
     ProductRunStatusResponse,
     ProductSourceArtifactView,
     ProductWorkspaceRunListResponse,
+    ProductWorkspaceShellShareCreatedResponse,
+    ProductPublicShareDetailResponse,
+    ProductPublicShareHistoryResponse,
+    ProductPublicShareArtifactResponse,
+    ProductPublicShareMutationResponse,
     RunHttpRouteSurface,
 )
 
@@ -145,6 +150,11 @@ __all__ = [
     "ProductRunStatusResponse",
     "ProductRunResultResponse",
     "ProductWorkspaceRunListResponse",
+    "ProductWorkspaceShellShareCreatedResponse",
+    "ProductPublicShareDetailResponse",
+    "ProductPublicShareHistoryResponse",
+    "ProductPublicShareArtifactResponse",
+    "ProductPublicShareMutationResponse",
     "PublicMcpToolDescriptor",
     "PublicMcpResourceDescriptor",
     "PublicMcpArgumentField",

@@ -19,6 +19,13 @@ from src.server.artifact_trace_read_models import (
     ProductRunTraceResponse,
 )
 from src.server.recent_activity_models import ProductRecentActivityResponse
+from src.server.public_share_models import (
+    ProductPublicShareArtifactResponse,
+    ProductPublicShareDetailResponse,
+    ProductPublicShareHistoryResponse,
+    ProductPublicShareMutationResponse,
+    ProductWorkspaceShellShareCreatedResponse,
+)
 from src.server.run_action_log_models import ProductRunActionLogResponse
 from src.server.run_admission_models import (
     ProductClientContext,
@@ -70,4 +77,9 @@ __all__ = [
     "ProductRecentActivityResponse",
     "ProductWorkspaceDetailResponse",
     "ProductWorkspaceListResponse",
+    "ProductWorkspaceShellShareCreatedResponse",
+    "ProductPublicShareDetailResponse",
+    "ProductPublicShareHistoryResponse",
+    "ProductPublicShareArtifactResponse",
+    "ProductPublicShareMutationResponse",
 ]

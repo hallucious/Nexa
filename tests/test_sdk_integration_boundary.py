@@ -1322,3 +1322,69 @@ def test_execution_report_includes_lifecycle_control_profile() -> None:
     assert report.lifecycle_control_profile.lifecycle_class == "run-entry"
     assert report.lifecycle_control_profile.review_tool_name == "mark_run_reviewed"
     assert report.to_dict()["lifecycle_control_profile"]["status_resource_name"] == "get_run_status"
+
+
+def test_build_public_mcp_surface_includes_public_share_resources_and_tools() -> None:
+    tools = {tool.route_name for tool in build_public_mcp_tools()}
+    resources = {resource.route_name for resource in build_public_mcp_resources()}
+
+    assert "create_workspace_shell_share" in tools
+    assert "extend_public_share" in tools
+    assert "revoke_public_share" in tools
+    assert "archive_public_share" in tools
+    assert "delete_public_share" in tools
+    assert "get_public_share" in resources
+    assert "get_public_share_history" in resources
+    assert "get_public_share_artifact" in resources
+
+
+def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+
+    create_dispatch = bridge.build_framework_tool_dispatch(
+        "create_workspace_shell_share",
+        {"workspace_id": "ws-1", "title": "Public Share"},
+    )
+    share_dispatch = bridge.build_framework_resource_dispatch(
+        "get_public_share",
+        {"share_id": "share-1"},
+    )
+    history_dispatch = bridge.build_http_resource_dispatch(
+        "get_public_share_history",
+        {"share_id": "share-1"},
+    )
+    artifact_dispatch = bridge.build_http_resource_dispatch(
+        "get_public_share_artifact",
+        {"share_id": "share-1"},
+    )
+
+    assert create_dispatch.handler_name == "handle_create_workspace_shell_share"
+    assert create_dispatch.request.path == "/api/workspaces/ws-1/shell/share"
+    assert create_dispatch.request.json_body == {"title": "Public Share"}
+
+    assert share_dispatch.handler_name == "handle_get_public_share"
+    assert share_dispatch.request.path == "/api/public-shares/share-1"
+
+    assert history_dispatch.request.method == "GET"
+    assert history_dispatch.request.path == "/api/public-shares/share-1/history"
+
+    assert artifact_dispatch.request.method == "GET"
+    assert artifact_dispatch.request.path == "/api/public-shares/share-1/artifact"
+
+
+def test_build_public_mcp_contracts_include_public_share_route_families() -> None:
+    route_contracts = {contract.route_name: contract for contract in build_public_mcp_route_contracts()}
+    responses = {contract.route_name: contract for contract in build_public_mcp_response_contracts()}
+    lifecycles = {(profile.kind, profile.route_name): profile for profile in build_public_mcp_lifecycle_control_profiles()}
+
+    assert route_contracts["create_workspace_shell_share"].route_family == "public-share-create"
+    assert route_contracts["get_public_share"].route_family == "public-share-read"
+    assert route_contracts["get_public_share_history"].route_family == "public-share-history"
+    assert route_contracts["get_public_share_artifact"].route_family == "public-share-artifact"
+    assert route_contracts["extend_public_share"].route_family == "public-share-management"
+
+    assert responses["create_workspace_shell_share"].success_status_codes == (201,)
+    assert responses["get_public_share_history"].required_top_level_keys == ("share_id", "history")
+
+    assert lifecycles[("tool", "create_workspace_shell_share")].status_resource_name == "get_public_share"
+    assert "get_public_share_artifact" in lifecycles[("resource", "get_public_share")].followup_route_names

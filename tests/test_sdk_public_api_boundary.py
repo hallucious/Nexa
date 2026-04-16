@@ -24,10 +24,23 @@ from src.server.framework_binding_models import FrameworkOutboundResponse
 from src.sdk.server import (
     ProductExecutionTarget,
     ProductLaunchOptions,
+    ProductPublicShareArtifactResponse,
+    ProductPublicShareDetailResponse,
+    ProductPublicShareHistoryResponse,
+    ProductPublicShareMutationResponse,
     ProductRunLaunchRequest,
     ProductRunStatusResponse,
     ProductSourceArtifactView,
     ProductWorkspaceRunListResponse,
+    ProductWorkspaceShellShareCreatedResponse,
+)
+from src.server.public_share_models import (
+    ProductPublicShareAuditSummaryView,
+    ProductPublicShareHistoryEntryView,
+    ProductPublicShareLifecycleView,
+    ProductPublicShareLinks,
+    ProductPublicShareManagementView,
+    ProductPublicShareSourceArtifactView,
 )
 from src.server.run_read_models import ProductExecutionTargetView, ProductRunLinks
 
@@ -336,3 +349,103 @@ def test_sdk_root_execution_report_includes_preflight_assessment() -> None:
 def test_sdk_root_exposes_result_shape_profile_builder() -> None:
     assert hasattr(sdk, "PublicMcpResultShapeProfile")
     assert hasattr(sdk, "build_public_mcp_result_shape_profiles")
+
+
+def test_server_sdk_surface_exposes_public_share_models() -> None:
+    detail = ProductPublicShareDetailResponse(
+        status="ready",
+        share_id="share-1",
+        share_path="https://nexa.test/s/share-1",
+        transport="link",
+        access_mode="public_read",
+        lifecycle=ProductPublicShareLifecycleView(
+            stored_state="active",
+            state="active",
+            created_at="2026-04-16T00:00:00Z",
+            updated_at="2026-04-16T00:00:01Z",
+        ),
+        management=ProductPublicShareManagementView(archived=False),
+        audit_summary=ProductPublicShareAuditSummaryView(event_count=1),
+        source_artifact=ProductPublicShareSourceArtifactView(
+            storage_role="commit_snapshot",
+            canonical_ref="commit_snapshot:commit-1",
+            artifact_format_family=".nex",
+        ),
+        share_boundary={"share_family": "public_nex_link_share"},
+        artifact_boundary={"format_family": ".nex"},
+        links=ProductPublicShareLinks({"self": "/api/public-shares/share-1"}),
+    )
+    created = ProductWorkspaceShellShareCreatedResponse(
+        status="created",
+        workspace_id="ws-1",
+        share_id="share-1",
+        share_path="https://nexa.test/s/share-1",
+        transport="link",
+        access_mode="public_read",
+        lifecycle=detail.lifecycle,
+        management=detail.management,
+        audit_summary=detail.audit_summary,
+        source_artifact=detail.source_artifact,
+        share_boundary=detail.share_boundary,
+        artifact_boundary=detail.artifact_boundary,
+        links=detail.links,
+    )
+    history = ProductPublicShareHistoryResponse(
+        status="ready",
+        share_id="share-1",
+        share_path="https://nexa.test/s/share-1",
+        audit_summary=detail.audit_summary,
+        share_boundary=detail.share_boundary,
+        artifact_boundary=detail.artifact_boundary,
+        history=(
+            ProductPublicShareHistoryEntryView(
+                event_id="evt-1",
+                event_type="created",
+                timestamp="2026-04-16T00:00:00Z",
+            ),
+        ),
+        links=detail.links,
+    )
+    artifact = ProductPublicShareArtifactResponse(
+        status="ready",
+        share_id="share-1",
+        share_title="Share",
+        share_boundary=detail.share_boundary,
+        artifact_boundary=detail.artifact_boundary,
+        artifact={"meta": {"storage_role": "commit_snapshot"}},
+        links=detail.links,
+    )
+    mutation = ProductPublicShareMutationResponse(
+        status="updated",
+        share_id="share-1",
+        share_path="https://nexa.test/s/share-1",
+        transport="link",
+        access_mode="public_read",
+        lifecycle=detail.lifecycle,
+        management=detail.management,
+        audit_summary=detail.audit_summary,
+        source_artifact=detail.source_artifact,
+        share_boundary=detail.share_boundary,
+        artifact_boundary=detail.artifact_boundary,
+        links=detail.links,
+        governance_summary={"total_share_count": 1},
+    )
+
+    assert server.PUBLIC_SERVER_SDK_SURFACE_VERSION == "1.0"
+    assert created.workspace_id == "ws-1"
+    assert history.history[0].event_id == "evt-1"
+    assert artifact.artifact["meta"]["storage_role"] == "commit_snapshot"
+    assert mutation.governance_summary == {"total_share_count": 1}
+
+
+def test_sdk_root_exposes_public_share_mcp_surface() -> None:
+    manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
+    resource_names = {resource.route_name for resource in manifest.resources}
+    tool_names = {tool.route_name for tool in manifest.tools}
+
+    assert "get_public_share" in resource_names
+    assert "get_public_share_history" in resource_names
+    assert "get_public_share_artifact" in resource_names
+    assert "create_workspace_shell_share" in tool_names
+    assert "extend_public_share" in tool_names
+    assert "delete_public_share" in tool_names
