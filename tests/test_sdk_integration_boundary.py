@@ -104,6 +104,7 @@ def test_mcp_tool_descriptors_follow_public_route_surface() -> None:
     assert indexed["launch_run"].method == "POST"
     assert indexed["launch_run"].path == "/api/runs"
     assert indexed["launch_run"].request_type is not None
+    assert indexed["put_workspace_shell_draft"].path.endswith("/shell/draft")
     assert indexed["launch_workspace_shell"].path.endswith("/shell/launch")
     assert indexed["commit_workspace_shell"].path.endswith("/shell/commit")
     assert indexed["checkout_workspace_shell"].path.endswith("/shell/checkout")
@@ -127,6 +128,7 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert indexed["get_recent_activity"].path == "/api/users/me/activity"
     assert indexed["list_issuer_public_shares"].path == "/api/users/me/public-shares"
     assert indexed["get_issuer_public_share_summary"].path == "/api/users/me/public-shares/summary"
+    assert indexed["get_workspace_shell"].path.endswith("/shell")
     assert indexed["list_issuer_public_share_action_reports"].path == "/api/users/me/public-shares/action-reports"
     assert indexed["get_issuer_public_share_action_report_summary"].path == "/api/users/me/public-shares/action-reports/summary"
 
@@ -1382,11 +1384,13 @@ def test_build_public_mcp_surface_includes_public_share_resources_and_tools() ->
     tools = {tool.route_name for tool in build_public_mcp_tools()}
     resources = {resource.route_name for resource in build_public_mcp_resources()}
 
+    assert "put_workspace_shell_draft" in tools
     assert "create_workspace_shell_share" in tools
     assert "extend_public_share" in tools
     assert "revoke_public_share" in tools
     assert "archive_public_share" in tools
     assert "delete_public_share" in tools
+    assert "get_workspace_shell" in resources
     assert "get_public_share" in resources
     assert "get_public_share_history" in resources
     assert "get_public_share_artifact" in resources
@@ -1395,6 +1399,14 @@ def test_build_public_mcp_surface_includes_public_share_resources_and_tools() ->
 def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
+    shell_dispatch = bridge.build_framework_resource_dispatch(
+        "get_workspace_shell",
+        {"workspace_id": "ws-1"},
+    )
+    draft_dispatch = bridge.build_framework_tool_dispatch(
+        "put_workspace_shell_draft",
+        {"workspace_id": "ws-1", "request_text": "Help me improve this shell."},
+    )
     create_dispatch = bridge.build_framework_tool_dispatch(
         "create_workspace_shell_share",
         {"workspace_id": "ws-1", "title": "Public Share"},
@@ -1411,6 +1423,13 @@ def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() 
         "get_public_share_artifact",
         {"share_id": "share-1"},
     )
+
+    assert shell_dispatch.handler_name == "handle_workspace_shell"
+    assert shell_dispatch.request.path == "/api/workspaces/ws-1/shell"
+
+    assert draft_dispatch.handler_name == "handle_put_workspace_shell_draft"
+    assert draft_dispatch.request.path == "/api/workspaces/ws-1/shell/draft"
+    assert draft_dispatch.request.json_body == {"request_text": "Help me improve this shell."}
 
     assert create_dispatch.handler_name == "handle_create_workspace_shell_share"
     assert create_dispatch.request.path == "/api/workspaces/ws-1/shell/share"
@@ -1431,15 +1450,22 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     responses = {contract.route_name: contract for contract in build_public_mcp_response_contracts()}
     lifecycles = {(profile.kind, profile.route_name): profile for profile in build_public_mcp_lifecycle_control_profiles()}
 
+    assert route_contracts["get_workspace_shell"].route_family == "workspace-shell-read"
+    assert route_contracts["put_workspace_shell_draft"].route_family == "workspace-shell-draft-write"
     assert route_contracts["create_workspace_shell_share"].route_family == "public-share-create"
     assert route_contracts["get_public_share"].route_family == "public-share-read"
     assert route_contracts["get_public_share_history"].route_family == "public-share-history"
     assert route_contracts["get_public_share_artifact"].route_family == "public-share-artifact"
     assert route_contracts["extend_public_share"].route_family == "public-share-management"
 
+    assert responses["get_workspace_shell"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes")
+    assert responses["put_workspace_shell_draft"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes")
     assert responses["create_workspace_shell_share"].success_status_codes == (201,)
     assert responses["get_public_share_history"].required_top_level_keys == ("share_id", "history")
 
+    assert lifecycles[("resource", "get_workspace_shell")].status_resource_name == "get_workspace_shell"
+    assert "commit_workspace_shell" in lifecycles[("resource", "get_workspace_shell")].followup_route_names
+    assert lifecycles[("tool", "put_workspace_shell_draft")].status_resource_name == "get_workspace_shell"
     assert lifecycles[("tool", "create_workspace_shell_share")].status_resource_name == "get_public_share"
     assert "get_public_share_artifact" in lifecycles[("resource", "get_public_share")].followup_route_names
     assert lifecycles[("tool", "checkout_workspace_shell")].source_resource_names == (

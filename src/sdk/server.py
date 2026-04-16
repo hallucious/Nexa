@@ -54,6 +54,13 @@ from src.server.workspace_onboarding_models import (
     ProductWorkspaceDetailResponse,
     ProductWorkspaceListResponse,
 )
+from src.server.workspace_shell_models import (
+    ProductWorkspaceShellCheckoutResponse,
+    ProductWorkspaceShellCommitResponse,
+    ProductWorkspaceShellDraftSavedResponse,
+    ProductWorkspaceShellLaunchAcceptedResponse,
+    ProductWorkspaceShellRuntimeResponse,
+)
 
 PUBLIC_SERVER_SDK_SURFACE_VERSION = "1.0"
 
@@ -82,6 +89,11 @@ __all__ = [
     "ProductRecentActivityResponse",
     "ProductWorkspaceDetailResponse",
     "ProductWorkspaceListResponse",
+    "ProductWorkspaceShellRuntimeResponse",
+    "ProductWorkspaceShellDraftSavedResponse",
+    "ProductWorkspaceShellCommitResponse",
+    "ProductWorkspaceShellCheckoutResponse",
+    "ProductWorkspaceShellLaunchAcceptedResponse",
     "ProductWorkspaceShellShareCreatedResponse",
     "ProductPublicShareDetailResponse",
     "ProductPublicShareHistoryResponse",

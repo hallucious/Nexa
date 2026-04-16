@@ -37,6 +37,11 @@ from src.sdk.server import (
     ProductRunStatusResponse,
     ProductSourceArtifactView,
     ProductWorkspaceRunListResponse,
+    ProductWorkspaceShellRuntimeResponse,
+    ProductWorkspaceShellDraftSavedResponse,
+    ProductWorkspaceShellCommitResponse,
+    ProductWorkspaceShellCheckoutResponse,
+    ProductWorkspaceShellLaunchAcceptedResponse,
     ProductWorkspaceShellShareCreatedResponse,
 )
 from src.server.public_share_models import (
@@ -47,7 +52,12 @@ from src.server.public_share_models import (
     ProductPublicShareManagementView,
     ProductPublicShareSourceArtifactView,
 )
+from src.server.workspace_shell_models import (
+    ProductWorkspaceShellActionAvailabilityView,
+    ProductWorkspaceShellRoutesView,
+)
 from src.server.run_read_models import ProductExecutionTargetView, ProductRunLinks
+from src.server.run_admission_models import ProductRunLaunchLinks
 
 
 def _working_save_model() -> WorkingSaveModel:
@@ -448,6 +458,55 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
     assert mutation.governance_summary == {"total_share_count": 1}
 
 
+def test_server_sdk_surface_exposes_workspace_shell_models() -> None:
+    runtime = ProductWorkspaceShellRuntimeResponse(
+        workspace_id="ws-1",
+        workspace_title="Primary Workspace",
+        storage_role="working_save",
+        action_availability=ProductWorkspaceShellActionAvailabilityView({"launch": {"allowed": True}}),
+        shell={"mode": "build"},
+        routes=ProductWorkspaceShellRoutesView({"self": "/api/workspaces/ws-1/shell"}),
+    )
+    draft = ProductWorkspaceShellDraftSavedResponse(
+        workspace_id="ws-1",
+        storage_role="working_save",
+        action_availability=runtime.action_availability,
+        shell=runtime.shell,
+        routes=runtime.routes,
+    )
+    commit = ProductWorkspaceShellCommitResponse(
+        workspace_id="ws-1",
+        storage_role="commit_snapshot",
+        action_availability=runtime.action_availability,
+        shell=runtime.shell,
+        routes=runtime.routes,
+        transition={"action": "commit_workspace_shell"},
+    )
+    checkout = ProductWorkspaceShellCheckoutResponse(
+        workspace_id="ws-1",
+        storage_role="working_save",
+        action_availability=runtime.action_availability,
+        shell=runtime.shell,
+        routes=runtime.routes,
+        transition={"action": "checkout_workspace_shell"},
+    )
+    launch = ProductWorkspaceShellLaunchAcceptedResponse(
+        status="accepted",
+        run_id="run-1",
+        workspace_id="ws-1",
+        execution_target=ProductExecutionTarget(target_type="working_save", target_ref="working_save:ws-1"),
+        initial_run_status="queued",
+        links=ProductRunLaunchLinks(run_status="/api/runs/run-1", run_result="/api/runs/run-1/result"),
+        launch_context={"action": "launch_workspace_shell", "workspace_id": "ws-1"},
+    )
+
+    assert runtime.routes.values["self"] == "/api/workspaces/ws-1/shell"
+    assert draft.persistence_action == "put_workspace_shell_draft"
+    assert commit.transition["action"] == "commit_workspace_shell"
+    assert checkout.transition["action"] == "checkout_workspace_shell"
+    assert launch.launch_context["action"] == "launch_workspace_shell"
+
+
 def test_sdk_root_exposes_public_share_mcp_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")
     resource_names = {resource.route_name for resource in manifest.resources}
@@ -456,6 +515,8 @@ def test_sdk_root_exposes_public_share_mcp_surface() -> None:
     assert "get_public_share" in resource_names
     assert "get_public_share_history" in resource_names
     assert "get_public_share_artifact" in resource_names
+    assert "get_workspace_shell" in resource_names
+    assert "put_workspace_shell_draft" in tool_names
     assert "create_workspace_shell_share" in tool_names
     assert "extend_public_share" in tool_names
     assert "delete_public_share" in tool_names

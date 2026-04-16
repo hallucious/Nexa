@@ -3656,6 +3656,23 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             _schema_field("client_context", "body", "object", description="Optional client/source correlation metadata."),
         ),
     },
+    "get_workspace_shell": {
+        "path_fields": (
+            _schema_field("workspace_id", "path", "string", required=True, description="Workspace shell owner."),
+        ),
+    },
+    "put_workspace_shell_draft": {
+        "path_fields": (
+            _schema_field("workspace_id", "path", "string", required=True, description="Workspace whose shell draft is being updated."),
+        ),
+        "body_fields": (
+            _schema_field("request_text", "body", "string", description="Optional designer request text to persist in the server-backed shell draft."),
+            _schema_field("updated_at", "body", "string", description="Optional client-side updated timestamp hint."),
+            _schema_field("validation_action", "body", "string", description="Optional validation action marker for continuity state."),
+            _schema_field("validation_status", "body", "string", description="Optional validation status marker for continuity state."),
+            _schema_field("validation_message", "body", "string", description="Optional validation message marker for continuity state."),
+        ),
+    },
     "launch_workspace_shell": {
         "path_fields": (
             _schema_field("workspace_id", "path", "string", required=True, description="Workspace shell owner."),
@@ -3844,6 +3861,8 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
 
 _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "launch_run": {"route_family": "run-launch", "transport_profile": "body-only"},
+    "get_workspace_shell": {"route_family": "workspace-shell-read", "transport_profile": "path-and-query"},
+    "put_workspace_shell_draft": {"route_family": "workspace-shell-draft-write", "transport_profile": "path-and-body"},
     "launch_workspace_shell": {"route_family": "workspace-shell-launch", "transport_profile": "path-and-body"},
     "commit_workspace_shell": {"route_family": "workspace-shell-commit", "transport_profile": "path-and-body"},
     "checkout_workspace_shell": {"route_family": "workspace-shell-checkout", "transport_profile": "path-and-body"},
@@ -3888,6 +3907,24 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_retryable": True,
         "safe_to_retry_same_request_on_response_timeout": False,
         "response_timeout_recommended_action": "inspect_launch_outcome_before_retry",
+    },
+    "workspace-shell-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_read_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_read_request",
+    },
+    "workspace-shell-draft-write": {
+        "idempotency_class": "state-mutation",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_workspace_state_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_workspace_state_before_retry",
     },
     "workspace-shell-launch": {
         "idempotency_class": "launch-non-idempotent",
@@ -4111,8 +4148,21 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "followup_route_names": ("get_run_status", "get_run_result", "get_run_actions", "list_run_artifacts", "get_run_trace"),
         "review_tool_name": "mark_run_reviewed",
     },
+    "workspace-shell-read": {
+        "lifecycle_class": "workspace-shell-read",
+        "status_resource_name": "get_workspace_shell",
+        "preferred_control_tool_names": ("put_workspace_shell_draft", "commit_workspace_shell", "checkout_workspace_shell", "launch_workspace_shell", "create_workspace_shell_share"),
+        "followup_route_names": ("put_workspace_shell_draft", "commit_workspace_shell", "checkout_workspace_shell", "launch_workspace_shell", "create_workspace_shell_share", "list_workspace_runs"),
+    },
+    "workspace-shell-draft-write": {
+        "lifecycle_class": "workspace-shell-edit",
+        "status_resource_name": "get_workspace_shell",
+        "preferred_control_tool_names": ("commit_workspace_shell", "launch_workspace_shell", "create_workspace_shell_share"),
+        "followup_route_names": ("get_workspace_shell", "commit_workspace_shell", "launch_workspace_shell", "create_workspace_shell_share", "list_workspace_runs"),
+    },
     "workspace-shell-launch": {
         "lifecycle_class": "run-entry",
+        "source_resource_names": ("get_workspace_shell",),
         "status_resource_name": "get_run_status",
         "result_resource_name": "get_run_result",
         "actions_resource_name": "get_run_actions",
@@ -4176,12 +4226,14 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
     },
     "workspace-shell-commit": {
         "lifecycle_class": "workspace-shell-lifecycle",
-        "followup_route_names": ("get_workspace",),
+        "status_resource_name": "get_workspace_shell",
+        "followup_route_names": ("get_workspace_shell", "checkout_workspace_shell", "create_workspace_shell_share", "launch_workspace_shell", "list_workspace_runs"),
     },
     "workspace-shell-checkout": {
         "lifecycle_class": "workspace-shell-lifecycle",
+        "status_resource_name": "get_workspace_shell",
         "source_resource_names": ("get_public_share", "get_public_share_history", "get_public_share_artifact"),
-        "followup_route_names": ("get_workspace", "get_public_share", "get_public_share_history", "get_public_share_artifact"),
+        "followup_route_names": ("get_workspace", "get_workspace_shell", "launch_workspace_shell", "create_workspace_shell_share", "get_public_share", "get_public_share_history", "get_public_share_artifact", "list_workspace_runs"),
     },
     "workspace-run-list": {
         "lifecycle_class": "workspace-observability",
@@ -4276,15 +4328,30 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "profile_kind": "accepted-status",
         "state_keys": ("status",),
     },
+    "get_workspace_shell": {
+        "profile_kind": "workspace-shell-runtime",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("storage_role",),
+    },
+    "put_workspace_shell_draft": {
+        "profile_kind": "workspace-shell-runtime",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("storage_role",),
+    },
     "launch_workspace_shell": {
-        "profile_kind": "accepted-status",
+        "profile_kind": "workspace-shell-launch",
+        "identity_keys": ("workspace_id", "run_id"),
         "state_keys": ("status",),
     },
     "commit_workspace_shell": {
         "profile_kind": "workspace-commit",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("storage_role",),
     },
     "checkout_workspace_shell": {
         "profile_kind": "workspace-checkout",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("storage_role",),
     },
     "retry_run": {
         "profile_kind": "run-control-status",
@@ -4448,14 +4515,36 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "body_kind": "object",
         "required_top_level_keys": ("status",),
     },
+    "get_workspace_shell": {
+        "response_shape": "workspace-shell-runtime",
+        "success_status_codes": (200,),
+        "body_kind": "object",
+        "required_top_level_keys": ("workspace_id", "storage_role", "action_availability", "shell", "routes"),
+    },
+    "put_workspace_shell_draft": {
+        "response_shape": "workspace-shell-runtime",
+        "success_status_codes": (200,),
+        "body_kind": "object",
+        "required_top_level_keys": ("workspace_id", "storage_role", "action_availability", "shell", "routes"),
+    },
     "launch_workspace_shell": {
-        "response_shape": "accepted",
+        "response_shape": "workspace-shell-launch",
         "success_status_codes": (202,),
         "body_kind": "object",
-        "required_top_level_keys": ("status",),
+        "required_top_level_keys": ("status", "run_id", "workspace_id", "launch_context"),
     },
-    "commit_workspace_shell": {"response_shape": "snapshot-commit", "success_status_codes": (200,), "body_kind": "object"},
-    "checkout_workspace_shell": {"response_shape": "working-save-checkout", "success_status_codes": (200,), "body_kind": "object"},
+    "commit_workspace_shell": {
+        "response_shape": "snapshot-commit",
+        "success_status_codes": (200,),
+        "body_kind": "object",
+        "required_top_level_keys": ("workspace_id", "storage_role", "transition"),
+    },
+    "checkout_workspace_shell": {
+        "response_shape": "working-save-checkout",
+        "success_status_codes": (200,),
+        "body_kind": "object",
+        "required_top_level_keys": ("workspace_id", "storage_role", "transition"),
+    },
     "retry_run": {"response_shape": "run-control", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status",)},
     "force_reset_run": {"response_shape": "run-control", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status",)},
     "mark_run_reviewed": {"response_shape": "run-control", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status",)},
@@ -4568,17 +4657,25 @@ _TOOL_SPECS: tuple[dict[str, object], ...] = (
         "tags": ("runs", "launch", "public-boundary"),
     },
     {
+        "name": "put_workspace_shell_draft",
+        "route_name": "put_workspace_shell_draft",
+        "description": "Persist server-backed workspace shell draft continuity and builder state.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceShellDraftSavedResponse"),
+        "tags": ("workspace-shell", "draft", "write", "public-boundary"),
+    },
+    {
         "name": "launch_workspace_shell",
         "route_name": "launch_workspace_shell",
         "description": "Launch a run from the current workspace shell artifact.",
         "request_type": PublicTypeRef("src.sdk.server", "ProductRunLaunchRequest"),
-        "response_type": PublicTypeRef("src.sdk.server", "ProductRunLaunchAcceptedResponse"),
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceShellLaunchAcceptedResponse"),
         "tags": ("workspace-shell", "launch", "public-boundary"),
     },
     {
         "name": "commit_workspace_shell",
         "route_name": "commit_workspace_shell",
         "description": "Convert the current workspace shell working_save into a commit_snapshot.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceShellCommitResponse"),
         "tags": ("workspace-shell", "lifecycle", "commit"),
     },
     {
@@ -4592,6 +4689,7 @@ _TOOL_SPECS: tuple[dict[str, object], ...] = (
         "name": "checkout_workspace_shell",
         "route_name": "checkout_workspace_shell",
         "description": "Reopen a workspace shell commit_snapshot as a working_save, including checkout from a public share when share_id is provided.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceShellCheckoutResponse"),
         "tags": ("workspace-shell", "lifecycle", "checkout", "sharing", "public-consumption"),
     },
     {
@@ -4778,6 +4876,13 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read issuer public-share action-report summary with governance rollup context.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductIssuerPublicShareActionReportSummaryResponse"),
         "tags": ("sharing", "issuer-management", "governance"),
+    },
+    {
+        "name": "get_workspace_shell",
+        "route_name": "get_workspace_shell",
+        "description": "Read the current workspace shell runtime projection and action availability.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceShellRuntimeResponse"),
+        "tags": ("workspace-shell", "read", "public-boundary"),
     },
     {
         "name": "get_workspace",
