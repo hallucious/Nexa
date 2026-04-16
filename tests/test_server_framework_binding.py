@@ -988,6 +988,9 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
     assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'
+    assert parsed['designer_section']['controls'][0]['action_target'] == 'nexa-curated:text_summarizer@1.0'
+    assert parsed['designer_section']['controls'][0]['template_ref'] == 'nexa-curated:text_summarizer@1.0'
+    assert parsed['designer_section']['controls'][0]['template_provenance']['source'] == 'nexa-curated'
     assert parsed['designer_section']['controls'][1]['action_target'] == 'designer.detail'
     assert parsed['validation_section']['summary']['headline'] == 'Validation: unknown'
     assert parsed['validation_section']['detail']['title'] == 'Validation detail'
@@ -1109,6 +1112,10 @@ def test_framework_binding_put_workspace_shell_draft_persists_template_and_valid
             'template_ref': 'nexa-curated:text_summarizer@1.0',
             'template_version': '1.0',
             'template_lookup_aliases': ['text_summarizer', 'nexa-curated:text_summarizer@1.0'],
+            'template_provenance_family': 'starter-template',
+            'template_provenance_source': 'nexa-curated',
+            'template_compatibility_family': 'workspace-shell-draft',
+            'template_apply_behavior': 'replace_designer_request',
             'request_text': 'Summarize this article.',
             'designer_action': 'apply_template',
             'validation_action': 'open_validation_detail',
@@ -1134,6 +1141,10 @@ def test_framework_binding_put_workspace_shell_draft_persists_template_and_valid
     assert artifact_store['ws-001']['designer']['draft_request_text'] == 'Summarize this article.'
     assert artifact_store['ws-001']['ui']['metadata']['runtime_shell_server_state']['validation_action'] == 'open_validation_detail'
     assert 'Persisted template: Text Summarizer' in '\n'.join(parsed['designer_section']['summary']['lines'])
+    assert 'Template ref: nexa-curated:text_summarizer@1.0' in '\n'.join(parsed['designer_section']['detail']['items'])
+    assert 'Lookup aliases: text_summarizer, nexa-curated:text_summarizer@1.0' in '\n'.join(parsed['designer_section']['detail']['items'])
+    assert 'Provenance: nexa-curated / starter-template' in '\n'.join(parsed['designer_section']['detail']['items'])
+    assert 'Compatibility: workspace-shell-draft / replace_designer_request' in '\n'.join(parsed['designer_section']['detail']['items'])
     assert 'Persisted validation action: open_validation_detail' in '\n'.join(parsed['validation_section']['summary']['lines'])
     assert parsed['status_history_section']['summary']['headline'] == 'Status history'
     assert parsed['result_history_section']['summary']['headline'] == 'Result history'

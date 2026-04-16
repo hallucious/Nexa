@@ -837,7 +837,13 @@ def _server_backed_shell_state(source: Any | None, model: Any) -> dict[str, Mapp
                 validation_state = dict(raw)
     return {"designer": designer_state, "validation": validation_state}
 
-def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping[str, Any] | None, persisted_state: Mapping[str, Any] | None = None) -> dict[str, Any]:
+def _designer_section(
+    shell: Mapping[str, Any] | None,
+    template_gallery: Mapping[str, Any] | None,
+    persisted_state: Mapping[str, Any] | None = None,
+    *,
+    app_language: str = "en",
+) -> dict[str, Any]:
     shell_map = shell or {}
     designer = shell_map.get("designer") or {}
     request_state = designer.get("request_state") or {}
@@ -855,18 +861,51 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
         or "Start from Designer to describe your goal or choose a starter template."
     )
     persisted = dict(persisted_state or {})
+    persisted_template_display = persisted.get("selected_template_display_name") or persisted.get("selected_template_id")
+    persisted_lookup_aliases = persisted.get("selected_template_lookup_aliases") or ()
+    if isinstance(persisted_lookup_aliases, str):
+        persisted_lookup_aliases = (persisted_lookup_aliases,)
+    persisted_lookup_aliases = tuple(
+        str(item).strip() for item in persisted_lookup_aliases if str(item).strip()
+    )
     lines = _summary_lines(
         f"Request status: {request_state.get('request_status')}" if request_state.get("request_status") else None,
         f"Preview status: {preview_state.get('preview_status')}" if preview_state.get("preview_status") else None,
         f"Approval status: {approval_state.get('approval_status')}" if approval_state.get("approval_status") else None,
         f"Templates available: {template_count}",
         f"Connected providers: {connected_count}",
-        f"Persisted template: {persisted.get('selected_template_display_name') or persisted.get('selected_template_id')}" if persisted.get("selected_template_display_name") or persisted.get("selected_template_id") else None,
+        f"Persisted template: {persisted_template_display}" if persisted_template_display else None,
     )
     detail_items = _summary_lines(
         f"Submit enabled: {request_state.get('can_submit')}" if request_state.get("can_submit") is not None else None,
         f"Current request: {request_state.get('current_request_text')}" if request_state.get("current_request_text") else None,
         f"Persisted request: {persisted.get('request_text')}" if persisted.get("request_text") else None,
+        ui_text(
+            "server.shell.template_ref",
+            app_language=app_language,
+            fallback_text="Template ref: {template_ref}",
+            template_ref=str(persisted.get("selected_template_ref") or "").strip(),
+        ) if persisted.get("selected_template_ref") else None,
+        ui_text(
+            "server.shell.template_lookup_aliases",
+            app_language=app_language,
+            fallback_text="Lookup aliases: {aliases}",
+            aliases=", ".join(persisted_lookup_aliases),
+        ) if persisted_lookup_aliases else None,
+        ui_text(
+            "server.shell.template_provenance",
+            app_language=app_language,
+            fallback_text="Provenance: {source} / {family}",
+            source=str(persisted.get("selected_template_provenance_source") or "").strip(),
+            family=str(persisted.get("selected_template_provenance_family") or "").strip(),
+        ) if persisted.get("selected_template_provenance_source") or persisted.get("selected_template_provenance_family") else None,
+        ui_text(
+            "server.shell.template_compatibility",
+            app_language=app_language,
+            fallback_text="Compatibility: {family} / {behavior}",
+            family=str(persisted.get("selected_template_compatibility_family") or "").strip(),
+            behavior=str(persisted.get("selected_template_apply_behavior") or "").strip(),
+        ) if persisted.get("selected_template_compatibility_family") or persisted.get("selected_template_apply_behavior") else None,
         f"Last designer action: {persisted.get('last_action')}" if persisted.get("last_action") else None,
         f"Provider setup summary: {provider_guidance.get('summary')}" if provider_guidance.get("summary") else None,
         *[
@@ -891,17 +930,26 @@ def _designer_section(shell: Mapping[str, Any] | None, template_gallery: Mapping
     ]
     if templates:
         first_template = templates[0]
+        lookup_aliases = tuple(
+            str(item).strip() for item in (first_template.get("lookup_aliases") or ()) if str(item).strip()
+        )
         controls.insert(
             0,
             {
                 "control_id": f"designer-template-{first_template.get('template_id') or 'primary'}",
-                "label": f"Use {str(first_template.get('display_name') or ui_text('server.shell.starter_template_fallback', app_language='en', fallback_text='starter template')).strip()}",
+                "label": f"Use {str(first_template.get('display_name') or ui_text('server.shell.starter_template_fallback', app_language=app_language, fallback_text='starter template')).strip()}",
                 "action_kind": "apply_template",
-                "action_target": str(first_template.get("template_id") or "").strip() or "template",
+                "action_target": str(first_template.get("template_ref") or first_template.get("template_id") or "").strip() or "template",
                 "request_text": str(first_template.get("designer_request_text") or "").strip() or None,
+                "template_id": str(first_template.get("template_id") or "").strip() or None,
+                "template_ref": str(first_template.get("template_ref") or "").strip() or None,
                 "template_display_name": str(first_template.get("display_name") or "").strip() or None,
                 "template_summary": str(first_template.get("summary") or "").strip() or None,
                 "template_category": str(first_template.get("category") or "").strip() or None,
+                "template_lookup_aliases": list(lookup_aliases),
+                "template_identity": dict(first_template.get("identity") or {}),
+                "template_provenance": dict(first_template.get("provenance") or {}),
+                "template_compatibility": dict(first_template.get("compatibility") or {}),
             },
         )
     return {
@@ -1350,7 +1398,7 @@ def build_workspace_shell_runtime_payload(
         "result_history_section": _result_history_section(recent_run_rows, workspace_id, result_rows_by_run_id),
         "trace_history_section": _trace_history_section(recent_run_rows, workspace_id, trace_rows_lookup, app_language=app_language),
         "artifacts_history_section": _artifacts_history_section(recent_run_rows, workspace_id, artifact_rows_lookup),
-        "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer")),
+        "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
         "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),
         "navigation": navigation,
         "step_state_banner": _step_state_banner(
@@ -1432,6 +1480,13 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         'actionFallback': ui_text('server.shell.action_fallback', app_language=app_language, fallback_text='Action'),
         'starterTemplateFallback': ui_text('server.shell.starter_template_fallback', app_language=app_language, fallback_text='starter template'),
         'templateSelectedSummary': ui_text('server.shell.template_selected_summary', app_language=app_language, fallback_text='Template selected.'),
+        'templateIdLabel': ui_text('server.shell.template_id', app_language=app_language, fallback_text='Template id: {{template_id}}', template_id='').replace('Template id: ', '').replace('{template_id}', ''),
+        'templateRefLabel': ui_text('server.shell.template_ref', app_language=app_language, fallback_text='Template ref: {{template_ref}}', template_ref='').replace('Template ref: ', '').replace('{template_ref}', ''),
+        'categoryLabel': ui_text('server.shell.category', app_language=app_language, fallback_text='Category: {{category}}', category='').replace('Category: ', '').replace('{category}', ''),
+        'designerRequestLabel': ui_text('server.shell.designer_request', app_language=app_language, fallback_text='Designer request: {{request}}', request='').replace('Designer request: ', '').replace('{request}', ''),
+        'templateLookupAliasesLabel': ui_text('server.shell.template_lookup_aliases', app_language=app_language, fallback_text='Lookup aliases: {{aliases}}', aliases='').replace('Lookup aliases: ', '').replace('{aliases}', ''),
+        'templateProvenanceLabel': ui_text('server.shell.template_provenance', app_language=app_language, fallback_text='Provenance: {{source}} / {{family}}', source='', family='').replace('Provenance: ', '').replace('{source} / {family}', ''),
+        'templateCompatibilityLabel': ui_text('server.shell.template_compatibility', app_language=app_language, fallback_text='Compatibility: {{family}} / {{behavior}}', family='', behavior='').replace('Compatibility: ', '').replace('{family} / {behavior}', ''),
         'designerWorkspace': ui_text('server.shell.designer_workspace', app_language=app_language, fallback_text='Designer workspace'),
         'reviewValidationAction': ui_text('server.shell.banner.review_validation', app_language=app_language, fallback_text='Review Validation'),
         'templateLoadedSummaryPrefix': ui_text('server.shell.template_loaded_summary_prefix', app_language=app_language, fallback_text='Template "'),
@@ -1998,18 +2053,26 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       const templateSummary = String(control && control.template_summary || localizedUi.templateSelectedSummary);
       const requestText = String(control && control.request_text || '').trim();
       const category = String(control && control.template_category || '').trim();
-      const templateId = String(control && control.action_target || '').trim();
+      const templateId = String(control && control.template_id || '').trim();
+      const templateRef = String(control && (control.template_ref || control.action_target) || '').trim();
+      const lookupAliases = Array.isArray(control && control.template_lookup_aliases) ? control.template_lookup_aliases.map((item) => String(item || '').trim()).filter(Boolean) : [];
+      const provenance = control && control.template_provenance && typeof control.template_provenance === 'object' ? control.template_provenance : {{}};
+      const compatibility = control && control.template_compatibility && typeof control.template_compatibility === 'object' ? control.template_compatibility : {{}};
       writeDesignerSection({{
         summary: {{ headline: localizedUi.designerWorkspace, lines: [
-          'Template selected: ' + displayName,
+          uiText('server.shell.template_selected', 'Template selected: {{name}}', {{ name: displayName }}),
           templateSummary,
-          requestText ? ('Designer request: ' + requestText) : null,
+          requestText ? uiText('server.shell.designer_request', 'Designer request: {{request}}', {{ request: requestText }}) : null,
         ].filter(Boolean) }},
         detail: {{ title: 'Designer detail', items: [
-          templateId ? ('Template id: ' + templateId) : null,
-          category ? ('Category: ' + category) : null,
-          requestText ? ('Designer request: ' + requestText) : null,
-          'Next step: review Validation, then run the draft when ready.',
+          templateId ? uiText('server.shell.template_id', 'Template id: {{template_id}}', {{ template_id: templateId }}) : null,
+          templateRef ? uiText('server.shell.template_ref', 'Template ref: {{template_ref}}', {{ template_ref: templateRef }}) : null,
+          category ? uiText('server.shell.category', 'Category: {{category}}', {{ category }}) : null,
+          lookupAliases.length ? uiText('server.shell.template_lookup_aliases', 'Lookup aliases: {{aliases}}', {{ aliases: lookupAliases.join(', ') }}) : null,
+          provenance.source || provenance.family ? uiText('server.shell.template_provenance', 'Provenance: {{source}} / {{family}}', {{ source: String(provenance.source || '').trim(), family: String(provenance.family || '').trim() }}) : null,
+          compatibility.family || compatibility.apply_behavior ? uiText('server.shell.template_compatibility', 'Compatibility: {{family}} / {{behavior}}', {{ family: String(compatibility.family || '').trim(), behavior: String(compatibility.apply_behavior || '').trim() }}) : null,
+          requestText ? uiText('server.shell.designer_request', 'Designer request: {{request}}', {{ request: requestText }}) : null,
+          uiText('server.shell.next_step_review_validation', 'Next step: review Validation, then run the draft when ready.'),
         ].filter(Boolean) }},
         controls: currentDesignerSection && currentDesignerSection.controls ? currentDesignerSection.controls : [],
       }});
@@ -2616,8 +2679,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         ' detail': ui_text('server.shell.focus_detail_suffix', app_language=app_language, fallback_text=' detail'),
         ' summary': ui_text('server.shell.focus_summary_suffix', app_language=app_language, fallback_text=' summary'),
         'Template selected.': ui_text('server.shell.template_selected_summary', app_language=app_language, fallback_text='Template selected.'),
-        'Template id: ': ui_text('server.shell.template_id', app_language=app_language, fallback_text='Template id: {template_id}', template_id='').replace('{template_id}', ''),
-        'Category: ': ui_text('server.shell.category', app_language=app_language, fallback_text='Category: {category}', category='').replace('{category}', ''),
+        'Template id: ': ui_text('server.shell.template_id', app_language=app_language, fallback_text='Template id: {{template_id}}', template_id='').replace('{template_id}', ''),
+        'Category: ': ui_text('server.shell.category', app_language=app_language, fallback_text='Category: {{category}}', category='').replace('{category}', ''),
         'Next step: review Validation, then run the draft when ready.': ui_text('server.shell.next_step_review_validation', app_language=app_language, fallback_text='Next step: review Validation, then run the draft when ready.'),
         'Step 2 of 5 — Review template': ui_text('server.shell.banner.review_template_title', app_language=app_language, fallback_text='Step 2 of 5 — Review template'),
         'Template "': 'Template "',

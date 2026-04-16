@@ -618,6 +618,8 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['designer_section']['summary']['headline'] == 'Designer workspace'
     assert 'Templates available:' in '\n'.join(payload['designer_section']['summary']['lines'])
     assert payload['designer_section']['detail']['title'] == 'Designer detail'
+    assert payload['designer_section']['controls'][0]['action_target'] == 'nexa-curated:text_summarizer@1.0'
+    assert payload['designer_section']['controls'][0]['template_ref'] == 'nexa-curated:text_summarizer@1.0'
     assert payload['validation_section']['summary']['headline'] == 'Validation: unknown'
     assert payload['validation_section']['detail']['title'] == 'Validation detail'
     assert payload['navigation']['default_section'] == 'result'
@@ -1276,6 +1278,12 @@ def test_fastapi_binding_workspace_shell_draft_write_persists_server_backed_stat
         json={
             'template_id': 'text_summarizer',
             'template_display_name': 'Text Summarizer',
+            'template_ref': 'nexa-curated:text_summarizer@1.0',
+            'template_lookup_aliases': ['text_summarizer', 'nexa-curated:text_summarizer@1.0'],
+            'template_provenance_family': 'starter-template',
+            'template_provenance_source': 'nexa-curated',
+            'template_compatibility_family': 'workspace-shell-draft',
+            'template_apply_behavior': 'replace_designer_request',
             'request_text': 'Summarize this article.',
             'designer_action': 'apply_template',
             'validation_action': 'open_validation_detail',
@@ -1288,6 +1296,10 @@ def test_fastapi_binding_workspace_shell_draft_write_persists_server_backed_stat
     payload = response.json()
     assert payload['routes']['workspace_shell_draft_write'] == '/api/workspaces/ws-001/shell/draft'
     assert 'Persisted template: Text Summarizer' in '\n'.join(payload['designer_section']['summary']['lines'])
+    assert 'Template ref: nexa-curated:text_summarizer@1.0' in '\n'.join(payload['designer_section']['detail']['items'])
+    assert 'Lookup aliases: text_summarizer, nexa-curated:text_summarizer@1.0' in '\n'.join(payload['designer_section']['detail']['items'])
+    assert 'Provenance: nexa-curated / starter-template' in '\n'.join(payload['designer_section']['detail']['items'])
+    assert 'Compatibility: workspace-shell-draft / replace_designer_request' in '\n'.join(payload['designer_section']['detail']['items'])
     assert 'Persisted request: Summarize this article.' in '\n'.join(payload['designer_section']['detail']['items'])
     assert 'Persisted validation action: open_validation_detail' in '\n'.join(payload['validation_section']['summary']['lines'])
     assert 'Persisted validation status: blocked' in '\n'.join(payload['validation_section']['detail']['items'])

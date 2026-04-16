@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 from src.designer.proposal_flow import list_starter_circuit_templates
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
@@ -17,6 +18,11 @@ class TemplateGalleryItemView:
     category: str
     summary: str
     designer_request_text: str
+    template_ref: str | None = None
+    lookup_aliases: tuple[str, ...] = ()
+    identity: dict[str, str] = field(default_factory=dict)
+    provenance: dict[str, str] = field(default_factory=dict)
+    compatibility: dict[str, Any] = field(default_factory=dict)
     action_type: str = "create_circuit_from_template"
     action_label: str | None = None
 
@@ -61,6 +67,20 @@ def read_template_gallery_view_model(
             category=ui_text(f"template_gallery.category.{template.category}", app_language=app_language, fallback_text=template.category.replace("_", " ")),
             summary=ui_text(f"template_gallery.template.{template.template_id}.summary", app_language=app_language, fallback_text=template.summary),
             designer_request_text=template.designer_request_text,
+            template_ref=template.template_ref,
+            lookup_aliases=template.lookup_aliases,
+            identity={**template.canonical_identity, "lookup_mode": "template_id_or_template_ref"},
+            provenance={
+                "family": template.provenance_family,
+                "source": template.provenance_source,
+                "curation_status": template.curation_status,
+            },
+            compatibility={
+                "family": template.compatibility_family,
+                "apply_behavior": template.apply_behavior,
+                "supported_entry_surfaces": list(template.supported_entry_surfaces),
+                "supported_storage_roles": list(template.supported_storage_roles),
+            },
             action_label=ui_text("template_gallery.action.use_template", app_language=app_language, fallback_text="Use template"),
         )
         for template in list_starter_circuit_templates()
