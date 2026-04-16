@@ -258,7 +258,9 @@ def test_sdk_root_exposes_public_mcp_argument_schema_catalog() -> None:
     assert indexed["get_history_summary"].query_fields[0].name == "workspace_id"
     assert indexed["get_public_nex_format"].route_name == "get_public_nex_format"
     assert indexed["get_starter_circuit_template"].path_fields[0].name == "template_id"
+    assert indexed["get_starter_circuit_template"].path_fields[0].description == "Starter template lookup value to read. Accepts a legacy template_id or canonical template_ref."
     assert indexed["apply_starter_circuit_template"].path_fields[1].name == "template_id"
+    assert indexed["apply_starter_circuit_template"].path_fields[1].description == "Starter template lookup value to apply. Accepts a legacy template_id or canonical template_ref."
     assert indexed["get_workspace_result_history"].path_fields[0].name == "workspace_id"
     assert [field.name for field in indexed["submit_workspace_feedback"].body_fields] == ["category", "surface", "message", "run_id"]
     assert indexed["list_workspaces"].route_name == "list_workspaces"

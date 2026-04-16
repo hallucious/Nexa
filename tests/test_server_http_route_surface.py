@@ -576,6 +576,7 @@ def test_starter_template_catalog_route_returns_public_template_exchange_surface
     template = next(item for item in response.body["templates"] if item["template_id"] == "text_summarizer")
     assert template["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert template["lookup_aliases"] == ["text_summarizer", "nexa-curated:text_summarizer@1.0"]
+    assert template["identity"] == {"canonical_key": "template_ref", "canonical_value": "nexa-curated:text_summarizer@1.0", "legacy_key": "template_id", "legacy_value": "text_summarizer", "lookup_mode": "template_id_or_template_ref"}
     assert template["template_version"] == "1.0"
     assert template["curation_status"] == "curated"
     assert template["provenance"]["family"] == "starter-template"
@@ -596,6 +597,8 @@ def test_starter_template_detail_route_returns_one_template() -> None:
     assert response.status_code == 200
     assert response.body["template"]["template_id"] == "text_summarizer"
     assert response.body["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
+    assert response.body["template"]["identity"]["canonical_value"] == "nexa-curated:text_summarizer@1.0"
+    assert response.body["template"]["identity"]["canonical_value"] == "nexa-curated:text_summarizer@1.0"
     assert response.body["template"]["provenance"]["source"] == "nexa-curated"
     assert response.body["template"]["compatibility"]["apply_behavior"] == "replace_designer_request"
     assert response.body["routes"]["catalog"] == "/api/templates/starter-circuits"

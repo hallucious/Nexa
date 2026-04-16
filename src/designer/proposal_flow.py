@@ -59,6 +59,15 @@ class StarterCircuitTemplateSpec:
         return f"{self.provenance_source}:{self.template_id}@{self.template_version}"
 
     @property
+    def canonical_identity(self) -> dict[str, str]:
+        return {
+            "canonical_key": "template_ref",
+            "canonical_value": self.template_ref,
+            "legacy_key": "template_id",
+            "legacy_value": self.template_id,
+        }
+
+    @property
     def lookup_aliases(self) -> tuple[str, ...]:
         return (self.template_id, self.template_ref)
 

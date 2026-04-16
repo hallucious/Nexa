@@ -3952,7 +3952,7 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         ),
     },
     "get_starter_circuit_template": {
-        "path_fields": (_schema_field("template_id", "path", "string", required=True, description="Starter template identifier to read."),),
+        "path_fields": (_schema_field("template_id", "path", "string", required=True, description="Starter template lookup value to read. Accepts a legacy template_id or canonical template_ref."),),
         "query_fields": (
             _schema_field("app_language", "query", "string", description="Optional language hint for localized starter-template detail."),
         ),
@@ -3960,7 +3960,7 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "apply_starter_circuit_template": {
         "path_fields": (
             _schema_field("workspace_id", "path", "string", required=True, description="Workspace whose shell draft should receive the starter template."),
-            _schema_field("template_id", "path", "string", required=True, description="Starter template identifier to apply."),
+            _schema_field("template_id", "path", "string", required=True, description="Starter template lookup value to apply. Accepts a legacy template_id or canonical template_ref."),
         ),
         "query_fields": (
             _schema_field("app_language", "query", "string", description="Optional language hint for localized shell projection after template apply."),
@@ -4899,11 +4899,11 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "profile_kind": "starter-template-catalog",
         "state_keys": ("status", "app_language"),
         "collection_field_name": "templates",
-        "collection_item_identity_keys": ("template_id",),
+        "collection_item_identity_keys": ("template_ref", "template_id"),
     },
     "get_starter_circuit_template": {
         "profile_kind": "starter-template-detail",
-        "identity_keys": ("template.template_id",),
+        "identity_keys": ("template.template_ref", "template.template_id"),
         "state_keys": ("status", "app_language"),
     },
     "get_public_nex_format": {

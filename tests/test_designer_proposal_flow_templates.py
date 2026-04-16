@@ -34,3 +34,14 @@ def test_get_starter_circuit_template_accepts_canonical_template_ref() -> None:
 
     assert template.template_id == "code_reviewer"
     assert template.template_ref == "nexa-curated:code_reviewer@1.0"
+
+
+def test_starter_circuit_template_exposes_canonical_identity_policy() -> None:
+    template = get_starter_circuit_template("code_reviewer")
+
+    assert template.canonical_identity == {
+        "canonical_key": "template_ref",
+        "canonical_value": "nexa-curated:code_reviewer@1.0",
+        "legacy_key": "template_id",
+        "legacy_value": "code_reviewer",
+    }

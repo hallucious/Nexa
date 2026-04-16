@@ -177,6 +177,12 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
     template_curation_status = str(body.get("template_curation_status") or "").strip() or None
     template_compatibility_family = str(body.get("template_compatibility_family") or "").strip() or None
     template_apply_behavior = str(body.get("template_apply_behavior") or "").strip() or None
+    raw_template_lookup_aliases = body.get("template_lookup_aliases")
+    template_lookup_aliases = tuple(
+        str(item).strip()
+        for item in (raw_template_lookup_aliases or ())
+        if str(item).strip()
+    ) or None
     request_text = str(body.get("request_text") or "").strip() or None
     designer_action = str(body.get("designer_action") or "").strip() or None
     validation_action = str(body.get("validation_action") or "").strip() or None
@@ -198,6 +204,7 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
                 "selected_template_curation_status",
                 "selected_template_compatibility_family",
                 "selected_template_apply_behavior",
+                "selected_template_lookup_aliases",
                 "request_text",
                 "last_action",
                 "updated_at",
@@ -229,6 +236,8 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
                 designer_state["selected_template_compatibility_family"] = template_compatibility_family
             if template_apply_behavior is not None:
                 designer_state["selected_template_apply_behavior"] = template_apply_behavior
+            if template_lookup_aliases is not None:
+                designer_state["selected_template_lookup_aliases"] = list(template_lookup_aliases)
             if request_text is not None:
                 designer_state["request_text"] = request_text
                 designer["draft_request_text"] = request_text
@@ -250,6 +259,7 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
                     "template_curation_status": template_curation_status,
                     "template_compatibility_family": template_compatibility_family,
                     "template_apply_behavior": template_apply_behavior,
+                    "template_lookup_aliases": list(template_lookup_aliases or ()),
                     "request_text": request_text,
                     "designer_action": designer_action,
                     "occurred_at": now_iso,
@@ -3109,6 +3119,13 @@ class RunHttpRouteSurface:
             "template_id": spec.template_id,
             "template_ref": spec.template_ref,
             "lookup_aliases": list(spec.lookup_aliases),
+            "identity": {
+                "canonical_key": "template_ref",
+                "canonical_value": spec.template_ref,
+                "legacy_key": "template_id",
+                "legacy_value": spec.template_id,
+                "lookup_mode": "template_id_or_template_ref",
+            },
             "display_name": display_name,
             "category": category_label,
             "category_id": spec.category,
@@ -3165,6 +3182,16 @@ class RunHttpRouteSurface:
                 "subtitle": ui_text("template_gallery.subtitle", app_language=app_language, fallback_text="Choose a starter workflow to begin faster."),
                 "template_count": len(templates),
                 "category_count": len(categories),
+                "identity_policy": {
+                    "canonical_key": "template_ref",
+                    "legacy_key": "template_id",
+                    "lookup_mode": "template_id_or_template_ref",
+                },
+                "namespace_policy": {
+                    "family": "starter-template",
+                    "source_scope": "nexa-curated",
+                    "canonical_ref_format": "{source}:{template_id}@{template_version}",
+                },
             },
             categories=tuple(categories.values()),
             templates=tuple(templates),
@@ -3290,6 +3317,7 @@ class RunHttpRouteSurface:
                 "template_curation_status": spec.curation_status,
                 "template_compatibility_family": spec.compatibility_family,
                 "template_apply_behavior": spec.apply_behavior,
+                "template_lookup_aliases": list(spec.lookup_aliases),
                 "designer_action": "apply_template",
             },
         )
