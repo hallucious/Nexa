@@ -115,6 +115,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "list_workspaces",
         "get_circuit_library",
         "get_public_nex_format",
+        "get_public_mcp_manifest",
+        "get_public_mcp_host_bridge",
         "get_workspace_result_history",
         "get_workspace_feedback",
         "submit_workspace_feedback",
@@ -1342,3 +1344,24 @@ def test_framework_binding_handles_public_share_delete_round_trip() -> None:
     assert parsed["action_report"]["action"] == "delete"
     assert parsed["governance_summary"]["total_share_count"] == 0
     assert parsed["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
+
+
+
+def test_framework_binding_handles_public_mcp_manifest_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_public_mcp_manifest(
+        request=_request(method="GET", path="/api/integrations/public-mcp/manifest", query_params={"base_url": "https://api.nexa.test"}),
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.body_text)
+    assert payload["manifest"]["server"]["name"] == "nexa-public"
+
+
+def test_framework_binding_handles_public_mcp_host_bridge_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_public_mcp_host_bridge(
+        request=_request(method="GET", path="/api/integrations/public-mcp/host-bridge", query_params={"base_url": "https://api.nexa.test"}),
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.body_text)
+    assert payload["host_bridge"]["framework_binding_class"] == "FrameworkRouteBindings"

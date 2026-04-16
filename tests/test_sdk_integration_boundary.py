@@ -1585,3 +1585,18 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
         "get_public_share_history",
         "get_public_share_artifact",
     )
+
+
+
+def test_public_mcp_manifest_and_host_bridge_resources_are_exported_with_expected_contracts() -> None:
+    adapter = build_public_mcp_adapter_scaffold(base_url="https://api.nexa.test")
+
+    manifest_contract = adapter.export_resource_contract("get_public_mcp_manifest")
+    host_bridge_contract = adapter.export_resource_contract("get_public_mcp_host_bridge")
+    manifest_response = adapter.export_resource_response_contract("get_public_mcp_manifest")
+    host_bridge_response = adapter.export_resource_response_contract("get_public_mcp_host_bridge")
+
+    assert manifest_contract.route_family == "public-mcp-manifest-read"
+    assert host_bridge_contract.route_family == "public-mcp-host-bridge-read"
+    assert manifest_response.required_top_level_keys == ("status", "manifest", "routes")
+    assert host_bridge_response.required_top_level_keys == ("status", "host_bridge", "routes")

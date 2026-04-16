@@ -20,6 +20,7 @@ from src.server.artifact_trace_read_models import (
 )
 from src.server.circuit_library_models import ProductCircuitLibraryResponse
 from src.server.public_nex_models import ProductPublicNexFormatResponse
+from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.recent_activity_models import ProductHistorySummaryResponse, ProductRecentActivityResponse
 from src.server.provider_health_models import (
     ProductProviderHealthDetailResponse,
@@ -118,6 +119,8 @@ __all__ = [
     "ProductHistorySummaryResponse",
     "ProductCircuitLibraryResponse",
     "ProductPublicNexFormatResponse",
+    "ProductPublicMcpManifestResponse",
+    "ProductPublicMcpHostBridgeResponse",
     "ProductWorkspaceCreateRequest",
     "ProductWorkspaceWriteAcceptedResponse",
     "ProductProviderCatalogResponse",

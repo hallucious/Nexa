@@ -3569,6 +3569,8 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "list_workspaces": "handle_list_workspaces",
     "get_circuit_library": "handle_circuit_library",
     "get_public_nex_format": "handle_public_nex_format",
+    "get_public_mcp_manifest": "handle_public_mcp_manifest",
+    "get_public_mcp_host_bridge": "handle_public_mcp_host_bridge",
     "get_workspace_result_history": "handle_workspace_result_history",
     "get_workspace_feedback": "handle_workspace_feedback",
     "submit_workspace_feedback": "handle_submit_workspace_feedback",
@@ -3943,6 +3945,20 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     },
     "get_public_nex_format": {
     },
+    "get_public_mcp_manifest": {
+        "query_fields": (
+            _schema_field("base_url", "query", "string", description="Optional public base URL to embed in manifest exports."),
+            _schema_field("resource_uri_prefix", "query", "string", description="Optional MCP resource URI prefix."),
+            _schema_field("server_name", "query", "string", description="Optional server name override for manifest export."),
+            _schema_field("server_title", "query", "string", description="Optional server title override for manifest export."),
+        ),
+    },
+    "get_public_mcp_host_bridge": {
+        "query_fields": (
+            _schema_field("base_url", "query", "string", description="Optional public base URL to embed in host-bridge exports."),
+            _schema_field("resource_uri_prefix", "query", "string", description="Optional MCP resource URI prefix."),
+        ),
+    },
     "get_workspace_result_history": {
         "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose result history should be read."),),
         "query_fields": (
@@ -4022,6 +4038,8 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "get_history_summary": {"route_family": "history-summary-read", "transport_profile": "query-only"},
     "get_circuit_library": {"route_family": "circuit-library-read", "transport_profile": "query-only"},
     "get_public_nex_format": {"route_family": "public-nex-format-read", "transport_profile": "no-arguments"},
+    "get_public_mcp_manifest": {"route_family": "public-mcp-manifest-read", "transport_profile": "query-only"},
+    "get_public_mcp_host_bridge": {"route_family": "public-mcp-host-bridge-read", "transport_profile": "query-only"},
     "get_workspace_result_history": {"route_family": "workspace-result-history-read", "transport_profile": "path-and-query"},
     "get_workspace_feedback": {"route_family": "workspace-feedback-read", "transport_profile": "path-and-query"},
     "submit_workspace_feedback": {"route_family": "workspace-feedback-write", "transport_profile": "path-and-body"},
@@ -4175,6 +4193,24 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_recommended_action": "retry_same_request",
     },
     "public-nex-format-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-mcp-manifest-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-mcp-host-bridge-read": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
         "safe_to_retry_same_request_on_timeout": True,
@@ -4588,6 +4624,16 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "result_resource_name": "get_public_nex_format",
         "followup_route_names": ("get_public_nex_format", "get_public_share_artifact", "create_workspace_shell_share", "commit_workspace_shell", "checkout_workspace_shell"),
     },
+    "public-mcp-manifest-read": {
+        "lifecycle_class": "public-mcp-manifest-read",
+        "result_resource_name": "get_public_mcp_manifest",
+        "followup_route_names": ("get_public_mcp_manifest", "get_public_mcp_host_bridge", "get_public_nex_format", "get_circuit_library"),
+    },
+    "public-mcp-host-bridge-read": {
+        "lifecycle_class": "public-mcp-host-bridge-read",
+        "result_resource_name": "get_public_mcp_host_bridge",
+        "followup_route_names": ("get_public_mcp_host_bridge", "get_public_mcp_manifest", "launch_run", "get_workspace_shell"),
+    },
     "workspace-result-history-read": {
         "lifecycle_class": "workspace-result-history-read",
         "status_resource_name": "get_workspace",
@@ -4781,6 +4827,20 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "state_keys": ("status",),
         "collection_field_name": "artifact_operation_boundaries",
         "collection_item_identity_keys": ("operation",),
+    },
+    "get_public_mcp_manifest": {
+        "profile_kind": "public-mcp-manifest",
+        "identity_keys": ("manifest",),
+        "state_keys": ("status",),
+        "collection_field_name": "tools",
+        "collection_item_identity_keys": ("route_name",),
+    },
+    "get_public_mcp_host_bridge": {
+        "profile_kind": "public-mcp-host-bridge",
+        "identity_keys": ("host_bridge",),
+        "state_keys": ("status",),
+        "collection_field_name": "tool_bindings",
+        "collection_item_identity_keys": ("route_name",),
     },
     "get_workspace_result_history": {
         "profile_kind": "workspace-result-history",
@@ -5001,6 +5061,8 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_history_summary": {"response_shape": "history-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("scope",)},
     "get_circuit_library": {"response_shape": "circuit-library", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "source_of_truth", "library", "overview_section", "item_sections", "routes")},
     "get_public_nex_format": {"response_shape": "public-nex-format", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "routes")},
+    "get_public_mcp_manifest": {"response_shape": "public-mcp-manifest", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "manifest", "routes")},
+    "get_public_mcp_host_bridge": {"response_shape": "public-mcp-host-bridge", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "host_bridge", "routes")},
     "get_workspace_result_history": {"response_shape": "workspace-result-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "result_history")},
     "get_workspace_feedback": {"response_shape": "workspace-feedback-read", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "feedback_channel")},
     "submit_workspace_feedback": {"response_shape": "workspace-feedback-write", "success_status_codes": (202,), "body_kind": "object", "required_top_level_keys": ("status", "feedback", "links")},
@@ -5346,6 +5408,20 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read the public .nex format boundary, role-aware operation catalog, and SDK entrypoints.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductPublicNexFormatResponse"),
         "tags": ("artifacts", "public-nex", "standardization"),
+    },
+    {
+        "name": "get_public_mcp_manifest",
+        "route_name": "get_public_mcp_manifest",
+        "description": "Read the public MCP manifest export surface for packaging and ecosystem discovery.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicMcpManifestResponse"),
+        "tags": ("integration", "mcp", "manifest"),
+    },
+    {
+        "name": "get_public_mcp_host_bridge",
+        "route_name": "get_public_mcp_host_bridge",
+        "description": "Read the public MCP host bridge export surface for framework dispatch and transport binding.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicMcpHostBridgeResponse"),
+        "tags": ("integration", "mcp", "host-bridge"),
     },
     {
         "name": "get_workspace_result_history",

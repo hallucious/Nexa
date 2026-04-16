@@ -95,6 +95,18 @@ class FrameworkRouteBindings:
             summary="Read the public .nex format boundary and role-aware operation catalog.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_public_mcp_manifest",
+            method="GET",
+            path_template="/api/integrations/public-mcp/manifest",
+            summary="Read the public MCP manifest export surface.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_public_mcp_host_bridge",
+            method="GET",
+            path_template="/api/integrations/public-mcp/host-bridge",
+            summary="Read the public MCP host bridge export surface.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_workspace_result_history",
             method="GET",
             path_template="/api/workspaces/{workspace_id}/result-history",
@@ -456,6 +468,28 @@ class FrameworkRouteBindings:
         )
         return cls.to_framework_response(response)
 
+
+    @classmethod
+    def handle_public_mcp_manifest(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_public_mcp_manifest(
+            http_request=cls.to_http_route_request(request),
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_public_mcp_host_bridge(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_public_mcp_host_bridge(
+            http_request=cls.to_http_route_request(request),
+        )
+        return cls.to_framework_response(response)
 
     @classmethod
     def handle_public_nex_format(

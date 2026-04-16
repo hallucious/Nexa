@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.server.public_nex_models import ProductPublicNexFormatResponse
+from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 
 from src import sdk
 from src.sdk import artifacts, server
@@ -181,6 +182,8 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert ProductHistorySummaryResponse is not None
     assert ProductCircuitLibraryResponse is not None
     assert ProductPublicNexFormatResponse is not None
+    assert ProductPublicMcpManifestResponse is not None
+    assert ProductPublicMcpHostBridgeResponse is not None
     assert ProductWorkspaceResultHistoryResponse is not None
     assert ProductWorkspaceFeedbackReadResponse is not None
     assert ProductWorkspaceFeedbackWriteRequest is not None

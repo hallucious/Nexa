@@ -1147,3 +1147,25 @@ def test_public_share_delete_route_removes_share_for_issuer() -> None:
     assert response.body["governance_summary"]["total_action_report_count"] == 3
     assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
     assert "share-delete-http-001" not in share_store
+
+
+def test_public_mcp_manifest_route_returns_manifest_export_surface() -> None:
+    response = RunHttpRouteSurface.handle_public_mcp_manifest(
+        http_request=HttpRouteRequest(method="GET", path="/api/integrations/public-mcp/manifest", query_params={"base_url": "https://api.nexa.test"}),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["manifest"]["server"]["name"] == "nexa-public"
+    assert response.body["routes"]["host_bridge"] == "/api/integrations/public-mcp/host-bridge"
+
+
+def test_public_mcp_host_bridge_route_returns_host_bridge_export_surface() -> None:
+    response = RunHttpRouteSurface.handle_public_mcp_host_bridge(
+        http_request=HttpRouteRequest(method="GET", path="/api/integrations/public-mcp/host-bridge", query_params={"base_url": "https://api.nexa.test"}),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["host_bridge"]["framework_binding_class"] == "FrameworkRouteBindings"
+    assert response.body["routes"]["manifest"] == "/api/integrations/public-mcp/manifest"

@@ -123,6 +123,17 @@ class FastApiRouteBindings:
             outbound = FrameworkRouteBindings.handle_public_nex_format(request=inbound)
             return self._framework_response(outbound)
 
+        @router.get("/api/integrations/public-mcp/manifest")
+        async def get_public_mcp_manifest(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_public_mcp_manifest(request=inbound)
+            return self._framework_response(outbound)
+
+        @router.get("/api/integrations/public-mcp/host-bridge")
+        async def get_public_mcp_host_bridge(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_public_mcp_host_bridge(request=inbound)
+            return self._framework_response(outbound)
 
         @router.get("/api/workspaces/{workspace_id}/result-history")
         async def get_workspace_result_history(request: Request, workspace_id: str) -> Response:

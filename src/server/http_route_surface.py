@@ -35,6 +35,7 @@ from src.server.run_action_log_api import RunActionLogReadService
 from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
 from src.server.circuit_library_runtime import build_circuit_library_payload
 from src.server.public_nex_models import ProductPublicNexFormatResponse
+from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.result_history_runtime import build_workspace_result_history_payload
 from src.storage.share_api import (
     build_issuer_public_share_management_action_report,
@@ -82,6 +83,12 @@ def _route_response(status_code: int, body: Mapping[str, Any]) -> HttpRouteRespo
 def _request_app_language(query_params: Mapping[str, Any] | None) -> str:
     params = query_params or {}
     return normalize_ui_language(str(params.get("app_language") or params.get("lang") or "en"))
+
+
+def _request_optional_text(query_params: Mapping[str, Any] | None, key: str) -> str | None:
+    params = query_params or {}
+    value = str(params.get(key) or "").strip()
+    return value or None
 
 
 def _working_save_source_dict_from_model(model) -> dict[str, Any]:
@@ -387,6 +394,27 @@ def _public_share_boundary_body() -> dict[str, Any]:
 
 
 
+
+
+def _public_mcp_manifest_body(query_params: Mapping[str, Any] | None) -> dict[str, Any]:
+    from src.sdk.integration import build_public_mcp_manifest
+
+    return build_public_mcp_manifest(
+        base_url=_request_optional_text(query_params, "base_url"),
+        resource_uri_prefix=_request_optional_text(query_params, "resource_uri_prefix") or "nexa://public",
+        server_name=_request_optional_text(query_params, "server_name") or "nexa-public",
+        server_title=_request_optional_text(query_params, "server_title") or "Nexa Public Integration Surface",
+    ).to_dict()
+
+
+def _public_mcp_host_bridge_body(query_params: Mapping[str, Any] | None) -> dict[str, Any]:
+    from src.sdk.integration import build_public_mcp_host_bridge_scaffold
+
+    export = build_public_mcp_host_bridge_scaffold(
+        base_url=_request_optional_text(query_params, "base_url"),
+        resource_uri_prefix=_request_optional_text(query_params, "resource_uri_prefix") or "nexa://public",
+    ).export()
+    return _to_jsonable(export)
 def _public_nex_format_body() -> dict[str, Any]:
     format_boundary = get_public_nex_format_boundary()
     return {
@@ -743,6 +771,8 @@ class RunHttpRouteSurface:
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
         ("get_public_nex_format", "GET", "/api/formats/public-nex"),
+        ("get_public_mcp_manifest", "GET", "/api/integrations/public-mcp/manifest"),
+        ("get_public_mcp_host_bridge", "GET", "/api/integrations/public-mcp/host-bridge"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
         ("get_workspace_feedback", "GET", "/api/workspaces/{workspace_id}/feedback"),
         ("submit_workspace_feedback", "POST", "/api/workspaces/{workspace_id}/feedback"),
@@ -3060,6 +3090,52 @@ class RunHttpRouteSurface:
                 "message": "Current user is not allowed to read the circuit library.",
             })
         return _route_response(200, payload)
+
+
+    @classmethod
+    def handle_public_mcp_manifest(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public MCP manifest route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/integrations/public-mcp/manifest":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        payload = _public_mcp_manifest_body(http_request.query_params)
+        response = ProductPublicMcpManifestResponse(
+            status="ready",
+            manifest=payload,
+            routes={
+                "self": "/api/integrations/public-mcp/manifest",
+                "host_bridge": "/api/integrations/public-mcp/host-bridge",
+                "public_nex_format": "/api/formats/public-nex",
+            },
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_public_mcp_host_bridge(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public MCP host bridge route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/integrations/public-mcp/host-bridge":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        payload = _public_mcp_host_bridge_body(http_request.query_params)
+        response = ProductPublicMcpHostBridgeResponse(
+            status="ready",
+            host_bridge=payload,
+            routes={
+                "self": "/api/integrations/public-mcp/host-bridge",
+                "manifest": "/api/integrations/public-mcp/manifest",
+            },
+        )
+        return _route_response(200, asdict(response))
 
     @classmethod
     def handle_public_nex_format(

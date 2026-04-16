@@ -1936,3 +1936,22 @@ def test_fastapi_binding_public_share_delete_round_trip() -> None:
     assert payload['action_report']['action'] == 'delete'
     assert payload['governance_summary']['total_share_count'] == 0
     assert payload['links']['action_reports'] == '/api/users/me/public-shares/action-reports'
+
+
+
+def test_fastapi_binding_public_mcp_manifest_route_round_trip() -> None:
+    client = _make_client()
+
+    response = client.get('/api/integrations/public-mcp/manifest', params={'base_url': 'https://api.nexa.test'})
+
+    assert response.status_code == 200
+    assert response.json()['manifest']['server']['name'] == 'nexa-public'
+
+
+def test_fastapi_binding_public_mcp_host_bridge_route_round_trip() -> None:
+    client = _make_client()
+
+    response = client.get('/api/integrations/public-mcp/host-bridge', params={'base_url': 'https://api.nexa.test'})
+
+    assert response.status_code == 200
+    assert response.json()['host_bridge']['framework_binding_class'] == 'FrameworkRouteBindings'
