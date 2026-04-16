@@ -10,6 +10,8 @@ class ProductPublicNexFormatResponse:
     format_boundary: Mapping[str, Any]
     role_boundaries: Mapping[str, Mapping[str, Any]]
     public_sdk_entrypoints: Mapping[str, str]
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
     routes: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

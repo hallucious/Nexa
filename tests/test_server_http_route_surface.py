@@ -665,6 +665,8 @@ def test_public_nex_format_route_returns_role_aware_standardization_surface() ->
     operations = response.body["format_boundary"]["artifact_operation_boundaries"]
     assert any(entry["operation"] == "load_artifact" for entry in operations)
     assert response.body["public_sdk_entrypoints"]["load_artifact"] == "load_nex"
+    assert response.body["identity_policy"]["canonical_key"] == "format_boundary.format_family"
+    assert response.body["namespace_policy"]["family"] == "public-nex-format"
     assert response.body["routes"]["public_share_artifact"] == "/api/public-shares/{share_id}/artifact"
 
 
@@ -1263,6 +1265,8 @@ def test_public_mcp_manifest_route_returns_manifest_export_surface() -> None:
     assert response.status_code == 200
     assert response.body["status"] == "ready"
     assert response.body["manifest"]["server"]["name"] == "nexa-public"
+    assert response.body["identity_policy"]["canonical_key"] == "manifest.server.name"
+    assert response.body["namespace_policy"]["family"] == "public-mcp-manifest"
     assert response.body["routes"]["host_bridge"] == "/api/integrations/public-mcp/host-bridge"
 
 
@@ -1274,4 +1278,6 @@ def test_public_mcp_host_bridge_route_returns_host_bridge_export_surface() -> No
     assert response.status_code == 200
     assert response.body["status"] == "ready"
     assert response.body["host_bridge"]["framework_binding_class"] == "FrameworkRouteBindings"
+    assert response.body["identity_policy"]["canonical_key"] == "host_bridge.framework_binding_class"
+    assert response.body["namespace_policy"]["family"] == "public-mcp-host-bridge"
     assert response.body["routes"]["manifest"] == "/api/integrations/public-mcp/manifest"

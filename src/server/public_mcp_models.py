@@ -8,6 +8,8 @@ from typing import Any, Mapping
 class ProductPublicMcpManifestResponse:
     status: str
     manifest: Mapping[str, Any]
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
     routes: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -21,6 +23,8 @@ class ProductPublicMcpManifestResponse:
 class ProductPublicMcpHostBridgeResponse:
     status: str
     host_bridge: Mapping[str, Any]
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
     routes: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

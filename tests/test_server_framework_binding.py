@@ -750,6 +750,8 @@ def test_framework_binding_handles_public_nex_format_round_trip() -> None:
     assert response.status_code == 200
     payload = json.loads(response.body_text)
     assert payload["format_boundary"]["format_family"] == ".nex"
+    assert payload["identity_policy"]["canonical_key"] == "format_boundary.format_family"
+    assert payload["namespace_policy"]["family"] == "public-nex-format"
     assert payload["role_boundaries"]["working_save"]["storage_role"] == "working_save"
 
 
@@ -1449,6 +1451,8 @@ def test_framework_binding_handles_public_mcp_manifest_round_trip() -> None:
     assert response.status_code == 200
     payload = json.loads(response.body_text)
     assert payload["manifest"]["server"]["name"] == "nexa-public"
+    assert payload["identity_policy"]["canonical_key"] == "manifest.server.name"
+    assert payload["namespace_policy"]["family"] == "public-mcp-manifest"
 
 
 def test_framework_binding_handles_public_mcp_host_bridge_round_trip() -> None:
@@ -1459,3 +1463,5 @@ def test_framework_binding_handles_public_mcp_host_bridge_round_trip() -> None:
     assert response.status_code == 200
     payload = json.loads(response.body_text)
     assert payload["host_bridge"]["framework_binding_class"] == "FrameworkRouteBindings"
+    assert payload["identity_policy"]["canonical_key"] == "host_bridge.framework_binding_class"
+    assert payload["namespace_policy"]["family"] == "public-mcp-host-bridge"

@@ -569,6 +569,53 @@ def _starter_template_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _public_nex_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "format_boundary.format_family",
+        "lookup_mode": "fixed_public_route",
+        "surface_family": "public-nex-format",
+    }
+
+
+def _public_nex_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-nex-format",
+        "canonical_route": "/api/formats/public-nex",
+        "format_family": ".nex",
+    }
+
+
+def _public_mcp_manifest_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "manifest.server.name",
+        "lookup_mode": "fixed_public_route",
+        "surface_family": "public-mcp-manifest",
+    }
+
+
+def _public_mcp_manifest_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-mcp-manifest",
+        "canonical_route": "/api/integrations/public-mcp/manifest",
+        "resource_uri_prefix_field": "manifest.resource_uri_prefix",
+    }
+
+
+def _public_mcp_host_bridge_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "host_bridge.framework_binding_class",
+        "lookup_mode": "fixed_public_route",
+        "surface_family": "public-mcp-host-bridge",
+    }
+
+
+def _public_mcp_host_bridge_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-mcp-host-bridge",
+        "canonical_route": "/api/integrations/public-mcp/host-bridge",
+        "resource_uri_prefix_field": "host_bridge.resource_uri_prefix",
+    }
+
 
 def _public_artifact_boundary_body(model_or_data: Any) -> dict[str, Any]:
     descriptor = describe_public_nex_artifact(model_or_data)
@@ -3488,6 +3535,8 @@ class RunHttpRouteSurface:
         response = ProductPublicMcpManifestResponse(
             status="ready",
             manifest=payload,
+            identity_policy=_public_mcp_manifest_identity_policy_body(),
+            namespace_policy=_public_mcp_manifest_namespace_policy_body(),
             routes={
                 "self": "/api/integrations/public-mcp/manifest",
                 "host_bridge": "/api/integrations/public-mcp/host-bridge",
@@ -3511,6 +3560,8 @@ class RunHttpRouteSurface:
         response = ProductPublicMcpHostBridgeResponse(
             status="ready",
             host_bridge=payload,
+            identity_policy=_public_mcp_host_bridge_identity_policy_body(),
+            namespace_policy=_public_mcp_host_bridge_namespace_policy_body(),
             routes={
                 "self": "/api/integrations/public-mcp/host-bridge",
                 "manifest": "/api/integrations/public-mcp/manifest",
@@ -3544,6 +3595,8 @@ class RunHttpRouteSurface:
                 "commit_snapshot": payload["role_boundaries"]["commit_snapshot"],
             },
             public_sdk_entrypoints=payload["public_sdk_entrypoints"],
+            identity_policy=_public_nex_identity_policy_body(),
+            namespace_policy=_public_nex_namespace_policy_body(),
             routes=payload["routes"],
         )
         body = asdict(response)

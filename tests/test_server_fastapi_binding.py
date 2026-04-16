@@ -555,6 +555,8 @@ def test_fastapi_binding_public_nex_format_route_round_trip() -> None:
     assert api_response.status_code == 200
     payload = api_response.json()
     assert payload["format_boundary"]["format_family"] == ".nex"
+    assert payload["identity_policy"]["canonical_key"] == "format_boundary.format_family"
+    assert payload["namespace_policy"]["family"] == "public-nex-format"
     assert payload["role_boundaries"]["commit_snapshot"]["storage_role"] == "commit_snapshot"
 
 
@@ -1994,6 +1996,8 @@ def test_fastapi_binding_public_mcp_manifest_route_round_trip() -> None:
 
     assert response.status_code == 200
     assert response.json()['manifest']['server']['name'] == 'nexa-public'
+    assert response.json()['identity_policy']['canonical_key'] == 'manifest.server.name'
+    assert response.json()['namespace_policy']['family'] == 'public-mcp-manifest'
 
 
 def test_fastapi_binding_public_mcp_host_bridge_route_round_trip() -> None:
@@ -2003,3 +2007,5 @@ def test_fastapi_binding_public_mcp_host_bridge_route_round_trip() -> None:
 
     assert response.status_code == 200
     assert response.json()['host_bridge']['framework_binding_class'] == 'FrameworkRouteBindings'
+    assert response.json()['identity_policy']['canonical_key'] == 'host_bridge.framework_binding_class'
+    assert response.json()['namespace_policy']['family'] == 'public-mcp-host-bridge'

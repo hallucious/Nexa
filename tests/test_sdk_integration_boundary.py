@@ -138,6 +138,9 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert contracts["get_public_share"].result_shape_profile.identity_keys == ("share_id", "identity", "identity_policy", "namespace_policy")
     assert contracts["list_issuer_public_shares"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
     assert contracts["list_starter_circuit_templates"].result_shape_profile.identity_keys == ("identity_policy", "namespace_policy")
+    assert contracts["get_public_nex_format"].result_shape_profile.identity_keys == ("format_boundary", "identity_policy", "namespace_policy")
+    assert contracts["get_public_mcp_manifest"].result_shape_profile.identity_keys == ("manifest", "identity_policy", "namespace_policy")
+    assert contracts["get_public_mcp_host_bridge"].result_shape_profile.identity_keys == ("host_bridge", "identity_policy", "namespace_policy")
     assert contracts["list_issuer_public_shares"].result_shape_profile.collection_item_identity_keys == ("share_id", "identity")
     assert indexed["get_public_nex_format"].path == "/api/formats/public-nex"
     assert indexed["list_issuer_public_shares"].path == "/api/users/me/public-shares"
@@ -1588,6 +1591,9 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["get_workspace_shell"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes")
     assert responses["put_workspace_shell_draft"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes")
     assert responses["create_workspace_shell_share"].success_status_codes == (201,)
+    assert responses["get_public_nex_format"].required_top_level_keys == ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")
+    assert responses["get_public_mcp_manifest"].required_top_level_keys == ("status", "manifest", "identity_policy", "namespace_policy", "routes")
+    assert responses["get_public_mcp_host_bridge"].required_top_level_keys == ("status", "host_bridge", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_share_history"].required_top_level_keys == ("share_id", "history", "identity_policy", "namespace_policy")
 
     assert lifecycles[("resource", "get_workspace_shell")].status_resource_name == "get_workspace_shell"
@@ -1613,5 +1619,5 @@ def test_public_mcp_manifest_and_host_bridge_resources_are_exported_with_expecte
 
     assert manifest_contract.route_family == "public-mcp-manifest-read"
     assert host_bridge_contract.route_family == "public-mcp-host-bridge-read"
-    assert manifest_response.required_top_level_keys == ("status", "manifest", "routes")
-    assert host_bridge_response.required_top_level_keys == ("status", "host_bridge", "routes")
+    assert manifest_response.required_top_level_keys == ("status", "manifest", "identity_policy", "namespace_policy", "routes")
+    assert host_bridge_response.required_top_level_keys == ("status", "host_bridge", "identity_policy", "namespace_policy", "routes")
