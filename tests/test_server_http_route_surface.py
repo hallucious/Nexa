@@ -246,7 +246,11 @@ def test_public_share_artifact_route_returns_canonical_artifact_without_authenti
     assert response.body["share_boundary"]["public_access_posture"] == "anonymous_readonly"
     assert response.body["share_boundary"]["management_access_posture"] == "issuer_authenticated_lifecycle_management"
     assert response.body["share_boundary"]["public_operation_boundaries"][0]["operation"] == "inspect_metadata"
+    assert response.body["share_boundary"]["public_operation_boundaries"][0]["allowed_effective_lifecycle_states"] == ["active", "expired", "revoked"]
+    assert response.body["share_boundary"]["public_operation_boundaries"][4]["allowed_storage_roles"] == ["commit_snapshot"]
     assert response.body["share_boundary"]["management_operation_boundaries"][0]["operation"] == "revoke"
+    assert response.body["share_boundary"]["management_operation_boundaries"][0]["denial_reason_code"] == "public_share.transition_not_allowed"
+    assert response.body["share_boundary"]["history_boundary"]["ordering"] == "ascending_sequence"
     assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
 
 

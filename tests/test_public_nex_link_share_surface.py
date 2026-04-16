@@ -79,6 +79,11 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     )
     assert boundary.public_operation_boundaries[0].posture == "anonymous_public_metadata_read"
     assert boundary.public_operation_boundaries[0].requires_authentication is False
+    assert boundary.public_operation_boundaries[0].allowed_storage_roles == ("working_save", "commit_snapshot")
+    assert boundary.public_operation_boundaries[0].allowed_effective_lifecycle_states == ("active", "expired", "revoked")
+    assert boundary.public_operation_boundaries[0].denial_reason_code == "public_share.metadata_not_allowed"
+    assert boundary.public_operation_boundaries[4].allowed_storage_roles == ("commit_snapshot",)
+    assert boundary.public_operation_boundaries[4].allowed_effective_lifecycle_states == ("active",)
     assert tuple(entry.operation for entry in boundary.management_operation_boundaries) == (
         "revoke",
         "extend_expiration",
@@ -87,6 +92,11 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     )
     assert all(entry.requires_authentication for entry in boundary.management_operation_boundaries)
     assert all(entry.requires_issuer_scope for entry in boundary.management_operation_boundaries)
+    assert boundary.management_operation_boundaries[0].allowed_effective_lifecycle_states == ("active",)
+    assert boundary.management_operation_boundaries[2].denial_reason_code == "public_share.management_not_allowed"
+    assert boundary.history_boundary.access_posture == "public_audit_history"
+    assert boundary.history_boundary.ordering == "ascending_sequence"
+    assert boundary.history_boundary.event_types == ("created", "expiration_extended", "revoked", "archived", "unarchived")
     assert boundary.supported_roles == ("working_save", "commit_snapshot")
     assert boundary.artifact_format_family == ".nex"
     assert boundary.viewer_capabilities == ("inspect_metadata", "download_artifact", "import_copy")

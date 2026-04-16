@@ -1646,7 +1646,11 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     assert payload['share_boundary']['public_access_posture'] == 'anonymous_readonly'
     assert payload['share_boundary']['management_access_posture'] == 'issuer_authenticated_lifecycle_management'
     assert payload['share_boundary']['public_operation_boundaries'][0]['operation'] == 'inspect_metadata'
+    assert payload['share_boundary']['public_operation_boundaries'][0]['allowed_effective_lifecycle_states'] == ['active', 'expired', 'revoked']
+    assert payload['share_boundary']['public_operation_boundaries'][4]['allowed_storage_roles'] == ['commit_snapshot']
     assert payload['share_boundary']['management_operation_boundaries'][2]['operation'] == 'delete'
+    assert payload['share_boundary']['management_operation_boundaries'][2]['denial_reason_code'] == 'public_share.management_not_allowed'
+    assert payload['share_boundary']['history_boundary']['detail_payload_posture'] == 'optional_string_map'
     assert payload['artifact_boundary']['role_boundary']['identity_field'] == 'commit_id'
 
     history_response = client.get('/api/public-shares/share-fastapi-001/history')

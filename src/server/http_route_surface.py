@@ -329,6 +329,9 @@ def _public_share_boundary_body() -> dict[str, Any]:
                 "requires_authentication": entry.requires_authentication,
                 "requires_issuer_scope": entry.requires_issuer_scope,
                 "lifecycle_gate": entry.lifecycle_gate,
+                "allowed_storage_roles": list(entry.allowed_storage_roles),
+                "allowed_effective_lifecycle_states": list(entry.allowed_effective_lifecycle_states),
+                "denial_reason_code": entry.denial_reason_code,
             }
             for entry in boundary.public_operation_boundaries
         ],
@@ -339,9 +342,21 @@ def _public_share_boundary_body() -> dict[str, Any]:
                 "requires_authentication": entry.requires_authentication,
                 "requires_issuer_scope": entry.requires_issuer_scope,
                 "lifecycle_gate": entry.lifecycle_gate,
+                "allowed_storage_roles": list(entry.allowed_storage_roles),
+                "allowed_effective_lifecycle_states": list(entry.allowed_effective_lifecycle_states),
+                "denial_reason_code": entry.denial_reason_code,
             }
             for entry in boundary.management_operation_boundaries
         ],
+        "history_boundary": {
+            "access_posture": boundary.history_boundary.access_posture,
+            "ordering": boundary.history_boundary.ordering,
+            "actor_identity_posture": boundary.history_boundary.actor_identity_posture,
+            "event_types": list(boundary.history_boundary.event_types),
+            "includes_stored_lifecycle_state": boundary.history_boundary.includes_stored_lifecycle_state,
+            "includes_effective_lifecycle_state": boundary.history_boundary.includes_effective_lifecycle_state,
+            "detail_payload_posture": boundary.history_boundary.detail_payload_posture,
+        },
         "supported_lifecycle_states": list(boundary.supported_lifecycle_states),
         "terminal_lifecycle_states": list(boundary.terminal_lifecycle_states),
         "management_operations": list(boundary.management_operations),

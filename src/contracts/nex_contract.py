@@ -101,6 +101,20 @@ class PublicNexShareOperationBoundary:
     requires_authentication: bool
     requires_issuer_scope: bool
     lifecycle_gate: str
+    allowed_storage_roles: tuple[StorageRole, ...]
+    allowed_effective_lifecycle_states: tuple[ShareLifecycleState, ...]
+    denial_reason_code: str
+
+
+@dataclass(frozen=True)
+class PublicNexShareHistoryBoundary:
+    access_posture: str
+    ordering: str
+    actor_identity_posture: str
+    event_types: tuple[ShareAuditEventType, ...]
+    includes_stored_lifecycle_state: bool
+    includes_effective_lifecycle_state: bool
+    detail_payload_posture: str
 
 
 @dataclass(frozen=True)
@@ -118,6 +132,7 @@ class PublicNexShareBoundary:
     supported_operations: tuple[ShareOperation, ...]
     public_operation_boundaries: tuple[PublicNexShareOperationBoundary, ...]
     management_operation_boundaries: tuple[PublicNexShareOperationBoundary, ...]
+    history_boundary: PublicNexShareHistoryBoundary
     supported_lifecycle_states: tuple[ShareLifecycleState, ...]
     terminal_lifecycle_states: tuple[ShareLifecycleState, ...]
     management_operations: tuple[str, ...]
