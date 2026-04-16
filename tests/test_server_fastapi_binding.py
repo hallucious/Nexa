@@ -517,6 +517,22 @@ def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
 
 
 
+def test_fastapi_binding_starter_template_routes_round_trip() -> None:
+    client = _make_client()
+
+    catalog_response = client.get('/api/templates/starter-circuits')
+    assert catalog_response.status_code == 200
+    assert catalog_response.json()['catalog']['family'] == 'starter-circuit-template-catalog'
+
+    detail_response = client.get('/api/templates/starter-circuits/text_summarizer')
+    assert detail_response.status_code == 200
+    assert detail_response.json()['template']['template_id'] == 'text_summarizer'
+
+    apply_response = client.post('/api/workspaces/ws-001/starter-templates/text_summarizer/apply', headers=_session_headers())
+    assert apply_response.status_code == 200
+    assert apply_response.json()['template']['template_id'] == 'text_summarizer'
+
+
 def test_fastapi_binding_public_nex_format_route_round_trip() -> None:
     client = _make_client()
 

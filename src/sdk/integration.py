@@ -3568,6 +3568,9 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "get_history_summary": "handle_history_summary",
     "list_workspaces": "handle_list_workspaces",
     "get_circuit_library": "handle_circuit_library",
+    "list_starter_circuit_templates": "handle_list_starter_circuit_templates",
+    "get_starter_circuit_template": "handle_get_starter_circuit_template",
+    "apply_starter_circuit_template": "handle_apply_starter_circuit_template",
     "get_public_nex_format": "handle_public_nex_format",
     "get_public_mcp_manifest": "handle_public_mcp_manifest",
     "get_public_mcp_host_bridge": "handle_public_mcp_host_bridge",
@@ -3943,6 +3946,26 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             _schema_field("app_language", "query", "string", description="Optional language hint for localized circuit-library summaries."),
         ),
     },
+    "list_starter_circuit_templates": {
+        "query_fields": (
+            _schema_field("app_language", "query", "string", description="Optional language hint for localized starter-template catalog summaries."),
+        ),
+    },
+    "get_starter_circuit_template": {
+        "path_fields": (_schema_field("template_id", "path", "string", required=True, description="Starter template identifier to read."),),
+        "query_fields": (
+            _schema_field("app_language", "query", "string", description="Optional language hint for localized starter-template detail."),
+        ),
+    },
+    "apply_starter_circuit_template": {
+        "path_fields": (
+            _schema_field("workspace_id", "path", "string", required=True, description="Workspace whose shell draft should receive the starter template."),
+            _schema_field("template_id", "path", "string", required=True, description="Starter template identifier to apply."),
+        ),
+        "query_fields": (
+            _schema_field("app_language", "query", "string", description="Optional language hint for localized shell projection after template apply."),
+        ),
+    },
     "get_public_nex_format": {
     },
     "get_public_mcp_manifest": {
@@ -3994,6 +4017,7 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "launch_run": {"route_family": "run-launch", "transport_profile": "body-only"},
     "get_workspace_shell": {"route_family": "workspace-shell-read", "transport_profile": "path-and-query"},
     "put_workspace_shell_draft": {"route_family": "workspace-shell-draft-write", "transport_profile": "path-and-body"},
+    "apply_starter_circuit_template": {"route_family": "starter-template-apply", "transport_profile": "path-and-query"},
     "launch_workspace_shell": {"route_family": "workspace-shell-launch", "transport_profile": "path-and-body"},
     "commit_workspace_shell": {"route_family": "workspace-shell-commit", "transport_profile": "path-and-body"},
     "checkout_workspace_shell": {"route_family": "workspace-shell-checkout", "transport_profile": "path-and-body"},
@@ -4037,6 +4061,8 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "delete_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
     "get_history_summary": {"route_family": "history-summary-read", "transport_profile": "query-only"},
     "get_circuit_library": {"route_family": "circuit-library-read", "transport_profile": "query-only"},
+    "list_starter_circuit_templates": {"route_family": "starter-template-catalog-read", "transport_profile": "query-only"},
+    "get_starter_circuit_template": {"route_family": "starter-template-detail-read", "transport_profile": "path-and-query"},
     "get_public_nex_format": {"route_family": "public-nex-format-read", "transport_profile": "no-arguments"},
     "get_public_mcp_manifest": {"route_family": "public-mcp-manifest-read", "transport_profile": "query-only"},
     "get_public_mcp_host_bridge": {"route_family": "public-mcp-host-bridge-read", "transport_profile": "query-only"},
@@ -4191,6 +4217,33 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_retryable": True,
         "safe_to_retry_same_request_on_response_timeout": True,
         "response_timeout_recommended_action": "retry_same_request",
+    },
+    "starter-template-catalog-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "starter-template-detail-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "starter-template-apply": {
+        "idempotency_class": "idempotent-write",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "read_status_resource",
     },
     "public-nex-format-read": {
         "idempotency_class": "read-only",
@@ -4619,6 +4672,22 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "result_resource_name": "get_circuit_library",
         "followup_route_names": ("get_circuit_library", "list_workspaces", "get_workspace_result_history", "get_workspace_feedback", "get_workspace_shell", "get_onboarding"),
     },
+    "starter-template-catalog-read": {
+        "lifecycle_class": "starter-template-catalog-read",
+        "result_resource_name": "list_starter_circuit_templates",
+        "followup_route_names": ("list_starter_circuit_templates", "get_starter_circuit_template", "apply_starter_circuit_template", "get_circuit_library", "create_workspace"),
+    },
+    "starter-template-detail-read": {
+        "lifecycle_class": "starter-template-detail-read",
+        "result_resource_name": "get_starter_circuit_template",
+        "followup_route_names": ("get_starter_circuit_template", "apply_starter_circuit_template", "list_starter_circuit_templates", "put_workspace_shell_draft", "launch_workspace_shell"),
+    },
+    "starter-template-apply": {
+        "lifecycle_class": "starter-template-apply",
+        "status_resource_name": "get_workspace_shell",
+        "result_resource_name": "put_workspace_shell_draft",
+        "followup_route_names": ("apply_starter_circuit_template", "get_workspace_shell", "put_workspace_shell_draft", "launch_workspace_shell", "list_starter_circuit_templates", "get_starter_circuit_template"),
+    },
     "public-nex-format-read": {
         "lifecycle_class": "public-nex-format-read",
         "result_resource_name": "get_public_nex_format",
@@ -4738,6 +4807,11 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "identity_keys": ("workspace_id",),
         "state_keys": ("storage_role",),
     },
+    "apply_starter_circuit_template": {
+        "profile_kind": "starter-template-apply",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("status",),
+    },
     "launch_workspace_shell": {
         "profile_kind": "workspace-shell-launch",
         "identity_keys": ("workspace_id", "run_id"),
@@ -4820,6 +4894,17 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "state_keys": ("status", "app_language"),
         "collection_field_name": "item_sections",
         "collection_item_identity_keys": ("workspace_id",),
+    },
+    "list_starter_circuit_templates": {
+        "profile_kind": "starter-template-catalog",
+        "state_keys": ("status", "app_language"),
+        "collection_field_name": "templates",
+        "collection_item_identity_keys": ("template_id",),
+    },
+    "get_starter_circuit_template": {
+        "profile_kind": "starter-template-detail",
+        "identity_keys": ("template.template_id",),
+        "state_keys": ("status", "app_language"),
     },
     "get_public_nex_format": {
         "profile_kind": "public-nex-format",
@@ -5029,6 +5114,12 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "body_kind": "object",
         "required_top_level_keys": ("workspace_id", "storage_role", "action_availability", "shell", "routes"),
     },
+    "apply_starter_circuit_template": {
+        "response_shape": "starter-template-apply",
+        "success_status_codes": (200,),
+        "body_kind": "object",
+        "required_top_level_keys": ("status", "workspace_id", "template", "shell", "routes"),
+    },
     "launch_workspace_shell": {
         "response_shape": "workspace-shell-launch",
         "success_status_codes": (202,),
@@ -5060,6 +5151,8 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object"},
     "get_history_summary": {"response_shape": "history-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("scope",)},
     "get_circuit_library": {"response_shape": "circuit-library", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "source_of_truth", "library", "overview_section", "item_sections", "routes")},
+    "list_starter_circuit_templates": {"response_shape": "starter-template-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "templates", "routes")},
+    "get_starter_circuit_template": {"response_shape": "starter-template-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "template", "routes")},
     "get_public_nex_format": {"response_shape": "public-nex-format", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "routes")},
     "get_public_mcp_manifest": {"response_shape": "public-mcp-manifest", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "manifest", "routes")},
     "get_public_mcp_host_bridge": {"response_shape": "public-mcp-host-bridge", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "host_bridge", "routes")},
@@ -5182,6 +5275,13 @@ _TOOL_SPECS: tuple[dict[str, object], ...] = (
         "description": "Persist server-backed workspace shell draft continuity and builder state.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceShellDraftSavedResponse"),
         "tags": ("workspace-shell", "draft", "write", "public-boundary"),
+    },
+    {
+        "name": "apply_starter_circuit_template",
+        "route_name": "apply_starter_circuit_template",
+        "description": "Apply a public starter template to a workspace shell draft and project the updated shell state.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductStarterTemplateApplyAcceptedResponse"),
+        "tags": ("templates", "ecosystem", "apply", "workspace-shell"),
     },
     {
         "name": "launch_workspace_shell",
@@ -5401,6 +5501,20 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read the beginner-facing workflow library and continue/result-history reentry surfaces.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductCircuitLibraryResponse"),
         "tags": ("workspace", "library", "reentry"),
+    },
+    {
+        "name": "list_starter_circuit_templates",
+        "route_name": "list_starter_circuit_templates",
+        "description": "Read the public starter-template catalog as a bounded ecosystem surface.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductStarterTemplateCatalogResponse"),
+        "tags": ("templates", "ecosystem", "catalog"),
+    },
+    {
+        "name": "get_starter_circuit_template",
+        "route_name": "get_starter_circuit_template",
+        "description": "Read one starter-template detail entry from the public ecosystem surface.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductStarterTemplateDetailResponse"),
+        "tags": ("templates", "ecosystem", "detail"),
     },
     {
         "name": "get_public_nex_format",

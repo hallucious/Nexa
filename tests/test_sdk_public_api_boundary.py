@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
+from src.server.starter_template_models import (
+    ProductStarterTemplateApplyAcceptedResponse,
+    ProductStarterTemplateCatalogResponse,
+    ProductStarterTemplateDetailResponse,
+)
 
 from src import sdk
 from src.sdk import artifacts, server
@@ -29,6 +34,9 @@ from src.sdk.server import (
     ProductOnboardingReadResponse,
     ProductHistorySummaryResponse,
     ProductCircuitLibraryResponse,
+    ProductStarterTemplateCatalogResponse,
+    ProductStarterTemplateDetailResponse,
+    ProductStarterTemplateApplyAcceptedResponse,
     ProductOnboardingWriteAcceptedResponse,
     ProductOnboardingWriteRequest,
     ProductProviderBindingWriteAcceptedResponse,
@@ -181,6 +189,9 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert ProductOnboardingWriteAcceptedResponse is not None
     assert ProductHistorySummaryResponse is not None
     assert ProductCircuitLibraryResponse is not None
+    assert ProductStarterTemplateCatalogResponse is not None
+    assert ProductStarterTemplateDetailResponse is not None
+    assert ProductStarterTemplateApplyAcceptedResponse is not None
     assert ProductPublicNexFormatResponse is not None
     assert ProductPublicMcpManifestResponse is not None
     assert ProductPublicMcpHostBridgeResponse is not None
@@ -200,9 +211,12 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(tool.route_name == "create_workspace" for tool in manifest.tools)
     assert any(tool.route_name == "submit_workspace_feedback" for tool in manifest.tools)
+    assert any(tool.route_name == "apply_starter_circuit_template" for tool in manifest.tools)
     assert any(resource.route_name == "get_provider_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_history_summary" for resource in manifest.resources)
     assert any(resource.route_name == "get_circuit_library" for resource in manifest.resources)
+    assert any(resource.route_name == "list_starter_circuit_templates" for resource in manifest.resources)
+    assert any(resource.route_name == "get_starter_circuit_template" for resource in manifest.resources)
     assert any(resource.route_name == "get_public_nex_format" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in manifest.resources)
@@ -243,6 +257,8 @@ def test_sdk_root_exposes_public_mcp_argument_schema_catalog() -> None:
     assert indexed["put_onboarding"].body_fields[-1].name == "current_step"
     assert indexed["get_history_summary"].query_fields[0].name == "workspace_id"
     assert indexed["get_public_nex_format"].route_name == "get_public_nex_format"
+    assert indexed["get_starter_circuit_template"].path_fields[0].name == "template_id"
+    assert indexed["apply_starter_circuit_template"].path_fields[1].name == "template_id"
     assert indexed["get_workspace_result_history"].path_fields[0].name == "workspace_id"
     assert [field.name for field in indexed["submit_workspace_feedback"].body_fields] == ["category", "surface", "message", "run_id"]
     assert indexed["list_workspaces"].route_name == "list_workspaces"

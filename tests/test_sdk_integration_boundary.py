@@ -131,6 +131,8 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert indexed["list_run_artifacts"].path.endswith("/artifacts")
     assert indexed["get_recent_activity"].path == "/api/users/me/activity"
     assert indexed["get_circuit_library"].path == "/api/workspaces/library"
+    assert indexed["list_starter_circuit_templates"].path == "/api/templates/starter-circuits"
+    assert indexed["get_starter_circuit_template"].path == "/api/templates/starter-circuits/{template_id}"
     assert indexed["get_public_nex_format"].path == "/api/formats/public-nex"
     assert indexed["list_issuer_public_shares"].path == "/api/users/me/public-shares"
     assert indexed["get_issuer_public_share_summary"].path == "/api/users/me/public-shares/summary"
@@ -157,9 +159,12 @@ def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> Non
     assert any(resource.route_name == "get_run_trace" for resource in surface.resources)
     assert any(tool.route_name == "create_workspace" for tool in surface.tools)
     assert any(tool.route_name == "submit_workspace_feedback" for tool in surface.tools)
+    assert any(tool.route_name == "apply_starter_circuit_template" for tool in surface.tools)
     assert any(resource.route_name == "get_provider_catalog" for resource in surface.resources)
     assert any(resource.route_name == "get_history_summary" for resource in surface.resources)
     assert any(resource.route_name == "get_public_nex_format" for resource in surface.resources)
+    assert any(resource.route_name == "list_starter_circuit_templates" for resource in surface.resources)
+    assert any(resource.route_name == "get_starter_circuit_template" for resource in surface.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in surface.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in surface.resources)
 
@@ -172,6 +177,8 @@ def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> No
     launch_export = scaffold.export_tool("launch_run", json_body={"workspace_id": "ws-1"})
     status_export = scaffold.export_resource("get_run_status", path_params={"run_id": "run-1"})
     library_export = scaffold.export_resource("get_circuit_library", query_params={"app_language": "ko"})
+    template_catalog_export = scaffold.export_resource("list_starter_circuit_templates", query_params={"app_language": "ko"})
+    template_detail_export = scaffold.export_resource("get_starter_circuit_template", path_params={"template_id": "text_summarizer"}, query_params={"app_language": "ko"})
     public_nex_export = scaffold.export_resource("get_public_nex_format")
     export = scaffold.export()
 
@@ -182,6 +189,8 @@ def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> No
     assert library_export.invocation.path == "/api/workspaces/library"
     assert library_export.invocation.query_params == {"app_language": "ko"}
     assert status_export.invocation.path == "/api/runs/run-1"
+    assert template_catalog_export.invocation.path == "/api/templates/starter-circuits"
+    assert template_detail_export.invocation.path == "/api/templates/starter-circuits/text_summarizer"
     assert public_nex_export.invocation.path == "/api/formats/public-nex"
     assert status_export.invocation.url == "https://api.nexa.test/api/runs/run-1"
     assert export.transport_kind == "http-route-bridge"

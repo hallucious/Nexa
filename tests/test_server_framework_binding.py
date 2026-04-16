@@ -114,6 +114,9 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "archive_issuer_public_shares",
         "list_workspaces",
         "get_circuit_library",
+        "list_starter_circuit_templates",
+        "get_starter_circuit_template",
+        "apply_starter_circuit_template",
         "get_public_nex_format",
         "get_public_mcp_manifest",
         "get_public_mcp_host_bridge",
@@ -174,6 +177,23 @@ def test_framework_route_definitions_are_unique() -> None:
     assert len(route_names) == len(set(route_names))
     assert len(route_identities) == len(set(route_identities))
 
+
+
+
+def _working_save(ref: str = "ws-001") -> dict:
+    return {
+        "meta": {
+            "format_version": "0.1.0",
+            "storage_role": "working_save",
+            "working_save_id": ref,
+        },
+        "circuit": {"nodes": [], "edges": [], "entry": "n1", "outputs": [{"name": "x", "source": "state.working.x"}]},
+        "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "last_run": {}},
+        "ui": {"layout": {}, "metadata": {}},
+        "designer": {},
+    }
 
 def _share_payload(share_id: str = "share-framework-001") -> dict:
     return export_public_nex_link_share(
@@ -665,6 +685,41 @@ def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None
 
 
 
+
+
+def test_framework_binding_handles_starter_template_routes_round_trip() -> None:
+    catalog_response = FrameworkRouteBindings.handle_list_starter_circuit_templates(
+        request=_request(method="GET", path="/api/templates/starter-circuits"),
+    )
+    detail_response = FrameworkRouteBindings.handle_get_starter_circuit_template(
+        request=_request(
+            method="GET",
+            path="/api/templates/starter-circuits/text_summarizer",
+            path_params={"template_id": "text_summarizer"},
+        ),
+    )
+    apply_response = FrameworkRouteBindings.handle_apply_starter_circuit_template(
+        request=_request(
+            method="POST",
+            path="/api/workspaces/ws-001/starter-templates/text_summarizer/apply",
+            path_params={"workspace_id": "ws-001", "template_id": "text_summarizer"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "owner_user_id": "user-owner", "title": "Primary Workspace", "artifact_source": _working_save("ws-template-001")},
+        artifact_source=_working_save("ws-template-001"),
+        recent_run_rows=(),
+        result_rows_by_run_id={},
+        onboarding_rows=(),
+        artifact_rows_lookup={},
+        trace_rows_lookup={},
+    )
+
+    assert catalog_response.status_code == 200
+    assert json.loads(catalog_response.body_text)["catalog"]["family"] == "starter-circuit-template-catalog"
+    assert detail_response.status_code == 200
+    assert json.loads(detail_response.body_text)["template"]["template_id"] == "text_summarizer"
+    assert apply_response.status_code == 200
+    assert json.loads(apply_response.body_text)["template"]["template_id"] == "text_summarizer"
 
 
 def test_framework_binding_handles_public_nex_format_round_trip() -> None:

@@ -51,6 +51,23 @@ def _commit_snapshot(ref: str = "snap-001") -> dict:
     }
 
 
+
+
+def _working_save(ref: str = "ws-001") -> dict:
+    return {
+        "meta": {
+            "format_version": "0.1.0",
+            "storage_role": "working_save",
+            "working_save_id": ref,
+        },
+        "circuit": {"nodes": [], "edges": [], "entry": "n1", "outputs": [{"name": "x", "source": "state.working.x"}]},
+        "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "last_run": {}},
+        "ui": {"layout": {}, "metadata": {}},
+        "designer": {},
+    }
+
 def _run_row(*, status: str = "running", status_family: str = "active") -> dict:
     return {
         "run_id": "run-001",
@@ -546,6 +563,62 @@ def test_circuit_library_route_requires_authentication() -> None:
 
     assert response.status_code == 401
     assert response.body["reason_code"] == "circuit_library.authentication_required"
+
+
+def test_starter_template_catalog_route_returns_public_template_exchange_surface() -> None:
+    response = RunHttpRouteSurface.handle_list_starter_circuit_templates(
+        http_request=HttpRouteRequest(method="GET", path="/api/templates/starter-circuits", query_params={"app_language": "ko"}),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["catalog"]["family"] == "starter-circuit-template-catalog"
+    assert any(item["template_id"] == "text_summarizer" for item in response.body["templates"])
+
+
+def test_starter_template_detail_route_returns_one_template() -> None:
+    response = RunHttpRouteSurface.handle_get_starter_circuit_template(
+        http_request=HttpRouteRequest(
+            method="GET",
+            path="/api/templates/starter-circuits/text_summarizer",
+            path_params={"template_id": "text_summarizer"},
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.body["template"]["template_id"] == "text_summarizer"
+    assert response.body["routes"]["catalog"] == "/api/templates/starter-circuits"
+
+
+def test_apply_starter_template_route_updates_workspace_shell_draft() -> None:
+    workspace_row = {
+        "workspace_id": "ws-001",
+        "owner_user_id": "user-owner",
+        "title": "Primary Workspace",
+        "description": "Main",
+        "artifact_source": _working_save("ws-template-001"),
+    }
+    response = RunHttpRouteSurface.handle_apply_starter_circuit_template(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/workspaces/ws-001/starter-templates/text_summarizer/apply",
+            path_params={"workspace_id": "ws-001", "template_id": "text_summarizer"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row=workspace_row,
+        artifact_source=_working_save("ws-template-001"),
+        recent_run_rows=(),
+        result_rows_by_run_id={},
+        onboarding_rows=(),
+        artifact_rows_lookup={},
+        trace_rows_lookup={},
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "accepted"
+    assert response.body["workspace_id"] == "ws-001"
+    assert response.body["template"]["template_id"] == "text_summarizer"
+    assert response.body["shell"]["workspace_id"] == "ws-001"
 
 
 def test_public_nex_format_route_returns_role_aware_standardization_surface() -> None:

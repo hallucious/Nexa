@@ -89,6 +89,24 @@ class FrameworkRouteBindings:
             summary="Read beginner-facing circuit library surface.",
         ),
         FrameworkRouteDefinition(
+            route_name="list_starter_circuit_templates",
+            method="GET",
+            path_template="/api/templates/starter-circuits",
+            summary="Read the public starter-template catalog surface.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_starter_circuit_template",
+            method="GET",
+            path_template="/api/templates/starter-circuits/{template_id}",
+            summary="Read one starter template from the public catalog.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="apply_starter_circuit_template",
+            method="POST",
+            path_template="/api/workspaces/{workspace_id}/starter-templates/{template_id}/apply",
+            summary="Apply a starter template to a workspace shell draft.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_public_nex_format",
             method="GET",
             path_template="/api/formats/public-nex",
@@ -442,6 +460,56 @@ class FrameworkRouteBindings:
             onboarding_rows=onboarding_rows,
         )
         return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_list_starter_circuit_templates(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_starter_circuit_templates(
+            http_request=cls.to_http_route_request(request),
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_starter_circuit_template(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_starter_circuit_template(
+            http_request=cls.to_http_route_request(request),
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_apply_starter_circuit_template(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        artifact_source: Any | None,
+        recent_run_rows: Sequence[Mapping[str, Any]] = (),
+        result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None = None,
+        onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_apply_starter_circuit_template(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            artifact_source=artifact_source,
+            recent_run_rows=recent_run_rows,
+            result_rows_by_run_id=result_rows_by_run_id,
+            onboarding_rows=onboarding_rows,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
+        )
+        return cls.to_framework_response(response)
+
 
     @classmethod
     def handle_circuit_library(

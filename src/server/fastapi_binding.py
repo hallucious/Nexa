@@ -117,6 +117,37 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/templates/starter-circuits")
+        async def list_starter_circuit_templates(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_list_starter_circuit_templates(request=inbound)
+            return self._framework_response(outbound)
+
+        @router.get("/api/templates/starter-circuits/{template_id}")
+        async def get_starter_circuit_template(template_id: str, request: Request) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"template_id": template_id})
+            outbound = FrameworkRouteBindings.handle_get_starter_circuit_template(request=inbound)
+            return self._framework_response(outbound)
+
+        @router.post("/api/workspaces/{workspace_id}/starter-templates/{template_id}/apply")
+        async def apply_starter_circuit_template(workspace_id: str, template_id: str, request: Request) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id, "template_id": template_id})
+            workspace_context = self.dependencies.workspace_context_provider(workspace_id)
+            workspace_row = self.dependencies.workspace_row_provider(workspace_id)
+            artifact_source = self.dependencies.workspace_artifact_source_provider(workspace_id)
+            outbound = FrameworkRouteBindings.handle_apply_starter_circuit_template(
+                request=inbound,
+                workspace_context=workspace_context,
+                workspace_row=workspace_row,
+                artifact_source=artifact_source,
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                artifact_rows_lookup=self.dependencies.artifact_rows_provider,
+                trace_rows_lookup=self.dependencies.trace_rows_provider,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/formats/public-nex")
         async def get_public_nex_format(request: Request) -> Response:
             inbound = self._inbound_request(request=request)
