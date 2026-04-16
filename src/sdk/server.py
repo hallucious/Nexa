@@ -19,6 +19,21 @@ from src.server.artifact_trace_read_models import (
     ProductRunTraceResponse,
 )
 from src.server.recent_activity_models import ProductRecentActivityResponse
+from src.server.provider_health_models import (
+    ProductProviderHealthDetailResponse,
+    ProductWorkspaceProviderHealthResponse,
+)
+from src.server.provider_probe_history_models import ProductProviderProbeHistoryResponse
+from src.server.provider_probe_models import (
+    ProductProviderProbeRequest,
+    ProductProviderProbeResponse,
+)
+from src.server.provider_secret_models import (
+    ProductProviderBindingWriteAcceptedResponse,
+    ProductProviderBindingWriteRequest,
+    ProductProviderCatalogResponse,
+    ProductWorkspaceProviderBindingsResponse,
+)
 from src.server.public_share_models import (
     ProductIssuerPublicShareActionReportListResponse,
     ProductIssuerPublicShareActionReportSummaryResponse,
@@ -51,8 +66,13 @@ from src.server.run_read_models import (
     ProductSourceArtifactView,
 )
 from src.server.workspace_onboarding_models import (
+    ProductOnboardingReadResponse,
+    ProductOnboardingWriteAcceptedResponse,
+    ProductOnboardingWriteRequest,
+    ProductWorkspaceCreateRequest,
     ProductWorkspaceDetailResponse,
     ProductWorkspaceListResponse,
+    ProductWorkspaceWriteAcceptedResponse,
 )
 from src.server.workspace_shell_models import (
     ProductWorkspaceShellCheckoutResponse,
@@ -87,6 +107,20 @@ __all__ = [
     "ProductRunControlRejectedResponse",
     "ProductRunActionLogResponse",
     "ProductRecentActivityResponse",
+    "ProductWorkspaceCreateRequest",
+    "ProductWorkspaceWriteAcceptedResponse",
+    "ProductProviderCatalogResponse",
+    "ProductWorkspaceProviderBindingsResponse",
+    "ProductProviderBindingWriteRequest",
+    "ProductProviderBindingWriteAcceptedResponse",
+    "ProductWorkspaceProviderHealthResponse",
+    "ProductProviderHealthDetailResponse",
+    "ProductProviderProbeRequest",
+    "ProductProviderProbeResponse",
+    "ProductProviderProbeHistoryResponse",
+    "ProductOnboardingReadResponse",
+    "ProductOnboardingWriteRequest",
+    "ProductOnboardingWriteAcceptedResponse",
     "ProductWorkspaceDetailResponse",
     "ProductWorkspaceListResponse",
     "ProductWorkspaceShellRuntimeResponse",

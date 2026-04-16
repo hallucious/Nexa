@@ -114,6 +114,10 @@ def test_mcp_tool_descriptors_follow_public_route_surface() -> None:
     assert indexed["extend_issuer_public_shares"].path == "/api/users/me/public-shares/actions/extend"
     assert indexed["archive_issuer_public_shares"].path == "/api/users/me/public-shares/actions/archive"
     assert indexed["delete_issuer_public_shares"].path == "/api/users/me/public-shares/actions/delete"
+    assert indexed["create_workspace"].path == "/api/workspaces"
+    assert indexed["put_workspace_provider_binding"].path == "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}"
+    assert indexed["probe_workspace_provider"].path == "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe"
+    assert indexed["put_onboarding"].path == "/api/users/me/onboarding"
 
 
 def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
@@ -131,6 +135,12 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert indexed["get_workspace_shell"].path.endswith("/shell")
     assert indexed["list_issuer_public_share_action_reports"].path == "/api/users/me/public-shares/action-reports"
     assert indexed["get_issuer_public_share_action_report_summary"].path == "/api/users/me/public-shares/action-reports/summary"
+    assert indexed["get_provider_catalog"].path == "/api/providers/catalog"
+    assert indexed["list_workspace_provider_bindings"].path == "/api/workspaces/{workspace_id}/provider-bindings"
+    assert indexed["list_workspace_provider_health"].path == "/api/workspaces/{workspace_id}/provider-bindings/health"
+    assert indexed["get_workspace_provider_health"].path == "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/health"
+    assert indexed["list_provider_probe_history"].path == "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe-history"
+    assert indexed["get_onboarding"].path == "/api/users/me/onboarding"
 
 
 def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> None:
@@ -143,6 +153,8 @@ def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> Non
     assert len(surface.resources) >= 8
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
     assert any(resource.route_name == "get_run_trace" for resource in surface.resources)
+    assert any(tool.route_name == "create_workspace" for tool in surface.tools)
+    assert any(resource.route_name == "get_provider_catalog" for resource in surface.resources)
 
 
 def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> None:
@@ -231,6 +243,12 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
     assert [field.name for field in status_schema.query_fields] == ["include", "lang"]
     checkout_schema = scaffold.export_tool_schema("checkout_workspace_shell")
     assert [field.name for field in checkout_schema.body_fields] == ["working_save_id", "share_id"]
+    create_workspace_schema = scaffold.export_tool_schema("create_workspace")
+    assert [field.name for field in create_workspace_schema.body_fields] == ["title", "description"]
+    provider_probe_schema = scaffold.export_tool_schema("probe_workspace_provider")
+    assert [field.name for field in provider_probe_schema.path_fields] == ["workspace_id", "provider_key"]
+    onboarding_schema = scaffold.export_tool_schema("put_onboarding")
+    assert [field.name for field in onboarding_schema.body_fields][-1] == "current_step"
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
     assert launch_manifest.argument_schema is not None
     assert launch_manifest.argument_schema.to_dict()["body_fields"][0]["name"] == "workspace_id"
@@ -323,6 +341,40 @@ def test_build_public_mcp_host_bridge_scaffold_normalizes_share_sourced_checkout
     assert request.json_body == {"working_save_id": "ws-reopened-1", "share_id": "share-1"}
 
 
+def test_build_public_mcp_host_bridge_scaffold_normalizes_workspace_bootstrap_arguments() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+
+    create_request = bridge.build_framework_tool_request_from_arguments(
+        "create_workspace",
+        {"title": "Alpha Workspace", "description": "Initial bootstrap workspace"},
+    )
+    probe_request = bridge.build_framework_tool_request_from_arguments(
+        "probe_workspace_provider",
+        {
+            "workspace_id": "ws-1",
+            "provider_key": "openai",
+            "model_ref": "gpt-5",
+            "timeout_ms": 2000,
+        },
+    )
+    onboarding_request = bridge.build_framework_tool_request_from_arguments(
+        "put_onboarding",
+        {
+            "workspace_id": "ws-1",
+            "first_success_achieved": True,
+            "advanced_surfaces_unlocked": True,
+            "current_step": "completed",
+        },
+    )
+
+    assert create_request.path == "/api/workspaces"
+    assert create_request.json_body == {"title": "Alpha Workspace", "description": "Initial bootstrap workspace"}
+    assert probe_request.path == "/api/workspaces/ws-1/provider-bindings/openai/probe"
+    assert probe_request.json_body == {"model_ref": "gpt-5", "timeout_ms": 2000}
+    assert onboarding_request.path == "/api/users/me/onboarding"
+    assert onboarding_request.json_body["current_step"] == "completed"
+
+
 def test_build_public_mcp_host_bridge_scaffold_normalizes_flat_resource_arguments() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
 
@@ -358,6 +410,20 @@ def test_build_public_mcp_host_bridge_scaffold_builds_dispatch_plans() -> None:
     assert framework_dispatch.handler_name == "handle_run_status"
     assert framework_dispatch.request.path == "/api/runs/run-1"
     assert framework_dispatch.request.query_params == {"include": "summary"}
+
+    create_dispatch = bridge.build_framework_tool_dispatch(
+        "create_workspace",
+        {"title": "Alpha Workspace"},
+    )
+    onboarding_dispatch = bridge.build_framework_tool_dispatch(
+        "put_onboarding",
+        {"workspace_id": "ws-1", "current_step": "designer", "advanced_surfaces_unlocked": False},
+    )
+
+    assert create_dispatch.handler_name == "handle_create_workspace"
+    assert create_dispatch.request.path == "/api/workspaces"
+    assert onboarding_dispatch.handler_name == "handle_put_onboarding"
+    assert onboarding_dispatch.request.path == "/api/users/me/onboarding"
 
     assert isinstance(http_dispatch, PublicMcpHttpDispatch)
     assert http_dispatch.route_name == "retry_run"

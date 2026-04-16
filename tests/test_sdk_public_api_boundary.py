@@ -23,6 +23,20 @@ from src.server.framework_binding_models import FrameworkOutboundResponse
 
 from src.sdk.server import (
     ProductExecutionTarget,
+    ProductOnboardingReadResponse,
+    ProductOnboardingWriteAcceptedResponse,
+    ProductOnboardingWriteRequest,
+    ProductProviderBindingWriteAcceptedResponse,
+    ProductProviderBindingWriteRequest,
+    ProductProviderCatalogResponse,
+    ProductProviderHealthDetailResponse,
+    ProductProviderProbeHistoryResponse,
+    ProductProviderProbeRequest,
+    ProductProviderProbeResponse,
+    ProductWorkspaceCreateRequest,
+    ProductWorkspaceProviderBindingsResponse,
+    ProductWorkspaceProviderHealthResponse,
+    ProductWorkspaceWriteAcceptedResponse,
     ProductIssuerPublicShareActionReportListResponse,
     ProductIssuerPublicShareActionReportSummaryResponse,
     ProductIssuerPublicShareBulkMutationResponse,
@@ -142,6 +156,20 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert ProductIssuerPublicShareActionReportListResponse is not None
     assert ProductIssuerPublicShareActionReportSummaryResponse is not None
     assert ProductIssuerPublicShareBulkMutationResponse is not None
+    assert ProductWorkspaceCreateRequest is not None
+    assert ProductWorkspaceWriteAcceptedResponse is not None
+    assert ProductProviderCatalogResponse is not None
+    assert ProductWorkspaceProviderBindingsResponse is not None
+    assert ProductProviderBindingWriteRequest is not None
+    assert ProductProviderBindingWriteAcceptedResponse is not None
+    assert ProductWorkspaceProviderHealthResponse is not None
+    assert ProductProviderHealthDetailResponse is not None
+    assert ProductProviderProbeRequest is not None
+    assert ProductProviderProbeResponse is not None
+    assert ProductProviderProbeHistoryResponse is not None
+    assert ProductOnboardingReadResponse is not None
+    assert ProductOnboardingWriteRequest is not None
+    assert ProductOnboardingWriteAcceptedResponse is not None
 
 
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
@@ -152,6 +180,8 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert not hasattr(sdk, "PUBLIC_MCP_COMPATIBILITY_POLICY_VERSION")
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
+    assert any(tool.route_name == "create_workspace" for tool in manifest.tools)
+    assert any(resource.route_name == "get_provider_catalog" for resource in manifest.resources)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
     assert launch_manifest.argument_schema is not None
     assert launch_manifest.argument_schema.body_fields[0].name == "workspace_id"
@@ -184,6 +214,9 @@ def test_sdk_root_exposes_public_mcp_argument_schema_catalog() -> None:
     indexed = {schema.route_name: schema for schema in schemas}
 
     assert indexed["get_workspace"].path_fields[0].name == "workspace_id"
+    assert indexed["create_workspace"].body_fields[0].name == "title"
+    assert indexed["put_workspace_provider_binding"].path_fields[1].name == "provider_key"
+    assert indexed["put_onboarding"].body_fields[-1].name == "current_step"
     assert indexed["list_workspaces"].route_name == "list_workspaces"
 
 
@@ -204,6 +237,9 @@ def test_sdk_root_exposes_public_mcp_lifecycle_control_profiles() -> None:
     assert indexed[("tool", "launch_run")].status_resource_name == "get_run_status"
     assert "retry_run" in indexed[("tool", "launch_run")].preferred_control_tool_names
     assert indexed[("resource", "get_run_status")].result_resource_name == "get_run_result"
+    assert indexed[("tool", "create_workspace")].status_resource_name == "get_workspace"
+    assert indexed[("tool", "probe_workspace_provider")].result_resource_name == "list_provider_probe_history"
+    assert indexed[("resource", "get_onboarding")].status_resource_name == "get_onboarding"
 
 
 def test_sdk_root_exposes_public_mcp_transport_contracts() -> None:
@@ -214,6 +250,9 @@ def test_sdk_root_exposes_public_mcp_transport_contracts() -> None:
     assert isinstance(indexed["launch_run"].session_contract, sdk.PublicMcpSessionContract)
     assert indexed["launch_run"].session_mode == "recommended-pass-through"
     assert indexed["get_run_status"].session_mode == "optional-pass-through"
+    assert indexed["create_workspace"].session_mode == "recommended-pass-through"
+    assert indexed["put_workspace_provider_binding"].session_mode == "recommended-pass-through"
+    assert indexed["put_onboarding"].session_mode == "recommended-pass-through"
 
 
 def test_sdk_root_exposes_public_mcp_transport_envelopes() -> None:
@@ -254,6 +293,9 @@ def test_sdk_root_exposes_public_mcp_route_contracts() -> None:
     assert isinstance(indexed["launch_run"], sdk.PublicMcpRouteContract)
     assert indexed["launch_run"].transport_profile == "body-only"
     assert indexed["list_workspaces"].transport_profile == "no-arguments"
+    assert indexed["create_workspace"].transport_profile == "body-only"
+    assert indexed["get_provider_catalog"].transport_profile == "no-arguments"
+    assert indexed["put_onboarding"].transport_profile == "body-only"
 
 
 def test_sdk_root_exposes_typed_normalized_arguments() -> None:
@@ -275,6 +317,9 @@ def test_sdk_root_exposes_public_mcp_response_contracts() -> None:
     assert isinstance(indexed["launch_run"], sdk.PublicMcpResponseContract)
     assert indexed["launch_run"].success_status_codes == (202,)
     assert indexed["get_run_status"].response_shape == "status"
+    assert indexed["create_workspace"].response_shape == "workspace-created"
+    assert indexed["get_provider_catalog"].response_shape == "provider-catalog"
+    assert indexed["put_onboarding"].response_shape == "onboarding-write"
 
 
 def test_sdk_root_exposes_public_mcp_normalized_response() -> None:
@@ -331,6 +376,9 @@ def test_sdk_root_exposes_public_mcp_recovery_policies() -> None:
     assert isinstance(indexed["launch_run"], sdk.PublicMcpRecoveryPolicy)
     assert indexed["launch_run"].timeout_recommended_action == "inspect_launch_outcome_before_retry"
     assert indexed["get_run_status"].safe_to_retry_same_request_on_timeout is True
+    assert indexed["create_workspace"].safe_to_retry_same_request_on_timeout is False
+    assert indexed["get_provider_catalog"].safe_to_retry_same_request_on_timeout is True
+    assert indexed["put_onboarding"].timeout_recommended_action == "inspect_onboarding_state_before_retry"
 
 
 def test_sdk_root_exposes_public_mcp_preflight_assessment() -> None:
