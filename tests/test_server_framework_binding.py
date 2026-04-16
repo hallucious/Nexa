@@ -715,11 +715,17 @@ def test_framework_binding_handles_starter_template_routes_round_trip() -> None:
     )
 
     assert catalog_response.status_code == 200
-    assert json.loads(catalog_response.body_text)["catalog"]["family"] == "starter-circuit-template-catalog"
+    catalog_payload = json.loads(catalog_response.body_text)
+    assert catalog_payload["catalog"]["family"] == "starter-circuit-template-catalog"
+    assert catalog_payload["templates"][0]["provenance"]["family"] == "starter-template"
     assert detail_response.status_code == 200
-    assert json.loads(detail_response.body_text)["template"]["template_id"] == "text_summarizer"
+    detail_payload = json.loads(detail_response.body_text)
+    assert detail_payload["template"]["template_id"] == "text_summarizer"
+    assert detail_payload["template"]["compatibility"]["family"] == "workspace-shell-draft"
     assert apply_response.status_code == 200
-    assert json.loads(apply_response.body_text)["template"]["template_id"] == "text_summarizer"
+    apply_payload = json.loads(apply_response.body_text)
+    assert apply_payload["template"]["template_id"] == "text_summarizer"
+    assert apply_payload["template"]["supported_storage_roles"] == ["working_save"]
 
 
 def test_framework_binding_handles_public_nex_format_round_trip() -> None:

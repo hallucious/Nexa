@@ -573,7 +573,13 @@ def test_starter_template_catalog_route_returns_public_template_exchange_surface
     assert response.status_code == 200
     assert response.body["status"] == "ready"
     assert response.body["catalog"]["family"] == "starter-circuit-template-catalog"
-    assert any(item["template_id"] == "text_summarizer" for item in response.body["templates"])
+    template = next(item for item in response.body["templates"] if item["template_id"] == "text_summarizer")
+    assert template["template_version"] == "1.0"
+    assert template["curation_status"] == "curated"
+    assert template["provenance"]["family"] == "starter-template"
+    assert template["provenance"]["source"] == "nexa-curated"
+    assert template["compatibility"]["family"] == "workspace-shell-draft"
+    assert template["supported_storage_roles"] == ["working_save"]
 
 
 def test_starter_template_detail_route_returns_one_template() -> None:
@@ -587,6 +593,8 @@ def test_starter_template_detail_route_returns_one_template() -> None:
 
     assert response.status_code == 200
     assert response.body["template"]["template_id"] == "text_summarizer"
+    assert response.body["template"]["provenance"]["source"] == "nexa-curated"
+    assert response.body["template"]["compatibility"]["apply_behavior"] == "replace_designer_request"
     assert response.body["routes"]["catalog"] == "/api/templates/starter-circuits"
 
 
@@ -618,6 +626,8 @@ def test_apply_starter_template_route_updates_workspace_shell_draft() -> None:
     assert response.body["status"] == "accepted"
     assert response.body["workspace_id"] == "ws-001"
     assert response.body["template"]["template_id"] == "text_summarizer"
+    assert response.body["template"]["compatibility"]["family"] == "workspace-shell-draft"
+    assert response.body["template"]["supported_entry_surfaces"] == ["designer", "template_gallery"]
     assert response.body["shell"]["workspace_id"] == "ws-001"
 
 

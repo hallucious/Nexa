@@ -9,6 +9,13 @@ def test_list_starter_circuit_templates_returns_representative_validated_set() -
     assert len(templates) == 10
     assert templates[0].template_id == "text_summarizer"
     assert all(template.designer_request_text for template in templates)
+    assert all(template.template_version == "1.0" for template in templates)
+    assert all(template.provenance_family == "starter-template" for template in templates)
+    assert all(template.provenance_source == "nexa-curated" for template in templates)
+    assert all(template.curation_status == "curated" for template in templates)
+    assert all(template.compatibility_family == "workspace-shell-draft" for template in templates)
+    assert all(template.apply_behavior == "replace_designer_request" for template in templates)
+    assert all(template.supported_storage_roles == ("working_save",) for template in templates)
 
 
 def test_get_starter_circuit_template_returns_specific_template() -> None:
@@ -17,3 +24,5 @@ def test_get_starter_circuit_template_returns_specific_template() -> None:
     assert template.display_name == "Code Reviewer"
     assert template.category == "code"
     assert "code" in template.designer_request_text.lower()
+    assert template.provenance_source == "nexa-curated"
+    assert template.supported_entry_surfaces == ("designer", "template_gallery")

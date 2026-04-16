@@ -45,6 +45,14 @@ class StarterCircuitTemplateSpec:
     category: str
     summary: str
     designer_request_text: str
+    template_version: str = "1.0"
+    provenance_family: str = "starter-template"
+    provenance_source: str = "nexa-curated"
+    curation_status: str = "curated"
+    compatibility_family: str = "workspace-shell-draft"
+    apply_behavior: str = "replace_designer_request"
+    supported_entry_surfaces: tuple[str, ...] = ("designer", "template_gallery")
+    supported_storage_roles: tuple[str, ...] = ("working_save",)
 
 
 _STARTER_CIRCUIT_TEMPLATES: tuple[StarterCircuitTemplateSpec, ...] = (

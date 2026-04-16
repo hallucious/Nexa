@@ -3077,6 +3077,21 @@ class RunHttpRouteSurface:
             "category_id": spec.category,
             "summary": summary,
             "designer_request_text": spec.designer_request_text,
+            "template_version": spec.template_version,
+            "curation_status": spec.curation_status,
+            "apply_behavior": spec.apply_behavior,
+            "supported_entry_surfaces": list(spec.supported_entry_surfaces),
+            "supported_storage_roles": list(spec.supported_storage_roles),
+            "provenance": {
+                "family": spec.provenance_family,
+                "source": spec.provenance_source,
+            },
+            "compatibility": {
+                "family": spec.compatibility_family,
+                "supported_storage_roles": list(spec.supported_storage_roles),
+                "supported_entry_surfaces": list(spec.supported_entry_surfaces),
+                "apply_behavior": spec.apply_behavior,
+            },
             "routes": {
                 "self": f"/api/templates/starter-circuits/{spec.template_id}",
                 "apply": f"/api/workspaces/{{workspace_id}}/starter-templates/{spec.template_id}/apply",
