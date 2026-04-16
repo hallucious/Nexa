@@ -329,8 +329,10 @@ def test_issuer_public_share_management_routes_return_bounded_summary_and_entrie
     assert response.body["summary"]["revoked_share_count"] == 1
     assert response.body["summary"]["commit_snapshot_share_count"] == 3
     assert response.body["summary"]["checkoutable_share_count"] == 1
-    assert response.body["identity_policy"]["canonical_key"] == "share_id"
-    assert response.body["namespace_policy"]["public_path_format"] == "/share/{share_id}"
+    assert response.body["identity_policy"]["canonical_key"] == "issuer_user_ref"
+    assert response.body["namespace_policy"]["family"] == "issuer-public-share-management"
+    assert response.body["namespace_policy"]["member_namespace_policy"]["public_path_format"] == "/share/{share_id}"
+    assert response.body["namespace_policy"]["member_namespace_policy"]["public_path_format"] == "/share/{share_id}"
     assert response.body["shares"][0]["identity"]["canonical_key"] == "share_id"
     assert [entry["share_id"] for entry in response.body["shares"]] == [
         "share-owner-active",

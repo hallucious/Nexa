@@ -290,6 +290,8 @@ class ProductIssuerPublicShareActionReportListResponse:
     applied_filters: dict[str, Any] = field(default_factory=dict)
     pagination: dict[str, Any] = field(default_factory=dict)
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -307,6 +309,8 @@ class ProductIssuerPublicShareActionReportSummaryResponse:
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
     applied_filters: dict[str, Any] = field(default_factory=dict)
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -328,6 +332,8 @@ class ProductIssuerPublicShareBulkMutationResponse:
     affected_share_count: int = 0
     expires_at: Optional[str] = None
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:

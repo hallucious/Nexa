@@ -137,6 +137,10 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert contracts["list_starter_circuit_templates"].result_shape_profile.collection_item_identity_keys == ("template_ref", "template_id")
     assert contracts["get_public_share"].result_shape_profile.identity_keys == ("share_id", "identity", "identity_policy", "namespace_policy")
     assert contracts["list_issuer_public_shares"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
+    assert contracts["get_issuer_public_share_summary"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
+    assert contracts["list_issuer_public_share_action_reports"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
+    assert contracts["get_issuer_public_share_action_report_summary"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
+    assert contracts["revoke_issuer_public_shares"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
     assert contracts["list_starter_circuit_templates"].result_shape_profile.identity_keys == ("identity_policy", "namespace_policy")
     assert contracts["get_public_nex_format"].result_shape_profile.identity_keys == ("format_boundary", "identity_policy", "namespace_policy")
     assert contracts["get_public_mcp_manifest"].result_shape_profile.identity_keys == ("manifest", "identity_policy", "namespace_policy")
@@ -1595,6 +1599,11 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["get_public_mcp_manifest"].required_top_level_keys == ("status", "manifest", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_mcp_host_bridge"].required_top_level_keys == ("status", "host_bridge", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_share_history"].required_top_level_keys == ("share_id", "history", "identity_policy", "namespace_policy")
+    assert responses["list_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "shares", "status", "identity_policy", "namespace_policy")
+    assert responses["get_issuer_public_share_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "status", "identity_policy", "namespace_policy")
+    assert responses["list_issuer_public_share_action_reports"].required_top_level_keys == ("issuer_user_ref", "reports", "status", "identity_policy", "namespace_policy")
+    assert responses["get_issuer_public_share_action_report_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "status", "identity_policy", "namespace_policy")
+    assert responses["revoke_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "status", "action", "identity_policy", "namespace_policy")
 
     assert lifecycles[("resource", "get_workspace_shell")].status_resource_name == "get_workspace_shell"
     assert "commit_workspace_shell" in lifecycles[("resource", "get_workspace_shell")].followup_route_names

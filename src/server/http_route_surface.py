@@ -553,6 +553,43 @@ def _public_share_namespace_policy_body() -> dict[str, Any]:
         "id_kind": "opaque-share-id",
     }
 
+
+def _issuer_public_share_management_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "issuer_user_ref",
+        "lookup_mode": "authenticated_self_route",
+        "surface_family": "issuer-public-share-management",
+        "member_identity_policy": _public_share_identity_policy_body(),
+    }
+
+
+def _issuer_public_share_management_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "issuer-public-share-management",
+        "canonical_route": "/api/users/me/public-shares",
+        "summary_route": "/api/users/me/public-shares/summary",
+        "actions_base_route": "/api/users/me/public-shares/actions/{action}",
+        "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
+
+def _issuer_public_share_action_report_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "issuer_user_ref",
+        "lookup_mode": "authenticated_self_route",
+        "surface_family": "issuer-public-share-action-report",
+        "report_identity_key": "report_id",
+    }
+
+
+def _issuer_public_share_action_report_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "issuer-public-share-action-report",
+        "canonical_route": "/api/users/me/public-shares/action-reports",
+        "summary_route": "/api/users/me/public-shares/action-reports/summary",
+        "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
 def _starter_template_identity_policy_body() -> dict[str, Any]:
     return {
         "canonical_key": "template_ref",
@@ -1548,8 +1585,8 @@ class RunHttpRouteSurface:
             "summary": _issuer_share_management_summary_body(summary),
             "inventory_summary": _issuer_share_management_summary_body(total_summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
-            "identity_policy": _public_share_identity_policy_body(),
-            "namespace_policy": _public_share_namespace_policy_body(),
+            "identity_policy": _issuer_public_share_management_identity_policy_body(),
+            "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in page_entries],
             "applied_filters": filters,
             "pagination": pagination,
@@ -1615,8 +1652,8 @@ class RunHttpRouteSurface:
             "summary": _issuer_share_management_summary_body(summary),
             "inventory_summary": _issuer_share_management_summary_body(total_summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
-            "identity_policy": _public_share_identity_policy_body(),
-            "namespace_policy": _public_share_namespace_policy_body(),
+            "identity_policy": _issuer_public_share_management_identity_policy_body(),
+            "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "applied_filters": filters,
             "links": {
                 "self": "/api/users/me/public-shares/summary",
@@ -1678,6 +1715,8 @@ class RunHttpRouteSurface:
             "summary": summary,
             "inventory_summary": inventory_summary,
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "identity_policy": _issuer_public_share_action_report_identity_policy_body(),
+            "namespace_policy": _issuer_public_share_action_report_namespace_policy_body(),
             "applied_filters": {"action": action},
             "pagination": {
                 "limit": resolved_limit,
@@ -1743,6 +1782,8 @@ class RunHttpRouteSurface:
             "summary": summary,
             "inventory_summary": inventory_summary,
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "identity_policy": _issuer_public_share_action_report_identity_policy_body(),
+            "namespace_policy": _issuer_public_share_action_report_namespace_policy_body(),
             "applied_filters": {"action": action},
             "links": {
                 "self": "/api/users/me/public-shares/action-reports/summary",
@@ -1835,6 +1876,8 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "identity_policy": _issuer_public_share_management_identity_policy_body(),
+            "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
             "action_report": persisted_action_report,
             "links": {
@@ -1943,6 +1986,8 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "identity_policy": _issuer_public_share_management_identity_policy_body(),
+            "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
             "action_report": persisted_action_report,
             "links": {
@@ -2042,6 +2087,8 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "identity_policy": _issuer_public_share_management_identity_policy_body(),
+            "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
             "action_report": persisted_action_report,
             "links": {

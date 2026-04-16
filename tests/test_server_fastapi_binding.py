@@ -1602,8 +1602,9 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
     assert list_payload['summary']['total_share_count'] == 2
     assert list_payload['summary']['active_share_count'] == 1
     assert list_payload['summary']['expired_share_count'] == 1
-    assert list_payload['identity_policy']['canonical_key'] == 'share_id'
-    assert list_payload['namespace_policy']['public_path_format'] == '/share/{share_id}'
+    assert list_payload['identity_policy']['canonical_key'] == 'issuer_user_ref'
+    assert list_payload['namespace_policy']['family'] == 'issuer-public-share-management'
+    assert list_payload['namespace_policy']['member_namespace_policy']['public_path_format'] == '/share/{share_id}'
     assert list_payload['shares'][0]['identity']['canonical_key'] == 'share_id'
     assert [entry['share_id'] for entry in list_payload['shares']] == [
         'share-fastapi-owner-active',
@@ -1615,6 +1616,8 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
     summary_payload = summary_response.json()
     assert summary_payload['summary']['total_share_count'] == 2
     assert summary_payload['summary']['latest_updated_at'] == '2026-04-15T12:30:00+00:00'
+    assert summary_payload['identity_policy']['canonical_key'] == 'issuer_user_ref'
+    assert summary_payload['namespace_policy']['family'] == 'issuer-public-share-management'
     assert summary_payload['governance_summary']['total_action_report_count'] == 2
     assert summary_payload['governance_summary']['archive_action_report_count'] == 1
     assert summary_payload['governance_summary']['recent_action_reports'][0]['report_id'] == 'report-fastapi-archive-001'

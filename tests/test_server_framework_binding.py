@@ -319,8 +319,9 @@ def test_framework_binding_handles_issuer_public_share_management_round_trip() -
     assert parsed["summary"]["total_share_count"] == 2
     assert parsed["summary"]["active_share_count"] == 1
     assert parsed["summary"]["expired_share_count"] == 1
-    assert parsed["identity_policy"]["canonical_key"] == "share_id"
-    assert parsed["namespace_policy"]["public_path_format"] == "/share/{share_id}"
+    assert parsed["identity_policy"]["canonical_key"] == "issuer_user_ref"
+    assert parsed["namespace_policy"]["family"] == "issuer-public-share-management"
+    assert parsed["namespace_policy"]["member_namespace_policy"]["public_path_format"] == "/share/{share_id}"
     assert parsed["shares"][0]["identity"]["canonical_key"] == "share_id"
     assert [entry["share_id"] for entry in parsed["shares"]] == [
         "share-framework-owner-active",
