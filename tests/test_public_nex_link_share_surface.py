@@ -70,6 +70,23 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.management_access_posture == "issuer_authenticated_lifecycle_management"
     assert boundary.history_access_posture == "public_audit_history"
     assert boundary.artifact_access_posture == "capability_bounded_artifact_access"
+    assert tuple(entry.operation for entry in boundary.public_operation_boundaries) == (
+        "inspect_metadata",
+        "download_artifact",
+        "import_copy",
+        "run_artifact",
+        "checkout_working_copy",
+    )
+    assert boundary.public_operation_boundaries[0].posture == "anonymous_public_metadata_read"
+    assert boundary.public_operation_boundaries[0].requires_authentication is False
+    assert tuple(entry.operation for entry in boundary.management_operation_boundaries) == (
+        "revoke",
+        "extend_expiration",
+        "delete",
+        "archive",
+    )
+    assert all(entry.requires_authentication for entry in boundary.management_operation_boundaries)
+    assert all(entry.requires_issuer_scope for entry in boundary.management_operation_boundaries)
     assert boundary.supported_roles == ("working_save", "commit_snapshot")
     assert boundary.artifact_format_family == ".nex"
     assert boundary.viewer_capabilities == ("inspect_metadata", "download_artifact", "import_copy")

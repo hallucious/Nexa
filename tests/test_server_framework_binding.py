@@ -425,6 +425,8 @@ def test_framework_binding_handles_public_share_round_trip() -> None:
     assert parsed["share_boundary"]["share_family"] == "nex.public-link-share"
     assert parsed["share_boundary"]["public_access_posture"] == "anonymous_readonly"
     assert parsed["share_boundary"]["management_access_posture"] == "issuer_authenticated_lifecycle_management"
+    assert parsed["share_boundary"]["public_operation_boundaries"][0]["operation"] == "inspect_metadata"
+    assert parsed["share_boundary"]["management_operation_boundaries"][1]["operation"] == "extend_expiration"
     assert parsed["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
 
 

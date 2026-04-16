@@ -95,6 +95,15 @@ class PublicNexArtifactDescriptor:
 
 
 @dataclass(frozen=True)
+class PublicNexShareOperationBoundary:
+    operation: str
+    posture: str
+    requires_authentication: bool
+    requires_issuer_scope: bool
+    lifecycle_gate: str
+
+
+@dataclass(frozen=True)
 class PublicNexShareBoundary:
     share_family: str
     transport_modes: tuple[ShareTransport, ...]
@@ -107,6 +116,8 @@ class PublicNexShareBoundary:
     artifact_format_family: str
     viewer_capabilities: tuple[str, ...]
     supported_operations: tuple[ShareOperation, ...]
+    public_operation_boundaries: tuple[PublicNexShareOperationBoundary, ...]
+    management_operation_boundaries: tuple[PublicNexShareOperationBoundary, ...]
     supported_lifecycle_states: tuple[ShareLifecycleState, ...]
     terminal_lifecycle_states: tuple[ShareLifecycleState, ...]
     management_operations: tuple[str, ...]

@@ -322,6 +322,26 @@ def _public_share_boundary_body() -> dict[str, Any]:
         "artifact_format_family": boundary.artifact_format_family,
         "viewer_capabilities": list(boundary.viewer_capabilities),
         "supported_operations": list(boundary.supported_operations),
+        "public_operation_boundaries": [
+            {
+                "operation": entry.operation,
+                "posture": entry.posture,
+                "requires_authentication": entry.requires_authentication,
+                "requires_issuer_scope": entry.requires_issuer_scope,
+                "lifecycle_gate": entry.lifecycle_gate,
+            }
+            for entry in boundary.public_operation_boundaries
+        ],
+        "management_operation_boundaries": [
+            {
+                "operation": entry.operation,
+                "posture": entry.posture,
+                "requires_authentication": entry.requires_authentication,
+                "requires_issuer_scope": entry.requires_issuer_scope,
+                "lifecycle_gate": entry.lifecycle_gate,
+            }
+            for entry in boundary.management_operation_boundaries
+        ],
         "supported_lifecycle_states": list(boundary.supported_lifecycle_states),
         "terminal_lifecycle_states": list(boundary.terminal_lifecycle_states),
         "management_operations": list(boundary.management_operations),
