@@ -89,6 +89,12 @@ class FrameworkRouteBindings:
             summary="Read beginner-facing circuit library surface.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_public_nex_format",
+            method="GET",
+            path_template="/api/formats/public-nex",
+            summary="Read the public .nex format boundary and role-aware operation catalog.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_workspace_result_history",
             method="GET",
             path_template="/api/workspaces/{workspace_id}/result-history",
@@ -447,6 +453,18 @@ class FrameworkRouteBindings:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+        )
+        return cls.to_framework_response(response)
+
+
+    @classmethod
+    def handle_public_nex_format(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_public_nex_format(
+            http_request=cls.to_http_route_request(request),
         )
         return cls.to_framework_response(response)
 

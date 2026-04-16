@@ -117,6 +117,12 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/formats/public-nex")
+        async def get_public_nex_format(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_public_nex_format(request=inbound)
+            return self._framework_response(outbound)
+
 
         @router.get("/api/workspaces/{workspace_id}/result-history")
         async def get_workspace_result_history(request: Request, workspace_id: str) -> Response:

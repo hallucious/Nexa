@@ -34,6 +34,7 @@ from src.server.run_control_api import RunControlService
 from src.server.run_action_log_api import RunActionLogReadService
 from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
 from src.server.circuit_library_runtime import build_circuit_library_payload
+from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.result_history_runtime import build_workspace_result_history_payload
 from src.storage.share_api import (
     build_issuer_public_share_management_action_report,
@@ -386,6 +387,65 @@ def _public_share_boundary_body() -> dict[str, Any]:
 
 
 
+def _public_nex_format_body() -> dict[str, Any]:
+    format_boundary = get_public_nex_format_boundary()
+    return {
+        "format_family": format_boundary.format_family,
+        "shared_backbone_sections": list(format_boundary.shared_backbone_sections),
+        "supported_roles": list(format_boundary.supported_roles),
+        "legacy_default_role": format_boundary.legacy_default_role,
+        "role_boundaries": {
+            "working_save": {
+                "storage_role": format_boundary.working_save.storage_role,
+                "identity_field": format_boundary.working_save.identity_field,
+                "required_sections": list(format_boundary.working_save.required_sections),
+                "optional_sections": list(format_boundary.working_save.optional_sections),
+                "forbidden_sections": list(format_boundary.working_save.forbidden_sections),
+                "editor_continuity_posture": format_boundary.working_save.editor_continuity_posture,
+                "commit_boundary_posture": format_boundary.working_save.commit_boundary_posture,
+            },
+            "commit_snapshot": {
+                "storage_role": format_boundary.commit_snapshot.storage_role,
+                "identity_field": format_boundary.commit_snapshot.identity_field,
+                "required_sections": list(format_boundary.commit_snapshot.required_sections),
+                "optional_sections": list(format_boundary.commit_snapshot.optional_sections),
+                "forbidden_sections": list(format_boundary.commit_snapshot.forbidden_sections),
+                "editor_continuity_posture": format_boundary.commit_snapshot.editor_continuity_posture,
+                "commit_boundary_posture": format_boundary.commit_snapshot.commit_boundary_posture,
+            },
+        },
+        "artifact_operation_boundaries": [
+            {
+                "operation": entry.operation,
+                "posture": entry.posture,
+                "canonical_api": entry.canonical_api,
+                "canonical_http_method": entry.canonical_http_method,
+                "canonical_route": entry.canonical_route,
+                "result_surface": entry.result_surface,
+                "allowed_source_roles": list(entry.allowed_source_roles),
+                "result_role_posture": entry.result_role_posture,
+                "denial_reason_code": entry.denial_reason_code,
+                "execution_anchor_posture": entry.execution_anchor_posture,
+            }
+            for entry in format_boundary.artifact_operation_boundaries
+        ],
+        "public_sdk_entrypoints": {
+            "load_artifact": "load_nex",
+            "validate_working_save": "validate_working_save",
+            "validate_commit_snapshot": "validate_commit_snapshot",
+            "commit_transition": "create_commit_snapshot_from_working_save",
+            "checkout_transition": "create_working_save_from_commit_snapshot",
+        },
+        "routes": {
+            "format": "/api/formats/public-nex",
+            "public_share_artifact": "/api/public-shares/{share_id}/artifact",
+            "workspace_shell_commit": "/api/workspaces/{workspace_id}/shell/commit",
+            "workspace_shell_checkout": "/api/workspaces/{workspace_id}/shell/checkout",
+            "workspace_shell_share": "/api/workspaces/{workspace_id}/shell/share",
+        },
+    }
+
+
 def _public_artifact_boundary_body(model_or_data: Any) -> dict[str, Any]:
     descriptor = describe_public_nex_artifact(model_or_data)
     format_boundary = get_public_nex_format_boundary()
@@ -682,6 +742,7 @@ class RunHttpRouteSurface:
         ("archive_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/archive"),
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
+        ("get_public_nex_format", "GET", "/api/formats/public-nex"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
         ("get_workspace_feedback", "GET", "/api/workspaces/{workspace_id}/feedback"),
         ("submit_workspace_feedback", "POST", "/api/workspaces/{workspace_id}/feedback"),
@@ -2999,6 +3060,39 @@ class RunHttpRouteSurface:
                 "message": "Current user is not allowed to read the circuit library.",
             })
         return _route_response(200, payload)
+
+    @classmethod
+    def handle_public_nex_format(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public .nex format route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/formats/public-nex":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        payload = _public_nex_format_body()
+        response = ProductPublicNexFormatResponse(
+            status="ready",
+            format_boundary={
+                "format_family": payload["format_family"],
+                "shared_backbone_sections": tuple(payload["shared_backbone_sections"]),
+                "supported_roles": tuple(payload["supported_roles"]),
+                "legacy_default_role": payload["legacy_default_role"],
+                "artifact_operation_boundaries": tuple(payload["artifact_operation_boundaries"]),
+            },
+            role_boundaries={
+                "working_save": payload["role_boundaries"]["working_save"],
+                "commit_snapshot": payload["role_boundaries"]["commit_snapshot"],
+            },
+            public_sdk_entrypoints=payload["public_sdk_entrypoints"],
+            routes=payload["routes"],
+        )
+        body = asdict(response)
+        body["format_boundary"]["artifact_operation_boundaries"] = payload["artifact_operation_boundaries"]
+        return _route_response(200, body)
+
 
     @classmethod
     def handle_workspace_result_history(

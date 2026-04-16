@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 
+import json
+
 from src.server import (
     EngineResultEnvelope,
     EngineRunStatusSnapshot,
@@ -112,6 +114,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "archive_issuer_public_shares",
         "list_workspaces",
         "get_circuit_library",
+        "get_public_nex_format",
         "get_workspace_result_history",
         "get_workspace_feedback",
         "submit_workspace_feedback",
@@ -658,6 +661,19 @@ def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None
     assert onboarding_payload["state"]["advanced_surfaces_unlocked"] is True
 
 
+
+
+
+
+def test_framework_binding_handles_public_nex_format_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_public_nex_format(
+        request=_request(method="GET", path="/api/formats/public-nex"),
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.body_text)
+    assert payload["format_boundary"]["format_family"] == ".nex"
+    assert payload["role_boundaries"]["working_save"]["storage_role"] == "working_save"
 
 
 def test_framework_binding_handles_circuit_library_round_trip() -> None:

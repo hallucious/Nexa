@@ -547,6 +547,31 @@ def test_circuit_library_route_requires_authentication() -> None:
     assert response.status_code == 401
     assert response.body["reason_code"] == "circuit_library.authentication_required"
 
+
+def test_public_nex_format_route_returns_role_aware_standardization_surface() -> None:
+    response = RunHttpRouteSurface.handle_public_nex_format(
+        http_request=HttpRouteRequest(method="GET", path="/api/formats/public-nex"),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["format_boundary"]["format_family"] == ".nex"
+    assert response.body["role_boundaries"]["working_save"]["identity_field"] == "working_save_id"
+    assert response.body["role_boundaries"]["commit_snapshot"]["identity_field"] == "commit_id"
+    operations = response.body["format_boundary"]["artifact_operation_boundaries"]
+    assert any(entry["operation"] == "load_artifact" for entry in operations)
+    assert response.body["public_sdk_entrypoints"]["load_artifact"] == "load_nex"
+    assert response.body["routes"]["public_share_artifact"] == "/api/public-shares/{share_id}/artifact"
+
+
+def test_public_nex_format_route_rejects_wrong_method() -> None:
+    response = RunHttpRouteSurface.handle_public_nex_format(
+        http_request=HttpRouteRequest(method="POST", path="/api/formats/public-nex"),
+    )
+
+    assert response.status_code == 405
+    assert response.body["reason_code"] == "route.method_not_allowed"
+
 def test_launch_route_returns_accepted_http_response() -> None:
     response = RunHttpRouteSurface.handle_launch(
         http_request=_auth_request(

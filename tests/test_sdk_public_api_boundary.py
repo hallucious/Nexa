@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from src.server.public_nex_models import ProductPublicNexFormatResponse
+
 from src import sdk
 from src.sdk import artifacts, server
 from src.sdk.artifacts import (
@@ -178,6 +180,7 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert ProductOnboardingWriteAcceptedResponse is not None
     assert ProductHistorySummaryResponse is not None
     assert ProductCircuitLibraryResponse is not None
+    assert ProductPublicNexFormatResponse is not None
     assert ProductWorkspaceResultHistoryResponse is not None
     assert ProductWorkspaceFeedbackReadResponse is not None
     assert ProductWorkspaceFeedbackWriteRequest is not None
@@ -197,6 +200,7 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert any(resource.route_name == "get_provider_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_history_summary" for resource in manifest.resources)
     assert any(resource.route_name == "get_circuit_library" for resource in manifest.resources)
+    assert any(resource.route_name == "get_public_nex_format" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in manifest.resources)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
@@ -235,6 +239,7 @@ def test_sdk_root_exposes_public_mcp_argument_schema_catalog() -> None:
     assert indexed["put_workspace_provider_binding"].path_fields[1].name == "provider_key"
     assert indexed["put_onboarding"].body_fields[-1].name == "current_step"
     assert indexed["get_history_summary"].query_fields[0].name == "workspace_id"
+    assert indexed["get_public_nex_format"].route_name == "get_public_nex_format"
     assert indexed["get_workspace_result_history"].path_fields[0].name == "workspace_id"
     assert [field.name for field in indexed["submit_workspace_feedback"].body_fields] == ["category", "surface", "message", "run_id"]
     assert indexed["list_workspaces"].route_name == "list_workspaces"
@@ -260,6 +265,7 @@ def test_sdk_root_exposes_public_mcp_lifecycle_control_profiles() -> None:
     assert indexed[("tool", "create_workspace")].status_resource_name == "get_workspace"
     assert indexed[("tool", "probe_workspace_provider")].result_resource_name == "list_provider_probe_history"
     assert indexed[("resource", "get_onboarding")].status_resource_name == "get_onboarding"
+    assert indexed[("resource", "get_public_nex_format")].result_resource_name == "get_public_nex_format"
 
 
 def test_sdk_root_exposes_public_mcp_transport_contracts() -> None:

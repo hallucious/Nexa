@@ -3568,6 +3568,7 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "get_history_summary": "handle_history_summary",
     "list_workspaces": "handle_list_workspaces",
     "get_circuit_library": "handle_circuit_library",
+    "get_public_nex_format": "handle_public_nex_format",
     "get_workspace_result_history": "handle_workspace_result_history",
     "get_workspace_feedback": "handle_workspace_feedback",
     "submit_workspace_feedback": "handle_submit_workspace_feedback",
@@ -3940,6 +3941,8 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             _schema_field("app_language", "query", "string", description="Optional language hint for localized circuit-library summaries."),
         ),
     },
+    "get_public_nex_format": {
+    },
     "get_workspace_result_history": {
         "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose result history should be read."),),
         "query_fields": (
@@ -4018,6 +4021,7 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "delete_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
     "get_history_summary": {"route_family": "history-summary-read", "transport_profile": "query-only"},
     "get_circuit_library": {"route_family": "circuit-library-read", "transport_profile": "query-only"},
+    "get_public_nex_format": {"route_family": "public-nex-format-read", "transport_profile": "no-arguments"},
     "get_workspace_result_history": {"route_family": "workspace-result-history-read", "transport_profile": "path-and-query"},
     "get_workspace_feedback": {"route_family": "workspace-feedback-read", "transport_profile": "path-and-query"},
     "submit_workspace_feedback": {"route_family": "workspace-feedback-write", "transport_profile": "path-and-body"},
@@ -4162,6 +4166,15 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_recommended_action": "retry_same_request",
     },
     "circuit-library-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-nex-format-read": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
         "safe_to_retry_same_request_on_timeout": True,
@@ -4570,6 +4583,11 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "result_resource_name": "get_circuit_library",
         "followup_route_names": ("get_circuit_library", "list_workspaces", "get_workspace_result_history", "get_workspace_feedback", "get_workspace_shell", "get_onboarding"),
     },
+    "public-nex-format-read": {
+        "lifecycle_class": "public-nex-format-read",
+        "result_resource_name": "get_public_nex_format",
+        "followup_route_names": ("get_public_nex_format", "get_public_share_artifact", "create_workspace_shell_share", "commit_workspace_shell", "checkout_workspace_shell"),
+    },
     "workspace-result-history-read": {
         "lifecycle_class": "workspace-result-history-read",
         "status_resource_name": "get_workspace",
@@ -4756,6 +4774,13 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "state_keys": ("status", "app_language"),
         "collection_field_name": "item_sections",
         "collection_item_identity_keys": ("workspace_id",),
+    },
+    "get_public_nex_format": {
+        "profile_kind": "public-nex-format",
+        "identity_keys": ("format_boundary",),
+        "state_keys": ("status",),
+        "collection_field_name": "artifact_operation_boundaries",
+        "collection_item_identity_keys": ("operation",),
     },
     "get_workspace_result_history": {
         "profile_kind": "workspace-result-history",
@@ -4975,6 +5000,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object"},
     "get_history_summary": {"response_shape": "history-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("scope",)},
     "get_circuit_library": {"response_shape": "circuit-library", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "source_of_truth", "library", "overview_section", "item_sections", "routes")},
+    "get_public_nex_format": {"response_shape": "public-nex-format", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "routes")},
     "get_workspace_result_history": {"response_shape": "workspace-result-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "result_history")},
     "get_workspace_feedback": {"response_shape": "workspace-feedback-read", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "feedback_channel")},
     "submit_workspace_feedback": {"response_shape": "workspace-feedback-write", "success_status_codes": (202,), "body_kind": "object", "required_top_level_keys": ("status", "feedback", "links")},
@@ -5313,6 +5339,13 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read the beginner-facing workflow library and continue/result-history reentry surfaces.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductCircuitLibraryResponse"),
         "tags": ("workspace", "library", "reentry"),
+    },
+    {
+        "name": "get_public_nex_format",
+        "route_name": "get_public_nex_format",
+        "description": "Read the public .nex format boundary, role-aware operation catalog, and SDK entrypoints.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicNexFormatResponse"),
+        "tags": ("artifacts", "public-nex", "standardization"),
     },
     {
         "name": "get_workspace_result_history",

@@ -515,6 +515,19 @@ def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
 
 
 
+
+
+def test_fastapi_binding_public_nex_format_route_round_trip() -> None:
+    client = _make_client()
+
+    api_response = client.get('/api/formats/public-nex')
+
+    assert api_response.status_code == 200
+    payload = api_response.json()
+    assert payload["format_boundary"]["format_family"] == ".nex"
+    assert payload["role_boundaries"]["commit_snapshot"]["storage_role"] == "commit_snapshot"
+
+
 def test_fastapi_binding_circuit_library_routes_round_trip() -> None:
     client = _make_client()
 
