@@ -586,6 +586,7 @@ class PublicMcpLifecycleControlProfile:
     actions_resource_name: str | None = None
     trace_resource_name: str | None = None
     artifacts_resource_name: str | None = None
+    source_resource_names: tuple[str, ...] = ()
     preferred_control_tool_names: tuple[str, ...] = ()
     followup_route_names: tuple[str, ...] = ()
     review_tool_name: str | None = None
@@ -602,6 +603,7 @@ class PublicMcpLifecycleControlProfile:
             "actions_resource_name": self.actions_resource_name,
             "trace_resource_name": self.trace_resource_name,
             "artifacts_resource_name": self.artifacts_resource_name,
+            "source_resource_names": list(self.source_resource_names),
             "preferred_control_tool_names": list(self.preferred_control_tool_names),
             "followup_route_names": list(self.followup_route_names),
             "review_tool_name": self.review_tool_name,
@@ -2535,6 +2537,7 @@ class PublicMcpAdapterScaffold:
             actions_resource_name=spec.get("actions_resource_name"),
             trace_resource_name=spec.get("trace_resource_name"),
             artifacts_resource_name=spec.get("artifacts_resource_name"),
+            source_resource_names=tuple(spec.get("source_resource_names", ())),
             preferred_control_tool_names=tuple(spec.get("preferred_control_tool_names", ())),
             followup_route_names=tuple(spec.get("followup_route_names", ())),
             review_tool_name=spec.get("review_tool_name"),
@@ -3672,6 +3675,7 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         ),
         "body_fields": (
             _schema_field("working_save_id", "body", "string", description="Optional reopened working_save identifier."),
+            _schema_field("share_id", "body", "string", description="Optional public share identifier to consume as the checkout source."),
         ),
     },
     "retry_run": {
@@ -4061,7 +4065,8 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
     },
     "workspace-shell-checkout": {
         "lifecycle_class": "workspace-shell-lifecycle",
-        "followup_route_names": ("get_workspace",),
+        "source_resource_names": ("get_public_share", "get_public_share_history", "get_public_share_artifact"),
+        "followup_route_names": ("get_workspace", "get_public_share", "get_public_share_history", "get_public_share_artifact"),
     },
     "workspace-run-list": {
         "lifecycle_class": "workspace-observability",
@@ -4384,8 +4389,8 @@ _TOOL_SPECS: tuple[dict[str, object], ...] = (
     {
         "name": "checkout_workspace_shell",
         "route_name": "checkout_workspace_shell",
-        "description": "Reopen the current workspace shell commit_snapshot as a working_save.",
-        "tags": ("workspace-shell", "lifecycle", "checkout"),
+        "description": "Reopen a workspace shell commit_snapshot as a working_save, including checkout from a public share when share_id is provided.",
+        "tags": ("workspace-shell", "lifecycle", "checkout", "sharing", "public-consumption"),
     },
     {
         "name": "retry_run",

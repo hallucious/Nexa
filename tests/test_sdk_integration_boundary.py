@@ -106,6 +106,8 @@ def test_mcp_tool_descriptors_follow_public_route_surface() -> None:
     assert indexed["launch_run"].request_type is not None
     assert indexed["launch_workspace_shell"].path.endswith("/shell/launch")
     assert indexed["commit_workspace_shell"].path.endswith("/shell/commit")
+    assert indexed["checkout_workspace_shell"].path.endswith("/shell/checkout")
+    assert "public-consumption" in indexed["checkout_workspace_shell"].tags
     assert indexed["retry_run"].response_type is not None
 
 
@@ -193,6 +195,15 @@ def test_build_public_mcp_manifest_returns_serializable_public_contract() -> Non
     assert "argument-schema" in manifest_dict["compatibility_policy"]["supported_contract_markers"]
     assert "execution-report" in manifest_dict["compatibility_policy"]["supported_runtime_markers"]
     assert manifest_dict["tools"][0]["request_type"] is None or "module" in manifest_dict["tools"][0]["request_type"]
+    checkout_manifest = next(tool for tool in manifest.tools if tool.route_name == "checkout_workspace_shell")
+    assert checkout_manifest.argument_schema is not None
+    assert [field.name for field in checkout_manifest.argument_schema.body_fields] == ["working_save_id", "share_id"]
+    assert checkout_manifest.lifecycle_control_profile is not None
+    assert checkout_manifest.lifecycle_control_profile.source_resource_names == (
+        "get_public_share",
+        "get_public_share_history",
+        "get_public_share_artifact",
+    )
     assert direct_manifest.to_dict() == manifest_dict
 
 
@@ -208,6 +219,8 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
     assert status_schema is not None
     assert [field.name for field in status_schema.path_fields] == ["run_id"]
     assert [field.name for field in status_schema.query_fields] == ["include", "lang"]
+    checkout_schema = scaffold.export_tool_schema("checkout_workspace_shell")
+    assert [field.name for field in checkout_schema.body_fields] == ["working_save_id", "share_id"]
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
     assert launch_manifest.argument_schema is not None
     assert launch_manifest.argument_schema.to_dict()["body_fields"][0]["name"] == "workspace_id"
@@ -280,6 +293,24 @@ def test_build_public_mcp_host_bridge_scaffold_normalizes_flat_tool_arguments() 
         "execution_target": {"target_type": "working_save", "target_ref": "working_save:ws-1"},
         "launch_options": {"mode": "standard", "priority": "normal"},
     }
+
+
+def test_build_public_mcp_host_bridge_scaffold_normalizes_share_sourced_checkout_arguments() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+
+    request = bridge.build_framework_tool_request_from_arguments(
+        "checkout_workspace_shell",
+        {
+            "workspace_id": "ws-1",
+            "working_save_id": "ws-reopened-1",
+            "share_id": "share-1",
+        },
+    )
+
+    assert request.method == "POST"
+    assert request.path == "/api/workspaces/ws-1/shell/checkout"
+    assert request.path_params == {"workspace_id": "ws-1"}
+    assert request.json_body == {"working_save_id": "ws-reopened-1", "share_id": "share-1"}
 
 
 def test_build_public_mcp_host_bridge_scaffold_normalizes_flat_resource_arguments() -> None:
@@ -420,6 +451,7 @@ def test_build_public_mcp_argument_schemas_returns_curated_contract_set() -> Non
     assert indexed["get_workspace"].path_fields[0].name == "workspace_id"
     assert indexed["list_workspaces"].route_name == "list_workspaces"
     assert indexed["get_recent_activity"].query_fields[1].name == "limit"
+    assert [field.name for field in indexed["checkout_workspace_shell"].body_fields] == ["working_save_id", "share_id"]
 
 
 def test_build_public_mcp_compatibility_policy_exports_supported_markers() -> None:
@@ -1117,6 +1149,13 @@ def test_build_public_mcp_lifecycle_control_profiles_exports_curated_followups()
     assert "retry_run" in launch_profile.preferred_control_tool_names
     assert status_profile.lifecycle_class == "run-read"
     assert status_profile.result_resource_name == "get_run_result"
+    checkout_profile = indexed[("tool", "checkout_workspace_shell")]
+    assert checkout_profile.source_resource_names == (
+        "get_public_share",
+        "get_public_share_history",
+        "get_public_share_artifact",
+    )
+    assert "get_workspace" in checkout_profile.followup_route_names
 
 
 def test_manifest_includes_lifecycle_control_profiles() -> None:
@@ -1129,6 +1168,13 @@ def test_manifest_includes_lifecycle_control_profiles() -> None:
     assert launch_tool.lifecycle_control_profile.status_resource_name == "get_run_status"
     assert "get_run_result" in launch_tool.lifecycle_control_profile.followup_route_names
     assert launch_tool_dict["lifecycle_control_profile"]["preferred_control_tool_names"] == ["retry_run", "force_reset_run", "mark_run_reviewed"]
+    checkout_tool = next(tool for tool in manifest.tools if tool.route_name == "checkout_workspace_shell")
+    assert checkout_tool.lifecycle_control_profile is not None
+    assert checkout_tool.lifecycle_control_profile.source_resource_names == (
+        "get_public_share",
+        "get_public_share_history",
+        "get_public_share_artifact",
+    )
 
 
 def test_host_bridge_framework_tool_report_uses_route_recovery_policy_for_launch_timeout(monkeypatch) -> None:
@@ -1388,3 +1434,8 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
 
     assert lifecycles[("tool", "create_workspace_shell_share")].status_resource_name == "get_public_share"
     assert "get_public_share_artifact" in lifecycles[("resource", "get_public_share")].followup_route_names
+    assert lifecycles[("tool", "checkout_workspace_shell")].source_resource_names == (
+        "get_public_share",
+        "get_public_share_history",
+        "get_public_share_artifact",
+    )
