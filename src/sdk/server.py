@@ -18,7 +18,7 @@ from src.server.artifact_trace_read_models import (
     ProductRunArtifactsResponse,
     ProductRunTraceResponse,
 )
-from src.server.recent_activity_models import ProductRecentActivityResponse
+from src.server.recent_activity_models import ProductHistorySummaryResponse, ProductRecentActivityResponse
 from src.server.provider_health_models import (
     ProductProviderHealthDetailResponse,
     ProductWorkspaceProviderHealthResponse,
@@ -65,6 +65,12 @@ from src.server.run_read_models import (
     ProductRunStatusResponse,
     ProductSourceArtifactView,
 )
+from src.server.workspace_feedback_models import (
+    ProductWorkspaceFeedbackReadResponse,
+    ProductWorkspaceFeedbackWriteAcceptedResponse,
+    ProductWorkspaceFeedbackWriteRequest,
+)
+from src.server.workspace_result_history_models import ProductWorkspaceResultHistoryResponse
 from src.server.workspace_onboarding_models import (
     ProductOnboardingReadResponse,
     ProductOnboardingWriteAcceptedResponse,
@@ -107,6 +113,7 @@ __all__ = [
     "ProductRunControlRejectedResponse",
     "ProductRunActionLogResponse",
     "ProductRecentActivityResponse",
+    "ProductHistorySummaryResponse",
     "ProductWorkspaceCreateRequest",
     "ProductWorkspaceWriteAcceptedResponse",
     "ProductProviderCatalogResponse",
@@ -123,6 +130,10 @@ __all__ = [
     "ProductOnboardingWriteAcceptedResponse",
     "ProductWorkspaceDetailResponse",
     "ProductWorkspaceListResponse",
+    "ProductWorkspaceResultHistoryResponse",
+    "ProductWorkspaceFeedbackReadResponse",
+    "ProductWorkspaceFeedbackWriteRequest",
+    "ProductWorkspaceFeedbackWriteAcceptedResponse",
     "ProductWorkspaceShellRuntimeResponse",
     "ProductWorkspaceShellDraftSavedResponse",
     "ProductWorkspaceShellCommitResponse",

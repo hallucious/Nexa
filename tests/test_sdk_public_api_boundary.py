@@ -24,6 +24,7 @@ from src.server.framework_binding_models import FrameworkOutboundResponse
 from src.sdk.server import (
     ProductExecutionTarget,
     ProductOnboardingReadResponse,
+    ProductHistorySummaryResponse,
     ProductOnboardingWriteAcceptedResponse,
     ProductOnboardingWriteRequest,
     ProductProviderBindingWriteAcceptedResponse,
@@ -51,6 +52,10 @@ from src.sdk.server import (
     ProductRunStatusResponse,
     ProductSourceArtifactView,
     ProductWorkspaceRunListResponse,
+    ProductWorkspaceResultHistoryResponse,
+    ProductWorkspaceFeedbackReadResponse,
+    ProductWorkspaceFeedbackWriteRequest,
+    ProductWorkspaceFeedbackWriteAcceptedResponse,
     ProductWorkspaceShellRuntimeResponse,
     ProductWorkspaceShellDraftSavedResponse,
     ProductWorkspaceShellCommitResponse,
@@ -170,6 +175,11 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert ProductOnboardingReadResponse is not None
     assert ProductOnboardingWriteRequest is not None
     assert ProductOnboardingWriteAcceptedResponse is not None
+    assert ProductHistorySummaryResponse is not None
+    assert ProductWorkspaceResultHistoryResponse is not None
+    assert ProductWorkspaceFeedbackReadResponse is not None
+    assert ProductWorkspaceFeedbackWriteRequest is not None
+    assert ProductWorkspaceFeedbackWriteAcceptedResponse is not None
 
 
 def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
@@ -181,7 +191,11 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert manifest.server_name == "nexa-public"
     assert any(tool.route_name == "launch_run" for tool in manifest.tools)
     assert any(tool.route_name == "create_workspace" for tool in manifest.tools)
+    assert any(tool.route_name == "submit_workspace_feedback" for tool in manifest.tools)
     assert any(resource.route_name == "get_provider_catalog" for resource in manifest.resources)
+    assert any(resource.route_name == "get_history_summary" for resource in manifest.resources)
+    assert any(resource.route_name == "get_workspace_result_history" for resource in manifest.resources)
+    assert any(resource.route_name == "get_workspace_feedback" for resource in manifest.resources)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
     assert launch_manifest.argument_schema is not None
     assert launch_manifest.argument_schema.body_fields[0].name == "workspace_id"
@@ -217,6 +231,9 @@ def test_sdk_root_exposes_public_mcp_argument_schema_catalog() -> None:
     assert indexed["create_workspace"].body_fields[0].name == "title"
     assert indexed["put_workspace_provider_binding"].path_fields[1].name == "provider_key"
     assert indexed["put_onboarding"].body_fields[-1].name == "current_step"
+    assert indexed["get_history_summary"].query_fields[0].name == "workspace_id"
+    assert indexed["get_workspace_result_history"].path_fields[0].name == "workspace_id"
+    assert [field.name for field in indexed["submit_workspace_feedback"].body_fields] == ["category", "surface", "message", "run_id"]
     assert indexed["list_workspaces"].route_name == "list_workspaces"
 
 

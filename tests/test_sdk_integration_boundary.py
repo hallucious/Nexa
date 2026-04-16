@@ -154,7 +154,11 @@ def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> Non
     assert any(tool.route_name == "launch_run" for tool in surface.tools)
     assert any(resource.route_name == "get_run_trace" for resource in surface.resources)
     assert any(tool.route_name == "create_workspace" for tool in surface.tools)
+    assert any(tool.route_name == "submit_workspace_feedback" for tool in surface.tools)
     assert any(resource.route_name == "get_provider_catalog" for resource in surface.resources)
+    assert any(resource.route_name == "get_history_summary" for resource in surface.resources)
+    assert any(resource.route_name == "get_workspace_result_history" for resource in surface.resources)
+    assert any(resource.route_name == "get_workspace_feedback" for resource in surface.resources)
 
 
 def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> None:
@@ -249,6 +253,13 @@ def test_adapter_scaffold_exports_argument_schema_contracts() -> None:
     assert [field.name for field in provider_probe_schema.path_fields] == ["workspace_id", "provider_key"]
     onboarding_schema = scaffold.export_tool_schema("put_onboarding")
     assert [field.name for field in onboarding_schema.body_fields][-1] == "current_step"
+    history_summary_schema = scaffold.export_resource_schema("get_history_summary")
+    result_history_schema = scaffold.export_resource_schema("get_workspace_result_history")
+    feedback_schema = scaffold.export_tool_schema("submit_workspace_feedback")
+    assert [field.name for field in history_summary_schema.query_fields] == ["workspace_id"]
+    assert [field.name for field in result_history_schema.path_fields] == ["workspace_id"]
+    assert [field.name for field in result_history_schema.query_fields] == ["run_id", "app_language"]
+    assert [field.name for field in feedback_schema.body_fields] == ["category", "surface", "message", "run_id"]
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
     assert launch_manifest.argument_schema is not None
     assert launch_manifest.argument_schema.to_dict()["body_fields"][0]["name"] == "workspace_id"
@@ -340,6 +351,32 @@ def test_build_public_mcp_host_bridge_scaffold_normalizes_share_sourced_checkout
     assert request.path_params == {"workspace_id": "ws-1"}
     assert request.json_body == {"working_save_id": "ws-reopened-1", "share_id": "share-1"}
 
+
+
+
+def test_build_public_mcp_host_bridge_scaffold_normalizes_workspace_feedback_arguments() -> None:
+    bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")
+
+    request = bridge.build_framework_tool_request_from_arguments(
+        "submit_workspace_feedback",
+        {
+            "workspace_id": "ws-1",
+            "category": "friction_note",
+            "surface": "workspace_shell",
+            "message": "The first-run guidance is still too dense.",
+            "run_id": "run-1",
+        },
+    )
+
+    assert request.method == "POST"
+    assert request.path == "/api/workspaces/ws-1/feedback"
+    assert request.path_params == {"workspace_id": "ws-1"}
+    assert request.json_body == {
+        "category": "friction_note",
+        "surface": "workspace_shell",
+        "message": "The first-run guidance is still too dense.",
+        "run_id": "run-1",
+    }
 
 def test_build_public_mcp_host_bridge_scaffold_normalizes_workspace_bootstrap_arguments() -> None:
     bridge = build_public_mcp_host_bridge_scaffold(base_url="https://api.nexa.test")

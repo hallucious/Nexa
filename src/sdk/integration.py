@@ -3930,6 +3930,37 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             _schema_field("share_ids", "body", "array[string]", required=True, description="Issuer-owned public shares to delete."),
         ),
     },
+    "get_history_summary": {
+        "query_fields": (
+            _schema_field("workspace_id", "query", "string", description="Optional workspace scope for the history summary."),
+        ),
+    },
+    "get_workspace_result_history": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose result history should be read."),),
+        "query_fields": (
+            _schema_field("run_id", "query", "string", description="Optional run to preselect in the result history view."),
+            _schema_field("app_language", "query", "string", description="Optional language hint for localized result-history summaries."),
+        ),
+    },
+    "get_workspace_feedback": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose feedback channel should be read."),),
+        "query_fields": (
+            _schema_field("category", "query", "string", description="Optional prefilled feedback category."),
+            _schema_field("surface", "query", "string", description="Optional prefilled surface identifier."),
+            _schema_field("run_id", "query", "string", description="Optional run identifier to prefill in the feedback channel."),
+            _schema_field("feedback_id", "query", "string", description="Optional feedback identifier whose confirmation state should be highlighted."),
+            _schema_field("app_language", "query", "string", description="Optional language hint for localized feedback copy."),
+        ),
+    },
+    "submit_workspace_feedback": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose feedback channel should receive a new entry."),),
+        "body_fields": (
+            _schema_field("category", "body", "string", required=True, description="Feedback category to record."),
+            _schema_field("surface", "body", "string", required=True, description="Surface where the feedback was captured."),
+            _schema_field("message", "body", "string", required=True, description="Human feedback message to persist."),
+            _schema_field("run_id", "body", "string", description="Optional run identifier linked to the feedback submission."),
+        ),
+    },
     "list_workspaces": {
     },
 }
@@ -3980,6 +4011,10 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "extend_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
     "archive_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
     "delete_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
+    "get_history_summary": {"route_family": "history-summary-read", "transport_profile": "query-only"},
+    "get_workspace_result_history": {"route_family": "workspace-result-history-read", "transport_profile": "path-and-query"},
+    "get_workspace_feedback": {"route_family": "workspace-feedback-read", "transport_profile": "path-and-query"},
+    "submit_workspace_feedback": {"route_family": "workspace-feedback-write", "transport_profile": "path-and-body"},
     "list_workspaces": {"route_family": "workspace-list", "transport_profile": "no-arguments"},
 }
 
@@ -4110,6 +4145,42 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_retryable": True,
         "safe_to_retry_same_request_on_response_timeout": True,
         "response_timeout_recommended_action": "retry_same_request",
+    },
+    "history-summary-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "workspace-result-history-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "workspace-feedback-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "workspace-feedback-write": {
+        "idempotency_class": "state-mutation",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": False,
+        "timeout_recommended_action": "inspect_workspace_feedback_state_before_retry",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": False,
+        "response_timeout_recommended_action": "inspect_workspace_feedback_state_before_retry",
     },
     "workspace-read": {
         "idempotency_class": "read-only",
@@ -4474,6 +4545,27 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "lifecycle_class": "activity-read",
         "followup_route_names": ("get_workspace", "list_workspace_runs"),
     },
+    "history-summary-read": {
+        "lifecycle_class": "history-summary-read",
+        "followup_route_names": ("get_recent_activity", "list_workspaces", "get_workspace"),
+    },
+    "workspace-result-history-read": {
+        "lifecycle_class": "workspace-result-history-read",
+        "status_resource_name": "get_workspace",
+        "result_resource_name": "get_workspace_result_history",
+        "followup_route_names": ("get_workspace_result_history", "get_workspace_feedback", "get_workspace_shell", "list_workspace_runs"),
+    },
+    "workspace-feedback-read": {
+        "lifecycle_class": "workspace-feedback-read",
+        "status_resource_name": "get_workspace",
+        "result_resource_name": "get_workspace_feedback",
+        "followup_route_names": ("get_workspace_feedback", "submit_workspace_feedback", "get_workspace_result_history", "get_workspace_shell"),
+    },
+    "workspace-feedback-write": {
+        "lifecycle_class": "workspace-feedback-write",
+        "status_resource_name": "get_workspace_feedback",
+        "followup_route_names": ("get_workspace_feedback", "get_workspace_result_history", "get_workspace_shell"),
+    },
     "public-share-create": {
         "lifecycle_class": "public-share-entry",
         "status_resource_name": "get_public_share",
@@ -4631,6 +4723,27 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "collection_field_name": "activities",
         "count_field_name": "returned_count",
         "collection_item_identity_keys": ("activity_id",),
+    },
+    "get_history_summary": {
+        "profile_kind": "history-summary",
+        "identity_keys": ("scope",),
+        "state_keys": ("latest_activity_at",),
+    },
+    "get_workspace_result_history": {
+        "profile_kind": "workspace-result-history",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("status",),
+        "collection_field_name": "item_sections",
+        "collection_item_identity_keys": ("run_id",),
+    },
+    "get_workspace_feedback": {
+        "profile_kind": "workspace-feedback-read",
+        "identity_keys": ("workspace_id",),
+        "state_keys": ("status",),
+    },
+    "submit_workspace_feedback": {
+        "profile_kind": "workspace-feedback-write",
+        "state_keys": ("status",),
     },
     "get_workspace": {
         "profile_kind": "workspace-detail",
@@ -4832,6 +4945,10 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_artifact_detail": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object"},
     "get_run_actions": {"response_shape": "action-log", "success_status_codes": (200,), "body_kind": "object"},
     "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object"},
+    "get_history_summary": {"response_shape": "history-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("scope",)},
+    "get_workspace_result_history": {"response_shape": "workspace-result-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "result_history")},
+    "get_workspace_feedback": {"response_shape": "workspace-feedback-read", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "feedback_channel")},
+    "submit_workspace_feedback": {"response_shape": "workspace-feedback-write", "success_status_codes": (202,), "body_kind": "object", "required_top_level_keys": ("status", "feedback", "links")},
     "get_workspace": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object"},
     "create_workspace": {"response_shape": "workspace-created", "success_status_codes": (201,), "body_kind": "object", "required_top_level_keys": ("status", "workspace", "owner_membership_id")},
     "get_provider_catalog": {"response_shape": "provider-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("returned_count", "providers")},
@@ -5032,6 +5149,14 @@ _TOOL_SPECS: tuple[dict[str, object], ...] = (
         "tags": ("runs", "control", "review"),
     },
     {
+        "name": "submit_workspace_feedback",
+        "route_name": "submit_workspace_feedback",
+        "description": "Submit a workspace-scoped product feedback note tied to the current workflow or result-history surface.",
+        "request_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceFeedbackWriteRequest"),
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceFeedbackWriteAcceptedResponse"),
+        "tags": ("workspace", "feedback", "write"),
+    },
+    {
         "name": "extend_public_share",
         "route_name": "extend_public_share",
         "description": "Extend the expiration of a public share you issued.",
@@ -5145,6 +5270,27 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read recent user activity with public run source identity when available.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductRecentActivityResponse"),
         "tags": ("history", "activity", "reentry"),
+    },
+    {
+        "name": "get_history_summary",
+        "route_name": "get_history_summary",
+        "description": "Read account or workspace history rollup counts for reentry and continuity decisions.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductHistorySummaryResponse"),
+        "tags": ("history", "summary", "reentry"),
+    },
+    {
+        "name": "get_workspace_result_history",
+        "route_name": "get_workspace_result_history",
+        "description": "Read workspace result-history reentry surfaces together with onboarding projection and selected result detail.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceResultHistoryResponse"),
+        "tags": ("workspace", "history", "results"),
+    },
+    {
+        "name": "get_workspace_feedback",
+        "route_name": "get_workspace_feedback",
+        "description": "Read the workspace feedback channel and prefilled product-learning entry surface.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceFeedbackReadResponse"),
+        "tags": ("workspace", "feedback", "read"),
     },
     {
         "name": "get_public_share",
