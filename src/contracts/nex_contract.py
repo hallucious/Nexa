@@ -71,6 +71,9 @@ class PublicNexArtifactOperationBoundary:
     operation: str
     posture: str
     canonical_api: str
+    canonical_http_method: str
+    canonical_route: str
+    result_surface: str
     allowed_source_roles: tuple[StorageRole, ...]
     result_role_posture: str
     denial_reason_code: str
@@ -114,6 +117,10 @@ class PublicNexArtifactDescriptor:
 class PublicNexShareOperationBoundary:
     operation: str
     posture: str
+    canonical_http_method: str
+    canonical_route: str
+    result_surface: str
+    effect_posture: str
     requires_authentication: bool
     requires_issuer_scope: bool
     lifecycle_gate: str

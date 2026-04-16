@@ -79,6 +79,10 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
         "checkout_working_copy",
     )
     assert boundary.public_operation_boundaries[0].posture == "anonymous_public_metadata_read"
+    assert boundary.public_operation_boundaries[0].canonical_http_method == "GET"
+    assert boundary.public_operation_boundaries[0].canonical_route == "/api/public-shares/{share_id}"
+    assert boundary.public_operation_boundaries[0].result_surface == "public_share_detail"
+    assert boundary.public_operation_boundaries[0].effect_posture == "read_only"
     assert boundary.public_operation_boundaries[0].requires_authentication is False
     assert boundary.public_operation_boundaries[0].allowed_storage_roles == ("working_save", "commit_snapshot")
     assert boundary.public_operation_boundaries[0].allowed_effective_lifecycle_states == ("active", "expired", "revoked")
@@ -93,6 +97,10 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     )
     assert all(entry.requires_authentication for entry in boundary.management_operation_boundaries)
     assert all(entry.requires_issuer_scope for entry in boundary.management_operation_boundaries)
+    assert boundary.management_operation_boundaries[0].canonical_http_method == "POST"
+    assert boundary.management_operation_boundaries[0].canonical_route == "/api/public-shares/{share_id}/revoke"
+    assert boundary.management_operation_boundaries[0].result_surface == "single_share_mutation_result"
+    assert boundary.management_operation_boundaries[0].effect_posture == "lifecycle_transition"
     assert boundary.management_operation_boundaries[0].allowed_effective_lifecycle_states == ("active",)
     assert boundary.management_operation_boundaries[2].denial_reason_code == "public_share.management_not_allowed"
     assert boundary.history_boundary.access_posture == "public_audit_history"
@@ -110,6 +118,9 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
         "run_artifact",
         "checkout_working_copy",
     )
+    assert format_boundary.artifact_operation_boundaries[0].canonical_http_method == "GET"
+    assert format_boundary.artifact_operation_boundaries[0].canonical_route == "/api/public-shares/{share_id}/artifact"
+    assert format_boundary.artifact_operation_boundaries[0].result_surface == "public_share_artifact"
     assert format_boundary.artifact_operation_boundaries[4].execution_anchor_posture == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
     assert format_boundary.artifact_operation_boundaries[5].allowed_source_roles == ("commit_snapshot",)
     assert boundary.supported_roles == ("working_save", "commit_snapshot")
