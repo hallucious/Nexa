@@ -378,7 +378,21 @@ def _public_artifact_boundary_body(model_or_data: Any) -> dict[str, Any]:
             "required_sections": list(descriptor.required_sections),
             "optional_sections": list(descriptor.optional_sections),
             "forbidden_sections": list(descriptor.forbidden_sections),
+            "editor_continuity_posture": descriptor.editor_continuity_posture,
+            "commit_boundary_posture": descriptor.commit_boundary_posture,
         },
+        "artifact_operation_boundaries": [
+            {
+                "operation": entry.operation,
+                "posture": entry.posture,
+                "canonical_api": entry.canonical_api,
+                "allowed_source_roles": list(entry.allowed_source_roles),
+                "result_role_posture": entry.result_role_posture,
+                "denial_reason_code": entry.denial_reason_code,
+                "execution_anchor_posture": entry.execution_anchor_posture,
+            }
+            for entry in format_boundary.artifact_operation_boundaries
+        ],
     }
 
 

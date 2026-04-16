@@ -428,6 +428,10 @@ def test_framework_binding_handles_public_share_round_trip() -> None:
     assert parsed["share_boundary"]["public_operation_boundaries"][0]["operation"] == "inspect_metadata"
     assert parsed["share_boundary"]["management_operation_boundaries"][1]["operation"] == "extend_expiration"
     assert parsed["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert parsed["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert parsed["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert parsed["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert parsed["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
 
 
 def test_framework_binding_handles_public_share_history_round_trip() -> None:
@@ -456,6 +460,10 @@ def test_framework_binding_handles_public_share_artifact_round_trip() -> None:
     assert parsed["artifact"]["meta"]["commit_id"] == "snap-share-001"
     assert parsed["share_boundary"]["artifact_format_family"] == ".nex"
     assert parsed["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert parsed["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert parsed["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert parsed["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert parsed["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
 
 
 def test_framework_binding_handles_workspace_shell_share_creation_round_trip() -> None:
@@ -1222,6 +1230,10 @@ def test_framework_binding_revoke_public_share_round_trip() -> None:
     assert parsed["governance_summary"]["total_action_report_count"] == 3
     assert parsed["share_boundary"]["share_family"] == "nex.public-link-share"
     assert parsed["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert parsed["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert parsed["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert parsed["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert parsed["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
     assert parsed["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
     assert share_store["share-framework-revoke-001"]["share"]["lifecycle"]["state"] == "revoked"
 
@@ -1258,6 +1270,10 @@ def test_framework_binding_extend_public_share_round_trip() -> None:
     assert parsed["governance_summary"]["total_action_report_count"] == 3
     assert parsed["share_boundary"]["share_family"] == "nex.public-link-share"
     assert parsed["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert parsed["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert parsed["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert parsed["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert parsed["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
     assert parsed["links"]["action_report_summary"] == "/api/users/me/public-shares/action-reports/summary"
     assert share_store["share-framework-extend-001"]["share"]["lifecycle"]["expires_at"] == "2026-04-20T00:00:00+00:00"
 

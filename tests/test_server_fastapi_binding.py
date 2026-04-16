@@ -1652,6 +1652,10 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     assert payload['share_boundary']['management_operation_boundaries'][2]['denial_reason_code'] == 'public_share.management_not_allowed'
     assert payload['share_boundary']['history_boundary']['detail_payload_posture'] == 'optional_string_map'
     assert payload['artifact_boundary']['role_boundary']['identity_field'] == 'commit_id'
+    assert payload['artifact_boundary']['role_boundary']['editor_continuity_posture'] == 'ui_forbidden_in_canonical_snapshot'
+    assert payload['artifact_boundary']['role_boundary']['commit_boundary_posture'] == 'already_crossed_commit_boundary'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][0]['operation'] == 'load_artifact'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][4]['execution_anchor_posture'] == 'working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor'
 
     history_response = client.get('/api/public-shares/share-fastapi-001/history')
     assert history_response.status_code == 200
@@ -1699,6 +1703,10 @@ def test_fastapi_binding_workspace_shell_share_creation_round_trip() -> None:
     assert payload['source_artifact']['canonical_ref'] == 'snap-fastapi-created-share-001'
     assert payload['share_boundary']['share_family'] == 'nex.public-link-share'
     assert payload['artifact_boundary']['role_boundary']['identity_field'] == 'commit_id'
+    assert payload['artifact_boundary']['role_boundary']['editor_continuity_posture'] == 'ui_forbidden_in_canonical_snapshot'
+    assert payload['artifact_boundary']['role_boundary']['commit_boundary_posture'] == 'already_crossed_commit_boundary'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][0]['operation'] == 'load_artifact'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][4]['execution_anchor_posture'] == 'working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor'
 
     get_response = client.get('/api/public-shares/share-fastapi-created-001')
     assert get_response.status_code == 200
@@ -1774,6 +1782,10 @@ def test_fastapi_binding_public_share_revoke_round_trip() -> None:
     assert payload['governance_summary']['total_action_report_count'] == 3
     assert payload['share_boundary']['share_family'] == 'nex.public-link-share'
     assert payload['artifact_boundary']['role_boundary']['identity_field'] == 'commit_id'
+    assert payload['artifact_boundary']['role_boundary']['editor_continuity_posture'] == 'ui_forbidden_in_canonical_snapshot'
+    assert payload['artifact_boundary']['role_boundary']['commit_boundary_posture'] == 'already_crossed_commit_boundary'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][0]['operation'] == 'load_artifact'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][4]['execution_anchor_posture'] == 'working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor'
     assert payload['links']['action_reports'] == '/api/users/me/public-shares/action-reports'
     assert share_store['share-fastapi-revoke-001']['share']['lifecycle']['state'] == 'revoked'
 
@@ -1826,6 +1838,10 @@ def test_fastapi_binding_public_share_extend_round_trip() -> None:
     assert payload['governance_summary']['total_action_report_count'] == 3
     assert payload['share_boundary']['share_family'] == 'nex.public-link-share'
     assert payload['artifact_boundary']['role_boundary']['identity_field'] == 'commit_id'
+    assert payload['artifact_boundary']['role_boundary']['editor_continuity_posture'] == 'ui_forbidden_in_canonical_snapshot'
+    assert payload['artifact_boundary']['role_boundary']['commit_boundary_posture'] == 'already_crossed_commit_boundary'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][0]['operation'] == 'load_artifact'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][4]['execution_anchor_posture'] == 'working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor'
     assert payload['links']['action_report_summary'] == '/api/users/me/public-shares/action-reports/summary'
 
 
@@ -1877,6 +1893,10 @@ def test_fastapi_binding_public_share_archive_round_trip() -> None:
     assert payload['governance_summary']['total_action_report_count'] == 3
     assert payload['share_boundary']['share_family'] == 'nex.public-link-share'
     assert payload['artifact_boundary']['role_boundary']['identity_field'] == 'commit_id'
+    assert payload['artifact_boundary']['role_boundary']['editor_continuity_posture'] == 'ui_forbidden_in_canonical_snapshot'
+    assert payload['artifact_boundary']['role_boundary']['commit_boundary_posture'] == 'already_crossed_commit_boundary'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][0]['operation'] == 'load_artifact'
+    assert payload['artifact_boundary']['artifact_operation_boundaries'][4]['execution_anchor_posture'] == 'working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor'
     assert payload['links']['action_reports'] == '/api/users/me/public-shares/action-reports'
 
 

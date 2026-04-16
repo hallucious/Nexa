@@ -62,6 +62,19 @@ class PublicNexRoleBoundary:
     optional_sections: tuple[str, ...]
     forbidden_sections: tuple[str, ...]
     identity_field: str
+    editor_continuity_posture: str
+    commit_boundary_posture: str
+
+
+@dataclass(frozen=True)
+class PublicNexArtifactOperationBoundary:
+    operation: str
+    posture: str
+    canonical_api: str
+    allowed_source_roles: tuple[StorageRole, ...]
+    result_role_posture: str
+    denial_reason_code: str
+    execution_anchor_posture: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -72,6 +85,7 @@ class PublicNexFormatBoundary:
     legacy_default_role: StorageRole
     working_save: PublicNexRoleBoundary
     commit_snapshot: PublicNexRoleBoundary
+    artifact_operation_boundaries: tuple[PublicNexArtifactOperationBoundary, ...]
 
     def role_boundary(self, storage_role: StorageRole) -> PublicNexRoleBoundary:
         if storage_role == WORKING_SAVE_ROLE:
@@ -90,6 +104,8 @@ class PublicNexArtifactDescriptor:
     required_sections: tuple[str, ...]
     optional_sections: tuple[str, ...]
     forbidden_sections: tuple[str, ...]
+    editor_continuity_posture: str
+    commit_boundary_posture: str
     export_ready: bool
     source_working_save_id: Optional[str] = None
 

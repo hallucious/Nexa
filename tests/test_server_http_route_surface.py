@@ -231,6 +231,10 @@ def test_public_share_route_returns_descriptor_without_authentication() -> None:
     assert response.body["source_artifact"]["canonical_ref"] == "snap-share-001"
     assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
     assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert response.body["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert response.body["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
 
 
 def test_public_share_artifact_route_returns_canonical_artifact_without_authentication() -> None:
@@ -252,6 +256,10 @@ def test_public_share_artifact_route_returns_canonical_artifact_without_authenti
     assert response.body["share_boundary"]["management_operation_boundaries"][0]["denial_reason_code"] == "public_share.transition_not_allowed"
     assert response.body["share_boundary"]["history_boundary"]["ordering"] == "ascending_sequence"
     assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert response.body["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert response.body["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
 
 
 def test_issuer_public_share_management_routes_require_authentication() -> None:
@@ -905,6 +913,10 @@ def test_public_share_revoke_route_updates_lifecycle_for_issuer() -> None:
     assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
     assert response.body["share_boundary"]["management_operation_boundaries"][3]["operation"] == "archive"
     assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert response.body["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert response.body["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
     assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
     assert share_store["share-revoke-http-001"]["share"]["lifecycle"]["state"] == "revoked"
 
@@ -953,6 +965,10 @@ def test_public_share_extend_route_updates_expiration_for_issuer() -> None:
     assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
     assert response.body["share_boundary"]["public_operation_boundaries"][3]["operation"] == "run_artifact"
     assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert response.body["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert response.body["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
     assert response.body["links"]["action_report_summary"] == "/api/users/me/public-shares/action-reports/summary"
 
 
@@ -1005,6 +1021,10 @@ def test_public_share_archive_route_updates_archive_state_for_issuer() -> None:
     assert response.body["governance_summary"]["total_action_report_count"] == 3
     assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
     assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
+    assert response.body["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
+    assert response.body["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
+    assert response.body["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
     assert response.body["links"]["action_reports"] == "/api/users/me/public-shares/action-reports"
 
 

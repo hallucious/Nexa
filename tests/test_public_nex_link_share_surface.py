@@ -5,6 +5,7 @@ import json
 import pytest
 
 from src.storage.lifecycle_api import create_commit_snapshot_from_working_save
+from src.storage.nex_api import get_public_nex_format_boundary
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.share_api import (
@@ -97,6 +98,20 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.history_boundary.access_posture == "public_audit_history"
     assert boundary.history_boundary.ordering == "ascending_sequence"
     assert boundary.history_boundary.event_types == ("created", "expiration_extended", "revoked", "archived", "unarchived")
+    format_boundary = get_public_nex_format_boundary()
+    assert format_boundary.working_save.editor_continuity_posture == "ui_continuity_allowed"
+    assert format_boundary.working_save.commit_boundary_posture == "must_strip_ui_before_commit_snapshot"
+    assert format_boundary.commit_snapshot.editor_continuity_posture == "ui_forbidden_in_canonical_snapshot"
+    assert tuple(entry.operation for entry in format_boundary.artifact_operation_boundaries) == (
+        "load_artifact",
+        "validate_working_save",
+        "validate_commit_snapshot",
+        "import_copy",
+        "run_artifact",
+        "checkout_working_copy",
+    )
+    assert format_boundary.artifact_operation_boundaries[4].execution_anchor_posture == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
+    assert format_boundary.artifact_operation_boundaries[5].allowed_source_roles == ("commit_snapshot",)
     assert boundary.supported_roles == ("working_save", "commit_snapshot")
     assert boundary.artifact_format_family == ".nex"
     assert boundary.viewer_capabilities == ("inspect_metadata", "download_artifact", "import_copy")

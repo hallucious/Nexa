@@ -13,6 +13,7 @@ from src.contracts.nex_contract import (
     COMMIT_SNAPSHOT_ROLE,
     WORKING_SAVE_ROLE,
     PublicNexArtifactDescriptor,
+    PublicNexArtifactOperationBoundary,
     PublicNexFormatBoundary,
     PublicNexRoleBoundary,
 )
@@ -47,6 +48,8 @@ _PUBLIC_NEX_FORMAT_BOUNDARY = PublicNexFormatBoundary(
         optional_sections=WORKING_SAVE_OPTIONAL_SECTIONS,
         forbidden_sections=tuple(),
         identity_field=WORKING_SAVE_IDENTITY_FIELD,
+        editor_continuity_posture="ui_continuity_allowed",
+        commit_boundary_posture="must_strip_ui_before_commit_snapshot",
     ),
     commit_snapshot=PublicNexRoleBoundary(
         storage_role=COMMIT_SNAPSHOT_ROLE,
@@ -54,6 +57,59 @@ _PUBLIC_NEX_FORMAT_BOUNDARY = PublicNexFormatBoundary(
         optional_sections=tuple(),
         forbidden_sections=COMMIT_SNAPSHOT_FORBIDDEN_SECTIONS,
         identity_field=COMMIT_SNAPSHOT_IDENTITY_FIELD,
+        editor_continuity_posture="ui_forbidden_in_canonical_snapshot",
+        commit_boundary_posture="already_crossed_commit_boundary",
+    ),
+    artifact_operation_boundaries=(
+        PublicNexArtifactOperationBoundary(
+            operation="load_artifact",
+            posture="role_aware_unified_loader",
+            canonical_api="load_nex",
+            allowed_source_roles=(WORKING_SAVE_ROLE, COMMIT_SNAPSHOT_ROLE),
+            result_role_posture="role_preserving_loaded_model",
+            denial_reason_code="public_nex.load_not_allowed",
+        ),
+        PublicNexArtifactOperationBoundary(
+            operation="validate_working_save",
+            posture="working_save_only_role_validator",
+            canonical_api="validate_working_save",
+            allowed_source_roles=(WORKING_SAVE_ROLE,),
+            result_role_posture="working_save_only",
+            denial_reason_code="public_nex.role_validation_not_allowed",
+        ),
+        PublicNexArtifactOperationBoundary(
+            operation="validate_commit_snapshot",
+            posture="commit_snapshot_only_role_validator",
+            canonical_api="validate_commit_snapshot",
+            allowed_source_roles=(COMMIT_SNAPSHOT_ROLE,),
+            result_role_posture="commit_snapshot_only",
+            denial_reason_code="public_nex.role_validation_not_allowed",
+        ),
+        PublicNexArtifactOperationBoundary(
+            operation="import_copy",
+            posture="role_preserving_public_import_copy",
+            canonical_api="load_nex",
+            allowed_source_roles=(WORKING_SAVE_ROLE, COMMIT_SNAPSHOT_ROLE),
+            result_role_posture="role_preserving_import_copy",
+            denial_reason_code="public_nex.import_not_allowed",
+        ),
+        PublicNexArtifactOperationBoundary(
+            operation="run_artifact",
+            posture="role_aware_runtime_entry",
+            canonical_api="load_nex",
+            allowed_source_roles=(WORKING_SAVE_ROLE, COMMIT_SNAPSHOT_ROLE),
+            result_role_posture="runtime_accepts_loaded_model",
+            denial_reason_code="public_nex.run_not_allowed",
+            execution_anchor_posture="working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor",
+        ),
+        PublicNexArtifactOperationBoundary(
+            operation="checkout_working_copy",
+            posture="commit_snapshot_to_working_save_checkout",
+            canonical_api="load_nex",
+            allowed_source_roles=(COMMIT_SNAPSHOT_ROLE,),
+            result_role_posture="commit_snapshot_to_working_save_checkout",
+            denial_reason_code="public_nex.checkout_not_allowed",
+        ),
     ),
 )
 
@@ -119,6 +175,8 @@ def describe_public_nex_artifact(
         required_sections=boundary.required_sections,
         optional_sections=boundary.optional_sections,
         forbidden_sections=boundary.forbidden_sections,
+        editor_continuity_posture=boundary.editor_continuity_posture,
+        commit_boundary_posture=boundary.commit_boundary_posture,
         export_ready=True,
         source_working_save_id=(
             str(meta.get("source_working_save_id"))
