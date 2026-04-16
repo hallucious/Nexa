@@ -25,6 +25,7 @@ from src.sdk.server import (
     ProductExecutionTarget,
     ProductOnboardingReadResponse,
     ProductHistorySummaryResponse,
+    ProductCircuitLibraryResponse,
     ProductOnboardingWriteAcceptedResponse,
     ProductOnboardingWriteRequest,
     ProductProviderBindingWriteAcceptedResponse,
@@ -176,6 +177,7 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert ProductOnboardingWriteRequest is not None
     assert ProductOnboardingWriteAcceptedResponse is not None
     assert ProductHistorySummaryResponse is not None
+    assert ProductCircuitLibraryResponse is not None
     assert ProductWorkspaceResultHistoryResponse is not None
     assert ProductWorkspaceFeedbackReadResponse is not None
     assert ProductWorkspaceFeedbackWriteRequest is not None
@@ -194,6 +196,7 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert any(tool.route_name == "submit_workspace_feedback" for tool in manifest.tools)
     assert any(resource.route_name == "get_provider_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_history_summary" for resource in manifest.resources)
+    assert any(resource.route_name == "get_circuit_library" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in manifest.resources)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")

@@ -3935,6 +3935,11 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             _schema_field("workspace_id", "query", "string", description="Optional workspace scope for the history summary."),
         ),
     },
+    "get_circuit_library": {
+        "query_fields": (
+            _schema_field("app_language", "query", "string", description="Optional language hint for localized circuit-library summaries."),
+        ),
+    },
     "get_workspace_result_history": {
         "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose result history should be read."),),
         "query_fields": (
@@ -4012,6 +4017,7 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "archive_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
     "delete_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
     "get_history_summary": {"route_family": "history-summary-read", "transport_profile": "query-only"},
+    "get_circuit_library": {"route_family": "circuit-library-read", "transport_profile": "query-only"},
     "get_workspace_result_history": {"route_family": "workspace-result-history-read", "transport_profile": "path-and-query"},
     "get_workspace_feedback": {"route_family": "workspace-feedback-read", "transport_profile": "path-and-query"},
     "submit_workspace_feedback": {"route_family": "workspace-feedback-write", "transport_profile": "path-and-body"},
@@ -4147,6 +4153,15 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_recommended_action": "retry_same_request",
     },
     "history-summary-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "circuit-library-read": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
         "safe_to_retry_same_request_on_timeout": True,
@@ -4549,6 +4564,12 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "lifecycle_class": "history-summary-read",
         "followup_route_names": ("get_recent_activity", "list_workspaces", "get_workspace"),
     },
+    "circuit-library-read": {
+        "lifecycle_class": "circuit-library-read",
+        "status_resource_name": "get_history_summary",
+        "result_resource_name": "get_circuit_library",
+        "followup_route_names": ("get_circuit_library", "list_workspaces", "get_workspace_result_history", "get_workspace_feedback", "get_workspace_shell", "get_onboarding"),
+    },
     "workspace-result-history-read": {
         "lifecycle_class": "workspace-result-history-read",
         "status_resource_name": "get_workspace",
@@ -4728,6 +4749,13 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "profile_kind": "history-summary",
         "identity_keys": ("scope",),
         "state_keys": ("latest_activity_at",),
+    },
+    "get_circuit_library": {
+        "profile_kind": "circuit-library",
+        "identity_keys": ("source_of_truth",),
+        "state_keys": ("status", "app_language"),
+        "collection_field_name": "item_sections",
+        "collection_item_identity_keys": ("workspace_id",),
     },
     "get_workspace_result_history": {
         "profile_kind": "workspace-result-history",
@@ -4946,6 +4974,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_run_actions": {"response_shape": "action-log", "success_status_codes": (200,), "body_kind": "object"},
     "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object"},
     "get_history_summary": {"response_shape": "history-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("scope",)},
+    "get_circuit_library": {"response_shape": "circuit-library", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "source_of_truth", "library", "overview_section", "item_sections", "routes")},
     "get_workspace_result_history": {"response_shape": "workspace-result-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "result_history")},
     "get_workspace_feedback": {"response_shape": "workspace-feedback-read", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "feedback_channel")},
     "submit_workspace_feedback": {"response_shape": "workspace-feedback-write", "success_status_codes": (202,), "body_kind": "object", "required_top_level_keys": ("status", "feedback", "links")},
@@ -5277,6 +5306,13 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read account or workspace history rollup counts for reentry and continuity decisions.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductHistorySummaryResponse"),
         "tags": ("history", "summary", "reentry"),
+    },
+    {
+        "name": "get_circuit_library",
+        "route_name": "get_circuit_library",
+        "description": "Read the beginner-facing workflow library and continue/result-history reentry surfaces.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductCircuitLibraryResponse"),
+        "tags": ("workspace", "library", "reentry"),
     },
     {
         "name": "get_workspace_result_history",

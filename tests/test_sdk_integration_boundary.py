@@ -130,6 +130,7 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert indexed["get_run_result"].response_type is not None
     assert indexed["list_run_artifacts"].path.endswith("/artifacts")
     assert indexed["get_recent_activity"].path == "/api/users/me/activity"
+    assert indexed["get_circuit_library"].path == "/api/workspaces/library"
     assert indexed["list_issuer_public_shares"].path == "/api/users/me/public-shares"
     assert indexed["get_issuer_public_share_summary"].path == "/api/users/me/public-shares/summary"
     assert indexed["get_workspace_shell"].path.endswith("/shell")
@@ -168,12 +169,15 @@ def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> No
 
     launch_export = scaffold.export_tool("launch_run", json_body={"workspace_id": "ws-1"})
     status_export = scaffold.export_resource("get_run_status", path_params={"run_id": "run-1"})
+    library_export = scaffold.export_resource("get_circuit_library", query_params={"app_language": "ko"})
     export = scaffold.export()
 
     assert launch_export.invocation.method == "POST"
     assert launch_export.invocation.url == "https://api.nexa.test/api/runs"
     assert launch_export.invocation.json_body == {"workspace_id": "ws-1"}
     assert status_export.uri_template == "nexa://public/api/runs/{run_id}"
+    assert library_export.invocation.path == "/api/workspaces/library"
+    assert library_export.invocation.query_params == {"app_language": "ko"}
     assert status_export.invocation.path == "/api/runs/run-1"
     assert status_export.invocation.url == "https://api.nexa.test/api/runs/run-1"
     assert export.transport_kind == "http-route-bridge"
