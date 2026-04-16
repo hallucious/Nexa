@@ -285,6 +285,8 @@ def test_public_share_artifact_route_returns_canonical_artifact_without_authenti
     assert response.body["share_boundary"]["history_boundary"]["ordering"] == "ascending_sequence"
     assert response.body["share_boundary"]["history_boundary"]["canonical_http_method"] == "GET"
     assert response.body["identity"]["share_family"] == "public_nex_link_share"
+    assert response.body["identity_policy"]["canonical_key"] == "share_id"
+    assert response.body["namespace_policy"]["public_path_format"] == "/share/{share_id}"
     assert response.body["share_boundary"]["history_boundary"]["canonical_route"] == "/api/public-shares/{share_id}/history"
     assert response.body["share_boundary"]["history_boundary"]["result_surface"] == "public_share_history"
     assert response.body["share_boundary"]["history_boundary"]["entry_boundary"]["entry_surface"] == "public_share_audit_entry"
@@ -577,6 +579,8 @@ def test_starter_template_catalog_route_returns_public_template_exchange_surface
     assert response.status_code == 200
     assert response.body["status"] == "ready"
     assert response.body["catalog"]["family"] == "starter-circuit-template-catalog"
+    assert response.body["identity_policy"]["canonical_key"] == "template_ref"
+    assert response.body["namespace_policy"]["canonical_ref_format"] == "{source}:{template_id}@{template_version}"
     template = next(item for item in response.body["templates"] if item["template_id"] == "text_summarizer")
     assert template["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert template["lookup_aliases"] == ["text_summarizer", "nexa-curated:text_summarizer@1.0"]
@@ -600,6 +604,8 @@ def test_starter_template_detail_route_returns_one_template() -> None:
 
     assert response.status_code == 200
     assert response.body["template"]["template_id"] == "text_summarizer"
+    assert response.body["identity_policy"]["canonical_key"] == "template_ref"
+    assert response.body["namespace_policy"]["family"] == "starter-template"
     assert response.body["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert response.body["template"]["identity"]["canonical_value"] == "nexa-curated:text_summarizer@1.0"
     assert response.body["template"]["identity"]["canonical_value"] == "nexa-curated:text_summarizer@1.0"
@@ -634,8 +640,12 @@ def test_apply_starter_template_route_updates_workspace_shell_draft() -> None:
 
     assert response.status_code == 200
     assert response.body["status"] == "accepted"
+    assert response.body["identity_policy"]["canonical_key"] == "template_ref"
+    assert response.body["namespace_policy"]["family"] == "starter-template"
     assert response.body["workspace_id"] == "ws-001"
     assert response.body["template"]["template_id"] == "text_summarizer"
+    assert response.body["identity_policy"]["canonical_key"] == "template_ref"
+    assert response.body["namespace_policy"]["family"] == "starter-template"
     assert response.body["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert response.body["template"]["compatibility"]["family"] == "workspace-shell-draft"
     assert response.body["template"]["supported_entry_surfaces"] == ["designer", "template_gallery"]

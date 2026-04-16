@@ -88,6 +88,8 @@ class ProductPublicShareDetailResponse:
     viewer_capabilities: tuple[str, ...] = ()
     operation_capabilities: tuple[str, ...] = ()
     identity: Optional[dict[str, Any]] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -142,6 +144,8 @@ class ProductPublicShareHistoryResponse:
     history: tuple[ProductPublicShareHistoryEntryView, ...] = ()
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
     identity: Optional[dict[str, Any]] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:
@@ -162,6 +166,8 @@ class ProductPublicShareArtifactResponse:
     artifact: dict[str, Any]
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
     identity: Optional[dict[str, Any]] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.status:

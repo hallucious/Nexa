@@ -553,6 +553,22 @@ def _public_share_namespace_policy_body() -> dict[str, Any]:
         "id_kind": "opaque-share-id",
     }
 
+def _starter_template_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "template_ref",
+        "legacy_key": "template_id",
+        "lookup_mode": "template_id_or_template_ref",
+    }
+
+
+def _starter_template_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "starter-template",
+        "source_scope": "nexa-curated",
+        "canonical_ref_format": "{source}:{template_id}@{template_version}",
+    }
+
+
 
 def _public_artifact_boundary_body(model_or_data: Any) -> dict[str, Any]:
     descriptor = describe_public_nex_artifact(model_or_data)
@@ -2146,6 +2162,8 @@ class RunHttpRouteSurface:
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
             "identity": _public_share_identity_body(descriptor),
+            "identity_policy": _public_share_identity_policy_body(),
+            "namespace_policy": _public_share_namespace_policy_body(),
             "lifecycle": {
                 "stored_state": descriptor.stored_lifecycle_state,
                 "state": descriptor.lifecycle_state,
@@ -2205,6 +2223,8 @@ class RunHttpRouteSurface:
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
             "identity": _public_share_identity_body(descriptor),
+            "identity_policy": _public_share_identity_policy_body(),
+            "namespace_policy": _public_share_namespace_policy_body(),
             "lifecycle": {
                 "stored_state": descriptor.stored_lifecycle_state,
                 "state": descriptor.lifecycle_state,
@@ -2263,6 +2283,8 @@ class RunHttpRouteSurface:
             "share_boundary": _public_share_boundary_body(),
             "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
             "identity": _public_share_identity_body(descriptor),
+            "identity_policy": _public_share_identity_policy_body(),
+            "namespace_policy": _public_share_namespace_policy_body(),
             "history": list(history),
             "links": {
                 "share": f"/api/public-shares/{descriptor.share_id}",
@@ -2307,6 +2329,8 @@ class RunHttpRouteSurface:
             "share_boundary": _public_share_boundary_body(),
             "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
             "identity": _public_share_identity_body(descriptor),
+            "identity_policy": _public_share_identity_policy_body(),
+            "namespace_policy": _public_share_namespace_policy_body(),
             "artifact": payload["artifact"],
             "links": {
                 "share": f"/api/public-shares/{descriptor.share_id}",
@@ -2431,6 +2455,8 @@ class RunHttpRouteSurface:
             "viewer_capabilities": list(extended_descriptor.viewer_capabilities),
             "operation_capabilities": list(extended_descriptor.operation_capabilities),
             "identity": _public_share_identity_body(extended_descriptor),
+            "identity_policy": _public_share_identity_policy_body(),
+            "namespace_policy": _public_share_namespace_policy_body(),
             "lifecycle": {
                 "stored_state": extended_descriptor.stored_lifecycle_state,
                 "state": extended_descriptor.lifecycle_state,
@@ -2837,6 +2863,8 @@ class RunHttpRouteSurface:
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
             "identity": _public_share_identity_body(descriptor),
+            "identity_policy": _public_share_identity_policy_body(),
+            "namespace_policy": _public_share_namespace_policy_body(),
             "lifecycle": {
                 "stored_state": descriptor.stored_lifecycle_state,
                 "state": descriptor.lifecycle_state,
@@ -3224,16 +3252,8 @@ class RunHttpRouteSurface:
                 "subtitle": ui_text("template_gallery.subtitle", app_language=app_language, fallback_text="Choose a starter workflow to begin faster."),
                 "template_count": len(templates),
                 "category_count": len(categories),
-                "identity_policy": {
-                    "canonical_key": "template_ref",
-                    "legacy_key": "template_id",
-                    "lookup_mode": "template_id_or_template_ref",
-                },
-                "namespace_policy": {
-                    "family": "starter-template",
-                    "source_scope": "nexa-curated",
-                    "canonical_ref_format": "{source}:{template_id}@{template_version}",
-                },
+                "identity_policy": _starter_template_identity_policy_body(),
+                "namespace_policy": _starter_template_namespace_policy_body(),
             },
             categories=tuple(categories.values()),
             templates=tuple(templates),
@@ -3242,6 +3262,8 @@ class RunHttpRouteSurface:
                 "self": "/api/templates/starter-circuits",
                 "workspace_library": "/api/workspaces/library",
             },
+            identity_policy=_starter_template_identity_policy_body(),
+            namespace_policy=_starter_template_namespace_policy_body(),
         )
         return _route_response(200, asdict(response))
 
@@ -3280,6 +3302,8 @@ class RunHttpRouteSurface:
                 "catalog": "/api/templates/starter-circuits",
                 "workspace_library": "/api/workspaces/library",
             },
+            identity_policy=_starter_template_identity_policy_body(),
+            namespace_policy=_starter_template_namespace_policy_body(),
         )
         return _route_response(200, asdict(response))
 
@@ -3395,6 +3419,8 @@ class RunHttpRouteSurface:
                 "workspace_shell": f"/api/workspaces/{workspace_id}/shell",
                 "catalog": "/api/templates/starter-circuits",
             },
+            identity_policy=_starter_template_identity_policy_body(),
+            namespace_policy=_starter_template_namespace_policy_body(),
         )
         return _route_response(200, asdict(response))
 

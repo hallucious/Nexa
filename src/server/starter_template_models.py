@@ -12,6 +12,8 @@ class ProductStarterTemplateCatalogResponse:
     templates: tuple[Mapping[str, Any], ...] = ()
     app_language: str = "en"
     routes: Mapping[str, str] = field(default_factory=dict)
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"ready", "accepted"}:
@@ -28,6 +30,8 @@ class ProductStarterTemplateDetailResponse:
     template: Mapping[str, Any]
     app_language: str = "en"
     routes: Mapping[str, str] = field(default_factory=dict)
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"ready", "accepted"}:
@@ -45,6 +49,8 @@ class ProductStarterTemplateApplyAcceptedResponse:
     template: Mapping[str, Any]
     shell: Mapping[str, Any]
     routes: Mapping[str, str] = field(default_factory=dict)
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"accepted", "ready"}:

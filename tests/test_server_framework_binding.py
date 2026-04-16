@@ -723,6 +723,8 @@ def test_framework_binding_handles_starter_template_routes_round_trip() -> None:
     catalog_payload = json.loads(catalog_response.body_text)
     assert catalog_payload["catalog"]["family"] == "starter-circuit-template-catalog"
     assert catalog_payload["catalog"]["identity_policy"]["canonical_key"] == "template_ref"
+    assert catalog_payload["identity_policy"]["canonical_key"] == "template_ref"
+    assert catalog_payload["namespace_policy"]["family"] == "starter-template"
     assert catalog_payload["templates"][0]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert catalog_payload["templates"][0]["provenance"]["family"] == "starter-template"
     assert catalog_payload["templates"][0]["identity"]["canonical_value"] == "nexa-curated:text_summarizer@1.0"
