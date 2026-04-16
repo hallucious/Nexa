@@ -266,6 +266,12 @@ def test_public_share_artifact_route_returns_canonical_artifact_without_authenti
     assert response.body["share_boundary"]["management_operation_boundaries"][0]["effect_posture"] == "lifecycle_transition"
     assert response.body["share_boundary"]["management_operation_boundaries"][0]["denial_reason_code"] == "public_share.transition_not_allowed"
     assert response.body["share_boundary"]["history_boundary"]["ordering"] == "ascending_sequence"
+    assert response.body["share_boundary"]["history_boundary"]["canonical_http_method"] == "GET"
+    assert response.body["share_boundary"]["history_boundary"]["canonical_route"] == "/api/public-shares/{share_id}/history"
+    assert response.body["share_boundary"]["history_boundary"]["result_surface"] == "public_share_history"
+    assert response.body["share_boundary"]["history_boundary"]["entry_boundary"]["entry_surface"] == "public_share_audit_entry"
+    assert response.body["share_boundary"]["history_boundary"]["entry_boundary"]["identity_field"] == "sequence"
+    assert response.body["share_boundary"]["history_boundary"]["entry_boundary"]["timestamp_field"] == "at"
     assert response.body["artifact_boundary"]["role_boundary"]["identity_field"] == "commit_id"
     assert response.body["artifact_boundary"]["role_boundary"]["editor_continuity_posture"] == "ui_forbidden_in_canonical_snapshot"
     assert response.body["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
@@ -1062,6 +1068,10 @@ def test_public_share_history_route_returns_audit_entries() -> None:
     assert response.body["history"][0]["event_type"] == "created"
     assert response.body["share_boundary"]["share_family"] == "nex.public-link-share"
     assert response.body["share_boundary"]["history_access_posture"] == "public_audit_history"
+    assert response.body["share_boundary"]["history_boundary"]["canonical_http_method"] == "GET"
+    assert response.body["share_boundary"]["history_boundary"]["canonical_route"] == "/api/public-shares/{share_id}/history"
+    assert response.body["share_boundary"]["history_boundary"]["result_surface"] == "public_share_history"
+    assert response.body["share_boundary"]["history_boundary"]["entry_boundary"]["entry_surface"] == "public_share_audit_entry"
     assert response.body["artifact_boundary"]["role_boundary"]["storage_role"] == "commit_snapshot"
 
 

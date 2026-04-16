@@ -105,7 +105,14 @@ def test_get_public_nex_share_boundary_declares_bounded_link_surface() -> None:
     assert boundary.management_operation_boundaries[2].denial_reason_code == "public_share.management_not_allowed"
     assert boundary.history_boundary.access_posture == "public_audit_history"
     assert boundary.history_boundary.ordering == "ascending_sequence"
+    assert boundary.history_boundary.canonical_http_method == "GET"
+    assert boundary.history_boundary.canonical_route == "/api/public-shares/{share_id}/history"
+    assert boundary.history_boundary.result_surface == "public_share_history"
     assert boundary.history_boundary.event_types == ("created", "expiration_extended", "revoked", "archived", "unarchived")
+    assert boundary.history_boundary.entry_boundary.entry_surface == "public_share_audit_entry"
+    assert boundary.history_boundary.entry_boundary.identity_field == "sequence"
+    assert boundary.history_boundary.entry_boundary.timestamp_field == "at"
+    assert boundary.history_boundary.entry_boundary.detail_payload_value_posture == "string_map_when_present"
     format_boundary = get_public_nex_format_boundary()
     assert format_boundary.working_save.editor_continuity_posture == "ui_continuity_allowed"
     assert format_boundary.working_save.commit_boundary_posture == "must_strip_ui_before_commit_snapshot"

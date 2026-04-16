@@ -130,14 +130,31 @@ class PublicNexShareOperationBoundary:
 
 
 @dataclass(frozen=True)
+class PublicNexShareHistoryEntryBoundary:
+    entry_surface: str
+    identity_field: str
+    timestamp_field: str
+    event_type_field: str
+    actor_identity_field: str
+    stored_lifecycle_field: str
+    effective_lifecycle_field: str
+    detail_payload_field: str
+    detail_payload_value_posture: str
+
+
+@dataclass(frozen=True)
 class PublicNexShareHistoryBoundary:
     access_posture: str
     ordering: str
+    canonical_http_method: str
+    canonical_route: str
+    result_surface: str
     actor_identity_posture: str
     event_types: tuple[ShareAuditEventType, ...]
     includes_stored_lifecycle_state: bool
     includes_effective_lifecycle_state: bool
     detail_payload_posture: str
+    entry_boundary: PublicNexShareHistoryEntryBoundary
 
 
 @dataclass(frozen=True)

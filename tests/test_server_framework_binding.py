@@ -445,6 +445,10 @@ def test_framework_binding_handles_public_share_history_round_trip() -> None:
     assert parsed["audit_summary"]["event_count"] == 1
     assert parsed["history"][0]["event_type"] == "created"
     assert parsed["share_boundary"]["share_family"] == "nex.public-link-share"
+    assert parsed["share_boundary"]["history_boundary"]["canonical_http_method"] == "GET"
+    assert parsed["share_boundary"]["history_boundary"]["canonical_route"] == "/api/public-shares/{share_id}/history"
+    assert parsed["share_boundary"]["history_boundary"]["result_surface"] == "public_share_history"
+    assert parsed["share_boundary"]["history_boundary"]["entry_boundary"]["entry_surface"] == "public_share_audit_entry"
     assert parsed["artifact_boundary"]["role_boundary"]["storage_role"] == "commit_snapshot"
 
 

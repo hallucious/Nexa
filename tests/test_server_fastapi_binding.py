@@ -1663,6 +1663,10 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     assert history_payload['audit_summary']['event_count'] == 1
     assert history_payload['history'][0]['event_type'] == 'created'
     assert history_payload['share_boundary']['share_family'] == 'nex.public-link-share'
+    assert history_payload['share_boundary']['history_boundary']['canonical_http_method'] == 'GET'
+    assert history_payload['share_boundary']['history_boundary']['canonical_route'] == '/api/public-shares/{share_id}/history'
+    assert history_payload['share_boundary']['history_boundary']['result_surface'] == 'public_share_history'
+    assert history_payload['share_boundary']['history_boundary']['entry_boundary']['entry_surface'] == 'public_share_audit_entry'
     assert history_payload['artifact_boundary']['role_boundary']['storage_role'] == 'commit_snapshot'
 
     artifact_response = client.get('/api/public-shares/share-fastapi-001/artifact')
