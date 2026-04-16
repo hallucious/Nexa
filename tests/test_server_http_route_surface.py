@@ -574,6 +574,8 @@ def test_starter_template_catalog_route_returns_public_template_exchange_surface
     assert response.body["status"] == "ready"
     assert response.body["catalog"]["family"] == "starter-circuit-template-catalog"
     template = next(item for item in response.body["templates"] if item["template_id"] == "text_summarizer")
+    assert template["template_ref"] == "nexa-curated:text_summarizer@1.0"
+    assert template["lookup_aliases"] == ["text_summarizer", "nexa-curated:text_summarizer@1.0"]
     assert template["template_version"] == "1.0"
     assert template["curation_status"] == "curated"
     assert template["provenance"]["family"] == "starter-template"
@@ -586,13 +588,14 @@ def test_starter_template_detail_route_returns_one_template() -> None:
     response = RunHttpRouteSurface.handle_get_starter_circuit_template(
         http_request=HttpRouteRequest(
             method="GET",
-            path="/api/templates/starter-circuits/text_summarizer",
-            path_params={"template_id": "text_summarizer"},
+            path="/api/templates/starter-circuits/nexa-curated: text_summarizer@1.0".replace(" ", ""),
+            path_params={"template_id": "nexa-curated:text_summarizer@1.0"},
         ),
     )
 
     assert response.status_code == 200
     assert response.body["template"]["template_id"] == "text_summarizer"
+    assert response.body["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert response.body["template"]["provenance"]["source"] == "nexa-curated"
     assert response.body["template"]["compatibility"]["apply_behavior"] == "replace_designer_request"
     assert response.body["routes"]["catalog"] == "/api/templates/starter-circuits"
@@ -626,6 +629,7 @@ def test_apply_starter_template_route_updates_workspace_shell_draft() -> None:
     assert response.body["status"] == "accepted"
     assert response.body["workspace_id"] == "ws-001"
     assert response.body["template"]["template_id"] == "text_summarizer"
+    assert response.body["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert response.body["template"]["compatibility"]["family"] == "workspace-shell-draft"
     assert response.body["template"]["supported_entry_surfaces"] == ["designer", "template_gallery"]
     assert response.body["shell"]["workspace_id"] == "ws-001"

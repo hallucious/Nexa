@@ -717,14 +717,17 @@ def test_framework_binding_handles_starter_template_routes_round_trip() -> None:
     assert catalog_response.status_code == 200
     catalog_payload = json.loads(catalog_response.body_text)
     assert catalog_payload["catalog"]["family"] == "starter-circuit-template-catalog"
+    assert catalog_payload["templates"][0]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert catalog_payload["templates"][0]["provenance"]["family"] == "starter-template"
     assert detail_response.status_code == 200
     detail_payload = json.loads(detail_response.body_text)
     assert detail_payload["template"]["template_id"] == "text_summarizer"
+    assert detail_payload["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert detail_payload["template"]["compatibility"]["family"] == "workspace-shell-draft"
     assert apply_response.status_code == 200
     apply_payload = json.loads(apply_response.body_text)
     assert apply_payload["template"]["template_id"] == "text_summarizer"
+    assert apply_payload["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert apply_payload["template"]["supported_storage_roles"] == ["working_save"]
 
 
@@ -1099,6 +1102,8 @@ def test_framework_binding_put_workspace_shell_draft_persists_template_and_valid
         request=_request(method='PUT', path='/api/workspaces/ws-001/shell/draft', path_params={'workspace_id': 'ws-001'}, json_body={
             'template_id': 'text_summarizer',
             'template_display_name': 'Text Summarizer',
+            'template_ref': 'nexa-curated:text_summarizer@1.0',
+            'template_version': '1.0',
             'request_text': 'Summarize this article.',
             'designer_action': 'apply_template',
             'validation_action': 'open_validation_detail',
@@ -1119,6 +1124,7 @@ def test_framework_binding_put_workspace_shell_draft_persists_template_and_valid
     parsed = json.loads(response.body_text)
     assert response.status_code == 200
     assert artifact_store['ws-001']['designer']['server_backed_shell_state']['selected_template_id'] == 'text_summarizer'
+    assert artifact_store['ws-001']['designer']['server_backed_shell_state']['selected_template_ref'] == 'nexa-curated:text_summarizer@1.0'
     assert artifact_store['ws-001']['designer']['draft_request_text'] == 'Summarize this article.'
     assert artifact_store['ws-001']['ui']['metadata']['runtime_shell_server_state']['validation_action'] == 'open_validation_detail'
     assert 'Persisted template: Text Summarizer' in '\n'.join(parsed['designer_section']['summary']['lines'])

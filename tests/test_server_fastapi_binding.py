@@ -524,18 +524,21 @@ def test_fastapi_binding_starter_template_routes_round_trip() -> None:
     assert catalog_response.status_code == 200
     catalog_payload = catalog_response.json()
     assert catalog_payload['catalog']['family'] == 'starter-circuit-template-catalog'
+    assert catalog_payload['templates'][0]['template_ref'] == 'nexa-curated:text_summarizer@1.0'
     assert catalog_payload['templates'][0]['provenance']['family'] == 'starter-template'
 
     detail_response = client.get('/api/templates/starter-circuits/text_summarizer')
     assert detail_response.status_code == 200
     detail_payload = detail_response.json()
     assert detail_payload['template']['template_id'] == 'text_summarizer'
+    assert detail_payload['template']['template_ref'] == 'nexa-curated:text_summarizer@1.0'
     assert detail_payload['template']['compatibility']['family'] == 'workspace-shell-draft'
 
     apply_response = client.post('/api/workspaces/ws-001/starter-templates/text_summarizer/apply', headers=_session_headers())
     assert apply_response.status_code == 200
     apply_payload = apply_response.json()
     assert apply_payload['template']['template_id'] == 'text_summarizer'
+    assert apply_payload['template']['template_ref'] == 'nexa-curated:text_summarizer@1.0'
     assert apply_payload['template']['supported_storage_roles'] == ['working_save']
 
 

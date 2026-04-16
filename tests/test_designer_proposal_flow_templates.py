@@ -26,3 +26,11 @@ def test_get_starter_circuit_template_returns_specific_template() -> None:
     assert "code" in template.designer_request_text.lower()
     assert template.provenance_source == "nexa-curated"
     assert template.supported_entry_surfaces == ("designer", "template_gallery")
+    assert template.template_ref == "nexa-curated:code_reviewer@1.0"
+
+
+def test_get_starter_circuit_template_accepts_canonical_template_ref() -> None:
+    template = get_starter_circuit_template("nexa-curated:code_reviewer@1.0")
+
+    assert template.template_id == "code_reviewer"
+    assert template.template_ref == "nexa-curated:code_reviewer@1.0"

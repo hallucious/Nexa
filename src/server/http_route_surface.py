@@ -170,6 +170,13 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
     template_id = str(body.get("template_id") or "").strip() or None
     template_display_name = str(body.get("template_display_name") or "").strip() or None
     template_category = str(body.get("template_category") or "").strip() or None
+    template_ref = str(body.get("template_ref") or "").strip() or None
+    template_version = str(body.get("template_version") or "").strip() or None
+    template_provenance_family = str(body.get("template_provenance_family") or "").strip() or None
+    template_provenance_source = str(body.get("template_provenance_source") or "").strip() or None
+    template_curation_status = str(body.get("template_curation_status") or "").strip() or None
+    template_compatibility_family = str(body.get("template_compatibility_family") or "").strip() or None
+    template_apply_behavior = str(body.get("template_apply_behavior") or "").strip() or None
     request_text = str(body.get("request_text") or "").strip() or None
     designer_action = str(body.get("designer_action") or "").strip() or None
     validation_action = str(body.get("validation_action") or "").strip() or None
@@ -184,6 +191,13 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
                 "selected_template_id",
                 "selected_template_display_name",
                 "selected_template_category",
+                "selected_template_ref",
+                "selected_template_version",
+                "selected_template_provenance_family",
+                "selected_template_provenance_source",
+                "selected_template_curation_status",
+                "selected_template_compatibility_family",
+                "selected_template_apply_behavior",
                 "request_text",
                 "last_action",
                 "updated_at",
@@ -201,6 +215,20 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
                 designer_state["selected_template_display_name"] = template_display_name
             if template_category is not None:
                 designer_state["selected_template_category"] = template_category
+            if template_ref is not None:
+                designer_state["selected_template_ref"] = template_ref
+            if template_version is not None:
+                designer_state["selected_template_version"] = template_version
+            if template_provenance_family is not None:
+                designer_state["selected_template_provenance_family"] = template_provenance_family
+            if template_provenance_source is not None:
+                designer_state["selected_template_provenance_source"] = template_provenance_source
+            if template_curation_status is not None:
+                designer_state["selected_template_curation_status"] = template_curation_status
+            if template_compatibility_family is not None:
+                designer_state["selected_template_compatibility_family"] = template_compatibility_family
+            if template_apply_behavior is not None:
+                designer_state["selected_template_apply_behavior"] = template_apply_behavior
             if request_text is not None:
                 designer_state["request_text"] = request_text
                 designer["draft_request_text"] = request_text
@@ -215,6 +243,13 @@ def _apply_workspace_shell_draft_patch(current_source: dict[str, Any], body: Map
                     "template_id": template_id,
                     "template_display_name": template_display_name,
                     "template_category": template_category,
+                    "template_ref": template_ref,
+                    "template_version": template_version,
+                    "template_provenance_family": template_provenance_family,
+                    "template_provenance_source": template_provenance_source,
+                    "template_curation_status": template_curation_status,
+                    "template_compatibility_family": template_compatibility_family,
+                    "template_apply_behavior": template_apply_behavior,
                     "request_text": request_text,
                     "designer_action": designer_action,
                     "occurred_at": now_iso,
@@ -3072,6 +3107,8 @@ class RunHttpRouteSurface:
         )
         return {
             "template_id": spec.template_id,
+            "template_ref": spec.template_ref,
+            "lookup_aliases": list(spec.lookup_aliases),
             "display_name": display_name,
             "category": category_label,
             "category_id": spec.category,
@@ -3219,7 +3256,8 @@ class RunHttpRouteSurface:
             return guard
         workspace_id, workspace_row, workspace_context = guard
         current_source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
-        if getattr(model.meta, "storage_role", None) != "working_save":
+        current_storage_role = str(getattr(model.meta, "storage_role", None) or "").strip()
+        if current_storage_role != "working_save":
             return _route_response(409, {
                 "status": "rejected",
                 "error_family": "starter_template_write_failure",
@@ -3228,13 +3266,30 @@ class RunHttpRouteSurface:
                 "workspace_id": workspace_id,
                 "template_id": template_id,
             })
+        if not spec.supports_storage_role(current_storage_role):
+            return _route_response(409, {
+                "status": "rejected",
+                "error_family": "starter_template_write_failure",
+                "reason_code": "starter_template.storage_role_not_supported",
+                "message": "Requested starter template does not support the current workspace storage role.",
+                "workspace_id": workspace_id,
+                "template_id": template_id,
+                "storage_role": current_storage_role,
+            })
         updated_source = _apply_workspace_shell_draft_patch(
             current_source,
             {
                 "request_text": spec.designer_request_text,
                 "template_id": spec.template_id,
+                "template_ref": spec.template_ref,
+                "template_version": spec.template_version,
                 "template_display_name": spec.display_name,
                 "template_category": spec.category,
+                "template_provenance_family": spec.provenance_family,
+                "template_provenance_source": spec.provenance_source,
+                "template_curation_status": spec.curation_status,
+                "template_compatibility_family": spec.compatibility_family,
+                "template_apply_behavior": spec.apply_behavior,
                 "designer_action": "apply_template",
             },
         )

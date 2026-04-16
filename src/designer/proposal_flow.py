@@ -54,6 +54,22 @@ class StarterCircuitTemplateSpec:
     supported_entry_surfaces: tuple[str, ...] = ("designer", "template_gallery")
     supported_storage_roles: tuple[str, ...] = ("working_save",)
 
+    @property
+    def template_ref(self) -> str:
+        return f"{self.provenance_source}:{self.template_id}@{self.template_version}"
+
+    @property
+    def lookup_aliases(self) -> tuple[str, ...]:
+        return (self.template_id, self.template_ref)
+
+    def matches_lookup(self, value: str) -> bool:
+        candidate = str(value or "").strip()
+        return bool(candidate) and candidate in self.lookup_aliases
+
+    def supports_storage_role(self, storage_role: str | None) -> bool:
+        role = str(storage_role or "").strip()
+        return bool(role) and role in self.supported_storage_roles
+
 
 _STARTER_CIRCUIT_TEMPLATES: tuple[StarterCircuitTemplateSpec, ...] = (
     StarterCircuitTemplateSpec(
@@ -134,8 +150,9 @@ def list_starter_circuit_templates() -> tuple[StarterCircuitTemplateSpec, ...]:
 
 
 def get_starter_circuit_template(template_id: str) -> StarterCircuitTemplateSpec:
+    lookup = str(template_id or "").strip()
     for template in _STARTER_CIRCUIT_TEMPLATES:
-        if template.template_id == template_id:
+        if template.matches_lookup(lookup):
             return template
     raise KeyError(f"unknown starter template: {template_id}")
 
