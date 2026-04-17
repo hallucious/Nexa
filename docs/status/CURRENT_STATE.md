@@ -17,12 +17,12 @@ It does not replace the canonical architecture or contract documents.
 
 ## Authoritative Snapshot
 
-* latest confirmed repository baseline: `e6ee133`
-* latest verified baseline: `2321 passed, 14 skipped`
-* status source: latest repository snapshot aligned to the current handoff baseline (`Nexa_e6ee133.zip`)
+* latest confirmed repository baseline: `ac3008d`
+* latest verified baseline: `2497 passed, 14 skipped`
+* status source: latest repository snapshot aligned to the current handoff baseline (`Nexa_ac3008d.zip`)
 * canonical macro roadmap reference: `nexa_implementation_order_final_v2_2.md`
 * canonical productization reference: `docs/specs/ui/general_user_productization_priority.md`
-* practical next-seam rule: treat Phase 7 and Phase 8 as closed enough to stop being the default work mode, and keep the next official line inside Phase 9 public-boundary / integration consolidation
+* practical next-seam rule: treat Phase 7 and Phase 8 as closed enough to stop being the default work mode, treat the large Phase 9.3 policy-surface standardization line as materially closed, and move the next official line into Phase 9 closure-audit / remaining macro expansion
 
 ---
 
@@ -69,7 +69,7 @@ The current surfaced beginner / return-use product path has now also practically
 | Phase 7 return-use loop | Complete baseline | circuit library, beginner result history, onboarding continuity alignment, and in-product feedback are closure-audited |
 | Phase 8 inclusion / product completeness | Complete baseline | surfaced accessibility and Korean localization closure are now practical and closure-audited |
 | surfaced metadata / terminology refinement | Complete baseline | major user-facing metadata and terminology cleanup batches have been applied |
-| Phase 9 (Stage 5 product expansion) | In progress | public-boundary-first expansion is now active; `src.sdk` and `src.sdk.integration` establish the public spine and minimal MCP adapter/export scaffold plus manifest-level export refinementing has started the Phase 9.2 integration line |
+| Phase 9 (Stage 5 product expansion) | In progress | public-boundary-first expansion is now broad across the major user-facing/public families; the large Phase 9.3 cross-family policy-standardization line is materially closed, and the next remaining work should be closure-audit plus remaining macro expansion such as sharing / ecosystem layers |
 
 ---
 
@@ -100,15 +100,12 @@ The surfaced beginner / return-use accessibility and Korean localization line is
 
 The next official product-facing line is Phase 9.
 
-Its first seam should be public-boundary-first expansion work such as:
+Its now-correct immediate seam is no longer another family-policy sweep.
 
-* public `.nex` format standardization
-* SDK / public API boundary clarification
-* public-contract versus internal-implementation boundary declaration
+The large public-boundary-first standardization line has already been pushed across the major user-facing/public families, so the next remaining Phase 9 work should focus on:
 
-Later Phase 9 layers may then cover:
-
-* MCP / integration-surface work
+* Phase 9 closure-audit / state-truth synchronization
+* explicit determination of what still remains outside the closed policy-standardization line
 * circuit sharing
 * community / ecosystem expansion
 
@@ -134,4 +131,4 @@ Every new surfaced family still risks drift across:
 
 The project should now be interpreted as:
 
-**engine/storage/UI foundations are implemented, broad server/product continuity is present in code, Phase 7 and Phase 8 are closed strongly enough to keep closed, and the current responsible top-level move is to continue Phase 9 public-boundary / integration work from the verified `e6ee133` / `2321 passed, 14 skipped` baseline rather than reopening older seams.**
+**engine/storage/UI foundations are implemented, broad server/product continuity is present in code, Phase 7 and Phase 8 are closed strongly enough to keep closed, the large Phase 9.3 user-facing/public policy-standardization line is materially closed, and the current responsible top-level move is to perform Phase 9 closure-audit / transition work from the verified `ac3008d` / `2497 passed, 14 skipped` baseline rather than reopening older seams or repeating already-closed family sweeps.**

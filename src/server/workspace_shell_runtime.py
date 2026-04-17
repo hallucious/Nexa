@@ -15,6 +15,7 @@ from src.ui.builder_shell import read_builder_shell_view_model
 from src.ui.i18n import normalize_ui_language, ui_language_from_sources, ui_text
 from src.ui.template_gallery import read_template_gallery_view_model
 from src.server.workspace_shell_sections import build_shell_section
+from src.storage.share_api import describe_public_nex_link_share
 
 _WORKSPACE_ARTIFACT_KEYS: tuple[str, ...] = (
     "working_save_source",
@@ -1301,6 +1302,89 @@ def _step_state_banner(
         "recommended_section_label": next_section_label,
     }
 
+def _artifact_canonical_ref_for_model(model: Any) -> str | None:
+    if isinstance(model, WorkingSaveModel):
+        return str(model.meta.working_save_id or "").strip() or None
+    if isinstance(model, CommitSnapshotModel):
+        return str(model.meta.commit_id or "").strip() or None
+    if isinstance(model, ExecutionRecordModel):
+        return str(model.meta.run_id or "").strip() or None
+    return None
+
+
+def _share_history_section(
+    share_payload_rows: Sequence[Mapping[str, Any]],
+    model: Any,
+    workspace_id: str,
+    *,
+    app_language: str = "en",
+) -> dict[str, Any]:
+    canonical_ref = _artifact_canonical_ref_for_model(model)
+    if not canonical_ref:
+        return build_shell_section(
+            headline=ui_text("server.shell.share_history", app_language=app_language, fallback_text="Share history"),
+            lines=_summary_lines(ui_text("server.shell.no_recent_share_history", app_language=app_language, fallback_text="No public share history is available yet.")),
+            detail_title=ui_text("server.shell.share_history_detail", app_language=app_language, fallback_text="Share history detail"),
+            detail_empty=ui_text("server.shell.share_history_entries_pending", app_language=app_language, fallback_text="Share history entries will appear here after you publish a share."),
+            controls=[{
+                "control_id": "share-history-create",
+                "label": ui_text("server.shell.create_share", app_language=app_language, fallback_text="Create share"),
+                "action_kind": "open_workspace_share_create",
+                "action_target": workspace_id,
+            }],
+            history=[],
+        )
+    entries: list[dict[str, Any]] = []
+    for row in share_payload_rows:
+        try:
+            descriptor = describe_public_nex_link_share(dict(row))
+        except Exception:
+            continue
+        if str(descriptor.canonical_ref or "").strip() != canonical_ref:
+            continue
+        entries.append({
+            "share_id": descriptor.share_id,
+            "title": descriptor.title,
+            "state": descriptor.lifecycle_state,
+            "share_path": descriptor.share_path,
+            "updated_at": descriptor.updated_at,
+            "archived": descriptor.archived,
+            "audit_event_count": descriptor.audit_event_count,
+        })
+    entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
+    latest = entries[0] if entries else None
+    controls: list[dict[str, Any]] = [{
+        "control_id": "share-history-create",
+        "label": ui_text("server.shell.create_share", app_language=app_language, fallback_text="Create share"),
+        "action_kind": "open_workspace_share_create",
+        "action_target": workspace_id,
+    }]
+    if latest is not None:
+        controls.append({
+            "control_id": f"share-history-open-{latest['share_id']}",
+            "label": ui_text("server.shell.open_latest_share", app_language=app_language, fallback_text="Open latest share"),
+            "action_kind": "open_public_share",
+            "action_target": latest["share_id"],
+        })
+    return build_shell_section(
+        headline=ui_text("server.shell.share_history", app_language=app_language, fallback_text="Share history"),
+        lines=_summary_lines(
+            ui_text("server.shell.recent_shares_prefix", app_language=app_language, fallback_text="Recent shares: ") + str(len(entries)) if entries else ui_text("server.shell.no_recent_share_history", app_language=app_language, fallback_text="No public share history is available yet."),
+            ui_text("server.shell.latest_prefix", app_language=app_language, fallback_text="Latest: ") + f"{latest['share_id']} — {latest['state']}" if latest else None,
+        ),
+        detail_title=ui_text("server.shell.share_history_detail", app_language=app_language, fallback_text="Share history detail"),
+        detail_items=[
+            f"{index + 1}. {entry['share_id']} — {entry['state']}"
+            + (f" — {entry['title']}" if entry.get("title") else "")
+            + (f" — {entry['share_path']}" if entry.get("share_path") else "")
+            for index, entry in enumerate(entries[:3])
+        ],
+        detail_empty=ui_text("server.shell.share_history_entries_pending", app_language=app_language, fallback_text="Share history entries will appear here after you publish a share."),
+        controls=controls,
+        history=entries[:3],
+    )
+
+
 def build_workspace_shell_runtime_payload(
     *,
     workspace_row: Mapping[str, Any] | None,
@@ -1310,6 +1394,7 @@ def build_workspace_shell_runtime_payload(
     onboarding_rows: Sequence[Mapping[str, Any]] = (),
     artifact_rows_lookup: Any | None = None,
     trace_rows_lookup: Any | None = None,
+    share_payload_rows: Sequence[Mapping[str, Any]] = (),
     app_language_override: str | None = None,
 ) -> dict[str, Any]:
     source = resolve_workspace_artifact_source(workspace_row, artifact_source)
@@ -1381,6 +1466,7 @@ def build_workspace_shell_runtime_payload(
             "workspace_shell_commit": f"/api/workspaces/{workspace_id}/shell/commit",
             "workspace_shell_checkout": f"/api/workspaces/{workspace_id}/shell/checkout",
             "workspace_shell_launch": f"/api/workspaces/{workspace_id}/shell/launch",
+            "workspace_shell_share": f"/api/workspaces/{workspace_id}/shell/share",
         },
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,
@@ -1398,6 +1484,7 @@ def build_workspace_shell_runtime_payload(
         "result_history_section": _result_history_section(recent_run_rows, workspace_id, result_rows_by_run_id),
         "trace_history_section": _trace_history_section(recent_run_rows, workspace_id, trace_rows_lookup, app_language=app_language),
         "artifacts_history_section": _artifacts_history_section(recent_run_rows, workspace_id, artifact_rows_lookup),
+        "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
         "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),
         "navigation": navigation,

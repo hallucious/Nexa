@@ -602,7 +602,18 @@ def test_fastapi_binding_circuit_library_routes_round_trip() -> None:
     assert '/app/workspaces/ws-001' in page_response.text
 
 def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
-    client = _make_client()
+    client = _make_client(
+        public_share_payload_rows_provider=lambda: (
+            export_public_nex_link_share(
+                _valid_working_save_artifact(),
+                share_id='share-shell-fastapi-001',
+                title='FastAPI Working Save Share',
+                created_at='2026-04-15T12:15:00+00:00',
+                updated_at='2026-04-15T12:15:00+00:00',
+                issued_by_user_ref='user-owner',
+            ),
+        )
+    )
     response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())
 
     assert response.status_code == 200
@@ -618,6 +629,11 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_result_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
     assert payload['routes']['latest_run_trace'] == '/api/runs/run-002/trace?limit=20'
+    assert payload['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shell/share'
+    assert payload['share_history_section']['summary']['headline'] == 'Share history'
+    assert 'Recent shares: 1' in payload['share_history_section']['summary']['lines']
+    assert 'share-shell-fastapi-001' in '\n'.join(payload['share_history_section']['detail']['items'])
+    assert payload['share_history_section']['controls'][0]['action_kind'] == 'open_workspace_share_create'
     assert payload['identity_policy']['surface_family'] == 'workspace-shell'
     assert payload['namespace_policy']['family'] == 'workspace-shell'
     assert payload['routes']['latest_run_artifacts'] == '/api/runs/run-002/artifacts'

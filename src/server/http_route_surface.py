@@ -1482,6 +1482,7 @@ class RunHttpRouteSurface:
         artifact_source: Any | None = None,
         artifact_rows_lookup=None,
         trace_rows_lookup=None,
+        share_payload_rows_provider=None,
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace shell route only supports GET."})
@@ -1535,6 +1536,7 @@ class RunHttpRouteSurface:
             onboarding_rows=onboarding_rows,
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
+            share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (),
             app_language_override=_request_app_language(http_request.query_params),
         )
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
@@ -1555,6 +1557,7 @@ class RunHttpRouteSurface:
         artifact_rows_lookup=None,
         trace_rows_lookup=None,
         workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+        share_payload_rows_provider=None,
     ) -> HttpRouteResponse:
         if http_request.method != "PUT":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace shell draft write route only supports PUT."})
@@ -1648,6 +1651,7 @@ class RunHttpRouteSurface:
             onboarding_rows=onboarding_rows,
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
+            share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (),
             app_language_override=_request_app_language(http_request.query_params),
         )
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
@@ -1860,6 +1864,7 @@ class RunHttpRouteSurface:
         artifact_rows_lookup=None,
         trace_rows_lookup=None,
         workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+        share_payload_rows_provider=None,
     ) -> HttpRouteResponse:
         guard = cls._workspace_shell_write_guard(http_request, workspace_context, workspace_row, expected_path="/api/workspaces/{workspace_id}/shell/commit", method_label="Workspace shell commit")
         if isinstance(guard, HttpRouteResponse):
@@ -1887,7 +1892,7 @@ class RunHttpRouteSurface:
             return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.commit_blocked", "message": str(exc), "workspace_id": workspace_context.workspace_id})
         serialized = serialize_commit_snapshot(snapshot)
         persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
-        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, app_language_override=_request_app_language(http_request.query_params))
+        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (), app_language_override=_request_app_language(http_request.query_params))
         payload["transition"] = {"action": "commit_workspace_shell", "from_role": "working_save", "to_role": "commit_snapshot", "workspace_id": workspace_context.workspace_id, "commit_id": snapshot.meta.commit_id, "source_working_save_id": snapshot.meta.source_working_save_id}
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
         payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
@@ -1908,6 +1913,7 @@ class RunHttpRouteSurface:
         trace_rows_lookup=None,
         workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
         public_share_payload_provider=None,
+        share_payload_rows_provider=None,
     ) -> HttpRouteResponse:
         guard = cls._workspace_shell_write_guard(http_request, workspace_context, workspace_row, expected_path="/api/workspaces/{workspace_id}/shell/checkout", method_label="Workspace shell checkout")
         if isinstance(guard, HttpRouteResponse):
@@ -1946,7 +1952,7 @@ class RunHttpRouteSurface:
         working_save = create_working_save_from_commit_snapshot(model, working_save_id=working_save_id)
         serialized = serialize_working_save(working_save)
         persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
-        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, app_language_override=_request_app_language(http_request.query_params))
+        payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (), app_language_override=_request_app_language(http_request.query_params))
         payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": model.meta.commit_id, "working_save_id": working_save.meta.working_save_id, "source_share_id": source_share_id}
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
         payload["namespace_policy"] = _workspace_shell_namespace_policy_body()

@@ -8,7 +8,7 @@ Version: 3.4.0
 
 ## Release Snapshot (current convergence baseline)
 
-The current repository state should now be read from the `503d977` / `2472 passed, 14 skipped` baseline rather than from the older `e6ee133` / `2321 passed, 14 skipped` snapshot (or earlier `ffc479d` / `2285 passed, 14 skipped` closure points).
+The current repository state should now be read from the `ac3008d` / `2497 passed, 14 skipped` baseline rather than from the older `503d977` / `2472 passed, 14 skipped`, `e6ee133` / `2497 passed, 14 skipped`, or `ffc479d` / `2285 passed, 14 skipped` closure points.
 
 ### 1. Core Execution Engine
 
@@ -68,12 +68,12 @@ The current repository state should now be read from the `503d977` / `2472 passe
 ### 5. Current Verified Baseline
 
 ```text
-2321 passed, 14 skipped
+2497 passed, 14 skipped
 ```
 
-* latest confirmed repository baseline: `e6ee133`
+* latest confirmed repository baseline: `ac3008d`
 * canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
-* practical codebase state has progressed from the earlier Phase 4.5 continuity foundation through Phase 7 return-use loop closure and Phase 8 inclusion/product-completeness closure into **Phase 9 public-boundary-first expansion**
+* practical codebase state has progressed from the earlier Phase 4.5 continuity foundation through Phase 7 return-use loop closure and Phase 8 inclusion/product-completeness closure into **Phase 9.3 cross-family user-facing/public contract standardization**, and that standardization line is now materially closed across the major user-facing families
 * `src.sdk` is now the curated public SDK boundary and `src.sdk.integration` is the first explicit integration seam
 * the old `ffc479d` / `2285 passed, 14 skipped` top-level status world is now historical rather than authoritative
 
@@ -251,14 +251,14 @@ CLI
 2321 passed, 14 skipped
 ```
 
-* latest confirmed repository baseline: `e6ee133`
-* current practical position is best described as: **Phase 4.5 continuity foundation plus Phase 7 closure plus Phase 8 closure are established strongly enough that the repository's next official work line is Phase 9 public-boundary-first expansion**
+* latest confirmed repository baseline: `ac3008d`
+* current practical position is best described as: **Phase 4.5 continuity foundation plus Phase 7 closure plus Phase 8 closure are established strongly enough that the repository has practically closed the large Phase 9.3 policy-surface standardization line and should now move into Phase 9 closure-audit / transition work rather than repeating more family-policy sweeps**
 * provider probe persistence foundation remains a closed-enough baseline and is no longer the main next-seam candidate
 * the server/product surface now spans workspace, onboarding, recent activity, run launch/read/list, artifact/trace, provider operational surfaces, circuit library, result history, and feedback channel flows
 * continuity projection and surfaced inclusion quality are now broad enough that further work should stay in the next official roadmap phase instead of extending Phase 8 indefinitely
 * the macro roadmap and the practical code state must both be kept visible:
   - macro roadmap: still `nexa_implementation_order_final_v2_2.md`
-  - practical code state: Phase 9.1 public-boundary foundation has been established and Phase 9.2 integration-side consolidation has started
+  - practical code state: Phase 9.1 public-boundary foundation and Phase 9.2 integration-side consolidation are already behind the current baseline, and the major Phase 9.3 cross-family policy standardization line is now materially closed across starter-template, public-share, public integration, issuer management, continuity, bootstrap, run/provider, run-adjacent, and workspace shell/launch families
 * `src.sdk.integration` now contains both curated MCP-style descriptors and a minimal MCP adapter/export scaffold plus manifest-level export refinement over that boundary
 * general-user productization remains a real roadmap priority, but the next official target should now stay inside **Phase 9 (Stage 5 product expansion)** work
 
@@ -266,9 +266,9 @@ CLI
 
 ### Next Priority
 
-* keep the synchronized `e6ee133` / `2321 passed, 14 skipped` status view authoritative at the top level
+* keep the synchronized `ac3008d` / `2497 passed, 14 skipped` status view authoritative at the top level
 * treat Phase 7 and Phase 8 as closed unless a concrete contradiction is found in source or tests
-* begin the next official line from **Phase 9 (Stage 5 product expansion)** work rather than extending Phase 8 by habit
+* begin the next official line from **Phase 9 closure-audit / remaining macro expansion** work rather than extending Phase 8 by habit or repeating already-closed policy-standardization families
 * keep `accounts / sessions` interpreted as earlier **Phase 4.5 foundation** scope rather than reopening them as fresh Phase 9 expansion work
 * keep route/binding/export alignment explicit across:
   - `src/server/http_route_surface.py`

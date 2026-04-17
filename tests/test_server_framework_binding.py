@@ -1076,6 +1076,23 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
             "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
             "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile"}},
         },
+        share_payload_rows_provider=lambda: (
+            export_public_nex_link_share(
+                {
+                    "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+                    "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+                    "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+                    "state": {"input": {}, "working": {}, "memory": {}},
+                    "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+                    "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+                },
+                share_id="share-shell-framework-001",
+                title="Framework Working Save Share",
+                created_at="2026-04-15T12:15:00+00:00",
+                updated_at="2026-04-15T12:15:00+00:00",
+                issued_by_user_ref="user-owner",
+            ),
+        ),
     )
 
     parsed = json.loads(response.body_text)
@@ -1101,6 +1118,11 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert 'First artifact id: artifact-1' in parsed['latest_run_artifacts_summary']['lines']
     assert parsed['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in parsed['latest_run_artifacts_detail']['items']
+    assert parsed['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shell/share'
+    assert parsed['share_history_section']['summary']['headline'] == 'Share history'
+    assert 'Recent shares: 1' in parsed['share_history_section']['summary']['lines']
+    assert 'share-shell-framework-001' in '\n'.join(parsed['share_history_section']['detail']['items'])
+    assert parsed['share_history_section']['controls'][0]['action_kind'] == 'open_workspace_share_create'
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
     assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'

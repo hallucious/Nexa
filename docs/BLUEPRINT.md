@@ -203,17 +203,17 @@ Engine
 
 Current implementation baseline:
 
-* latest confirmed repository baseline: `e6ee133`
-* latest verified baseline: `2321 passed, 14 skipped`
+* latest confirmed repository baseline: `ac3008d`
+* latest verified baseline: `2497 passed, 14 skipped`
 * the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
 * the practical codebase state has already closed the broad **Phase 4.5 continuity foundation**, **Phase 7 return-use loop**, and **Phase 8 inclusion / product-completeness** lines strongly enough that they should no longer be treated as the default next seam
 * the public-boundary-first **Phase 9** line is now the correct official top-level interpretation of the repository, with `src.sdk` acting as the curated public SDK surface and `src.sdk.integration` acting as the first explicit integration boundary
 * `src/server/` still contains the broad continuity families (workspace, onboarding, run, provider, artifact/trace, aggregate, and setup-entry surfaces) that make the earlier product continuity work real rather than speculative
 * `src/server/database_foundation.py` remains the canonical persistence-family foundation for workspace registry, run history, onboarding state, managed provider bindings, provider probe events, artifact index, and trace event index
 * the route/binding surface already exposes product/API continuity reads and writes for workspace, onboarding, provider operations, run launch/status/result/list, artifact detail, trace, recent activity, history summary, circuit library, result history, and feedback channel flows
-* `src/sdk.integration` now contains both curated MCP-style tool/resource descriptors and the minimal MCP adapter/export scaffold plus manifest-level export refinement needed to prove the Phase 9.2 integration boundary is runnable rather than decorative
-* top-level project-truth documents must therefore be interpreted against the `e6ee133` baseline and its verified `2321 passed, 14 skipped` state rather than the older `ffc479d` / `2285 passed, 14 skipped` snapshot
-* this practical server/product progress does **not** mean the macro productization sequence has been superseded: it means the repository has now practically closed the roadmap's Stage 3 and Stage 4 lines, established the public-boundary spine for Stage 5, and should keep its next official implementation focus inside **Phase 9.2 integration-side consolidation** rather than reopening older seams by habit
+* `src/sdk.integration` now contains curated MCP-style tool/resource descriptors plus the cross-family result-shape / required-top-level-key standardization that has been propagated across the major user-facing/public families in the current Phase 9.3 line
+* top-level project-truth documents must therefore be interpreted against the `ac3008d` baseline and its verified `2497 passed, 14 skipped` state rather than the older `e6ee133` / `2321 passed, 14 skipped` or `ffc479d` / `2285 passed, 14 skipped` snapshots
+* this practical server/product progress does **not** mean the macro productization sequence has been superseded: it means the repository has now practically closed the roadmap's Stage 3 and Stage 4 lines, established the public-boundary spine for Stage 5, materially closed the large **Phase 9.3 cross-family user-facing/public contract standardization** line, and should keep its next official implementation focus inside **Phase 9 closure-audit / remaining macro expansion** rather than reopening older seams by habit
 
 Interpretation rule:
 
@@ -284,7 +284,7 @@ Legacy `.nex` compatibility runtime concentration:
 
 ---
 
-## 4. Savefile & Bundle System (NEW)
+## 4. Savefile & Bundle System
 
 ### 4.1 `.nex` Storage Family
 
