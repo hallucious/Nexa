@@ -67,6 +67,7 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
     return {
         "status": "accepted",
         "message": ui_text("server.feedback.message_recorded", app_language=app_language, fallback_text="Feedback recorded for product learning."),
+        "workspace_id": workspace_id,
         "feedback": {
             "feedback_id": str(row.get("feedback_id") or ""),
             "workspace_id": workspace_id,

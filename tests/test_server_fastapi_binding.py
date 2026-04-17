@@ -567,9 +567,12 @@ def test_fastapi_binding_circuit_library_routes_round_trip() -> None:
     assert api_response.status_code == 200
     api_payload = api_response.json()
     assert api_payload['status'] == 'ready'
+    assert api_payload['identity_policy']['surface_family'] == 'circuit-library'
+    assert api_payload['namespace_policy']['family'] == 'circuit-library'
     assert api_payload['library']['returned_count'] == 1
     assert api_payload['library']['items'][0]['continue_href'] == '/app/workspaces/ws-001'
     assert api_payload['library']['items'][0]['result_history_href'] == '/app/workspaces/ws-001/results?run_id=run-001'
+    assert api_payload['item_sections'][0]['identity']['canonical_value'] == 'ws-001'
 
     page_response = client.get('/app/library', headers=_session_headers())
     assert page_response.status_code == 200
@@ -1314,8 +1317,11 @@ def test_fastapi_binding_workspace_result_history_routes_round_trip() -> None:
     api_response = client.get('/api/workspaces/ws-001/result-history', headers=_session_headers())
     assert api_response.status_code == 200
     api_payload = api_response.json()
+    assert api_payload['identity_policy']['surface_family'] == 'workspace-result-history'
+    assert api_payload['namespace_policy']['family'] == 'workspace-result-history'
     assert api_payload['result_history']['returned_count'] >= 1
     assert api_payload['result_history']['items'][0]['open_result_href'].startswith('/app/workspaces/ws-001/results?run_id=')
+    assert api_payload['item_sections'][0]['identity']['canonical_value'].startswith('run-')
     page_response = client.get('/app/workspaces/ws-001/results?run_id=run-002', headers=_session_headers())
     assert page_response.status_code == 200
     assert 'Recent results' in page_response.text
@@ -1355,6 +1361,8 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
     get_response = client.get('/api/workspaces/ws-001/feedback?surface=result_history&run_id=run-001', headers=_session_headers())
     assert get_response.status_code == 200
     get_payload = get_response.json()
+    assert get_payload['identity_policy']['surface_family'] == 'workspace-feedback'
+    assert get_payload['namespace_policy']['family'] == 'workspace-feedback'
     assert get_payload['feedback_channel']['submit_path'] == '/api/workspaces/ws-001/feedback'
     assert get_payload['feedback_channel']['prefill_surface'] == 'result_history'
     assert get_payload['feedback_channel']['prefill_run_id'] == 'run-001'
@@ -1371,8 +1379,13 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
     )
     assert submit_response.status_code == 202
     submit_payload = submit_response.json()
+    assert submit_payload['workspace_id'] == 'ws-001'
+    assert submit_payload['identity_policy']['surface_family'] == 'workspace-feedback'
+    assert submit_payload['namespace_policy']['family'] == 'workspace-feedback'
     assert submit_payload['feedback']['surface'] == 'result_history'
     assert submit_payload['feedback']['workspace_id'] == 'ws-001'
+    assert submit_payload['feedback']['identity']['canonical_key'] == 'feedback_id'
+    assert submit_payload['feedback']['identity']['canonical_value']
 
     get_after_submit = client.get('/api/workspaces/ws-001/feedback', headers=_session_headers())
     assert get_after_submit.status_code == 200

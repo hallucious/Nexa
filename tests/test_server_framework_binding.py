@@ -786,8 +786,11 @@ def test_framework_binding_handles_circuit_library_round_trip() -> None:
     parsed = json.loads(response.body_text)
     assert response.status_code == 200
     assert parsed["status"] == "ready"
+    assert parsed["identity_policy"]["surface_family"] == "circuit-library"
+    assert parsed["namespace_policy"]["family"] == "circuit-library"
     assert parsed["library"]["returned_count"] == 1
     assert parsed["library"]["items"][0]["continue_href"] == "/app/workspaces/ws-001/results?run_id=run-001"
+    assert parsed["item_sections"][0]["identity"]["canonical_value"] == "ws-001"
     assert parsed["library"]["items"][0]["onboarding_incomplete"] is True
 
 def test_framework_binding_handles_workspace_provider_health_round_trip() -> None:
@@ -1173,8 +1176,11 @@ def test_framework_binding_handles_workspace_result_history_round_trip() -> None
     )
     assert response.status_code == 200
     parsed = json.loads(response.body_text)
+    assert parsed["identity_policy"]["surface_family"] == "workspace-result-history"
+    assert parsed["namespace_policy"]["family"] == "workspace-result-history"
     assert parsed["result_history"]["returned_count"] == 1
     assert parsed["result_history"]["items"][0]["output_preview"] == "Latest Hello"
+    assert parsed["item_sections"][0]["identity"]["canonical_value"] == "run-002"
 
 
 def test_framework_binding_workspace_feedback_route_round_trip() -> None:
@@ -1199,7 +1205,10 @@ def test_framework_binding_workspace_feedback_route_round_trip() -> None:
     )
     assert response.status_code == 200
     payload = json.loads(response.body_text)
+    assert payload["identity_policy"]["surface_family"] == "workspace-feedback"
+    assert payload["namespace_policy"]["family"] == "workspace-feedback"
     assert payload["feedback_channel"]["prefill_surface"] == "circuit_library"
+    assert payload["feedback_channel"]["items"][0]["identity"]["canonical_value"] == "fb-001"
 
 
 def test_framework_binding_workspace_feedback_submit_round_trip() -> None:
@@ -1214,7 +1223,11 @@ def test_framework_binding_workspace_feedback_submit_round_trip() -> None:
     )
     assert response.status_code == 202
     payload = json.loads(response.body_text)
+    assert payload["workspace_id"] == "ws-001"
+    assert payload["identity_policy"]["surface_family"] == "workspace-feedback"
+    assert payload["namespace_policy"]["family"] == "workspace-feedback"
     assert payload["feedback"]["feedback_id"] == "fb-010"
+    assert payload["feedback"]["identity"]["canonical_value"] == "fb-010"
     assert payload["feedback"]["surface"] == "workspace_shell"
 
 

@@ -556,8 +556,12 @@ def test_circuit_library_route_returns_registry_backed_return_use_payload() -> N
 
     assert response.status_code == 200
     assert response.body["status"] == "ready"
+    assert response.body["identity_policy"]["surface_family"] == "circuit-library"
+    assert response.body["namespace_policy"]["family"] == "circuit-library"
     assert response.body["library"]["returned_count"] == 1
     assert response.body["library"]["items"][0]["has_recent_result_history"] is True
+    assert response.body["library"]["items"][0]["identity"]["canonical_value"] == "ws-001"
+    assert response.body["item_sections"][0]["identity"]["canonical_value"] == "ws-001"
     assert response.body["item_sections"][0]["continue_href"] == "/app/workspaces/ws-001"
 
 
@@ -851,8 +855,12 @@ def test_workspace_result_history_route_returns_beginner_facing_result_cards() -
         recent_run_rows=(), provider_binding_rows=(), managed_secret_rows=(), provider_probe_rows=(), onboarding_rows=(),
     )
     assert response.status_code == 200
+    assert response.body["identity_policy"]["surface_family"] == "workspace-result-history"
+    assert response.body["namespace_policy"]["family"] == "workspace-result-history"
     assert response.body["result_history"]["returned_count"] == 1
     assert response.body["result_history"]["items"][0]["output_preview"] == "Latest Hello"
+    assert response.body["result_history"]["items"][0]["identity"]["canonical_value"] == "run-002"
+    assert response.body["item_sections"][0]["identity"]["canonical_value"] == "run-002"
 
 
 def test_http_route_surface_workspace_feedback_read_and_submit_round_trip() -> None:
@@ -877,8 +885,11 @@ def test_http_route_surface_workspace_feedback_read_and_submit_round_trip() -> N
     )
     assert get_response.status_code == 200
     payload = get_response.body
+    assert payload["identity_policy"]["surface_family"] == "workspace-feedback"
+    assert payload["namespace_policy"]["family"] == "workspace-feedback"
     assert payload["feedback_channel"]["submit_path"] == "/api/workspaces/ws-001/feedback"
     assert payload["feedback_channel"]["items"][0]["feedback_id"] == "fb-001"
+    assert payload["feedback_channel"]["items"][0]["identity"]["canonical_value"] == "fb-001"
 
     written = {}
     post_response = RunHttpRouteSurface.handle_submit_workspace_feedback(
@@ -891,7 +902,11 @@ def test_http_route_surface_workspace_feedback_read_and_submit_round_trip() -> N
     )
     assert post_response.status_code == 202
     submit_payload = post_response.body
+    assert submit_payload["workspace_id"] == "ws-001"
+    assert submit_payload["identity_policy"]["surface_family"] == "workspace-feedback"
+    assert submit_payload["namespace_policy"]["family"] == "workspace-feedback"
     assert submit_payload["feedback"]["feedback_id"] == "fb-002"
+    assert submit_payload["feedback"]["identity"]["canonical_value"] == "fb-002"
     assert written["row"]["surface"] == "result_history"
 
 

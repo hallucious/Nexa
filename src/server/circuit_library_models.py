@@ -12,6 +12,8 @@ class ProductCircuitLibraryResponse:
     overview_section: Mapping[str, Any]
     item_sections: tuple[Mapping[str, Any], ...] = ()
     app_language: str = "en"
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
     routes: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

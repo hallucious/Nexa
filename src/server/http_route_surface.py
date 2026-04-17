@@ -654,6 +654,76 @@ def _public_mcp_host_bridge_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _circuit_library_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "library_scope",
+        "scope_kind": "authenticated_user",
+        "surface_family": "circuit-library",
+        "member_identity_key": "workspace_id",
+    }
+
+
+def _circuit_library_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "circuit-library",
+        "canonical_route": "/api/workspaces/library",
+        "member_namespace_family": "workspace",
+        "continuity_surface": "return-use-library",
+    }
+
+
+def _workspace_result_history_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-result-history",
+        "member_identity_key": "run_id",
+        "selection_query_key": "run_id",
+    }
+
+
+def _workspace_result_history_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-result-history",
+        "canonical_route": "/api/workspaces/{workspace_id}/result-history",
+        "member_namespace_family": "run",
+        "selection_query_key": "run_id",
+    }
+
+
+def _workspace_feedback_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-feedback",
+        "member_identity_key": "feedback_id",
+        "submission_surface": "workspace-scoped-feedback",
+    }
+
+
+def _workspace_feedback_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-feedback",
+        "canonical_route": "/api/workspaces/{workspace_id}/feedback",
+        "member_namespace_family": "feedback",
+        "submission_posture": "workspace-scoped-write",
+    }
+
+
+def _inject_collection_identity(collection: Any, *, canonical_key: str, lookup_mode: str = "direct") -> None:
+    if not isinstance(collection, list):
+        return
+    for item in collection:
+        if not isinstance(item, dict):
+            continue
+        canonical_value = str(item.get(canonical_key) or "").strip()
+        if not canonical_value:
+            continue
+        item["identity"] = {
+            "canonical_key": canonical_key,
+            "canonical_value": canonical_value,
+            "lookup_mode": lookup_mode,
+        }
+
+
 def _public_artifact_boundary_body(model_or_data: Any) -> dict[str, Any]:
     descriptor = describe_public_nex_artifact(model_or_data)
     format_boundary = get_public_nex_format_boundary()
@@ -3564,6 +3634,12 @@ class RunHttpRouteSurface:
                 "reason_code": "circuit_library.forbidden",
                 "message": "Current user is not allowed to read the circuit library.",
             })
+        library = payload.get("library")
+        if isinstance(library, dict):
+            _inject_collection_identity(library.get("items"), canonical_key="workspace_id", lookup_mode="workspace_id_only")
+        _inject_collection_identity(payload.get("item_sections"), canonical_key="workspace_id", lookup_mode="workspace_id_only")
+        payload["identity_policy"] = _circuit_library_identity_policy_body()
+        payload["namespace_policy"] = _circuit_library_namespace_policy_body()
         return _route_response(200, payload)
 
 
@@ -3700,6 +3776,15 @@ class RunHttpRouteSurface:
                 "message": "Current user is not allowed to read workspace result history." if request_auth.is_authenticated else "Workspace result history requires an authenticated session.",
                 "workspace_id": workspace_id,
             })
+        result_history = payload.get("result_history")
+        if isinstance(result_history, dict):
+            _inject_collection_identity(result_history.get("items"), canonical_key="run_id", lookup_mode="run_id_only")
+        _inject_collection_identity(payload.get("item_sections"), canonical_key="run_id", lookup_mode="run_id_only")
+        selected_result = payload.get("selected_result")
+        if isinstance(selected_result, dict):
+            _inject_collection_identity([selected_result], canonical_key="run_id", lookup_mode="run_id_only")
+        payload["identity_policy"] = _workspace_result_history_identity_policy_body()
+        payload["namespace_policy"] = _workspace_result_history_namespace_policy_body()
         return _route_response(200, payload)
 
     @classmethod
@@ -3760,6 +3845,11 @@ class RunHttpRouteSurface:
             confirmation_feedback_id=str((http_request.query_params or {}).get("feedback_id") or "").strip() or None,
             app_language=_request_app_language(http_request.query_params),
         )
+        channel = payload.get("feedback_channel")
+        if isinstance(channel, dict):
+            _inject_collection_identity(channel.get("items"), canonical_key="feedback_id", lookup_mode="feedback_id_only")
+        payload["identity_policy"] = _workspace_feedback_identity_policy_body()
+        payload["namespace_policy"] = _workspace_feedback_namespace_policy_body()
         return _route_response(200, payload)
 
     @classmethod
@@ -3874,6 +3964,11 @@ class RunHttpRouteSurface:
             workspace_title=str(workspace_row.get("title") or workspace_context.workspace_id),
             app_language=_request_app_language(http_request.query_params),
         )
+        feedback = payload.get("feedback")
+        if isinstance(feedback, dict):
+            _inject_collection_identity([feedback], canonical_key="feedback_id", lookup_mode="feedback_id_only")
+        payload["identity_policy"] = _workspace_feedback_identity_policy_body()
+        payload["namespace_policy"] = _workspace_feedback_namespace_policy_body()
         return _route_response(202, payload)
 
     @classmethod

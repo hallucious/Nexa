@@ -193,6 +193,7 @@ def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> No
     template_catalog_export = scaffold.export_resource("list_starter_circuit_templates", query_params={"app_language": "ko"})
     template_detail_export = scaffold.export_resource("get_starter_circuit_template", path_params={"template_id": "text_summarizer"}, query_params={"app_language": "ko"})
     public_nex_export = scaffold.export_resource("get_public_nex_format")
+    profiles = build_public_mcp_result_shape_profiles()
     export = scaffold.export()
 
     assert launch_export.invocation.method == "POST"
@@ -205,6 +206,11 @@ def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> No
     assert template_catalog_export.invocation.path == "/api/templates/starter-circuits"
     assert template_detail_export.invocation.path == "/api/templates/starter-circuits/text_summarizer"
     assert public_nex_export.invocation.path == "/api/formats/public-nex"
+    profiles_by_kind = {profile.profile_kind: profile for profile in profiles}
+    assert profiles_by_kind["circuit-library"].identity_keys == ("source_of_truth", "identity_policy", "namespace_policy")
+    assert profiles_by_kind["workspace-result-history"].identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert profiles_by_kind["workspace-feedback-read"].identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert profiles_by_kind["workspace-feedback-write"].identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
     assert status_export.invocation.url == "https://api.nexa.test/api/runs/run-1"
     assert export.transport_kind == "http-route-bridge"
     assert export.stability == "scaffold"

@@ -33,6 +33,8 @@ class ProductWorkspaceFeedbackReadResponse:
     workspace_id: str
     workspace_title: str
     feedback_channel: Mapping[str, Any]
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
     routes: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -50,7 +52,10 @@ class ProductWorkspaceFeedbackReadResponse:
 class ProductWorkspaceFeedbackWriteAcceptedResponse:
     status: str
     message: str
+    workspace_id: str
     feedback: Mapping[str, Any]
+    identity_policy: Mapping[str, Any] | None = None
+    namespace_policy: Mapping[str, Any] | None = None
     links: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -58,6 +63,8 @@ class ProductWorkspaceFeedbackWriteAcceptedResponse:
             raise ValueError(f"Unsupported ProductWorkspaceFeedbackWriteAcceptedResponse.status: {self.status}")
         if not self.message:
             raise ValueError("ProductWorkspaceFeedbackWriteAcceptedResponse.message must be non-empty")
+        if not self.workspace_id:
+            raise ValueError("ProductWorkspaceFeedbackWriteAcceptedResponse.workspace_id must be non-empty")
         feedback_id = str(self.feedback.get("feedback_id") or "").strip()
         if not feedback_id:
             raise ValueError("ProductWorkspaceFeedbackWriteAcceptedResponse.feedback.feedback_id must be non-empty")
