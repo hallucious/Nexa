@@ -1119,10 +1119,21 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in parsed['latest_run_artifacts_detail']['items']
     assert parsed['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shell/share'
+    assert parsed['routes']['workspace_recent_activity'] == '/api/users/me/activity?workspace_id=ws-001'
+    assert parsed['routes']['workspace_history_summary'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert parsed['share_history_section']['summary']['headline'] == 'Share history'
     assert 'Recent shares: 1' in parsed['share_history_section']['summary']['lines']
     assert 'share-shell-framework-001' in '\n'.join(parsed['share_history_section']['detail']['items'])
     assert parsed['share_history_section']['controls'][0]['action_kind'] == 'open_workspace_share_create'
+    assert parsed['recent_activity_section']['summary']['headline'] == 'Recent activity'
+    assert 'Activity items: 1' in parsed['recent_activity_section']['summary']['lines']
+    assert 'run — run-001' in '\n'.join(parsed['recent_activity_section']['detail']['items'])
+    assert parsed['recent_activity_section']['controls'][0]['action_kind'] == 'open_route'
+    assert parsed['history_summary_section']['summary']['headline'] == 'History summary'
+    assert 'Total runs: 1' in parsed['history_summary_section']['summary']['lines']
+    assert 'Successful runs: 1' in parsed['history_summary_section']['summary']['lines']
+    assert 'Share history entries: 1' in parsed['history_summary_section']['detail']['items']
+    assert parsed['history_summary_section']['controls'][0]['action_target'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
     assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'

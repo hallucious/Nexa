@@ -514,6 +514,23 @@ def _recent_run_rows_for_workspace(recent_run_rows: Sequence[Mapping[str, Any]],
     return tuple(candidates[:limit])
 
 
+def _recent_onboarding_rows_for_workspace(onboarding_rows: Sequence[Mapping[str, Any]], workspace_id: str, *, limit: int = 5) -> tuple[Mapping[str, Any], ...]:
+    candidates = [
+        dict(row)
+        for row in onboarding_rows
+        if str(row.get("workspace_id") or "").strip() == workspace_id
+    ]
+    candidates.sort(
+        key=lambda row: (
+            str(row.get("updated_at") or ""),
+            str(row.get("created_at") or ""),
+            str(row.get("onboarding_state_id") or ""),
+        ),
+        reverse=True,
+    )
+    return tuple(candidates[:limit])
+
+
 def _status_history_section(recent_run_rows: Sequence[Mapping[str, Any]], workspace_id: str) -> dict[str, Any]:
     entries: list[dict[str, Any]] = []
     for row in _recent_run_rows_for_workspace(recent_run_rows, workspace_id):
@@ -651,6 +668,167 @@ def _result_history_section(
         history=entries[:3],
     )
 
+
+
+def _recent_activity_entries(
+    recent_run_rows: Sequence[Mapping[str, Any]],
+    onboarding_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
+) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for row in _recent_run_rows_for_workspace(recent_run_rows, workspace_id):
+        run_id = str(row.get("run_id") or "").strip()
+        if not run_id:
+            continue
+        status_family = str(row.get("status_family") or row.get("status") or "unknown").strip() or "unknown"
+        occurred_at = str(row.get("updated_at") or row.get("created_at") or "").strip() or None
+        entries.append({
+            "activity_id": f"run:{run_id}:{occurred_at or ''}",
+            "activity_type": "run",
+            "label": run_id,
+            "status": status_family,
+            "occurred_at": occurred_at,
+            "summary": f"Run {run_id} reached {status_family}.",
+        })
+    for row in _recent_onboarding_rows_for_workspace(onboarding_rows, workspace_id):
+        onboarding_state_id = str(row.get("onboarding_state_id") or "").strip() or "onboarding"
+        current_step = str(row.get("current_step") or "updated").strip() or "updated"
+        occurred_at = str(row.get("updated_at") or row.get("created_at") or "").strip() or None
+        entries.append({
+            "activity_id": f"onboarding:{onboarding_state_id}:{occurred_at or ''}",
+            "activity_type": "onboarding",
+            "label": onboarding_state_id,
+            "status": current_step,
+            "occurred_at": occurred_at,
+            "summary": f"Onboarding moved to {current_step}.",
+        })
+    entries.sort(key=lambda item: (str(item.get("occurred_at") or ""), str(item.get("activity_id") or "")), reverse=True)
+    return entries[:5]
+
+
+def _recent_activity_section(
+    recent_run_rows: Sequence[Mapping[str, Any]],
+    onboarding_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
+    *,
+    app_language: str = "en",
+) -> dict[str, Any]:
+    entries = _recent_activity_entries(recent_run_rows, onboarding_rows, workspace_id)
+    latest = entries[0] if entries else None
+    return build_shell_section(
+        headline=ui_text("server.shell.recent_activity", app_language=app_language, fallback_text="Recent activity"),
+        lines=_summary_lines(
+            ui_text("server.shell.activity_items_prefix", app_language=app_language, fallback_text="Activity items: ") + str(len(entries)) if entries else ui_text("server.shell.no_recent_activity", app_language=app_language, fallback_text="No recent activity is available yet."),
+            ui_text("server.shell.latest_prefix", app_language=app_language, fallback_text="Latest: ") + f"{latest['activity_type']} — {latest['label']}" if latest else None,
+        ),
+        detail_title=ui_text("server.shell.recent_activity_detail", app_language=app_language, fallback_text="Recent activity detail"),
+        detail_items=[
+            f"{index + 1}. {entry['activity_type']} — {entry['label']} — {entry['status']}"
+            for index, entry in enumerate(entries[:3])
+        ],
+        detail_empty=ui_text("server.shell.recent_activity_pending", app_language=app_language, fallback_text="Recent activity entries will appear here as work continues."),
+        controls=[
+            {
+                "control_id": "recent-activity-open-route",
+                "label": ui_text("server.shell.open_recent_activity", app_language=app_language, fallback_text="Open recent activity"),
+                "action_kind": "open_route",
+                "action_target": f"/api/users/me/activity?workspace_id={workspace_id}",
+            }
+        ],
+        history=entries[:3],
+    )
+
+
+def _matching_share_history_entries(
+    share_payload_rows: Sequence[Mapping[str, Any]],
+    model: Any,
+) -> list[dict[str, Any]]:
+    canonical_ref = _artifact_canonical_ref_for_model(model)
+    if not canonical_ref:
+        return []
+    entries: list[dict[str, Any]] = []
+    for row in share_payload_rows:
+        try:
+            descriptor = describe_public_nex_link_share(dict(row))
+        except Exception:
+            continue
+        if str(descriptor.canonical_ref or "").strip() != canonical_ref:
+            continue
+        entries.append({
+            "share_id": descriptor.share_id,
+            "state": descriptor.lifecycle_state,
+            "title": descriptor.title,
+            "updated_at": descriptor.updated_at,
+        })
+    entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
+    return entries
+
+
+def _history_summary_section(
+    recent_run_rows: Sequence[Mapping[str, Any]],
+    onboarding_rows: Sequence[Mapping[str, Any]],
+    share_payload_rows: Sequence[Mapping[str, Any]],
+    model: Any,
+    workspace_id: str,
+    *,
+    app_language: str = "en",
+) -> dict[str, Any]:
+    run_entries = list(_recent_run_rows_for_workspace(recent_run_rows, workspace_id, limit=50))
+    onboarding_entries = list(_recent_onboarding_rows_for_workspace(onboarding_rows, workspace_id, limit=50))
+    share_entries = _matching_share_history_entries(share_payload_rows, model)
+    pending_runs = sum(1 for row in run_entries if str(row.get("status_family") or "").strip() == "pending")
+    active_runs = sum(1 for row in run_entries if str(row.get("status_family") or "").strip() == "active")
+    success_runs = sum(1 for row in run_entries if str(row.get("status_family") or "").strip() == "terminal_success")
+    failure_runs = sum(1 for row in run_entries if str(row.get("status_family") or "").strip() == "terminal_failure")
+    latest_values = [
+        str(row.get("updated_at") or row.get("created_at") or "").strip()
+        for row in run_entries
+    ] + [
+        str(row.get("updated_at") or row.get("created_at") or "").strip()
+        for row in onboarding_entries
+    ] + [
+        str(entry.get("updated_at") or "").strip()
+        for entry in share_entries
+    ]
+    latest_activity_at = max([value for value in latest_values if value], default=None)
+    return build_shell_section(
+        headline=ui_text("server.shell.history_summary", app_language=app_language, fallback_text="History summary"),
+        lines=_summary_lines(
+            ui_text("server.shell.total_runs_prefix", app_language=app_language, fallback_text="Total runs: ") + str(len(run_entries)),
+            ui_text("server.shell.successful_runs_prefix", app_language=app_language, fallback_text="Successful runs: ") + str(success_runs),
+            ui_text("server.shell.latest_activity_at_prefix", app_language=app_language, fallback_text="Latest activity at: ") + latest_activity_at if latest_activity_at else None,
+        ),
+        detail_title=ui_text("server.shell.history_summary_detail", app_language=app_language, fallback_text="History summary detail"),
+        detail_items=[
+            ui_text("server.shell.pending_runs_prefix", app_language=app_language, fallback_text="Pending runs: ") + str(pending_runs),
+            ui_text("server.shell.active_runs_prefix", app_language=app_language, fallback_text="Active runs: ") + str(active_runs),
+            ui_text("server.shell.failed_runs_prefix", app_language=app_language, fallback_text="Failed runs: ") + str(failure_runs),
+            ui_text("server.shell.onboarding_updates_prefix", app_language=app_language, fallback_text="Onboarding updates: ") + str(len(onboarding_entries)),
+            ui_text("server.shell.share_history_entries_prefix", app_language=app_language, fallback_text="Share history entries: ") + str(len(share_entries)),
+        ],
+        controls=[
+            {
+                "control_id": "history-summary-open-route",
+                "label": ui_text("server.shell.open_history_summary", app_language=app_language, fallback_text="Open history summary"),
+                "action_kind": "open_route",
+                "action_target": f"/api/users/me/history-summary?workspace_id={workspace_id}",
+            },
+            {
+                "control_id": "history-summary-open-activity",
+                "label": ui_text("server.shell.open_recent_activity", app_language=app_language, fallback_text="Open recent activity"),
+                "action_kind": "open_route",
+                "action_target": f"/api/users/me/activity?workspace_id={workspace_id}",
+            },
+        ],
+        history=[{
+            "total_runs": len(run_entries),
+            "successful_runs": success_runs,
+            "failed_runs": failure_runs,
+            "onboarding_updates": len(onboarding_entries),
+            "share_history_entries": len(share_entries),
+            "latest_activity_at": latest_activity_at,
+        }],
+    )
 
 
 def _artifact_mapping_from_source(source: Any | None, model: Any) -> dict[str, Any]:
@@ -1467,6 +1645,8 @@ def build_workspace_shell_runtime_payload(
             "workspace_shell_checkout": f"/api/workspaces/{workspace_id}/shell/checkout",
             "workspace_shell_launch": f"/api/workspaces/{workspace_id}/shell/launch",
             "workspace_shell_share": f"/api/workspaces/{workspace_id}/shell/share",
+            "workspace_recent_activity": f"/api/users/me/activity?workspace_id={workspace_id}",
+            "workspace_history_summary": f"/api/users/me/history-summary?workspace_id={workspace_id}",
         },
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,
@@ -1484,6 +1664,8 @@ def build_workspace_shell_runtime_payload(
         "result_history_section": _result_history_section(recent_run_rows, workspace_id, result_rows_by_run_id),
         "trace_history_section": _trace_history_section(recent_run_rows, workspace_id, trace_rows_lookup, app_language=app_language),
         "artifacts_history_section": _artifacts_history_section(recent_run_rows, workspace_id, artifact_rows_lookup),
+        "recent_activity_section": _recent_activity_section(recent_run_rows, onboarding_rows, workspace_id, app_language=app_language),
+        "history_summary_section": _history_summary_section(recent_run_rows, onboarding_rows, share_payload_rows, model, workspace_id, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
         "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),
@@ -1541,6 +1723,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     result_history_section_json = json.dumps(payload.get("result_history_section"), ensure_ascii=False)
     trace_history_section_json = json.dumps(payload.get("trace_history_section"), ensure_ascii=False)
     artifacts_history_section_json = json.dumps(payload.get("artifacts_history_section"), ensure_ascii=False)
+    recent_activity_section_json = json.dumps(payload.get("recent_activity_section"), ensure_ascii=False)
+    history_summary_section_json = json.dumps(payload.get("history_summary_section"), ensure_ascii=False)
     designer_section_json = json.dumps(payload.get("designer_section"), ensure_ascii=False)
     validation_section_json = json.dumps(payload.get("validation_section"), ensure_ascii=False)
     step_state_banner_json = json.dumps(payload.get("step_state_banner"), ensure_ascii=False)
@@ -1781,7 +1965,21 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <pre id="latest-run-artifacts-detail">{escape(ui_text("server.shell.artifacts_detail_prompt", app_language=app_language, fallback_text="Open latest artifacts to view the detail layer."))}</pre>
       </section>
     </div>
-    <section class=\"card\" style=\"margin-top:16px;\" role=\"region\" aria-labelledby=\"browser-log-title\">
+    <div class="row">
+      <section id="recent-activity-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="recent-activity-title">
+        <h2 id="recent-activity-title">{escape(ui_text("server.shell.recent_activity", app_language=app_language, fallback_text="Recent activity"))}</h2>
+        <pre id="recent-activity-summary">{escape(ui_text("server.shell.recent_activity_summary", app_language=app_language, fallback_text="Recent activity will appear here."))}</pre>
+        <pre id="recent-activity-detail">{escape(ui_text("server.shell.recent_activity_detail", app_language=app_language, fallback_text="Recent activity detail will appear here."))}</pre>
+        <div id="recent-activity-controls" class="actions"></div>
+      </section>
+      <section id="history-summary-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="history-summary-title">
+        <h2 id="history-summary-title">{escape(ui_text("server.shell.history_summary", app_language=app_language, fallback_text="History summary"))}</h2>
+        <pre id="history-summary-summary">{escape(ui_text("server.shell.history_summary_summary", app_language=app_language, fallback_text="History summary will appear here."))}</pre>
+        <pre id="history-summary-detail">{escape(ui_text("server.shell.history_summary_detail", app_language=app_language, fallback_text="History summary detail will appear here."))}</pre>
+        <div id="history-summary-controls" class="actions"></div>
+      </section>
+    </div>
+    <section class="card" style="margin-top:16px;" role="region" aria-labelledby="browser-log-title">
       <h2 id=\"browser-log-title\">Last action log</h2>
       <pre id=\"browser-log\" aria-live=\"polite\">Ready.</pre>
     </section>
@@ -1805,6 +2003,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialResultHistorySection = {result_history_section_json};
     const initialTraceHistorySection = {trace_history_section_json};
     const initialArtifactsHistorySection = {artifacts_history_section_json};
+    const initialRecentActivitySection = {recent_activity_section_json};
+    const initialHistorySummarySection = {history_summary_section_json};
     const initialDesignerSection = {designer_section_json};
     const initialValidationSection = {validation_section_json};
     const initialStepStateBanner = {step_state_banner_json};
@@ -1832,6 +2032,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const artifactsHistorySummaryEl = document.getElementById('artifacts-history-summary');
     const artifactsHistoryDetailEl = document.getElementById('artifacts-history-detail');
     const artifactsHistoryControlsEl = document.getElementById('artifacts-history-controls');
+    const recentActivitySummaryEl = document.getElementById('recent-activity-summary');
+    const recentActivityDetailEl = document.getElementById('recent-activity-detail');
+    const recentActivityControlsEl = document.getElementById('recent-activity-controls');
+    const historySummarySummaryEl = document.getElementById('history-summary-summary');
+    const historySummaryDetailEl = document.getElementById('history-summary-detail');
+    const historySummaryControlsEl = document.getElementById('history-summary-controls');
     const designerSummaryEl = document.getElementById('designer-summary');
     const designerDetailEl = document.getElementById('designer-detail');
     const designerControlsEl = document.getElementById('designer-controls');
@@ -1861,6 +2067,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentResultHistorySection = initialResultHistorySection || null;
     let currentTraceHistorySection = initialTraceHistorySection || null;
     let currentArtifactsHistorySection = initialArtifactsHistorySection || null;
+    let currentRecentActivitySection = initialRecentActivitySection || null;
+    let currentHistorySummarySection = initialHistorySummarySection || null;
     let currentDesignerSection = initialDesignerSection || null;
     let currentValidationSection = initialValidationSection || null;
     let currentStepStateBanner = initialStepStateBanner || null;
@@ -2129,6 +2337,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     function writeArtifactsHistorySection(section) {{
       currentArtifactsHistorySection = writeShellSection(section, currentArtifactsHistorySection, artifactsHistorySummaryEl, artifactsHistoryDetailEl, artifactsHistoryControlsEl, 'Recent artifacts history will appear here.', 'Artifacts history detail will appear here.');
     }}
+    function writeRecentActivitySection(section) {{
+      currentRecentActivitySection = writeShellSection(section, currentRecentActivitySection, recentActivitySummaryEl, recentActivityDetailEl, recentActivityControlsEl, 'Recent activity will appear here.', 'Recent activity detail will appear here.');
+    }}
+    function writeHistorySummarySection(section) {{
+      currentHistorySummarySection = writeShellSection(section, currentHistorySummarySection, historySummarySummaryEl, historySummaryDetailEl, historySummaryControlsEl, 'History summary will appear here.', 'History summary detail will appear here.');
+    }}
     function writeDesignerSection(section) {{
       currentDesignerSection = writeShellSection(section, currentDesignerSection, designerSummaryEl, designerDetailEl, designerControlsEl, 'Open Designer to start drafting your workflow.', 'Designer detail will appear here.');
     }}
@@ -2215,6 +2429,13 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
           setActiveRun(target);
           await refreshLatestRunArtifacts();
           writeLog('Opened artifacts for ' + target + '.');
+          return;
+        }}
+      }}
+      if (kind === 'open_route') {{
+        if (target) {{
+          window.open(target, '_blank', 'noopener');
+          writeLog('Opened route ' + target + '.');
           return;
         }}
       }}
@@ -2496,6 +2717,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeResultHistorySection(initialResultHistorySection);
     writeTraceHistorySection(initialTraceHistorySection);
     writeArtifactsHistorySection(initialArtifactsHistorySection);
+    writeRecentActivitySection(initialRecentActivitySection);
+    writeHistorySummarySection(initialHistorySummarySection);
     writeDesignerSection(initialDesignerSection);
     writeValidationSection(initialValidationSection);
     writeStepStateBanner(initialStepStateBanner);
@@ -2518,6 +2741,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       if (body.artifacts_history_section) {{
         writeArtifactsHistorySection(body.artifacts_history_section);
+      }}
+      if (body.recent_activity_section) {{
+        writeRecentActivitySection(body.recent_activity_section);
+      }}
+      if (body.history_summary_section) {{
+        writeHistorySummarySection(body.history_summary_section);
       }}
       if (body.designer_section) {{
         writeDesignerSection(body.designer_section);

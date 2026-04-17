@@ -630,10 +630,21 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
     assert payload['routes']['latest_run_trace'] == '/api/runs/run-002/trace?limit=20'
     assert payload['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shell/share'
+    assert payload['routes']['workspace_recent_activity'] == '/api/users/me/activity?workspace_id=ws-001'
+    assert payload['routes']['workspace_history_summary'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert payload['share_history_section']['summary']['headline'] == 'Share history'
     assert 'Recent shares: 1' in payload['share_history_section']['summary']['lines']
     assert 'share-shell-fastapi-001' in '\n'.join(payload['share_history_section']['detail']['items'])
     assert payload['share_history_section']['controls'][0]['action_kind'] == 'open_workspace_share_create'
+    assert payload['recent_activity_section']['summary']['headline'] == 'Recent activity'
+    assert 'Activity items: 2' in payload['recent_activity_section']['summary']['lines']
+    assert 'run — run-002' in '\n'.join(payload['recent_activity_section']['detail']['items'])
+    assert payload['recent_activity_section']['controls'][0]['action_target'] == '/api/users/me/activity?workspace_id=ws-001'
+    assert payload['history_summary_section']['summary']['headline'] == 'History summary'
+    assert 'Total runs: 2' in payload['history_summary_section']['summary']['lines']
+    assert 'Successful runs: 1' in payload['history_summary_section']['summary']['lines']
+    assert 'Share history entries: 1' in payload['history_summary_section']['detail']['items']
+    assert payload['history_summary_section']['controls'][0]['action_kind'] == 'open_route'
     assert payload['identity_policy']['surface_family'] == 'workspace-shell'
     assert payload['namespace_policy']['family'] == 'workspace-shell'
     assert payload['routes']['latest_run_artifacts'] == '/api/runs/run-002/artifacts'

@@ -1036,6 +1036,10 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
     assert payload['action_availability']['draft_write']['allowed'] is False
     assert payload['action_availability']['checkout']['allowed'] is True
     assert payload['action_availability']['launch']['allowed'] is True
+    assert payload['routes']['workspace_recent_activity'] == '/api/users/me/activity?workspace_id=ws-001'
+    assert payload['routes']['workspace_history_summary'] == '/api/users/me/history-summary?workspace_id=ws-001'
+    assert payload['recent_activity_section']['summary']['headline'] == 'Recent activity'
+    assert payload['history_summary_section']['summary']['headline'] == 'History summary'
 
 
 def test_public_share_artifact_route_rejects_effectively_expired_share() -> None:
