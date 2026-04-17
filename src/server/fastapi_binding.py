@@ -483,6 +483,7 @@ class FastApiRouteBindings:
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
                 artifact_rows_lookup=self.dependencies.artifact_rows_provider,
                 trace_rows_lookup=self.dependencies.trace_rows_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
             )
             return self._framework_response(outbound)
 
@@ -500,6 +501,7 @@ class FastApiRouteBindings:
                 artifact_rows_lookup=self.dependencies.artifact_rows_provider,
                 trace_rows_lookup=self.dependencies.trace_rows_provider,
                 workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
             )
             return self._framework_response(outbound)
 
@@ -517,6 +519,7 @@ class FastApiRouteBindings:
                 artifact_rows_lookup=self.dependencies.artifact_rows_provider,
                 trace_rows_lookup=self.dependencies.trace_rows_provider,
                 workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
             )
             return self._framework_response(outbound)
 
@@ -535,6 +538,7 @@ class FastApiRouteBindings:
                 trace_rows_lookup=self.dependencies.trace_rows_provider,
                 workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
                 public_share_payload_provider=self.dependencies.public_share_payload_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
             )
             return self._framework_response(outbound)
 
