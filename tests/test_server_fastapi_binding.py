@@ -494,6 +494,9 @@ def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
     assert artifact_list_payload["activity_continuity"]["recent_run_count"] == 1
     assert artifact_list_payload["source_artifact"]["storage_role"] == "commit_snapshot"
     assert artifact_list_payload["source_artifact"]["canonical_ref"] == "snap-001"
+    assert artifact_list_payload["identity_policy"]["surface_family"] == "run-artifacts"
+    assert artifact_list_payload["namespace_policy"]["family"] == "run-artifacts"
+    assert artifact_list_payload["artifacts"][0]["identity"]["canonical_key"] == "artifact_id"
 
     artifact_detail_response = client.get("/api/artifacts/artifact-1", headers=_session_headers())
     assert artifact_detail_response.status_code == 200
@@ -504,6 +507,9 @@ def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
     assert artifact_detail_payload["activity_continuity"]["recent_run_count"] == 1
     assert artifact_detail_payload["source_artifact"]["storage_role"] == "commit_snapshot"
     assert artifact_detail_payload["source_artifact"]["canonical_ref"] == "snap-001"
+    assert artifact_detail_payload["identity_policy"]["surface_family"] == "artifact-detail"
+    assert artifact_detail_payload["namespace_policy"]["family"] == "artifact-detail"
+    assert artifact_detail_payload["identity"]["canonical_key"] == "artifact_id"
 
     trace_response = client.get("/api/runs/run-001/trace?limit=10", headers=_session_headers())
     assert trace_response.status_code == 200
@@ -514,7 +520,19 @@ def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
     assert trace_payload["activity_continuity"]["recent_run_count"] == 1
     assert trace_payload["source_artifact"]["storage_role"] == "commit_snapshot"
     assert trace_payload["source_artifact"]["canonical_ref"] == "snap-001"
+    assert trace_payload["identity_policy"]["surface_family"] == "run-trace"
+    assert trace_payload["namespace_policy"]["family"] == "run-trace"
+    assert trace_payload["events"][0]["identity"]["canonical_key"] == "event_id"
     assert [event["sequence"] for event in trace_payload["events"]] == [1, 2]
+
+    actions_response = client.get("/api/runs/run-001/actions", headers=_session_headers())
+    assert actions_response.status_code == 200
+    actions_payload = actions_response.json()
+    assert actions_payload["identity_policy"]["surface_family"] == "run-action-log"
+    assert actions_payload["namespace_policy"]["family"] == "run-action-log"
+    assert actions_payload["returned_count"] >= 0
+    if actions_payload["actions"]:
+        assert actions_payload["actions"][0]["identity"]["canonical_key"] == "event_id"
 
 
 

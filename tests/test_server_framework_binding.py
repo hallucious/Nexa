@@ -658,6 +658,84 @@ def test_framework_binding_handles_workspace_run_list_round_trip() -> None:
     assert parsed["namespace_policy"]["family"] == "workspace-run-list"
 
 
+def test_framework_binding_handles_run_trace_artifacts_and_actions_round_trip() -> None:
+    artifact_list_response = FrameworkRouteBindings.handle_run_artifacts(
+        request=_request(method="GET", path="/api/runs/run-001/artifacts", path_params={"run_id": "run-001"}),
+        run_context=_run_context(),
+        run_record_row=_run_row(status="completed", status_family="terminal_success"),
+        artifact_rows=(
+            {
+                "artifact_id": "artifact-1",
+                "run_id": "run-001",
+                "workspace_id": "ws-001",
+                "kind": "report",
+                "label": "Primary artifact",
+                "value_type": "text/markdown",
+                "preview": "Preview",
+                "created_at": "2026-04-11T12:00:00+00:00",
+                "source_storage_role": "commit_snapshot",
+                "source_canonical_ref": "snap-001",
+            },
+        ),
+    )
+    artifact_list_payload = json.loads(artifact_list_response.body_text)
+    assert artifact_list_response.status_code == 200
+    assert artifact_list_payload["identity_policy"]["surface_family"] == "run-artifacts"
+    assert artifact_list_payload["namespace_policy"]["family"] == "run-artifacts"
+    assert artifact_list_payload["artifacts"][0]["identity"]["canonical_key"] == "artifact_id"
+
+    artifact_detail_response = FrameworkRouteBindings.handle_artifact_detail(
+        request=_request(method="GET", path="/api/artifacts/artifact-1", path_params={"artifact_id": "artifact-1"}),
+        workspace_context=_workspace(),
+        artifact_row={
+            "artifact_id": "artifact-1",
+            "run_id": "run-001",
+            "workspace_id": "ws-001",
+            "kind": "report",
+            "label": "Primary artifact",
+            "value_type": "text/markdown",
+            "preview": "Preview",
+            "payload_mode": "inline",
+            "payload_value": "Body",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "source_storage_role": "commit_snapshot",
+            "source_canonical_ref": "snap-001",
+        },
+        run_record_row=_run_row(status="completed", status_family="terminal_success"),
+    )
+    artifact_detail_payload = json.loads(artifact_detail_response.body_text)
+    assert artifact_detail_response.status_code == 200
+    assert artifact_detail_payload["identity_policy"]["surface_family"] == "artifact-detail"
+    assert artifact_detail_payload["namespace_policy"]["family"] == "artifact-detail"
+    assert artifact_detail_payload["identity"]["canonical_key"] == "artifact_id"
+
+    trace_response = FrameworkRouteBindings.handle_run_trace(
+        request=_request(method="GET", path="/api/runs/run-001/trace", path_params={"run_id": "run-001"}, query_params={"limit": 10}),
+        run_context=_run_context(),
+        run_record_row=_run_row(status="completed", status_family="terminal_success"),
+        trace_rows=(
+            {"trace_event_ref": "evt-1", "run_id": "run-001", "sequence_number": 1, "event_type": "node.started", "occurred_at": "2026-04-11T12:00:00+00:00"},
+            {"trace_event_ref": "evt-2", "run_id": "run-001", "sequence_number": 2, "event_type": "node.completed", "occurred_at": "2026-04-11T12:00:05+00:00"},
+        ),
+    )
+    trace_payload = json.loads(trace_response.body_text)
+    assert trace_response.status_code == 200
+    assert trace_payload["identity_policy"]["surface_family"] == "run-trace"
+    assert trace_payload["namespace_policy"]["family"] == "run-trace"
+    assert trace_payload["events"][0]["identity"]["canonical_key"] == "event_id"
+
+    actions_response = FrameworkRouteBindings.handle_run_actions(
+        request=_request(method="GET", path="/api/runs/run-001/actions", path_params={"run_id": "run-001"}),
+        run_context=_run_context(),
+        run_record_row={**_run_row(status="completed", status_family="terminal_success"), "action_log": [{"event_id": "evt-10", "action": "retry", "actor_user_id": "user-1", "timestamp": "2026-04-11T12:01:00+00:00", "before_state": {}, "after_state": {}}]},
+    )
+    actions_payload = json.loads(actions_response.body_text)
+    assert actions_response.status_code == 200
+    assert actions_payload["identity_policy"]["surface_family"] == "run-action-log"
+    assert actions_payload["namespace_policy"]["family"] == "run-action-log"
+    assert actions_payload["actions"][0]["identity"]["canonical_key"] == "event_id"
+
+
 def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None:
     workspace_response = FrameworkRouteBindings.handle_list_workspaces(
         request=_request(method="GET", path="/api/workspaces"),

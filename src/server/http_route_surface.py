@@ -832,6 +832,73 @@ def _run_result_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _run_trace_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "run_id",
+        "surface_family": "run-trace",
+        "member_identity_key": "event_id",
+        "family_group": "run",
+    }
+
+
+def _run_trace_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "run-trace",
+        "canonical_route": "/api/runs/{run_id}/trace",
+        "family_group": "run",
+    }
+
+
+def _run_artifacts_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "run_id",
+        "surface_family": "run-artifacts",
+        "member_identity_key": "artifact_id",
+        "family_group": "run",
+    }
+
+
+def _run_artifacts_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "run-artifacts",
+        "canonical_route": "/api/runs/{run_id}/artifacts",
+        "family_group": "run",
+    }
+
+
+def _artifact_detail_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "artifact_id",
+        "surface_family": "artifact-detail",
+        "family_group": "artifact",
+    }
+
+
+def _artifact_detail_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "artifact-detail",
+        "canonical_route": "/api/artifacts/{artifact_id}",
+        "family_group": "artifact",
+    }
+
+
+def _run_action_log_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "run_id",
+        "surface_family": "run-action-log",
+        "member_identity_key": "event_id",
+        "family_group": "run",
+    }
+
+
+def _run_action_log_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "run-action-log",
+        "canonical_route": "/api/runs/{run_id}/actions",
+        "family_group": "run",
+    }
+
+
 def _run_control_identity_policy_body() -> dict[str, Any]:
     return {
         "canonical_key": "run_id",
@@ -3456,7 +3523,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_collection_identity(payload.get("artifacts"), canonical_key="artifact_id", lookup_mode="artifact_id_only")
+            payload["identity_policy"] = _run_artifacts_identity_policy_body()
+            payload["namespace_policy"] = _run_artifacts_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -3498,7 +3569,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_mapping_identity(payload, canonical_key="artifact_id", lookup_mode="artifact_id_only")
+            payload["identity_policy"] = _artifact_detail_identity_policy_body()
+            payload["namespace_policy"] = _artifact_detail_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -3544,7 +3619,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_collection_identity(payload.get("events"), canonical_key="event_id", lookup_mode="event_id_only")
+            payload["identity_policy"] = _run_trace_identity_policy_body()
+            payload["namespace_policy"] = _run_trace_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -5051,8 +5130,9 @@ class RunHttpRouteSurface:
         if outcome.ok:
             assert outcome.response is not None
             payload = asdict(outcome.response)
-            payload["identity_policy"] = _workspace_provider_probe_identity_policy_body()
-            payload["namespace_policy"] = _workspace_provider_probe_namespace_policy_body()
+            _inject_collection_identity(payload.get("actions"), canonical_key="event_id", lookup_mode="event_id_only")
+            payload["identity_policy"] = _run_action_log_identity_policy_body()
+            payload["namespace_policy"] = _run_action_log_namespace_policy_body()
             return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
