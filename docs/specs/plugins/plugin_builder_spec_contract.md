@@ -825,7 +825,7 @@ Interpretation rule:
 - this Builder contract remains a build/publication-oriented contract vocabulary
 - coexistence is mandatory until an explicit migration document says otherwise
 
-## 28. Relationship to Other Documents
+## 29. Relationship to Other Documents
 
 This document should be read alongside or followed by related documents such as:
 

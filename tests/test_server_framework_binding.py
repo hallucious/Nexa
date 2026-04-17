@@ -568,6 +568,8 @@ def test_framework_binding_serializes_http_response_into_json_text() -> None:
     parsed = json.loads(response.body_text)
     assert parsed["status"] == "running"
     assert parsed["progress"]["percent"] == 20
+    assert parsed["identity_policy"]["surface_family"] == "run-status"
+    assert parsed["namespace_policy"]["family"] == "run-status"
 
 
 def test_framework_binding_handles_launch_round_trip() -> None:
@@ -626,6 +628,8 @@ def test_framework_binding_handles_result_route_round_trip() -> None:
     assert parsed["result_state"] == "ready_success"
     assert parsed["final_output"]["output_key"] == "answer"
     assert parsed["final_output"]["value_preview"] == "ok"
+    assert parsed["identity_policy"]["surface_family"] == "run-result"
+    assert parsed["namespace_policy"]["family"] == "run-result"
 
 
 def test_framework_binding_handles_workspace_run_list_round_trip() -> None:
@@ -649,6 +653,9 @@ def test_framework_binding_handles_workspace_run_list_round_trip() -> None:
     assert parsed["workspace_id"] == "ws-001"
     assert parsed["returned_count"] == 2
     assert parsed["runs"][0]["run_id"] == "run-002"
+    assert parsed["runs"][0]["identity"]["canonical_key"] == "run_id"
+    assert parsed["identity_policy"]["surface_family"] == "workspace-run-list"
+    assert parsed["namespace_policy"]["family"] == "workspace-run-list"
 
 
 def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None:
@@ -857,6 +864,9 @@ def test_framework_binding_handles_provider_catalog_and_workspace_provider_bindi
     assert catalog_response.status_code == 200
     assert catalog_payload["returned_count"] == 1
     assert catalog_payload["providers"][0]["provider_key"] == "openai"
+    assert catalog_payload["providers"][0]["identity"]["canonical_key"] == "provider_key"
+    assert catalog_payload["identity_policy"]["surface_family"] == "provider-catalog"
+    assert catalog_payload["namespace_policy"]["family"] == "provider-catalog"
 
     list_response = FrameworkRouteBindings.handle_list_workspace_provider_bindings(
         request=_request(method="GET", path="/api/workspaces/ws-001/provider-bindings", path_params={"workspace_id": "ws-001"}),
@@ -887,6 +897,9 @@ def test_framework_binding_handles_provider_catalog_and_workspace_provider_bindi
     assert list_response.status_code == 200
     assert list_payload["returned_count"] == 1
     assert list_payload["bindings"][0]["status"] == "configured"
+    assert list_payload["bindings"][0]["identity"]["canonical_key"] == "binding_id"
+    assert list_payload["identity_policy"]["surface_family"] == "workspace-provider-binding"
+    assert list_payload["namespace_policy"]["family"] == "workspace-provider-binding"
 
     put_response = FrameworkRouteBindings.handle_put_workspace_provider_binding(
         request=_request(
@@ -916,6 +929,9 @@ def test_framework_binding_handles_provider_catalog_and_workspace_provider_bindi
     assert put_response.status_code == 200
     assert put_payload["binding"]["provider_key"] == "openai"
     assert put_payload["binding"]["secret_ref"] == "secret://ws-001/openai"
+    assert put_payload["binding"]["identity"]["canonical_key"] == "binding_id"
+    assert put_payload["identity_policy"]["surface_family"] == "workspace-provider-binding"
+    assert put_payload["namespace_policy"]["family"] == "workspace-provider-binding"
     assert put_payload["secret_rotated"] is True
     assert "super-secret" not in put_response.body_text
 
@@ -940,6 +956,9 @@ def test_framework_binding_handles_provider_probe_history_round_trip() -> None:
     assert response.status_code == 200
     assert parsed["returned_count"] == 1
     assert parsed["items"][0]["probe_event_id"] == "probe-002"
+    assert parsed["items"][0]["identity"]["canonical_key"] == "probe_event_id"
+    assert parsed["identity_policy"]["surface_family"] == "workspace-provider-probe-history"
+    assert parsed["namespace_policy"]["family"] == "workspace-provider-probe-history"
 
 
 def test_framework_binding_workspace_shell_includes_latest_run_previews() -> None:

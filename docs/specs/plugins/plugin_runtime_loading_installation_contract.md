@@ -147,3 +147,12 @@ A plugin should not become active merely because it was built or published.
 It becomes usable only when a target runtime explicitly accepts, loads, and activates it under enforceable policy and verification boundaries.
 
 That is the canonical meaning of Plugin Runtime Loading / Installation in Nexa.
+
+
+Plugin type resolution rule:
+- installation/load acceptance must not proceed to activation with `plugin_type` unresolved
+- if the artifact manifest carries `plugin_type`, runtime may use that value directly
+- if the artifact manifest leaves `plugin_type` null, the loading stage must resolve it through an explicit loading/install rule
+- acceptable resolution sources include builder/template metadata, discovery metadata, or an operator-supplied resolution rule
+- a plugin with unresolved runtime-facing `plugin_type` must not proceed as activation-ready
+

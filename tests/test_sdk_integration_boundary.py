@@ -144,6 +144,14 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert contracts["list_starter_circuit_templates"].result_shape_profile.identity_keys == ("identity_policy", "namespace_policy")
     assert contracts["get_public_nex_format"].result_shape_profile.identity_keys == ("format_boundary", "identity_policy", "namespace_policy")
     assert contracts["get_public_mcp_manifest"].result_shape_profile.identity_keys == ("manifest", "identity_policy", "namespace_policy")
+    assert contracts["list_workspace_runs"].result_shape_profile.identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert contracts["get_provider_catalog"].result_shape_profile.identity_keys == ("identity_policy", "namespace_policy")
+    assert contracts["list_workspace_provider_bindings"].result_shape_profile.identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert contracts["put_workspace_provider_binding"].result_shape_profile.identity_keys == ("binding.binding_id", "identity_policy", "namespace_policy")
+    assert contracts["list_workspace_provider_health"].result_shape_profile.identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert contracts["get_workspace_provider_health"].result_shape_profile.identity_keys == ("workspace_id", "provider_key", "identity_policy", "namespace_policy")
+    assert contracts["probe_workspace_provider"].result_shape_profile.identity_keys == ("workspace_id", "provider_key", "identity_policy", "namespace_policy")
+    assert contracts["list_provider_probe_history"].result_shape_profile.identity_keys == ("workspace_id", "provider_key", "identity_policy", "namespace_policy")
     assert contracts["get_public_mcp_host_bridge"].result_shape_profile.identity_keys == ("host_bridge", "identity_policy", "namespace_policy")
     assert contracts["list_issuer_public_shares"].result_shape_profile.collection_item_identity_keys == ("share_id", "identity")
     assert indexed["get_public_nex_format"].path == "/api/formats/public-nex"
@@ -753,8 +761,8 @@ def test_build_public_mcp_result_shape_profiles_exports_family_profiles() -> Non
     profiles = build_public_mcp_result_shape_profiles()
 
     assert any(isinstance(profile, PublicMcpResultShapeProfile) for profile in profiles)
-    assert any(profile.profile_kind == "run-status-detail" and profile.identity_keys == ("run_id",) for profile in profiles)
-    assert any(profile.collection_field_name == "runs" and profile.collection_item_identity_keys == ("run_id",) for profile in profiles)
+    assert any(profile.profile_kind == "run-status-detail" and profile.identity_keys == ("run_id", "identity_policy", "namespace_policy") for profile in profiles)
+    assert any(profile.collection_field_name == "runs" and profile.collection_item_identity_keys == ("run_id", "identity") for profile in profiles)
 
 
 def test_build_public_mcp_response_contracts_exports_curated_success_shapes() -> None:
@@ -767,7 +775,7 @@ def test_build_public_mcp_response_contracts_exports_curated_success_shapes() ->
     assert indexed["get_run_status"].response_shape == "status"
     assert indexed["get_run_status"].success_status_codes == (200,)
     assert indexed["get_run_status"].result_shape_profile is not None
-    assert indexed["get_run_status"].result_shape_profile.identity_keys == ("run_id",)
+    assert indexed["get_run_status"].result_shape_profile.identity_keys == ("run_id", "identity_policy", "namespace_policy")
 
 
 def test_manifest_includes_response_contracts() -> None:
@@ -783,7 +791,7 @@ def test_manifest_includes_response_contracts() -> None:
     assert status_resource.response_contract.response_shape == "status"
     assert status_resource.response_contract.result_shape_profile is not None
     assert status_dict["response_contract"]["success_status_codes"] == [200]
-    assert status_dict["response_contract"]["result_shape_profile"]["identity_keys"] == ["run_id"]
+    assert status_dict["response_contract"]["result_shape_profile"]["identity_keys"] == ["run_id", "identity_policy", "namespace_policy"]
 
 
 def test_adapter_scaffold_normalizes_framework_response_against_public_contract() -> None:
@@ -794,7 +802,7 @@ def test_adapter_scaffold_normalizes_framework_response_against_public_contract(
         FrameworkOutboundResponse(
             status_code=200,
             headers={"content-type": "application/json"},
-            body_text='{"run_id": "run-1", "status": "queued"}',
+            body_text='{"run_id": "run-1", "status": "queued", "identity_policy": {"surface_family": "run-status"}, "namespace_policy": {"family": "run-status"}}',
             media_type="application/json",
         ),
     )
@@ -846,7 +854,7 @@ def test_response_contract_exports_body_kind_and_required_keys() -> None:
     indexed = {contract.route_name: contract for contract in contracts}
 
     assert indexed["get_run_status"].body_kind == "object"
-    assert indexed["get_run_status"].required_top_level_keys == ("run_id", "status")
+    assert indexed["get_run_status"].required_top_level_keys == ("run_id", "status", "identity_policy", "namespace_policy")
     assert indexed["launch_run"].required_top_level_keys == ("status",)
 
 
@@ -858,7 +866,8 @@ def test_response_contract_exports_result_shape_profiles() -> None:
     assert workspace_runs is not None
     assert workspace_runs.collection_field_name == "runs"
     assert workspace_runs.count_field_name == "returned_count"
-    assert workspace_runs.collection_item_identity_keys == ("run_id",)
+    assert workspace_runs.identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert workspace_runs.collection_item_identity_keys == ("run_id", "identity")
 
 
 def test_adapter_scaffold_rejects_response_missing_collection_item_identity_key() -> None:
@@ -869,7 +878,7 @@ def test_adapter_scaffold_rejects_response_missing_collection_item_identity_key(
             "list_workspace_runs",
             HttpRouteResponse(
                 status_code=200,
-                body={"workspace_id": "ws-1", "returned_count": 1, "runs": [{"status": "queued"}]},
+                body={"workspace_id": "ws-1", "returned_count": 1, "identity_policy": {"surface_family": "workspace-run-list"}, "namespace_policy": {"family": "workspace-run-list"}, "runs": [{"status": "queued"}]},
                 headers={"content-type": "application/json"},
             ),
         )
@@ -1623,6 +1632,17 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["put_onboarding"].required_top_level_keys == ("status", "continuity_scope", "state", "links", "was_created", "identity_policy", "namespace_policy")
     assert responses["get_recent_activity"].required_top_level_keys == ("returned_count", "activities", "identity_policy", "namespace_policy")
     assert responses["get_history_summary"].required_top_level_keys == ("scope", "identity_policy", "namespace_policy")
+    assert responses["list_workspace_runs"].required_top_level_keys == ("workspace_id", "returned_count", "runs", "identity_policy", "namespace_policy")
+    assert responses["retry_run"].required_top_level_keys == ("status", "run_id", "identity_policy", "namespace_policy")
+    assert responses["get_run_status"].required_top_level_keys == ("run_id", "status", "identity_policy", "namespace_policy")
+    assert responses["get_run_result"].required_top_level_keys == ("run_id", "result_state", "identity_policy", "namespace_policy")
+    assert responses["get_provider_catalog"].required_top_level_keys == ("returned_count", "providers", "identity_policy", "namespace_policy")
+    assert responses["list_workspace_provider_bindings"].required_top_level_keys == ("workspace_id", "returned_count", "bindings", "identity_policy", "namespace_policy")
+    assert responses["put_workspace_provider_binding"].required_top_level_keys == ("status", "binding", "was_created", "secret_rotated", "identity_policy", "namespace_policy")
+    assert responses["list_workspace_provider_health"].required_top_level_keys == ("workspace_id", "returned_count", "providers", "identity_policy", "namespace_policy")
+    assert responses["get_workspace_provider_health"].required_top_level_keys == ("workspace_id", "health", "identity_policy", "namespace_policy")
+    assert responses["probe_workspace_provider"].required_top_level_keys == ("workspace_id", "provider_key", "probe_status", "connectivity_state", "findings", "links", "identity_policy", "namespace_policy")
+    assert responses["list_provider_probe_history"].required_top_level_keys == ("workspace_id", "provider_key", "returned_count", "total_visible_count", "items", "applied_filters", "identity_policy", "namespace_policy")
     assert responses["get_public_share_history"].required_top_level_keys == ("share_id", "history", "identity_policy", "namespace_policy")
     assert responses["list_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "shares", "status", "identity_policy", "namespace_policy")
     assert responses["get_issuer_public_share_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "status", "identity_policy", "namespace_policy")

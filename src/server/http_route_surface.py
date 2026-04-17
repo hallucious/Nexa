@@ -782,6 +782,164 @@ def _history_summary_namespace_policy_body() -> dict[str, Any]:
         "family_group": "workspace-bootstrap",
     }
 
+def _workspace_run_list_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-run-list",
+        "member_identity_key": "run_id",
+        "family_group": "run",
+    }
+
+
+def _workspace_run_list_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-run-list",
+        "canonical_route": "/api/workspaces/{workspace_id}/runs",
+        "member_namespace_family": "run",
+        "family_group": "run",
+    }
+
+
+def _run_status_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "run_id",
+        "surface_family": "run-status",
+        "family_group": "run",
+    }
+
+
+def _run_status_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "run-status",
+        "canonical_route": "/api/runs/{run_id}",
+        "family_group": "run",
+    }
+
+
+def _run_result_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "run_id",
+        "surface_family": "run-result",
+        "family_group": "run",
+    }
+
+
+def _run_result_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "run-result",
+        "canonical_route": "/api/runs/{run_id}/result",
+        "family_group": "run",
+    }
+
+
+def _run_control_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "run_id",
+        "surface_family": "run-control",
+        "action_key": "action",
+        "family_group": "run",
+    }
+
+
+def _run_control_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "run-control",
+        "canonical_route": "/api/runs/{run_id}/{action}",
+        "family_group": "run",
+    }
+
+
+def _provider_catalog_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "provider_catalog_family",
+        "surface_family": "provider-catalog",
+        "member_identity_key": "provider_key",
+        "family_group": "workspace-provider",
+    }
+
+
+def _provider_catalog_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "provider-catalog",
+        "canonical_route": "/api/providers/catalog",
+        "member_namespace_family": "provider",
+        "family_group": "workspace-provider",
+    }
+
+
+def _workspace_provider_binding_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-provider-binding",
+        "member_identity_key": "binding_id",
+        "family_group": "workspace-provider",
+    }
+
+
+def _workspace_provider_binding_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-provider-binding",
+        "canonical_route": "/api/workspaces/{workspace_id}/provider-bindings",
+        "member_namespace_family": "provider-binding",
+        "family_group": "workspace-provider",
+    }
+
+
+def _workspace_provider_health_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-provider-health",
+        "member_identity_key": "provider_key",
+        "family_group": "workspace-provider",
+    }
+
+
+def _workspace_provider_health_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-provider-health",
+        "canonical_route": "/api/workspaces/{workspace_id}/provider-bindings/health",
+        "detail_path_format": "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/health",
+        "member_namespace_family": "provider-health",
+        "family_group": "workspace-provider",
+    }
+
+
+def _workspace_provider_probe_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-provider-probe",
+        "member_identity_key": "provider_key",
+        "family_group": "workspace-provider",
+    }
+
+
+def _workspace_provider_probe_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-provider-probe",
+        "canonical_route": "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe",
+        "member_namespace_family": "provider-probe",
+        "family_group": "workspace-provider",
+    }
+
+
+def _workspace_provider_probe_history_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-provider-probe-history",
+        "member_identity_key": "probe_event_id",
+        "family_group": "workspace-provider",
+    }
+
+
+def _workspace_provider_probe_history_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-provider-probe-history",
+        "canonical_route": "/api/workspaces/{workspace_id}/provider-bindings/{provider_key}/probe-history",
+        "member_namespace_family": "provider-probe-event",
+        "family_group": "workspace-provider",
+    }
+
+
 
 def _inject_mapping_identity(mapping: Any, *, canonical_key: str, canonical_value: Any | None = None, lookup_mode: str = "direct") -> None:
     if not isinstance(mapping, dict):
@@ -3253,7 +3411,10 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            payload["identity_policy"] = _run_status_identity_policy_body()
+            payload["namespace_policy"] = _run_status_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4454,7 +4615,10 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            payload["identity_policy"] = _workspace_provider_probe_identity_policy_body()
+            payload["namespace_policy"] = _workspace_provider_probe_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4495,7 +4659,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_collection_identity(payload.get("providers"), canonical_key="provider_key", lookup_mode="provider_key_only")
+            payload["identity_policy"] = _workspace_provider_health_identity_policy_body()
+            payload["namespace_policy"] = _workspace_provider_health_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4540,7 +4708,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_mapping_identity(payload.get("health"), canonical_key="provider_key", lookup_mode="workspace_id_and_provider_key")
+            payload["identity_policy"] = _workspace_provider_health_identity_policy_body()
+            payload["namespace_policy"] = _workspace_provider_health_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4586,7 +4758,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_collection_identity(payload.get("items"), canonical_key="probe_event_id", lookup_mode="probe_event_id_only")
+            payload["identity_policy"] = _workspace_provider_probe_history_identity_policy_body()
+            payload["namespace_policy"] = _workspace_provider_probe_history_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4621,7 +4797,12 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_mapping_identity(payload, canonical_key="provider_catalog_family", canonical_value="provider-catalog", lookup_mode="provider_catalog")
+            _inject_collection_identity(payload.get("providers"), canonical_key="provider_key", lookup_mode="provider_key_only")
+            payload["identity_policy"] = _provider_catalog_identity_policy_body()
+            payload["namespace_policy"] = _provider_catalog_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4660,7 +4841,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_collection_identity(payload.get("bindings"), canonical_key="binding_id", lookup_mode="binding_id_only")
+            payload["identity_policy"] = _workspace_provider_binding_identity_policy_body()
+            payload["namespace_policy"] = _workspace_provider_binding_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4718,7 +4903,11 @@ class RunHttpRouteSurface:
             assert outcome.accepted is not None
             if binding_writer is not None and outcome.created_or_updated_binding_row is not None:
                 binding_writer(dict(outcome.created_or_updated_binding_row))
-            return _route_response(200, asdict(outcome.accepted))
+            payload = asdict(outcome.accepted)
+            _inject_mapping_identity(payload.get("binding"), canonical_key="binding_id", lookup_mode="binding_id_only")
+            payload["identity_policy"] = _workspace_provider_binding_identity_policy_body()
+            payload["namespace_policy"] = _workspace_provider_binding_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4769,7 +4958,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_collection_identity(payload.get("runs"), canonical_key="run_id", lookup_mode="run_id_only")
+            payload["identity_policy"] = _workspace_run_list_identity_policy_body()
+            payload["namespace_policy"] = _workspace_run_list_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4814,7 +5007,10 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.accepted is not None
-            return _route_response(200, asdict(outcome.accepted))
+            payload = asdict(outcome.accepted)
+            payload["identity_policy"] = _run_control_identity_policy_body()
+            payload["namespace_policy"] = _run_control_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4854,7 +5050,10 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            payload["identity_policy"] = _workspace_provider_probe_identity_policy_body()
+            payload["namespace_policy"] = _workspace_provider_probe_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4922,6 +5121,9 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            payload["identity_policy"] = _run_result_identity_policy_body()
+            payload["namespace_policy"] = _run_result_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))

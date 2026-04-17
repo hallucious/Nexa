@@ -58,6 +58,7 @@ BoundPluginRuntime
 - manifest_ref: string
 - installation_ref: string
 - target_runtime_ref: string
+- execution_stage: enum("pre", "core", "post")
 - executor_ref: string
 - bound_policy_ref: string
 - working_context_contract_ref: string
@@ -75,6 +76,7 @@ Runtime may create a BoundPluginRuntime only if:
 - plugin is loaded
 - plugin is active or eligible
 - artifact and manifest resolve consistently
+- execution_stage is permitted by the plugin's declared stage allowance
 - approved namespace policy is resolvable
 - runtime can enforce required policy restrictions
 - PluginExecutor path is available

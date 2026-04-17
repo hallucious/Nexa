@@ -118,24 +118,41 @@ Unless otherwise noted, most of this plugin family should currently be read as `
 - Plugin Lifecycle State Machine Contract: How do all plugin states fit together as one explicit lifecycle machine?
 - Plugin Contract Family Index: How should the whole family be read, navigated, and implemented?
 
-## 8. Dependency Map
+## 8. Reading Order vs Real Dependency Structure
 
-Builder Spec
--> Intake
--> Namespace Policy
--> Artifact / Manifest
--> Registry
--> Verification / Test
--> Loading / Installation
--> Execution Binding
--> Context I/O
--> Failure / Recovery
--> Runtime Observability
--> Runtime Governance
--> Lifecycle State Machine
--> Family Index
+The family uses a canonical reading order,
+but the real dependency structure is not purely linear.
 
-## 9. Reading Order vs Implementation Order
+Reading order exists to reduce conceptual confusion.
+Dependency structure exists to show which contracts directly constrain others.
+
+These two views must not be collapsed.
+
+## 9. Conceptual Dependency Graph
+
+The real dependency structure is better understood as a graph with strong direct links such as:
+
+- Builder Spec -> Intake
+- Builder Spec -> Namespace Policy
+- Builder Spec -> Verification / Test
+- Namespace Policy -> Runtime Artifact / Manifest
+- Namespace Policy -> Runtime Loading / Installation
+- Namespace Policy -> Runtime Execution Binding
+- Namespace Policy -> Plugin Context I/O
+- Runtime Artifact / Manifest -> Registry
+- Runtime Artifact / Manifest -> Runtime Loading / Installation
+- Verification / Test -> Runtime Loading / Installation
+- Runtime Loading / Installation -> Runtime Execution Binding
+- Runtime Execution Binding -> Plugin Context I/O
+- Plugin Context I/O -> Failure / Recovery
+- Failure / Recovery -> Runtime Observability
+- Runtime Observability -> Runtime Governance
+- Runtime Governance -> Lifecycle State Machine
+
+This graph is not exhaustive,
+but it is more accurate than a single linear chain.
+
+## 10. Reading Order vs Implementation Order
 
 Reading order follows conceptual clarity.
 Implementation may batch nearby runtime concerns, but must still respect upstream invariants.
@@ -188,7 +205,7 @@ When the plugin contract family changes:
 4. dependency notes must be updated
 5. implementation guidance may need revision
 
-## 14. Explicitly Forbidden Patterns
+## 15. Explicitly Forbidden Patterns
 
 - orphan contract creation
 - reading-order ambiguity
@@ -196,14 +213,14 @@ When the plugin contract family changes:
 - hidden dependency assumptions
 - family-index drift
 
-## 15. Canonical Summary
+## 17. Canonical Summary
 
 - The plugin system is a contract family, not a single spec.
 - The family has a canonical reading order and dependency map.
 - Builder, artifact, runtime, and governance concerns must remain layered.
 - The family index is necessary to keep the plugin spec set navigable, maintainable, and implementation-safe.
 
-## 16. Final Statement
+## 18. Final Statement
 
 The plugin contract family in Nexa should not exist as a scattered pile of individually reasonable documents.
 

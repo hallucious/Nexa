@@ -463,6 +463,8 @@ def test_fastapi_binding_status_endpoint_round_trip() -> None:
     assert payload["provider_continuity"]["provider_binding_count"] == 1
     assert payload["activity_continuity"]["recent_run_count"] == 1
     assert payload["progress"]["percent"] == 25
+    assert payload["identity_policy"]["surface_family"] == "run-status"
+    assert payload["namespace_policy"]["family"] == "run-status"
 
 
 def test_fastapi_binding_result_endpoint_round_trip() -> None:
@@ -476,6 +478,8 @@ def test_fastapi_binding_result_endpoint_round_trip() -> None:
     assert payload["provider_continuity"]["provider_binding_count"] == 1
     assert payload["activity_continuity"]["recent_run_count"] == 1
     assert payload["final_output"]["output_key"] == "answer"
+    assert payload["identity_policy"]["surface_family"] == "run-result"
+    assert payload["namespace_policy"]["family"] == "run-result"
 
 
 def test_fastapi_binding_artifact_and_trace_routes_round_trip() -> None:
@@ -805,14 +809,20 @@ def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() ->
     catalog_payload = catalog_response.json()
     assert catalog_payload["returned_count"] == 1
     assert catalog_payload["providers"][0]["provider_key"] == "openai"
+    assert catalog_payload["providers"][0]["identity"]["canonical_key"] == "provider_key"
     assert catalog_payload["provider_continuity"]["provider_binding_count"] >= 1
     assert catalog_payload["activity_continuity"]["recent_run_count"] >= 1
+    assert catalog_payload["identity_policy"]["surface_family"] == "provider-catalog"
+    assert catalog_payload["namespace_policy"]["family"] == "provider-catalog"
 
     bindings_response = client.get("/api/workspaces/ws-001/provider-bindings", headers=_session_headers())
     assert bindings_response.status_code == 200
     bindings_payload = bindings_response.json()
     assert bindings_payload["returned_count"] == 1
     assert bindings_payload["bindings"][0]["status"] == "configured"
+    assert bindings_payload["bindings"][0]["identity"]["canonical_key"] == "binding_id"
+    assert bindings_payload["identity_policy"]["surface_family"] == "workspace-provider-binding"
+    assert bindings_payload["namespace_policy"]["family"] == "workspace-provider-binding"
 
     put_response = client.put(
         "/api/workspaces/ws-001/provider-bindings/openai",
@@ -823,6 +833,9 @@ def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() ->
     put_payload = put_response.json()
     assert put_payload["binding"]["provider_key"] == "openai"
     assert put_payload["binding"]["secret_ref"] == "aws-secretsmanager://nexa/ws-001/providers/openai"
+    assert put_payload["binding"]["identity"]["canonical_key"] == "binding_id"
+    assert put_payload["identity_policy"]["surface_family"] == "workspace-provider-binding"
+    assert put_payload["namespace_policy"]["family"] == "workspace-provider-binding"
     assert put_payload["secret_rotated"] is True
     assert "super-secret" not in put_response.text
 
@@ -838,6 +851,8 @@ def test_fastapi_binding_provider_probe_round_trip() -> None:
     payload = response.json()
     assert payload['probe_status'] == 'reachable'
     assert payload['effective_model_ref'] == 'gpt-4.1'
+    assert payload['identity_policy']['surface_family'] == 'workspace-provider-probe'
+    assert payload['namespace_policy']['family'] == 'workspace-provider-probe'
 
 
 def test_fastapi_binding_recent_activity_includes_provider_probe_event() -> None:
@@ -931,8 +946,11 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
     assert health_response.status_code == 200
     assert health_response.json()['provider_key'] == 'openai'
     assert health_response.json()['health']['provider_key'] == 'openai'
+    assert health_response.json()['health']['identity']['canonical_key'] == 'provider_key'
     assert health_response.json()['health']['health_status'] in {'healthy', 'warning', 'blocked', 'disabled', 'missing'}
     assert health_response.json()['provider_continuity']['provider_binding_count'] >= 1
+    assert health_response.json()['identity_policy']['surface_family'] == 'workspace-provider-health'
+    assert health_response.json()['namespace_policy']['family'] == 'workspace-provider-health'
 
     probe_response = client.post(
         '/api/workspaces/ws-001/provider-bindings/openai/probe',
@@ -943,6 +961,8 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
     probe_payload = probe_response.json()
     assert probe_payload['probe_status'] == 'reachable'
     assert probe_payload['provider_continuity']['provider_binding_count'] >= 1
+    assert probe_payload['identity_policy']['surface_family'] == 'workspace-provider-probe'
+    assert probe_payload['namespace_policy']['family'] == 'workspace-provider-probe'
 
     history_response = client.get('/api/workspaces/ws-001/provider-bindings/openai/probe-history', headers=_session_headers())
     assert history_response.status_code == 200
@@ -950,6 +970,9 @@ def test_fastapi_binding_provider_binding_round_trip_enables_probe_and_health() 
     assert history_response.json()['items'][0]['probe_event_id'] == 'probe-created'
     history_payload = history_response.json()
     assert history_payload['items'][0]['provider_key'] == 'openai'
+    assert history_payload['items'][0]['identity']['canonical_key'] == 'probe_event_id'
+    assert history_payload['identity_policy']['surface_family'] == 'workspace-provider-probe-history'
+    assert history_payload['namespace_policy']['family'] == 'workspace-provider-probe-history'
     assert history_payload['provider_continuity']['recent_probe_count'] >= 1
 
 
@@ -961,6 +984,9 @@ def test_fastapi_binding_provider_probe_history_round_trip() -> None:
     payload = response.json()
     assert payload['returned_count'] == 1
     assert payload['items'][0]['probe_event_id'] == 'probe-001'
+    assert payload['items'][0]['identity']['canonical_key'] == 'probe_event_id'
+    assert payload['identity_policy']['surface_family'] == 'workspace-provider-probe-history'
+    assert payload['namespace_policy']['family'] == 'workspace-provider-probe-history'
 
 
 def test_fastapi_binding_provider_probe_write_is_visible_in_history_and_recent_activity() -> None:

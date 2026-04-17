@@ -80,6 +80,7 @@ PluginArtifactManifest
 - plugin_name: string
 - plugin_display_name: string | null
 - plugin_category: string
+- plugin_type: string | null
 - plugin_summary: string
 - plugin_description: string | null
 - artifact_version: string
@@ -155,6 +156,12 @@ That field must not be silently merged with existing current-code `plugin_type` 
 Canonical distinction:
 - `plugin_category` = builder/artifact purpose class
 - `plugin_type` = current runtime/platform role class
+
+Normative bridge rule:
+- `plugin_category` must not be treated as a synonym for `plugin_type`
+- a runtime-usable artifact must expose or resolve an explicit runtime-facing `plugin_type` before loading/install acceptance
+- that runtime-facing type may be carried directly in the artifact/manifest layer or resolved by a declared loading/install rule
+- category alone is not sufficient to determine runtime/plugin-role behavior
 
 ## 13. Relationship to Current Codebase Alignment
 

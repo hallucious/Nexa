@@ -375,7 +375,7 @@ def test_sdk_root_exposes_public_mcp_normalized_response() -> None:
         FrameworkOutboundResponse(
             status_code=200,
             headers={"content-type": "application/json"},
-            body_text='{"run_id": "run-1", "status": "queued"}',
+            body_text='{"run_id": "run-1", "status": "queued", "identity_policy": {"surface_family": "run-status", "canonical_key": "run_id"}, "namespace_policy": {"family": "run-status", "namespace": "run"}}',
             media_type="application/json",
         ),
     )
