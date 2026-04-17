@@ -211,6 +211,13 @@ def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> No
     assert profiles_by_kind["workspace-result-history"].identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
     assert profiles_by_kind["workspace-feedback-read"].identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
     assert profiles_by_kind["workspace-feedback-write"].identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert profiles_by_kind["workspace-collection"].identity_keys == ("identity_policy", "namespace_policy")
+    assert profiles_by_kind["workspace-detail"].identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert profiles_by_kind["workspace-create"].identity_keys == ("workspace.workspace_id", "identity_policy", "namespace_policy")
+    assert profiles_by_kind["onboarding-read"].identity_keys == ("continuity_scope", "identity_policy", "namespace_policy")
+    assert profiles_by_kind["onboarding-write"].identity_keys == ("continuity_scope", "identity_policy", "namespace_policy")
+    assert profiles_by_kind["activity-collection"].identity_keys == ("identity_policy", "namespace_policy")
+    assert profiles_by_kind["history-summary"].identity_keys == ("scope", "identity_policy", "namespace_policy")
     assert status_export.invocation.url == "https://api.nexa.test/api/runs/run-1"
     assert export.transport_kind == "http-route-bridge"
     assert export.stability == "scaffold"
@@ -880,7 +887,12 @@ def test_adapter_scaffold_rejects_response_with_invalid_count_field_type() -> No
             "list_workspaces",
             HttpRouteResponse(
                 status_code=200,
-                body={"returned_count": "1", "workspaces": [{"workspace_id": "ws-1"}]},
+                body={
+                    "returned_count": "1",
+                    "workspaces": [{"workspace_id": "ws-1", "identity": {"canonical_key": "workspace_id", "canonical_value": "ws-1", "lookup_mode": "workspace_id_only"}}],
+                    "identity_policy": {"surface_family": "workspace-registry"},
+                    "namespace_policy": {"family": "workspace-registry"},
+                },
                 headers={"content-type": "application/json"},
             ),
         )
@@ -1604,6 +1616,13 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["get_public_nex_format"].required_top_level_keys == ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_mcp_manifest"].required_top_level_keys == ("status", "manifest", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_mcp_host_bridge"].required_top_level_keys == ("status", "host_bridge", "identity_policy", "namespace_policy", "routes")
+    assert responses["list_workspaces"].required_top_level_keys == ("returned_count", "workspaces", "identity_policy", "namespace_policy")
+    assert responses["get_workspace"].required_top_level_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert responses["create_workspace"].required_top_level_keys == ("status", "workspace", "owner_membership_id", "identity_policy", "namespace_policy")
+    assert responses["get_onboarding"].required_top_level_keys == ("continuity_scope", "state", "links", "identity_policy", "namespace_policy")
+    assert responses["put_onboarding"].required_top_level_keys == ("status", "continuity_scope", "state", "links", "was_created", "identity_policy", "namespace_policy")
+    assert responses["get_recent_activity"].required_top_level_keys == ("returned_count", "activities", "identity_policy", "namespace_policy")
+    assert responses["get_history_summary"].required_top_level_keys == ("scope", "identity_policy", "namespace_policy")
     assert responses["get_public_share_history"].required_top_level_keys == ("share_id", "history", "identity_policy", "namespace_policy")
     assert responses["list_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "shares", "status", "identity_policy", "namespace_policy")
     assert responses["get_issuer_public_share_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "status", "identity_policy", "namespace_policy")

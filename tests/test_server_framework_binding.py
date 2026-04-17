@@ -671,6 +671,9 @@ def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None
     assert workspace_response.status_code == 200
     assert workspace_payload["returned_count"] == 1
     assert workspace_payload["workspaces"][0]["workspace_id"] == "ws-001"
+    assert workspace_payload["workspaces"][0]["identity"]["canonical_key"] == "workspace_id"
+    assert workspace_payload["identity_policy"]["surface_family"] == "workspace-registry"
+    assert workspace_payload["namespace_policy"]["family"] == "workspace-registry"
 
     onboarding_response = FrameworkRouteBindings.handle_put_onboarding(
         request=_request(
@@ -687,6 +690,9 @@ def test_framework_binding_handles_workspace_and_onboarding_round_trip() -> None
     assert onboarding_response.status_code == 200
     assert onboarding_payload["state"]["first_success_achieved"] is True
     assert onboarding_payload["state"]["advanced_surfaces_unlocked"] is True
+    assert onboarding_payload["state"]["identity"]["canonical_key"] == "onboarding_state_id"
+    assert onboarding_payload["identity_policy"]["surface_family"] == "workspace-onboarding"
+    assert onboarding_payload["namespace_policy"]["family"] == "workspace-onboarding"
 
 
 

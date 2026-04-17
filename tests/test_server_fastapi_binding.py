@@ -752,15 +752,25 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
     assert workspace_payload['returned_count'] == 1
     assert workspace_payload['workspaces'][0]['workspace_id'] == 'ws-001'
     assert workspace_payload['workspaces'][0]['provider_continuity']['recent_probe_count'] == 1
+    assert workspace_payload['workspaces'][0]['identity']['canonical_key'] == 'workspace_id'
+    assert workspace_payload['identity_policy']['surface_family'] == 'workspace-registry'
+    assert workspace_payload['namespace_policy']['family'] == 'workspace-registry'
 
     workspace_detail = client.get('/api/workspaces/ws-001', headers=_session_headers())
     assert workspace_detail.status_code == 200
-    assert workspace_detail.json()['workspace_id'] == 'ws-001'
-    assert workspace_detail.json()['provider_continuity']['latest_probe_event_id'] == 'probe-001'
+    workspace_detail_payload = workspace_detail.json()
+    assert workspace_detail_payload['workspace_id'] == 'ws-001'
+    assert workspace_detail_payload['provider_continuity']['latest_probe_event_id'] == 'probe-001'
+    assert workspace_detail_payload['identity_policy']['surface_family'] == 'workspace-registry'
+    assert workspace_detail_payload['namespace_policy']['family'] == 'workspace-registry'
 
     workspace_create = client.post('/api/workspaces', headers=_session_headers(), json={'title': 'Created Workspace'})
     assert workspace_create.status_code == 201
-    assert workspace_create.json()['workspace']['workspace_id'] == 'ws-new'
+    workspace_create_payload = workspace_create.json()
+    assert workspace_create_payload['workspace']['workspace_id'] == 'ws-new'
+    assert workspace_create_payload['workspace']['identity']['canonical_key'] == 'workspace_id'
+    assert workspace_create_payload['identity_policy']['surface_family'] == 'workspace-registry'
+    assert workspace_create_payload['namespace_policy']['family'] == 'workspace-registry'
 
     onboarding_get = client.get('/api/users/me/onboarding', headers=_session_headers())
     assert onboarding_get.status_code == 200
@@ -768,6 +778,9 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
     assert onboarding_get_payload['state']['first_success_achieved'] is False
     assert onboarding_get_payload['provider_continuity']['provider_binding_count'] == 1
     assert onboarding_get_payload['activity_continuity']['latest_run_id'] == 'run-001'
+    assert onboarding_get_payload['state']['identity']['canonical_key'] == 'continuity_scope'
+    assert onboarding_get_payload['identity_policy']['surface_family'] == 'workspace-onboarding'
+    assert onboarding_get_payload['namespace_policy']['family'] == 'workspace-onboarding'
 
     onboarding_put = client.put(
         '/api/users/me/onboarding',
@@ -779,6 +792,9 @@ def test_fastapi_binding_workspace_and_onboarding_routes_round_trip() -> None:
     assert onboarding_put_payload['state']['advanced_surfaces_unlocked'] is True
     assert onboarding_put_payload['provider_continuity']['provider_binding_count'] == 1
     assert onboarding_put_payload['activity_continuity']['latest_run_id'] == 'run-001'
+    assert onboarding_put_payload['state']['identity']['canonical_key'] == 'onboarding_state_id'
+    assert onboarding_put_payload['identity_policy']['surface_family'] == 'workspace-onboarding'
+    assert onboarding_put_payload['namespace_policy']['family'] == 'workspace-onboarding'
 
 
 def test_fastapi_binding_provider_catalog_and_workspace_bindings_round_trip() -> None:
@@ -831,8 +847,11 @@ def test_fastapi_binding_recent_activity_includes_provider_probe_event() -> None
     payload = response.json()
     assert payload['activities'][0]['activity_type'] == 'provider_probe_reachable'
     assert payload['activities'][0]['links']['provider_probe_history'].endswith('/probe-history')
+    assert payload['activities'][0]['identity']['canonical_key'] == 'activity_id'
     assert payload['provider_continuity']['provider_binding_count'] == 1
     assert payload['activity_continuity']['recent_run_count'] == 1
+    assert payload['identity_policy']['surface_family'] == 'recent-activity'
+    assert payload['namespace_policy']['family'] == 'recent-activity'
 
 
 

@@ -4879,13 +4879,14 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     },
     "get_recent_activity": {
         "profile_kind": "activity-collection",
+        "identity_keys": ("identity_policy", "namespace_policy"),
         "collection_field_name": "activities",
         "count_field_name": "returned_count",
-        "collection_item_identity_keys": ("activity_id",),
+        "collection_item_identity_keys": ("activity_id", "identity"),
     },
     "get_history_summary": {
         "profile_kind": "history-summary",
-        "identity_keys": ("scope",),
+        "identity_keys": ("scope", "identity_policy", "namespace_policy"),
         "state_keys": ("latest_activity_at",),
     },
     "get_circuit_library": {
@@ -4947,10 +4948,11 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     },
     "get_workspace": {
         "profile_kind": "workspace-detail",
-        "identity_keys": ("workspace_id",),
+        "identity_keys": ("workspace_id", "identity_policy", "namespace_policy"),
     },
     "create_workspace": {
         "profile_kind": "workspace-create",
+        "identity_keys": ("workspace.workspace_id", "identity_policy", "namespace_policy"),
         "state_keys": ("status",),
     },
     "get_provider_catalog": {
@@ -4995,11 +4997,11 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     },
     "get_onboarding": {
         "profile_kind": "onboarding-read",
-        "identity_keys": ("continuity_scope",),
+        "identity_keys": ("continuity_scope", "identity_policy", "namespace_policy"),
     },
     "put_onboarding": {
         "profile_kind": "onboarding-write",
-        "identity_keys": ("continuity_scope",),
+        "identity_keys": ("continuity_scope", "identity_policy", "namespace_policy"),
         "state_keys": ("status",),
     },
     "create_workspace_shell_share": {
@@ -5090,9 +5092,10 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     },
     "list_workspaces": {
         "profile_kind": "workspace-collection",
+        "identity_keys": ("identity_policy", "namespace_policy"),
         "collection_field_name": "workspaces",
         "count_field_name": "returned_count",
-        "collection_item_identity_keys": ("workspace_id",),
+        "collection_item_identity_keys": ("workspace_id", "identity"),
     },
 }
 
@@ -5150,8 +5153,8 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "list_run_artifacts": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object"},
     "get_artifact_detail": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object"},
     "get_run_actions": {"response_shape": "action-log", "success_status_codes": (200,), "body_kind": "object"},
-    "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object"},
-    "get_history_summary": {"response_shape": "history-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("scope",)},
+    "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("returned_count", "activities", "identity_policy", "namespace_policy")},
+    "get_history_summary": {"response_shape": "history-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("scope", "identity_policy", "namespace_policy")},
     "get_circuit_library": {"response_shape": "circuit-library", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "source_of_truth", "library", "overview_section", "item_sections", "identity_policy", "namespace_policy", "routes")},
     "list_starter_circuit_templates": {"response_shape": "starter-template-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "templates", "routes", "identity_policy", "namespace_policy")},
     "get_starter_circuit_template": {"response_shape": "starter-template-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "template", "routes", "identity_policy", "namespace_policy")},
@@ -5161,8 +5164,8 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_workspace_result_history": {"response_shape": "workspace-result-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "result_history", "identity_policy", "namespace_policy")},
     "get_workspace_feedback": {"response_shape": "workspace-feedback-read", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "feedback_channel", "identity_policy", "namespace_policy")},
     "submit_workspace_feedback": {"response_shape": "workspace-feedback-write", "success_status_codes": (202,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "feedback", "identity_policy", "namespace_policy", "links")},
-    "get_workspace": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object"},
-    "create_workspace": {"response_shape": "workspace-created", "success_status_codes": (201,), "body_kind": "object", "required_top_level_keys": ("status", "workspace", "owner_membership_id")},
+    "get_workspace": {"response_shape": "detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("workspace_id", "identity_policy", "namespace_policy")},
+    "create_workspace": {"response_shape": "workspace-created", "success_status_codes": (201,), "body_kind": "object", "required_top_level_keys": ("status", "workspace", "owner_membership_id", "identity_policy", "namespace_policy")},
     "get_provider_catalog": {"response_shape": "provider-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("returned_count", "providers")},
     "list_workspace_provider_bindings": {"response_shape": "workspace-provider-binding-list", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("workspace_id", "returned_count", "bindings")},
     "put_workspace_provider_binding": {"response_shape": "workspace-provider-binding-write", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "binding", "was_created", "secret_rotated")},
@@ -5170,8 +5173,8 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_workspace_provider_health": {"response_shape": "workspace-provider-health-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("workspace_id", "health")},
     "probe_workspace_provider": {"response_shape": "workspace-provider-probe", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("workspace_id", "provider_key", "probe_status", "connectivity_state", "findings", "links")},
     "list_provider_probe_history": {"response_shape": "workspace-provider-probe-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("workspace_id", "provider_key", "returned_count", "total_visible_count", "items", "applied_filters")},
-    "get_onboarding": {"response_shape": "onboarding-read", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("continuity_scope", "state", "links")},
-    "put_onboarding": {"response_shape": "onboarding-write", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "continuity_scope", "state", "links", "was_created")},
+    "get_onboarding": {"response_shape": "onboarding-read", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("continuity_scope", "state", "links", "identity_policy", "namespace_policy")},
+    "put_onboarding": {"response_shape": "onboarding-write", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "continuity_scope", "state", "links", "was_created", "identity_policy", "namespace_policy")},
     "create_workspace_shell_share": {"response_shape": "public-share-created", "success_status_codes": (201,), "body_kind": "object", "required_top_level_keys": ("share_id", "status", "identity_policy", "namespace_policy")},
     "get_public_share": {"response_shape": "public-share-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "status", "identity_policy", "namespace_policy")},
     "get_public_share_history": {"response_shape": "public-share-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "history", "identity_policy", "namespace_policy")},
@@ -5188,7 +5191,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "extend_issuer_public_shares": {"response_shape": "issuer-public-share-bulk-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "status", "action", "identity_policy", "namespace_policy")},
     "archive_issuer_public_shares": {"response_shape": "issuer-public-share-bulk-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "status", "action", "identity_policy", "namespace_policy")},
     "delete_issuer_public_shares": {"response_shape": "issuer-public-share-bulk-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "status", "action", "identity_policy", "namespace_policy")},
-    "list_workspaces": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object"},
+    "list_workspaces": {"response_shape": "list", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("returned_count", "workspaces", "identity_policy", "namespace_policy")},
 }
 
 

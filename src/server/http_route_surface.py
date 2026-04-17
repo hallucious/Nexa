@@ -708,8 +708,97 @@ def _workspace_feedback_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _workspace_registry_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-registry",
+        "member_identity_key": "workspace_id",
+        "family_group": "workspace-bootstrap",
+    }
+
+
+def _workspace_registry_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-registry",
+        "canonical_route": "/api/workspaces",
+        "detail_path_format": "/api/workspaces/{workspace_id}",
+        "member_namespace_family": "workspace",
+        "family_group": "workspace-bootstrap",
+    }
+
+
+def _workspace_onboarding_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "continuity_scope",
+        "surface_family": "workspace-onboarding",
+        "member_identity_key": "onboarding_state_id",
+        "family_group": "workspace-bootstrap",
+    }
+
+
+def _workspace_onboarding_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-onboarding",
+        "canonical_route": "/api/users/me/onboarding",
+        "workspace_query_key": "workspace_id",
+        "member_namespace_family": "onboarding-state",
+        "family_group": "workspace-bootstrap",
+    }
+
+
+def _recent_activity_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "activity_scope",
+        "surface_family": "recent-activity",
+        "member_identity_key": "activity_id",
+        "filter_query_key": "workspace_id",
+        "family_group": "workspace-bootstrap",
+    }
+
+
+def _recent_activity_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "recent-activity",
+        "canonical_route": "/api/users/me/activity",
+        "filter_query_key": "workspace_id",
+        "member_namespace_family": "activity",
+        "family_group": "workspace-bootstrap",
+    }
+
+
+def _history_summary_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "scope",
+        "surface_family": "history-summary",
+        "family_group": "workspace-bootstrap",
+    }
+
+
+def _history_summary_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "history-summary",
+        "canonical_route": "/api/users/me/history-summary",
+        "filter_query_key": "workspace_id",
+        "family_group": "workspace-bootstrap",
+    }
+
+
+def _inject_mapping_identity(mapping: Any, *, canonical_key: str, canonical_value: Any | None = None, lookup_mode: str = "direct") -> None:
+    if not isinstance(mapping, dict):
+        return
+    value = canonical_value if canonical_value is not None else mapping.get(canonical_key)
+    canonical_value_text = str(value or "").strip()
+    if not canonical_value_text:
+        return
+    mapping["identity"] = {
+        "canonical_key": canonical_key,
+        "canonical_value": canonical_value_text,
+        "lookup_mode": lookup_mode,
+    }
+
+
 def _inject_collection_identity(collection: Any, *, canonical_key: str, lookup_mode: str = "direct") -> None:
-    if not isinstance(collection, list):
+    if not isinstance(collection, (list, tuple)):
         return
     for item in collection:
         if not isinstance(item, dict):
@@ -3328,7 +3417,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_collection_identity(payload.get("workspaces"), canonical_key="workspace_id", lookup_mode="workspace_id_only")
+            payload["identity_policy"] = _workspace_registry_identity_policy_body()
+            payload["namespace_policy"] = _workspace_registry_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4004,7 +4097,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_mapping_identity(payload, canonical_key="workspace_id", lookup_mode="workspace_id_only")
+            payload["identity_policy"] = _workspace_registry_identity_policy_body()
+            payload["namespace_policy"] = _workspace_registry_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4062,7 +4159,16 @@ class RunHttpRouteSurface:
             assert outcome.accepted is not None
             if workspace_registry_writer is not None and outcome.created_workspace_row is not None and outcome.created_membership_row is not None:
                 workspace_registry_writer(dict(outcome.created_workspace_row), dict(outcome.created_membership_row))
-            return _route_response(201, asdict(outcome.accepted))
+            payload = asdict(outcome.accepted)
+            workspace = payload.get("workspace")
+            if isinstance(workspace, dict):
+                _inject_mapping_identity(workspace, canonical_key="workspace_id", lookup_mode="workspace_id_only")
+                workspace_id = str(workspace.get("workspace_id") or "").strip()
+                if workspace_id:
+                    payload["workspace_id"] = workspace_id
+            payload["identity_policy"] = _workspace_registry_identity_policy_body()
+            payload["namespace_policy"] = _workspace_registry_namespace_policy_body()
+            return _route_response(201, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4100,7 +4206,20 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            state = payload.get("state")
+            if isinstance(state, dict):
+                _inject_mapping_identity(state, canonical_key="onboarding_state_id", lookup_mode="onboarding_state_id_only")
+                if "identity" not in state:
+                    _inject_mapping_identity(
+                        state,
+                        canonical_key="continuity_scope",
+                        canonical_value=payload.get("continuity_scope"),
+                        lookup_mode="continuity_scope_only",
+                    )
+            payload["identity_policy"] = _workspace_onboarding_identity_policy_body()
+            payload["namespace_policy"] = _workspace_onboarding_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4161,7 +4280,20 @@ class RunHttpRouteSurface:
             assert outcome.accepted is not None
             if onboarding_state_writer is not None and outcome.persisted_onboarding_row is not None:
                 onboarding_state_writer(dict(outcome.persisted_onboarding_row))
-            return _route_response(200, asdict(outcome.accepted))
+            payload = asdict(outcome.accepted)
+            state = payload.get("state")
+            if isinstance(state, dict):
+                _inject_mapping_identity(state, canonical_key="onboarding_state_id", lookup_mode="onboarding_state_id_only")
+                if "identity" not in state:
+                    _inject_mapping_identity(
+                        state,
+                        canonical_key="continuity_scope",
+                        canonical_value=payload.get("continuity_scope"),
+                        lookup_mode="continuity_scope_only",
+                    )
+            payload["identity_policy"] = _workspace_onboarding_identity_policy_body()
+            payload["namespace_policy"] = _workspace_onboarding_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4201,7 +4333,11 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            _inject_collection_identity(payload.get("activities"), canonical_key="activity_id", lookup_mode="activity_id_only")
+            payload["identity_policy"] = _recent_activity_identity_policy_body()
+            payload["namespace_policy"] = _recent_activity_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
@@ -4237,7 +4373,10 @@ class RunHttpRouteSurface:
         )
         if outcome.ok:
             assert outcome.response is not None
-            return _route_response(200, asdict(outcome.response))
+            payload = asdict(outcome.response)
+            payload["identity_policy"] = _history_summary_identity_policy_body()
+            payload["namespace_policy"] = _history_summary_namespace_policy_body()
+            return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))
 
