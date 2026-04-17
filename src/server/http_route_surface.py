@@ -1008,6 +1008,47 @@ def _workspace_provider_probe_history_namespace_policy_body() -> dict[str, Any]:
 
 
 
+def _workspace_shell_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-shell",
+        "member_identity_key": "workspace_id",
+        "family_group": "workspace-shell-family",
+    }
+
+
+def _workspace_shell_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-shell",
+        "canonical_route": "/api/workspaces/{workspace_id}/shell",
+        "draft_write_route": "/api/workspaces/{workspace_id}/shell/draft",
+        "commit_route": "/api/workspaces/{workspace_id}/shell/commit",
+        "checkout_route": "/api/workspaces/{workspace_id}/shell/checkout",
+        "launch_route": "/api/workspaces/{workspace_id}/shell/launch",
+        "member_namespace_family": "workspace-shell",
+        "family_group": "workspace-shell-family",
+    }
+
+
+def _run_launch_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "run_id",
+        "surface_family": "run-launch",
+        "secondary_identity_key": "workspace_id",
+        "member_identity_key": "run_id",
+        "family_group": "run-family",
+    }
+
+
+def _run_launch_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "run-launch",
+        "canonical_route": "/api/runs",
+        "member_namespace_family": "run",
+        "family_group": "run-family",
+    }
+
+
 def _inject_mapping_identity(mapping: Any, *, canonical_key: str, canonical_value: Any | None = None, lookup_mode: str = "direct") -> None:
     if not isinstance(mapping, dict):
         return
@@ -1496,6 +1537,8 @@ class RunHttpRouteSurface:
             trace_rows_lookup=trace_rows_lookup,
             app_language_override=_request_app_language(http_request.query_params),
         )
+        payload["identity_policy"] = _workspace_shell_identity_policy_body()
+        payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
         return _route_response(200, payload)
 
     @classmethod
@@ -1607,6 +1650,8 @@ class RunHttpRouteSurface:
             trace_rows_lookup=trace_rows_lookup,
             app_language_override=_request_app_language(http_request.query_params),
         )
+        payload["identity_policy"] = _workspace_shell_identity_policy_body()
+        payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
         return _route_response(200, payload)
 
 
@@ -1795,6 +1840,8 @@ class RunHttpRouteSurface:
                 "storage_role": target["target_type"],
                 "target_ref": target["target_ref"],
             }
+            body_payload["identity_policy"] = _run_launch_identity_policy_body()
+            body_payload["namespace_policy"] = _run_launch_namespace_policy_body()
             return _route_response(response.status_code, body_payload)
         return response
 
@@ -1842,6 +1889,8 @@ class RunHttpRouteSurface:
         persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
         payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, app_language_override=_request_app_language(http_request.query_params))
         payload["transition"] = {"action": "commit_workspace_shell", "from_role": "working_save", "to_role": "commit_snapshot", "workspace_id": workspace_context.workspace_id, "commit_id": snapshot.meta.commit_id, "source_working_save_id": snapshot.meta.source_working_save_id}
+        payload["identity_policy"] = _workspace_shell_identity_policy_body()
+        payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
         return _route_response(200, payload)
 
     @classmethod
@@ -1899,6 +1948,8 @@ class RunHttpRouteSurface:
         persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
         payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, app_language_override=_request_app_language(http_request.query_params))
         payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": model.meta.commit_id, "working_save_id": working_save.meta.working_save_id, "source_share_id": source_share_id}
+        payload["identity_policy"] = _workspace_shell_identity_policy_body()
+        payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
         return _route_response(200, payload)
 
     @classmethod
@@ -3430,9 +3481,14 @@ class RunHttpRouteSurface:
         )
         if outcome.accepted:
             assert outcome.accepted_response is not None
-            return _route_response(202, asdict(outcome.accepted_response))
+            accepted_payload = asdict(outcome.accepted_response)
+            accepted_payload["identity_policy"] = _run_launch_identity_policy_body()
+            accepted_payload["namespace_policy"] = _run_launch_namespace_policy_body()
+            return _route_response(202, accepted_payload)
         assert outcome.rejected_response is not None
         rejected = asdict(outcome.rejected_response)
+        rejected["identity_policy"] = _run_launch_identity_policy_body()
+        rejected["namespace_policy"] = _run_launch_namespace_policy_body()
         if outcome.rejected_response.failure_family == "engine_rejection":
             rejected["status"] = "rejected_by_engine"
             rejected["error_family"] = "engine_launch_rejection"

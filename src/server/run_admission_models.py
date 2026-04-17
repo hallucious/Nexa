@@ -209,6 +209,8 @@ class ProductRunLaunchAcceptedResponse:
     workspace_title: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if self.status != "accepted":
@@ -235,6 +237,8 @@ class ProductRunLaunchRejectedResponse:
     workspace_title: Optional[str] = None
     provider_continuity: Optional[ProductProviderContinuitySummary] = None
     activity_continuity: Optional[ProductActivityContinuitySummary] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
     def __post_init__(self) -> None:
         if self.status != "rejected":
             raise ValueError("ProductRunLaunchRejectedResponse.status must be 'rejected'")

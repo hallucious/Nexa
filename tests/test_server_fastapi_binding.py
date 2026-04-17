@@ -618,6 +618,8 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_result_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
     assert payload['routes']['latest_run_trace'] == '/api/runs/run-002/trace?limit=20'
+    assert payload['identity_policy']['surface_family'] == 'workspace-shell'
+    assert payload['namespace_policy']['family'] == 'workspace-shell'
     assert payload['routes']['latest_run_artifacts'] == '/api/runs/run-002/artifacts'
     assert payload['latest_run_trace_preview']['event_count'] == 2
     assert payload['latest_run_trace_preview']['latest_event_type'] == 'node.completed'
@@ -1627,6 +1629,8 @@ def test_fastapi_binding_workspace_shell_commit_round_trip() -> None:
     assert payload['commit_id'] == 'commit-fastapi-001'
     assert payload['transition']['action'] == 'commit_workspace_shell'
     assert payload['routes']['workspace_shell_commit'] == '/api/workspaces/ws-001/shell/commit'
+    assert payload['identity_policy']['surface_family'] == 'workspace-shell'
+    assert payload['namespace_policy']['family'] == 'workspace-shell'
 
 
 def test_fastapi_binding_workspace_shell_checkout_round_trip() -> None:
@@ -1640,6 +1644,8 @@ def test_fastapi_binding_workspace_shell_checkout_round_trip() -> None:
     assert payload['working_save_id'] == 'ws-fastapi-restored'
     assert payload['transition']['action'] == 'checkout_workspace_shell'
     assert payload['routes']['workspace_shell_checkout'] == '/api/workspaces/ws-001/shell/checkout'
+    assert payload['identity_policy']['surface_family'] == 'workspace-shell'
+    assert payload['namespace_policy']['family'] == 'workspace-shell'
 
 
 def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> None:
@@ -1878,6 +1884,8 @@ def test_fastapi_binding_workspace_shell_launch_round_trip() -> None:
     assert payload['launch_context']['action'] == 'launch_workspace_shell'
     assert payload['source_artifact']['storage_role'] == 'working_save'
     assert payload['source_artifact']['canonical_ref'] == 'ws-001-draft'
+    assert payload['identity_policy']['surface_family'] == 'run-launch'
+    assert payload['namespace_policy']['family'] == 'run-launch'
 
 
 def test_fastapi_binding_workspace_shell_draft_rejects_commit_snapshot_source() -> None:

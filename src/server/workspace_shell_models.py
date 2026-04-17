@@ -44,6 +44,8 @@ class ProductWorkspaceShellRuntimeResponse:
     template_gallery: Optional[dict[str, Any]] = None
     navigation: Optional[dict[str, Any]] = None
     step_state_banner: Optional[dict[str, Any]] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         if not self.workspace_id:
@@ -82,6 +84,8 @@ class ProductWorkspaceShellCheckoutResponse(ProductWorkspaceShellRuntimeResponse
 @dataclass(frozen=True)
 class ProductWorkspaceShellLaunchAcceptedResponse(ProductRunLaunchAcceptedResponse):
     launch_context: dict[str, Any] = field(default_factory=dict)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         super().__post_init__()

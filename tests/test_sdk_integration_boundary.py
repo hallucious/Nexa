@@ -829,7 +829,7 @@ def test_adapter_scaffold_normalizes_http_response_against_public_contract() -> 
         "launch_run",
         HttpRouteResponse(
             status_code=202,
-            body={"run_id": "run-1", "status": "queued"},
+            body={"run_id": "run-1", "workspace_id": "ws-1", "status": "queued", "identity_policy": {"surface_family": "run-launch", "canonical_key": "run_id"}, "namespace_policy": {"family": "run-launch"}},
             headers={"content-type": "application/json"},
         ),
     )
@@ -864,7 +864,7 @@ def test_response_contract_exports_body_kind_and_required_keys() -> None:
 
     assert indexed["get_run_status"].body_kind == "object"
     assert indexed["get_run_status"].required_top_level_keys == ("run_id", "status", "identity_policy", "namespace_policy")
-    assert indexed["launch_run"].required_top_level_keys == ("status",)
+    assert indexed["launch_run"].required_top_level_keys == ("status", "run_id", "workspace_id", "identity_policy", "namespace_policy")
 
 
 def test_response_contract_exports_result_shape_profiles() -> None:
@@ -1628,8 +1628,8 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert route_contracts["get_public_share_artifact"].route_family == "public-share-artifact"
     assert route_contracts["extend_public_share"].route_family == "public-share-management"
 
-    assert responses["get_workspace_shell"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes")
-    assert responses["put_workspace_shell_draft"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes")
+    assert responses["get_workspace_shell"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy")
+    assert responses["put_workspace_shell_draft"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy")
     assert responses["create_workspace_shell_share"].success_status_codes == (201,)
     assert responses["get_public_nex_format"].required_top_level_keys == ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_mcp_manifest"].required_top_level_keys == ("status", "manifest", "identity_policy", "namespace_policy", "routes")

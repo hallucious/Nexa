@@ -1265,6 +1265,8 @@ def test_framework_binding_put_workspace_shell_draft_persists_template_and_valid
     assert parsed['status_history_section']['summary']['headline'] == 'Status history'
     assert parsed['result_history_section']['summary']['headline'] == 'Result history'
     assert parsed['routes']['workspace_shell_draft_write'] == '/api/workspaces/ws-001/shell/draft'
+    assert parsed['identity_policy']['surface_family'] == 'workspace-shell'
+    assert parsed['namespace_policy']['family'] == 'workspace-shell'
 
 
 def test_framework_binding_handles_workspace_result_history_round_trip() -> None:
@@ -1359,6 +1361,8 @@ def test_framework_binding_commit_workspace_shell_persists_commit_snapshot() -> 
     assert parsed['storage_role'] == 'commit_snapshot'
     assert parsed['transition']['action'] == 'commit_workspace_shell'
     assert parsed['routes']['workspace_shell_commit'] == '/api/workspaces/ws-001/shell/commit'
+    assert parsed['identity_policy']['surface_family'] == 'workspace-shell'
+    assert parsed['namespace_policy']['family'] == 'workspace-shell'
 
 
 def test_framework_binding_checkout_workspace_shell_restores_working_save() -> None:
@@ -1377,6 +1381,8 @@ def test_framework_binding_checkout_workspace_shell_restores_working_save() -> N
     assert parsed['storage_role'] == 'working_save'
     assert parsed['transition']['action'] == 'checkout_workspace_shell'
     assert parsed['routes']['workspace_shell_checkout'] == '/api/workspaces/ws-001/shell/checkout'
+    assert parsed['identity_policy']['surface_family'] == 'workspace-shell'
+    assert parsed['namespace_policy']['family'] == 'workspace-shell'
 
 
 def test_framework_binding_launch_workspace_shell_round_trip() -> None:
@@ -1404,6 +1410,8 @@ def test_framework_binding_launch_workspace_shell_round_trip() -> None:
     assert parsed['launch_context']['action'] == 'launch_workspace_shell'
     assert parsed['source_artifact']['storage_role'] == 'working_save'
     assert parsed['source_artifact']['canonical_ref'] == 'ws-framework-launch'
+    assert parsed['identity_policy']['surface_family'] == 'run-launch'
+    assert parsed['namespace_policy']['family'] == 'run-launch'
 
 
 def test_framework_binding_workspace_shell_draft_rejects_commit_snapshot_source() -> None:

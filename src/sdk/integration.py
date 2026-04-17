@@ -4795,16 +4795,17 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
 _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "launch_run": {
         "profile_kind": "accepted-status",
+        "identity_keys": ("run_id", "workspace_id", "identity_policy", "namespace_policy"),
         "state_keys": ("status",),
     },
     "get_workspace_shell": {
         "profile_kind": "workspace-shell-runtime",
-        "identity_keys": ("workspace_id",),
+        "identity_keys": ("workspace_id", "identity_policy", "namespace_policy"),
         "state_keys": ("storage_role",),
     },
     "put_workspace_shell_draft": {
         "profile_kind": "workspace-shell-runtime",
-        "identity_keys": ("workspace_id",),
+        "identity_keys": ("workspace_id", "identity_policy", "namespace_policy"),
         "state_keys": ("storage_role",),
     },
     "apply_starter_circuit_template": {
@@ -4814,17 +4815,17 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     },
     "launch_workspace_shell": {
         "profile_kind": "workspace-shell-launch",
-        "identity_keys": ("workspace_id", "run_id"),
+        "identity_keys": ("workspace_id", "run_id", "identity_policy", "namespace_policy"),
         "state_keys": ("status",),
     },
     "commit_workspace_shell": {
         "profile_kind": "workspace-commit",
-        "identity_keys": ("workspace_id",),
+        "identity_keys": ("workspace_id", "identity_policy", "namespace_policy"),
         "state_keys": ("storage_role",),
     },
     "checkout_workspace_shell": {
         "profile_kind": "workspace-checkout",
-        "identity_keys": ("workspace_id",),
+        "identity_keys": ("workspace_id", "identity_policy", "namespace_policy"),
         "state_keys": ("storage_role",),
     },
     "retry_run": {
@@ -5114,19 +5115,19 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "response_shape": "accepted",
         "success_status_codes": (202,),
         "body_kind": "object",
-        "required_top_level_keys": ("status",),
+        "required_top_level_keys": ("status", "run_id", "workspace_id", "identity_policy", "namespace_policy"),
     },
     "get_workspace_shell": {
         "response_shape": "workspace-shell-runtime",
         "success_status_codes": (200,),
         "body_kind": "object",
-        "required_top_level_keys": ("workspace_id", "storage_role", "action_availability", "shell", "routes"),
+        "required_top_level_keys": ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy"),
     },
     "put_workspace_shell_draft": {
         "response_shape": "workspace-shell-runtime",
         "success_status_codes": (200,),
         "body_kind": "object",
-        "required_top_level_keys": ("workspace_id", "storage_role", "action_availability", "shell", "routes"),
+        "required_top_level_keys": ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy"),
     },
     "apply_starter_circuit_template": {
         "response_shape": "starter-template-apply",
@@ -5138,19 +5139,19 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "response_shape": "workspace-shell-launch",
         "success_status_codes": (202,),
         "body_kind": "object",
-        "required_top_level_keys": ("status", "run_id", "workspace_id", "launch_context"),
+        "required_top_level_keys": ("status", "run_id", "workspace_id", "launch_context", "identity_policy", "namespace_policy"),
     },
     "commit_workspace_shell": {
         "response_shape": "snapshot-commit",
         "success_status_codes": (200,),
         "body_kind": "object",
-        "required_top_level_keys": ("workspace_id", "storage_role", "transition"),
+        "required_top_level_keys": ("workspace_id", "storage_role", "transition", "identity_policy", "namespace_policy"),
     },
     "checkout_workspace_shell": {
         "response_shape": "working-save-checkout",
         "success_status_codes": (200,),
         "body_kind": "object",
-        "required_top_level_keys": ("workspace_id", "storage_role", "transition"),
+        "required_top_level_keys": ("workspace_id", "storage_role", "transition", "identity_policy", "namespace_policy"),
     },
     "retry_run": {"response_shape": "run-control", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "run_id", "identity_policy", "namespace_policy")},
     "force_reset_run": {"response_shape": "run-control", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "run_id", "identity_policy", "namespace_policy")},
