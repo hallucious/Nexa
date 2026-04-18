@@ -487,6 +487,7 @@ class FastApiRouteBindings:
                 provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                feedback_rows=self.dependencies.feedback_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -508,6 +509,7 @@ class FastApiRouteBindings:
                 provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                feedback_rows=self.dependencies.feedback_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -529,6 +531,7 @@ class FastApiRouteBindings:
                 provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
                 managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                feedback_rows=self.dependencies.feedback_rows_provider(),
             )
             return self._framework_response(outbound)
 
@@ -871,6 +874,11 @@ class FastApiRouteBindings:
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
                 artifact_rows_lookup=self.dependencies.artifact_rows_provider,
                 trace_rows_lookup=self.dependencies.trace_rows_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                feedback_rows=self.dependencies.feedback_rows_provider(),
             )
             framework_response = self._framework_response(outbound)
             if framework_response.status_code != 200:

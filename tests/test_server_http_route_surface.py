@@ -1064,6 +1064,17 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
             'requested_by_user_id': 'user-owner',
             'message': 'Probe completed.',
         },),
+        feedback_rows=({
+            'feedback_id': 'fb-shell-http-001',
+            'user_id': 'user-owner',
+            'workspace_id': 'ws-001',
+            'workspace_title': 'Primary Workspace',
+            'category': 'friction_note',
+            'surface': 'workspace_shell',
+            'message': 'Please show recent feedback in the shell.',
+            'status': 'received',
+            'created_at': '2026-04-15T12:16:00+00:00',
+        },),
     ).body
     assert payload['storage_role'] == 'commit_snapshot'
     assert payload['action_availability']['draft_write']['allowed'] is False
@@ -1075,6 +1086,11 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
     assert payload['history_summary_section']['summary']['headline'] == 'History summary'
     assert payload['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'
     assert payload['routes']['workspace_provider_health'] == '/api/workspaces/ws-001/provider-bindings/health'
+    assert payload['routes']['workspace_feedback'] == '/api/workspaces/ws-001/feedback'
+    assert payload['routes']['workspace_feedback_page'] == '/app/workspaces/ws-001/feedback'
+    assert payload['feedback_continuity_section']['summary']['headline'] == 'Feedback continuity'
+    assert 'Feedback items: 1' in payload['feedback_continuity_section']['summary']['lines']
+    assert 'friction_note — workspace_shell — received — fb-shell-http-001' in '\n'.join(payload['feedback_continuity_section']['detail']['items'])
     assert payload['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
     assert 'Configured providers: 1' in payload['provider_readiness_section']['summary']['lines']
 

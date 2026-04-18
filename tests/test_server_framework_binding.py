@@ -1128,6 +1128,17 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
             "requested_by_user_id": "user-owner",
             "message": "Probe completed.",
         },),
+        feedback_rows=({
+            "feedback_id": "fb-shell-framework-001",
+            "user_id": "user-owner",
+            "workspace_id": "ws-001",
+            "workspace_title": "Primary Workspace",
+            "category": "friction_note",
+            "surface": "workspace_shell",
+            "message": "Please keep my recent feedback visible.",
+            "status": "received",
+            "created_at": "2026-04-15T12:16:00+00:00",
+        },),
     )
 
     parsed = json.loads(response.body_text)
@@ -1171,6 +1182,13 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['history_summary_section']['controls'][0]['action_target'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert parsed['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'
     assert parsed['routes']['workspace_provider_health'] == '/api/workspaces/ws-001/provider-bindings/health'
+    assert parsed['routes']['workspace_feedback'] == '/api/workspaces/ws-001/feedback'
+    assert parsed['routes']['workspace_feedback_page'] == '/app/workspaces/ws-001/feedback'
+    assert parsed['feedback_continuity_section']['summary']['headline'] == 'Feedback continuity'
+    assert 'Feedback items: 1' in parsed['feedback_continuity_section']['summary']['lines']
+    assert 'friction_note — workspace_shell — received — fb-shell-framework-001' in '\n'.join(parsed['feedback_continuity_section']['detail']['items'])
+    assert parsed['feedback_continuity_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/feedback'
+    assert parsed['feedback_continuity_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/feedback'
     assert parsed['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
     assert 'Configured providers: 1' in parsed['provider_readiness_section']['summary']['lines']
     assert 'Recent provider probes: 1' in parsed['provider_readiness_section']['summary']['lines']

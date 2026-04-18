@@ -662,6 +662,7 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            feedback_rows=feedback_rows,
         )
         return cls.to_framework_response(response)
 
@@ -923,6 +924,7 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            feedback_rows=feedback_rows,
         )
         return cls.to_framework_response(response)
 
@@ -1005,6 +1007,7 @@ class FrameworkRouteBindings:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        feedback_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -1020,6 +1023,7 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            feedback_rows=feedback_rows,
         )
         return cls.to_framework_response(response)
 
@@ -1041,6 +1045,7 @@ class FrameworkRouteBindings:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        feedback_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_put_workspace_shell_draft(
             http_request=cls.to_http_route_request(request),
@@ -1057,6 +1062,7 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            feedback_rows=feedback_rows,
         )
         return cls.to_framework_response(response)
 
@@ -1115,6 +1121,7 @@ class FrameworkRouteBindings:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        feedback_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_commit_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -1131,6 +1138,7 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            feedback_rows=feedback_rows,
         )
         return cls.to_framework_response(response)
 
@@ -1153,6 +1161,7 @@ class FrameworkRouteBindings:
         provider_binding_rows: Sequence[Mapping[str, Any]] = (),
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
+        feedback_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_checkout_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -1170,6 +1179,7 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
+            feedback_rows=feedback_rows,
         )
         return cls.to_framework_response(response)
 

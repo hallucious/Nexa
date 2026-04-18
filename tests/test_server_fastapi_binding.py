@@ -603,6 +603,17 @@ def test_fastapi_binding_circuit_library_routes_round_trip() -> None:
 
 def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     client = _make_client(
+        feedback_store=InMemoryFeedbackStore.from_rows(({
+            "feedback_id": "fb-shell-fastapi-001",
+            "user_id": "user-owner",
+            "workspace_id": "ws-001",
+            "workspace_title": "Primary Workspace",
+            "category": "friction_note",
+            "surface": "workspace_shell",
+            "message": "The shell should show my latest feedback.",
+            "status": "received",
+            "created_at": "2026-04-15T12:16:00+00:00",
+        },)),
         public_share_payload_rows_provider=lambda: (
             export_public_nex_link_share(
                 _valid_working_save_artifact(),
@@ -647,6 +658,13 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['history_summary_section']['controls'][0]['action_kind'] == 'open_route'
     assert payload['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'
     assert payload['routes']['workspace_provider_health'] == '/api/workspaces/ws-001/provider-bindings/health'
+    assert payload['routes']['workspace_feedback'] == '/api/workspaces/ws-001/feedback'
+    assert payload['routes']['workspace_feedback_page'] == '/app/workspaces/ws-001/feedback'
+    assert payload['feedback_continuity_section']['summary']['headline'] == 'Feedback continuity'
+    assert 'Feedback items: 1' in payload['feedback_continuity_section']['summary']['lines']
+    assert 'friction_note — workspace_shell — received — fb-shell-fastapi-001' in '\n'.join(payload['feedback_continuity_section']['detail']['items'])
+    assert payload['feedback_continuity_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/feedback'
+    assert payload['feedback_continuity_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/feedback'
     assert payload['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
     assert 'Configured providers: 1' in payload['provider_readiness_section']['summary']['lines']
     assert 'Recent provider probes: 1' in payload['provider_readiness_section']['summary']['lines']
