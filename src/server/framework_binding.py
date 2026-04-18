@@ -662,7 +662,6 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
-            feedback_rows=feedback_rows,
         )
         return cls.to_framework_response(response)
 
@@ -924,7 +923,6 @@ class FrameworkRouteBindings:
             provider_binding_rows=provider_binding_rows,
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
-            feedback_rows=feedback_rows,
         )
         return cls.to_framework_response(response)
 
