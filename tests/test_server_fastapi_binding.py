@@ -2060,6 +2060,7 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert '/app/public-shares/share-fastapi-001/import?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/run?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/download?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/app/public-shares/share-fastapi-001/compare?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/archive?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/delete?app_language=en&amp;workspace_id=ws-001' in detail_body
@@ -2074,6 +2075,7 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert '/app/public-shares/share-fastapi-001/import?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/run?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/download?app_language=en&amp;workspace_id=ws-001' in history_body
+    assert '/app/public-shares/share-fastapi-001/compare?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in history_body
 
 
@@ -2160,6 +2162,32 @@ def test_fastapi_binding_public_share_run_product_flow_round_trip() -> None:
     shell_payload = shell_response.json()
     assert shell_payload['storage_role'] == 'working_save'
     assert shell_payload['working_save_id'] == 'ws-001-draft'
+
+
+
+def test_fastapi_binding_public_share_catalog_and_compare_pages_round_trip() -> None:
+    client = _make_client(artifact_source=_valid_working_save_artifact())
+
+    catalog_response = client.get('/app/public-shares?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert catalog_response.status_code == 200
+    catalog_body = catalog_response.text
+    assert 'Browse public shares' in catalog_body
+    assert '/app/public-shares/summary?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001/compare?app_language=en&amp;workspace_id=ws-001' in catalog_body
+
+    summary_response = client.get('/app/public-shares/summary?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert summary_response.status_code == 200
+    summary_body = summary_response.text
+    assert 'Open catalog summary' in summary_body or 'Public share catalog summary' in summary_body
+    assert 'Checkoutable' in summary_body
+
+    compare_response = client.get('/app/public-shares/share-fastapi-001/compare?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert compare_response.status_code == 200
+    compare_body = compare_response.text
+    assert 'Compare with workspace' in compare_body
+    assert 'name="workspace_id" value="ws-001"' in compare_body
+    assert 'Storage role match:' in compare_body
 
 
 def test_fastapi_binding_public_share_download_product_flow_round_trip() -> None:

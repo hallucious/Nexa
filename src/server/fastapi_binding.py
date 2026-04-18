@@ -23,6 +23,9 @@ from src.server.public_share_runtime import (
     build_workspace_public_share_history_payload,
     render_workspace_public_share_history_html,
     render_workspace_share_create_html,
+    render_public_share_catalog_html,
+    render_public_share_catalog_summary_html,
+    render_public_share_compare_html,
     render_public_share_checkout_html,
     render_public_share_download_html,
     render_public_share_import_html,
@@ -735,6 +738,93 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/app/public-shares")
+        async def get_public_share_catalog_page(request: Request) -> Response:
+            from src.storage.share_api import describe_public_nex_link_share
+
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            search = str(query.get("q") or "").strip().lower()
+            storage_role = str(query.get("storage_role") or "").strip() or None
+            operation = str(query.get("operation") or "").strip() or None
+            rows = self.dependencies.public_share_payload_rows_provider() if self.dependencies.public_share_payload_rows_provider is not None else ()
+            entries: list[dict[str, Any]] = []
+            for row in rows:
+                try:
+                    descriptor = describe_public_nex_link_share(dict(row))
+                except Exception:
+                    continue
+                if descriptor.archived or descriptor.lifecycle_state != "active":
+                    continue
+                haystack = " ".join(filter(None, (descriptor.title, descriptor.summary, descriptor.share_path))).lower()
+                if search and search not in haystack:
+                    continue
+                if storage_role and descriptor.storage_role != storage_role:
+                    continue
+                if operation and operation not in descriptor.operation_capabilities:
+                    continue
+                entries.append({
+                    "share_id": descriptor.share_id,
+                    "share_path": descriptor.share_path,
+                    "title": descriptor.title,
+                    "summary": descriptor.summary,
+                    "storage_role": descriptor.storage_role,
+                    "lifecycle_state": descriptor.lifecycle_state,
+                    "updated_at": descriptor.updated_at,
+                    "operation_capabilities": list(descriptor.operation_capabilities),
+                })
+            entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
+            payload = {
+                "app_language": app_language,
+                "workspace_id": workspace_id,
+                "entries": entries,
+                "filters": {"q": search, "storage_role": storage_role, "operation": operation},
+            }
+            return HTMLResponse(content=render_public_share_catalog_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.get("/app/public-shares/summary")
+        async def get_public_share_catalog_summary_page(request: Request) -> Response:
+            from src.storage.share_api import describe_public_nex_link_share
+
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            search = str(query.get("q") or "").strip().lower()
+            storage_role = str(query.get("storage_role") or "").strip() or None
+            operation = str(query.get("operation") or "").strip() or None
+            rows = self.dependencies.public_share_payload_rows_provider() if self.dependencies.public_share_payload_rows_provider is not None else ()
+            visible: list[Any] = []
+            filtered: list[Any] = []
+            for row in rows:
+                try:
+                    descriptor = describe_public_nex_link_share(dict(row))
+                except Exception:
+                    continue
+                if descriptor.archived or descriptor.lifecycle_state != "active":
+                    continue
+                visible.append(descriptor)
+                haystack = " ".join(filter(None, (descriptor.title, descriptor.summary, descriptor.share_path))).lower()
+                if search and search not in haystack:
+                    continue
+                if storage_role and descriptor.storage_role != storage_role:
+                    continue
+                if operation and operation not in descriptor.operation_capabilities:
+                    continue
+                filtered.append(descriptor)
+            summary = {
+                "filtered_share_count": len(filtered),
+                "inventory_share_count": len(visible),
+                "working_save_share_count": sum(1 for entry in filtered if entry.storage_role == "working_save"),
+                "commit_snapshot_share_count": sum(1 for entry in filtered if entry.storage_role == "commit_snapshot"),
+                "checkoutable_share_count": sum(1 for entry in filtered if "checkout_working_copy" in entry.operation_capabilities),
+                "importable_share_count": sum(1 for entry in filtered if "import_copy" in entry.operation_capabilities),
+                "runnable_share_count": sum(1 for entry in filtered if "run_artifact" in entry.operation_capabilities),
+                "downloadable_share_count": sum(1 for entry in filtered if "download_artifact" in entry.operation_capabilities),
+            }
+            payload = {"app_language": app_language, "workspace_id": workspace_id, "summary": summary}
+            return HTMLResponse(content=render_public_share_catalog_summary_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
         @router.get("/api/public-shares/{share_id}")
         async def get_public_share(request: Request, share_id: str) -> Response:
             inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
@@ -1307,6 +1397,64 @@ class FastApiRouteBindings:
             }
             payload["notice"] = _public_share_notice_payload(request)
             return HTMLResponse(content=render_public_share_history_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.get("/app/public-shares/{share_id}/compare")
+        async def get_public_share_compare_page(request: Request, share_id: str) -> Response:
+            from src.server.http_route_surface import RunHttpRouteSurface
+            from src.storage.serialization import serialize_nex_artifact
+
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=query,
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            artifact_inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}/artifact",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=query,
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            artifact_outbound = FrameworkRouteBindings.handle_get_public_share_artifact(
+                request=artifact_inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            artifact_response = self._framework_response(artifact_outbound)
+            if artifact_response.status_code != 200:
+                return artifact_response
+            artifact_payload = json.loads(artifact_outbound.body_text)
+            compare_payload: dict[str, Any] = {
+                "workspace_id": workspace_id,
+                "workspace_found": False,
+                "share_artifact": dict(artifact_payload.get("artifact") or {}),
+            }
+            if workspace_id:
+                workspace_row = self.dependencies.workspace_row_provider(workspace_id)
+                if workspace_row is not None:
+                    artifact_source = self.dependencies.workspace_artifact_source_provider(workspace_id)
+                    _source, model, _loaded = RunHttpRouteSurface._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+                    compare_payload["workspace_found"] = True
+                    compare_payload["workspace_artifact"] = serialize_nex_artifact(model)
+            payload["compare"] = compare_payload
+            payload["app_language"] = app_language
+            return HTMLResponse(content=render_public_share_compare_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
 
         @router.get("/app/public-shares/{share_id}/checkout")
         async def get_public_share_checkout_page(request: Request, share_id: str) -> Response:
