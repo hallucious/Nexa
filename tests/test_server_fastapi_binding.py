@@ -641,6 +641,12 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
     assert payload['routes']['latest_run_trace'] == '/api/runs/run-002/trace?limit=20'
     assert payload['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shell/share'
+    assert payload['routes']['workspace_result_history'] == '/api/workspaces/ws-001/result-history'
+    assert payload['routes']['workspace_result_history_page'] == '/app/workspaces/ws-001/results?app_language=en'
+    assert payload['routes']['circuit_library'] == '/api/workspaces/library'
+    assert payload['routes']['circuit_library_page'] == '/app/library?app_language=en'
+    assert payload['routes']['starter_template_catalog'] == '/api/templates/starter-circuits'
+    assert payload['routes']['starter_template_catalog_page'] == '/app/templates/starter-circuits?app_language=en'
     assert payload['routes']['workspace_recent_activity'] == '/api/users/me/activity?workspace_id=ws-001'
     assert payload['routes']['workspace_history_summary'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert payload['share_history_section']['summary']['headline'] == 'Share history'
@@ -722,6 +728,21 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['client_continuity']['version'] == 'phase6-batch15'
 
 
+def test_fastapi_binding_starter_template_catalog_page_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/app/templates/starter-circuits', headers=_session_headers())
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    body = response.text
+    assert 'Starter workflows' in body
+    assert 'Choose a starter workflow to begin faster.' in body
+    assert 'Open raw starter-template catalog' in body
+    assert 'Open workflow library' in body
+    assert 'Text Summarizer' in body
+    assert '/api/templates/starter-circuits/text_summarizer' in body
+
+
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     client = _make_client()
     response = client.get('/app/workspaces/ws-001', headers=_session_headers())
@@ -733,6 +754,12 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert 'Run draft' in body
     assert '/api/runs' in body
     assert '/api/workspaces/ws-001/shell' in body
+    assert '/app/library?app_language=en' in body
+    assert '/app/workspaces/ws-001/results?app_language=en' in body
+    assert '/app/templates/starter-circuits?app_language=en' in body
+    assert 'Open workflow library' in body
+    assert 'Open result history page' in body
+    assert 'Browse starter template page' in body
     assert 'Latest run status' in body
     assert 'Latest run result' in body
     assert 'Status detail layer' in body

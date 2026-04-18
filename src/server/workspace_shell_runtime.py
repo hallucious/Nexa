@@ -622,6 +622,8 @@ def _result_history_section(
     recent_run_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
     result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None,
+    *,
+    app_language: str = "en",
 ) -> dict[str, Any]:
     result_rows_by_run_id = result_rows_by_run_id or {}
     entries: list[dict[str, Any]] = []
@@ -641,28 +643,45 @@ def _result_history_section(
     controls: list[dict[str, Any]] = [
         {
             "control_id": "result-history-open-latest",
-            "label": "Open latest result",
+            "label": ui_text("server.shell.open_latest_result", app_language=app_language, fallback_text="Open latest result"),
             "action_kind": "focus_section",
             "action_target": "runtime.result",
-        }
+        },
+        {
+            "control_id": "result-history-open-page",
+            "label": ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"),
+            "action_kind": "open_route",
+            "action_target": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
+        },
+        {
+            "control_id": "result-history-open-route",
+            "label": ui_text("server.shell.open_result_history_route", app_language=app_language, fallback_text="Open result history"),
+            "action_kind": "open_route",
+            "action_target": f"/api/workspaces/{workspace_id}/result-history",
+        },
     ]
     if len(entries) > 1:
         previous = entries[1]
         controls.append(
             {
                 "control_id": f"result-history-open-{previous['run_id']}",
-                "label": f"Open {previous['run_id']} result",
+                "label": ui_text(
+                    "server.shell.open_previous_result",
+                    app_language=app_language,
+                    fallback_text="Open {run_id} result",
+                    run_id=previous["run_id"],
+                ),
                 "action_kind": "open_run_result",
                 "action_target": previous["run_id"],
             }
         )
     return build_shell_section(
-        headline="Result history",
+        headline=ui_text("server.shell.result_history_section", app_language=app_language, fallback_text="Result history"),
         lines=_summary_lines(
-            f"Recent results: {len(entries)}" if entries else "No recent result history is available yet.",
-            f"Latest: {latest['run_id']} — {latest['result_state']}" if latest else None,
+            ui_text("server.shell.recent_results_prefix", app_language=app_language, fallback_text="Recent results: ") + str(len(entries)) if entries else ui_text("server.shell.no_recent_result_history", app_language=app_language, fallback_text="No recent result history is available yet."),
+            ui_text("server.shell.latest_prefix", app_language=app_language, fallback_text="Latest: ") + f"{latest['run_id']} — {latest['result_state']}" if latest else None,
         ),
-        detail_title="Result history detail",
+        detail_title=ui_text("server.shell.result_history_detail", app_language=app_language, fallback_text="Result history detail"),
         detail_items=[f"{index + 1}. {entry['run_id']} — {entry['result_state']} — {entry['summary']}" for index, entry in enumerate(entries[:3])],
         detail_empty="Result history entries will appear here as runs complete.",
         controls=controls,
@@ -995,6 +1014,18 @@ def _history_summary_section(
                 "action_kind": "open_route",
                 "action_target": f"/api/users/me/activity?workspace_id={workspace_id}",
             },
+            {
+                "control_id": "history-summary-open-library-page",
+                "label": ui_text("server.shell.open_workflow_library", app_language=app_language, fallback_text="Open workflow library"),
+                "action_kind": "open_route",
+                "action_target": f"/app/library?app_language={app_language}",
+            },
+            {
+                "control_id": "history-summary-open-results-page",
+                "label": ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"),
+                "action_kind": "open_route",
+                "action_target": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
+            },
         ],
         history=[{
             "total_runs": len(run_entries),
@@ -1278,9 +1309,15 @@ def _designer_section(
         },
         {
             "control_id": "designer-open-templates",
-            "label": "Open starter templates",
+            "label": ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"),
             "action_kind": "focus_auxiliary",
             "action_target": "templates",
+        },
+        {
+            "control_id": "designer-open-template-catalog-page",
+            "label": ui_text("server.shell.open_starter_template_catalog_page", app_language=app_language, fallback_text="Browse starter template page"),
+            "action_kind": "open_route",
+            "action_target": f"/app/templates/starter-circuits?app_language={app_language}",
         },
     ]
     if templates:
@@ -1831,6 +1868,12 @@ def build_workspace_shell_runtime_payload(
             "workspace_provider_health": f"/api/workspaces/{workspace_id}/provider-bindings/health",
             "workspace_feedback": f"/api/workspaces/{workspace_id}/feedback",
             "workspace_feedback_page": f"/app/workspaces/{workspace_id}/feedback",
+            "workspace_result_history": f"/api/workspaces/{workspace_id}/result-history",
+            "workspace_result_history_page": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
+            "circuit_library": "/api/workspaces/library",
+            "circuit_library_page": f"/app/library?app_language={app_language}",
+            "starter_template_catalog": "/api/templates/starter-circuits",
+            "starter_template_catalog_page": f"/app/templates/starter-circuits?app_language={app_language}",
         },
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,
@@ -1845,7 +1888,7 @@ def build_workspace_shell_runtime_payload(
         "latest_run_artifacts_detail": _latest_run_artifacts_detail(latest_run_artifacts_preview),
         "latest_run_trace_detail": _latest_run_trace_detail(latest_run_trace_preview),
         "status_history_section": _status_history_section(recent_run_rows, workspace_id),
-        "result_history_section": _result_history_section(recent_run_rows, workspace_id, result_rows_by_run_id),
+        "result_history_section": _result_history_section(recent_run_rows, workspace_id, result_rows_by_run_id, app_language=app_language),
         "trace_history_section": _trace_history_section(recent_run_rows, workspace_id, trace_rows_lookup, app_language=app_language),
         "artifacts_history_section": _artifacts_history_section(recent_run_rows, workspace_id, artifact_rows_lookup),
         "recent_activity_section": _recent_activity_section(recent_run_rows, onboarding_rows, workspace_id, app_language=app_language),
@@ -2029,6 +2072,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <button id="open-result" class="secondary" {'disabled' if not routes.get('latest_run_result') else ''}>{escape(ui_text("server.shell.open_latest_result", app_language=app_language, fallback_text="Open latest result"))}</button>
       <button id="open-trace" class="secondary" {'disabled' if not latest_run_trace_path else ''}>{escape(ui_text("server.shell.open_latest_trace", app_language=app_language, fallback_text="Open latest trace"))}</button>
       <button id="open-artifacts" class="secondary" {'disabled' if not latest_run_artifacts_path else ''}>{escape(ui_text("server.shell.open_latest_artifacts", app_language=app_language, fallback_text="Open latest artifacts"))}</button>
+      <button id="open-workflow-library" class="secondary" {'disabled' if not routes.get('circuit_library_page') else ''}>{escape(ui_text("server.shell.open_workflow_library", app_language=app_language, fallback_text="Open workflow library"))}</button>
+      <button id="open-result-history-page" class="secondary" {'disabled' if not routes.get('workspace_result_history_page') else ''}>{escape(ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"))}</button>
+      <button id="open-starter-template-catalog-page" class="secondary" {'disabled' if not routes.get('starter_template_catalog_page') else ''}>{escape(ui_text("server.shell.open_starter_template_catalog_page", app_language=app_language, fallback_text="Browse starter template page"))}</button>
     </div>
     <section class="card" style="margin-top:16px;" role="region" aria-labelledby="runtime-focus-title">
       <h2 id="runtime-focus-title">{escape(ui_text("server.shell.runtime_focus", app_language=app_language, fallback_text="Runtime focus"))}</h2>
@@ -3073,6 +3119,33 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     document.getElementById('open-artifacts').addEventListener('click', async () => {{
       const body = await refreshLatestRunArtifacts();
       writeLog(body || localizedUi.noRecentArtifacts);
+    }});
+    document.getElementById('open-workflow-library').addEventListener('click', () => {{
+      const target = routes && routes.circuit_library_page;
+      if (!target) {{
+        writeLog('No workflow library page is available.');
+        return;
+      }}
+      window.open(target, '_blank', 'noopener');
+      writeLog('Opened route ' + target + '.');
+    }});
+    document.getElementById('open-result-history-page').addEventListener('click', () => {{
+      const target = routes && routes.workspace_result_history_page;
+      if (!target) {{
+        writeLog('No result history page is available.');
+        return;
+      }}
+      window.open(target, '_blank', 'noopener');
+      writeLog('Opened route ' + target + '.');
+    }});
+    document.getElementById('open-starter-template-catalog-page').addEventListener('click', () => {{
+      const target = routes && routes.starter_template_catalog_page;
+      if (!target) {{
+        writeLog('No starter template page is available.');
+        return;
+      }}
+      window.open(target, '_blank', 'noopener');
+      writeLog('Opened route ' + target + '.');
     }});
   </script>
 </body>

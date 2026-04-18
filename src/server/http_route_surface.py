@@ -3844,6 +3844,8 @@ class RunHttpRouteSurface:
             routes={
                 "self": "/api/templates/starter-circuits",
                 "workspace_library": "/api/workspaces/library",
+                "app_catalog": f"/app/templates/starter-circuits?app_language={app_language}",
+                "app_library": f"/app/library?app_language={app_language}",
             },
             identity_policy=_starter_template_identity_policy_body(),
             namespace_policy=_starter_template_namespace_policy_body(),

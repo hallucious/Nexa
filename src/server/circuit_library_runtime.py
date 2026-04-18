@@ -126,7 +126,11 @@ def build_circuit_library_payload(
         "overview_section": overview,
         "item_sections": item_sections,
         "app_language": app_language,
-        "routes": {"workspace_list": "/api/workspaces", "app_library": f"/app/library?app_language={app_language}"},
+        "routes": {
+            "workspace_list": "/api/workspaces",
+            "app_library": f"/app/library?app_language={app_language}",
+            "starter_template_catalog_page": f"/app/templates/starter-circuits?app_language={app_language}",
+        },
     }
 
 
@@ -180,10 +184,13 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
         </article>
         """
     if not cards_html:
+        starter_templates_href = escape(str((payload.get("routes") or {}).get("starter_template_catalog_page") or "/app/templates/starter-circuits"))
+        browse_templates_label = escape(ui_text("server.library.browse_starter_templates", app_language=app_language, fallback_text="Browse starter templates"))
         cards_html = f"""
         <article class="workflow-card empty">
           <h2>{empty_title}</h2>
           <p>{empty_summary}</p>
+          <div class="actions"><a class="action-link" href="{starter_templates_href}">{browse_templates_label}</a></div>
         </article>
         """
 

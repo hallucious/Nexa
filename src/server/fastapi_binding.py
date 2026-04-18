@@ -14,6 +14,7 @@ from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRoute
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
 from src.server.result_history_runtime import render_workspace_result_history_html
+from src.server.starter_template_runtime import render_starter_template_catalog_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 
 
@@ -771,6 +772,25 @@ class FastApiRouteBindings:
                 now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
             )
             return self._framework_response(outbound)
+
+        @router.get("/app/templates/starter-circuits")
+        async def get_starter_template_catalog_page(request: Request) -> Response:
+            inbound = FrameworkInboundRequest(
+                method=request.method,
+                path="/api/templates/starter-circuits",
+                headers=dict(request.headers),
+                path_params={},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_list_starter_circuit_templates(request=inbound)
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            return HTMLResponse(content=render_starter_template_catalog_html(payload), status_code=200)
+
 
         @router.get("/app/library")
         async def get_circuit_library_page(request: Request) -> Response:

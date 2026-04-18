@@ -832,6 +832,8 @@ def test_framework_binding_handles_starter_template_routes_round_trip() -> None:
     assert apply_payload["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert apply_payload["template"]["identity"]["canonical_key"] == "template_ref"
     assert apply_payload["template"]["supported_storage_roles"] == ["working_save"]
+    assert catalog_payload["routes"]["app_catalog"] == "/app/templates/starter-circuits?app_language=en"
+    assert catalog_payload["routes"]["app_library"] == "/app/library?app_language=en"
 
 
 def test_framework_binding_handles_public_nex_format_round_trip() -> None:
