@@ -4,7 +4,7 @@ import json
 from typing import Any, Mapping, Optional
 
 from fastapi import APIRouter, Body, FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 
 from src.server.framework_binding import FrameworkRouteBindings
 from src.server.aws_secrets_manager_binding import AwsSecretsManagerSecretAuthority
@@ -14,7 +14,7 @@ from src.server.fastapi_binding_models import FastApiBindingConfig, FastApiRoute
 from src.server.workspace_shell_runtime import render_workspace_shell_runtime_html
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
 from src.server.result_history_runtime import render_workspace_result_history_html
-from src.server.starter_template_runtime import render_starter_template_catalog_html
+from src.server.starter_template_runtime import render_starter_template_catalog_html, render_starter_template_detail_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 
 
@@ -791,6 +791,89 @@ class FastApiRouteBindings:
             payload = json.loads(outbound.body_text)
             return HTMLResponse(content=render_starter_template_catalog_html(payload), status_code=200)
 
+        @router.get("/app/workspaces/{workspace_id}/starter-templates")
+        async def get_workspace_starter_template_catalog_page(request: Request, workspace_id: str) -> Response:
+            if self.dependencies.workspace_context_provider(workspace_id) is None or self.dependencies.workspace_row_provider(workspace_id) is None:
+                return JSONResponse(status_code=404, content={"error_family": "workspace_read_failure", "reason_code": "workspace.not_found", "message": "Requested workspace was not found."})
+            inbound = FrameworkInboundRequest(
+                method=request.method,
+                path="/api/templates/starter-circuits",
+                headers=dict(request.headers),
+                path_params={},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_list_starter_circuit_templates(request=inbound)
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            app_language = str(dict(request.query_params).get("app_language") or payload.get("app_language") or "en")
+            payload.setdefault("routes", {})["app_catalog"] = f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}"
+            payload["routes"]["workspace_page"] = f"/app/workspaces/{workspace_id}?app_language={app_language}"
+            for template in list(payload.get("templates") or []):
+                template_routes = dict(template.get("routes") or {})
+                template_id = str(template.get("template_id") or "").strip()
+                if not template_id:
+                    continue
+                template_routes["app_workspace_detail"] = f"/app/workspaces/{workspace_id}/starter-templates/{template_id}?app_language={app_language}"
+                template["routes"] = template_routes
+            return HTMLResponse(content=render_starter_template_catalog_html(payload), status_code=200)
+
+        @router.get("/app/workspaces/{workspace_id}/starter-templates/{template_id}")
+        async def get_workspace_starter_template_detail_page(request: Request, workspace_id: str, template_id: str) -> Response:
+            if self.dependencies.workspace_context_provider(workspace_id) is None or self.dependencies.workspace_row_provider(workspace_id) is None:
+                return JSONResponse(status_code=404, content={"error_family": "workspace_read_failure", "reason_code": "workspace.not_found", "message": "Requested workspace was not found."})
+            inbound = FrameworkInboundRequest(
+                method=request.method,
+                path=f"/api/templates/starter-circuits/{template_id}",
+                headers=dict(request.headers),
+                path_params={"template_id": template_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_starter_circuit_template(request=inbound)
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            app_language = str(dict(request.query_params).get("app_language") or payload.get("app_language") or "en")
+            payload.setdefault("routes", {})["workspace_page"] = f"/app/workspaces/{workspace_id}?app_language={app_language}"
+            payload["routes"]["workspace_templates_page"] = f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}"
+            payload["routes"]["workspace_apply_html"] = f"/app/workspaces/{workspace_id}/starter-templates/{template_id}/apply?app_language={app_language}"
+            payload["routes"]["api_detail"] = f"/api/templates/starter-circuits/{template_id}"
+            return HTMLResponse(content=render_starter_template_detail_html(payload), status_code=200)
+
+        @router.post("/app/workspaces/{workspace_id}/starter-templates/{template_id}/apply")
+        async def apply_workspace_starter_template_page(request: Request, workspace_id: str, template_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path=f"/api/workspaces/{workspace_id}/starter-templates/{template_id}/apply",
+                headers=dict(request.headers),
+                path_params={"workspace_id": workspace_id, "template_id": template_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_apply_starter_circuit_template(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                artifact_rows_lookup=self.dependencies.artifact_rows_provider,
+                trace_rows_lookup=self.dependencies.trace_rows_provider,
+                workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            return RedirectResponse(url=f"/app/workspaces/{workspace_id}?app_language={app_language}", status_code=303)
 
         @router.get("/app/library")
         async def get_circuit_library_page(request: Request) -> Response:

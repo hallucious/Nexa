@@ -860,6 +860,7 @@ def test_workspace_result_history_route_returns_beginner_facing_result_cards() -
     assert response.body["result_history"]["returned_count"] == 1
     assert response.body["result_history"]["items"][0]["output_preview"] == "Latest Hello"
     assert response.body["result_history"]["items"][0]["identity"]["canonical_value"] == "run-002"
+    assert response.body["routes"]["starter_template_catalog_page"] == '/app/workspaces/ws-001/starter-templates?app_language=en'
     assert response.body["item_sections"][0]["identity"]["canonical_value"] == "run-002"
 
 
@@ -1087,7 +1088,7 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
     assert payload['routes']['circuit_library'] == '/api/workspaces/library'
     assert payload['routes']['circuit_library_page'] == '/app/library?app_language=en'
     assert payload['routes']['starter_template_catalog'] == '/api/templates/starter-circuits'
-    assert payload['routes']['starter_template_catalog_page'] == '/app/templates/starter-circuits?app_language=en'
+    assert payload['routes']['starter_template_catalog_page'] == '/app/workspaces/ws-001/starter-templates?app_language=en'
     assert payload['recent_activity_section']['summary']['headline'] == 'Recent activity'
     assert payload['history_summary_section']['summary']['headline'] == 'History summary'
     assert payload['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'

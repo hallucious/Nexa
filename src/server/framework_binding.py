@@ -496,6 +496,7 @@ class FrameworkRouteBindings:
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         artifact_rows_lookup=None,
         trace_rows_lookup=None,
+        workspace_artifact_source_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_apply_starter_circuit_template(
             http_request=cls.to_http_route_request(request),
@@ -507,6 +508,7 @@ class FrameworkRouteBindings:
             onboarding_rows=onboarding_rows,
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
+            workspace_artifact_source_writer=workspace_artifact_source_writer,
         )
         return cls.to_framework_response(response)
 

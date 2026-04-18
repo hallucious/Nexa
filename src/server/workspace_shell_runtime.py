@@ -1873,7 +1873,7 @@ def build_workspace_shell_runtime_payload(
             "circuit_library": "/api/workspaces/library",
             "circuit_library_page": f"/app/library?app_language={app_language}",
             "starter_template_catalog": "/api/templates/starter-circuits",
-            "starter_template_catalog_page": f"/app/templates/starter-circuits?app_language={app_language}",
+            "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
         },
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,

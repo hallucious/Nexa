@@ -176,6 +176,7 @@ def build_workspace_result_history_payload(
             "workspace_page": f"/app/workspaces/{response.workspace_id}",
             "api_history": f"/api/workspaces/{response.workspace_id}/result-history",
             "app_history": f"/app/workspaces/{response.workspace_id}/results",
+            "starter_template_catalog_page": f"/app/workspaces/{response.workspace_id}/starter-templates?app_language={app_language}",
         },
     }
 
@@ -273,6 +274,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
       <header aria-labelledby="result-history-title">
         <a class="top-link" href="{escape(str(payload.get('routes', {}).get('library') or '/app/library'))}" aria-label="{escape(ui_text('server.result_history.back_to_library', app_language=app_language, fallback_text='Back to library'))}">{escape(ui_text('server.result_history.back_to_library', app_language=app_language, fallback_text='Back to library'))}</a>
         <a class="top-link" href="{escape(str(payload.get('routes', {}).get('workspace_page') or '#'))}">{escape(ui_text('server.result_history.open_workflow', app_language=app_language, fallback_text='Open workflow'))}</a>
+        <a class="top-link" href="{escape(str(payload.get('routes', {}).get('starter_template_catalog_page') or '#'))}">{escape(ui_text('server.shell.open_starter_templates', app_language=app_language, fallback_text='Open starter templates'))}</a>
         <h1 id="result-history-title">{title}</h1>
         <p>{workspace_title} · {subtitle}</p>
       </header>

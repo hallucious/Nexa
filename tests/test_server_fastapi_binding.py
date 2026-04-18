@@ -646,7 +646,7 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['routes']['circuit_library'] == '/api/workspaces/library'
     assert payload['routes']['circuit_library_page'] == '/app/library?app_language=en'
     assert payload['routes']['starter_template_catalog'] == '/api/templates/starter-circuits'
-    assert payload['routes']['starter_template_catalog_page'] == '/app/templates/starter-circuits?app_language=en'
+    assert payload['routes']['starter_template_catalog_page'] == '/app/workspaces/ws-001/starter-templates?app_language=en'
     assert payload['routes']['workspace_recent_activity'] == '/api/users/me/activity?workspace_id=ws-001'
     assert payload['routes']['workspace_history_summary'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert payload['share_history_section']['summary']['headline'] == 'Share history'
@@ -743,6 +743,56 @@ def test_fastapi_binding_starter_template_catalog_page_round_trip() -> None:
     assert '/api/templates/starter-circuits/text_summarizer' in body
 
 
+def test_fastapi_binding_workspace_starter_template_catalog_page_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/app/workspaces/ws-001/starter-templates', headers=_session_headers())
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    body = response.text
+    assert 'Starter workflows' in body
+    assert 'Open workspace' in body
+    assert '/app/workspaces/ws-001?app_language=en' in body
+    assert '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en' in body
+    assert 'Review in workspace' in body
+
+
+def test_fastapi_binding_workspace_starter_template_detail_page_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/app/workspaces/ws-001/starter-templates/text_summarizer', headers=_session_headers())
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    body = response.text
+    assert 'Text Summarizer' in body
+    assert 'Use template' in body
+    assert '/app/workspaces/ws-001/starter-templates/text_summarizer/apply?app_language=en' in body
+    assert 'Back to starter templates' in body
+    assert 'Open workspace' in body
+
+
+def test_fastapi_binding_workspace_starter_template_apply_page_redirects_to_workspace() -> None:
+    client = _make_client()
+    response = client.post('/app/workspaces/ws-001/starter-templates/text_summarizer/apply', headers=_session_headers(), follow_redirects=False)
+
+    assert response.status_code == 303
+    assert response.headers['location'] == '/app/workspaces/ws-001?app_language=en'
+
+
+def test_fastapi_binding_workspace_result_history_page_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/app/workspaces/ws-001/results', headers=_session_headers())
+
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/html')
+    body = response.text
+    assert 'Recent results' in body
+    assert 'Back to library' in body
+    assert 'Open workflow' in body
+    assert 'Open starter templates' in body
+    assert '/app/workspaces/ws-001/starter-templates?app_language=en' in body
+
+
 def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     client = _make_client()
     response = client.get('/app/workspaces/ws-001', headers=_session_headers())
@@ -756,7 +806,7 @@ def test_fastapi_binding_workspace_shell_html_page_round_trip() -> None:
     assert '/api/workspaces/ws-001/shell' in body
     assert '/app/library?app_language=en' in body
     assert '/app/workspaces/ws-001/results?app_language=en' in body
-    assert '/app/templates/starter-circuits?app_language=en' in body
+    assert '/app/workspaces/ws-001/starter-templates?app_language=en' in body
     assert 'Open workflow library' in body
     assert 'Open result history page' in body
     assert 'Browse starter template page' in body
