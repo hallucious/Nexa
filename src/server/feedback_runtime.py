@@ -49,10 +49,12 @@ def build_workspace_feedback_payload(
         "feedback_channel": asdict(view_model),
         "routes": {
             "submit": f"/api/workspaces/{workspace_id}/feedback?app_language={app_language}",
-            "feedback_page": f"/app/workspaces/{workspace_id}/feedback",
-            "workspace_page": f"/app/workspaces/{workspace_id}",
-            "result_history": f"/app/workspaces/{workspace_id}/results",
-            "library": "/app/library",
+            "feedback_page": f"/app/workspaces/{workspace_id}/feedback?app_language={app_language}",
+            "workspace_page": f"/app/workspaces/{workspace_id}?app_language={app_language}",
+            "result_history": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
+            "library": f"/app/library?app_language={app_language}",
+            "workspace_library": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
+            "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
         },
     }
 
@@ -86,6 +88,8 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
             "workspace_page": f"/app/workspaces/{workspace_id}?app_language={app_language}",
             "result_history": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
             "library": f"/app/library?app_language={app_language}",
+            "workspace_library": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
+            "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
         },
     }
 
@@ -106,8 +110,11 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     empty_summary = escape(str(channel.get("empty_summary") or ""))
     confirmation_title = escape(str(channel.get("confirmation_title") or ""))
     confirmation_summary = escape(str(channel.get("confirmation_summary") or ""))
-    library_href = escape(str((payload.get("routes") or {}).get("library") or "/app/library"))
+    route_map = dict(payload.get("routes") or {})
+    library_href = escape(str(route_map.get("workspace_library") or route_map.get("library") or "/app/library"))
+    starter_templates_href = escape(str(route_map.get("starter_template_catalog_page") or "#"))
     back_to_library_label = escape(ui_text("server.feedback.back_to_library", app_language=app_language, fallback_text="Back to library"))
+    open_starter_templates_label = escape(ui_text("server.feedback.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"))
     open_workflow_label = escape(ui_text("server.feedback.open_workflow", app_language=app_language, fallback_text="Open workflow"))
     open_results_label = escape(ui_text("server.feedback.open_results", app_language=app_language, fallback_text="Open results"))
     form_title = escape(ui_text("server.feedback.form_title", app_language=app_language, fallback_text="Send a quick product note"))
@@ -122,8 +129,8 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     sending_text = escape(ui_text("server.feedback.sending", app_language=app_language, fallback_text="Sending feedback…"))
     submit_failed_text = escape(ui_text("server.feedback.submit_failed", app_language=app_language, fallback_text="Could not submit feedback right now."))
     submit_recorded_text = escape(ui_text("server.feedback.submit_recorded", app_language=app_language, fallback_text="Feedback recorded."))
-    workspace_href = escape(str((payload.get("routes") or {}).get("workspace_page") or "#"))
-    result_history_href = escape(str((payload.get("routes") or {}).get("result_history") or "#"))
+    workspace_href = escape(str(route_map.get("workspace_page") or "#"))
+    result_history_href = escape(str(route_map.get("result_history") or "#"))
     option_fallback_label = ui_text("server.feedback.option_fallback", app_language=app_language, fallback_text="Option")
     options_html = "".join(
         f'<button type="button" class="option" data-category="{escape(str(option.get("category_key") or "friction_note"))}"><strong>{escape(str(option.get("title") or option_fallback_label))}</strong><span>{escape(str(option.get("summary") or ""))}</span></button>'
@@ -172,6 +179,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           <a class=\"secondary\" href=\"{library_href}\">{back_to_library_label}</a>
           <a class=\"secondary\" href=\"{workspace_href}\">{open_workflow_label}</a>
           <a class=\"secondary\" href=\"{result_history_href}\">{open_results_label}</a>
+          <a class=\"secondary\" href=\"{starter_templates_href}\">{open_starter_templates_label}</a>
         </div>
       </header>
       {confirmation_html}

@@ -813,6 +813,7 @@ class FastApiRouteBindings:
             payload.setdefault("routes", {})["app_catalog"] = f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}"
             payload["routes"]["workspace_page"] = f"/app/workspaces/{workspace_id}?app_language={app_language}"
             payload["routes"]["workspace_app_library"] = f"/app/workspaces/{workspace_id}/library?app_language={app_language}"
+            payload["routes"]["workspace_feedback_page"] = f"/app/workspaces/{workspace_id}/feedback?surface=circuit_library&app_language={app_language}"
             for template in list(payload.get("templates") or []):
                 template_routes = dict(template.get("routes") or {})
                 template_id = str(template.get("template_id") or "").strip()
@@ -843,6 +844,7 @@ class FastApiRouteBindings:
             app_language = str(dict(request.query_params).get("app_language") or payload.get("app_language") or "en")
             payload.setdefault("routes", {})["workspace_page"] = f"/app/workspaces/{workspace_id}?app_language={app_language}"
             payload["routes"]["workspace_app_library"] = f"/app/workspaces/{workspace_id}/library?app_language={app_language}"
+            payload["routes"]["workspace_feedback_page"] = f"/app/workspaces/{workspace_id}/feedback?surface=circuit_library&app_language={app_language}"
             payload["routes"]["workspace_templates_page"] = f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}"
             payload["routes"]["workspace_apply_html"] = f"/app/workspaces/{workspace_id}/starter-templates/{template_id}/apply?app_language={app_language}"
             payload["routes"]["api_detail"] = f"/api/templates/starter-circuits/{template_id}"
@@ -966,6 +968,9 @@ class FastApiRouteBindings:
             if framework_response.status_code != 200:
                 return framework_response
             payload = json.loads(outbound.body_text)
+            app_language = str(dict(request.query_params).get("app_language") or payload.get("app_language") or "en")
+            payload.setdefault("routes", {})["workspace_feedback_page"] = f"/app/workspaces/{workspace_id}/feedback?surface=result_history&app_language={app_language}"
+            payload["routes"]["workspace_page"] = f"/app/workspaces/{workspace_id}?app_language={app_language}"
             return HTMLResponse(content=render_workspace_result_history_html(payload), status_code=200)
 
         @router.get("/app/workspaces/{workspace_id}/feedback")
@@ -989,6 +994,11 @@ class FastApiRouteBindings:
             if framework_response.status_code != 200:
                 return framework_response
             payload = json.loads(outbound.body_text)
+            app_language = str(dict(request.query_params).get("app_language") or payload.get("app_language") or "en")
+            payload.setdefault("routes", {})["workspace_library"] = f"/app/workspaces/{workspace_id}/library?app_language={app_language}"
+            payload["routes"]["starter_template_catalog_page"] = f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}"
+            payload["routes"]["workspace_page"] = f"/app/workspaces/{workspace_id}?app_language={app_language}"
+            payload["routes"]["result_history"] = f"/app/workspaces/{workspace_id}/results?app_language={app_language}"
             return HTMLResponse(content=render_workspace_feedback_html(payload), status_code=200)
 
         @router.get("/app/workspaces/{workspace_id}")

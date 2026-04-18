@@ -21,6 +21,7 @@ def render_starter_template_catalog_html(payload: Mapping[str, object]) -> str:
     raw_catalog_href = escape(str(routes.get("self") or "/api/templates/starter-circuits"))
     library_href = escape(str(routes.get("app_library") or "/app/library"))
     workspace_href = escape(str(routes.get("workspace_page") or ""))
+    feedback_href = escape(str(routes.get("workspace_feedback_page") or ""))
     cards_html = ""
     for template in list(payload.get("templates") or ()):
         template_map = dict(template or {})
@@ -75,6 +76,13 @@ def render_starter_template_catalog_html(payload: Mapping[str, object]) -> str:
             f'{escape(ui_text("server.templates.open_workspace", app_language=app_language, fallback_text="Open workspace"))}'
             '</a>'
         )
+    feedback_link_html = ""
+    if feedback_href:
+        feedback_link_html = (
+            f'<a class="top-link" href="{feedback_href}">'
+            f'{escape(ui_text("server.templates.send_feedback", app_language=app_language, fallback_text="Send feedback"))}'
+            '</a>'
+        )
     return f"""<!doctype html>
 <html lang="{app_language}">
   <head>
@@ -103,6 +111,7 @@ def render_starter_template_catalog_html(payload: Mapping[str, object]) -> str:
         <a class="top-link" href="{raw_catalog_href}">{escape(ui_text("server.templates.open_raw_catalog", app_language=app_language, fallback_text="Open raw starter-template catalog"))}</a>
         <a class="top-link" href="{library_href}">{escape(ui_text("server.templates.open_library", app_language=app_language, fallback_text="Open workflow library"))}</a>
         {workspace_link_html}
+        {feedback_link_html}
         <h1 id="starter-template-title">{title}</h1>
         <p>{subtitle}</p>
       </header>
@@ -125,6 +134,7 @@ def render_starter_template_detail_html(payload: Mapping[str, object]) -> str:
     workspace_templates_href = escape(str(routes.get("workspace_templates_page") or routes.get("catalog") or "/app/templates/starter-circuits"))
     workspace_href = escape(str(routes.get("workspace_page") or ""))
     apply_href = escape(str(routes.get("workspace_apply_html") or "#"))
+    feedback_href = escape(str(routes.get("workspace_feedback_page") or ""))
     apply_label = escape(ui_text("template_gallery.action.use_template", app_language=app_language, fallback_text="Use template"))
     raw_identity = template.get("identity")
     raw_provenance = template.get("provenance")
@@ -146,6 +156,13 @@ def render_starter_template_detail_html(payload: Mapping[str, object]) -> str:
         workspace_link_html = (
             f'<a class="top-link" href="{workspace_href}">'
             f'{escape(ui_text("server.templates.open_workspace", app_language=app_language, fallback_text="Open workspace"))}'
+            '</a>'
+        )
+    feedback_link_html = ""
+    if feedback_href:
+        feedback_link_html = (
+            f'<a class="top-link" href="{feedback_href}">'
+            f'{escape(ui_text("server.templates.send_feedback", app_language=app_language, fallback_text="Send feedback"))}'
             '</a>'
         )
     return f"""<!doctype html>
@@ -189,6 +206,7 @@ def render_starter_template_detail_html(payload: Mapping[str, object]) -> str:
             <button type="submit" class="action-link">{apply_label}</button>
           </form>
           <a class="action-link secondary" href="{workspace_templates_href}">{escape(ui_text("server.templates.back_to_catalog", app_language=app_language, fallback_text="Back to starter templates"))}</a>
+          <a class="action-link secondary" href="{feedback_href}">{escape(ui_text("server.templates.send_feedback", app_language=app_language, fallback_text="Send feedback"))}</a>
         </div>
       </article>
     </main>

@@ -600,6 +600,7 @@ def test_fastapi_binding_circuit_library_routes_round_trip() -> None:
     assert page_response.status_code == 200
     assert 'My workflows' in page_response.text
     assert '/app/workspaces/ws-001' in page_response.text
+    assert '/app/workspaces/ws-001/feedback?surface=circuit_library&amp;app_language=en' in page_response.text
 
 def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     client = _make_client(
@@ -754,6 +755,7 @@ def test_fastapi_binding_workspace_starter_template_catalog_page_round_trip() ->
     assert 'Open workspace' in body
     assert '/app/workspaces/ws-001?app_language=en' in body
     assert '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en' in body
+    assert '/app/workspaces/ws-001/feedback?surface=circuit_library&amp;app_language=en' in body
     assert 'Review in workspace' in body
 
 
@@ -767,6 +769,7 @@ def test_fastapi_binding_workspace_starter_template_detail_page_round_trip() -> 
     assert 'Text Summarizer' in body
     assert 'Use template' in body
     assert '/app/workspaces/ws-001/starter-templates/text_summarizer/apply?app_language=en' in body
+    assert '/app/workspaces/ws-001/feedback?surface=circuit_library&amp;app_language=en' in body
     assert 'Back to starter templates' in body
     assert 'Open workspace' in body
 
@@ -1593,6 +1596,8 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
     body = page_response.text
     assert 'Help us improve this workflow' in body
     assert '/api/workspaces/ws-001/feedback' in body
+    assert '/app/workspaces/ws-001/library?app_language=en' in body
+    assert '/app/workspaces/ws-001/starter-templates?app_language=en' in body
     assert 'Report confusing screen' in body
 
 

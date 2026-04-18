@@ -100,6 +100,7 @@ def build_circuit_library_payload(
                 "continue_label": item.continue_label,
                 "result_history_href": item.result_history_href,
                 "result_history_action_label": item.result_history_action_label,
+                "feedback_href": f"/app/workspaces/{item.workspace_id}/feedback?surface=circuit_library&app_language={app_language}",
                 "has_recent_result_history": item.has_recent_result_history,
                 "onboarding_incomplete": item.onboarding_incomplete,
                 "onboarding_step_id": item.onboarding_step_id,
@@ -166,11 +167,15 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
         title_text = escape(str(item.get("title") or item.get("workspace_id") or ui_text("server.library.workflow_fallback", app_language=app_language, fallback_text="Workflow")))
         result_history_href = escape(str(item.get("result_history_href") or ""))
         result_history_label = escape(str(item.get("result_history_action_label") or ui_text("server.library.open_results", app_language=app_language, fallback_text="Open results")))
+        feedback_href = escape(str(item.get("feedback_href") or ""))
+        feedback_label = escape(ui_text("server.library.send_feedback", app_language=app_language, fallback_text="Send feedback"))
         detail_title = escape(str(detail.get("title") or ui_text("server.library.workflow_detail", app_language=app_language, fallback_text="Workflow detail")))
         status_aria = escape(ui_text("server.library.workflow_status_aria", app_language=app_language, fallback_text="Workflow status {status}", status=status_label))
         control_html = ""
         if result_history_href:
             control_html += f'<a class="action-link secondary" href="{result_history_href}">{result_history_label}</a>'
+        if feedback_href:
+            control_html += f'<a class="action-link secondary" href="{feedback_href}">{feedback_label}</a>'
         control_html += f'<a class="action-link" href="{continue_href}">{continue_label}</a>'
         cards_html += f"""
         <article class="workflow-card" aria-labelledby="workflow-title-{escape(str(item.get('workspace_id') or 'workflow'))}">

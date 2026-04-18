@@ -136,6 +136,7 @@ def build_workspace_result_history_payload(
                 "status_label": item.status_label,
                 "open_result_href": item.open_result_href,
                 "continue_href": item.continue_href,
+                "feedback_href": f"/app/workspaces/{response.workspace_id}/feedback?surface=result_history&run_id={item.run_id}&app_language={app_language}",
                 "section": build_shell_section(
                     headline=item.result_title,
                     lines=[item.status_label] + list(item.summary_lines),
@@ -174,9 +175,10 @@ def build_workspace_result_history_payload(
             "workspace_list": "/api/workspaces",
             "library": "/app/library",
             "workspace_library": f"/app/workspaces/{response.workspace_id}/library?app_language={app_language}",
-            "workspace_page": f"/app/workspaces/{response.workspace_id}",
+            "workspace_page": f"/app/workspaces/{response.workspace_id}?app_language={app_language}",
             "api_history": f"/api/workspaces/{response.workspace_id}/result-history",
-            "app_history": f"/app/workspaces/{response.workspace_id}/results",
+            "app_history": f"/app/workspaces/{response.workspace_id}/results?app_language={app_language}",
+            "workspace_feedback_page": f"/app/workspaces/{response.workspace_id}/feedback?surface=result_history&app_language={app_language}",
             "starter_template_catalog_page": f"/app/workspaces/{response.workspace_id}/starter-templates?app_language={app_language}",
         },
     }
@@ -205,6 +207,9 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         selected_class = " selected" if item.get("selected") else ""
         open_href = escape(str(item.get("open_result_href") or "#"))
         continue_href = escape(str(item.get("continue_href") or "#"))
+        feedback_href = escape(str(item.get("feedback_href") or ""))
+        feedback_label = escape(ui_text('server.result_history.send_feedback', app_language=app_language, fallback_text='Send feedback'))
+        feedback_action_html = f'<a class="action-link secondary" href="{feedback_href}">{feedback_label}</a>' if feedback_href else ''
         cards_html += f"""
         <article class="result-card{selected_class}" aria-labelledby="result-title-{escape(str(item.get('run_id') or 'result'))}" {'aria-current="true"' if item.get('selected') else ''}>
           <div class="result-card-head">
@@ -218,6 +223,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
           </details>
           <div class="actions">
             <a class="action-link secondary" href="{open_href}">{escape(ui_text('server.result_history.open_result_label', app_language=app_language, fallback_text='Open result'))}</a>
+            {feedback_action_html}
             <a class="action-link" href="{continue_href}">{escape(ui_text('server.result_history.open_workflow', app_language=app_language, fallback_text='Open workflow'))}</a>
           </div>
         </article>
@@ -233,6 +239,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
     if selected.get("output_preview"):
         selected_output_html = f'<section class="selected-output" role="region" aria-labelledby="selected-output-title"><h2 id="selected-output-title">{escape(str(selected.get("output_label") or ui_text("server.result_history.selected_output_title", app_language=app_language, fallback_text="Selected output")))}</h2><pre>{escape(str(selected.get("output_preview") or ""))}</pre></section>'
     onboarding_html = ""
+    workspace_feedback_href = escape(str((payload.get('routes') or {}).get('workspace_feedback_page') or '#'))
     if onboarding_banner:
         action_href = escape(str(onboarding_banner.get("action_href") or "#"))
         action_label = escape(str(onboarding_banner.get("action_label") or ui_text("server.result_history.onboarding_continue", app_language=app_language, fallback_text="Continue workflow")))
@@ -276,6 +283,7 @@ def render_workspace_result_history_html(payload: Mapping[str, Any]) -> str:
         <a class="top-link" href="{escape(str(payload.get('routes', {}).get('library') or '/app/library'))}" aria-label="{escape(ui_text('server.result_history.back_to_library', app_language=app_language, fallback_text='Back to library'))}">{escape(ui_text('server.result_history.back_to_library', app_language=app_language, fallback_text='Back to library'))}</a>
         <a class="top-link" href="{escape(str(payload.get('routes', {}).get('workspace_page') or '#'))}">{escape(ui_text('server.result_history.open_workflow', app_language=app_language, fallback_text='Open workflow'))}</a>
         <a class="top-link" href="{escape(str(payload.get('routes', {}).get('starter_template_catalog_page') or '#'))}">{escape(ui_text('server.shell.open_starter_templates', app_language=app_language, fallback_text='Open starter templates'))}</a>
+        <a class="top-link" href="{workspace_feedback_href}">{escape(ui_text('server.result_history.send_feedback', app_language=app_language, fallback_text='Send feedback'))}</a>
         <h1 id="result-history-title">{title}</h1>
         <p>{workspace_title} · {subtitle}</p>
       </header>
