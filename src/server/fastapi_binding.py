@@ -24,6 +24,9 @@ from src.server.public_share_runtime import (
     render_workspace_share_create_html,
     render_public_share_detail_html,
     render_public_share_history_html,
+    render_issuer_public_share_portfolio_html,
+    render_issuer_public_share_summary_html,
+    render_issuer_public_share_action_reports_html,
 )
 
 
@@ -810,6 +813,17 @@ class FastApiRouteBindings:
                 target += f"&share_action=delete&status={status}"
             return target
 
+        def _issuer_public_share_app_target(*, app_language: str, action: str | None = None, status: str | None = None, reason: str | None = None) -> str:
+            target = f"/app/users/me/public-shares?app_language={app_language}"
+            if action:
+                target += f"&action={action}"
+            if status:
+                target += f"&status={status}"
+            if reason:
+                from urllib.parse import quote
+                target += f"&reason={quote(reason)}"
+            return target
+
         def _public_share_notice_payload(request: Request) -> dict[str, str]:
             query = dict(request.query_params)
             payload: dict[str, str] = {}
@@ -818,6 +832,223 @@ class FastApiRouteBindings:
                 if value:
                     payload[key] = value
             return payload
+
+        @router.get("/app/users/me/public-shares")
+        async def get_issuer_public_share_portfolio_page(request: Request) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            api_query = {key: value for key, value in query.items() if key not in {"app_language", "action", "status", "reason"}}
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path="/api/users/me/public-shares",
+                headers=dict(request.headers),
+                path_params={},
+                query_params=api_query,
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_list_issuer_public_shares(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            payload["app_language"] = app_language
+            payload["notice"] = _public_share_notice_payload(request)
+            return HTMLResponse(content=render_issuer_public_share_portfolio_html(payload, app_language=app_language), status_code=200)
+
+        @router.get("/app/users/me/public-shares/summary")
+        async def get_issuer_public_share_summary_page(request: Request) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            api_query = {key: value for key, value in query.items() if key != "app_language"}
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path="/api/users/me/public-shares/summary",
+                headers=dict(request.headers),
+                path_params={},
+                query_params=api_query,
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_issuer_public_share_summary(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            payload["app_language"] = app_language
+            return HTMLResponse(content=render_issuer_public_share_summary_html(payload, app_language=app_language), status_code=200)
+
+        @router.get("/app/users/me/public-shares/action-reports")
+        async def get_issuer_public_share_action_reports_page(request: Request) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            api_query = {key: value for key, value in query.items() if key not in {"app_language", "status", "reason"}}
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path="/api/users/me/public-shares/action-reports",
+                headers=dict(request.headers),
+                path_params={},
+                query_params=api_query,
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_list_issuer_public_share_action_reports(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            payload["app_language"] = app_language
+            payload["notice"] = _public_share_notice_payload(request)
+            return HTMLResponse(content=render_issuer_public_share_action_reports_html(payload, app_language=app_language), status_code=200)
+
+        @router.post("/app/users/me/public-shares/actions/revoke")
+        async def revoke_issuer_public_shares_page(request: Request) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            form = _read_simple_form_data(await request.body())
+            share_id = str(form.get("share_id") or "").strip()
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path="/api/users/me/public-shares/actions/revoke",
+                headers=dict(request.headers),
+                path_params={},
+                query_params={},
+                json_body={"share_ids": [share_id]} if share_id else {"share_ids": []},
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_revoke_issuer_public_shares(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            payload = json.loads(outbound.body_text) if outbound.body_text else {}
+            return RedirectResponse(
+                url=_issuer_public_share_app_target(
+                    app_language=app_language,
+                    action="revoke",
+                    status="done" if outbound.status_code == 200 else "error",
+                    reason=str(payload.get("reason_code") or "").strip() or None,
+                ),
+                status_code=303,
+            )
+
+        @router.post("/app/users/me/public-shares/actions/archive")
+        async def archive_issuer_public_shares_page(request: Request) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            form = _read_simple_form_data(await request.body())
+            share_id = str(form.get("share_id") or "").strip()
+            archived = str(form.get("archived") or "true").strip().lower() in {"1", "true", "yes", "on"}
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path="/api/users/me/public-shares/actions/archive",
+                headers=dict(request.headers),
+                path_params={},
+                query_params={},
+                json_body={"share_ids": [share_id], "archived": archived} if share_id else {"share_ids": [], "archived": archived},
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_archive_issuer_public_shares(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            payload = json.loads(outbound.body_text) if outbound.body_text else {}
+            return RedirectResponse(
+                url=_issuer_public_share_app_target(
+                    app_language=app_language,
+                    action="archive" if archived else "unarchive",
+                    status="done" if outbound.status_code == 200 else "error",
+                    reason=str(payload.get("reason_code") or "").strip() or None,
+                ),
+                status_code=303,
+            )
+
+        @router.post("/app/users/me/public-shares/actions/extend")
+        async def extend_issuer_public_shares_page(request: Request) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            form = _read_simple_form_data(await request.body())
+            share_id = str(form.get("share_id") or "").strip()
+            expires_at = str(form.get("expires_at") or "").strip()
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path="/api/users/me/public-shares/actions/extend",
+                headers=dict(request.headers),
+                path_params={},
+                query_params={},
+                json_body={"share_ids": [share_id], "expires_at": expires_at} if share_id else {"share_ids": [], "expires_at": expires_at},
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_extend_issuer_public_shares(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            payload = json.loads(outbound.body_text) if outbound.body_text else {}
+            return RedirectResponse(
+                url=_issuer_public_share_app_target(
+                    app_language=app_language,
+                    action="extend",
+                    status="done" if outbound.status_code == 200 else "error",
+                    reason=str(payload.get("reason_code") or "").strip() or None,
+                ),
+                status_code=303,
+            )
+
+        @router.post("/app/users/me/public-shares/actions/delete")
+        async def delete_issuer_public_shares_page(request: Request) -> Response:
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            form = _read_simple_form_data(await request.body())
+            share_id = str(form.get("share_id") or "").strip()
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path="/api/users/me/public-shares/actions/delete",
+                headers=dict(request.headers),
+                path_params={},
+                query_params={},
+                json_body={"share_ids": [share_id]} if share_id else {"share_ids": []},
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_delete_issuer_public_shares(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_payload_deleter=self.dependencies.public_share_payload_deleter,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            payload = json.loads(outbound.body_text) if outbound.body_text else {}
+            return RedirectResponse(
+                url=_issuer_public_share_app_target(
+                    app_language=app_language,
+                    action="delete",
+                    status="done" if outbound.status_code == 200 else "error",
+                    reason=str(payload.get("reason_code") or "").strip() or None,
+                ),
+                status_code=303,
+            )
 
         @router.get("/app/workspaces/{workspace_id}/shares")
         async def get_workspace_share_history_page(request: Request, workspace_id: str) -> Response:

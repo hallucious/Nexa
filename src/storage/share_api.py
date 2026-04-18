@@ -254,6 +254,8 @@ def _issuer_public_share_management_entry_from_descriptor(descriptor: PublicNexS
         created_at=descriptor.created_at,
         updated_at=descriptor.updated_at,
         expires_at=descriptor.expires_at,
+        archived=descriptor.archived,
+        archived_at=descriptor.archived_at,
         audit_event_count=descriptor.audit_event_count,
         last_audit_event_type=descriptor.last_audit_event_type,
         last_audit_event_at=descriptor.last_audit_event_at,

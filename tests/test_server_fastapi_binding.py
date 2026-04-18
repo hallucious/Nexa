@@ -2069,6 +2069,105 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in history_body
 
 
+def test_fastapi_binding_issuer_public_share_product_pages_round_trip() -> None:
+    rows = (
+        export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-active-page'),
+            share_id='share-fastapi-owner-active-page',
+            title='FastAPI Owner Active Page',
+            created_at='2026-04-15T12:00:00+00:00',
+            updated_at='2026-04-15T12:30:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-archived-page'),
+            share_id='share-fastapi-owner-archived-page',
+            title='FastAPI Owner Archived Page',
+            created_at='2026-04-10T12:00:00+00:00',
+            updated_at='2026-04-10T12:15:00+00:00',
+            archived=True,
+            issued_by_user_ref='user-owner',
+        ),
+    )
+    client = _make_client(public_share_payload_rows_provider=lambda: rows, public_share_action_report_rows_provider=_issuer_action_report_rows)
+
+    portfolio_response = client.get('/app/users/me/public-shares?app_language=en', headers=_session_headers())
+    assert portfolio_response.status_code == 200
+    portfolio_body = portfolio_response.text
+    assert 'My public shares' in portfolio_body
+    assert 'FastAPI Owner Active Page' in portfolio_body
+    assert '/app/users/me/public-shares/summary?app_language=en' in portfolio_body
+    assert '/app/users/me/public-shares/action-reports?app_language=en' in portfolio_body
+    assert '/app/users/me/public-shares/actions/revoke?app_language=en' in portfolio_body
+    assert '/app/users/me/public-shares/actions/archive?app_language=en' in portfolio_body
+
+    summary_response = client.get('/app/users/me/public-shares/summary?app_language=en', headers=_session_headers())
+    assert summary_response.status_code == 200
+    assert 'Public share summary' in summary_response.text or 'Share summary' in summary_response.text
+
+    reports_response = client.get('/app/users/me/public-shares/action-reports?app_language=en', headers=_session_headers())
+    assert reports_response.status_code == 200
+    reports_body = reports_response.text
+    assert 'Action reports' in reports_body
+    assert 'Archive' in reports_body
+
+
+def test_fastapi_binding_issuer_public_share_product_management_round_trip() -> None:
+    share_store: dict[str, dict] = {
+        'share-fastapi-owner-portfolio-001': export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-portfolio-001'),
+            share_id='share-fastapi-owner-portfolio-001',
+            title='FastAPI Owner Portfolio Share',
+            created_at='2026-04-15T12:00:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+    }
+    action_reports: list[dict] = []
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload['share']['share_id']] = dict(payload)
+        return dict(payload)
+
+    def _deleter(share_id: str) -> bool:
+        return share_store.pop(share_id, None) is not None
+
+    def _action_report_writer(report: dict) -> dict:
+        action_reports.append(dict(report))
+        return dict(report)
+
+    client = _make_client(
+        public_share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_payload_writer=_writer,
+        public_share_payload_deleter=_deleter,
+        public_share_action_report_rows_provider=lambda: tuple(action_reports),
+        public_share_action_report_writer=_action_report_writer,
+    )
+
+    archive_response = client.post(
+        '/app/users/me/public-shares/actions/archive?app_language=en',
+        headers=_session_headers(),
+        data={'share_id': 'share-fastapi-owner-portfolio-001', 'archived': 'true'},
+        follow_redirects=False,
+    )
+    assert archive_response.status_code == 303
+    assert archive_response.headers['location'].startswith('/app/users/me/public-shares?app_language=en')
+    assert 'action=archive' in archive_response.headers['location']
+    archived_page = client.get(archive_response.headers['location'], headers=_session_headers())
+    assert archived_page.status_code == 200
+    assert 'Unarchive share' in archived_page.text
+
+    delete_response = client.post(
+        '/app/users/me/public-shares/actions/delete?app_language=en',
+        headers=_session_headers(),
+        data={'share_id': 'share-fastapi-owner-portfolio-001'},
+        follow_redirects=False,
+    )
+    assert delete_response.status_code == 303
+    assert delete_response.headers['location'].startswith('/app/users/me/public-shares?app_language=en')
+    assert 'action=delete' in delete_response.headers['location']
+    assert 'share-fastapi-owner-portfolio-001' not in share_store
+
+
 def test_fastapi_binding_public_share_management_actions_round_trip() -> None:
     share_store: dict[str, dict] = {'share-fastapi-001': _share_payload('share-fastapi-001')}
     action_reports: list[dict] = []
