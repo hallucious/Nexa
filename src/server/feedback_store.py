@@ -7,7 +7,7 @@ from typing import Any
 from src.server.fastapi_binding_models import FastApiRouteDependencies
 
 _ALLOWED_CATEGORIES = {"confusing_screen", "friction_note", "bug_report"}
-_ALLOWED_SURFACES = {"circuit_library", "result_history", "workspace_shell", "unknown"}
+_ALLOWED_SURFACES = {"circuit_library", "result_history", "starter_templates", "workspace_shell", "unknown"}
 
 
 @dataclass
@@ -44,6 +44,7 @@ class InMemoryFeedbackStore:
             "surface": surface,
             "message": message,
             "run_id": str(row.get("run_id") or "").strip() or None,
+            "template_id": str(row.get("template_id") or "").strip() or None,
             "status": str(row.get("status") or "received").strip() or "received",
             "created_at": created_at,
         }

@@ -4263,6 +4263,7 @@ class RunHttpRouteSurface:
             prefill_category=str((http_request.query_params or {}).get("category") or "").strip() or None,
             prefill_surface=str((http_request.query_params or {}).get("surface") or "").strip() or None,
             prefill_run_id=str((http_request.query_params or {}).get("run_id") or "").strip() or None,
+            prefill_template_id=str((http_request.query_params or {}).get("template_id") or "").strip() or None,
             confirmation_feedback_id=str((http_request.query_params or {}).get("feedback_id") or "").strip() or None,
             app_language=_request_app_language(http_request.query_params),
         )
@@ -4335,6 +4336,9 @@ class RunHttpRouteSurface:
         surface = str(body.get("surface") or "").strip().lower() or "unknown"
         message = str(body.get("message") or "").strip()
         run_id = str(body.get("run_id") or "").strip() or None
+        template_id = str(body.get("template_id") or "").strip() or None
+        if surface != "starter_templates":
+            template_id = None
         if category not in {"confusing_screen", "friction_note", "bug_report"}:
             return _route_response(400, {
                 "status": "rejected",
@@ -4376,6 +4380,7 @@ class RunHttpRouteSurface:
             "surface": surface,
             "message": message,
             "run_id": run_id,
+            "template_id": template_id,
             "status": "received",
             "created_at": str(now_iso or "").strip() or "1970-01-01T00:00:00+00:00",
         }

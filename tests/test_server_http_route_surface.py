@@ -1028,6 +1028,17 @@ def test_workspace_shell_draft_route_rejects_commit_snapshot_source() -> None:
     assert artifact_store['ws-001']['meta']['storage_role'] == 'commit_snapshot'
 
 
+def test_workspace_feedback_payload_preserves_starter_template_detail_origin_navigation() -> None:
+    payload = RunHttpRouteSurface.handle_workspace_feedback(
+        http_request=_auth_request(method='GET', path='/api/workspaces/ws-001/feedback', path_params={'workspace_id': 'ws-001'}, query_params={'surface': 'starter_templates', 'template_id': 'text_summarizer'}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        feedback_rows=(),
+    ).body
+    assert payload['routes']['origin_page'] == '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en'
+    assert payload['routes']['origin_label'] == 'Back to starter template'
+
+
 def test_workspace_shell_payload_exposes_role_aware_action_availability() -> None:
     payload = RunHttpRouteSurface.handle_workspace_shell(
         http_request=_auth_request(method='GET', path='/api/workspaces/ws-001/shell', path_params={'workspace_id': 'ws-001'}),

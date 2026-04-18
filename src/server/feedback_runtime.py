@@ -17,14 +17,20 @@ def _normalized_prefill(value: object | None, *, allowed: set[str], default: str
     return normalized if normalized in allowed else default
 
 
-def _feedback_origin_route(*, workspace_id: str, surface: str | None, run_id: str | None, app_language: str) -> tuple[str, str]:
+def _feedback_origin_route(*, workspace_id: str, surface: str | None, run_id: str | None, template_id: str | None, app_language: str) -> tuple[str, str]:
     normalized_surface = _normalized_prefill(surface, allowed=_ALLOWED_SURFACES, default="unknown")
     normalized_run_id = str(run_id or "").strip()
+    normalized_template_id = str(template_id or "").strip()
     if normalized_surface == "result_history":
         href = f"/app/workspaces/{workspace_id}/results?app_language={app_language}" + (f"&run_id={normalized_run_id}" if normalized_run_id else "")
         label = ui_text("server.feedback.back_to_results", app_language=app_language, fallback_text="Back to results")
         return href, label
     if normalized_surface == "starter_templates":
+        if normalized_template_id:
+            return (
+                f"/app/workspaces/{workspace_id}/starter-templates/{normalized_template_id}?app_language={app_language}",
+                ui_text("server.feedback.back_to_starter_template", app_language=app_language, fallback_text="Back to starter template"),
+            )
         return (
             f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
             ui_text("server.feedback.back_to_starter_templates", app_language=app_language, fallback_text="Back to starter templates"),
@@ -51,15 +57,18 @@ def build_workspace_feedback_payload(
     prefill_surface: str | None = None,
     prefill_run_id: str | None = None,
     confirmation_feedback_id: str | None = None,
+    prefill_template_id: str | None = None,
 ) -> dict[str, Any]:
     app_language = normalize_ui_language(app_language)
     normalized_category = _normalized_prefill(prefill_category, allowed=_ALLOWED_CATEGORIES, default="friction_note")
     normalized_surface = _normalized_prefill(prefill_surface, allowed=_ALLOWED_SURFACES, default="unknown")
     normalized_run_id = str(prefill_run_id or "").strip() or None
+    normalized_template_id = str(prefill_template_id or "").strip() or None
     origin_href, origin_label = _feedback_origin_route(
         workspace_id=workspace_id,
         surface=normalized_surface,
         run_id=normalized_run_id,
+        template_id=normalized_template_id,
         app_language=app_language,
     )
     view_model = read_feedback_channel_view_model(
@@ -90,6 +99,7 @@ def build_workspace_feedback_payload(
             "origin_surface": normalized_surface,
             "origin_page": origin_href,
             "origin_label": origin_label,
+            "origin_template_id": normalized_template_id,
         },
     }
 
@@ -102,10 +112,12 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
     surface_label = ui_text(f"feedback.surface.{surface}", app_language=app_language, fallback_text=surface.replace("_", " ").title())
     workspace_id = str(row.get("workspace_id") or "").strip()
     run_id = str(row.get("run_id") or "").strip() or None
+    template_id = str(row.get("template_id") or "").strip() or None
     origin_href, origin_label = _feedback_origin_route(
         workspace_id=workspace_id,
         surface=surface,
         run_id=run_id,
+        template_id=template_id,
         app_language=app_language,
     )
     return {
@@ -122,6 +134,7 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
             "surface_label": surface_label,
             "message": str(row.get("message") or "").strip(),
             "run_id": run_id,
+            "template_id": template_id,
             "status": str(row.get("status") or "received").strip() or "received",
             "created_at": str(row.get("created_at") or "").strip(),
         },
@@ -134,6 +147,7 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
             "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
             "origin_page": origin_href,
             "origin_label": origin_label,
+            "origin_template_id": template_id,
         },
     }
 
@@ -145,16 +159,17 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     title = escape(str(channel.get("title") or ui_text("feedback.title", app_language=app_language, fallback_text="Feedback")))
     subtitle = escape(str(channel.get("subtitle") or ""))
     submit_path = escape(str(channel.get("submit_path") or "#"))
+    route_map = dict(payload.get("routes") or {})
     prefill_category = escape(str(channel.get("prefill_category") or "friction_note"))
     prefill_surface = escape(str(channel.get("prefill_surface") or "unknown"))
     prefill_run_id = escape(str(channel.get("prefill_run_id") or ""))
     options = list(channel.get("options") or [])
+    prefill_template_id = escape(str(route_map.get("origin_template_id") or ""))
     items = list(channel.get("items") or [])
     empty_title = escape(str(channel.get("empty_title") or ui_text("server.feedback.empty_title", app_language=app_language, fallback_text="No feedback sent yet")))
     empty_summary = escape(str(channel.get("empty_summary") or ""))
     confirmation_title = escape(str(channel.get("confirmation_title") or ""))
     confirmation_summary = escape(str(channel.get("confirmation_summary") or ""))
-    route_map = dict(payload.get("routes") or {})
     library_href = escape(str(route_map.get("workspace_library") or route_map.get("library") or "/app/library"))
     starter_templates_href = escape(str(route_map.get("starter_template_catalog_page") or "#"))
     origin_href = escape(str(route_map.get("origin_page") or route_map.get("workspace_page") or "#"))
@@ -273,6 +288,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
       const categoryEl = document.getElementById('category');
       const surfaceEl = document.getElementById('surface');
       const runIdEl = document.getElementById('run_id');
+      const templateIdEl = document.getElementById('template_id');
       categoryEl.value = {prefill_category!r};
       surfaceEl.value = {prefill_surface!r};
       document.querySelectorAll('.option').forEach((button) => {{
@@ -289,6 +305,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           category: categoryEl.value,
           surface: surfaceEl.value,
           run_id: runIdEl.value || null,
+          template_id: templateIdEl.value || null,
           message: document.getElementById('message').value,
         }};
         const response = await fetch({submit_path!r}, {{
@@ -309,6 +326,11 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           nextQuery.set('run_id', runIdEl.value);
         }} else {{
           nextQuery.delete('run_id');
+        }}
+        if (templateIdEl.value) {{
+          nextQuery.set('template_id', templateIdEl.value);
+        }} else {{
+          nextQuery.delete('template_id');
         }}
         nextQuery.set('feedback_id', data.feedback.feedback_id);
         nextQuery.set('app_language', feedbackPageLanguage);

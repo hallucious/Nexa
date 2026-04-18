@@ -56,3 +56,23 @@ def test_feedback_store_rejects_invalid_category() -> None:
 def test_bind_feedback_store_updates_dependencies() -> None:
     deps = bind_feedback_store(dependencies=FastApiRouteDependencies(), store=InMemoryFeedbackStore())
     assert deps.feedback_rows_provider() == ()
+
+
+def test_feedback_store_accepts_starter_template_surface_and_preserves_template_id() -> None:
+    store = InMemoryFeedbackStore()
+    store.write({
+        "feedback_id": "fb-004",
+        "user_id": "user-owner",
+        "workspace_id": "ws-001",
+        "workspace_title": "Primary Workflow",
+        "category": "friction_note",
+        "surface": "starter_templates",
+        "template_id": "text_summarizer",
+        "message": "This starter template needs clearer setup guidance.",
+        "status": "received",
+        "created_at": "2026-04-14T08:10:00+00:00",
+    })
+
+    rows = store.list_rows()
+    assert rows[0]["surface"] == "starter_templates"
+    assert rows[0]["template_id"] == "text_summarizer"

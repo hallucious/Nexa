@@ -769,7 +769,7 @@ def test_fastapi_binding_workspace_starter_template_detail_page_round_trip() -> 
     assert 'Text Summarizer' in body
     assert 'Use template' in body
     assert '/app/workspaces/ws-001/starter-templates/text_summarizer/apply?app_language=en' in body
-    assert '/app/workspaces/ws-001/feedback?surface=starter_templates&amp;app_language=en' in body
+    assert '/app/workspaces/ws-001/feedback?surface=starter_templates&amp;template_id=text_summarizer&amp;app_language=en' in body
     assert 'Back to starter templates' in body
     assert 'Open workspace' in body
 
@@ -782,6 +782,16 @@ def test_fastapi_binding_feedback_page_preserves_starter_template_origin_navigat
     body = response.text
     assert '/app/workspaces/ws-001/starter-templates?app_language=en' in body
     assert 'Back to starter templates' in body
+
+
+def test_fastapi_binding_feedback_page_preserves_starter_template_detail_origin_navigation() -> None:
+    client = _make_client()
+
+    response = client.get('/app/workspaces/ws-001/feedback?surface=starter_templates&template_id=text_summarizer&app_language=en', headers=_session_headers())
+    assert response.status_code == 200
+    body = response.text
+    assert '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en' in body
+    assert 'Back to starter template' in body
 
 
 def test_fastapi_binding_workspace_starter_template_apply_page_redirects_to_workspace() -> None:
@@ -1665,6 +1675,34 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '<option value="starter_templates">시작 템플릿</option>' in feedback_page.text
     assert "const feedbackPageLanguage = currentQuery.get('app_language') || 'ko';" in feedback_page.text
     assert "nextQuery.set('app_language', feedbackPageLanguage);" in feedback_page.text
+
+
+def test_fastapi_binding_workspace_feedback_starter_template_detail_round_trip() -> None:
+    feedback_store = InMemoryFeedbackStore()
+    client = _make_client(feedback_store=feedback_store)
+
+    get_response = client.get('/api/workspaces/ws-001/feedback?surface=starter_templates&template_id=text_summarizer', headers=_session_headers())
+    assert get_response.status_code == 200
+    get_payload = get_response.json()
+    assert get_payload['routes']['origin_page'] == '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en'
+    assert get_payload['routes']['origin_label'] == 'Back to starter template'
+
+    submit_response = client.post(
+        '/api/workspaces/ws-001/feedback',
+        headers=_session_headers(),
+        json={
+            'category': 'friction_note',
+            'surface': 'starter_templates',
+            'template_id': 'text_summarizer',
+            'message': 'This starter template needs clearer setup guidance.',
+        },
+    )
+    assert submit_response.status_code == 202
+    submit_payload = submit_response.json()
+    assert submit_payload['feedback']['surface'] == 'starter_templates'
+    assert submit_payload['feedback']['template_id'] == 'text_summarizer'
+    assert submit_payload['links']['origin_page'] == '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en'
+    assert feedback_store.list_rows()[0]['template_id'] == 'text_summarizer'
 
 
 def test_fastapi_binding_feedback_submission_localizes_server_message() -> None:
