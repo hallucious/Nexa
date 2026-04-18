@@ -280,6 +280,8 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           categoryEl.value = button.getAttribute('data-category') || 'friction_note';
         }});
       }});
+      const currentQuery = new URLSearchParams(window.location.search);
+      const feedbackPageLanguage = currentQuery.get('app_language') || {app_language!r};
       form.addEventListener('submit', async (event) => {{
         event.preventDefault();
         statusEl.textContent = {sending_text!r};
@@ -300,7 +302,17 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           return;
         }}
         statusEl.textContent = data.message || {submit_recorded_text!r};
-        window.location.search = new URLSearchParams({{ category: categoryEl.value, surface: surfaceEl.value, run_id: runIdEl.value || '', feedback_id: data.feedback.feedback_id }}).toString();
+        const nextQuery = new URLSearchParams(window.location.search);
+        nextQuery.set('category', categoryEl.value);
+        nextQuery.set('surface', surfaceEl.value);
+        if (runIdEl.value) {{
+          nextQuery.set('run_id', runIdEl.value);
+        }} else {{
+          nextQuery.delete('run_id');
+        }}
+        nextQuery.set('feedback_id', data.feedback.feedback_id);
+        nextQuery.set('app_language', feedbackPageLanguage);
+        window.location.search = nextQuery.toString();
       }});
     </script>
   </body>

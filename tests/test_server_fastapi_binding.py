@@ -1614,6 +1614,8 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
     assert '/app/workspaces/ws-001/starter-templates?app_language=en' in body
     assert 'Report confusing screen' in body
     assert '<option value="starter_templates">Starter templates</option>' in body
+    assert "const feedbackPageLanguage = currentQuery.get('app_language') || 'en';" in body
+    assert "nextQuery.set('app_language', feedbackPageLanguage);" in body
 
 
 
@@ -1661,6 +1663,8 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '버그 신고 바로가기' in feedback_page.text
     assert '실행 식별자 (선택)' in feedback_page.text
     assert '<option value="starter_templates">시작 템플릿</option>' in feedback_page.text
+    assert "const feedbackPageLanguage = currentQuery.get('app_language') || 'ko';" in feedback_page.text
+    assert "nextQuery.set('app_language', feedbackPageLanguage);" in feedback_page.text
 
 
 def test_fastapi_binding_feedback_submission_localizes_server_message() -> None:
