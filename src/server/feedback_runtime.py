@@ -17,6 +17,29 @@ def _normalized_prefill(value: object | None, *, allowed: set[str], default: str
     return normalized if normalized in allowed else default
 
 
+def _feedback_origin_route(*, workspace_id: str, surface: str | None, run_id: str | None, app_language: str) -> tuple[str, str]:
+    normalized_surface = _normalized_prefill(surface, allowed=_ALLOWED_SURFACES, default="unknown")
+    normalized_run_id = str(run_id or "").strip()
+    if normalized_surface == "result_history":
+        href = f"/app/workspaces/{workspace_id}/results?app_language={app_language}" + (f"&run_id={normalized_run_id}" if normalized_run_id else "")
+        label = ui_text("server.feedback.back_to_results", app_language=app_language, fallback_text="Back to results")
+        return href, label
+    if normalized_surface == "starter_templates":
+        return (
+            f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
+            ui_text("server.feedback.back_to_starter_templates", app_language=app_language, fallback_text="Back to starter templates"),
+        )
+    if normalized_surface == "circuit_library":
+        return (
+            f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
+            ui_text("server.feedback.back_to_library", app_language=app_language, fallback_text="Back to library"),
+        )
+    return (
+        f"/app/workspaces/{workspace_id}?app_language={app_language}",
+        ui_text("server.feedback.back_to_workflow", app_language=app_language, fallback_text="Back to workflow"),
+    )
+
+
 def build_workspace_feedback_payload(
     *,
     workspace_id: str,
@@ -30,15 +53,24 @@ def build_workspace_feedback_payload(
     confirmation_feedback_id: str | None = None,
 ) -> dict[str, Any]:
     app_language = normalize_ui_language(app_language)
+    normalized_category = _normalized_prefill(prefill_category, allowed=_ALLOWED_CATEGORIES, default="friction_note")
+    normalized_surface = _normalized_prefill(prefill_surface, allowed=_ALLOWED_SURFACES, default="unknown")
+    normalized_run_id = str(prefill_run_id or "").strip() or None
+    origin_href, origin_label = _feedback_origin_route(
+        workspace_id=workspace_id,
+        surface=normalized_surface,
+        run_id=normalized_run_id,
+        app_language=app_language,
+    )
     view_model = read_feedback_channel_view_model(
         workspace_id=workspace_id,
         workspace_title=workspace_title,
         feedback_rows=feedback_rows,
         current_user_id=current_user_id,
         app_language=app_language,
-        prefill_category=_normalized_prefill(prefill_category, allowed=_ALLOWED_CATEGORIES, default="friction_note"),
-        prefill_surface=_normalized_prefill(prefill_surface, allowed=_ALLOWED_SURFACES, default="unknown"),
-        prefill_run_id=str(prefill_run_id or "").strip() or None,
+        prefill_category=normalized_category,
+        prefill_surface=normalized_surface,
+        prefill_run_id=normalized_run_id,
         confirmation_feedback_id=confirmation_feedback_id,
     )
     return {
@@ -55,6 +87,9 @@ def build_workspace_feedback_payload(
             "library": f"/app/library?app_language={app_language}",
             "workspace_library": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
             "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
+            "origin_surface": normalized_surface,
+            "origin_page": origin_href,
+            "origin_label": origin_label,
         },
     }
 
@@ -66,6 +101,13 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
     category_label = ui_text(f"feedback.category.{category}", app_language=app_language, fallback_text=category.replace("_", " ").title())
     surface_label = ui_text(f"feedback.surface.{surface}", app_language=app_language, fallback_text=surface.replace("_", " ").title())
     workspace_id = str(row.get("workspace_id") or "").strip()
+    run_id = str(row.get("run_id") or "").strip() or None
+    origin_href, origin_label = _feedback_origin_route(
+        workspace_id=workspace_id,
+        surface=surface,
+        run_id=run_id,
+        app_language=app_language,
+    )
     return {
         "status": "accepted",
         "message": ui_text("server.feedback.message_recorded", app_language=app_language, fallback_text="Feedback recorded for product learning."),
@@ -79,7 +121,7 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
             "surface": surface,
             "surface_label": surface_label,
             "message": str(row.get("message") or "").strip(),
-            "run_id": str(row.get("run_id") or "").strip() or None,
+            "run_id": run_id,
             "status": str(row.get("status") or "received").strip() or "received",
             "created_at": str(row.get("created_at") or "").strip(),
         },
@@ -90,6 +132,8 @@ def build_feedback_submission_payload(*, row: Mapping[str, object], workspace_ti
             "library": f"/app/library?app_language={app_language}",
             "workspace_library": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
             "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
+            "origin_page": origin_href,
+            "origin_label": origin_label,
         },
     }
 
@@ -113,6 +157,8 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
     route_map = dict(payload.get("routes") or {})
     library_href = escape(str(route_map.get("workspace_library") or route_map.get("library") or "/app/library"))
     starter_templates_href = escape(str(route_map.get("starter_template_catalog_page") or "#"))
+    origin_href = escape(str(route_map.get("origin_page") or route_map.get("workspace_page") or "#"))
+    origin_label = escape(str(route_map.get("origin_label") or ui_text("server.feedback.back_to_workflow", app_language=app_language, fallback_text="Back to workflow")))
     back_to_library_label = escape(ui_text("server.feedback.back_to_library", app_language=app_language, fallback_text="Back to library"))
     open_starter_templates_label = escape(ui_text("server.feedback.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"))
     open_workflow_label = escape(ui_text("server.feedback.open_workflow", app_language=app_language, fallback_text="Open workflow"))
@@ -144,6 +190,14 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
         items_html = f'<article class="feedback-item empty"><h2>{empty_title}</h2><p>{empty_summary}</p></article>'
     confirmation_html = ""
     confirmation_region_label = escape(ui_text("server.feedback.confirmation_region", app_language=app_language, fallback_text="Feedback confirmation"))
+    nav_links: list[tuple[str, str]] = []
+    for href, label in ((origin_href, origin_label), (library_href, back_to_library_label), (workspace_href, open_workflow_label), (result_history_href, open_results_label), (starter_templates_href, open_starter_templates_label)):
+        if not href or href == "#":
+            continue
+        if any(existing_href == href for existing_href, _ in nav_links):
+            continue
+        nav_links.append((href, label))
+    nav_links_html = "".join(f'<a class=\"secondary\" href=\"{href}\">{label}</a>' for href, label in nav_links)
     if confirmation_title or confirmation_summary:
         confirmation_html = f'<section class="confirmation" role="region" aria-labelledby="feedback-confirmation-title" aria-label="{confirmation_region_label}"><h2 id="feedback-confirmation-title">{confirmation_title}</h2><p>{confirmation_summary}</p></section>'
     return f"""<!doctype html>
@@ -176,10 +230,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
         <p>{subtitle}</p>
         <p>{escape(ui_text("server.feedback.workflow_label", app_language=app_language, fallback_text="Workflow: {workspace}", workspace=workspace_title))}</p>
         <div class=\"nav-links\">
-          <a class=\"secondary\" href=\"{library_href}\">{back_to_library_label}</a>
-          <a class=\"secondary\" href=\"{workspace_href}\">{open_workflow_label}</a>
-          <a class=\"secondary\" href=\"{result_history_href}\">{open_results_label}</a>
-          <a class=\"secondary\" href=\"{starter_templates_href}\">{open_starter_templates_label}</a>
+          {nav_links_html}
         </div>
       </header>
       {confirmation_html}

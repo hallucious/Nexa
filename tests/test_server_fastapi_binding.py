@@ -774,6 +774,16 @@ def test_fastapi_binding_workspace_starter_template_detail_page_round_trip() -> 
     assert 'Open workspace' in body
 
 
+def test_fastapi_binding_feedback_page_preserves_starter_template_origin_navigation() -> None:
+    client = _make_client()
+
+    response = client.get('/app/workspaces/ws-001/feedback?surface=starter_templates&app_language=en', headers=_session_headers())
+    assert response.status_code == 200
+    body = response.text
+    assert '/app/workspaces/ws-001/starter-templates?app_language=en' in body
+    assert 'Back to starter templates' in body
+
+
 def test_fastapi_binding_workspace_starter_template_apply_page_redirects_to_workspace() -> None:
     client = _make_client()
     response = client.post('/app/workspaces/ws-001/starter-templates/text_summarizer/apply', headers=_session_headers(), follow_redirects=False)
@@ -1564,6 +1574,8 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
     assert get_payload['feedback_channel']['submit_path'] == '/api/workspaces/ws-001/feedback'
     assert get_payload['feedback_channel']['prefill_surface'] == 'result_history'
     assert get_payload['feedback_channel']['prefill_run_id'] == 'run-001'
+    assert get_payload['routes']['origin_page'] == '/app/workspaces/ws-001/results?app_language=en&run_id=run-001'
+    assert get_payload['routes']['origin_label'] == 'Back to results'
 
     submit_response = client.post(
         '/api/workspaces/ws-001/feedback',
@@ -1596,6 +1608,8 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
     body = page_response.text
     assert 'Help us improve this workflow' in body
     assert '/api/workspaces/ws-001/feedback' in body
+    assert '/app/workspaces/ws-001/results?app_language=en&amp;run_id=run-001' in body
+    assert 'Back to results' in body
     assert '/app/workspaces/ws-001/library?app_language=en' in body
     assert '/app/workspaces/ws-001/starter-templates?app_language=en' in body
     assert 'Report confusing screen' in body

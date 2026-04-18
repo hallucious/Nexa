@@ -889,6 +889,8 @@ def test_http_route_surface_workspace_feedback_read_and_submit_round_trip() -> N
     assert payload["identity_policy"]["surface_family"] == "workspace-feedback"
     assert payload["namespace_policy"]["family"] == "workspace-feedback"
     assert payload["feedback_channel"]["submit_path"] == "/api/workspaces/ws-001/feedback"
+    assert payload["routes"]["origin_page"] == "/app/workspaces/ws-001/results?app_language=en&run_id=run-001"
+    assert payload["routes"]["origin_label"] == "Back to results"
     assert payload["feedback_channel"]["items"][0]["feedback_id"] == "fb-001"
     assert payload["feedback_channel"]["items"][0]["identity"]["canonical_value"] == "fb-001"
 
