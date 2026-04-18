@@ -23,6 +23,7 @@ from src.server.public_share_runtime import (
     render_workspace_public_share_history_html,
     render_workspace_share_create_html,
     render_public_share_checkout_html,
+    render_public_share_import_html,
     render_public_share_detail_html,
     render_public_share_history_html,
     render_issuer_public_share_portfolio_html,
@@ -1314,6 +1315,64 @@ class FastApiRouteBindings:
             target = f"/app/workspaces/{workspace_id}?app_language={app_language}&action=checkout&status=done&source_share_id={share_id}"
             if working_save_id:
                 target += f"&working_save_id={quote(working_save_id)}"
+            return RedirectResponse(url=target, status_code=303)
+
+        @router.get("/app/public-shares/{share_id}/import")
+        async def get_public_share_import_page(request: Request, share_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            payload["app_language"] = app_language
+            payload["prefill_workspace_id"] = workspace_id or ""
+            payload["notice"] = _public_share_notice_payload(request)
+            return HTMLResponse(content=render_public_share_import_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.post("/app/public-shares/{share_id}/import")
+        async def import_public_share_page(request: Request, share_id: str) -> Response:
+            query = dict(request.query_params)
+            form = _read_simple_form_data(await request.body())
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(form.get("workspace_id") or query.get("workspace_id") or "").strip()
+            if not workspace_id:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/import?app_language={app_language}&action=import_copy&status=error&reason=workspace_id_required", status_code=303)
+            workspace_context = self.dependencies.workspace_context_provider(workspace_id)
+            workspace_row = self.dependencies.workspace_row_provider(workspace_id)
+            if workspace_context is None or workspace_row is None:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/import?app_language={app_language}&workspace_id={quote(workspace_id)}&action=import_copy&status=error&reason=workspace_not_found", status_code=303)
+            share_payload = self.dependencies.public_share_payload_provider(share_id) if self.dependencies.public_share_payload_provider is not None else None
+            if not isinstance(share_payload, Mapping):
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/import?app_language={app_language}&workspace_id={quote(workspace_id)}&action=import_copy&status=error&reason=share_not_found", status_code=303)
+            from src.storage.share_api import ensure_public_nex_link_share_operation_allowed
+            from src.storage.validators.shared_validator import load_nex
+            from src.storage.serialization import serialize_nex_artifact
+            try:
+                ensure_public_nex_link_share_operation_allowed(share_payload, "import_copy")
+            except ValueError as exc:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/import?app_language={app_language}&workspace_id={quote(workspace_id)}&action=import_copy&status=error&reason={quote(str(exc))}", status_code=303)
+            loaded_share = load_nex(share_payload["artifact"])
+            model = loaded_share.parsed_model
+            serialized = serialize_nex_artifact(model)
+            if self.dependencies.workspace_artifact_source_writer is not None:
+                self.dependencies.workspace_artifact_source_writer(workspace_id, serialized)
+            storage_role = str(serialized.get("meta", {}).get("storage_role") or "unknown")
+            target = f"/app/workspaces/{workspace_id}?app_language={app_language}&action=import_copy&status=done&source_share_id={share_id}&storage_role={quote(storage_role)}"
             return RedirectResponse(url=target, status_code=303)
 
         @router.post("/app/public-shares/{share_id}/revoke")

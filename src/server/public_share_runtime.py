@@ -271,9 +271,13 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     can_manage = bool(viewer_context.get("can_manage"))
     operation_capabilities = set(payload.get("operation_capabilities") or ())
     checkout_page = f"/app/public-shares/{share_id}/checkout?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    import_page = f"/app/public-shares/{share_id}/import?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     checkout_action_html = ""
     if "checkout_working_copy" in operation_capabilities:
         checkout_action_html = f'<a class="action-link" href="{escape(checkout_page)}">{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</a>'
+    import_action_html = ""
+    if "import_copy" in operation_capabilities:
+        import_action_html = f'<a class="action-link secondary" href="{escape(import_page)}">{escape(ui_text("server.public_share.import_submit", app_language=app_language, fallback_text="Import copy to workspace"))}</a>'
     management_html = ""
     if can_manage:
         management_html = _public_share_management_controls_html(
@@ -310,6 +314,7 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
       <a class=\"action-link secondary\" href=\"{escape(back_to_workspace_shares)}\">{escape(ui_text('server.public_share.back_to_share_history', app_language=app_language, fallback_text='Back to share history'))}</a>
       <a class=\"action-link secondary\" href=\"{escape(history_page)}\">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
       {checkout_action_html}
+      {import_action_html}
       <a class=\"action-link secondary\" href=\"{artifact_href}\">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
       <a class=\"action-link secondary\" href=\"{api_href}\">{escape(ui_text('server.public_share.open_raw_share', app_language=app_language, fallback_text='Open raw share'))}</a>
     </div>
@@ -413,6 +418,81 @@ def render_public_share_checkout_html(payload: Mapping[str, Any], *, app_languag
 </html>"""
 
 
+def render_public_share_import_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
+    app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
+    share_id = escape(str(payload.get("share_id") or ""))
+    title = escape(str(payload.get("title") or payload.get("share_path") or ui_text("server.public_share.share_fallback", app_language=app_language, fallback_text="Public share")))
+    summary = escape(str(payload.get("summary") or payload.get("share_path") or ""))
+    lifecycle = dict(payload.get("lifecycle") or {})
+    source = dict(payload.get("source_artifact") or {})
+    notice = dict(payload.get("notice") or {})
+    links = dict(payload.get("links") or {})
+    operation_capabilities = set(payload.get("operation_capabilities") or ())
+    prefill_workspace_id = escape(str(payload.get("prefill_workspace_id") or workspace_id or ""))
+    detail_page = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    import_action = f"/app/public-shares/{share_id}/import?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    can_import = "import_copy" in operation_capabilities
+    notice_html = _public_share_notice_html(notice, app_language=app_language)
+    capability_html = "<p><strong>Import available.</strong> This share can be imported into a workspace while preserving its source role.</p>" if can_import else f"<p><strong>{escape(ui_text('server.public_share.import_unavailable', app_language=app_language, fallback_text='Import unavailable.'))}</strong> {escape(ui_text('server.public_share.import_unavailable_summary', app_language=app_language, fallback_text='This share cannot currently be imported into a workspace.'))}</p>"
+    disabled_attr = "" if can_import else " disabled"
+    return f"""<!doctype html>
+<html lang="{app_language}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(ui_text('server.public_share.import_page_title', app_language=app_language, fallback_text='Import share copy — {share_id}', share_id=share_id or 'share'))}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
+    .shell {{ max-width: 960px; margin: 0 auto; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
+    .card {{ border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; margin-top: 16px; }}
+    .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
+    .action-link {{ display: inline-block; border-radius: 10px; padding: 10px 14px; text-decoration: none; background: #111827; color: white; }}
+    .action-link.secondary {{ background: #374151; }}
+    form {{ display: grid; gap: 12px; margin-top: 16px; }}
+    label {{ font-weight: 600; display: grid; gap: 6px; }}
+    input, button {{ padding: 10px 12px; border-radius: 10px; border: 1px solid #d1d5db; font: inherit; }}
+    button {{ background: #111827; color: white; border-color: #111827; cursor: pointer; }}
+    button[disabled] {{ opacity: 0.45; cursor: not-allowed; }}
+    code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }}
+  </style>
+</head>
+<body>
+  <main class="shell" role="main" aria-labelledby="public-share-import-title">
+    <h1 id="public-share-import-title">{escape(ui_text('server.public_share.import_heading', app_language=app_language, fallback_text='Import share copy to workspace'))}</h1>
+    <p>{title}</p>
+    <p>{summary}</p>
+    <div class="actions">
+      <a class="action-link secondary" href="{escape(detail_page)}">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
+      <a class="action-link secondary" href="{escape(history_page)}">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
+      <a class="action-link secondary" href="{escape(str(links.get('artifact') or f'/api/public-shares/{share_id}/artifact'))}">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
+    </div>
+    <section class="card">
+      <h2>{escape(ui_text('server.public_share.import_context', app_language=app_language, fallback_text='Import context'))}</h2>
+      <ul>
+        <li>{escape(ui_text('server.public_share.share_id', app_language=app_language, fallback_text='Share id'))}: <code>{share_id}</code></li>
+        <li>{escape(ui_text('server.public_share.lifecycle_state', app_language=app_language, fallback_text='Lifecycle state'))}: <code>{escape(str(lifecycle.get('state') or 'unknown'))}</code></li>
+        <li>{escape(ui_text('server.public_share.storage_role', app_language=app_language, fallback_text='Storage role'))}: <code>{escape(str(source.get('storage_role') or 'unknown'))}</code></li>
+        <li>{escape(ui_text('server.public_share.canonical_ref', app_language=app_language, fallback_text='Canonical ref'))}: <code>{escape(str(source.get('canonical_ref') or ''))}</code></li>
+      </ul>
+      {capability_html}
+    </section>
+    <section class="card">
+      <h2>{escape(ui_text('server.public_share.import_form_title', app_language=app_language, fallback_text='Import copy'))}</h2>
+      <p>{escape(ui_text('server.public_share.import_form_summary', app_language=app_language, fallback_text='Choose the workspace that should receive a role-preserving imported copy of this public share.'))}</p>
+      <form method="post" action="{escape(import_action)}">
+        <label>{escape(ui_text('server.public_share.import_workspace_id', app_language=app_language, fallback_text='Workspace id'))}
+          <input name="workspace_id" value="{prefill_workspace_id}" placeholder="ws-001" required />
+        </label>
+        <button type="submit"{disabled_attr}>{escape(ui_text('server.public_share.import_submit', app_language=app_language, fallback_text='Import copy to workspace'))}</button>
+      </form>
+      {notice_html}
+    </section>
+  </main>
+</body>
+</html>"""
+
+
 def render_workspace_share_create_html(payload: Mapping[str, Any]) -> str:
     app_language = normalize_ui_language(payload.get("app_language") or "en")
     workspace_title = escape(str(payload.get("workspace_title") or ui_text("server.public_share.workspace_fallback", app_language=app_language, fallback_text="Workflow")))
@@ -507,9 +587,13 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     notice = dict(payload.get("notice") or {})
     operation_capabilities = set(payload.get("operation_capabilities") or ())
     checkout_page = f"/app/public-shares/{share_id}/checkout?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    import_page = f"/app/public-shares/{share_id}/import?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     checkout_action_html = ""
     if "checkout_working_copy" in operation_capabilities:
         checkout_action_html = f'<a class="action-link" href="{escape(checkout_page)}">{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</a>'
+    import_action_html = ""
+    if "import_copy" in operation_capabilities:
+        import_action_html = f'<a class="action-link secondary" href="{escape(import_page)}">{escape(ui_text("server.public_share.import_submit", app_language=app_language, fallback_text="Import copy to workspace"))}</a>'
     can_manage = bool(viewer_context.get("can_manage"))
     management_html = ""
     if can_manage:
@@ -548,6 +632,7 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     <div class=\"actions\">
       <a class=\"action-link secondary\" href=\"{escape(detail_page)}\">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
       {checkout_action_html}
+      {import_action_html}
       <a class=\"action-link secondary\" href=\"{artifact_href}\">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
     </div>
     {management_html}

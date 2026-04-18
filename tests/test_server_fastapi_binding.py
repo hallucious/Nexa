@@ -2057,6 +2057,7 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert '/app/public-shares/share-fastapi-001/history?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/api/public-shares/share-fastapi-001/artifact' in detail_body
     assert '/app/public-shares/share-fastapi-001/checkout?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/app/public-shares/share-fastapi-001/import?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/archive?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/delete?app_language=en&amp;workspace_id=ws-001' in detail_body
@@ -2068,6 +2069,7 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert 'created' in history_body
     assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/checkout?app_language=en&amp;workspace_id=ws-001' in history_body
+    assert '/app/public-shares/share-fastapi-001/import?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in history_body
 
 
@@ -2095,6 +2097,39 @@ def test_fastapi_binding_public_share_checkout_product_flow_round_trip() -> None
     shell_payload = shell_response.json()
     assert shell_payload['storage_role'] == 'working_save'
     assert shell_payload['working_save_id'] == 'ws-share-restored'
+
+
+def test_fastapi_binding_public_share_import_product_flow_round_trip() -> None:
+    share_payload = export_public_nex_link_share(
+        _commit_snapshot('snap-fastapi-import-001'),
+        share_id='share-fastapi-import-001',
+        title='FastAPI import share',
+        created_at='2026-04-15T12:00:00+00:00',
+        issued_by_user_ref='user-owner',
+    )
+    client = _make_client(artifact_source=_valid_working_save_artifact(), public_share_payload_provider=lambda share_id: share_payload if share_id == 'share-fastapi-import-001' else None)
+
+    import_page = client.get('/app/public-shares/share-fastapi-import-001/import?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert import_page.status_code == 200
+    import_body = import_page.text
+    assert 'Import share copy to workspace' in import_body
+    assert 'name="workspace_id" value="ws-001"' in import_body
+    assert '/app/public-shares/share-fastapi-import-001?app_language=en&amp;workspace_id=ws-001' in import_body
+
+    post_response = client.post(
+        '/app/public-shares/share-fastapi-import-001/import?app_language=en&workspace_id=ws-001',
+        headers=_session_headers(),
+        data={'workspace_id': 'ws-001'},
+        follow_redirects=False,
+    )
+    assert post_response.status_code == 303
+    assert post_response.headers['location'] == '/app/workspaces/ws-001?app_language=en&action=import_copy&status=done&source_share_id=share-fastapi-import-001&storage_role=commit_snapshot'
+
+    shell_response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())
+    assert shell_response.status_code == 200
+    shell_payload = shell_response.json()
+    assert shell_payload['storage_role'] == 'commit_snapshot'
+    assert shell_payload['commit_id'] == 'snap-fastapi-import-001'
 
 
 def test_fastapi_binding_issuer_public_share_product_pages_round_trip() -> None:
