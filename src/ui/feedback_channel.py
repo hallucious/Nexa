@@ -13,6 +13,7 @@ _CATEGORY_LABELS = {
 _SURFACE_LABELS = {
     "circuit_library": "Library",
     "result_history": "Result history",
+    "starter_templates": "Starter templates",
     "workspace_shell": "Workflow",
     "unknown": "Current screen",
 }

@@ -755,7 +755,7 @@ def test_fastapi_binding_workspace_starter_template_catalog_page_round_trip() ->
     assert 'Open workspace' in body
     assert '/app/workspaces/ws-001?app_language=en' in body
     assert '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en' in body
-    assert '/app/workspaces/ws-001/feedback?surface=circuit_library&amp;app_language=en' in body
+    assert '/app/workspaces/ws-001/feedback?surface=starter_templates&amp;app_language=en' in body
     assert 'Review in workspace' in body
 
 
@@ -769,7 +769,7 @@ def test_fastapi_binding_workspace_starter_template_detail_page_round_trip() -> 
     assert 'Text Summarizer' in body
     assert 'Use template' in body
     assert '/app/workspaces/ws-001/starter-templates/text_summarizer/apply?app_language=en' in body
-    assert '/app/workspaces/ws-001/feedback?surface=circuit_library&amp;app_language=en' in body
+    assert '/app/workspaces/ws-001/feedback?surface=starter_templates&amp;app_language=en' in body
     assert 'Back to starter templates' in body
     assert 'Open workspace' in body
 
@@ -1599,6 +1599,7 @@ def test_fastapi_binding_workspace_feedback_routes_round_trip() -> None:
     assert '/app/workspaces/ws-001/library?app_language=en' in body
     assert '/app/workspaces/ws-001/starter-templates?app_language=en' in body
     assert 'Report confusing screen' in body
+    assert '<option value="starter_templates">Starter templates</option>' in body
 
 
 
@@ -1645,6 +1646,7 @@ def test_fastapi_binding_product_pages_support_korean_query_language() -> None:
     assert '빠른 불편 메모' in feedback_page.text
     assert '버그 신고 바로가기' in feedback_page.text
     assert '실행 식별자 (선택)' in feedback_page.text
+    assert '<option value="starter_templates">시작 템플릿</option>' in feedback_page.text
 
 
 def test_fastapi_binding_feedback_submission_localizes_server_message() -> None:

@@ -894,7 +894,7 @@ def test_http_route_surface_workspace_feedback_read_and_submit_round_trip() -> N
 
     written = {}
     post_response = RunHttpRouteSurface.handle_submit_workspace_feedback(
-        http_request=_auth_request(method="POST", path="/api/workspaces/ws-001/feedback", path_params={"workspace_id": "ws-001"}, json_body={"category": "bug_report", "surface": "result_history", "message": "This screen failed unexpectedly.", "run_id": "run-001"}),
+        http_request=_auth_request(method="POST", path="/api/workspaces/ws-001/feedback", path_params={"workspace_id": "ws-001"}, json_body={"category": "bug_report", "surface": "starter_templates", "message": "This screen failed unexpectedly.", "run_id": "run-001"}),
         workspace_context=_workspace(),
         workspace_row={"workspace_id": "ws-001", "title": "Primary Workspace", "owner_user_id": "user-owner", "created_at": "2026-04-11T11:59:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
         feedback_writer=lambda row: written.setdefault("row", dict(row)),
@@ -908,7 +908,7 @@ def test_http_route_surface_workspace_feedback_read_and_submit_round_trip() -> N
     assert submit_payload["namespace_policy"]["family"] == "workspace-feedback"
     assert submit_payload["feedback"]["feedback_id"] == "fb-002"
     assert submit_payload["feedback"]["identity"]["canonical_value"] == "fb-002"
-    assert written["row"]["surface"] == "result_history"
+    assert written["row"]["surface"] == "starter_templates"
 
 
 def test_http_route_surface_workspace_feedback_rejects_empty_message() -> None:

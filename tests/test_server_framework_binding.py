@@ -1385,7 +1385,7 @@ def test_framework_binding_handles_workspace_result_history_round_trip() -> None
 
 
 def test_framework_binding_workspace_feedback_route_round_trip() -> None:
-    request = _request(method="GET", path="/api/workspaces/ws-001/feedback", path_params={"workspace_id": "ws-001"}, query_params={"surface": "circuit_library"})
+    request = _request(method="GET", path="/api/workspaces/ws-001/feedback", path_params={"workspace_id": "ws-001"}, query_params={"surface": "starter_templates"})
     response = FrameworkRouteBindings.handle_workspace_feedback(
         request=request,
         workspace_context=_workspace(),
@@ -1408,7 +1408,7 @@ def test_framework_binding_workspace_feedback_route_round_trip() -> None:
     payload = json.loads(response.body_text)
     assert payload["identity_policy"]["surface_family"] == "workspace-feedback"
     assert payload["namespace_policy"]["family"] == "workspace-feedback"
-    assert payload["feedback_channel"]["prefill_surface"] == "circuit_library"
+    assert payload["feedback_channel"]["prefill_surface"] == "starter_templates"
     assert payload["feedback_channel"]["items"][0]["identity"]["canonical_value"] == "fb-001"
 
 

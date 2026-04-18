@@ -9,7 +9,7 @@ from src.ui.i18n import normalize_ui_language, ui_text
 from src.ui.feedback_channel import read_feedback_channel_view_model
 
 _ALLOWED_CATEGORIES = {"confusing_screen", "friction_note", "bug_report"}
-_ALLOWED_SURFACES = {"circuit_library", "result_history", "workspace_shell", "unknown"}
+_ALLOWED_SURFACES = {"circuit_library", "result_history", "starter_templates", "workspace_shell", "unknown"}
 
 
 def _normalized_prefill(value: object | None, *, allowed: set[str], default: str) -> str:
@@ -197,6 +197,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           <select id=\"surface\" name=\"surface\">
             <option value=\"circuit_library\">{escape(ui_text("feedback.surface.circuit_library", app_language=app_language, fallback_text="Library"))}</option>
             <option value=\"result_history\">{escape(ui_text("feedback.surface.result_history", app_language=app_language, fallback_text="Result history"))}</option>
+            <option value=\"starter_templates\">{escape(ui_text("feedback.surface.starter_templates", app_language=app_language, fallback_text="Starter templates"))}</option>
             <option value=\"workspace_shell\">{escape(ui_text("feedback.surface.workspace_shell", app_language=app_language, fallback_text="Workflow"))}</option>
             <option value=\"unknown\">{escape(ui_text("feedback.surface.unknown", app_language=app_language, fallback_text="Current screen"))}</option>
           </select>

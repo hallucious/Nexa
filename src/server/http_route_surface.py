@@ -4343,12 +4343,12 @@ class RunHttpRouteSurface:
                 "message": "Feedback category must be one of confusing_screen, friction_note, or bug_report.",
                 "workspace_id": workspace_context.workspace_id,
             })
-        if surface not in {"circuit_library", "result_history", "workspace_shell", "unknown"}:
+        if surface not in {"circuit_library", "result_history", "starter_templates", "workspace_shell", "unknown"}:
             return _route_response(400, {
                 "status": "rejected",
                 "error_family": "workspace_feedback_write_failure",
                 "reason_code": "workspace_feedback.surface_invalid",
-                "message": "Feedback surface must be recognized before it can be recorded.",
+                "message": "Feedback surface must be recognized before it can be recorded. Allowed values are circuit_library, result_history, starter_templates, workspace_shell, and unknown.",
                 "workspace_id": workspace_context.workspace_id,
             })
         if not message:
