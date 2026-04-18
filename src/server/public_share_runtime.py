@@ -260,6 +260,8 @@ def _public_catalog_entry_html(entry: Mapping[str, Any], *, app_language: str, w
     storage_role = escape(str(entry.get("storage_role") or "unknown"))
     lifecycle_state = escape(str(entry.get("lifecycle_state") or "unknown"))
     updated_at = escape(str(entry.get("updated_at") or ""))
+    issuer_user_ref = str(entry.get("issued_by_user_ref") or "").strip()
+    issuer_code = escape(issuer_user_ref)
     workspace_query = f"&workspace_id={workspace_id}" if workspace_id else ""
     detail_page = f"/app/public-shares/{share_id}?app_language={app_language}{workspace_query}"
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}{workspace_query}"
@@ -268,6 +270,7 @@ def _public_catalog_entry_html(entry: Mapping[str, Any], *, app_language: str, w
     import_page = f"/app/public-shares/{share_id}/import?app_language={app_language}{workspace_query}"
     run_page = f"/app/public-shares/{share_id}/run?app_language={app_language}{workspace_query}"
     download_page = f"/app/public-shares/{share_id}/download?app_language={app_language}{workspace_query}"
+    issuer_page = f"/app/public-shares/issuers/{issuer_user_ref}?app_language={app_language}{workspace_query}" if issuer_user_ref else ""
     operation_capabilities = set(entry.get("operation_capabilities") or ())
     compare_action_html = f'<a class="action-link secondary" href="{escape(compare_page)}">{escape(ui_text("server.public_share.compare_submit", app_language=app_language, fallback_text="Compare with workspace"))}</a>'
     checkout_action_html = ''
@@ -282,6 +285,12 @@ def _public_catalog_entry_html(entry: Mapping[str, Any], *, app_language: str, w
     download_action_html = ''
     if 'download_artifact' in operation_capabilities:
         download_action_html = f'<a class="action-link secondary" href="{escape(download_page)}">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</a>'
+    issuer_action_html = ''
+    if issuer_user_ref:
+        issuer_action_html = f'<a class="action-link secondary" href="{escape(issuer_page)}">{escape(ui_text("server.public_share.more_from_issuer", app_language=app_language, fallback_text="More from this issuer"))}</a>'
+    issuer_meta_html = ''
+    if issuer_user_ref:
+        issuer_meta_html = f'<li>{escape(ui_text("server.public_share.issuer_user_ref", app_language=app_language, fallback_text="Issuer"))}: <code>{issuer_code}</code></li>'
     return f"""
     <article class="share-card">
       <div class="share-card-head">
@@ -292,11 +301,13 @@ def _public_catalog_entry_html(entry: Mapping[str, Any], *, app_language: str, w
       <ul class="detail-list">
         <li>{escape(ui_text('server.public_share.share_id', app_language=app_language, fallback_text='Share id'))}: <code>{share_id}</code></li>
         <li>{escape(ui_text('server.public_share.storage_role', app_language=app_language, fallback_text='Storage role'))}: <code>{storage_role}</code></li>
+        {issuer_meta_html}
         <li>{escape(ui_text('server.public_share.updated_at', app_language=app_language, fallback_text='Updated'))}: {updated_at}</li>
       </ul>
       <div class="actions">
         <a class="action-link" href="{escape(detail_page)}">{escape(ui_text('server.public_share.open_share', app_language=app_language, fallback_text='Open share'))}</a>
         <a class="action-link secondary" href="{escape(history_page)}">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
+        {issuer_action_html}
         {compare_action_html}
         {checkout_action_html}
         {import_action_html}
@@ -398,6 +409,114 @@ def render_public_share_catalog_summary_html(payload: Mapping[str, Any], *, app_
 </html>"""
 
 
+def render_public_share_issuer_catalog_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
+    app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
+    issuer_user_ref = str(payload.get("issuer_user_ref") or "").strip()
+    entries = list(payload.get("entries") or ())
+    filters = dict(payload.get("filters") or {})
+    workspace_id = workspace_id or (str(payload.get("workspace_id") or "").strip() or None)
+    workspace_query = f"&workspace_id={workspace_id}" if workspace_id else ""
+    catalog_page = f"/app/public-shares?app_language={app_language}{workspace_query}"
+    summary_page = f"/app/public-shares/issuers/{issuer_user_ref}/summary?app_language={app_language}{workspace_query}" if issuer_user_ref else catalog_page
+    entry_html = ''.join(_public_catalog_entry_html(entry, app_language=app_language, workspace_id=workspace_id) for entry in entries)
+    if not entry_html:
+        entry_html = f'<article class="share-card empty"><h2>{escape(ui_text("server.public_share.no_issuer_shares_title", app_language=app_language, fallback_text="No public shares from this issuer"))}</h2><p>{escape(ui_text("server.public_share.no_issuer_shares_summary", app_language=app_language, fallback_text="Public shares from this issuer that match the current filters will appear here."))}</p></article>'
+    workspace_value = escape(str(workspace_id or ''))
+    issuer_code = escape(issuer_user_ref)
+    return f"""<!doctype html>
+<html lang="{app_language}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(ui_text('server.public_share.issuer_catalog_page_title', app_language=app_language, fallback_text='Public shares by issuer'))}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin:0; padding:24px; background:#f7f7f8; color:#111; }}
+    .shell {{ max-width:1080px; margin:0 auto; background:white; border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.08); }}
+    .share-card {{ border:1px solid #e5e7eb; border-radius:12px; padding:16px; background:#fff; margin-top:16px; }}
+    .actions {{ display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; }}
+    .action-link {{ display:inline-block; border-radius:10px; padding:10px 14px; text-decoration:none; background:#111827; color:white; }}
+    .action-link.secondary {{ background:#374151; }}
+    .filters {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin-top:16px; }}
+    label span {{ display:block; font-weight:600; margin-bottom:4px; }}
+    input, select {{ width:100%; padding:10px; border-radius:10px; border:1px solid #d1d5db; }}
+    .share-card-head {{ display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }}
+    .status-badge {{ display:inline-block; border-radius:999px; padding:4px 10px; background:#e5e7eb; font-size:0.875rem; }}
+    .detail-list {{ padding-left:18px; }}
+    code {{ background:#f3f4f6; padding:2px 6px; border-radius:6px; }}
+  </style>
+</head>
+<body>
+  <main class="shell" role="main" aria-labelledby="issuer-catalog-title">
+    <h1 id="issuer-catalog-title">{escape(ui_text('server.public_share.more_from_issuer', app_language=app_language, fallback_text='More from this issuer'))}</h1>
+    <p>{escape(ui_text('server.public_share.issuer_catalog_summary', app_language=app_language, fallback_text='Browse active public shares issued by one publisher.'))}</p>
+    <p><strong>{escape(ui_text('server.public_share.issuer_user_ref', app_language=app_language, fallback_text='Issuer'))}:</strong> <code>{issuer_code}</code></p>
+    <div class="actions">
+      <a class="action-link secondary" href="{escape(catalog_page)}">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
+      <a class="action-link secondary" href="{escape(summary_page)}">{escape(ui_text('server.public_share.open_summary', app_language=app_language, fallback_text='Open catalog summary'))}</a>
+    </div>
+    <form class="filters" method="get" action="/app/public-shares/issuers/{issuer_code}">
+      <input type="hidden" name="app_language" value="{escape(app_language)}" />
+      <label><span>{escape(ui_text('server.public_share.search_label', app_language=app_language, fallback_text='Search'))}</span><input name="q" value="{escape(str(filters.get('q') or ''))}" /></label>
+      <label><span>{escape(ui_text('server.public_share.storage_role', app_language=app_language, fallback_text='Storage role'))}</span><select name="storage_role"><option value="">All</option><option value="working_save"{' selected' if filters.get('storage_role') == 'working_save' else ''}>working_save</option><option value="commit_snapshot"{' selected' if filters.get('storage_role') == 'commit_snapshot' else ''}>commit_snapshot</option></select></label>
+      <label><span>{escape(ui_text('server.public_share.operation_label', app_language=app_language, fallback_text='Operation'))}</span><select name="operation"><option value="">All</option><option value="checkout_working_copy"{' selected' if filters.get('operation') == 'checkout_working_copy' else ''}>checkout_working_copy</option><option value="import_copy"{' selected' if filters.get('operation') == 'import_copy' else ''}>import_copy</option><option value="run_artifact"{' selected' if filters.get('operation') == 'run_artifact' else ''}>run_artifact</option><option value="download_artifact"{' selected' if filters.get('operation') == 'download_artifact' else ''}>download_artifact</option></select></label>
+      <label><span>{escape(ui_text('server.public_share.workspace_id', app_language=app_language, fallback_text='Workspace id'))}</span><input name="workspace_id" value="{workspace_value}" /></label>
+      <div class="actions"><button class="action-link" type="submit">{escape(ui_text('server.public_share.refresh', app_language=app_language, fallback_text='Apply filters'))}</button></div>
+    </form>
+    {entry_html}
+  </main>
+</body>
+</html>"""
+
+
+def render_public_share_issuer_summary_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
+    app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
+    issuer_user_ref = str(payload.get("issuer_user_ref") or "").strip()
+    workspace_id = workspace_id or (str(payload.get("workspace_id") or "").strip() or None)
+    workspace_query = f"&workspace_id={workspace_id}" if workspace_id else ""
+    summary = dict(payload.get("summary") or {})
+    catalog_page = f"/app/public-shares?app_language={app_language}{workspace_query}"
+    issuer_page = f"/app/public-shares/issuers/{issuer_user_ref}?app_language={app_language}{workspace_query}" if issuer_user_ref else catalog_page
+    issuer_code = escape(issuer_user_ref)
+    return f"""<!doctype html>
+<html lang="{app_language}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(ui_text('server.public_share.issuer_summary_page_title', app_language=app_language, fallback_text='Issuer public share summary'))}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin:0; padding:24px; background:#f7f7f8; color:#111; }}
+    .shell {{ max-width:960px; margin:0 auto; background:white; border-radius:16px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.08); }}
+    .actions {{ display:flex; gap:12px; flex-wrap:wrap; margin-top:16px; }}
+    .action-link {{ display:inline-block; border-radius:10px; padding:10px 14px; text-decoration:none; background:#111827; color:white; }}
+    .action-link.secondary {{ background:#374151; }}
+    .metrics {{ display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin-top:16px; }}
+    .metric {{ border:1px solid #e5e7eb; border-radius:12px; padding:16px; background:#fff; }}
+    code {{ background:#f3f4f6; padding:2px 6px; border-radius:6px; }}
+  </style>
+</head>
+<body>
+  <main class="shell" role="main" aria-labelledby="issuer-summary-title">
+    <h1 id="issuer-summary-title">{escape(ui_text('server.public_share.issuer_summary', app_language=app_language, fallback_text='Issuer summary'))}</h1>
+    <p><strong>{escape(ui_text('server.public_share.issuer_user_ref', app_language=app_language, fallback_text='Issuer'))}:</strong> <code>{issuer_code}</code></p>
+    <div class="actions">
+      <a class="action-link secondary" href="{escape(catalog_page)}">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
+      <a class="action-link secondary" href="{escape(issuer_page)}">{escape(ui_text('server.public_share.more_from_issuer', app_language=app_language, fallback_text='More from this issuer'))}</a>
+    </div>
+    <section class="metrics">
+      <article class="metric"><strong>{escape(ui_text('server.public_share.filtered_shares', app_language=app_language, fallback_text='Filtered shares'))}</strong><div>{escape(str(summary.get('filtered_share_count') or 0))}</div></article>
+      <article class="metric"><strong>{escape(ui_text('server.public_share.inventory_total', app_language=app_language, fallback_text='Inventory total'))}</strong><div>{escape(str(summary.get('inventory_share_count') or 0))}</div></article>
+      <article class="metric"><strong>{escape(ui_text('server.public_share.working_save_shares', app_language=app_language, fallback_text='Working saves'))}</strong><div>{escape(str(summary.get('working_save_share_count') or 0))}</div></article>
+      <article class="metric"><strong>{escape(ui_text('server.public_share.commit_snapshot_shares', app_language=app_language, fallback_text='Commit snapshots'))}</strong><div>{escape(str(summary.get('commit_snapshot_share_count') or 0))}</div></article>
+      <article class="metric"><strong>{escape(ui_text('server.public_share.checkoutable_shares', app_language=app_language, fallback_text='Checkoutable'))}</strong><div>{escape(str(summary.get('checkoutable_share_count') or 0))}</div></article>
+      <article class="metric"><strong>{escape(ui_text('server.public_share.importable_shares', app_language=app_language, fallback_text='Importable'))}</strong><div>{escape(str(summary.get('importable_share_count') or 0))}</div></article>
+      <article class="metric"><strong>{escape(ui_text('server.public_share.runnable_shares', app_language=app_language, fallback_text='Runnable'))}</strong><div>{escape(str(summary.get('runnable_share_count') or 0))}</div></article>
+      <article class="metric"><strong>{escape(ui_text('server.public_share.downloadable_shares', app_language=app_language, fallback_text='Downloadable'))}</strong><div>{escape(str(summary.get('downloadable_share_count') or 0))}</div></article>
+    </section>
+  </main>
+</body>
+</html>"""
+
+
 def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
     app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
     share_id = escape(str(payload.get("share_id") or ""))
@@ -410,6 +529,8 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     back_to_workspace_shares = f"/app/workspaces/{workspace_id}/shares?app_language={app_language}" if workspace_id else "/app/library"
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}{workspace_query}"
     download_page = f"/app/public-shares/{share_id}/download?app_language={app_language}{workspace_query}"
+    issuer_user_ref = str(lifecycle.get("issued_by_user_ref") or "").strip()
+    issuer_page = f"/app/public-shares/issuers/{issuer_user_ref}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "") if issuer_user_ref else ""
     artifact_href = escape(str(links.get("artifact") or f"/api/public-shares/{share_id}/artifact"))
     api_href = escape(str(links.get("self") or f"/api/public-shares/{share_id}"))
     share_path = escape(str(payload.get("share_path") or links.get("public_share_path") or ""))
@@ -468,6 +589,7 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     <div class="actions">
       <a class="action-link secondary" href="{escape(back_to_workspace_shares)}">{escape(ui_text('server.public_share.back_to_share_history', app_language=app_language, fallback_text='Back to share history'))}</a>
       <a class="action-link secondary" href="{escape(history_page)}">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
+      {f'<a class="action-link secondary" href="{escape(issuer_page)}">{escape(ui_text("server.public_share.more_from_issuer", app_language=app_language, fallback_text="More from this issuer"))}</a>' if issuer_page else ""}
       {checkout_action_html}
       {import_action_html}
       {run_action_html}
@@ -510,6 +632,8 @@ def render_public_share_download_html(payload: Mapping[str, Any], *, app_languag
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     catalog_page = f"/app/public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     catalog_summary_page = f"/app/public-shares/summary?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    issuer_user_ref = str(lifecycle.get("issued_by_user_ref") or "").strip()
+    issuer_page = f"/app/public-shares/issuers/{issuer_user_ref}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "") if issuer_user_ref else ""
     raw_artifact_href = escape(str(links.get("artifact") or f"/api/public-shares/{share_id}/artifact"))
     download_action = f"/app/public-shares/{share_id}/artifact/download?app_language={app_language}"
     can_download = "download_artifact" in operation_capabilities
@@ -542,6 +666,7 @@ def render_public_share_download_html(payload: Mapping[str, Any], *, app_languag
       <a class="action-link secondary" href="{escape(history_page)}">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
       <a class="action-link secondary" href="{escape(catalog_page)}">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
       <a class="action-link secondary" href="{escape(catalog_summary_page)}">{escape(ui_text('server.public_share.open_summary', app_language=app_language, fallback_text='Open catalog summary'))}</a>
+      {f'<a class="action-link secondary" href="{escape(issuer_page)}">{escape(ui_text("server.public_share.more_from_issuer", app_language=app_language, fallback_text="More from this issuer"))}</a>' if issuer_page else ""}
       <a class="action-link secondary" href="{raw_artifact_href}">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
     </div>
     <section class="card">
@@ -883,6 +1008,7 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     share_id = escape(str(payload.get("share_id") or ""))
     share_path = escape(str(payload.get("share_path") or ""))
     history = list(payload.get("history") or [])
+    lifecycle = dict(payload.get("lifecycle") or {})
     links = dict(payload.get("links") or {})
     detail_page = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     catalog_page = f"/app/public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
@@ -902,6 +1028,8 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     run_page = f"/app/public-shares/{share_id}/run?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     compare_page = f"/app/public-shares/{share_id}/compare?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     download_page = f"/app/public-shares/{share_id}/download?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    issuer_user_ref = str(lifecycle.get("issued_by_user_ref") or "").strip()
+    issuer_page = f"/app/public-shares/issuers/{issuer_user_ref}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "") if issuer_user_ref else ""
     checkout_action_html = ""
     if "checkout_working_copy" in operation_capabilities:
         checkout_action_html = f'<a class="action-link" href="{escape(checkout_page)}">{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</a>'
@@ -953,6 +1081,7 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
       <a class="action-link secondary" href="{escape(detail_page)}">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
       <a class="action-link secondary" href="{escape(catalog_page)}">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
       <a class="action-link secondary" href="{escape(catalog_summary_page)}">{escape(ui_text('server.public_share.open_summary', app_language=app_language, fallback_text='Open catalog summary'))}</a>
+      {f'<a class="action-link secondary" href="{escape(issuer_page)}">{escape(ui_text("server.public_share.more_from_issuer", app_language=app_language, fallback_text="More from this issuer"))}</a>' if issuer_page else ""}
       {checkout_action_html}
       {import_action_html}
       {run_action_html}
