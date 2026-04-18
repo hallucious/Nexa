@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, quote
 from typing import Any, Mapping, Optional
 
 from fastapi import APIRouter, Body, FastAPI, Request
@@ -22,6 +22,7 @@ from src.server.public_share_runtime import (
     build_workspace_public_share_history_payload,
     render_workspace_public_share_history_html,
     render_workspace_share_create_html,
+    render_public_share_checkout_html,
     render_public_share_detail_html,
     render_public_share_history_html,
     render_issuer_public_share_portfolio_html,
@@ -1226,6 +1227,7 @@ class FastApiRouteBindings:
                 detail_payload = json.loads(detail_outbound.body_text)
                 payload["lifecycle"] = dict(detail_payload.get("lifecycle") or {})
                 payload["management"] = dict(detail_payload.get("management") or {})
+                payload["operation_capabilities"] = list(detail_payload.get("operation_capabilities") or ())
             issued_by_user_ref = str(dict(payload.get("lifecycle") or {}).get("issued_by_user_ref") or "").strip() or None
             payload["viewer_context"] = {
                 "requested_by_user_ref": requested_by_user_ref,
@@ -1233,6 +1235,86 @@ class FastApiRouteBindings:
             }
             payload["notice"] = _public_share_notice_payload(request)
             return HTMLResponse(content=render_public_share_history_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.get("/app/public-shares/{share_id}/checkout")
+        async def get_public_share_checkout_page(request: Request, share_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            payload["app_language"] = app_language
+            payload["prefill_workspace_id"] = workspace_id or ""
+            payload["prefill_working_save_id"] = str(query.get("working_save_id") or "").strip()
+            payload["notice"] = _public_share_notice_payload(request)
+            return HTMLResponse(content=render_public_share_checkout_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.post("/app/public-shares/{share_id}/checkout")
+        async def checkout_public_share_page(request: Request, share_id: str) -> Response:
+            query = dict(request.query_params)
+            form = _read_simple_form_data(await request.body())
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(form.get("workspace_id") or query.get("workspace_id") or "").strip()
+            working_save_id = str(form.get("working_save_id") or "").strip()
+            if not workspace_id:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/checkout?app_language={app_language}&action=checkout&status=error&reason=workspace_id_required", status_code=303)
+            json_body: dict[str, Any] = {"share_id": share_id}
+            if working_save_id:
+                json_body["working_save_id"] = working_save_id
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path=f"/api/workspaces/{workspace_id}/shell/checkout",
+                headers=dict(request.headers),
+                path_params={"workspace_id": workspace_id},
+                query_params={"app_language": app_language},
+                json_body=json_body,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_checkout_workspace_shell(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                recent_run_rows=self.dependencies.workspace_run_rows_provider(workspace_id),
+                result_rows_by_run_id=self.dependencies.workspace_result_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+                artifact_rows_lookup=self.dependencies.artifact_rows_provider,
+                trace_rows_lookup=self.dependencies.trace_rows_provider,
+                workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+                public_share_payload_provider=self.dependencies.public_share_payload_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                feedback_rows=self.dependencies.feedback_rows_provider(),
+            )
+            if outbound.status_code != 200:
+                payload = json.loads(outbound.body_text) if outbound.body_text else {}
+                reason = str(payload.get("reason_code") or "checkout_failed").strip() or "checkout_failed"
+                ws_q = f"&workspace_id={workspace_id}" if workspace_id else ""
+                back = f"/app/public-shares/{share_id}/checkout?app_language={app_language}{ws_q}&action=checkout&status=error&reason={quote(reason)}"
+                if working_save_id:
+                    back += f"&working_save_id={quote(working_save_id)}"
+                return RedirectResponse(url=back, status_code=303)
+            target = f"/app/workspaces/{workspace_id}?app_language={app_language}&action=checkout&status=done&source_share_id={share_id}"
+            if working_save_id:
+                target += f"&working_save_id={quote(working_save_id)}"
+            return RedirectResponse(url=target, status_code=303)
 
         @router.post("/app/public-shares/{share_id}/revoke")
         async def revoke_public_share_page(request: Request, share_id: str) -> Response:

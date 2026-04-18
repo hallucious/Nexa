@@ -2056,6 +2056,7 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert '/app/workspaces/ws-001/shares?app_language=en' in detail_body
     assert '/app/public-shares/share-fastapi-001/history?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/api/public-shares/share-fastapi-001/artifact' in detail_body
+    assert '/app/public-shares/share-fastapi-001/checkout?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/archive?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/delete?app_language=en&amp;workspace_id=ws-001' in detail_body
@@ -2066,7 +2067,34 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert 'Share history' in history_body or 'Open history' in history_body
     assert 'created' in history_body
     assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in history_body
+    assert '/app/public-shares/share-fastapi-001/checkout?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in history_body
+
+
+def test_fastapi_binding_public_share_checkout_product_flow_round_trip() -> None:
+    client = _make_client(artifact_source=_valid_working_save_artifact())
+
+    checkout_page = client.get('/app/public-shares/share-fastapi-001/checkout?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert checkout_page.status_code == 200
+    checkout_body = checkout_page.text
+    assert 'Restore share to workspace' in checkout_body
+    assert 'name="workspace_id" value="ws-001"' in checkout_body
+    assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in checkout_body
+
+    post_response = client.post(
+        '/app/public-shares/share-fastapi-001/checkout?app_language=en&workspace_id=ws-001',
+        headers=_session_headers(),
+        data={'working_save_id': 'ws-share-restored'},
+        follow_redirects=False,
+    )
+    assert post_response.status_code == 303
+    assert post_response.headers['location'] == '/app/workspaces/ws-001?app_language=en&action=checkout&status=done&source_share_id=share-fastapi-001&working_save_id=ws-share-restored'
+
+    shell_response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())
+    assert shell_response.status_code == 200
+    shell_payload = shell_response.json()
+    assert shell_payload['storage_role'] == 'working_save'
+    assert shell_payload['working_save_id'] == 'ws-share-restored'
 
 
 def test_fastapi_binding_issuer_public_share_product_pages_round_trip() -> None:
