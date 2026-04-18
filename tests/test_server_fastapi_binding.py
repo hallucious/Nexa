@@ -2140,6 +2140,16 @@ def test_fastapi_binding_public_share_management_actions_round_trip() -> None:
     assert 'share-fastapi-001' not in share_store
 
 
+def test_fastapi_binding_workspace_share_create_form_page_renders() -> None:
+    client = _make_client(artifact_source=_commit_snapshot('snap-fastapi-created-share-page-form-001'))
+    response = client.get('/app/workspaces/ws-001/shares/create?app_language=en', headers=_session_headers())
+    assert response.status_code == 200
+    body = response.text
+    assert '<form method="post" action="/app/workspaces/ws-001/shares/create?app_language=en">' in body
+    assert 'Current artifact' in body or 'Source artifact' in body
+    assert 'Public share for Primary Workspace.' in body
+
+
 def test_fastapi_binding_workspace_share_create_page_redirects_to_public_share_detail() -> None:
     share_store: dict[str, dict] = {}
 
@@ -2152,12 +2162,25 @@ def test_fastapi_binding_workspace_share_create_page_redirects_to_public_share_d
         public_share_payload_provider=lambda share_id: share_store.get(share_id),
         public_share_payload_writer=_writer,
     )
-    response = client.post('/app/workspaces/ws-001/shares/create?app_language=en', headers=_session_headers(), follow_redirects=False)
+    response = client.post(
+        '/app/workspaces/ws-001/shares/create?app_language=en',
+        headers=_session_headers(),
+        data={
+            'title': 'Form Created Share',
+            'summary': 'Share created from the product-facing form.',
+            'expires_at': '2026-04-22T00:00:00+00:00',
+        },
+        follow_redirects=False,
+    )
     assert response.status_code == 303
     location = response.headers['location']
     assert location.startswith('/app/public-shares/')
     assert 'workspace_id=ws-001' in location
     assert 'app_language=en' in location
+    created_payload = next(iter(share_store.values()))
+    assert created_payload['share']['title'] == 'Form Created Share'
+    assert created_payload['share']['summary'] == 'Share created from the product-facing form.'
+    assert created_payload['share']['lifecycle']['expires_at'] == '2026-04-22T00:00:00+00:00'
 
 
 def test_fastapi_binding_workspace_shell_share_creation_round_trip() -> None:

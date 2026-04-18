@@ -320,6 +320,82 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
 </html>"""
 
 
+def render_workspace_share_create_html(payload: Mapping[str, Any]) -> str:
+    app_language = normalize_ui_language(payload.get("app_language") or "en")
+    workspace_title = escape(str(payload.get("workspace_title") or ui_text("server.public_share.workspace_fallback", app_language=app_language, fallback_text="Workflow")))
+    canonical_ref = escape(str(payload.get("canonical_ref") or ui_text("server.public_share.no_canonical_ref", app_language=app_language, fallback_text="Unavailable")))
+    storage_role = escape(str(payload.get("storage_role") or ui_text("server.public_share.unknown_storage_role", app_language=app_language, fallback_text="unknown")))
+    routes = dict(payload.get("routes") or {})
+    title_value = escape(str(payload.get("prefill_title") or ""))
+    summary_value = escape(str(payload.get("prefill_summary") or ""))
+    expires_value = escape(str(payload.get("prefill_expires_at") or ""))
+    share_count = escape(str(payload.get("share_count") or 0))
+    form_action = escape(str(routes.get("workspace_share_create_page") or "#"))
+    workspace_page = escape(str(routes.get("workspace_page") or "#"))
+    share_history_page = escape(str(routes.get("workspace_share_history_page") or "#"))
+    feedback_page = escape(str(routes.get("workspace_feedback_page") or "#"))
+    starter_templates = escape(str(routes.get("starter_template_catalog_page") or "#"))
+    library_page = escape(str(routes.get("library_page") or "#"))
+    return f"""<!doctype html>
+<html lang=\"{app_language}\">
+<head>
+  <meta charset=\"utf-8\" />
+  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <title>{escape(ui_text('server.public_share.create_page_title', app_language=app_language, fallback_text='Create share — {workspace}', workspace=workspace_title))}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
+    .shell {{ max-width: 960px; margin: 0 auto; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
+    .card {{ border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; margin-top: 16px; }}
+    .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
+    .action-link {{ display: inline-block; border-radius: 10px; padding: 10px 14px; text-decoration: none; background: #111827; color: white; }}
+    .action-link.secondary {{ background: #374151; }}
+    .form-grid {{ display: grid; gap: 16px; margin-top: 16px; }}
+    label span {{ display: block; font-weight: 600; margin-bottom: 6px; }}
+    input, textarea {{ width: 100%; box-sizing: border-box; border: 1px solid #d1d5db; border-radius: 10px; padding: 10px 12px; font: inherit; }}
+    textarea {{ min-height: 120px; resize: vertical; }}
+    button {{ border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer; background: #111827; color: white; }}
+    code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }}
+  </style>
+</head>
+<body>
+  <main class=\"shell\" role=\"main\" aria-labelledby=\"share-create-title\">
+    <h1 id=\"share-create-title\">{escape(ui_text('server.public_share.create_share', app_language=app_language, fallback_text='Create share'))}</h1>
+    <p><strong>{workspace_title}</strong></p>
+    <p>{escape(ui_text('server.public_share.create_page_summary', app_language=app_language, fallback_text='Publish the current workflow artifact as a public share.'))}</p>
+    <div class=\"actions\">
+      <a class=\"action-link secondary\" href=\"{workspace_page}\">{escape(ui_text('server.public_share.back_to_workspace', app_language=app_language, fallback_text='Back to workflow'))}</a>
+      <a class=\"action-link secondary\" href=\"{share_history_page}\">{escape(ui_text('server.public_share.back_to_share_history', app_language=app_language, fallback_text='Back to share history'))}</a>
+      <a class=\"action-link secondary\" href=\"{library_page}\">{escape(ui_text('server.public_share.back_to_library', app_language=app_language, fallback_text='Back to library'))}</a>
+      <a class=\"action-link secondary\" href=\"{starter_templates}\">{escape(ui_text('server.public_share.back_to_starter_templates', app_language=app_language, fallback_text='Back to starter templates'))}</a>
+      <a class=\"action-link secondary\" href=\"{feedback_page}\">{escape(ui_text('server.public_share.send_feedback', app_language=app_language, fallback_text='Send feedback'))}</a>
+    </div>
+    <section class=\"card\">
+      <h2>{escape(ui_text('server.public_share.source_artifact', app_language=app_language, fallback_text='Source artifact'))}</h2>
+      <ul>
+        <li>{escape(ui_text('server.public_share.canonical_ref', app_language=app_language, fallback_text='Canonical ref'))}: <code>{canonical_ref}</code></li>
+        <li>{escape(ui_text('server.public_share.storage_role', app_language=app_language, fallback_text='Storage role'))}: <code>{storage_role}</code></li>
+        <li>{escape(ui_text('server.public_share.share_count', app_language=app_language, fallback_text='Existing shares'))}: <code>{share_count}</code></li>
+      </ul>
+    </section>
+    <section class=\"card\">
+      <h2>{escape(ui_text('server.public_share.share_details', app_language=app_language, fallback_text='Share details'))}</h2>
+      <form method=\"post\" action=\"{form_action}\">
+        <div class=\"form-grid\">
+          <label><span>{escape(ui_text('server.public_share.share_title', app_language=app_language, fallback_text='Title'))}</span><input type=\"text\" name=\"title\" value=\"{title_value}\" /></label>
+          <label><span>{escape(ui_text('server.public_share.share_summary', app_language=app_language, fallback_text='Summary'))}</span><textarea name=\"summary\">{summary_value}</textarea></label>
+          <label><span>{escape(ui_text('server.public_share.expires_at', app_language=app_language, fallback_text='Expires'))}</span><input type=\"text\" name=\"expires_at\" value=\"{expires_value}\" placeholder=\"2026-04-30T00:00:00+00:00\" /></label>
+        </div>
+        <div class=\"actions\">
+          <button type=\"submit\">{escape(ui_text('server.public_share.create_share', app_language=app_language, fallback_text='Create share'))}</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
 def render_public_share_history_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
     app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
     share_id = escape(str(payload.get("share_id") or ""))

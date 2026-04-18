@@ -2724,6 +2724,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         }}
       }}
       if (kind === 'open_workspace_share_create') {{
+        const shareCreatePage = routes && typeof routes.workspace_share_create_page === 'string' ? routes.workspace_share_create_page : '';
+        if (shareCreatePage) {{
+          window.location.href = shareCreatePage;
+          return;
+        }}
         const shareCreatePath = routes && typeof routes.workspace_shell_share === 'string' ? routes.workspace_shell_share : '';
         if (shareCreatePath) {{
           const response = await fetch(shareCreatePath, {{

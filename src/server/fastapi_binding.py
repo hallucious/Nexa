@@ -18,8 +18,10 @@ from src.server.result_history_runtime import render_workspace_result_history_ht
 from src.server.starter_template_runtime import render_starter_template_catalog_html, render_starter_template_detail_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 from src.server.public_share_runtime import (
+    _canonical_ref_for_workspace_artifact,
     build_workspace_public_share_history_payload,
     render_workspace_public_share_history_html,
+    render_workspace_share_create_html,
     render_public_share_detail_html,
     render_public_share_history_html,
 )
@@ -834,15 +836,64 @@ class FastApiRouteBindings:
             )
             return HTMLResponse(content=render_workspace_public_share_history_html(payload), status_code=200)
 
+        @router.get("/app/workspaces/{workspace_id}/shares/create")
+        async def get_workspace_share_create_page(request: Request, workspace_id: str) -> Response:
+            workspace_context = self.dependencies.workspace_context_provider(workspace_id)
+            workspace_row = self.dependencies.workspace_row_provider(workspace_id)
+            if workspace_context is None or workspace_row is None:
+                return JSONResponse(status_code=404, content={"error_family": "workspace_read_failure", "reason_code": "workspace.not_found", "message": "Requested workspace was not found."})
+            app_language = str(dict(request.query_params).get("app_language") or "en")
+            artifact_source = self.dependencies.workspace_artifact_source_provider(workspace_id)
+            canonical_ref, storage_role = _canonical_ref_for_workspace_artifact(workspace_row, artifact_source)
+            share_rows = self.dependencies.public_share_payload_rows_provider() if self.dependencies.public_share_payload_rows_provider is not None else ()
+            share_count = 0
+            for row in share_rows:
+                try:
+                    source_artifact = dict(row.get("source_artifact") or {}) if isinstance(row, Mapping) else {}
+                    row_ref = str(source_artifact.get("canonical_ref") or "").strip()
+                except Exception:
+                    row_ref = ""
+                if canonical_ref and row_ref == canonical_ref:
+                    share_count += 1
+            workspace_title = str(workspace_row.get("title") or workspace_id)
+            payload = {
+                "workspace_id": workspace_id,
+                "workspace_title": workspace_title,
+                "app_language": app_language,
+                "canonical_ref": canonical_ref,
+                "storage_role": storage_role,
+                "share_count": share_count,
+                "prefill_title": f"{workspace_title} snapshot",
+                "prefill_summary": f"Public share for {workspace_title}.",
+                "prefill_expires_at": "",
+                "routes": {
+                    "workspace_page": f"/app/workspaces/{workspace_id}?app_language={app_language}",
+                    "workspace_feedback_page": f"/app/workspaces/{workspace_id}/feedback?surface=workspace_shell&app_language={app_language}",
+                    "workspace_share_create_page": f"/app/workspaces/{workspace_id}/shares/create?app_language={app_language}",
+                    "workspace_share_history_page": f"/app/workspaces/{workspace_id}/shares?app_language={app_language}",
+                    "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
+                    "library_page": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
+                },
+            }
+            return HTMLResponse(content=render_workspace_share_create_html(payload), status_code=200)
+
         @router.post("/app/workspaces/{workspace_id}/shares/create")
         async def create_workspace_share_page(request: Request, workspace_id: str) -> Response:
+            form = _read_simple_form_data(await request.body())
+            json_body = {
+                "title": str(form.get("title") or "").strip() or None,
+                "summary": str(form.get("summary") or "").strip() or None,
+                "expires_at": str(form.get("expires_at") or "").strip() or None,
+            }
+            if all(value is None for value in json_body.values()):
+                json_body = None
             inbound = FrameworkInboundRequest(
                 method="POST",
                 path=f"/api/workspaces/{workspace_id}/shell/share",
                 headers=dict(request.headers),
                 path_params={"workspace_id": workspace_id},
                 query_params=dict(request.query_params),
-                json_body=None,
+                json_body=json_body,
                 session_claims=self._resolve_session_claims(request),
             )
             outbound = FrameworkRouteBindings.handle_create_workspace_shell_share(
