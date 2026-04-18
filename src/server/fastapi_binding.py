@@ -21,12 +21,10 @@ from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.server.public_share_runtime import (
     _canonical_ref_for_workspace_artifact,
     build_workspace_public_share_history_payload,
-    build_public_share_catalog_payload,
     render_workspace_public_share_history_html,
     render_workspace_share_create_html,
-    render_public_share_catalog_html,
-    render_public_share_catalog_summary_html,
     render_public_share_checkout_html,
+    render_public_share_download_html,
     render_public_share_import_html,
     render_public_share_run_html,
     render_public_share_detail_html,
@@ -73,6 +71,14 @@ def _collect_share_ids_from_form(form: Mapping[str, str]) -> list[str]:
     if share_id and share_id not in share_ids:
         share_ids.append(share_id)
     return share_ids
+
+
+def _public_share_artifact_download_filename(*, share_id: str, share_title: str, storage_role: str) -> str:
+    base = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in (share_title or share_id).lower()).strip("-")
+    if not base:
+        base = share_id or "public-share"
+    role = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in (storage_role or "artifact").lower()).strip("-") or "artifact"
+    return f"{base}-{role}.nex.json"
 
 
 class FastApiRouteBindings:
@@ -756,6 +762,66 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+
+        @router.get("/app/public-shares/{share_id}/download")
+        async def get_public_share_download_page(request: Request, share_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            payload["app_language"] = app_language
+            payload["notice"] = _public_share_notice_payload(request)
+            return HTMLResponse(content=render_public_share_download_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.get("/app/public-shares/{share_id}/artifact/download")
+        async def download_public_share_artifact_page(request: Request, share_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}/artifact",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_public_share_artifact(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            artifact = dict(payload.get("artifact") or {})
+            storage_role = str(dict(artifact.get("meta") or {}).get("storage_role") or "artifact")
+            filename = _public_share_artifact_download_filename(
+                share_id=share_id,
+                share_title=str(payload.get("share_title") or share_id),
+                storage_role=storage_role,
+            )
+            body = json.dumps(artifact, indent=2, ensure_ascii=False) + "\n"
+            return Response(
+                content=body,
+                media_type="application/json",
+                headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            )
+
         @router.post("/api/public-shares/{share_id}/extend")
         async def extend_public_share(request: Request, share_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
             inbound = self._inbound_request(request=request, path_params={"share_id": share_id}, json_body=payload)
@@ -1161,38 +1227,6 @@ class FastApiRouteBindings:
             share_id = str(payload.get("share_id") or "").strip()
             app_language = str(dict(request.query_params).get("app_language") or "en")
             return RedirectResponse(url=f"/app/public-shares/{share_id}?app_language={app_language}&workspace_id={workspace_id}", status_code=303)
-
-        @router.get("/app/public-shares")
-        async def get_public_share_catalog_page(request: Request) -> Response:
-            query = dict(request.query_params)
-            app_language = str(query.get("app_language") or "en")
-            workspace_id = str(query.get("workspace_id") or "").strip() or None
-            payload = build_public_share_catalog_payload(
-                share_payload_rows=self.dependencies.public_share_payload_rows_provider(),
-                app_language=app_language,
-                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
-                workspace_id=workspace_id,
-                query=str(query.get("q") or "").strip() or None,
-                storage_role=str(query.get("storage_role") or "").strip() or None,
-                operation=str(query.get("operation") or "").strip() or None,
-            )
-            return HTMLResponse(content=render_public_share_catalog_html(payload, app_language=app_language), status_code=200)
-
-        @router.get("/app/public-shares/summary")
-        async def get_public_share_catalog_summary_page(request: Request) -> Response:
-            query = dict(request.query_params)
-            app_language = str(query.get("app_language") or "en")
-            workspace_id = str(query.get("workspace_id") or "").strip() or None
-            payload = build_public_share_catalog_payload(
-                share_payload_rows=self.dependencies.public_share_payload_rows_provider(),
-                app_language=app_language,
-                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
-                workspace_id=workspace_id,
-                query=str(query.get("q") or "").strip() or None,
-                storage_role=str(query.get("storage_role") or "").strip() or None,
-                operation=str(query.get("operation") or "").strip() or None,
-            )
-            return HTMLResponse(content=render_public_share_catalog_summary_html(payload, app_language=app_language), status_code=200)
 
         @router.get("/app/public-shares/{share_id}")
         async def get_public_share_page(request: Request, share_id: str) -> Response:

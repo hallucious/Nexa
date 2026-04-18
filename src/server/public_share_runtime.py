@@ -253,242 +253,6 @@ def render_workspace_public_share_history_html(payload: Mapping[str, Any]) -> st
 
 
 
-
-def _public_share_catalog_summary(entries: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
-    total_share_count = len(entries)
-    working_save_share_count = sum(1 for entry in entries if str(entry.get("storage_role") or "") == "working_save")
-    commit_snapshot_share_count = sum(1 for entry in entries if str(entry.get("storage_role") or "") == "commit_snapshot")
-    runnable_share_count = sum(1 for entry in entries if "run_artifact" in set(entry.get("operation_capabilities") or ()))
-    checkoutable_share_count = sum(1 for entry in entries if "checkout_working_copy" in set(entry.get("operation_capabilities") or ()))
-    importable_share_count = sum(1 for entry in entries if "import_copy" in set(entry.get("operation_capabilities") or ()))
-    latest_updated_at = max((str(entry.get("updated_at") or "") for entry in entries if str(entry.get("updated_at") or "")), default=None)
-    return {
-        "total_share_count": total_share_count,
-        "working_save_share_count": working_save_share_count,
-        "commit_snapshot_share_count": commit_snapshot_share_count,
-        "runnable_share_count": runnable_share_count,
-        "checkoutable_share_count": checkoutable_share_count,
-        "importable_share_count": importable_share_count,
-        "latest_updated_at": latest_updated_at,
-    }
-
-
-def build_public_share_catalog_payload(
-    *,
-    share_payload_rows: Sequence[Mapping[str, Any]] = (),
-    app_language: str = "en",
-    now_iso: str | None = None,
-    workspace_id: str | None = None,
-    query: str | None = None,
-    storage_role: str | None = None,
-    operation: str | None = None,
-) -> dict[str, Any]:
-    app_language = normalize_ui_language(app_language)
-    query_text = str(query or "").strip()
-    normalized_query = query_text.lower()
-    normalized_storage_role = str(storage_role or "").strip() or None
-    normalized_operation = str(operation or "").strip() or None
-    workspace_query = f"&workspace_id={workspace_id}" if workspace_id else ""
-    inventory_entries: list[dict[str, Any]] = []
-    filtered_entries: list[dict[str, Any]] = []
-    for row in share_payload_rows:
-        try:
-            descriptor = describe_public_nex_link_share(dict(row), now_iso=now_iso)
-        except Exception:
-            continue
-        if descriptor.lifecycle_state != "active" or descriptor.archived:
-            continue
-        entry = {
-            "share_id": descriptor.share_id,
-            "share_path": descriptor.share_path,
-            "title": descriptor.title,
-            "summary": descriptor.summary,
-            "storage_role": descriptor.storage_role,
-            "canonical_ref": descriptor.canonical_ref,
-            "updated_at": descriptor.updated_at,
-            "created_at": descriptor.created_at,
-            "operation_capabilities": list(descriptor.operation_capabilities),
-            "detail_href": f"/app/public-shares/{descriptor.share_id}?app_language={app_language}{workspace_query}",
-            "history_href": f"/app/public-shares/{descriptor.share_id}/history?app_language={app_language}{workspace_query}",
-            "checkout_href": f"/app/public-shares/{descriptor.share_id}/checkout?app_language={app_language}{workspace_query}" if "checkout_working_copy" in descriptor.operation_capabilities else None,
-            "import_href": f"/app/public-shares/{descriptor.share_id}/import?app_language={app_language}{workspace_query}" if "import_copy" in descriptor.operation_capabilities else None,
-            "run_href": f"/app/public-shares/{descriptor.share_id}/run?app_language={app_language}{workspace_query}" if "run_artifact" in descriptor.operation_capabilities else None,
-        }
-        inventory_entries.append(entry)
-        if normalized_storage_role is not None and descriptor.storage_role != normalized_storage_role:
-            continue
-        if normalized_operation is not None and normalized_operation not in descriptor.operation_capabilities:
-            continue
-        if normalized_query:
-            haystack = " ".join(
-                part for part in (
-                    descriptor.share_id,
-                    descriptor.share_path,
-                    descriptor.title,
-                    descriptor.summary or "",
-                    descriptor.canonical_ref,
-                ) if part
-            ).lower()
-            if normalized_query not in haystack:
-                continue
-        filtered_entries.append(entry)
-    filtered_entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
-    inventory_entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
-    return {
-        "status": "ready",
-        "app_language": app_language,
-        "workspace_id": workspace_id,
-        "query": query_text,
-        "storage_role": normalized_storage_role,
-        "operation": normalized_operation,
-        "summary": _public_share_catalog_summary(filtered_entries),
-        "inventory_summary": _public_share_catalog_summary(inventory_entries),
-        "entries": filtered_entries,
-        "routes": {
-            "catalog_page": f"/app/public-shares?app_language={app_language}{workspace_query}",
-            "catalog_summary_page": f"/app/public-shares/summary?app_language={app_language}{workspace_query}",
-        },
-    }
-
-
-def render_public_share_catalog_html(payload: Mapping[str, Any], *, app_language: str | None = None) -> str:
-    app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
-    summary = dict(payload.get("summary") or {})
-    inventory_summary = dict(payload.get("inventory_summary") or {})
-    routes = dict(payload.get("routes") or {})
-    workspace_id = str(payload.get("workspace_id") or "").strip() or None
-    workspace_hidden = f'<input type="hidden" name="workspace_id" value="{escape(workspace_id)}" />' if workspace_id else ''
-    q_value = escape(str(payload.get("query") or ""))
-    selected_role = str(payload.get("storage_role") or "")
-    selected_operation = str(payload.get("operation") or "")
-    summary_href = escape(str(routes.get("catalog_summary_page") or f"/app/public-shares/summary?app_language={app_language}"))
-    cards: list[str] = []
-    for entry in list(payload.get("entries") or ()):
-        capability_badges = " ".join(f'<span class="badge">{escape(cap.replace("_", " "))}</span>' for cap in list(entry.get("operation_capabilities") or ()))
-        actions = [
-            f'<a class="action-link" href="{escape(str(entry.get("detail_href") or "#"))}">{escape(ui_text("server.public_share.open_share", app_language=app_language, fallback_text="Open share"))}</a>',
-            f'<a class="action-link secondary" href="{escape(str(entry.get("history_href") or "#"))}">{escape(ui_text("server.public_share.open_history", app_language=app_language, fallback_text="Open history"))}</a>',
-        ]
-        if entry.get("checkout_href"):
-            actions.append(f'<a class="action-link secondary" href="{escape(str(entry.get("checkout_href")))}">{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</a>')
-        if entry.get("import_href"):
-            actions.append(f'<a class="action-link secondary" href="{escape(str(entry.get("import_href")))}">{escape(ui_text("server.public_share.import_submit", app_language=app_language, fallback_text="Import copy to workspace"))}</a>')
-        if entry.get("run_href"):
-            actions.append(f'<a class="action-link secondary" href="{escape(str(entry.get("run_href")))}">{escape(ui_text("server.public_share.run_submit", app_language=app_language, fallback_text="Run in workspace"))}</a>')
-        cards.append(
-            f"""\
-            <article class=\"share-card\">\n              <div class=\"share-card-head\"><h2>{escape(str(entry.get('title') or entry.get('share_id') or 'Public share'))}</h2><span class=\"status-badge\">{escape(str(entry.get('storage_role') or 'unknown'))}</span></div>\n              <p>{escape(str(entry.get('summary') or entry.get('share_path') or ''))}</p>\n              <p><code>{escape(str(entry.get('share_id') or ''))}</code> — <code>{escape(str(entry.get('canonical_ref') or ''))}</code></p>\n              <div class=\"badges\">{capability_badges}</div>\n              <div class=\"actions\">{''.join(actions)}</div>\n            </article>\n            """
-        )
-    cards_html = "".join(cards) or f'<article class="share-card empty"><h2>{escape(ui_text("server.public_share.no_shares_title", app_language=app_language, fallback_text="No public shares available"))}</h2><p>{escape(ui_text("server.public_share.no_shares_summary", app_language=app_language, fallback_text="Try a different filter or check back later."))}</p></article>'
-    role_options = [
-        ("", ui_text("server.public_share.all_roles", app_language=app_language, fallback_text="All roles")),
-        ("working_save", ui_text("server.public_share.role_working_save", app_language=app_language, fallback_text="Working saves")),
-        ("commit_snapshot", ui_text("server.public_share.role_commit_snapshot", app_language=app_language, fallback_text="Commit snapshots")),
-    ]
-    operation_options = [
-        ("", ui_text("server.public_share.all_operations", app_language=app_language, fallback_text="All operations")),
-        ("checkout_working_copy", ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace")),
-        ("import_copy", ui_text("server.public_share.import_submit", app_language=app_language, fallback_text="Import copy to workspace")),
-        ("run_artifact", ui_text("server.public_share.run_submit", app_language=app_language, fallback_text="Run in workspace")),
-    ]
-    role_html = "".join(f'<option value="{escape(value)}"{" selected" if selected_role == value else ""}>{escape(label)}</option>' for value, label in role_options)
-    operation_html = "".join(f'<option value="{escape(value)}"{" selected" if selected_operation == value else ""}>{escape(label)}</option>' for value, label in operation_options)
-    return f"""<!doctype html>
-<html lang=\"{app_language}\"> 
-<head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>{escape(ui_text("server.public_share.catalog_page_title", app_language=app_language, fallback_text="Public share catalog"))}</title>
-  <style>
-    body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
-    .shell {{ max-width: 1080px; margin: 0 auto; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
-    .share-card {{ border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; margin-top: 16px; }}
-    .share-card-head {{ display: flex; justify-content: space-between; gap: 12px; align-items: center; }}
-    .status-badge, .badge {{ background: #eff6ff; color: #1d4ed8; padding: 4px 8px; border-radius: 999px; font-size: 0.875rem; display: inline-block; margin-right: 8px; }}
-    .badge {{ background: #f3f4f6; color: #374151; }}
-    .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
-    .action-link {{ display: inline-block; border-radius: 10px; padding: 10px 14px; text-decoration: none; background: #111827; color: white; }}
-    .action-link.secondary {{ background: #374151; }}
-    form.filters {{ display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end; }}
-    label span {{ display: block; margin-bottom: 6px; font-weight: 600; }}
-    input[type=\"text\"], select {{ width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid #d1d5db; }}
-    button {{ border: 0; border-radius: 10px; padding: 10px 14px; background: #111827; color: white; cursor: pointer; }}
-    code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }}
-  </style>
-</head>
-<body>
-  <main class=\"shell\" role=\"main\" aria-labelledby=\"public-share-catalog-title\"> 
-    <h1 id=\"public-share-catalog-title\">{escape(ui_text("server.public_share.catalog_page_title", app_language=app_language, fallback_text="Public share catalog"))}</h1>
-    <p>{escape(ui_text("server.public_share.catalog_summary", app_language=app_language, fallback_text="Browse active public shares and open them for inspect, restore, import, or run."))}</p>
-    <form class=\"filters\" method=\"get\" action=\"/app/public-shares\"> 
-      <input type=\"hidden\" name=\"app_language\" value=\"{escape(app_language)}\" />
-      {workspace_hidden}
-      <label><span>{escape(ui_text("server.public_share.search", app_language=app_language, fallback_text="Search"))}</span><input type=\"text\" name=\"q\" value=\"{q_value}\" placeholder=\"share id, title, summary, canonical ref\" /></label>
-      <label><span>{escape(ui_text("server.public_share.storage_role", app_language=app_language, fallback_text="Storage role"))}</span><select name=\"storage_role\">{role_html}</select></label>
-      <label><span>{escape(ui_text("server.public_share.operation_filter", app_language=app_language, fallback_text="Operation"))}</span><select name=\"operation\">{operation_html}</select></label>
-      <button type=\"submit\">{escape(ui_text("server.public_share.apply_filters", app_language=app_language, fallback_text="Apply filters"))}</button>
-    </form>
-    <section class=\"share-card\"><h2>{escape(ui_text("server.public_share.catalog_overview", app_language=app_language, fallback_text="Catalog overview"))}</h2>
-      <ul>
-        <li>{escape(ui_text("server.public_share.filtered_shares", app_language=app_language, fallback_text="Filtered shares"))}: <code>{escape(str(summary.get("total_share_count") or 0))}</code></li>
-        <li>{escape(ui_text("server.public_share.inventory_total", app_language=app_language, fallback_text="Catalog inventory"))}: <code>{escape(str(inventory_summary.get("total_share_count") or 0))}</code></li>
-        <li>{escape(ui_text("server.public_share.checkoutable_count", app_language=app_language, fallback_text="Checkoutable"))}: <code>{escape(str(summary.get("checkoutable_share_count") or 0))}</code></li>
-        <li>{escape(ui_text("server.public_share.importable_count", app_language=app_language, fallback_text="Importable"))}: <code>{escape(str(summary.get("importable_share_count") or 0))}</code></li>
-        <li>{escape(ui_text("server.public_share.runnable_count", app_language=app_language, fallback_text="Runnable"))}: <code>{escape(str(summary.get("runnable_share_count") or 0))}</code></li>
-      </ul>
-      <div class=\"actions\"><a class=\"action-link secondary\" href=\"{summary_href}\">{escape(ui_text("server.public_share.open_summary", app_language=app_language, fallback_text="Open catalog summary"))}</a></div>
-    </section>
-    {cards_html}
-  </main>
-</body>
-</html>"""
-
-
-def render_public_share_catalog_summary_html(payload: Mapping[str, Any], *, app_language: str | None = None) -> str:
-    app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
-    summary = dict(payload.get("summary") or {})
-    inventory_summary = dict(payload.get("inventory_summary") or {})
-    routes = dict(payload.get("routes") or {})
-    back_href = escape(str(routes.get("catalog_page") or f"/app/public-shares?app_language={app_language}"))
-    return f"""<!doctype html>
-<html lang=\"{app_language}\"> 
-<head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
-  <title>{escape(ui_text("server.public_share.catalog_summary_title", app_language=app_language, fallback_text="Public share catalog summary"))}</title>
-  <style>
-    body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
-    .shell {{ max-width: 960px; margin: 0 auto; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
-    .card {{ border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; margin-top: 16px; }}
-    .action-link {{ display: inline-block; border-radius: 10px; padding: 10px 14px; text-decoration: none; background: #374151; color: white; }}
-    code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }}
-  </style>
-</head>
-<body>
-  <main class=\"shell\" role=\"main\" aria-labelledby=\"public-share-catalog-summary-title\"> 
-    <h1 id=\"public-share-catalog-summary-title\">{escape(ui_text("server.public_share.catalog_summary_title", app_language=app_language, fallback_text="Public share catalog summary"))}</h1>
-    <p><a class=\"action-link\" href=\"{back_href}\">{escape(ui_text("server.public_share.back_to_catalog", app_language=app_language, fallback_text="Back to catalog"))}</a></p>
-    <section class=\"card\"><h2>{escape(ui_text("server.public_share.filtered_summary", app_language=app_language, fallback_text="Filtered summary"))}</h2><ul>
-      <li>{escape(ui_text("server.public_share.filtered_shares", app_language=app_language, fallback_text="Filtered shares"))}: <code>{escape(str(summary.get("total_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.role_working_save", app_language=app_language, fallback_text="Working saves"))}: <code>{escape(str(summary.get("working_save_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.role_commit_snapshot", app_language=app_language, fallback_text="Commit snapshots"))}: <code>{escape(str(summary.get("commit_snapshot_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.checkoutable_count", app_language=app_language, fallback_text="Checkoutable"))}: <code>{escape(str(summary.get("checkoutable_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.importable_count", app_language=app_language, fallback_text="Importable"))}: <code>{escape(str(summary.get("importable_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.runnable_count", app_language=app_language, fallback_text="Runnable"))}: <code>{escape(str(summary.get("runnable_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.updated_at", app_language=app_language, fallback_text="Updated"))}: {escape(str(summary.get("latest_updated_at") or ui_text("server.public_share.not_set", app_language=app_language, fallback_text="Not set")))}</li>
-    </ul></section>
-    <section class=\"card\"><h2>{escape(ui_text("server.public_share.inventory_total", app_language=app_language, fallback_text="Catalog inventory"))}</h2><ul>
-      <li>{escape(ui_text("server.public_share.filtered_shares", app_language=app_language, fallback_text="Filtered shares"))}: <code>{escape(str(inventory_summary.get("total_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.role_working_save", app_language=app_language, fallback_text="Working saves"))}: <code>{escape(str(inventory_summary.get("working_save_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.role_commit_snapshot", app_language=app_language, fallback_text="Commit snapshots"))}: <code>{escape(str(inventory_summary.get("commit_snapshot_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.checkoutable_count", app_language=app_language, fallback_text="Checkoutable"))}: <code>{escape(str(inventory_summary.get("checkoutable_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.importable_count", app_language=app_language, fallback_text="Importable"))}: <code>{escape(str(inventory_summary.get("importable_share_count") or 0))}</code></li>
-      <li>{escape(ui_text("server.public_share.runnable_count", app_language=app_language, fallback_text="Runnable"))}: <code>{escape(str(inventory_summary.get("runnable_share_count") or 0))}</code></li>
-    </ul></section>
-  </main>
-</body>
-</html>"""
-
 def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
     app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
     share_id = escape(str(payload.get("share_id") or ""))
@@ -500,8 +264,7 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     workspace_query = f"&workspace_id={workspace_id}" if workspace_id else ""
     back_to_workspace_shares = f"/app/workspaces/{workspace_id}/shares?app_language={app_language}" if workspace_id else "/app/library"
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}{workspace_query}"
-    catalog_page = f"/app/public-shares?app_language={app_language}{workspace_query}"
-    catalog_summary_page = f"/app/public-shares/summary?app_language={app_language}{workspace_query}"
+    download_page = f"/app/public-shares/{share_id}/download?app_language={app_language}{workspace_query}"
     artifact_href = escape(str(links.get("artifact") or f"/api/public-shares/{share_id}/artifact"))
     api_href = escape(str(links.get("self") or f"/api/public-shares/{share_id}"))
     share_path = escape(str(payload.get("share_path") or links.get("public_share_path") or ""))
@@ -521,6 +284,9 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     run_action_html = ""
     if "run_artifact" in operation_capabilities:
         run_action_html = f'<a class="action-link secondary" href="{escape(run_page)}">{escape(ui_text("server.public_share.run_submit", app_language=app_language, fallback_text="Run in workspace"))}</a>'
+    download_action_html = ""
+    if "download_artifact" in operation_capabilities:
+        download_action_html = f'<a class="action-link secondary" href="{escape(download_page)}">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</a>'
     management_html = ""
     if can_manage:
         management_html = _public_share_management_controls_html(
@@ -534,10 +300,10 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
         )
     notice_html = _public_share_notice_html(notice, app_language=app_language)
     return f"""<!doctype html>
-<html lang=\"{app_language}\">
+<html lang="{app_language}">
 <head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{escape(ui_text('server.public_share.detail_page_title', app_language=app_language, fallback_text='Public share — {share_id}', share_id=share_id or 'share'))}</title>
   <style>
     body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
@@ -550,21 +316,20 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
   </style>
 </head>
 <body>
-  <main class=\"shell\" role=\"main\" aria-labelledby=\"public-share-title\">
-    <h1 id=\"public-share-title\">{title}</h1>
+  <main class="shell" role="main" aria-labelledby="public-share-title">
+    <h1 id="public-share-title">{title}</h1>
     <p>{summary}</p>
-    <div class=\"actions\">
-      <a class=\"action-link secondary\" href=\"{escape(back_to_workspace_shares)}\">{escape(ui_text('server.public_share.back_to_share_history', app_language=app_language, fallback_text='Back to share history'))}</a>
-      <a class=\"action-link secondary\" href=\"{escape(history_page)}\">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
-      <a class=\"action-link secondary\" href=\"{escape(catalog_page)}\">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
-      <a class=\"action-link secondary\" href=\"{escape(catalog_summary_page)}\">{escape(ui_text('server.public_share.open_summary', app_language=app_language, fallback_text='Open catalog summary'))}</a>
+    <div class="actions">
+      <a class="action-link secondary" href="{escape(back_to_workspace_shares)}">{escape(ui_text('server.public_share.back_to_share_history', app_language=app_language, fallback_text='Back to share history'))}</a>
+      <a class="action-link secondary" href="{escape(history_page)}">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
       {checkout_action_html}
       {import_action_html}
       {run_action_html}
-      <a class=\"action-link secondary\" href=\"{artifact_href}\">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
-      <a class=\"action-link secondary\" href=\"{api_href}\">{escape(ui_text('server.public_share.open_raw_share', app_language=app_language, fallback_text='Open raw share'))}</a>
+      {download_action_html}
+      <a class="action-link secondary" href="{artifact_href}">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
+      <a class="action-link secondary" href="{api_href}">{escape(ui_text('server.public_share.open_raw_share', app_language=app_language, fallback_text='Open raw share'))}</a>
     </div>
-    <section class=\"card\"><h2>{escape(ui_text('server.public_share.share_identity', app_language=app_language, fallback_text='Share identity'))}</h2><ul>
+    <section class="card"><h2>{escape(ui_text('server.public_share.share_identity', app_language=app_language, fallback_text='Share identity'))}</h2><ul>
       <li>{escape(ui_text('server.public_share.share_id', app_language=app_language, fallback_text='Share id'))}: <code>{share_id}</code></li>
       <li>{escape(ui_text('server.public_share.share_path_label', app_language=app_language, fallback_text='Share path'))}: <code>{share_path}</code></li>
       <li>{escape(ui_text('server.public_share.lifecycle_state', app_language=app_language, fallback_text='Lifecycle state'))}: <code>{escape(str(lifecycle.get('state') or 'unknown'))}</code></li>
@@ -573,12 +338,81 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
       <li>{escape(ui_text('server.public_share.updated_at', app_language=app_language, fallback_text='Updated'))}: {escape(str(lifecycle.get('updated_at') or ''))}</li>
       <li>{escape(ui_text('server.public_share.expires_at', app_language=app_language, fallback_text='Expires'))}: {escape(str(lifecycle.get('expires_at') or ui_text('server.public_share.not_set', app_language=app_language, fallback_text='Not set')))}</li>
     </ul></section>
-    <section class=\"card\"><h2>{escape(ui_text('server.public_share.source_artifact', app_language=app_language, fallback_text='Source artifact'))}</h2><ul>
+    <section class="card"><h2>{escape(ui_text('server.public_share.source_artifact', app_language=app_language, fallback_text='Source artifact'))}</h2><ul>
       <li>{escape(ui_text('server.public_share.storage_role', app_language=app_language, fallback_text='Storage role'))}: <code>{escape(str(source.get('storage_role') or 'unknown'))}</code></li>
       <li>{escape(ui_text('server.public_share.canonical_ref', app_language=app_language, fallback_text='Canonical ref'))}: <code>{escape(str(source.get('canonical_ref') or ''))}</code></li>
       <li>{escape(ui_text('server.public_share.artifact_family', app_language=app_language, fallback_text='Artifact family'))}: <code>{escape(str(source.get('artifact_format_family') or ''))}</code></li>
     </ul></section>
     {management_html}
+    {notice_html}
+  </main>
+</body>
+</html>"""
+
+def render_public_share_download_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
+    app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
+    share_id = escape(str(payload.get("share_id") or ""))
+    title = escape(str(payload.get("title") or payload.get("share_path") or ui_text("server.public_share.share_fallback", app_language=app_language, fallback_text="Public share")))
+    summary = escape(str(payload.get("summary") or payload.get("share_path") or ""))
+    lifecycle = dict(payload.get("lifecycle") or {})
+    source = dict(payload.get("source_artifact") or {})
+    notice = dict(payload.get("notice") or {})
+    links = dict(payload.get("links") or {})
+    operation_capabilities = set(payload.get("operation_capabilities") or ())
+    detail_page = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    catalog_page = f"/app/public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    catalog_summary_page = f"/app/public-shares/summary?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    raw_artifact_href = escape(str(links.get("artifact") or f"/api/public-shares/{share_id}/artifact"))
+    download_action = f"/app/public-shares/{share_id}/artifact/download?app_language={app_language}"
+    can_download = "download_artifact" in operation_capabilities
+    notice_html = _public_share_notice_html(notice, app_language=app_language)
+    capability_html = "<p><strong>Download available.</strong> This share can be downloaded as a canonical public artifact file.</p>" if can_download else f"<p><strong>{escape(ui_text('server.public_share.download_unavailable', app_language=app_language, fallback_text='Download unavailable.'))}</strong> {escape(ui_text('server.public_share.download_unavailable_summary', app_language=app_language, fallback_text='This share cannot currently be downloaded as an artifact file.'))}</p>"
+    download_action_html = f'<a class="action-link" href="{escape(download_action)}">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</a>' if can_download else f'<span class="action-link secondary" aria-disabled="true">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</span>'
+    return f"""<!doctype html>
+<html lang="{app_language}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(ui_text('server.public_share.download_page_title', app_language=app_language, fallback_text='Download public share artifact — {share_id}', share_id=share_id or 'share'))}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
+    .shell {{ max-width: 960px; margin: 0 auto; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
+    .card {{ border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; margin-top: 16px; }}
+    .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
+    .action-link {{ display: inline-block; border-radius: 10px; padding: 10px 14px; text-decoration: none; background: #111827; color: white; }}
+    .action-link.secondary {{ background: #374151; }}
+    code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }}
+  </style>
+</head>
+<body>
+  <main class="shell" role="main" aria-labelledby="public-share-download-title">
+    <h1 id="public-share-download-title">{escape(ui_text('server.public_share.download_heading', app_language=app_language, fallback_text='Download public share artifact'))}</h1>
+    <p>{title}</p>
+    <p>{summary}</p>
+    <div class="actions">
+      <a class="action-link secondary" href="{escape(detail_page)}">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
+      <a class="action-link secondary" href="{escape(history_page)}">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
+      <a class="action-link secondary" href="{escape(catalog_page)}">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
+      <a class="action-link secondary" href="{escape(catalog_summary_page)}">{escape(ui_text('server.public_share.open_summary', app_language=app_language, fallback_text='Open catalog summary'))}</a>
+      <a class="action-link secondary" href="{raw_artifact_href}">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
+    </div>
+    <section class="card">
+      <h2>{escape(ui_text('server.public_share.download_context', app_language=app_language, fallback_text='Download context'))}</h2>
+      <ul>
+        <li>{escape(ui_text('server.public_share.share_id', app_language=app_language, fallback_text='Share id'))}: <code>{share_id}</code></li>
+        <li>{escape(ui_text('server.public_share.lifecycle_state', app_language=app_language, fallback_text='Lifecycle state'))}: <code>{escape(str(lifecycle.get('state') or 'unknown'))}</code></li>
+        <li>{escape(ui_text('server.public_share.storage_role', app_language=app_language, fallback_text='Storage role'))}: <code>{escape(str(source.get('storage_role') or 'unknown'))}</code></li>
+        <li>{escape(ui_text('server.public_share.canonical_ref', app_language=app_language, fallback_text='Canonical ref'))}: <code>{escape(str(source.get('canonical_ref') or ''))}</code></li>
+      </ul>
+      {capability_html}
+    </section>
+    <section class="card">
+      <h2>{escape(ui_text('server.public_share.download_form_title', app_language=app_language, fallback_text='Artifact download'))}</h2>
+      <p>{escape(ui_text('server.public_share.download_form_summary', app_language=app_language, fallback_text='Download the canonical public artifact as a JSON file you can inspect or store locally.'))}</p>
+      <div class="actions">{download_action_html}</div>
+      {notice_html}
+    </section>
   </main>
 </body>
 </html>"""
@@ -598,8 +432,6 @@ def render_public_share_checkout_html(payload: Mapping[str, Any], *, app_languag
     prefill_workspace_id = escape(str(payload.get("prefill_workspace_id") or workspace_id or ""))
     prefill_working_save_id = escape(str(payload.get("prefill_working_save_id") or ""))
     detail_page = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
-    catalog_page = f"/app/public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
-    catalog_summary_page = f"/app/public-shares/summary?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     checkout_action = f"/app/public-shares/{share_id}/checkout?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     can_checkout = "checkout_working_copy" in operation_capabilities
@@ -634,8 +466,6 @@ def render_public_share_checkout_html(payload: Mapping[str, Any], *, app_languag
     <p>{summary}</p>
     <div class="actions">
       <a class="action-link secondary" href="{escape(detail_page)}">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
-      <a class="action-link secondary" href="{escape(catalog_page)}">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
-      <a class="action-link secondary" href="{escape(catalog_summary_page)}">{escape(ui_text('server.public_share.open_summary', app_language=app_language, fallback_text='Open catalog summary'))}</a>
       <a class="action-link secondary" href="{escape(history_page)}">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
       <a class="action-link secondary" href="{escape(str(links.get('artifact') or f'/api/public-shares/{share_id}/artifact'))}">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
     </div>
@@ -900,6 +730,7 @@ def render_workspace_share_create_html(payload: Mapping[str, Any]) -> str:
 """
 
 
+
 def render_public_share_history_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
     app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
     share_id = escape(str(payload.get("share_id") or ""))
@@ -912,9 +743,9 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     audit_items = []
     for entry in history:
         audit_items.append(
-            f"<article class=\"event-card\"><h2>{escape(str(entry.get('event_type') or 'event'))}</h2><p>{escape(str(entry.get('timestamp') or ''))}</p><pre>{escape(str(entry.get('detail_payload') or ''))}</pre></article>"
+            f'<article class="event-card"><h2>{escape(str(entry.get("event_type") or "event"))}</h2><p>{escape(str(entry.get("timestamp") or ""))}</p><pre>{escape(str(entry.get("detail_payload") or ""))}</pre></article>'
         )
-    audit_html = "".join(audit_items) or f"<article class=\"event-card empty\"><h2>{escape(ui_text('server.public_share.no_history_title', app_language=app_language, fallback_text='No audit history yet'))}</h2><p>{escape(ui_text('server.public_share.no_history_summary', app_language=app_language, fallback_text='Audit history will appear here after lifecycle events occur.'))}</p></article>"
+    audit_html = "".join(audit_items) or f'<article class="event-card empty"><h2>{escape(ui_text("server.public_share.no_history_title", app_language=app_language, fallback_text="No audit history yet"))}</h2><p>{escape(ui_text("server.public_share.no_history_summary", app_language=app_language, fallback_text="Audit history will appear here after lifecycle events occur."))}</p></article>'
     artifact_href = escape(str(links.get("artifact") or f"/api/public-shares/{share_id}/artifact"))
     viewer_context = dict(payload.get("viewer_context") or {})
     notice = dict(payload.get("notice") or {})
@@ -922,6 +753,7 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     checkout_page = f"/app/public-shares/{share_id}/checkout?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     import_page = f"/app/public-shares/{share_id}/import?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     run_page = f"/app/public-shares/{share_id}/run?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    download_page = f"/app/public-shares/{share_id}/download?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     checkout_action_html = ""
     if "checkout_working_copy" in operation_capabilities:
         checkout_action_html = f'<a class="action-link" href="{escape(checkout_page)}">{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</a>'
@@ -931,6 +763,9 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     run_action_html = ""
     if "run_artifact" in operation_capabilities:
         run_action_html = f'<a class="action-link secondary" href="{escape(run_page)}">{escape(ui_text("server.public_share.run_submit", app_language=app_language, fallback_text="Run in workspace"))}</a>'
+    download_action_html = ""
+    if "download_artifact" in operation_capabilities:
+        download_action_html = f'<a class="action-link secondary" href="{escape(download_page)}">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</a>'
     can_manage = bool(viewer_context.get("can_manage"))
     management_html = ""
     if can_manage:
@@ -946,10 +781,10 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
         )
     notice_html = _public_share_notice_html(notice, app_language=app_language)
     return f"""<!doctype html>
-<html lang=\"{app_language}\">
+<html lang="{app_language}">
 <head>
-  <meta charset=\"utf-8\" />
-  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{escape(ui_text('server.public_share.history_page_title', app_language=app_language, fallback_text='Share history — {share_id}', share_id=share_id or 'share'))}</title>
   <style>
     body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
@@ -963,24 +798,25 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
   </style>
 </head>
 <body>
-  <main class=\"shell\" role=\"main\" aria-labelledby=\"public-share-history-title\">
-    <h1 id=\"public-share-history-title\">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</h1>
+  <main class="shell" role="main" aria-labelledby="public-share-history-title">
+    <h1 id="public-share-history-title">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</h1>
     <p><code>{share_id}</code> — {share_path}</p>
-    <div class=\"actions\">
-      <a class=\"action-link secondary\" href=\"{escape(detail_page)}\">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
-      <a class=\"action-link secondary\" href=\"{escape(catalog_page)}\">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
-      <a class=\"action-link secondary\" href=\"{escape(catalog_summary_page)}\">{escape(ui_text('server.public_share.open_summary', app_language=app_language, fallback_text='Open catalog summary'))}</a>
+    <div class="actions">
+      <a class="action-link secondary" href="{escape(detail_page)}">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
+      <a class="action-link secondary" href="{escape(catalog_page)}">{escape(ui_text('server.public_share.back_to_catalog', app_language=app_language, fallback_text='Browse public shares'))}</a>
+      <a class="action-link secondary" href="{escape(catalog_summary_page)}">{escape(ui_text('server.public_share.open_summary', app_language=app_language, fallback_text='Open catalog summary'))}</a>
       {checkout_action_html}
       {import_action_html}
       {run_action_html}
-      <a class=\"action-link secondary\" href=\"{artifact_href}\">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
+      {download_action_html}
+      <a class="action-link secondary" href="{artifact_href}">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
     </div>
     {management_html}
+    {notice_html}
     {audit_html}
   </main>
 </body>
 </html>"""
-
 
 def _issuer_public_share_notice_html(notice: Mapping[str, Any] | None, *, app_language: str) -> str:
     if not notice:
