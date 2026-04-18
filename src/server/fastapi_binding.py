@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from urllib.parse import parse_qsl
 from typing import Any, Mapping, Optional
 
 from fastapi import APIRouter, Body, FastAPI, Request
@@ -40,6 +41,14 @@ def default_fastapi_session_claims_resolver(
     except json.JSONDecodeError:
         return None
     return dict(parsed) if isinstance(parsed, Mapping) else None
+
+
+def _read_simple_form_data(body: bytes) -> dict[str, str]:
+    if not body:
+        return {}
+    return {key: value for key, value in parse_qsl(body.decode("utf-8"), keep_blank_values=True)}
+
+
 
 
 class FastApiRouteBindings:
@@ -936,7 +945,7 @@ class FastApiRouteBindings:
             query = dict(request.query_params)
             app_language = str(query.get("app_language") or "en")
             workspace_id = str(query.get("workspace_id") or "").strip() or None
-            form = dict(await request.form())
+            form = _read_simple_form_data(await request.body())
             origin = str(form.get("origin") or query.get("origin") or "detail").strip() or "detail"
             inbound = FrameworkInboundRequest(
                 method="POST",
@@ -972,7 +981,7 @@ class FastApiRouteBindings:
             query = dict(request.query_params)
             app_language = str(query.get("app_language") or "en")
             workspace_id = str(query.get("workspace_id") or "").strip() or None
-            form = dict(await request.form())
+            form = _read_simple_form_data(await request.body())
             origin = str(form.get("origin") or query.get("origin") or "detail").strip() or "detail"
             archived = str(form.get("archived") or "true").strip().lower() in {"1", "true", "yes", "on"}
             inbound = FrameworkInboundRequest(
@@ -1010,7 +1019,7 @@ class FastApiRouteBindings:
             query = dict(request.query_params)
             app_language = str(query.get("app_language") or "en")
             workspace_id = str(query.get("workspace_id") or "").strip() or None
-            form = dict(await request.form())
+            form = _read_simple_form_data(await request.body())
             origin = str(form.get("origin") or query.get("origin") or "detail").strip() or "detail"
             expires_at = str(form.get("expires_at") or "").strip()
             inbound = FrameworkInboundRequest(
