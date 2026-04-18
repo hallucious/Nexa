@@ -2047,6 +2047,30 @@ def test_fastapi_binding_workspace_share_history_page_round_trip() -> None:
     assert '/app/workspaces/ws-001/shares/create?app_language=en' in body
 
 
+
+
+def test_fastapi_binding_public_share_catalog_product_pages_round_trip() -> None:
+    client = _make_client()
+    catalog_response = client.get('/app/public-shares?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert catalog_response.status_code == 200
+    catalog_body = catalog_response.text
+    assert 'Public share catalog' in catalog_body
+    assert 'FastAPI share' in catalog_body
+    assert '/app/public-shares/summary?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001/history?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001/checkout?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001/import?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001/run?app_language=en&amp;workspace_id=ws-001' in catalog_body
+
+    summary_response = client.get('/app/public-shares/summary?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert summary_response.status_code == 200
+    summary_body = summary_response.text
+    assert 'Public share catalog summary' in summary_body
+    assert '/app/public-shares?app_language=en&amp;workspace_id=ws-001' in summary_body
+    assert 'Filtered shares' in summary_body
+    assert 'Runnable' in summary_body
+
 def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     client = _make_client()
     detail_response = client.get('/app/public-shares/share-fastapi-001?app_language=en&workspace_id=ws-001', headers=_session_headers())
@@ -2055,6 +2079,8 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert 'FastAPI share' in detail_body
     assert '/app/workspaces/ws-001/shares?app_language=en' in detail_body
     assert '/app/public-shares/share-fastapi-001/history?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/app/public-shares?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/app/public-shares/summary?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/api/public-shares/share-fastapi-001/artifact' in detail_body
     assert '/app/public-shares/share-fastapi-001/checkout?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/app/public-shares/share-fastapi-001/import?app_language=en&amp;workspace_id=ws-001' in detail_body
@@ -2069,6 +2095,8 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert 'Share history' in history_body or 'Open history' in history_body
     assert 'created' in history_body
     assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in history_body
+    assert '/app/public-shares?app_language=en&amp;workspace_id=ws-001' in history_body
+    assert '/app/public-shares/summary?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/checkout?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/import?app_language=en&amp;workspace_id=ws-001' in history_body
     assert '/app/public-shares/share-fastapi-001/run?app_language=en&amp;workspace_id=ws-001' in history_body

@@ -21,8 +21,11 @@ from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.server.public_share_runtime import (
     _canonical_ref_for_workspace_artifact,
     build_workspace_public_share_history_payload,
+    build_public_share_catalog_payload,
     render_workspace_public_share_history_html,
     render_workspace_share_create_html,
+    render_public_share_catalog_html,
+    render_public_share_catalog_summary_html,
     render_public_share_checkout_html,
     render_public_share_import_html,
     render_public_share_run_html,
@@ -1158,6 +1161,38 @@ class FastApiRouteBindings:
             share_id = str(payload.get("share_id") or "").strip()
             app_language = str(dict(request.query_params).get("app_language") or "en")
             return RedirectResponse(url=f"/app/public-shares/{share_id}?app_language={app_language}&workspace_id={workspace_id}", status_code=303)
+
+        @router.get("/app/public-shares")
+        async def get_public_share_catalog_page(request: Request) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            payload = build_public_share_catalog_payload(
+                share_payload_rows=self.dependencies.public_share_payload_rows_provider(),
+                app_language=app_language,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+                workspace_id=workspace_id,
+                query=str(query.get("q") or "").strip() or None,
+                storage_role=str(query.get("storage_role") or "").strip() or None,
+                operation=str(query.get("operation") or "").strip() or None,
+            )
+            return HTMLResponse(content=render_public_share_catalog_html(payload, app_language=app_language), status_code=200)
+
+        @router.get("/app/public-shares/summary")
+        async def get_public_share_catalog_summary_page(request: Request) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            payload = build_public_share_catalog_payload(
+                share_payload_rows=self.dependencies.public_share_payload_rows_provider(),
+                app_language=app_language,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+                workspace_id=workspace_id,
+                query=str(query.get("q") or "").strip() or None,
+                storage_role=str(query.get("storage_role") or "").strip() or None,
+                operation=str(query.get("operation") or "").strip() or None,
+            )
+            return HTMLResponse(content=render_public_share_catalog_summary_html(payload, app_language=app_language), status_code=200)
 
         @router.get("/app/public-shares/{share_id}")
         async def get_public_share_page(request: Request, share_id: str) -> Response:
