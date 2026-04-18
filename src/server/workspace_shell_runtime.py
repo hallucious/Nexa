@@ -1749,6 +1749,11 @@ def _share_history_section(
         "label": ui_text("server.shell.create_share", app_language=app_language, fallback_text="Create share"),
         "action_kind": "open_workspace_share_create",
         "action_target": workspace_id,
+    }, {
+        "control_id": "share-history-open-page",
+        "label": ui_text("server.shell.open_share_history_page", app_language=app_language, fallback_text="Open share history page"),
+        "action_kind": "open_route",
+        "action_target": f"/app/workspaces/{workspace_id}/shares?app_language={app_language}",
     }]
     if latest is not None:
         controls.append({
@@ -1862,6 +1867,10 @@ def build_workspace_shell_runtime_payload(
             "workspace_shell_checkout": f"/api/workspaces/{workspace_id}/shell/checkout",
             "workspace_shell_launch": f"/api/workspaces/{workspace_id}/shell/launch",
             "workspace_shell_share": f"/api/workspaces/{workspace_id}/shell/share",
+            "workspace_share_history_page": f"/app/workspaces/{workspace_id}/shares?app_language={app_language}",
+            "workspace_share_create_page": f"/app/workspaces/{workspace_id}/shares/create?app_language={app_language}",
+            "public_share_page_template": f"/app/public-shares/{{share_id}}?app_language={app_language}&workspace_id={workspace_id}",
+            "public_share_history_page_template": f"/app/public-shares/{{share_id}}/history?app_language={app_language}&workspace_id={workspace_id}",
             "workspace_recent_activity": f"/api/users/me/activity?workspace_id={workspace_id}",
             "workspace_history_summary": f"/api/users/me/history-summary?workspace_id={workspace_id}",
             "workspace_provider_bindings": f"/api/workspaces/{workspace_id}/provider-bindings",
@@ -2075,6 +2084,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       <button id="open-artifacts" class="secondary" {'disabled' if not latest_run_artifacts_path else ''}>{escape(ui_text("server.shell.open_latest_artifacts", app_language=app_language, fallback_text="Open latest artifacts"))}</button>
       <button id="open-workflow-library" class="secondary" {'disabled' if not routes.get('circuit_library_page') else ''}>{escape(ui_text("server.shell.open_workflow_library", app_language=app_language, fallback_text="Open workflow library"))}</button>
       <button id="open-result-history-page" class="secondary" {'disabled' if not routes.get('workspace_result_history_page') else ''}>{escape(ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"))}</button>
+      <button id="open-share-history-page" class="secondary" {'disabled' if not routes.get('workspace_share_history_page') else ''}>{escape(ui_text("server.shell.open_share_history_page", app_language=app_language, fallback_text="Open share history page"))}</button>
+      <button id="create-share" class="secondary" {'disabled' if not routes.get('workspace_shell_share') else ''}>{escape(ui_text("server.shell.create_share", app_language=app_language, fallback_text="Create share"))}</button>
       <button id="open-starter-template-catalog-page" class="secondary" {'disabled' if not routes.get('starter_template_catalog_page') else ''}>{escape(ui_text("server.shell.open_starter_template_catalog_page", app_language=app_language, fallback_text="Browse starter template page"))}</button>
     </div>
     <section class="card" style="margin-top:16px;" role="region" aria-labelledby="runtime-focus-title">
@@ -2701,6 +2712,39 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         if (target) {{
           window.open(target, '_blank', 'noopener');
           writeLog('Opened route ' + target + '.');
+          return;
+        }}
+      }}
+      if (kind === 'open_public_share') {{
+        if (target) {{
+          const template = routes && typeof routes.public_share_page_template === 'string' ? routes.public_share_page_template : '';
+          const nextHref = template ? template.replace('{{share_id}}', encodeURIComponent(target)) : '/api/public-shares/' + encodeURIComponent(target);
+          window.location.href = nextHref;
+          return;
+        }}
+      }}
+      if (kind === 'open_workspace_share_create') {{
+        const shareCreatePath = routes && typeof routes.workspace_shell_share === 'string' ? routes.workspace_shell_share : '';
+        if (shareCreatePath) {{
+          const response = await fetch(shareCreatePath, {{
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {{ 'content-type': 'application/json' }},
+            body: JSON.stringify({{}}),
+          }});
+          const body = await response.json();
+          if (!response.ok) {{
+            writeLog(body);
+            return;
+          }}
+          const shareId = body && typeof body.share_id === 'string' ? body.share_id : '';
+          if (shareId) {{
+            const template = routes && typeof routes.public_share_page_template === 'string' ? routes.public_share_page_template : '';
+            const nextHref = template ? template.replace('{{share_id}}', encodeURIComponent(shareId)) : '/api/public-shares/' + encodeURIComponent(shareId);
+            window.location.href = nextHref;
+            return;
+          }}
+          writeLog(body);
           return;
         }}
       }}

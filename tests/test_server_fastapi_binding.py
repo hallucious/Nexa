@@ -642,6 +642,10 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
     assert payload['routes']['latest_run_trace'] == '/api/runs/run-002/trace?limit=20'
     assert payload['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shell/share'
+    assert payload['routes']['workspace_share_history_page'] == '/app/workspaces/ws-001/shares?app_language=en'
+    assert payload['routes']['workspace_share_create_page'] == '/app/workspaces/ws-001/shares/create?app_language=en'
+    assert payload['routes']['public_share_page_template'] == '/app/public-shares/{share_id}?app_language=en&workspace_id=ws-001'
+    assert payload['routes']['public_share_history_page_template'] == '/app/public-shares/{share_id}/history?app_language=en&workspace_id=ws-001'
     assert payload['routes']['workspace_result_history'] == '/api/workspaces/ws-001/result-history'
     assert payload['routes']['workspace_result_history_page'] == '/app/workspaces/ws-001/results?app_language=en'
     assert payload['routes']['circuit_library'] == '/api/workspaces/library'
@@ -2015,6 +2019,70 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     assert artifact_payload['artifact']['meta']['commit_id'] == 'snap-fastapi-share-001'
     assert artifact_payload['share_boundary']['artifact_format_family'] == '.nex'
     assert artifact_payload['artifact_boundary']['role_boundary']['identity_field'] == 'commit_id'
+
+
+
+
+def test_fastapi_binding_workspace_share_history_page_round_trip() -> None:
+    client = _make_client(
+        artifact_source=_valid_working_save_artifact(),
+        public_share_payload_rows_provider=lambda: (
+            export_public_nex_link_share(
+                _valid_working_save_artifact(),
+                share_id='share-workspace-history-001',
+                title='Workspace History Share',
+                created_at='2026-04-15T12:15:00+00:00',
+                updated_at='2026-04-15T12:16:00+00:00',
+                issued_by_user_ref='user-owner',
+            ),
+        ),
+    )
+    response = client.get('/app/workspaces/ws-001/shares?app_language=en', headers=_session_headers())
+    assert response.status_code == 200
+    body = response.text
+    assert 'Share history' in body
+    assert 'Workspace History Share' in body
+    assert '/app/public-shares/share-workspace-history-001?app_language=en&amp;workspace_id=ws-001' in body
+    assert '/app/public-shares/share-workspace-history-001/history?app_language=en&amp;workspace_id=ws-001' in body
+    assert '/app/workspaces/ws-001/shares/create?app_language=en' in body
+
+
+def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
+    client = _make_client()
+    detail_response = client.get('/app/public-shares/share-fastapi-001?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert detail_response.status_code == 200
+    detail_body = detail_response.text
+    assert 'FastAPI share' in detail_body
+    assert '/app/workspaces/ws-001/shares?app_language=en' in detail_body
+    assert '/app/public-shares/share-fastapi-001/history?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/api/public-shares/share-fastapi-001/artifact' in detail_body
+
+    history_response = client.get('/app/public-shares/share-fastapi-001/history?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert history_response.status_code == 200
+    history_body = history_response.text
+    assert 'Share history' in history_body or 'Open history' in history_body
+    assert 'created' in history_body
+    assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in history_body
+
+
+def test_fastapi_binding_workspace_share_create_page_redirects_to_public_share_detail() -> None:
+    share_store: dict[str, dict] = {}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload['share']['share_id']] = dict(payload)
+        return dict(payload)
+
+    client = _make_client(
+        artifact_source=_commit_snapshot('snap-fastapi-created-share-page-001'),
+        public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_writer=_writer,
+    )
+    response = client.post('/app/workspaces/ws-001/shares/create?app_language=en', headers=_session_headers(), follow_redirects=False)
+    assert response.status_code == 303
+    location = response.headers['location']
+    assert location.startswith('/app/public-shares/')
+    assert 'workspace_id=ws-001' in location
+    assert 'app_language=en' in location
 
 
 def test_fastapi_binding_workspace_shell_share_creation_round_trip() -> None:
