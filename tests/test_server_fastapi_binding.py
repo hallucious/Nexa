@@ -792,6 +792,8 @@ def test_fastapi_binding_feedback_page_preserves_starter_template_detail_origin_
     body = response.text
     assert '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en' in body
     assert 'Back to starter template' in body
+    assert 'id=\"template_id\"' in body
+    assert 'value=\"text_summarizer\"' in body
 
 
 def test_fastapi_binding_workspace_starter_template_apply_page_redirects_to_workspace() -> None:

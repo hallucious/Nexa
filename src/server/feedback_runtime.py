@@ -269,6 +269,7 @@ def render_workspace_feedback_html(payload: Mapping[str, Any]) -> str:
           </select>
           <label for=\"run_id\">{run_id_label}</label>
           <input id=\"run_id\" name=\"run_id\" value=\"{prefill_run_id}\" placeholder=\"{run_id_placeholder}\" />
+          <input type=\"hidden\" id=\"template_id\" name=\"template_id\" value=\"{prefill_template_id}\" />
           <label for=\"message\">{message_label}</label>
           <textarea id=\"message\" name=\"message\" placeholder=\"{message_placeholder}\"></textarea>
           <div class=\"actions\">
