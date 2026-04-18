@@ -17,6 +17,7 @@ from src.server.circuit_library_runtime import render_circuit_library_runtime_ht
 from src.server.result_history_runtime import render_workspace_result_history_html
 from src.server.starter_template_runtime import render_starter_template_catalog_html, render_starter_template_detail_html
 from src.server.feedback_runtime import render_workspace_feedback_html
+from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.server.public_share_runtime import (
     _canonical_ref_for_workspace_artifact,
     build_workspace_public_share_history_payload,
@@ -24,6 +25,7 @@ from src.server.public_share_runtime import (
     render_workspace_share_create_html,
     render_public_share_checkout_html,
     render_public_share_import_html,
+    render_public_share_run_html,
     render_public_share_detail_html,
     render_public_share_history_html,
     render_issuer_public_share_portfolio_html,
@@ -1374,6 +1376,127 @@ class FastApiRouteBindings:
             storage_role = str(serialized.get("meta", {}).get("storage_role") or "unknown")
             target = f"/app/workspaces/{workspace_id}?app_language={app_language}&action=import_copy&status=done&source_share_id={share_id}&storage_role={quote(storage_role)}"
             return RedirectResponse(url=target, status_code=303)
+
+        @router.get("/app/public-shares/{share_id}/run")
+        async def get_public_share_run_page(request: Request, share_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            payload["app_language"] = app_language
+            payload["prefill_workspace_id"] = workspace_id or ""
+            payload["prefill_input_payload_json"] = str(query.get("input_payload_json") or "")
+            payload["notice"] = _public_share_notice_payload(request)
+            return HTMLResponse(content=render_public_share_run_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.post("/app/public-shares/{share_id}/run")
+        async def run_public_share_page(request: Request, share_id: str) -> Response:
+            query = dict(request.query_params)
+            form = _read_simple_form_data(await request.body())
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(form.get("workspace_id") or query.get("workspace_id") or "").strip()
+            input_payload_json = str(form.get("input_payload_json") or "").strip()
+            if not workspace_id:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/run?app_language={app_language}&action=run_artifact&status=error&reason=workspace_id_required", status_code=303)
+            workspace_context = self.dependencies.workspace_context_provider(workspace_id)
+            workspace_row = self.dependencies.workspace_row_provider(workspace_id)
+            if workspace_context is None or workspace_row is None:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/run?app_language={app_language}&workspace_id={quote(workspace_id)}&action=run_artifact&status=error&reason=workspace_not_found", status_code=303)
+            share_payload = self.dependencies.public_share_payload_provider(share_id) if self.dependencies.public_share_payload_provider is not None else None
+            if not isinstance(share_payload, Mapping):
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/run?app_language={app_language}&workspace_id={quote(workspace_id)}&action=run_artifact&status=error&reason=share_not_found", status_code=303)
+            from src.storage.share_api import ensure_public_nex_link_share_operation_allowed
+            from src.storage.validators.shared_validator import load_nex
+            try:
+                ensure_public_nex_link_share_operation_allowed(share_payload, "run_artifact")
+            except ValueError as exc:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/run?app_language={app_language}&workspace_id={quote(workspace_id)}&action=run_artifact&status=error&reason={quote(str(exc))}", status_code=303)
+            input_payload = None
+            if input_payload_json:
+                try:
+                    input_payload = json.loads(input_payload_json)
+                except json.JSONDecodeError:
+                    return RedirectResponse(url=f"/app/public-shares/{share_id}/run?app_language={app_language}&workspace_id={quote(workspace_id)}&action=run_artifact&status=error&reason=input_payload_invalid_json&input_payload_json={quote(input_payload_json)}", status_code=303)
+            loaded_share = load_nex(share_payload["artifact"])
+            if loaded_share.parsed_model is None:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/run?app_language={app_language}&workspace_id={quote(workspace_id)}&action=run_artifact&status=error&reason=share_artifact_invalid", status_code=303)
+            model = loaded_share.parsed_model
+            storage_role = str(getattr(model.meta, "storage_role", "") or "").strip()
+            target_ref = str(getattr(model.meta, "commit_id", "") or getattr(model.meta, "working_save_id", "") or "").strip()
+            if not target_ref or storage_role not in {"commit_snapshot", "working_save"}:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/run?app_language={app_language}&workspace_id={quote(workspace_id)}&action=run_artifact&status=error&reason=share_target_unsupported", status_code=303)
+            target_type = "commit_snapshot" if storage_role == "commit_snapshot" else "working_save"
+            target_catalog = dict(self.dependencies.target_catalog_provider(workspace_id) or {})
+            target_catalog[target_ref] = ExecutionTargetCatalogEntry(
+                workspace_id=workspace_id,
+                target_ref=target_ref,
+                target_type=target_type,
+                source=share_payload["artifact"],
+            )
+            launch_payload: dict[str, Any] = {
+                "workspace_id": workspace_id,
+                "execution_target": {"target_type": target_type, "target_ref": target_ref},
+                "client_context": {"source": "public_share_run", "correlation_token": share_id},
+            }
+            if input_payload is not None:
+                launch_payload["input_payload"] = input_payload
+            if target_type == "working_save":
+                launch_payload["launch_options"] = {"allow_working_save_execution": True}
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path="/api/runs",
+                headers=dict(request.headers),
+                path_params={},
+                query_params={"app_language": app_language},
+                json_body=launch_payload,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_launch(
+                request=inbound,
+                workspace_context=workspace_context,
+                target_catalog=target_catalog,
+                policy=self.dependencies.admission_policy,
+                engine_launch_decider=self.dependencies.engine_launch_decider,
+                run_id_factory=self.dependencies.run_id_factory,
+                run_request_id_factory=self.dependencies.run_request_id_factory,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+                workspace_row=workspace_row,
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+            )
+            if outbound.status_code != 202:
+                payload = json.loads(outbound.body_text) if outbound.body_text else {}
+                reason = str(payload.get("reason_code") or "run_artifact_failed").strip() or "run_artifact_failed"
+                back = f"/app/public-shares/{share_id}/run?app_language={app_language}&workspace_id={quote(workspace_id)}&action=run_artifact&status=error&reason={quote(reason)}"
+                if input_payload_json:
+                    back += f"&input_payload_json={quote(input_payload_json)}"
+                return RedirectResponse(url=back, status_code=303)
+            launch_result = json.loads(outbound.body_text) if outbound.body_text else {}
+            run_id = str(launch_result.get("run_id") or "").strip()
+            target = f"/app/workspaces/{workspace_id}?app_language={app_language}&action=run_artifact&status=accepted&source_share_id={share_id}"
+            if run_id:
+                target += f"&run_id={quote(run_id)}"
+            return RedirectResponse(url=target, status_code=303)
+
 
         @router.post("/app/public-shares/{share_id}/revoke")
         async def revoke_public_share_page(request: Request, share_id: str) -> Response:
