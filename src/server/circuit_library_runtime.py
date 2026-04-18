@@ -146,6 +146,9 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
     raw_registry_label = escape(ui_text("server.library.open_raw_registry", app_language=app_language, fallback_text="Open raw workspace registry"))
     raw_registry_aria = escape(ui_text("server.library.open_raw_registry_aria", app_language=app_language, fallback_text="Open raw workspace registry JSON"))
     workflow_library_aria = escape(ui_text("server.library.workflow_library_aria", app_language=app_language, fallback_text="Workflow library"))
+    routes = dict(payload.get("routes") or {})
+    workspace_href = escape(str(routes.get("workspace_page") or ""))
+    starter_templates_href = escape(str(routes.get("starter_template_catalog_page") or "/app/templates/starter-circuits"))
 
     def _render_lines(lines: Sequence[str]) -> str:
         if not lines:
@@ -184,7 +187,6 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
         </article>
         """
     if not cards_html:
-        starter_templates_href = escape(str((payload.get("routes") or {}).get("starter_template_catalog_page") or "/app/templates/starter-circuits"))
         browse_templates_label = escape(ui_text("server.library.browse_starter_templates", app_language=app_language, fallback_text="Browse starter templates"))
         cards_html = f"""
         <article class="workflow-card empty">
@@ -193,6 +195,19 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
           <div class="actions"><a class="action-link" href="{starter_templates_href}">{browse_templates_label}</a></div>
         </article>
         """
+
+    workspace_link_html = ""
+    if workspace_href:
+        workspace_link_html = (
+            f'<a class="top-link" href="{workspace_href}">'
+            f'{escape(ui_text("server.library.open_workspace", app_language=app_language, fallback_text="Open workspace"))}'
+            '</a>'
+        )
+    starter_templates_link_html = (
+        f'<a class="top-link" href="{starter_templates_href}">'
+        f'{escape(ui_text("server.library.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"))}'
+        '</a>'
+    )
 
     return f"""<!doctype html>
 <html lang="{app_language}">
@@ -222,6 +237,8 @@ def render_circuit_library_runtime_html(payload: Mapping[str, Any]) -> str:
     <main role="main" aria-labelledby="library-title">
       <header aria-labelledby="library-title">
         <a class="top-link" href="{raw_registry_href}" aria-label="{raw_registry_aria}">{raw_registry_label}</a>
+        {starter_templates_link_html}
+        {workspace_link_html}
         <h1 id="library-title">{title}</h1>
         <p>{subtitle}</p>
       </header>

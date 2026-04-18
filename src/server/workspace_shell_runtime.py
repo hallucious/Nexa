@@ -1018,7 +1018,7 @@ def _history_summary_section(
                 "control_id": "history-summary-open-library-page",
                 "label": ui_text("server.shell.open_workflow_library", app_language=app_language, fallback_text="Open workflow library"),
                 "action_kind": "open_route",
-                "action_target": f"/app/library?app_language={app_language}",
+                "action_target": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
             },
             {
                 "control_id": "history-summary-open-results-page",
@@ -1872,6 +1872,7 @@ def build_workspace_shell_runtime_payload(
             "workspace_result_history_page": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
             "circuit_library": "/api/workspaces/library",
             "circuit_library_page": f"/app/library?app_language={app_language}",
+            "workspace_circuit_library_page": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
             "starter_template_catalog": "/api/templates/starter-circuits",
             "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
         },
@@ -3121,7 +3122,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       writeLog(body || localizedUi.noRecentArtifacts);
     }});
     document.getElementById('open-workflow-library').addEventListener('click', () => {{
-      const target = routes && routes.circuit_library_page;
+      const target = (routes && (routes.workspace_circuit_library_page || routes.circuit_library_page)) || null;
       if (!target) {{
         writeLog('No workflow library page is available.');
         return;

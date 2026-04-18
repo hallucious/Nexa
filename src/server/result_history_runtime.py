@@ -173,6 +173,7 @@ def build_workspace_result_history_payload(
         "routes": {
             "workspace_list": "/api/workspaces",
             "library": "/app/library",
+            "workspace_library": f"/app/workspaces/{response.workspace_id}/library?app_language={app_language}",
             "workspace_page": f"/app/workspaces/{response.workspace_id}",
             "api_history": f"/api/workspaces/{response.workspace_id}/result-history",
             "app_history": f"/app/workspaces/{response.workspace_id}/results",
