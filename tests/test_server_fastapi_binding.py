@@ -2100,6 +2100,11 @@ def test_fastapi_binding_issuer_public_share_product_pages_round_trip() -> None:
     assert '/app/users/me/public-shares/action-reports?app_language=en' in portfolio_body
     assert '/app/users/me/public-shares/actions/revoke?app_language=en' in portfolio_body
     assert '/app/users/me/public-shares/actions/archive?app_language=en' in portfolio_body
+    assert 'bulk-revoke-form' in portfolio_body
+    assert 'bulk-archive-form' in portfolio_body
+    assert 'bulk-extend-form' in portfolio_body
+    assert 'bulk-delete-form' in portfolio_body
+    assert 'share_ids_csv' in portfolio_body
 
     summary_response = client.get('/app/users/me/public-shares/summary?app_language=en', headers=_session_headers())
     assert summary_response.status_code == 200
@@ -2166,6 +2171,69 @@ def test_fastapi_binding_issuer_public_share_product_management_round_trip() -> 
     assert delete_response.headers['location'].startswith('/app/users/me/public-shares?app_language=en')
     assert 'action=delete' in delete_response.headers['location']
     assert 'share-fastapi-owner-portfolio-001' not in share_store
+
+
+def test_fastapi_binding_issuer_public_share_bulk_management_round_trip() -> None:
+    share_store: dict[str, dict] = {
+        'share-fastapi-owner-bulk-001': export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-bulk-001'),
+            share_id='share-fastapi-owner-bulk-001',
+            title='FastAPI Owner Bulk Share 1',
+            created_at='2026-04-15T12:00:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+        'share-fastapi-owner-bulk-002': export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-bulk-002'),
+            share_id='share-fastapi-owner-bulk-002',
+            title='FastAPI Owner Bulk Share 2',
+            created_at='2026-04-15T12:05:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+    }
+    action_reports: list[dict] = []
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload['share']['share_id']] = dict(payload)
+        return dict(payload)
+
+    def _deleter(share_id: str) -> bool:
+        return share_store.pop(share_id, None) is not None
+
+    def _action_report_writer(report: dict) -> dict:
+        action_reports.append(dict(report))
+        return dict(report)
+
+    client = _make_client(
+        public_share_payload_rows_provider=lambda: tuple(share_store.values()),
+        public_share_payload_writer=_writer,
+        public_share_payload_deleter=_deleter,
+        public_share_action_report_rows_provider=lambda: tuple(action_reports),
+        public_share_action_report_writer=_action_report_writer,
+    )
+
+    archive_response = client.post(
+        '/app/users/me/public-shares/actions/archive?app_language=en',
+        headers=_session_headers(),
+        data={'share_ids_csv': 'share-fastapi-owner-bulk-001,share-fastapi-owner-bulk-002', 'archived': 'true'},
+        follow_redirects=False,
+    )
+    assert archive_response.status_code == 303
+    assert archive_response.headers['location'].startswith('/app/users/me/public-shares?app_language=en')
+    assert 'action=archive' in archive_response.headers['location']
+    assert share_store['share-fastapi-owner-bulk-001']['share']['management']['archived'] is True
+    assert share_store['share-fastapi-owner-bulk-002']['share']['management']['archived'] is True
+
+    revoke_response = client.post(
+        '/app/users/me/public-shares/actions/revoke?app_language=en',
+        headers=_session_headers(),
+        data={'share_ids_csv': 'share-fastapi-owner-bulk-001,share-fastapi-owner-bulk-002'},
+        follow_redirects=False,
+    )
+    assert revoke_response.status_code == 303
+    assert 'action=revoke' in revoke_response.headers['location']
+    assert share_store['share-fastapi-owner-bulk-001']['share']['lifecycle']['state'] == 'revoked'
+    assert share_store['share-fastapi-owner-bulk-002']['share']['lifecycle']['state'] == 'revoked'
+    assert action_reports[-1]['affected_share_count'] == 2
 
 
 def test_fastapi_binding_public_share_management_actions_round_trip() -> None:

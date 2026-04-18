@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from html import escape
 from typing import Any, Mapping, Sequence
 
@@ -517,6 +518,54 @@ def render_issuer_public_share_portfolio_html(payload: Mapping[str, Any], *, app
     governance = dict(payload.get("governance_summary") or {})
     shares = list(payload.get("shares") or [])
     notice_html = _issuer_public_share_notice_html(dict(payload.get("notice") or {}), app_language=app_language)
+    bulk_action_empty = ui_text(
+        "server.public_share.bulk_action_empty",
+        app_language=app_language,
+        fallback_text="Select at least one share first.",
+    )
+    bulk_selection_summary = ui_text(
+        "server.public_share.bulk_selection_summary",
+        app_language=app_language,
+        fallback_text="Selected shares: {count}",
+        count="0",
+    )
+    bulk_selection_template = ui_text(
+        "server.public_share.bulk_selection_summary",
+        app_language=app_language,
+        fallback_text="Selected shares: {count}",
+        count="__COUNT__",
+    )
+    bulk_toolbar_html = ""
+    if shares:
+        bulk_toolbar_html = f"""
+    <section class="bulk-management" aria-labelledby="bulk-management-title">
+      <h2 id="bulk-management-title">{escape(ui_text('server.public_share.bulk_manage_shares', app_language=app_language, fallback_text='Bulk manage shares'))}</h2>
+      <p id="bulk-selection-summary">{escape(bulk_selection_summary)}</p>
+      <div class="actions">
+        <label class="select-all-toggle"><input type="checkbox" id="bulk-select-all" /> {escape(ui_text('server.public_share.select_all_shares', app_language=app_language, fallback_text='Select all shown shares'))}</label>
+      </div>
+      <div class="actions">
+        <form class="inline" id="bulk-revoke-form" method="post" action="/app/users/me/public-shares/actions/revoke?app_language={app_language}">
+          <input type="hidden" name="share_ids_csv" value="" />
+          <button class="action-link secondary" type="submit">{escape(ui_text('server.public_share.bulk_revoke_shares', app_language=app_language, fallback_text='Revoke selected'))}</button>
+        </form>
+        <form class="inline" id="bulk-archive-form" method="post" action="/app/users/me/public-shares/actions/archive?app_language={app_language}">
+          <input type="hidden" name="share_ids_csv" value="" />
+          <input type="hidden" name="archived" value="true" />
+          <button class="action-link secondary" type="submit">{escape(ui_text('server.public_share.bulk_archive_shares', app_language=app_language, fallback_text='Archive selected'))}</button>
+        </form>
+        <form class="inline extend-form" id="bulk-extend-form" method="post" action="/app/users/me/public-shares/actions/extend?app_language={app_language}">
+          <input type="hidden" name="share_ids_csv" value="" />
+          <input type="text" name="expires_at" value="" placeholder="2026-04-30T00:00:00+00:00" />
+          <button class="action-link secondary" type="submit">{escape(ui_text('server.public_share.bulk_extend_shares', app_language=app_language, fallback_text='Extend selected'))}</button>
+        </form>
+        <form class="inline" id="bulk-delete-form" method="post" action="/app/users/me/public-shares/actions/delete?app_language={app_language}">
+          <input type="hidden" name="share_ids_csv" value="" />
+          <button class="action-link danger" type="submit">{escape(ui_text('server.public_share.bulk_delete_shares', app_language=app_language, fallback_text='Delete selected'))}</button>
+        </form>
+      </div>
+    </section>
+"""
     cards: list[str] = []
     for entry in shares:
         share_id = escape(str(entry.get("share_id") or ""))
@@ -533,6 +582,7 @@ def render_issuer_public_share_portfolio_html(payload: Mapping[str, Any], *, app
             f"""
         <article class="share-card">
           <div class="share-card-head">
+            <label class="share-selector"><input class="share-select" type="checkbox" value="{share_id}" data-share-id="{share_id}" /> {escape(ui_text('server.public_share.select_share', app_language=app_language, fallback_text='Select share'))}</label>
             <h2>{escape(str(entry.get('title') or entry.get('share_id') or ui_text('server.public_share.share_fallback', app_language=app_language, fallback_text='Public share')))}</h2>
             <span class="status-badge">{escape(str(lifecycle.get('state') or 'unknown'))}</span>
           </div>
@@ -567,8 +617,8 @@ def render_issuer_public_share_portfolio_html(payload: Mapping[str, Any], *, app
     body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
     .shell {{ max-width: 1080px; margin: 0 auto; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
     .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 12px; margin-top: 16px; }}
-    .metric, .share-card, .notice {{ border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; margin-top: 16px; }}
-    .share-card-head {{ display:flex; justify-content: space-between; gap: 12px; align-items: center; }}
+    .metric, .share-card, .notice, .bulk-management {{ border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; margin-top: 16px; }}
+    .share-card-head {{ display:flex; justify-content: space-between; gap: 12px; align-items: center; flex-wrap: wrap; }}
     .status-badge {{ background: #eff6ff; color: #1d4ed8; padding: 4px 8px; border-radius: 999px; font-size: 0.875rem; }}
     .actions {{ display:flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
     .action-link {{ display:inline-block; border-radius: 10px; padding: 10px 14px; text-decoration:none; background:#111827; color:white; border:0; cursor:pointer; }}
@@ -576,6 +626,8 @@ def render_issuer_public_share_portfolio_html(payload: Mapping[str, Any], *, app
     .action-link.danger {{ background:#b91c1c; }}
     form.inline {{ display:inline-flex; gap: 8px; align-items: center; flex-wrap: wrap; }}
     .extend-form input[type=text] {{ border:1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; min-width: 220px; }}
+    .share-selector {{ display:inline-flex; gap: 8px; align-items:center; font-size: 0.9rem; }}
+    .select-all-toggle {{ display:inline-flex; gap: 8px; align-items:center; }}
     code {{ background:#f3f4f6; padding:2px 6px; border-radius:6px; }}
   </style>
 </head>
@@ -591,11 +643,46 @@ def render_issuer_public_share_portfolio_html(payload: Mapping[str, Any], *, app
       <article class="metric"><strong>{escape(ui_text('server.public_share.archived_shares', app_language=app_language, fallback_text='Archived'))}</strong><div>{escape(str(summary.get('archived_share_count') or 0))}</div></article>
       <article class="metric"><strong>{escape(ui_text('server.public_share.action_reports', app_language=app_language, fallback_text='Action reports'))}</strong><div>{escape(str(governance.get('total_action_report_count') or 0))}</div></article>
     </section>
+    {bulk_toolbar_html}
     {cards_html}
   </main>
+  <script>
+    (() => {{
+      const bulkMessage = {json.dumps(bulk_action_empty)};
+      const checkboxes = Array.from(document.querySelectorAll('.share-select'));
+      const selectAll = document.getElementById('bulk-select-all');
+      const summary = document.getElementById('bulk-selection-summary');
+      const forms = Array.from(document.querySelectorAll('form[id^="bulk-"]'));
+      const updateSelection = () => {{
+        const selected = checkboxes.filter((input) => input.checked).map((input) => input.value);
+        forms.forEach((form) => {{
+          const hidden = form.querySelector('input[name="share_ids_csv"]');
+          if (hidden) hidden.value = selected.join(',');
+        }});
+        if (summary) summary.textContent = {json.dumps(bulk_selection_template)}.replace('__COUNT__', String(selected.length));
+        if (selectAll) selectAll.checked = selected.length > 0 && selected.length === checkboxes.length;
+      }};
+      if (selectAll) {{
+        selectAll.addEventListener('change', () => {{
+          checkboxes.forEach((input) => {{ input.checked = selectAll.checked; }});
+          updateSelection();
+        }});
+      }}
+      checkboxes.forEach((input) => input.addEventListener('change', updateSelection));
+      forms.forEach((form) => {{
+        form.addEventListener('submit', (event) => {{
+          const hidden = form.querySelector('input[name="share_ids_csv"]');
+          if (!hidden || !hidden.value.trim()) {{
+            event.preventDefault();
+            window.alert(bulkMessage);
+          }}
+        }});
+      }});
+      updateSelection();
+    }})();
+  </script>
 </body>
 </html>"""
-
 
 def render_issuer_public_share_summary_html(payload: Mapping[str, Any], *, app_language: str | None = None) -> str:
     app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")

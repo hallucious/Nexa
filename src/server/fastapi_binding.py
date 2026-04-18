@@ -54,6 +54,18 @@ def _read_simple_form_data(body: bytes) -> dict[str, str]:
     return {key: value for key, value in parse_qsl(body.decode("utf-8"), keep_blank_values=True)}
 
 
+def _collect_share_ids_from_form(form: Mapping[str, str]) -> list[str]:
+    share_ids: list[str] = []
+    share_ids_csv = str(form.get("share_ids_csv") or "").strip()
+    if share_ids_csv:
+        for raw_value in share_ids_csv.split(","):
+            share_id = raw_value.strip()
+            if share_id and share_id not in share_ids:
+                share_ids.append(share_id)
+    share_id = str(form.get("share_id") or "").strip()
+    if share_id and share_id not in share_ids:
+        share_ids.append(share_id)
+    return share_ids
 
 
 class FastApiRouteBindings:
@@ -920,14 +932,14 @@ class FastApiRouteBindings:
         async def revoke_issuer_public_shares_page(request: Request) -> Response:
             app_language = str(dict(request.query_params).get("app_language") or "en")
             form = _read_simple_form_data(await request.body())
-            share_id = str(form.get("share_id") or "").strip()
+            share_ids = _collect_share_ids_from_form(form)
             inbound = FrameworkInboundRequest(
                 method="POST",
                 path="/api/users/me/public-shares/actions/revoke",
                 headers=dict(request.headers),
                 path_params={},
                 query_params={},
-                json_body={"share_ids": [share_id]} if share_id else {"share_ids": []},
+                json_body={"share_ids": share_ids},
                 session_claims=self._resolve_session_claims(request),
             )
             outbound = FrameworkRouteBindings.handle_revoke_issuer_public_shares(
@@ -953,7 +965,7 @@ class FastApiRouteBindings:
         async def archive_issuer_public_shares_page(request: Request) -> Response:
             app_language = str(dict(request.query_params).get("app_language") or "en")
             form = _read_simple_form_data(await request.body())
-            share_id = str(form.get("share_id") or "").strip()
+            share_ids = _collect_share_ids_from_form(form)
             archived = str(form.get("archived") or "true").strip().lower() in {"1", "true", "yes", "on"}
             inbound = FrameworkInboundRequest(
                 method="POST",
@@ -961,7 +973,7 @@ class FastApiRouteBindings:
                 headers=dict(request.headers),
                 path_params={},
                 query_params={},
-                json_body={"share_ids": [share_id], "archived": archived} if share_id else {"share_ids": [], "archived": archived},
+                json_body={"share_ids": share_ids, "archived": archived},
                 session_claims=self._resolve_session_claims(request),
             )
             outbound = FrameworkRouteBindings.handle_archive_issuer_public_shares(
@@ -987,7 +999,7 @@ class FastApiRouteBindings:
         async def extend_issuer_public_shares_page(request: Request) -> Response:
             app_language = str(dict(request.query_params).get("app_language") or "en")
             form = _read_simple_form_data(await request.body())
-            share_id = str(form.get("share_id") or "").strip()
+            share_ids = _collect_share_ids_from_form(form)
             expires_at = str(form.get("expires_at") or "").strip()
             inbound = FrameworkInboundRequest(
                 method="POST",
@@ -995,7 +1007,7 @@ class FastApiRouteBindings:
                 headers=dict(request.headers),
                 path_params={},
                 query_params={},
-                json_body={"share_ids": [share_id], "expires_at": expires_at} if share_id else {"share_ids": [], "expires_at": expires_at},
+                json_body={"share_ids": share_ids, "expires_at": expires_at},
                 session_claims=self._resolve_session_claims(request),
             )
             outbound = FrameworkRouteBindings.handle_extend_issuer_public_shares(
@@ -1021,14 +1033,14 @@ class FastApiRouteBindings:
         async def delete_issuer_public_shares_page(request: Request) -> Response:
             app_language = str(dict(request.query_params).get("app_language") or "en")
             form = _read_simple_form_data(await request.body())
-            share_id = str(form.get("share_id") or "").strip()
+            share_ids = _collect_share_ids_from_form(form)
             inbound = FrameworkInboundRequest(
                 method="POST",
                 path="/api/users/me/public-shares/actions/delete",
                 headers=dict(request.headers),
                 path_params={},
                 query_params={},
-                json_body={"share_ids": [share_id]} if share_id else {"share_ids": []},
+                json_body={"share_ids": share_ids},
                 session_claims=self._resolve_session_claims(request),
             )
             outbound = FrameworkRouteBindings.handle_delete_issuer_public_shares(
