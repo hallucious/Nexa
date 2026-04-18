@@ -102,6 +102,82 @@ def _share_management_nav_html(routes: Mapping[str, Any], *, app_language: str) 
     )
 
 
+def _public_share_notice_html(notice: Mapping[str, Any] | None, *, app_language: str) -> str:
+    if not notice:
+        return ""
+    status = str(notice.get("status") or "").strip().lower()
+    action = str(notice.get("action") or "share action").strip()
+    reason = str(notice.get("reason") or "").strip()
+    action_label = action.replace("_", " ").title() or ui_text("server.public_share.action_status_fallback", app_language=app_language, fallback_text="Share action")
+    if status == "done":
+        message = ui_text("server.public_share.action_status_done", app_language=app_language, fallback_text="{action} completed.", action=action_label)
+        css_class = "notice success"
+    elif status == "error":
+        message = ui_text("server.public_share.action_status_error", app_language=app_language, fallback_text="{action} failed.", action=action_label)
+        if reason:
+            message = f"{message} {reason}"
+        css_class = "notice error"
+    else:
+        return ""
+    return f'<section class="{css_class}" role="status"><p>{escape(message)}</p></section>'
+
+
+def _public_share_management_controls_html(
+    *,
+    share_id: str,
+    lifecycle_state: str,
+    archived: bool,
+    app_language: str,
+    workspace_id: str | None,
+    origin: str,
+    current_expires_at: str | None = None,
+) -> str:
+    workspace_query = f"&workspace_id={workspace_id}" if workspace_id else ""
+    form_suffix = f"?app_language={app_language}{workspace_query}"
+    archive_target = "false" if archived else "true"
+    archive_label = ui_text(
+        "server.public_share.unarchive_share" if archived else "server.public_share.archive_share",
+        app_language=app_language,
+        fallback_text="Unarchive share" if archived else "Archive share",
+    )
+    revoke_form = ""
+    if lifecycle_state == "active":
+        revoke_form = (
+            f'<form class="inline" method="post" action="{escape(f"/app/public-shares/{share_id}/revoke{form_suffix}")}">'
+            f'<input type="hidden" name="origin" value="{escape(origin)}" />'
+            f'<button class="action-link secondary" type="submit">{escape(ui_text("server.public_share.revoke_share", app_language=app_language, fallback_text="Revoke share"))}</button>'
+            '</form>'
+        )
+    extend_form = (
+        f'<form class="inline extend-form" method="post" action="{escape(f"/app/public-shares/{share_id}/extend{form_suffix}")}">'
+        f'<input type="hidden" name="origin" value="{escape(origin)}" />'
+        f'<label><span>{escape(ui_text("server.public_share.expires_at", app_language=app_language, fallback_text="Expires"))}</span>'
+        f'<input type="text" name="expires_at" value="{escape(str(current_expires_at or ""))}" placeholder="2026-04-30T00:00:00+00:00" /></label>'
+        f'<button class="action-link secondary" type="submit">{escape(ui_text("server.public_share.extend_share", app_language=app_language, fallback_text="Extend share"))}</button>'
+        '</form>'
+    )
+    archive_form = (
+        f'<form class="inline" method="post" action="{escape(f"/app/public-shares/{share_id}/archive{form_suffix}")}">'
+        f'<input type="hidden" name="origin" value="{escape(origin)}" />'
+        f'<input type="hidden" name="archived" value="{escape(archive_target)}" />'
+        f'<button class="action-link secondary" type="submit">{escape(archive_label)}</button>'
+        '</form>'
+    )
+    delete_form = (
+        f'<form class="inline" method="post" action="{escape(f"/app/public-shares/{share_id}/delete{form_suffix}")}">'
+        f'<input type="hidden" name="origin" value="{escape(origin)}" />'
+        f'<button class="action-link danger" type="submit">{escape(ui_text("server.public_share.delete_share", app_language=app_language, fallback_text="Delete share"))}</button>'
+        '</form>'
+    )
+    return (
+        '<section class="card management"><h2>'
+        f'{escape(ui_text("server.public_share.manage_share", app_language=app_language, fallback_text="Manage share"))}'
+        '</h2><div class="actions">'
+        f'{revoke_form}{extend_form}{archive_form}{delete_form}'
+        '</div></section>'
+    )
+
+
 def render_workspace_public_share_history_html(payload: Mapping[str, Any]) -> str:
     app_language = normalize_ui_language(payload.get("app_language") or "en")
     workspace_title = escape(str(payload.get("workspace_title") or ui_text("server.public_share.workspace_fallback", app_language=app_language, fallback_text="Workflow")))
@@ -183,6 +259,21 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     artifact_href = escape(str(links.get("artifact") or f"/api/public-shares/{share_id}/artifact"))
     api_href = escape(str(links.get("self") or f"/api/public-shares/{share_id}"))
     share_path = escape(str(payload.get("share_path") or links.get("public_share_path") or ""))
+    viewer_context = dict(payload.get("viewer_context") or {})
+    notice = dict(payload.get("notice") or {})
+    can_manage = bool(viewer_context.get("can_manage"))
+    management_html = ""
+    if can_manage:
+        management_html = _public_share_management_controls_html(
+            share_id=str(payload.get("share_id") or ""),
+            lifecycle_state=str(lifecycle.get("state") or "unknown"),
+            archived=bool(dict(payload.get("management") or {}).get("archived")),
+            app_language=app_language,
+            workspace_id=workspace_id,
+            origin="detail",
+            current_expires_at=str(lifecycle.get("expires_at") or "") or None,
+        )
+    notice_html = _public_share_notice_html(notice, app_language=app_language)
     return f"""<!doctype html>
 <html lang=\"{app_language}\">
 <head>
@@ -223,6 +314,7 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
       <li>{escape(ui_text('server.public_share.canonical_ref', app_language=app_language, fallback_text='Canonical ref'))}: <code>{escape(str(source.get('canonical_ref') or ''))}</code></li>
       <li>{escape(ui_text('server.public_share.artifact_family', app_language=app_language, fallback_text='Artifact family'))}: <code>{escape(str(source.get('artifact_format_family') or ''))}</code></li>
     </ul></section>
+    {management_html}
   </main>
 </body>
 </html>"""
@@ -242,6 +334,22 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
         )
     audit_html = "".join(audit_items) or f"<article class=\"event-card empty\"><h2>{escape(ui_text('server.public_share.no_history_title', app_language=app_language, fallback_text='No audit history yet'))}</h2><p>{escape(ui_text('server.public_share.no_history_summary', app_language=app_language, fallback_text='Audit history will appear here after lifecycle events occur.'))}</p></article>"
     artifact_href = escape(str(links.get("artifact") or f"/api/public-shares/{share_id}/artifact"))
+    viewer_context = dict(payload.get("viewer_context") or {})
+    notice = dict(payload.get("notice") or {})
+    can_manage = bool(viewer_context.get("can_manage"))
+    management_html = ""
+    if can_manage:
+        lifecycle = dict(payload.get("lifecycle") or {})
+        management_html = _public_share_management_controls_html(
+            share_id=str(payload.get("share_id") or ""),
+            lifecycle_state=str(lifecycle.get("state") or "unknown"),
+            archived=bool(dict(payload.get("management") or {}).get("archived")),
+            app_language=app_language,
+            workspace_id=workspace_id,
+            origin="history",
+            current_expires_at=str(lifecycle.get("expires_at") or "") or None,
+        )
+    notice_html = _public_share_notice_html(notice, app_language=app_language)
     return f"""<!doctype html>
 <html lang=\"{app_language}\">
 <head>
@@ -267,6 +375,7 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
       <a class=\"action-link secondary\" href=\"{escape(detail_page)}\">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
       <a class=\"action-link secondary\" href=\"{artifact_href}\">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
     </div>
+    {management_html}
     {audit_html}
   </main>
 </body>

@@ -779,6 +779,35 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        def _public_share_app_target(*, share_id: str, app_language: str, workspace_id: str | None, origin: str | None = None) -> str:
+            workspace_query = f"&workspace_id={workspace_id}" if workspace_id else ""
+            if origin == "history":
+                return f"/app/public-shares/{share_id}/history?app_language={app_language}{workspace_query}"
+            return f"/app/public-shares/{share_id}?app_language={app_language}{workspace_query}"
+
+        def _public_share_delete_target(*, app_language: str, workspace_id: str | None, share_id: str, status: str | None = None, reason: str | None = None) -> str:
+            if workspace_id:
+                target = f"/app/workspaces/{workspace_id}/shares?app_language={app_language}&action=delete&share_id={share_id}"
+                if status:
+                    target += f"&status={status}"
+                if reason:
+                    from urllib.parse import quote
+                    target += f"&reason={quote(reason)}"
+                return target
+            target = f"/app/library?app_language={app_language}"
+            if status:
+                target += f"&share_action=delete&status={status}"
+            return target
+
+        def _public_share_notice_payload(request: Request) -> dict[str, str]:
+            query = dict(request.query_params)
+            payload: dict[str, str] = {}
+            for key in ("action", "status", "reason"):
+                value = str(query.get(key) or "").strip()
+                if value:
+                    payload[key] = value
+            return payload
+
         @router.get("/app/workspaces/{workspace_id}/shares")
         async def get_workspace_share_history_page(request: Request, workspace_id: str) -> Response:
             workspace_context = self.dependencies.workspace_context_provider(workspace_id)
@@ -844,6 +873,14 @@ class FastApiRouteBindings:
             payload = json.loads(outbound.body_text)
             app_language = str(dict(request.query_params).get("app_language") or "en")
             workspace_id = str(dict(request.query_params).get("workspace_id") or "").strip() or None
+            session_claims = self._resolve_session_claims(request)
+            requested_by_user_ref = str((session_claims or {}).get("sub") or "").strip() or None
+            issued_by_user_ref = str(dict(payload.get("lifecycle") or {}).get("issued_by_user_ref") or "").strip() or None
+            payload["viewer_context"] = {
+                "requested_by_user_ref": requested_by_user_ref,
+                "can_manage": bool(requested_by_user_ref and issued_by_user_ref and requested_by_user_ref == issued_by_user_ref),
+            }
+            payload["notice"] = _public_share_notice_payload(request)
             return HTMLResponse(content=render_public_share_detail_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
 
         @router.get("/app/public-shares/{share_id}/history")
@@ -867,7 +904,172 @@ class FastApiRouteBindings:
             payload = json.loads(outbound.body_text)
             app_language = str(dict(request.query_params).get("app_language") or "en")
             workspace_id = str(dict(request.query_params).get("workspace_id") or "").strip() or None
+            session_claims = self._resolve_session_claims(request)
+            requested_by_user_ref = str((session_claims or {}).get("sub") or "").strip() or None
+            detail_inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=session_claims,
+            )
+            detail_outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=detail_inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            if detail_outbound.status_code == 200 and detail_outbound.body_text:
+                detail_payload = json.loads(detail_outbound.body_text)
+                payload["lifecycle"] = dict(detail_payload.get("lifecycle") or {})
+                payload["management"] = dict(detail_payload.get("management") or {})
+            issued_by_user_ref = str(dict(payload.get("lifecycle") or {}).get("issued_by_user_ref") or "").strip() or None
+            payload["viewer_context"] = {
+                "requested_by_user_ref": requested_by_user_ref,
+                "can_manage": bool(requested_by_user_ref and issued_by_user_ref and requested_by_user_ref == issued_by_user_ref),
+            }
+            payload["notice"] = _public_share_notice_payload(request)
             return HTMLResponse(content=render_public_share_history_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.post("/app/public-shares/{share_id}/revoke")
+        async def revoke_public_share_page(request: Request, share_id: str) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            form = dict(await request.form())
+            origin = str(form.get("origin") or query.get("origin") or "detail").strip() or "detail"
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path=f"/api/public-shares/{share_id}/revoke",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=query,
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_revoke_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            payload = json.loads(outbound.body_text) if outbound.body_text else {}
+            status = "done" if outbound.status_code == 200 else "error"
+            reason = str(payload.get("reason_code") or "").strip() or None
+            target = _public_share_app_target(share_id=share_id, app_language=app_language, workspace_id=workspace_id, origin=origin)
+            sep = '&' if '?' in target else '?'
+            target = f"{target}{sep}action=revoke&status={status}"
+            if reason:
+                from urllib.parse import quote
+                target += f"&reason={quote(reason)}"
+            return RedirectResponse(url=target, status_code=303)
+
+        @router.post("/app/public-shares/{share_id}/archive")
+        async def archive_public_share_page(request: Request, share_id: str) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            form = dict(await request.form())
+            origin = str(form.get("origin") or query.get("origin") or "detail").strip() or "detail"
+            archived = str(form.get("archived") or "true").strip().lower() in {"1", "true", "yes", "on"}
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path=f"/api/public-shares/{share_id}/archive",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=query,
+                json_body={"archived": archived},
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_archive_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            payload = json.loads(outbound.body_text) if outbound.body_text else {}
+            status = "done" if outbound.status_code == 200 else "error"
+            reason = str(payload.get("reason_code") or "").strip() or None
+            target = _public_share_app_target(share_id=share_id, app_language=app_language, workspace_id=workspace_id, origin=origin)
+            sep = '&' if '?' in target else '?'
+            action_name = 'archive' if archived else 'unarchive'
+            target = f"{target}{sep}action={action_name}&status={status}"
+            if reason:
+                from urllib.parse import quote
+                target += f"&reason={quote(reason)}"
+            return RedirectResponse(url=target, status_code=303)
+
+        @router.post("/app/public-shares/{share_id}/extend")
+        async def extend_public_share_page(request: Request, share_id: str) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            form = dict(await request.form())
+            origin = str(form.get("origin") or query.get("origin") or "detail").strip() or "detail"
+            expires_at = str(form.get("expires_at") or "").strip()
+            inbound = FrameworkInboundRequest(
+                method="POST",
+                path=f"/api/public-shares/{share_id}/extend",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=query,
+                json_body={"expires_at": expires_at},
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_extend_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                public_share_payload_writer=self.dependencies.public_share_payload_writer,
+                public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            payload = json.loads(outbound.body_text) if outbound.body_text else {}
+            status = "done" if outbound.status_code == 200 else "error"
+            reason = str(payload.get("reason_code") or "").strip() or None
+            target = _public_share_app_target(share_id=share_id, app_language=app_language, workspace_id=workspace_id, origin=origin)
+            sep = '&' if '?' in target else '?'
+            target = f"{target}{sep}action=extend&status={status}"
+            if reason:
+                from urllib.parse import quote
+                target += f"&reason={quote(reason)}"
+            return RedirectResponse(url=target, status_code=303)
+
+        @router.post("/app/public-shares/{share_id}/delete")
+        async def delete_public_share_page(request: Request, share_id: str) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            inbound = FrameworkInboundRequest(
+                method="DELETE",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=query,
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_delete_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                public_share_action_report_rows_provider=self.dependencies.public_share_action_report_rows_provider,
+                public_share_payload_deleter=self.dependencies.public_share_payload_deleter,
+                public_share_action_report_writer=self.dependencies.public_share_action_report_writer,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            payload = json.loads(outbound.body_text) if outbound.body_text else {}
+            status = "done" if outbound.status_code == 200 else "error"
+            reason = str(payload.get("reason_code") or "").strip() or None
+            target = _public_share_delete_target(app_language=app_language, workspace_id=workspace_id, share_id=share_id, status=status, reason=reason)
+            return RedirectResponse(url=target, status_code=303)
 
         @router.get("/app/templates/starter-circuits")
         async def get_starter_template_catalog_page(request: Request) -> Response:

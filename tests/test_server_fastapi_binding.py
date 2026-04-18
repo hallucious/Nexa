@@ -2056,6 +2056,9 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert '/app/workspaces/ws-001/shares?app_language=en' in detail_body
     assert '/app/public-shares/share-fastapi-001/history?app_language=en&amp;workspace_id=ws-001' in detail_body
     assert '/api/public-shares/share-fastapi-001/artifact' in detail_body
+    assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/app/public-shares/share-fastapi-001/archive?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/app/public-shares/share-fastapi-001/delete?app_language=en&amp;workspace_id=ws-001' in detail_body
 
     history_response = client.get('/app/public-shares/share-fastapi-001/history?app_language=en&workspace_id=ws-001', headers=_session_headers())
     assert history_response.status_code == 200
@@ -2063,6 +2066,78 @@ def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     assert 'Share history' in history_body or 'Open history' in history_body
     assert 'created' in history_body
     assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in history_body
+    assert '/app/public-shares/share-fastapi-001/revoke?app_language=en&amp;workspace_id=ws-001' in history_body
+
+
+def test_fastapi_binding_public_share_management_actions_round_trip() -> None:
+    share_store: dict[str, dict] = {'share-fastapi-001': _share_payload('share-fastapi-001')}
+    action_reports: list[dict] = []
+
+    def _provider(share_id: str):
+        return share_store.get(share_id)
+
+    def _rows_provider():
+        return tuple(share_store.values())
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload['share']['share_id']] = dict(payload)
+        return dict(payload)
+
+    def _deleter(share_id: str) -> bool:
+        return share_store.pop(share_id, None) is not None
+
+    def _action_report_writer(report: dict) -> dict:
+        action_reports.append(dict(report))
+        return dict(report)
+
+    client = _make_client(
+        public_share_payload_provider=_provider,
+        public_share_payload_rows_provider=_rows_provider,
+        public_share_payload_writer=_writer,
+        public_share_payload_deleter=_deleter,
+        public_share_action_report_rows_provider=lambda: tuple(action_reports),
+        public_share_action_report_writer=_action_report_writer,
+    )
+
+    archive_response = client.post(
+        '/app/public-shares/share-fastapi-001/archive?app_language=en&workspace_id=ws-001',
+        headers=_session_headers(),
+        data={'archived': 'true', 'origin': 'detail'},
+        follow_redirects=False,
+    )
+    assert archive_response.status_code == 303
+    archive_location = archive_response.headers['location']
+    assert archive_location.startswith('/app/public-shares/share-fastapi-001?app_language=en&workspace_id=ws-001')
+    assert 'action=archive' in archive_location
+    assert 'status=done' in archive_location
+    archived_detail = client.get(archive_location, headers=_session_headers())
+    assert archived_detail.status_code == 200
+    assert 'Unarchive share' in archived_detail.text
+
+    revoke_response = client.post(
+        '/app/public-shares/share-fastapi-001/revoke?app_language=en&workspace_id=ws-001',
+        headers=_session_headers(),
+        data={'origin': 'history'},
+        follow_redirects=False,
+    )
+    assert revoke_response.status_code == 303
+    revoke_location = revoke_response.headers['location']
+    assert revoke_location.startswith('/app/public-shares/share-fastapi-001/history?app_language=en&workspace_id=ws-001')
+    assert 'action=revoke' in revoke_location
+    assert 'status=done' in revoke_location
+
+    delete_response = client.post(
+        '/app/public-shares/share-fastapi-001/delete?app_language=en&workspace_id=ws-001',
+        headers=_session_headers(),
+        data={'origin': 'detail'},
+        follow_redirects=False,
+    )
+    assert delete_response.status_code == 303
+    delete_location = delete_response.headers['location']
+    assert delete_location.startswith('/app/workspaces/ws-001/shares?app_language=en')
+    assert 'action=delete' in delete_location
+    assert 'status=done' in delete_location
+    assert 'share-fastapi-001' not in share_store
 
 
 def test_fastapi_binding_workspace_share_create_page_redirects_to_public_share_detail() -> None:
