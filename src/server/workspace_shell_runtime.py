@@ -15,6 +15,7 @@ from src.ui.builder_shell import read_builder_shell_view_model
 from src.ui.i18n import normalize_ui_language, ui_language_from_sources, ui_text
 from src.ui.template_gallery import read_template_gallery_view_model
 from src.server.workspace_shell_sections import build_shell_section
+from src.server.workspace_onboarding_api import _provider_continuity_summary_for_workspace
 from src.storage.share_api import describe_public_nex_link_share
 
 _WORKSPACE_ARTIFACT_KEYS: tuple[str, ...] = (
@@ -738,6 +739,112 @@ def _recent_activity_section(
         history=entries[:3],
     )
 
+
+
+def _provider_readiness_entries(
+    provider_binding_rows: Sequence[Mapping[str, Any]],
+    provider_probe_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
+) -> list[dict[str, Any]]:
+    normalized_workspace_id = str(workspace_id or "").strip()
+    if not normalized_workspace_id:
+        return []
+    bindings = [
+        dict(row) for row in provider_binding_rows
+        if str(row.get("workspace_id") or "").strip() == normalized_workspace_id
+    ]
+    probes = [
+        dict(row) for row in provider_probe_rows
+        if str(row.get("workspace_id") or "").strip() == normalized_workspace_id
+    ]
+    probes.sort(key=lambda row: (str(row.get("occurred_at") or ""), str(row.get("probe_event_id") or "")), reverse=True)
+    latest_probe_by_key: dict[str, Mapping[str, Any]] = {}
+    for row in probes:
+        key = str(row.get("provider_key") or "").strip()
+        if key and key not in latest_probe_by_key:
+            latest_probe_by_key[key] = row
+    bindings.sort(key=lambda row: (str(row.get("updated_at") or row.get("created_at") or ""), str(row.get("binding_id") or "")), reverse=True)
+    entries: list[dict[str, Any]] = []
+    if bindings:
+        for row in bindings[:3]:
+            provider_key = str(row.get("provider_key") or "").strip() or "provider"
+            latest_probe = latest_probe_by_key.get(provider_key)
+            entries.append({
+                "provider_key": provider_key,
+                "display_name": str(row.get("display_name") or provider_key).strip() or provider_key,
+                "binding_id": str(row.get("binding_id") or "").strip() or None,
+                "enabled": bool(row.get("enabled", True)),
+                "credential_source": str(row.get("credential_source") or "").strip() or None,
+                "probe_status": str((latest_probe or {}).get("probe_status") or "not_checked").strip() or "not_checked",
+                "probe_event_id": str((latest_probe or {}).get("probe_event_id") or "").strip() or None,
+                "occurred_at": str((latest_probe or {}).get("occurred_at") or row.get("updated_at") or row.get("created_at") or "").strip() or None,
+            })
+    else:
+        for row in probes[:3]:
+            provider_key = str(row.get("provider_key") or "").strip() or "provider"
+            entries.append({
+                "provider_key": provider_key,
+                "display_name": str(row.get("display_name") or provider_key).strip() or provider_key,
+                "binding_id": None,
+                "enabled": None,
+                "credential_source": None,
+                "probe_status": str(row.get("probe_status") or "not_checked").strip() or "not_checked",
+                "probe_event_id": str(row.get("probe_event_id") or "").strip() or None,
+                "occurred_at": str(row.get("occurred_at") or "").strip() or None,
+            })
+    return entries
+
+
+def _provider_readiness_section(
+    provider_binding_rows: Sequence[Mapping[str, Any]],
+    managed_secret_rows: Sequence[Mapping[str, Any]],
+    provider_probe_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
+    *,
+    app_language: str = "en",
+) -> dict[str, Any]:
+    continuity = _provider_continuity_summary_for_workspace(
+        workspace_id,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+    )
+    entries = _provider_readiness_entries(provider_binding_rows, provider_probe_rows, workspace_id)
+    lines = _summary_lines(
+        ui_text("server.shell.configured_providers_prefix", app_language=app_language, fallback_text="Configured providers: ") + str(getattr(continuity, "provider_binding_count", 0)) if continuity is not None else ui_text("server.shell.no_provider_readiness", app_language=app_language, fallback_text="No provider readiness data is available yet."),
+        ui_text("server.shell.recent_provider_probes_prefix", app_language=app_language, fallback_text="Recent provider probes: ") + str(getattr(continuity, "recent_probe_count", 0)) if continuity is not None else None,
+        ui_text("server.shell.latest_provider_activity_prefix", app_language=app_language, fallback_text="Latest provider activity: ") + str(getattr(continuity, "latest_provider_activity_at", "")) if continuity is not None and getattr(continuity, "latest_provider_activity_at", None) else None,
+    )
+    detail_items = [
+        f"{index + 1}. {entry['provider_key']} — {entry['probe_status']}"
+        + (f" — {entry['display_name']}" if entry.get('display_name') else '')
+        + (f" — {entry['binding_id']}" if entry.get('binding_id') else '')
+        for index, entry in enumerate(entries)
+    ]
+    controls = [
+        {
+            "control_id": "provider-readiness-open-bindings",
+            "label": ui_text("server.shell.open_provider_bindings", app_language=app_language, fallback_text="Open provider bindings"),
+            "action_kind": "open_route",
+            "action_target": f"/api/workspaces/{workspace_id}/provider-bindings",
+        },
+        {
+            "control_id": "provider-readiness-open-health",
+            "label": ui_text("server.shell.open_provider_health", app_language=app_language, fallback_text="Open provider health"),
+            "action_kind": "open_route",
+            "action_target": f"/api/workspaces/{workspace_id}/provider-bindings/health",
+        },
+    ]
+    return build_shell_section(
+        headline=ui_text("server.shell.provider_readiness", app_language=app_language, fallback_text="Provider readiness"),
+        lines=lines,
+        detail_title=ui_text("server.shell.provider_readiness_detail", app_language=app_language, fallback_text="Provider readiness detail"),
+        detail_items=detail_items,
+        summary_empty=ui_text("server.shell.no_provider_readiness", app_language=app_language, fallback_text="No provider readiness data is available yet."),
+        detail_empty=ui_text("server.shell.provider_readiness_pending", app_language=app_language, fallback_text="Provider readiness details will appear here after provider setup or health checks."),
+        controls=controls,
+        history=entries,
+    )
 
 def _matching_share_history_entries(
     share_payload_rows: Sequence[Mapping[str, Any]],
@@ -1573,6 +1680,9 @@ def build_workspace_shell_runtime_payload(
     artifact_rows_lookup: Any | None = None,
     trace_rows_lookup: Any | None = None,
     share_payload_rows: Sequence[Mapping[str, Any]] = (),
+    provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+    managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+    provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     app_language_override: str | None = None,
 ) -> dict[str, Any]:
     source = resolve_workspace_artifact_source(workspace_row, artifact_source)
@@ -1647,6 +1757,8 @@ def build_workspace_shell_runtime_payload(
             "workspace_shell_share": f"/api/workspaces/{workspace_id}/shell/share",
             "workspace_recent_activity": f"/api/users/me/activity?workspace_id={workspace_id}",
             "workspace_history_summary": f"/api/users/me/history-summary?workspace_id={workspace_id}",
+            "workspace_provider_bindings": f"/api/workspaces/{workspace_id}/provider-bindings",
+            "workspace_provider_health": f"/api/workspaces/{workspace_id}/provider-bindings/health",
         },
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,
@@ -1666,6 +1778,7 @@ def build_workspace_shell_runtime_payload(
         "artifacts_history_section": _artifacts_history_section(recent_run_rows, workspace_id, artifact_rows_lookup),
         "recent_activity_section": _recent_activity_section(recent_run_rows, onboarding_rows, workspace_id, app_language=app_language),
         "history_summary_section": _history_summary_section(recent_run_rows, onboarding_rows, share_payload_rows, model, workspace_id, app_language=app_language),
+        "provider_readiness_section": _provider_readiness_section(provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
         "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),
@@ -1725,6 +1838,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     artifacts_history_section_json = json.dumps(payload.get("artifacts_history_section"), ensure_ascii=False)
     recent_activity_section_json = json.dumps(payload.get("recent_activity_section"), ensure_ascii=False)
     history_summary_section_json = json.dumps(payload.get("history_summary_section"), ensure_ascii=False)
+    provider_readiness_section_json = json.dumps(payload.get("provider_readiness_section"), ensure_ascii=False)
     designer_section_json = json.dumps(payload.get("designer_section"), ensure_ascii=False)
     validation_section_json = json.dumps(payload.get("validation_section"), ensure_ascii=False)
     step_state_banner_json = json.dumps(payload.get("step_state_banner"), ensure_ascii=False)
@@ -1979,6 +2093,14 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <div id="history-summary-controls" class="actions"></div>
       </section>
     </div>
+    <div class="row">
+      <section id="provider-readiness-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="provider-readiness-title">
+        <h2 id="provider-readiness-title">{escape(ui_text("server.shell.provider_readiness", app_language=app_language, fallback_text="Provider readiness"))}</h2>
+        <pre id="provider-readiness-summary">{escape(ui_text("server.shell.provider_readiness_summary", app_language=app_language, fallback_text="Provider readiness will appear here."))}</pre>
+        <pre id="provider-readiness-detail">{escape(ui_text("server.shell.provider_readiness_detail", app_language=app_language, fallback_text="Provider readiness detail will appear here."))}</pre>
+        <div id="provider-readiness-controls" class="actions"></div>
+      </section>
+    </div>
     <section class="card" style="margin-top:16px;" role="region" aria-labelledby="browser-log-title">
       <h2 id=\"browser-log-title\">Last action log</h2>
       <pre id=\"browser-log\" aria-live=\"polite\">Ready.</pre>
@@ -2005,6 +2127,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialArtifactsHistorySection = {artifacts_history_section_json};
     const initialRecentActivitySection = {recent_activity_section_json};
     const initialHistorySummarySection = {history_summary_section_json};
+    const initialProviderReadinessSection = {provider_readiness_section_json};
     const initialDesignerSection = {designer_section_json};
     const initialValidationSection = {validation_section_json};
     const initialStepStateBanner = {step_state_banner_json};
@@ -2038,6 +2161,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const historySummarySummaryEl = document.getElementById('history-summary-summary');
     const historySummaryDetailEl = document.getElementById('history-summary-detail');
     const historySummaryControlsEl = document.getElementById('history-summary-controls');
+    const providerReadinessSummaryEl = document.getElementById('provider-readiness-summary');
+    const providerReadinessDetailEl = document.getElementById('provider-readiness-detail');
+    const providerReadinessControlsEl = document.getElementById('provider-readiness-controls');
     const designerSummaryEl = document.getElementById('designer-summary');
     const designerDetailEl = document.getElementById('designer-detail');
     const designerControlsEl = document.getElementById('designer-controls');
@@ -2069,6 +2195,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentArtifactsHistorySection = initialArtifactsHistorySection || null;
     let currentRecentActivitySection = initialRecentActivitySection || null;
     let currentHistorySummarySection = initialHistorySummarySection || null;
+    let currentProviderReadinessSection = initialProviderReadinessSection || null;
     let currentDesignerSection = initialDesignerSection || null;
     let currentValidationSection = initialValidationSection || null;
     let currentStepStateBanner = initialStepStateBanner || null;
@@ -2342,6 +2469,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     function writeHistorySummarySection(section) {{
       currentHistorySummarySection = writeShellSection(section, currentHistorySummarySection, historySummarySummaryEl, historySummaryDetailEl, historySummaryControlsEl, 'History summary will appear here.', 'History summary detail will appear here.');
+    }}
+    function writeProviderReadinessSection(section) {{
+      currentProviderReadinessSection = writeShellSection(section, currentProviderReadinessSection, providerReadinessSummaryEl, providerReadinessDetailEl, providerReadinessControlsEl, 'Provider readiness will appear here.', 'Provider readiness detail will appear here.');
     }}
     function writeDesignerSection(section) {{
       currentDesignerSection = writeShellSection(section, currentDesignerSection, designerSummaryEl, designerDetailEl, designerControlsEl, 'Open Designer to start drafting your workflow.', 'Designer detail will appear here.');
@@ -2719,6 +2849,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeArtifactsHistorySection(initialArtifactsHistorySection);
     writeRecentActivitySection(initialRecentActivitySection);
     writeHistorySummarySection(initialHistorySummarySection);
+    writeProviderReadinessSection(initialProviderReadinessSection);
     writeDesignerSection(initialDesignerSection);
     writeValidationSection(initialValidationSection);
     writeStepStateBanner(initialStepStateBanner);
@@ -2747,6 +2878,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       if (body.history_summary_section) {{
         writeHistorySummarySection(body.history_summary_section);
+      }}
+      if (body.provider_readiness_section) {{
+        writeProviderReadinessSection(body.provider_readiness_section);
       }}
       if (body.designer_section) {{
         writeDesignerSection(body.designer_section);

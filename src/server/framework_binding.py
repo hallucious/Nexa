@@ -1002,6 +1002,9 @@ class FrameworkRouteBindings:
         artifact_rows_lookup=None,
         trace_rows_lookup=None,
         share_payload_rows_provider=None,
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -1014,6 +1017,9 @@ class FrameworkRouteBindings:
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
             share_payload_rows_provider=share_payload_rows_provider,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
         )
         return cls.to_framework_response(response)
 
@@ -1032,6 +1038,9 @@ class FrameworkRouteBindings:
         trace_rows_lookup=None,
         workspace_artifact_source_writer=None,
         share_payload_rows_provider=None,
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_put_workspace_shell_draft(
             http_request=cls.to_http_route_request(request),
@@ -1045,6 +1054,9 @@ class FrameworkRouteBindings:
             trace_rows_lookup=trace_rows_lookup,
             workspace_artifact_source_writer=workspace_artifact_source_writer,
             share_payload_rows_provider=share_payload_rows_provider,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
         )
         return cls.to_framework_response(response)
 
@@ -1100,6 +1112,9 @@ class FrameworkRouteBindings:
         trace_rows_lookup=None,
         workspace_artifact_source_writer=None,
         share_payload_rows_provider=None,
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_commit_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -1113,6 +1128,9 @@ class FrameworkRouteBindings:
             trace_rows_lookup=trace_rows_lookup,
             workspace_artifact_source_writer=workspace_artifact_source_writer,
             share_payload_rows_provider=share_payload_rows_provider,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
         )
         return cls.to_framework_response(response)
 
@@ -1132,6 +1150,9 @@ class FrameworkRouteBindings:
         workspace_artifact_source_writer=None,
         public_share_payload_provider=None,
         share_payload_rows_provider=None,
+        provider_binding_rows: Sequence[Mapping[str, Any]] = (),
+        managed_secret_rows: Sequence[Mapping[str, Any]] = (),
+        provider_probe_rows: Sequence[Mapping[str, Any]] = (),
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_checkout_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -1146,6 +1167,9 @@ class FrameworkRouteBindings:
             workspace_artifact_source_writer=workspace_artifact_source_writer,
             public_share_payload_provider=public_share_payload_provider,
             share_payload_rows_provider=share_payload_rows_provider,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
         )
         return cls.to_framework_response(response)
 

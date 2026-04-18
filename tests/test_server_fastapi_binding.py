@@ -645,6 +645,14 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert 'Successful runs: 1' in payload['history_summary_section']['summary']['lines']
     assert 'Share history entries: 1' in payload['history_summary_section']['detail']['items']
     assert payload['history_summary_section']['controls'][0]['action_kind'] == 'open_route'
+    assert payload['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'
+    assert payload['routes']['workspace_provider_health'] == '/api/workspaces/ws-001/provider-bindings/health'
+    assert payload['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
+    assert 'Configured providers: 1' in payload['provider_readiness_section']['summary']['lines']
+    assert 'Recent provider probes: 1' in payload['provider_readiness_section']['summary']['lines']
+    assert 'openai — reachable' in '\n'.join(payload['provider_readiness_section']['detail']['items'])
+    assert payload['provider_readiness_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/provider-bindings'
+    assert payload['provider_readiness_section']['controls'][1]['action_target'] == '/api/workspaces/ws-001/provider-bindings/health'
     assert payload['identity_policy']['surface_family'] == 'workspace-shell'
     assert payload['namespace_policy']['family'] == 'workspace-shell'
     assert payload['routes']['latest_run_artifacts'] == '/api/runs/run-002/artifacts'

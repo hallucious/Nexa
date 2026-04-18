@@ -1031,6 +1031,39 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
         workspace_context=_workspace(),
         workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
         artifact_source=_commit_snapshot('snap-http-actions-001'),
+        provider_binding_rows=({
+            'binding_id': 'binding-http-001',
+            'workspace_id': 'ws-001',
+            'provider_key': 'openai',
+            'provider_family': 'openai',
+            'display_name': 'OpenAI GPT',
+            'credential_source': 'managed',
+            'enabled': True,
+            'created_at': '2026-04-11T12:00:00+00:00',
+            'updated_at': '2026-04-11T12:05:00+00:00',
+            'updated_by_user_id': 'user-owner',
+        },),
+        managed_secret_rows=({
+            'workspace_id': 'ws-001',
+            'provider_key': 'openai',
+            'secret_ref': 'secret://ws-001/openai',
+            'last_rotated_at': '2026-04-11T12:06:00+00:00',
+        },),
+        provider_probe_rows=({
+            'probe_event_id': 'probe-http-001',
+            'workspace_id': 'ws-001',
+            'provider_key': 'openai',
+            'provider_family': 'openai',
+            'display_name': 'OpenAI GPT',
+            'probe_status': 'reachable',
+            'connectivity_state': 'ok',
+            'secret_resolution_status': 'resolved',
+            'requested_model_ref': 'gpt-4.1',
+            'effective_model_ref': 'gpt-4.1',
+            'occurred_at': '2026-04-11T12:08:00+00:00',
+            'requested_by_user_id': 'user-owner',
+            'message': 'Probe completed.',
+        },),
     ).body
     assert payload['storage_role'] == 'commit_snapshot'
     assert payload['action_availability']['draft_write']['allowed'] is False
@@ -1040,6 +1073,10 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
     assert payload['routes']['workspace_history_summary'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert payload['recent_activity_section']['summary']['headline'] == 'Recent activity'
     assert payload['history_summary_section']['summary']['headline'] == 'History summary'
+    assert payload['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'
+    assert payload['routes']['workspace_provider_health'] == '/api/workspaces/ws-001/provider-bindings/health'
+    assert payload['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
+    assert 'Configured providers: 1' in payload['provider_readiness_section']['summary']['lines']
 
 
 def test_public_share_artifact_route_rejects_effectively_expired_share() -> None:

@@ -1483,6 +1483,9 @@ class RunHttpRouteSurface:
         artifact_rows_lookup=None,
         trace_rows_lookup=None,
         share_payload_rows_provider=None,
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "GET":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace shell route only supports GET."})
@@ -1537,6 +1540,9 @@ class RunHttpRouteSurface:
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
             share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (),
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
             app_language_override=_request_app_language(http_request.query_params),
         )
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
@@ -1558,6 +1564,9 @@ class RunHttpRouteSurface:
         trace_rows_lookup=None,
         workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
         share_payload_rows_provider=None,
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         if http_request.method != "PUT":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace shell draft write route only supports PUT."})
@@ -1652,6 +1661,9 @@ class RunHttpRouteSurface:
             artifact_rows_lookup=artifact_rows_lookup,
             trace_rows_lookup=trace_rows_lookup,
             share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (),
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
             app_language_override=_request_app_language(http_request.query_params),
         )
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
@@ -1865,6 +1877,9 @@ class RunHttpRouteSurface:
         trace_rows_lookup=None,
         workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
         share_payload_rows_provider=None,
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         guard = cls._workspace_shell_write_guard(http_request, workspace_context, workspace_row, expected_path="/api/workspaces/{workspace_id}/shell/commit", method_label="Workspace shell commit")
         if isinstance(guard, HttpRouteResponse):
@@ -1914,6 +1929,9 @@ class RunHttpRouteSurface:
         workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
         public_share_payload_provider=None,
         share_payload_rows_provider=None,
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
     ) -> HttpRouteResponse:
         guard = cls._workspace_shell_write_guard(http_request, workspace_context, workspace_row, expected_path="/api/workspaces/{workspace_id}/shell/checkout", method_label="Workspace shell checkout")
         if isinstance(guard, HttpRouteResponse):

@@ -1093,6 +1093,41 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
                 issued_by_user_ref="user-owner",
             ),
         ),
+          provider_binding_rows=({
+            "binding_id": "binding-001",
+            "workspace_id": "ws-001",
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "credential_source": "managed",
+            "secret_ref": "secret://ws-001/openai",
+            "secret_version_ref": "v1",
+            "enabled": True,
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "updated_by_user_id": "user-owner",
+        },),
+        managed_secret_rows=({
+            "workspace_id": "ws-001",
+            "provider_key": "openai",
+            "secret_ref": "secret://ws-001/openai",
+            "last_rotated_at": "2026-04-11T12:06:00+00:00",
+        },),
+        provider_probe_rows=({
+            "probe_event_id": "probe-001",
+            "workspace_id": "ws-001",
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "probe_status": "reachable",
+            "connectivity_state": "ok",
+            "secret_resolution_status": "resolved",
+            "requested_model_ref": "gpt-4.1",
+            "effective_model_ref": "gpt-4.1",
+            "occurred_at": "2026-04-11T12:08:00+00:00",
+            "requested_by_user_id": "user-owner",
+            "message": "Probe completed.",
+        },),
     )
 
     parsed = json.loads(response.body_text)
@@ -1134,6 +1169,14 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert 'Successful runs: 1' in parsed['history_summary_section']['summary']['lines']
     assert 'Share history entries: 1' in parsed['history_summary_section']['detail']['items']
     assert parsed['history_summary_section']['controls'][0]['action_target'] == '/api/users/me/history-summary?workspace_id=ws-001'
+    assert parsed['routes']['workspace_provider_bindings'] == '/api/workspaces/ws-001/provider-bindings'
+    assert parsed['routes']['workspace_provider_health'] == '/api/workspaces/ws-001/provider-bindings/health'
+    assert parsed['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
+    assert 'Configured providers: 1' in parsed['provider_readiness_section']['summary']['lines']
+    assert 'Recent provider probes: 1' in parsed['provider_readiness_section']['summary']['lines']
+    assert 'openai — reachable' in '\n'.join(parsed['provider_readiness_section']['detail']['items'])
+    assert parsed['provider_readiness_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/provider-bindings'
+    assert parsed['provider_readiness_section']['controls'][1]['action_target'] == '/api/workspaces/ws-001/provider-bindings/health'
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
     assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'
