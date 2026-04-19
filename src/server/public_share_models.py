@@ -509,7 +509,7 @@ class ProductIssuerPublicShareGovernanceSummaryView(ProductIssuerPublicShareSumm
     archive_action_report_count: int = 0
     delete_action_report_count: int = 0
     latest_action_report_at: Optional[str] = None
-    recent_action_reports: tuple[dict[str, Any], ...] = ()
+    recent_action_reports: tuple[ProductIssuerPublicShareActionReportEntryView, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -557,15 +557,78 @@ class ProductIssuerPublicShareSummaryResponse:
 
 
 @dataclass(frozen=True)
+class ProductIssuerPublicShareActionReportEntryView:
+    report_id: str
+    issuer_user_ref: str
+    action: str
+    scope: str
+    created_at: str
+    requested_share_ids: tuple[str, ...] = ()
+    affected_share_ids: tuple[str, ...] = ()
+    affected_share_count: int = 0
+    before_total_share_count: int = 0
+    after_total_share_count: int = 0
+    actor_user_ref: Optional[str] = None
+    expires_at: Optional[str] = None
+    archived: Optional[bool] = None
+
+    def __post_init__(self) -> None:
+        if not self.report_id:
+            raise ValueError("ProductIssuerPublicShareActionReportEntryView.report_id must be non-empty")
+        if not self.issuer_user_ref:
+            raise ValueError("ProductIssuerPublicShareActionReportEntryView.issuer_user_ref must be non-empty")
+        if not self.action:
+            raise ValueError("ProductIssuerPublicShareActionReportEntryView.action must be non-empty")
+        if not self.scope:
+            raise ValueError("ProductIssuerPublicShareActionReportEntryView.scope must be non-empty")
+        if not self.created_at:
+            raise ValueError("ProductIssuerPublicShareActionReportEntryView.created_at must be non-empty")
+        if self.affected_share_count < 0:
+            raise ValueError("ProductIssuerPublicShareActionReportEntryView.affected_share_count must be >= 0")
+        if self.before_total_share_count < 0:
+            raise ValueError("ProductIssuerPublicShareActionReportEntryView.before_total_share_count must be >= 0")
+        if self.after_total_share_count < 0:
+            raise ValueError("ProductIssuerPublicShareActionReportEntryView.after_total_share_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareActionReportSummaryView:
+    issuer_user_ref: str
+    total_report_count: int
+    revoke_report_count: int
+    extend_report_count: int
+    archive_report_count: int
+    delete_report_count: int
+    total_requested_share_count: int
+    total_affected_share_count: int
+    latest_report_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not self.issuer_user_ref:
+            raise ValueError("ProductIssuerPublicShareActionReportSummaryView.issuer_user_ref must be non-empty")
+        for field_name in (
+            "total_report_count",
+            "revoke_report_count",
+            "extend_report_count",
+            "archive_report_count",
+            "delete_report_count",
+            "total_requested_share_count",
+            "total_affected_share_count",
+        ):
+            if getattr(self, field_name) < 0:
+                raise ValueError(f"ProductIssuerPublicShareActionReportSummaryView.{field_name} must be >= 0")
+
+
+@dataclass(frozen=True)
 class ProductIssuerPublicShareActionReportListResponse:
     status: str
     issuer_user_ref: str
-    summary: dict[str, Any]
-    inventory_summary: dict[str, Any]
+    summary: ProductIssuerPublicShareActionReportSummaryView
+    inventory_summary: ProductIssuerPublicShareActionReportSummaryView
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
     management_capability_summary: ProductIssuerPublicShareManagementCapabilitySummaryView
     bulk_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
-    reports: tuple[dict[str, Any], ...] = ()
+    reports: tuple[ProductIssuerPublicShareActionReportEntryView, ...] = ()
     applied_filters: dict[str, Any] = field(default_factory=dict)
     pagination: dict[str, Any] = field(default_factory=dict)
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
@@ -583,8 +646,8 @@ class ProductIssuerPublicShareActionReportListResponse:
 class ProductIssuerPublicShareActionReportSummaryResponse:
     status: str
     issuer_user_ref: str
-    summary: dict[str, Any]
-    inventory_summary: dict[str, Any]
+    summary: ProductIssuerPublicShareActionReportSummaryView
+    inventory_summary: ProductIssuerPublicShareActionReportSummaryView
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
     management_capability_summary: ProductIssuerPublicShareManagementCapabilitySummaryView
     bulk_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
@@ -610,7 +673,7 @@ class ProductIssuerPublicShareBulkMutationResponse:
     management_capability_summary: ProductIssuerPublicShareManagementCapabilitySummaryView
     bulk_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     shares: tuple[ProductIssuerPublicShareManagementEntryView, ...] = ()
-    action_report: Optional[dict[str, Any]] = None
+    action_report: Optional[ProductIssuerPublicShareActionReportEntryView] = None
     requested_share_ids: tuple[str, ...] = ()
     affected_share_count: int = 0
     expires_at: Optional[str] = None

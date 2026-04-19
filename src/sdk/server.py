@@ -43,8 +43,10 @@ from src.server.provider_secret_models import (
     ProductWorkspaceProviderBindingsResponse,
 )
 from src.server.public_share_models import (
+    ProductIssuerPublicShareActionReportEntryView,
     ProductIssuerPublicShareActionReportListResponse,
     ProductIssuerPublicShareActionReportSummaryResponse,
+    ProductIssuerPublicShareActionReportSummaryView,
     ProductIssuerPublicShareBulkMutationResponse,
     ProductIssuerPublicShareListResponse,
     ProductIssuerPublicShareSummaryResponse,
@@ -175,6 +177,8 @@ __all__ = [
     "ProductPublicShareMutationResponse",
     "ProductIssuerPublicShareListResponse",
     "ProductIssuerPublicShareSummaryResponse",
+    "ProductIssuerPublicShareActionReportEntryView",
+    "ProductIssuerPublicShareActionReportSummaryView",
     "ProductIssuerPublicShareActionReportListResponse",
     "ProductIssuerPublicShareActionReportSummaryResponse",
     "ProductIssuerPublicShareBulkMutationResponse",

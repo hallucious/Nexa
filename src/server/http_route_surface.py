@@ -1534,6 +1534,44 @@ def _issuer_share_management_summary_body(summary) -> dict[str, Any]:
     }
 
 
+def _report_attr_or_key(report: Any, key: str, default: Any = None) -> Any:
+    if isinstance(report, Mapping):
+        return report.get(key, default)
+    return getattr(report, key, default)
+
+
+def _issuer_share_management_action_report_entry_body(report: Any) -> dict[str, Any]:
+    return {
+        "report_id": _report_attr_or_key(report, "report_id"),
+        "issuer_user_ref": _report_attr_or_key(report, "issuer_user_ref"),
+        "action": _report_attr_or_key(report, "action"),
+        "scope": _report_attr_or_key(report, "scope"),
+        "created_at": _report_attr_or_key(report, "created_at"),
+        "requested_share_ids": list(_report_attr_or_key(report, "requested_share_ids", ()) or ()),
+        "affected_share_ids": list(_report_attr_or_key(report, "affected_share_ids", ()) or ()),
+        "affected_share_count": int(_report_attr_or_key(report, "affected_share_count", 0) or 0),
+        "before_total_share_count": int(_report_attr_or_key(report, "before_total_share_count", 0) or 0),
+        "after_total_share_count": int(_report_attr_or_key(report, "after_total_share_count", 0) or 0),
+        "actor_user_ref": _report_attr_or_key(report, "actor_user_ref"),
+        "expires_at": _report_attr_or_key(report, "expires_at"),
+        "archived": _report_attr_or_key(report, "archived"),
+    }
+
+
+def _issuer_share_management_action_report_summary_body(summary) -> dict[str, Any]:
+    return {
+        "issuer_user_ref": summary.issuer_user_ref,
+        "total_report_count": summary.total_report_count,
+        "revoke_report_count": summary.revoke_report_count,
+        "extend_report_count": summary.extend_report_count,
+        "archive_report_count": summary.archive_report_count,
+        "delete_report_count": summary.delete_report_count,
+        "total_requested_share_count": summary.total_requested_share_count,
+        "total_affected_share_count": summary.total_affected_share_count,
+        "latest_report_at": summary.latest_report_at,
+    }
+
+
 def _issuer_share_governance_summary_body(summary) -> dict[str, Any]:
     return {
         "issuer_user_ref": summary.issuer_user_ref,
@@ -1555,7 +1593,7 @@ def _issuer_share_governance_summary_body(summary) -> dict[str, Any]:
         "latest_updated_at": summary.latest_updated_at,
         "latest_audit_event_at": summary.latest_audit_event_at,
         "latest_action_report_at": summary.latest_action_report_at,
-        "recent_action_reports": [_to_jsonable(report) for report in summary.recent_action_reports],
+        "recent_action_reports": [_issuer_share_management_action_report_entry_body(report) for report in summary.recent_action_reports],
     }
 
 
@@ -2573,8 +2611,8 @@ class RunHttpRouteSurface:
         return _route_response(200, {
             "status": "ready",
             "issuer_user_ref": request_auth.requested_by_user_ref,
-            "summary": summary,
-            "inventory_summary": inventory_summary,
+            "summary": _issuer_share_management_action_report_summary_body(summary),
+            "inventory_summary": _issuer_share_management_action_report_summary_body(inventory_summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "management_capability_summary": management_capability_summary,
             "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
@@ -2589,7 +2627,7 @@ class RunHttpRouteSurface:
                 "has_more": has_more,
                 "next_offset": resolved_offset + returned_count if has_more else None,
             },
-            "reports": reports,
+            "reports": [_issuer_share_management_action_report_entry_body(report) for report in reports],
             "links": {
                 "self": "/api/users/me/public-shares/action-reports",
                 "summary": "/api/users/me/public-shares/action-reports/summary",
@@ -2644,8 +2682,8 @@ class RunHttpRouteSurface:
         return _route_response(200, {
             "status": "ready",
             "issuer_user_ref": request_auth.requested_by_user_ref,
-            "summary": summary,
-            "inventory_summary": inventory_summary,
+            "summary": _issuer_share_management_action_report_summary_body(summary),
+            "inventory_summary": _issuer_share_management_action_report_summary_body(inventory_summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "management_capability_summary": management_capability_summary,
             "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
@@ -2749,7 +2787,7 @@ class RunHttpRouteSurface:
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
-            "action_report": persisted_action_report,
+            "action_report": _issuer_share_management_action_report_entry_body(persisted_action_report),
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
@@ -2862,7 +2900,7 @@ class RunHttpRouteSurface:
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
-            "action_report": persisted_action_report,
+            "action_report": _issuer_share_management_action_report_entry_body(persisted_action_report),
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
@@ -2966,7 +3004,7 @@ class RunHttpRouteSurface:
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
-            "action_report": persisted_action_report,
+            "action_report": _issuer_share_management_action_report_entry_body(persisted_action_report),
             "links": {
                 "shares": "/api/users/me/public-shares",
                 "summary": "/api/users/me/public-shares/summary",
@@ -3068,7 +3106,7 @@ class RunHttpRouteSurface:
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in deleted_entries],
-            "action_report": persisted_action_report,
+            "action_report": _issuer_share_management_action_report_entry_body(persisted_action_report),
             "links": {
                 "self": "/api/users/me/public-shares/actions/delete",
                 "shares": "/api/users/me/public-shares",
@@ -3634,7 +3672,7 @@ class RunHttpRouteSurface:
                 "artifact_format_family": extended_descriptor.artifact_format_family,
                 "source_working_save_id": extended_descriptor.source_working_save_id,
             },
-            "action_report": persisted_action_report,
+            "action_report": _issuer_share_management_action_report_entry_body(persisted_action_report),
             "share_boundary": _public_share_boundary_body(),
             "artifact_boundary": _public_artifact_boundary_body(persisted["artifact"]),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
@@ -3760,7 +3798,7 @@ class RunHttpRouteSurface:
                 "artifact_format_family": revoked_descriptor.artifact_format_family,
                 "source_working_save_id": revoked_descriptor.source_working_save_id,
             },
-            "action_report": persisted_action_report,
+            "action_report": _issuer_share_management_action_report_entry_body(persisted_action_report),
             "share_boundary": _public_share_boundary_body(),
             "artifact_boundary": _public_artifact_boundary_body(persisted["artifact"]),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
@@ -3895,7 +3933,7 @@ class RunHttpRouteSurface:
                 "artifact_format_family": updated_descriptor.artifact_format_family,
                 "source_working_save_id": updated_descriptor.source_working_save_id,
             },
-            "action_report": persisted_action_report,
+            "action_report": _issuer_share_management_action_report_entry_body(persisted_action_report),
             "share_boundary": _public_share_boundary_body(),
             "artifact_boundary": _public_artifact_boundary_body(persisted["artifact"]),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
@@ -4046,7 +4084,7 @@ class RunHttpRouteSurface:
             },
             "share_boundary": _public_share_boundary_body(),
             "artifact_boundary": _public_artifact_boundary_body(payload["artifact"]),
-            "action_report": persisted_action_report,
+            "action_report": _issuer_share_management_action_report_entry_body(persisted_action_report),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
             "links": {
                 "shares": "/api/users/me/public-shares",

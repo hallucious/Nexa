@@ -50,8 +50,10 @@ from src.sdk.server import (
     ProductWorkspaceProviderBindingsResponse,
     ProductWorkspaceProviderHealthResponse,
     ProductWorkspaceWriteAcceptedResponse,
+    ProductIssuerPublicShareActionReportEntryView,
     ProductIssuerPublicShareActionReportListResponse,
     ProductIssuerPublicShareActionReportSummaryResponse,
+    ProductIssuerPublicShareActionReportSummaryView,
     ProductIssuerPublicShareBulkMutationResponse,
     ProductIssuerPublicShareListResponse,
     ProductIssuerPublicShareSummaryResponse,
@@ -83,6 +85,9 @@ from src.sdk.server import (
     ProductWorkspaceShellShareCreatedResponse,
 )
 from src.server.public_share_models import (
+    ProductIssuerPublicShareGovernanceSummaryView,
+    ProductIssuerPublicShareManagementCapabilitySummaryView,
+    ProductIssuerPublicShareSummaryView,
     ProductPublicShareAuditSummaryView,
     ProductPublicShareHistoryEntryView,
     ProductPublicShareLifecycleView,
@@ -568,12 +573,127 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
         governance_summary={"total_share_count": 1},
         identity=detail.identity,
     )
+    action_report_summary = ProductIssuerPublicShareActionReportSummaryView(
+        issuer_user_ref="user-1",
+        total_report_count=2,
+        revoke_report_count=1,
+        extend_report_count=0,
+        archive_report_count=1,
+        delete_report_count=0,
+        total_requested_share_count=3,
+        total_affected_share_count=2,
+        latest_report_at="2026-04-16T01:00:00Z",
+    )
+    action_report_entry = ProductIssuerPublicShareActionReportEntryView(
+        report_id="report-1",
+        issuer_user_ref="user-1",
+        action="archive",
+        scope="bulk_selection",
+        created_at="2026-04-16T01:00:00Z",
+        requested_share_ids=("share-1", "share-2"),
+        affected_share_ids=("share-1",),
+        affected_share_count=1,
+        before_total_share_count=2,
+        after_total_share_count=2,
+        actor_user_ref="user-1",
+        archived=True,
+    )
+    action_report_list = ProductIssuerPublicShareActionReportListResponse(
+        status="ready",
+        issuer_user_ref="user-1",
+        summary=action_report_summary,
+        inventory_summary=action_report_summary,
+        governance_summary=ProductIssuerPublicShareSummaryResponse(
+            status="ready",
+            issuer_user_ref="user-1",
+            summary=ProductIssuerPublicShareSummaryView(
+                issuer_user_ref="user-1",
+                total_share_count=1,
+                active_share_count=1,
+                expired_share_count=0,
+                revoked_share_count=0,
+                archived_share_count=0,
+                working_save_share_count=0,
+                commit_snapshot_share_count=1,
+                runnable_share_count=1,
+                checkoutable_share_count=1,
+            ),
+            inventory_summary=ProductIssuerPublicShareSummaryView(
+                issuer_user_ref="user-1",
+                total_share_count=1,
+                active_share_count=1,
+                expired_share_count=0,
+                revoked_share_count=0,
+                archived_share_count=0,
+                working_save_share_count=0,
+                commit_snapshot_share_count=1,
+                runnable_share_count=1,
+                checkoutable_share_count=1,
+            ),
+            governance_summary=ProductIssuerPublicShareGovernanceSummaryView(
+                issuer_user_ref="user-1",
+                total_share_count=1,
+                active_share_count=1,
+                expired_share_count=0,
+                revoked_share_count=0,
+                archived_share_count=0,
+                working_save_share_count=0,
+                commit_snapshot_share_count=1,
+                runnable_share_count=1,
+                checkoutable_share_count=1,
+                total_action_report_count=1,
+                revoke_action_report_count=0,
+                extend_action_report_count=0,
+                archive_action_report_count=1,
+                delete_action_report_count=0,
+                recent_action_reports=(action_report_entry,),
+            ),
+            management_capability_summary=ProductIssuerPublicShareManagementCapabilitySummaryView(
+                total_share_count=1,
+                revokable_share_count=1,
+                extendable_share_count=1,
+                archivable_share_count=1,
+                unarchivable_share_count=0,
+                deletable_share_count=1,
+            ),
+        ).governance_summary,
+        management_capability_summary=ProductIssuerPublicShareManagementCapabilitySummaryView(
+            total_share_count=1,
+            revokable_share_count=1,
+            extendable_share_count=1,
+            archivable_share_count=1,
+            unarchivable_share_count=0,
+            deletable_share_count=1,
+        ),
+        reports=(action_report_entry,),
+    )
+    action_report_summary_response = ProductIssuerPublicShareActionReportSummaryResponse(
+        status="ready",
+        issuer_user_ref="user-1",
+        summary=action_report_summary,
+        inventory_summary=action_report_summary,
+        governance_summary=action_report_list.governance_summary,
+        management_capability_summary=action_report_list.management_capability_summary,
+    )
+    bulk_mutation = ProductIssuerPublicShareBulkMutationResponse(
+        status="ready",
+        issuer_user_ref="user-1",
+        action="archive",
+        summary=action_report_list.governance_summary,
+        governance_summary=action_report_list.governance_summary,
+        management_capability_summary=action_report_list.management_capability_summary,
+        action_report=action_report_entry,
+    )
 
     assert server.PUBLIC_SERVER_SDK_SURFACE_VERSION == "1.0"
     assert created.workspace_id == "ws-1"
     assert history.history[0].event_id == "evt-1"
     assert artifact.artifact["meta"]["storage_role"] == "commit_snapshot"
     assert mutation.governance_summary == {"total_share_count": 1}
+    assert action_report_list.reports[0].report_id == "report-1"
+    assert action_report_summary_response.summary.total_report_count == 2
+    assert bulk_mutation.action_report is not None
+    assert bulk_mutation.action_report.action == "archive"
     assert detail.identity == {"canonical_key": "share_id", "canonical_value": "share-1"}
 
 
