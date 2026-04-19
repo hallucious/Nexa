@@ -557,6 +557,36 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
         artifact={"meta": {"storage_role": "commit_snapshot"}},
         links=detail.links,
     )
+    mutation_governance_summary = ProductIssuerPublicShareGovernanceSummaryView(
+        issuer_user_ref="user-1",
+        total_share_count=1,
+        active_share_count=1,
+        expired_share_count=0,
+        revoked_share_count=0,
+        archived_share_count=0,
+        working_save_share_count=0,
+        commit_snapshot_share_count=1,
+        runnable_share_count=1,
+        checkoutable_share_count=1,
+        total_action_report_count=0,
+        revoke_action_report_count=0,
+        extend_action_report_count=0,
+        archive_action_report_count=0,
+        delete_action_report_count=0,
+    )
+    mutation_action_report = ProductIssuerPublicShareActionReportEntryView(
+        report_id="report-mutation-1",
+        issuer_user_ref="user-1",
+        action="revoke",
+        scope="single_share",
+        created_at="2026-04-16T00:30:00Z",
+        requested_share_ids=("share-1",),
+        affected_share_ids=("share-1",),
+        affected_share_count=1,
+        before_total_share_count=1,
+        after_total_share_count=1,
+        actor_user_ref="user-1",
+    )
     mutation = ProductPublicShareMutationResponse(
         status="updated",
         share_id="share-1",
@@ -570,7 +600,8 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
         share_boundary=detail.share_boundary,
         artifact_boundary=detail.artifact_boundary,
         links=detail.links,
-        governance_summary={"total_share_count": 1},
+        action_report=mutation_action_report,
+        governance_summary=mutation_governance_summary,
         identity=detail.identity,
     )
     action_report_summary = ProductIssuerPublicShareActionReportSummaryView(
@@ -689,7 +720,10 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
     assert created.workspace_id == "ws-1"
     assert history.history[0].event_id == "evt-1"
     assert artifact.artifact["meta"]["storage_role"] == "commit_snapshot"
-    assert mutation.governance_summary == {"total_share_count": 1}
+    assert mutation.action_report is not None
+    assert mutation.action_report.action == "revoke"
+    assert mutation.governance_summary is not None
+    assert mutation.governance_summary.total_share_count == 1
     assert action_report_list.reports[0].report_id == "report-1"
     assert action_report_summary_response.summary.total_report_count == 2
     assert bulk_mutation.action_report is not None

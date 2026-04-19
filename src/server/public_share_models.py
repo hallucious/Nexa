@@ -203,8 +203,8 @@ class ProductPublicShareArtifactResponse:
 
 @dataclass(frozen=True)
 class ProductPublicShareMutationResponse(ProductPublicShareDetailResponse):
-    action_report: Optional[dict[str, Any]] = None
-    governance_summary: Optional[dict[str, Any]] = None
+    action_report: Optional[ProductIssuerPublicShareActionReportEntryView] = None
+    governance_summary: Optional[ProductIssuerPublicShareGovernanceSummaryView] = None
 
 
 @dataclass(frozen=True)
