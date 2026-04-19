@@ -355,6 +355,18 @@ def test_public_share_related_and_compare_routes_return_summary() -> None:
     assert compare.body["capability_summary"]["can_run_artifact"] is True
     assert compare.body["action_availability"]["run"]["allowed"] is True
 
+    compare_full = RunHttpRouteSurface.handle_get_public_share_compare(
+        http_request=HttpRouteRequest(method="GET", path="/api/public-shares/share-owner-active/compare", path_params={"share_id": "share-owner-active"}, query_params={"workspace_id": "ws-001"}),
+        share_payload_provider=lambda share_id: next((row for row in _issuer_share_rows() if row["share"]["share_id"] == share_id), None),
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Workspace", "continuity_source": "server", "archived": False},
+        workspace_artifact_source_provider=lambda _workspace_id: _working_save("ws-http-compare"),
+    )
+    assert compare_full.status_code == 200
+    assert compare_full.body["compare"]["workspace_found"] is True
+    assert compare_full.body["compare"]["share_artifact"]["meta"]["storage_role"] == "commit_snapshot"
+    assert compare_full.body["compare"]["workspace_artifact"]["meta"]["storage_role"] == "working_save"
+    assert compare_full.body["namespace_policy"]["family"] == "public-share-compare"
+
 
 def test_public_share_route_returns_descriptor_without_authentication() -> None:
     response = RunHttpRouteSurface.handle_get_public_share(

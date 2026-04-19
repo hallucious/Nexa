@@ -1092,6 +1092,17 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/public-shares/{share_id}/compare")
+        async def get_public_share_compare(request: Request, share_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
+            outbound = FrameworkRouteBindings.handle_get_public_share_compare(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                workspace_row_provider=self.dependencies.workspace_row_provider,
+                workspace_artifact_source_provider=self.dependencies.workspace_artifact_source_provider,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/public-shares/{share_id}/compare-summary")
         async def get_public_share_compare_summary(request: Request, share_id: str) -> Response:
             inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
@@ -1805,59 +1816,28 @@ class FastApiRouteBindings:
 
         @router.get("/app/public-shares/{share_id}/compare")
         async def get_public_share_compare_page(request: Request, share_id: str) -> Response:
-            from src.server.http_route_surface import RunHttpRouteSurface
-            from src.storage.serialization import serialize_nex_artifact
-
             query = dict(request.query_params)
             app_language = str(query.get("app_language") or "en")
             workspace_id = str(query.get("workspace_id") or "").strip() or None
             inbound = FrameworkInboundRequest(
                 method="GET",
-                path=f"/api/public-shares/{share_id}",
+                path=f"/api/public-shares/{share_id}/compare",
                 headers=dict(request.headers),
                 path_params={"share_id": share_id},
                 query_params=query,
                 json_body=None,
                 session_claims=self._resolve_session_claims(request),
             )
-            outbound = FrameworkRouteBindings.handle_get_public_share(
+            outbound = FrameworkRouteBindings.handle_get_public_share_compare(
                 request=inbound,
                 share_payload_provider=self.dependencies.public_share_payload_provider,
+                workspace_row_provider=self.dependencies.workspace_row_provider,
+                workspace_artifact_source_provider=self.dependencies.workspace_artifact_source_provider,
             )
             framework_response = self._framework_response(outbound)
             if framework_response.status_code != 200:
                 return framework_response
             payload = json.loads(outbound.body_text)
-            artifact_inbound = FrameworkInboundRequest(
-                method="GET",
-                path=f"/api/public-shares/{share_id}/artifact",
-                headers=dict(request.headers),
-                path_params={"share_id": share_id},
-                query_params=query,
-                json_body=None,
-                session_claims=self._resolve_session_claims(request),
-            )
-            artifact_outbound = FrameworkRouteBindings.handle_get_public_share_artifact(
-                request=artifact_inbound,
-                share_payload_provider=self.dependencies.public_share_payload_provider,
-            )
-            artifact_response = self._framework_response(artifact_outbound)
-            if artifact_response.status_code != 200:
-                return artifact_response
-            artifact_payload = json.loads(artifact_outbound.body_text)
-            compare_payload: dict[str, Any] = {
-                "workspace_id": workspace_id,
-                "workspace_found": False,
-                "share_artifact": dict(artifact_payload.get("artifact") or {}),
-            }
-            if workspace_id:
-                workspace_row = self.dependencies.workspace_row_provider(workspace_id)
-                if workspace_row is not None:
-                    artifact_source = self.dependencies.workspace_artifact_source_provider(workspace_id)
-                    _source, model, _loaded = RunHttpRouteSurface._load_workspace_shell_artifact_model(workspace_row, artifact_source)
-                    compare_payload["workspace_found"] = True
-                    compare_payload["workspace_artifact"] = serialize_nex_artifact(model)
-            payload["compare"] = compare_payload
             payload["app_language"] = app_language
             return HTMLResponse(content=render_public_share_compare_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
 

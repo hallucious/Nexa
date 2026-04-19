@@ -468,6 +468,21 @@ class ProductPublicShareCompareSummaryView:
 
 
 @dataclass(frozen=True)
+class ProductPublicShareCompareView:
+    workspace_found: bool
+    share_artifact: dict[str, Any]
+    workspace_id: Optional[str] = None
+    workspace_artifact: Optional[dict[str, Any]] = None
+    share_storage_role: Optional[str] = None
+    workspace_storage_role: Optional[str] = None
+    storage_role_match: bool = False
+    canonical_ref_match: bool = False
+    artifact_digest_match: bool = False
+    share_summary: dict[str, Any] = field(default_factory=dict)
+    workspace_summary: Optional[dict[str, Any]] = None
+
+
+@dataclass(frozen=True)
 class ProductPublicShareCatalogResponse:
     status: str
     returned_count: int
@@ -676,6 +691,25 @@ class ProductPublicShareCompareSummaryResponse:
             raise ValueError("ProductPublicShareCompareSummaryResponse.status must be non-empty")
         if not self.share_id:
             raise ValueError("ProductPublicShareCompareSummaryResponse.share_id must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareCompareResponse:
+    status: str
+    share_id: str
+    compare: ProductPublicShareCompareView
+    capability_summary: ProductPublicShareCapabilitySummaryView = field(default_factory=ProductPublicShareCapabilitySummaryView)
+    action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity: Optional[dict[str, Any]] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareCompareResponse.status must be non-empty")
+        if not self.share_id:
+            raise ValueError("ProductPublicShareCompareResponse.share_id must be non-empty")
 
 
 

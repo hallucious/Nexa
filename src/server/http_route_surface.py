@@ -641,16 +641,33 @@ def _public_share_compare_identity_policy_body() -> dict[str, Any]:
     return {
         "canonical_key": "share_id",
         "lookup_mode": "share_id_only",
-        "surface_family": "public-share-compare-summary",
+        "surface_family": "public-share-compare",
         "member_identity_policy": _public_share_identity_policy_body(),
     }
 
 
 def _public_share_compare_namespace_policy_body() -> dict[str, Any]:
     return {
+        "family": "public-share-compare",
+        "canonical_route": "/api/public-shares/{share_id}/compare",
+        "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
+
+def _public_share_compare_summary_identity_policy_body() -> dict[str, Any]:
+    policy = _public_share_compare_identity_policy_body()
+    return {
+        **policy,
+        "surface_family": "public-share-compare-summary",
+    }
+
+
+def _public_share_compare_summary_namespace_policy_body() -> dict[str, Any]:
+    policy = _public_share_compare_namespace_policy_body()
+    return {
+        **policy,
         "family": "public-share-compare-summary",
         "canonical_route": "/api/public-shares/{share_id}/compare-summary",
-        "member_namespace_policy": _public_share_namespace_policy_body(),
     }
 
 
@@ -1928,6 +1945,7 @@ class RunHttpRouteSurface:
         ("save_public_share", "POST", "/api/public-shares/{share_id}/save"),
         ("unsave_public_share", "POST", "/api/public-shares/{share_id}/unsave"),
         ("get_related_public_shares", "GET", "/api/public-shares/{share_id}/related"),
+        ("get_public_share_compare", "GET", "/api/public-shares/{share_id}/compare"),
         ("get_public_share_compare_summary", "GET", "/api/public-shares/{share_id}/compare-summary"),
         ("get_public_share", "GET", "/api/public-shares/{share_id}"),
         ("get_public_share_history", "GET", "/api/public-shares/{share_id}/history"),
@@ -3809,6 +3827,45 @@ class RunHttpRouteSurface:
         })
 
     @classmethod
+    def handle_get_public_share_compare(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_provider: Callable[[str], Mapping[str, Any] | None] | None = None,
+        workspace_row_provider: Callable[[str], Mapping[str, Any] | None] | None = None,
+        workspace_artifact_source_provider: Callable[[str], Any | None] | None = None,
+    ) -> HttpRouteResponse:
+        share_id = str((http_request.path_params or {}).get("share_id") or "").strip()
+        if http_request.method.upper() != "GET" or http_request.path != f"/api/public-shares/{share_id}/compare" or not share_id:
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        payload = share_payload_provider(share_id) if share_payload_provider is not None else None
+        if payload is None:
+            return _route_response(404, {"status": "missing", "reason_code": "public_share.not_found", "share_id": share_id})
+        descriptor = describe_public_nex_link_share(payload)
+        workspace_id = str((http_request.query_params or {}).get("workspace_id") or "").strip() or None
+        workspace_artifact = None
+        if workspace_id and workspace_row_provider is not None and workspace_artifact_source_provider is not None:
+            workspace_row = workspace_row_provider(workspace_id)
+            artifact_source = workspace_artifact_source_provider(workspace_id)
+            workspace_artifact = _workspace_artifact_mapping(workspace_row, artifact_source) if workspace_row is not None else None
+        compare = _public_share_compare_summary_body(payload.get("artifact") if isinstance(payload, Mapping) else None, workspace_artifact, workspace_id=workspace_id)
+        return _route_response(200, {
+            "status": "ready",
+            "share_id": share_id,
+            "identity": _public_share_identity_body(descriptor),
+            "capability_summary": _public_share_capability_summary_body(descriptor),
+            "action_availability": _public_share_action_availability_body(descriptor),
+            "compare": compare,
+            "links": {
+                "detail": f"/api/public-shares/{share_id}",
+                "artifact": f"/api/public-shares/{share_id}/artifact",
+                "compare_summary": f"/api/public-shares/{share_id}/compare-summary",
+            },
+            "identity_policy": _public_share_compare_identity_policy_body(),
+            "namespace_policy": _public_share_compare_namespace_policy_body(),
+        })
+
+    @classmethod
     def handle_get_public_share_compare_summary(
         cls,
         http_request: HttpRouteRequest,
@@ -3839,8 +3896,8 @@ class RunHttpRouteSurface:
             "action_availability": _public_share_action_availability_body(descriptor),
             "compare": compare,
             "links": {"detail": f"/api/public-shares/{share_id}", "artifact": f"/api/public-shares/{share_id}/artifact"},
-            "identity_policy": _public_share_compare_identity_policy_body(),
-            "namespace_policy": _public_share_compare_namespace_policy_body(),
+            "identity_policy": _public_share_compare_summary_identity_policy_body(),
+            "namespace_policy": _public_share_compare_summary_namespace_policy_body(),
         })
 
     @classmethod

@@ -3598,6 +3598,7 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "save_public_share": "handle_save_public_share",
     "unsave_public_share": "handle_unsave_public_share",
     "get_related_public_shares": "handle_get_related_public_shares",
+    "get_public_share_compare": "handle_get_public_share_compare",
     "get_public_share_compare_summary": "handle_get_public_share_compare_summary",
     "get_public_share": "handle_get_public_share",
     "get_public_share_history": "handle_get_public_share_history",
@@ -3919,6 +3920,10 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share whose related catalog entries should be read."),),
         "query_fields": (_schema_field("limit", "query", "integer", description="Optional maximum related entries to return."),),
     },
+    "get_public_share_compare": {
+        "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share whose compare payload should be read."),),
+        "query_fields": (_schema_field("workspace_id", "query", "string", description="Optional workspace identifier for compare payload."),),
+    },
     "get_public_share_compare_summary": {
         "path_fields": (_schema_field("share_id", "path", "string", required=True, description="Public share whose compare summary should be read."),),
         "query_fields": (_schema_field("workspace_id", "query", "string", description="Optional workspace identifier for compare summary."),),
@@ -4151,6 +4156,7 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "save_public_share": {"route_family": "saved-public-share-mutation", "transport_profile": "path-only"},
     "unsave_public_share": {"route_family": "saved-public-share-mutation", "transport_profile": "path-only"},
     "get_related_public_shares": {"route_family": "public-share-related", "transport_profile": "path-and-query"},
+    "get_public_share_compare": {"route_family": "public-share-compare", "transport_profile": "path-and-query"},
     "get_public_share_compare_summary": {"route_family": "public-share-compare-summary", "transport_profile": "path-and-query"},
     "get_public_share": {"route_family": "public-share-read", "transport_profile": "path-only"},
     "get_public_share_history": {"route_family": "public-share-history", "transport_profile": "path-only"},
@@ -4609,6 +4615,15 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "safe_to_retry_same_request_on_response_timeout": True,
         "response_timeout_recommended_action": "retry_same_request",
     },
+    "public-share-compare": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
     "public-share-compare-summary": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
@@ -4997,7 +5012,13 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
     "public-share-related": {
         "lifecycle_class": "public-share-discovery",
         "status_resource_name": "get_public_share",
-        "followup_route_names": ("get_public_share", "get_public_share_compare_summary", "get_public_share_artifact"),
+        "followup_route_names": ("get_public_share", "get_public_share_compare", "get_public_share_compare_summary", "get_public_share_artifact"),
+    },
+    "public-share-compare": {
+        "lifecycle_class": "public-share-compare",
+        "status_resource_name": "get_public_share",
+        "result_resource_name": "get_public_share_artifact",
+        "followup_route_names": ("get_public_share_compare_summary", "get_public_share", "get_public_share_artifact", "get_related_public_shares"),
     },
     "public-share-compare-summary": {
         "lifecycle_class": "public-share-compare",
@@ -5391,6 +5412,11 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "count_field_name": "total_related_count",
         "collection_item_identity_keys": ("share_id", "identity"),
     },
+    "get_public_share_compare": {
+        "profile_kind": "public-share-compare",
+        "identity_keys": ("share_id", "identity", "identity_policy", "namespace_policy"),
+        "state_keys": ("status",),
+    },
     "get_public_share_compare_summary": {
         "profile_kind": "public-share-compare-summary",
         "identity_keys": ("share_id", "identity", "identity_policy", "namespace_policy"),
@@ -5593,6 +5619,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "save_public_share": {"response_shape": "saved-public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "saved_by_user_ref", "saved", "status", "action", "identity_policy", "namespace_policy")},
     "unsave_public_share": {"response_shape": "saved-public-share-mutation", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "saved_by_user_ref", "saved", "status", "action", "identity_policy", "namespace_policy")},
     "get_related_public_shares": {"response_shape": "related-public-share-collection", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "shares", "related_summary", "status", "identity_policy", "namespace_policy")},
+    "get_public_share_compare": {"response_shape": "public-share-compare", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "compare", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")},
     "get_public_share_compare_summary": {"response_shape": "public-share-compare-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "compare", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")},
     "get_public_share": {"response_shape": "public-share-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "share_path", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")},
     "get_public_share_history": {"response_shape": "public-share-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("share_id", "history", "identity_policy", "namespace_policy")},
@@ -6075,6 +6102,13 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "List related public shares for a target public share.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductRelatedPublicShareResponse"),
         "tags": ("public-share", "related", "list"),
+    },
+    {
+        "name": "get_public_share_compare",
+        "route_name": "get_public_share_compare",
+        "description": "Read a full compare payload between a public share artifact and an optional workspace artifact.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicShareCompareResponse"),
+        "tags": ("public-share", "compare", "full"),
     },
     {
         "name": "get_public_share_compare_summary",

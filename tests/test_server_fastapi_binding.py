@@ -2131,6 +2131,11 @@ def test_fastapi_binding_public_share_api_catalog_saved_related_and_compare_roun
     assert related_response.status_code == 200
     assert related_response.json()['related_summary']['total_related_count'] == 1
 
+    compare_full_response = client.get('/api/public-shares/share-fastapi-001/compare?workspace_id=ws-001', headers=_session_headers())
+    assert compare_full_response.status_code == 200
+    assert compare_full_response.json()['compare']['workspace_found'] is True
+    assert compare_full_response.json()['compare']['share_artifact']['meta']['storage_role'] == 'commit_snapshot'
+
     compare_response = client.get('/api/public-shares/share-fastapi-001/compare-summary?workspace_id=ws-001', headers=_session_headers())
     assert compare_response.status_code == 200
     assert compare_response.json()['compare']['workspace_found'] is True

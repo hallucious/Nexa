@@ -153,6 +153,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "save_public_share",
         "unsave_public_share",
         "get_related_public_shares",
+        "get_public_share_compare",
         "get_public_share_compare_summary",
         "get_public_share",
         "get_public_share_history",
@@ -588,6 +589,18 @@ def test_framework_binding_handles_related_and_compare_public_share_round_trip()
     assert parsed_compare["compare"]["share_storage_role"] == "commit_snapshot"
     assert parsed_compare["compare"]["workspace_storage_role"] == "working_save"
     assert parsed_compare["namespace_policy"]["family"] == "public-share-compare-summary"
+
+    compare_full = FrameworkRouteBindings.handle_get_public_share_compare(
+        request=_request(method="GET", path="/api/public-shares/share-framework-owner-active/compare", path_params={"share_id": "share-framework-owner-active"}, query_params={"workspace_id": "ws-001"}),
+        share_payload_provider=lambda share_id: next((row for row in _issuer_share_rows() if row["share"]["share_id"] == share_id), None),
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Workspace", "continuity_source": "server", "archived": False},
+        workspace_artifact_source_provider=lambda _workspace_id: _working_save("ws-compare-001"),
+    )
+    parsed_compare_full = json.loads(compare_full.body_text)
+    assert parsed_compare_full["compare"]["workspace_found"] is True
+    assert parsed_compare_full["compare"]["share_artifact"]["meta"]["storage_role"] == "commit_snapshot"
+    assert parsed_compare_full["compare"]["workspace_artifact"]["meta"]["storage_role"] == "working_save"
+    assert parsed_compare_full["namespace_policy"]["family"] == "public-share-compare"
 
 
 def test_framework_binding_handles_public_share_round_trip() -> None:

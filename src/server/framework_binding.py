@@ -311,6 +311,12 @@ class FrameworkRouteBindings:
             summary="List related public shares for a target public share.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_public_share_compare",
+            method="GET",
+            path_template="/api/public-shares/{share_id}/compare",
+            summary="Read a full compare payload between a public share artifact and an optional workspace artifact.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_public_share_compare_summary",
             method="GET",
             path_template="/api/public-shares/{share_id}/compare-summary",
@@ -1618,6 +1624,23 @@ class FrameworkRouteBindings:
             share_payload_rows_provider=share_payload_rows_provider,
             saved_public_share_rows_provider=saved_public_share_rows_provider,
             now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_public_share_compare(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_provider=None,
+        workspace_row_provider=None,
+        workspace_artifact_source_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_public_share_compare(
+            cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+            workspace_row_provider=workspace_row_provider,
+            workspace_artifact_source_provider=workspace_artifact_source_provider,
         )
         return cls.to_framework_response(response)
 
