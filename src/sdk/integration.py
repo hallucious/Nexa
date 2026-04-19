@@ -3588,6 +3588,8 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "list_provider_probe_history": "handle_list_provider_probe_history",
     "get_onboarding": "handle_get_onboarding",
     "create_workspace_shell_share": "handle_create_workspace_shell_share",
+    "get_workspace_public_share_history": "handle_get_workspace_public_share_history",
+    "get_workspace_public_share_create_context": "handle_get_workspace_public_share_create_context",
     "list_public_shares": "handle_list_public_shares",
     "get_public_share_catalog_summary": "handle_get_public_share_catalog_summary",
     "list_public_shares_by_issuer": "handle_list_public_shares_by_issuer",
@@ -3868,6 +3870,12 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             _schema_field("expires_at", "body", "string", description="Optional expiration timestamp for the share."),
         ),
     },
+    "get_workspace_public_share_history": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose public share history should be read."),),
+    },
+    "get_workspace_public_share_create_context": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose share creation context should be read."),),
+    },
     "list_public_shares": {
         "query_fields": (
             _schema_field("q", "query", "string", description="Optional text search for catalog entries."),
@@ -4133,6 +4141,8 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "get_onboarding": {"route_family": "onboarding-read", "transport_profile": "no-arguments"},
     "put_onboarding": {"route_family": "onboarding-write", "transport_profile": "body-only"},
     "create_workspace_shell_share": {"route_family": "public-share-create", "transport_profile": "path-and-body"},
+    "get_workspace_public_share_history": {"route_family": "workspace-public-share-history", "transport_profile": "path-only"},
+    "get_workspace_public_share_create_context": {"route_family": "workspace-public-share-create-context", "transport_profile": "path-only"},
     "list_public_shares": {"route_family": "public-share-catalog", "transport_profile": "query-only"},
     "get_public_share_catalog_summary": {"route_family": "public-share-catalog-summary", "transport_profile": "query-only"},
     "list_public_shares_by_issuer": {"route_family": "public-share-issuer-catalog", "transport_profile": "path-and-query"},
@@ -4617,6 +4627,24 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "safe_to_retry_same_request_on_response_timeout": False,
         "response_timeout_recommended_action": "inspect_share_creation_outcome_before_retry",
     },
+    "workspace-public-share-history": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "workspace-public-share-create-context": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
     "public-share-read": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
@@ -4929,6 +4957,16 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "lifecycle_class": "workspace-feedback-write",
         "status_resource_name": "get_workspace_feedback",
         "followup_route_names": ("get_workspace_feedback", "get_workspace_result_history", "get_workspace_shell"),
+    },
+    "workspace-public-share-history": {
+        "lifecycle_class": "workspace-public-share-history",
+        "result_resource_name": "get_workspace_public_share_history",
+        "followup_route_names": ("get_workspace_public_share_history", "get_workspace_public_share_create_context", "create_workspace_shell_share", "get_workspace_shell"),
+    },
+    "workspace-public-share-create-context": {
+        "lifecycle_class": "workspace-public-share-create-context",
+        "result_resource_name": "get_workspace_public_share_create_context",
+        "followup_route_names": ("get_workspace_public_share_create_context", "create_workspace_shell_share", "get_workspace_public_share_history", "get_workspace_shell"),
     },
     "public-share-catalog": {
         "lifecycle_class": "public-share-discovery",
@@ -5292,6 +5330,19 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "identity_keys": ("share_id", "identity", "identity_policy", "namespace_policy"),
         "state_keys": ("status",),
     },
+    "get_workspace_public_share_history": {
+        "profile_kind": "workspace-public-share-history",
+        "identity_keys": ("workspace_id", "canonical_ref", "identity_policy", "namespace_policy"),
+        "state_keys": ("status",),
+        "collection_field_name": "entries",
+        "count_field_name": "share_count",
+        "collection_item_identity_keys": ("share_id",),
+    },
+    "get_workspace_public_share_create_context": {
+        "profile_kind": "workspace-public-share-create-context",
+        "identity_keys": ("workspace_id", "canonical_ref", "identity_policy", "namespace_policy"),
+        "state_keys": ("status",),
+    },
     "list_public_shares": {
         "profile_kind": "public-share-catalog-collection",
         "identity_keys": ("identity_policy", "namespace_policy"),
@@ -5532,6 +5583,8 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_onboarding": {"response_shape": "onboarding-read", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("continuity_scope", "state", "links", "identity_policy", "namespace_policy")},
     "put_onboarding": {"response_shape": "onboarding-write", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "continuity_scope", "state", "links", "was_created", "identity_policy", "namespace_policy")},
     "create_workspace_shell_share": {"response_shape": "public-share-created", "success_status_codes": (201,), "body_kind": "object", "required_top_level_keys": ("share_id", "status", "identity_policy", "namespace_policy")},
+    "get_workspace_public_share_history": {"response_shape": "workspace-public-share-history", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("workspace_id", "share_count", "entries", "status", "identity_policy", "namespace_policy")},
+    "get_workspace_public_share_create_context": {"response_shape": "workspace-public-share-create-context", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("workspace_id", "share_count", "prefill_title", "prefill_summary", "status", "identity_policy", "namespace_policy")},
     "list_public_shares": {"response_shape": "public-share-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("returned_count", "shares", "status", "identity_policy", "namespace_policy")},
     "get_public_share_catalog_summary": {"response_shape": "public-share-catalog-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("summary", "status", "identity_policy", "namespace_policy")},
     "list_public_shares_by_issuer": {"response_shape": "public-share-issuer-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("issuer_user_ref", "returned_count", "shares", "status", "identity_policy", "namespace_policy")},
@@ -5966,6 +6019,20 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read the workspace feedback channel and prefilled product-learning entry surface.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceFeedbackReadResponse"),
         "tags": ("workspace", "feedback", "read"),
+    },
+    {
+        "name": "get_workspace_public_share_history",
+        "route_name": "get_workspace_public_share_history",
+        "description": "List public shares issued from the current workspace shell artifact lineage.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspacePublicShareHistoryResponse"),
+        "tags": ("workspace", "public-share", "history"),
+    },
+    {
+        "name": "get_workspace_public_share_create_context",
+        "route_name": "get_workspace_public_share_create_context",
+        "description": "Read share creation context for the current workspace shell artifact.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspacePublicShareCreateContextResponse"),
+        "tags": ("workspace", "public-share", "create-context"),
     },
     {
         "name": "list_public_shares",

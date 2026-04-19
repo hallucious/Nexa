@@ -579,6 +579,86 @@ class ProductRelatedPublicShareResponse:
             raise ValueError("ProductRelatedPublicShareResponse.share_id must be non-empty")
 
 
+
+
+@dataclass(frozen=True)
+class ProductWorkspacePublicShareHistoryEntryView:
+    share_id: str
+    share_path: str
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    state: Optional[str] = None
+    stored_state: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    archived: bool = False
+    audit_event_count: int = 0
+    operation_capabilities: tuple[str, ...] = ()
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+
+    def __post_init__(self) -> None:
+        if not self.share_id:
+            raise ValueError("ProductWorkspacePublicShareHistoryEntryView.share_id must be non-empty")
+        if not self.share_path:
+            raise ValueError("ProductWorkspacePublicShareHistoryEntryView.share_path must be non-empty")
+        if self.audit_event_count < 0:
+            raise ValueError("ProductWorkspacePublicShareHistoryEntryView.audit_event_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductWorkspacePublicShareHistoryResponse:
+    status: str
+    workspace_id: str
+    workspace_title: str
+    share_count: int
+    entries: tuple[ProductWorkspacePublicShareHistoryEntryView, ...] = ()
+    canonical_ref: Optional[str] = None
+    storage_role: Optional[str] = None
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductWorkspacePublicShareHistoryResponse.status must be non-empty")
+        if not self.workspace_id:
+            raise ValueError("ProductWorkspacePublicShareHistoryResponse.workspace_id must be non-empty")
+        if not self.workspace_title:
+            raise ValueError("ProductWorkspacePublicShareHistoryResponse.workspace_title must be non-empty")
+        if self.share_count < 0:
+            raise ValueError("ProductWorkspacePublicShareHistoryResponse.share_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductWorkspacePublicShareCreateContextResponse:
+    status: str
+    workspace_id: str
+    workspace_title: str
+    share_count: int
+    prefill_title: str
+    prefill_summary: str
+    prefill_expires_at: str = ""
+    canonical_ref: Optional[str] = None
+    storage_role: Optional[str] = None
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductWorkspacePublicShareCreateContextResponse.status must be non-empty")
+        if not self.workspace_id:
+            raise ValueError("ProductWorkspacePublicShareCreateContextResponse.workspace_id must be non-empty")
+        if not self.workspace_title:
+            raise ValueError("ProductWorkspacePublicShareCreateContextResponse.workspace_title must be non-empty")
+        if self.share_count < 0:
+            raise ValueError("ProductWorkspacePublicShareCreateContextResponse.share_count must be >= 0")
+        if not self.prefill_title:
+            raise ValueError("ProductWorkspacePublicShareCreateContextResponse.prefill_title must be non-empty")
+        if not self.prefill_summary:
+            raise ValueError("ProductWorkspacePublicShareCreateContextResponse.prefill_summary must be non-empty")
+
 @dataclass(frozen=True)
 class ProductPublicShareCompareSummaryResponse:
     status: str

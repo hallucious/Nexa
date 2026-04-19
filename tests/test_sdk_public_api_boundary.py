@@ -63,6 +63,8 @@ from src.sdk.server import (
     ProductPublicShareCapabilitySummaryView,
     ProductPublicShareCatalogResponse,
     ProductPublicShareCatalogSummaryResponse,
+    ProductWorkspacePublicShareHistoryResponse,
+    ProductWorkspacePublicShareCreateContextResponse,
     ProductPublicShareCompareSummaryResponse,
     ProductPublicShareDetailResponse,
     ProductPublicShareHistoryResponse,
@@ -797,6 +799,8 @@ def test_sdk_root_exposes_public_share_mcp_surface() -> None:
     assert "get_public_share" in resource_names
     assert "get_public_share_history" in resource_names
     assert "get_public_share_artifact" in resource_names
+    assert "get_workspace_public_share_history" in resource_names
+    assert "get_workspace_public_share_create_context" in resource_names
     assert "get_workspace_shell" in resource_names
     assert "put_workspace_shell_draft" in tool_names
     assert "create_workspace_shell_share" in tool_names

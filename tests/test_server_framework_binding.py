@@ -142,6 +142,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "commit_workspace_shell",
         "checkout_workspace_shell",
         "create_workspace_shell_share",
+        "get_workspace_public_share_history",
+        "get_workspace_public_share_create_context",
         "launch_workspace_shell",
         "list_public_shares",
         "get_public_share_catalog_summary",
@@ -531,6 +533,36 @@ def test_framework_binding_handles_saved_public_share_collection_round_trip() ->
     assert parsed["returned_count"] == 2
     assert parsed["shares"][0]["saved_at"] == "2026-04-16T09:00:00+00:00"
     assert parsed["identity_policy"]["canonical_key"] == "saved_by_user_ref"
+
+
+def test_framework_binding_handles_workspace_public_share_history_and_create_context_round_trip() -> None:
+    history = FrameworkRouteBindings.handle_get_workspace_public_share_history(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shares", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "title": "Workspace One"},
+        artifact_source=_commit_snapshot("snap-framework-owner-active"),
+        share_payload_rows_provider=_issuer_share_rows,
+    )
+    parsed_history = json.loads(history.body_text)
+    assert history.status_code == 200
+    assert parsed_history["workspace_id"] == "ws-001"
+    assert parsed_history["share_count"] == 1
+    assert parsed_history["entries"][0]["share_id"] == "share-framework-owner-active"
+    assert parsed_history["identity_policy"]["surface_family"] == "workspace-public-share-history"
+
+    create_context = FrameworkRouteBindings.handle_get_workspace_public_share_create_context(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shares/create-context", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "title": "Workspace One"},
+        artifact_source=_commit_snapshot("snap-framework-owner-active"),
+        share_payload_rows_provider=_issuer_share_rows,
+    )
+    parsed_context = json.loads(create_context.body_text)
+    assert create_context.status_code == 200
+    assert parsed_context["workspace_id"] == "ws-001"
+    assert parsed_context["share_count"] == 1
+    assert parsed_context["prefill_title"] == "Workspace One snapshot"
+    assert parsed_context["namespace_policy"]["family"] == "workspace-public-share-create-context"
 
 
 def test_framework_binding_handles_related_and_compare_public_share_round_trip() -> None:

@@ -654,6 +654,40 @@ def _public_share_compare_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _workspace_public_share_history_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "lookup_mode": "workspace_scope",
+        "surface_family": "workspace-public-share-history",
+        "member_identity_policy": _public_share_identity_policy_body(),
+    }
+
+
+def _workspace_public_share_history_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-public-share-history",
+        "canonical_route": "/api/workspaces/{workspace_id}/shares",
+        "allowed_namespaces": ["workspace.shell", "public_share.descriptor", "public_share.artifact"],
+        "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
+
+def _workspace_public_share_create_context_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "lookup_mode": "workspace_scope",
+        "surface_family": "workspace-public-share-create-context",
+    }
+
+
+def _workspace_public_share_create_context_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-public-share-create-context",
+        "canonical_route": "/api/workspaces/{workspace_id}/shares/create-context",
+        "allowed_namespaces": ["workspace.shell", "public_share.descriptor"],
+    }
+
+
 def _public_share_consumer_action_identity_policy_body(*, action: str, route_template: str) -> dict[str, Any]:
     return {
         "subject_boundary": "public_share_consumer_action",
@@ -1883,6 +1917,8 @@ class RunHttpRouteSurface:
         ("commit_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/commit"),
         ("checkout_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/checkout"),
         ("create_workspace_shell_share", "POST", "/api/workspaces/{workspace_id}/shell/share"),
+        ("get_workspace_public_share_history", "GET", "/api/workspaces/{workspace_id}/shares"),
+        ("get_workspace_public_share_create_context", "GET", "/api/workspaces/{workspace_id}/shares/create-context"),
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
         ("list_public_shares", "GET", "/api/public-shares"),
         ("get_public_share_catalog_summary", "GET", "/api/public-shares/summary"),
@@ -3283,6 +3319,143 @@ class RunHttpRouteSurface:
                 "public_share_path": descriptor.share_path,
                 "workspace_shell_share": f"/api/workspaces/{workspace_context.workspace_id}/shell/share",
             },
+        })
+
+    @classmethod
+    def handle_get_workspace_public_share_history(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        artifact_source: Any | None = None,
+        share_payload_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace public share history route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/shares"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "workspace_share_read_failure",
+                "reason_code": "workspace.not_found",
+                "message": "Requested workspace was not found.",
+                "workspace_id": workspace_id,
+            })
+        _source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+        meta = getattr(model, "meta", None)
+        storage_role = str(getattr(meta, "storage_role", "") or "").strip() or None
+        canonical_ref = str(getattr(meta, "working_save_id", "") or "").strip() or str(getattr(meta, "commit_id", "") or "").strip() or str(getattr(meta, "run_id", "") or "").strip() or None
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        entries=[]
+        for row in rows:
+            try:
+                descriptor = describe_public_nex_link_share(dict(row))
+            except Exception:
+                continue
+            if canonical_ref and str(descriptor.canonical_ref or "").strip() != canonical_ref:
+                continue
+            entries.append({
+                "share_id": descriptor.share_id,
+                "share_path": descriptor.share_path,
+                "title": descriptor.title,
+                "summary": descriptor.summary,
+                "state": descriptor.lifecycle_state,
+                "stored_state": descriptor.stored_lifecycle_state,
+                "created_at": descriptor.created_at,
+                "updated_at": descriptor.updated_at,
+                "expires_at": descriptor.expires_at,
+                "archived": descriptor.archived,
+                "audit_event_count": descriptor.audit_event_count,
+                "operation_capabilities": list(descriptor.operation_capabilities),
+                "links": {
+                    "detail": f"/api/public-shares/{descriptor.share_id}",
+                    "history": f"/api/public-shares/{descriptor.share_id}/history",
+                    "artifact": f"/api/public-shares/{descriptor.share_id}/artifact",
+                    "public_share_path": descriptor.share_path,
+                },
+            })
+        entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
+        return _route_response(200, {
+            "status": "ready",
+            "workspace_id": workspace_id,
+            "workspace_title": str(workspace_row.get("title") or workspace_id),
+            "canonical_ref": canonical_ref,
+            "storage_role": storage_role,
+            "share_count": len(entries),
+            "entries": entries,
+            "links": {
+                "workspace": f"/api/workspaces/{workspace_id}",
+                "workspace_shell_share": f"/api/workspaces/{workspace_id}/shell/share",
+                "workspace_share_create_context": f"/api/workspaces/{workspace_id}/shares/create-context",
+            },
+            "identity_policy": _workspace_public_share_history_identity_policy_body(),
+            "namespace_policy": _workspace_public_share_history_namespace_policy_body(),
+        })
+
+    @classmethod
+    def handle_get_workspace_public_share_create_context(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        artifact_source: Any | None = None,
+        share_payload_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace public share create-context route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/shares/create-context"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "workspace_share_read_failure",
+                "reason_code": "workspace.not_found",
+                "message": "Requested workspace was not found.",
+                "workspace_id": workspace_id,
+            })
+        _source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
+        meta = getattr(model, "meta", None)
+        storage_role = str(getattr(meta, "storage_role", "") or "").strip() or None
+        canonical_ref = str(getattr(meta, "working_save_id", "") or "").strip() or str(getattr(meta, "commit_id", "") or "").strip() or str(getattr(meta, "run_id", "") or "").strip() or None
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        share_count = 0
+        for row in rows:
+            try:
+                descriptor = describe_public_nex_link_share(dict(row))
+            except Exception:
+                continue
+            if canonical_ref and str(descriptor.canonical_ref or "").strip() != canonical_ref:
+                continue
+            share_count += 1
+        workspace_title = str(workspace_row.get("title") or workspace_id)
+        return _route_response(200, {
+            "status": "ready",
+            "workspace_id": workspace_id,
+            "workspace_title": workspace_title,
+            "canonical_ref": canonical_ref,
+            "storage_role": storage_role,
+            "share_count": share_count,
+            "prefill_title": f"{workspace_title} snapshot",
+            "prefill_summary": f"Public share for {workspace_title}.",
+            "prefill_expires_at": "",
+            "links": {
+                "workspace": f"/api/workspaces/{workspace_id}",
+                "workspace_shell_share": f"/api/workspaces/{workspace_id}/shell/share",
+                "workspace_share_history": f"/api/workspaces/{workspace_id}/shares",
+            },
+            "identity_policy": _workspace_public_share_create_context_identity_policy_body(),
+            "namespace_policy": _workspace_public_share_create_context_namespace_policy_body(),
         })
 
     @classmethod

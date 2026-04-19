@@ -245,6 +245,18 @@ class FrameworkRouteBindings:
             summary="Create a bounded public share from the current workspace shell public artifact.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_workspace_public_share_history",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/shares",
+            summary="List public shares issued from the current workspace shell artifact lineage.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_workspace_public_share_create_context",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/shares/create-context",
+            summary="Read share-creation context for the current workspace shell artifact.",
+        ),
+        FrameworkRouteDefinition(
             route_name="launch_workspace_shell",
             method="POST",
             path_template="/api/workspaces/{workspace_id}/shell/launch",
@@ -1431,6 +1443,44 @@ class FrameworkRouteBindings:
             artifact_source=artifact_source,
             public_share_payload_writer=public_share_payload_writer,
             now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_workspace_public_share_history(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        artifact_source: Any | None = None,
+        share_payload_rows_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_workspace_public_share_history(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            artifact_source=artifact_source,
+            share_payload_rows_provider=share_payload_rows_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_workspace_public_share_create_context(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        artifact_source: Any | None = None,
+        share_payload_rows_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_workspace_public_share_create_context(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            artifact_source=artifact_source,
+            share_payload_rows_provider=share_payload_rows_provider,
         )
         return cls.to_framework_response(response)
 

@@ -1850,6 +1850,44 @@ def test_fastapi_binding_workspace_shell_checkout_round_trip() -> None:
     assert payload['namespace_policy']['family'] == 'workspace-shell'
 
 
+def test_fastapi_binding_workspace_public_share_history_and_create_context_api_round_trip() -> None:
+    rows = (
+        export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-owner-active'),
+            share_id='share-fastapi-owner-active',
+            title='FastAPI Owner Active',
+            created_at='2026-04-15T12:00:00+00:00',
+            updated_at='2026-04-15T12:30:00+00:00',
+            issued_by_user_ref='user-owner',
+        ),
+        export_public_nex_link_share(
+            _commit_snapshot('snap-fastapi-other-active'),
+            share_id='share-fastapi-other-active',
+            title='FastAPI Other Active',
+            created_at='2026-04-16T12:00:00+00:00',
+            updated_at='2026-04-16T12:30:00+00:00',
+            issued_by_user_ref='user-other',
+        ),
+    )
+    client = _make_client(artifact_source=_commit_snapshot('snap-fastapi-owner-active'), public_share_payload_rows_provider=lambda: rows)
+
+    history_response = client.get('/api/workspaces/ws-001/shares', headers=_session_headers())
+    assert history_response.status_code == 200
+    history_payload = history_response.json()
+    assert history_payload['workspace_id'] == 'ws-001'
+    assert history_payload['share_count'] == 1
+    assert history_payload['entries'][0]['share_id'] == 'share-fastapi-owner-active'
+    assert history_payload['identity_policy']['surface_family'] == 'workspace-public-share-history'
+
+    context_response = client.get('/api/workspaces/ws-001/shares/create-context', headers=_session_headers())
+    assert context_response.status_code == 200
+    context_payload = context_response.json()
+    assert context_payload['workspace_id'] == 'ws-001'
+    assert context_payload['share_count'] == 1
+    assert context_payload['prefill_title'] == 'Primary Workspace snapshot'
+    assert context_payload['namespace_policy']['family'] == 'workspace-public-share-create-context'
+
+
 def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> None:
     rows = (
         export_public_nex_link_share(

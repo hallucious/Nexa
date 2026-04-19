@@ -1650,6 +1650,8 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert route_contracts["get_workspace_shell"].route_family == "workspace-shell-read"
     assert route_contracts["put_workspace_shell_draft"].route_family == "workspace-shell-draft-write"
     assert route_contracts["create_workspace_shell_share"].route_family == "public-share-create"
+    assert route_contracts["get_workspace_public_share_history"].route_family == "workspace-public-share-history"
+    assert route_contracts["get_workspace_public_share_create_context"].route_family == "workspace-public-share-create-context"
     assert route_contracts["list_public_shares"].route_family == "public-share-catalog"
     assert route_contracts["get_public_share_catalog_summary"].route_family == "public-share-catalog-summary"
     assert route_contracts["list_public_shares_by_issuer"].route_family == "public-share-issuer-catalog"
@@ -1667,6 +1669,8 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["get_workspace_shell"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy")
     assert responses["put_workspace_shell_draft"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy")
     assert responses["create_workspace_shell_share"].success_status_codes == (201,)
+    assert responses["get_workspace_public_share_history"].required_top_level_keys == ("workspace_id", "share_count", "entries", "status", "identity_policy", "namespace_policy")
+    assert responses["get_workspace_public_share_create_context"].required_top_level_keys == ("workspace_id", "share_count", "prefill_title", "prefill_summary", "status", "identity_policy", "namespace_policy")
     assert responses["list_public_shares"].required_top_level_keys == ("returned_count", "shares", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_share_catalog_summary"].required_top_level_keys == ("summary", "status", "identity_policy", "namespace_policy")
     assert responses["list_public_shares_by_issuer"].required_top_level_keys == ("issuer_user_ref", "returned_count", "shares", "status", "identity_policy", "namespace_policy")
