@@ -1401,7 +1401,91 @@ def _public_artifact_boundary_body(model_or_data: Any) -> dict[str, Any]:
     }
 
 
+def _issuer_share_management_entry_capability_summary_body(entry) -> dict[str, Any]:
+    lifecycle_state = str(entry.lifecycle_state or "").strip()
+    archived = bool(entry.archived)
+    can_mutate_lifecycle = lifecycle_state == "active"
+    return {
+        "can_revoke": can_mutate_lifecycle,
+        "can_extend_expiration": can_mutate_lifecycle,
+        "can_archive": not archived,
+        "can_unarchive": archived,
+        "can_delete": True,
+    }
+
+
+def _issuer_share_management_entry_action_availability_body(entry) -> dict[str, Any]:
+    capability_summary = _issuer_share_management_entry_capability_summary_body(entry)
+    archived = bool(entry.archived)
+    return {
+        "revoke": {
+            "allowed": capability_summary["can_revoke"],
+            "denial_reason_code": None if capability_summary["can_revoke"] else "public_share.transition_not_allowed",
+        },
+        "extend_expiration": {
+            "allowed": capability_summary["can_extend_expiration"],
+            "denial_reason_code": None if capability_summary["can_extend_expiration"] else "public_share.transition_not_allowed",
+        },
+        "archive": {
+            "allowed": capability_summary["can_archive"],
+            "target_archived_state": True,
+            "denial_reason_code": None if capability_summary["can_archive"] else "public_share.already_archived",
+        },
+        "unarchive": {
+            "allowed": capability_summary["can_unarchive"],
+            "target_archived_state": False,
+            "denial_reason_code": None if capability_summary["can_unarchive"] else "public_share.not_archived",
+        },
+        "delete": {
+            "allowed": capability_summary["can_delete"],
+            "denial_reason_code": None,
+        },
+    }
+
+
+def _issuer_share_management_capability_summary_body(entries) -> dict[str, Any]:
+    resolved_entries = tuple(entries or ())
+    entry_summaries = tuple(_issuer_share_management_entry_capability_summary_body(entry) for entry in resolved_entries)
+    total = len(resolved_entries)
+    return {
+        "total_share_count": total,
+        "revokable_share_count": sum(1 for summary in entry_summaries if summary["can_revoke"]),
+        "extendable_share_count": sum(1 for summary in entry_summaries if summary["can_extend_expiration"]),
+        "archivable_share_count": sum(1 for summary in entry_summaries if summary["can_archive"]),
+        "unarchivable_share_count": sum(1 for summary in entry_summaries if summary["can_unarchive"]),
+        "deletable_share_count": sum(1 for summary in entry_summaries if summary["can_delete"]),
+    }
+
+
+def _issuer_share_bulk_action_availability_body(capability_summary: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "revoke": {
+            "allowed": bool(capability_summary.get("revokable_share_count", 0)),
+            "denial_reason_code": None if bool(capability_summary.get("revokable_share_count", 0)) else "public_share.no_revokable_shares",
+        },
+        "extend_expiration": {
+            "allowed": bool(capability_summary.get("extendable_share_count", 0)),
+            "denial_reason_code": None if bool(capability_summary.get("extendable_share_count", 0)) else "public_share.no_extendable_shares",
+        },
+        "archive": {
+            "allowed": bool(capability_summary.get("archivable_share_count", 0)),
+            "target_archived_state": True,
+            "denial_reason_code": None if bool(capability_summary.get("archivable_share_count", 0)) else "public_share.no_archivable_shares",
+        },
+        "unarchive": {
+            "allowed": bool(capability_summary.get("unarchivable_share_count", 0)),
+            "target_archived_state": False,
+            "denial_reason_code": None if bool(capability_summary.get("unarchivable_share_count", 0)) else "public_share.no_unarchivable_shares",
+        },
+        "delete": {
+            "allowed": bool(capability_summary.get("deletable_share_count", 0)),
+            "denial_reason_code": None if bool(capability_summary.get("deletable_share_count", 0)) else "public_share.no_deletable_shares",
+        },
+    }
+
+
 def _issuer_share_management_entry_body(entry) -> dict[str, Any]:
+    capability_summary = _issuer_share_management_entry_capability_summary_body(entry)
     return {
         "share_id": entry.share_id,
         "share_path": entry.share_path,
@@ -1411,6 +1495,8 @@ def _issuer_share_management_entry_body(entry) -> dict[str, Any]:
         "storage_role": entry.storage_role,
         "canonical_ref": entry.canonical_ref,
         "operation_capabilities": list(entry.operation_capabilities),
+        "management_capability_summary": capability_summary,
+        "management_action_availability": _issuer_share_management_entry_action_availability_body(entry),
         "lifecycle": {
             "stored_state": entry.stored_lifecycle_state,
             "state": entry.lifecycle_state,
@@ -2336,12 +2422,15 @@ class RunHttpRouteSurface:
                 "message": str(exc),
             })
         page_entries, pagination = _apply_issuer_public_share_management_page(entries, limit=limit, offset=offset)
+        management_capability_summary = _issuer_share_management_capability_summary_body(entries)
         return _route_response(200, {
             "status": "ready",
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": _issuer_share_management_summary_body(summary),
             "inventory_summary": _issuer_share_management_summary_body(total_summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "management_capability_summary": management_capability_summary,
+            "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in page_entries],
@@ -2396,6 +2485,16 @@ class RunHttpRouteSurface:
                 requires_operation=filters["operation"],
                 archived=filters["archived"],
             )
+            filtered_entries = list_public_nex_link_shares_for_issuer(
+                rows,
+                request_auth.requested_by_user_ref,
+                now_iso=now_iso,
+                lifecycle_state=filters["lifecycle_state"],
+                stored_lifecycle_state=filters["stored_lifecycle_state"],
+                storage_role=filters["storage_role"],
+                requires_operation=filters["operation"],
+                archived=filters["archived"],
+            )
         except ValueError as exc:
             return _route_response(400, {
                 "status": "rejected",
@@ -2403,12 +2502,15 @@ class RunHttpRouteSurface:
                 "reason_code": "public_share.invalid_management_filter",
                 "message": str(exc),
             })
+        management_capability_summary = _issuer_share_management_capability_summary_body(filtered_entries)
         return _route_response(200, {
             "status": "ready",
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": _issuer_share_management_summary_body(summary),
             "inventory_summary": _issuer_share_management_summary_body(total_summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "management_capability_summary": management_capability_summary,
+            "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "applied_filters": filters,
@@ -2455,6 +2557,7 @@ class RunHttpRouteSurface:
                 request_auth.requested_by_user_ref,
                 now_iso=now_iso,
             )
+            share_entries = list_public_nex_link_shares_for_issuer(share_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
             resolved_limit, resolved_offset = normalize_issuer_public_share_management_action_report_pagination(limit=limit, offset=offset)
         except ValueError as exc:
             return _route_response(400, {
@@ -2466,12 +2569,15 @@ class RunHttpRouteSurface:
         filtered_count = summary.total_report_count
         returned_count = len(reports)
         has_more = resolved_offset + returned_count < filtered_count
+        management_capability_summary = _issuer_share_management_capability_summary_body(share_entries)
         return _route_response(200, {
             "status": "ready",
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": summary,
             "inventory_summary": inventory_summary,
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "management_capability_summary": management_capability_summary,
+            "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
             "identity_policy": _issuer_public_share_action_report_identity_policy_body(),
             "namespace_policy": _issuer_public_share_action_report_namespace_policy_body(),
             "applied_filters": {"action": action},
@@ -2526,6 +2632,7 @@ class RunHttpRouteSurface:
                 request_auth.requested_by_user_ref,
                 now_iso=now_iso,
             )
+            share_entries = list_public_nex_link_shares_for_issuer(share_rows, request_auth.requested_by_user_ref, now_iso=now_iso)
         except ValueError as exc:
             return _route_response(400, {
                 "status": "rejected",
@@ -2533,12 +2640,15 @@ class RunHttpRouteSurface:
                 "reason_code": "public_share.invalid_query",
                 "message": str(exc),
             })
+        management_capability_summary = _issuer_share_management_capability_summary_body(share_entries)
         return _route_response(200, {
             "status": "ready",
             "issuer_user_ref": request_auth.requested_by_user_ref,
             "summary": summary,
             "inventory_summary": inventory_summary,
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "management_capability_summary": management_capability_summary,
+            "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
             "identity_policy": _issuer_public_share_action_report_identity_policy_body(),
             "namespace_policy": _issuer_public_share_action_report_namespace_policy_body(),
             "applied_filters": {"action": action},
@@ -2625,6 +2735,7 @@ class RunHttpRouteSurface:
             request_auth.requested_by_user_ref,
             now_iso=now_iso,
         )
+        management_capability_summary = _issuer_share_management_capability_summary_body(entries)
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -2633,6 +2744,8 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "management_capability_summary": management_capability_summary,
+            "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
@@ -2734,6 +2847,7 @@ class RunHttpRouteSurface:
             request_auth.requested_by_user_ref,
             now_iso=now_iso,
         )
+        management_capability_summary = _issuer_share_management_capability_summary_body(entries)
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -2743,6 +2857,8 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "management_capability_summary": management_capability_summary,
+            "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
@@ -2835,6 +2951,7 @@ class RunHttpRouteSurface:
             request_auth.requested_by_user_ref,
             now_iso=now_iso,
         )
+        management_capability_summary = _issuer_share_management_capability_summary_body(entries)
         return _route_response(200, {
             "status": "updated",
             "issuer_user_ref": request_auth.requested_by_user_ref,
@@ -2844,6 +2961,8 @@ class RunHttpRouteSurface:
             "affected_share_count": len(entries),
             "summary": _issuer_share_management_summary_body(summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "management_capability_summary": management_capability_summary,
+            "bulk_action_availability": _issuer_share_bulk_action_availability_body(management_capability_summary),
             "identity_policy": _issuer_public_share_management_identity_policy_body(),
             "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in entries],
@@ -2944,6 +3063,10 @@ class RunHttpRouteSurface:
             "affected_share_count": len(deleted_entries),
             "summary": _issuer_share_management_summary_body(summary),
             "governance_summary": _issuer_share_governance_summary_body(governance_summary),
+            "management_capability_summary": _issuer_share_management_capability_summary_body(deleted_entries),
+            "bulk_action_availability": _issuer_share_bulk_action_availability_body(_issuer_share_management_capability_summary_body(deleted_entries)),
+            "identity_policy": _issuer_public_share_management_identity_policy_body(),
+            "namespace_policy": _issuer_public_share_management_namespace_policy_body(),
             "shares": [_issuer_share_management_entry_body(entry) for entry in deleted_entries],
             "action_report": persisted_action_report,
             "links": {

@@ -340,6 +340,9 @@ def test_framework_binding_handles_issuer_public_share_management_round_trip() -
         "share-framework-owner-active",
         "share-framework-owner-expired",
     ]
+    assert parsed["management_capability_summary"]["revokable_share_count"] == 1
+    assert parsed["bulk_action_availability"]["revoke"]["allowed"] is True
+    assert parsed["shares"][1]["management_action_availability"]["revoke"]["allowed"] is False
 
 
 def test_framework_binding_handles_issuer_public_share_summary_round_trip() -> None:
@@ -353,6 +356,7 @@ def test_framework_binding_handles_issuer_public_share_summary_round_trip() -> N
     parsed = json.loads(response.body_text)
     assert parsed["summary"]["total_share_count"] == 2
     assert parsed["summary"]["latest_updated_at"] == "2026-04-15T12:30:00+00:00"
+    assert parsed["management_capability_summary"]["extendable_share_count"] == 1
 
 
 def test_framework_binding_handles_issuer_public_share_action_report_round_trip() -> None:
@@ -368,6 +372,8 @@ def test_framework_binding_handles_issuer_public_share_action_report_round_trip(
     assert parsed["summary"]["total_report_count"] == 1
     assert parsed["inventory_summary"]["total_report_count"] == 2
     assert parsed["governance_summary"]["total_share_count"] == 2
+    assert parsed["management_capability_summary"]["total_share_count"] == 2
+    assert parsed["bulk_action_availability"]["delete"]["allowed"] is True
     assert parsed["reports"][0]["action"] == "archive"
     assert parsed["links"]["share_summary"] == "/api/users/me/public-shares/summary"
 

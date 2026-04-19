@@ -1683,11 +1683,14 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["list_provider_probe_history"].required_top_level_keys == ("workspace_id", "provider_key", "returned_count", "total_visible_count", "items", "applied_filters", "identity_policy", "namespace_policy")
     assert responses["get_public_share"].required_top_level_keys == ("share_id", "share_path", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_share_history"].required_top_level_keys == ("share_id", "history", "identity_policy", "namespace_policy")
-    assert responses["list_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "shares", "status", "identity_policy", "namespace_policy")
-    assert responses["get_issuer_public_share_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "status", "identity_policy", "namespace_policy")
-    assert responses["list_issuer_public_share_action_reports"].required_top_level_keys == ("issuer_user_ref", "reports", "status", "identity_policy", "namespace_policy")
-    assert responses["get_issuer_public_share_action_report_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "status", "identity_policy", "namespace_policy")
-    assert responses["revoke_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "status", "action", "identity_policy", "namespace_policy")
+    assert responses["list_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "shares", "management_capability_summary", "bulk_action_availability", "status", "identity_policy", "namespace_policy")
+    assert responses["get_issuer_public_share_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "management_capability_summary", "bulk_action_availability", "status", "identity_policy", "namespace_policy")
+    assert responses["list_issuer_public_share_action_reports"].required_top_level_keys == ("issuer_user_ref", "reports", "management_capability_summary", "bulk_action_availability", "status", "identity_policy", "namespace_policy")
+    assert responses["get_issuer_public_share_action_report_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "management_capability_summary", "bulk_action_availability", "status", "identity_policy", "namespace_policy")
+    assert responses["revoke_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "management_capability_summary", "bulk_action_availability", "status", "action", "identity_policy", "namespace_policy")
+    assert responses["extend_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "management_capability_summary", "bulk_action_availability", "status", "action", "identity_policy", "namespace_policy")
+    assert responses["archive_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "management_capability_summary", "bulk_action_availability", "status", "action", "identity_policy", "namespace_policy")
+    assert responses["delete_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "management_capability_summary", "bulk_action_availability", "status", "action", "identity_policy", "namespace_policy")
     assert "get_public_share_compare_summary" in lifecycles[("resource", "list_public_shares")].followup_route_names
 
     assert lifecycles[("resource", "get_workspace_shell")].status_resource_name == "get_workspace_shell"

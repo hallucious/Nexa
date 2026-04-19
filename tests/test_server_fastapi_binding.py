@@ -1894,6 +1894,9 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
         'share-fastapi-owner-active',
         'share-fastapi-owner-expired',
     ]
+    assert list_payload['management_capability_summary']['revokable_share_count'] == 1
+    assert list_payload['bulk_action_availability']['revoke']['allowed'] is True
+    assert list_payload['shares'][1]['management_action_availability']['revoke']['allowed'] is False
 
     summary_response = client.get('/api/users/me/public-shares/summary', headers=_session_headers())
     assert summary_response.status_code == 200
@@ -1904,6 +1907,8 @@ def test_fastapi_binding_issuer_public_share_management_routes_round_trip() -> N
     assert summary_payload['namespace_policy']['family'] == 'issuer-public-share-management'
     assert summary_payload['governance_summary']['total_action_report_count'] == 2
     assert summary_payload['governance_summary']['archive_action_report_count'] == 1
+    assert summary_payload['management_capability_summary']['extendable_share_count'] == 1
+    assert summary_payload['bulk_action_availability']['delete']['allowed'] is True
     assert summary_payload['governance_summary']['recent_action_reports'][0]['report_id'] == 'report-fastapi-archive-001'
 
     filtered_list_response = client.get('/api/users/me/public-shares?lifecycle_state=active&limit=1&offset=0', headers=_session_headers())
@@ -2527,6 +2532,7 @@ def test_fastapi_binding_issuer_public_share_product_management_round_trip() -> 
     archived_page = client.get(archive_response.headers['location'], headers=_session_headers())
     assert archived_page.status_code == 200
     assert 'Unarchive share' in archived_page.text
+    assert 'Action reports' in archived_page.text or 'action reports' in archived_page.text
 
     delete_response = client.post(
         '/app/users/me/public-shares/actions/delete?app_language=en',

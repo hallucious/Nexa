@@ -420,6 +420,39 @@ class ProductPublicShareCompareSummaryResponse:
             raise ValueError("ProductPublicShareCompareSummaryResponse.share_id must be non-empty")
 
 
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareManagementCapabilityView:
+    can_revoke: bool = False
+    can_extend_expiration: bool = False
+    can_archive: bool = False
+    can_unarchive: bool = False
+    can_delete: bool = True
+
+
+@dataclass(frozen=True)
+class ProductIssuerPublicShareManagementCapabilitySummaryView:
+    total_share_count: int
+    revokable_share_count: int
+    extendable_share_count: int
+    archivable_share_count: int
+    unarchivable_share_count: int
+    deletable_share_count: int
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "total_share_count",
+            "revokable_share_count",
+            "extendable_share_count",
+            "archivable_share_count",
+            "unarchivable_share_count",
+            "deletable_share_count",
+        ):
+            if getattr(self, field_name) < 0:
+                raise ValueError(f"ProductIssuerPublicShareManagementCapabilitySummaryView.{field_name} must be >= 0")
+
+
 @dataclass(frozen=True)
 class ProductIssuerPublicShareManagementEntryView:
     share_id: str
@@ -432,6 +465,8 @@ class ProductIssuerPublicShareManagementEntryView:
     title: Optional[str] = None
     summary: Optional[str] = None
     operation_capabilities: tuple[str, ...] = ()
+    management_capability_summary: ProductIssuerPublicShareManagementCapabilityView = field(default_factory=ProductIssuerPublicShareManagementCapabilityView)
+    management_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     identity: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
@@ -484,6 +519,8 @@ class ProductIssuerPublicShareListResponse:
     summary: ProductIssuerPublicShareSummaryView
     inventory_summary: ProductIssuerPublicShareSummaryView
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    management_capability_summary: ProductIssuerPublicShareManagementCapabilitySummaryView
+    bulk_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     shares: tuple[ProductIssuerPublicShareManagementEntryView, ...] = ()
     applied_filters: dict[str, Any] = field(default_factory=dict)
     pagination: dict[str, Any] = field(default_factory=dict)
@@ -505,6 +542,8 @@ class ProductIssuerPublicShareSummaryResponse:
     summary: ProductIssuerPublicShareSummaryView
     inventory_summary: ProductIssuerPublicShareSummaryView
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    management_capability_summary: ProductIssuerPublicShareManagementCapabilitySummaryView
+    bulk_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     applied_filters: dict[str, Any] = field(default_factory=dict)
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
     identity_policy: Optional[dict[str, Any]] = None
@@ -524,6 +563,8 @@ class ProductIssuerPublicShareActionReportListResponse:
     summary: dict[str, Any]
     inventory_summary: dict[str, Any]
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    management_capability_summary: ProductIssuerPublicShareManagementCapabilitySummaryView
+    bulk_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     reports: tuple[dict[str, Any], ...] = ()
     applied_filters: dict[str, Any] = field(default_factory=dict)
     pagination: dict[str, Any] = field(default_factory=dict)
@@ -545,6 +586,8 @@ class ProductIssuerPublicShareActionReportSummaryResponse:
     summary: dict[str, Any]
     inventory_summary: dict[str, Any]
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    management_capability_summary: ProductIssuerPublicShareManagementCapabilitySummaryView
+    bulk_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     applied_filters: dict[str, Any] = field(default_factory=dict)
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
     identity_policy: Optional[dict[str, Any]] = None
@@ -564,6 +607,8 @@ class ProductIssuerPublicShareBulkMutationResponse:
     action: str
     summary: ProductIssuerPublicShareSummaryView
     governance_summary: ProductIssuerPublicShareGovernanceSummaryView
+    management_capability_summary: ProductIssuerPublicShareManagementCapabilitySummaryView
+    bulk_action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     shares: tuple[ProductIssuerPublicShareManagementEntryView, ...] = ()
     action_report: Optional[dict[str, Any]] = None
     requested_share_ids: tuple[str, ...] = ()

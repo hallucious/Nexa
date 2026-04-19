@@ -407,6 +407,11 @@ def test_issuer_public_share_management_routes_return_bounded_summary_and_entrie
     assert response.body["shares"][1]["lifecycle"]["state"] == "expired"
     assert response.body["shares"][2]["lifecycle"]["state"] == "revoked"
     assert response.body["governance_summary"]["total_action_report_count"] == 2
+    assert response.body["management_capability_summary"]["revokable_share_count"] == 1
+    assert response.body["management_capability_summary"]["archivable_share_count"] == 3
+    assert response.body["bulk_action_availability"]["revoke"]["allowed"] is True
+    assert response.body["shares"][0]["management_capability_summary"]["can_revoke"] is True
+    assert response.body["shares"][1]["management_action_availability"]["revoke"]["allowed"] is False
     assert response.body["governance_summary"]["latest_action_report_at"] == "2026-04-15T14:00:00+00:00"
     assert [report["report_id"] for report in response.body["governance_summary"]["recent_action_reports"]] == [
         "share-report-http-002",
@@ -428,6 +433,8 @@ def test_issuer_public_share_summary_route_returns_compact_management_summary() 
     assert response.body["governance_summary"]["total_share_count"] == 3
     assert response.body["governance_summary"]["total_action_report_count"] == 2
     assert response.body["governance_summary"]["delete_action_report_count"] == 1
+    assert response.body["management_capability_summary"]["extendable_share_count"] == 1
+    assert response.body["bulk_action_availability"]["delete"]["allowed"] is True
     assert response.body["governance_summary"]["latest_action_report_at"] == "2026-04-15T14:00:00+00:00"
     assert response.body["links"]["shares"] == "/api/users/me/public-shares"
 
@@ -467,6 +474,8 @@ def test_issuer_public_share_action_report_routes_return_filtered_results() -> N
     assert response.body["inventory_summary"]["total_report_count"] == 2
     assert response.body["governance_summary"]["total_share_count"] == 3
     assert response.body["governance_summary"]["total_action_report_count"] == 2
+    assert response.body["management_capability_summary"]["total_share_count"] == 3
+    assert response.body["bulk_action_availability"]["archive"]["allowed"] is True
     assert response.body["reports"][0]["action"] == "delete"
     assert response.body["links"]["share_summary"] == "/api/users/me/public-shares/summary"
 
