@@ -644,7 +644,9 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['latest_run_result_preview']['run_id'] == 'run-002'
     assert payload['latest_run_result_preview']['result_state'] == 'ready_success'
     assert payload['routes']['latest_run_trace'] == '/api/runs/run-002/trace?limit=20'
-    assert payload['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shell/share'
+    assert payload['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shares'
+    assert payload['routes']['workspace_public_share_create'] == '/api/workspaces/ws-001/shares'
+    assert payload['routes']['workspace_shell_share_legacy'] == '/api/workspaces/ws-001/shell/share'
     assert payload['routes']['workspace_share_history_page'] == '/app/workspaces/ws-001/shares?app_language=en'
     assert payload['routes']['workspace_share_create_page'] == '/app/workspaces/ws-001/shares/create?app_language=en'
     assert payload['routes']['public_share_page_template'] == '/app/public-shares/{share_id}?app_language=en&workspace_id=ws-001'
@@ -3136,3 +3138,31 @@ def test_fastapi_binding_public_mcp_host_bridge_route_round_trip() -> None:
     assert response.json()['host_bridge']['framework_binding_class'] == 'FrameworkRouteBindings'
     assert response.json()['identity_policy']['canonical_key'] == 'host_bridge.framework_binding_class'
     assert response.json()['namespace_policy']['family'] == 'public-mcp-host-bridge'
+
+
+def test_fastapi_binding_workspace_public_share_creation_round_trip() -> None:
+    share_store: dict[str, dict] = {}
+
+    def _writer(payload: dict) -> dict:
+        share_store[payload["share"]["share_id"]] = dict(payload)
+        return dict(payload)
+
+    client = _make_client(
+        artifact_source=_commit_snapshot('snap-fastapi-created-share-002'),
+        public_share_payload_provider=lambda share_id: share_store.get(share_id),
+        public_share_payload_writer=_writer,
+    )
+    response = client.post(
+        '/api/workspaces/ws-001/shares',
+        headers=_session_headers(),
+        json={'share_id': 'share-fastapi-created-002', 'title': 'FastAPI Family Shared Snapshot', 'expires_at': '2026-04-21T00:00:00+00:00'},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload['share_id'] == 'share-fastapi-created-002'
+    assert payload['links']['workspace_public_share_create'] == '/api/workspaces/ws-001/shares'
+    assert payload['links']['workspace_shell_share'] == '/api/workspaces/ws-001/shares'
+    assert payload['links']['workspace_shell_share_legacy'] == '/api/workspaces/ws-001/shell/share'
+    get_response = client.get('/api/public-shares/share-fastapi-created-002')
+    assert get_response.status_code == 200

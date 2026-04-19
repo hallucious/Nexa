@@ -1591,7 +1591,7 @@ def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() 
         {"workspace_id": "ws-1", "request_text": "Help me improve this shell."},
     )
     create_dispatch = bridge.build_framework_tool_dispatch(
-        "create_workspace_shell_share",
+        "create_workspace_public_share",
         {"workspace_id": "ws-1", "title": "Public Share"},
     )
     share_dispatch = bridge.build_framework_resource_dispatch(
@@ -1622,8 +1622,8 @@ def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() 
     assert draft_dispatch.request.path == "/api/workspaces/ws-1/shell/draft"
     assert draft_dispatch.request.json_body == {"request_text": "Help me improve this shell."}
 
-    assert create_dispatch.handler_name == "handle_create_workspace_shell_share"
-    assert create_dispatch.request.path == "/api/workspaces/ws-1/shell/share"
+    assert create_dispatch.handler_name == "handle_create_workspace_public_share"
+    assert create_dispatch.request.path == "/api/workspaces/ws-1/shares"
     assert create_dispatch.request.json_body == {"title": "Public Share"}
 
     assert share_dispatch.handler_name == "handle_get_public_share"
@@ -1651,7 +1651,7 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
 
     assert route_contracts["get_workspace_shell"].route_family == "workspace-shell-read"
     assert route_contracts["put_workspace_shell_draft"].route_family == "workspace-shell-draft-write"
-    assert route_contracts["create_workspace_shell_share"].route_family == "public-share-create"
+    assert route_contracts["create_workspace_public_share"].route_family == "workspace-public-share-create"
     assert route_contracts["get_workspace_public_share_history"].route_family == "workspace-public-share-history"
     assert route_contracts["get_workspace_public_share_create_context"].route_family == "workspace-public-share-create-context"
     assert route_contracts["list_public_shares"].route_family == "public-share-catalog"
@@ -1671,7 +1671,7 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
 
     assert responses["get_workspace_shell"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy")
     assert responses["put_workspace_shell_draft"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy")
-    assert responses["create_workspace_shell_share"].success_status_codes == (201,)
+    assert responses["create_workspace_public_share"].success_status_codes == (201,)
     assert responses["get_workspace_public_share_history"].required_top_level_keys == ("workspace_id", "share_count", "entries", "status", "identity_policy", "namespace_policy")
     assert responses["get_workspace_public_share_create_context"].required_top_level_keys == ("workspace_id", "share_count", "prefill_title", "prefill_summary", "status", "identity_policy", "namespace_policy")
     assert responses["list_public_shares"].required_top_level_keys == ("returned_count", "shares", "status", "identity_policy", "namespace_policy")
@@ -1725,7 +1725,7 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert lifecycles[("resource", "get_workspace_shell")].status_resource_name == "get_workspace_shell"
     assert "commit_workspace_shell" in lifecycles[("resource", "get_workspace_shell")].followup_route_names
     assert lifecycles[("tool", "put_workspace_shell_draft")].status_resource_name == "get_workspace_shell"
-    assert lifecycles[("tool", "create_workspace_shell_share")].status_resource_name == "get_public_share"
+    assert lifecycles[("tool", "create_workspace_public_share")].status_resource_name == "get_public_share"
     assert "get_public_share_artifact" in lifecycles[("resource", "get_public_share")].followup_route_names
     assert lifecycles[("tool", "checkout_workspace_shell")].source_resource_names == (
         "get_public_share",

@@ -1526,3 +1526,39 @@ def test_public_mcp_host_bridge_route_returns_host_bridge_export_surface() -> No
     assert response.body["identity_policy"]["canonical_key"] == "host_bridge.framework_binding_class"
     assert response.body["namespace_policy"]["family"] == "public-mcp-host-bridge"
     assert response.body["routes"]["manifest"] == "/api/integrations/public-mcp/manifest"
+
+
+def test_workspace_public_share_creation_returns_persisted_public_share_descriptor() -> None:
+    share_store: dict[str, dict] = {}
+
+    def _writer(payload: dict) -> dict:
+        share = payload.get("share", {}) if isinstance(payload.get("share"), dict) else {}
+        share_store[str(share.get("share_id"))] = dict(payload)
+        return dict(payload)
+
+    response = RunHttpRouteSurface.handle_create_workspace_public_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/workspaces/ws-001/shares",
+            path_params={"workspace_id": "ws-001"},
+            json_body={"share_id": "share-created-http-002", "title": "Shared Workspace Family", "expires_at": "2026-04-21T00:00:00+00:00"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "continuity_source": "server",
+            "archived": False,
+        },
+        artifact_source=_commit_snapshot("snap-create-share-002"),
+        public_share_payload_writer=_writer,
+        now_iso="2026-04-15T12:31:00+00:00",
+    )
+
+    assert response.status_code == 201
+    assert response.body["share_id"] == "share-created-http-002"
+    assert response.body["links"]["workspace_public_share_create"] == "/api/workspaces/ws-001/shares"
+    assert response.body["links"]["workspace_shell_share"] == "/api/workspaces/ws-001/shares"
+    assert response.body["links"]["workspace_shell_share_legacy"] == "/api/workspaces/ws-001/shell/share"
+    assert "share-created-http-002" in share_store

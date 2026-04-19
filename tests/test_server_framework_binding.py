@@ -142,6 +142,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "commit_workspace_shell",
         "checkout_workspace_shell",
         "create_workspace_shell_share",
+        "create_workspace_public_share",
         "get_workspace_public_share_history",
         "get_workspace_public_share_create_context",
         "launch_workspace_shell",
@@ -1454,7 +1455,9 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert 'First artifact id: artifact-1' in parsed['latest_run_artifacts_summary']['lines']
     assert parsed['latest_run_artifacts_detail']['title'] == 'Artifacts detail'
     assert 'Artifact count: 1' in parsed['latest_run_artifacts_detail']['items']
-    assert parsed['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shell/share'
+    assert parsed['routes']['workspace_shell_share'] == '/api/workspaces/ws-001/shares'
+    assert parsed['routes']['workspace_public_share_create'] == '/api/workspaces/ws-001/shares'
+    assert parsed['routes']['workspace_shell_share_legacy'] == '/api/workspaces/ws-001/shell/share'
     assert parsed['routes']['workspace_recent_activity'] == '/api/users/me/activity?workspace_id=ws-001'
     assert parsed['routes']['workspace_history_summary'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert parsed['share_history_section']['summary']['headline'] == 'Share history'
@@ -1974,3 +1977,36 @@ def test_framework_binding_handles_public_mcp_host_bridge_round_trip() -> None:
     assert payload["host_bridge"]["framework_binding_class"] == "FrameworkRouteBindings"
     assert payload["identity_policy"]["canonical_key"] == "host_bridge.framework_binding_class"
     assert payload["namespace_policy"]["family"] == "public-mcp-host-bridge"
+
+
+def test_framework_binding_handles_workspace_public_share_creation_round_trip() -> None:
+    share_store: dict[str, dict] = {}
+
+    response = FrameworkRouteBindings.handle_create_workspace_public_share(
+        request=_request(
+            method="POST",
+            path="/api/workspaces/ws-001/shares",
+            path_params={"workspace_id": "ws-001"},
+            json_body={"share_id": "share-framework-created-002", "title": "Framework Family Shared Snapshot"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "continuity_source": "server",
+            "archived": False,
+        },
+        artifact_source=_commit_snapshot("snap-framework-share-002"),
+        public_share_payload_writer=lambda payload: share_store.setdefault(payload["share"]["share_id"], dict(payload)),
+        now_iso="2026-04-15T12:16:00+00:00",
+    )
+
+    assert response.status_code == 201
+    parsed = json.loads(response.body_text)
+    assert parsed["share_id"] == "share-framework-created-002"
+    assert parsed["links"]["workspace_public_share_create"] == "/api/workspaces/ws-001/shares"
+    assert parsed["links"]["workspace_shell_share"] == "/api/workspaces/ws-001/shares"
+    assert parsed["links"]["workspace_shell_share_legacy"] == "/api/workspaces/ws-001/shell/share"
+    assert parsed["source_artifact"]["canonical_ref"] == "snap-framework-share-002"
+    assert "share-framework-created-002" in share_store

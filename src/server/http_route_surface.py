@@ -1934,6 +1934,7 @@ class RunHttpRouteSurface:
         ("commit_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/commit"),
         ("checkout_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/checkout"),
         ("create_workspace_shell_share", "POST", "/api/workspaces/{workspace_id}/shell/share"),
+        ("create_workspace_public_share", "POST", "/api/workspaces/{workspace_id}/shares"),
         ("get_workspace_public_share_history", "GET", "/api/workspaces/{workspace_id}/shares"),
         ("get_workspace_public_share_create_context", "GET", "/api/workspaces/{workspace_id}/shares/create-context"),
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
@@ -3250,7 +3251,7 @@ class RunHttpRouteSurface:
 
 
     @classmethod
-    def handle_create_workspace_shell_share(
+    def handle_create_workspace_public_share(
         cls,
         *,
         http_request: HttpRouteRequest,
@@ -3264,8 +3265,8 @@ class RunHttpRouteSurface:
             http_request,
             workspace_context,
             workspace_row,
-            expected_path="/api/workspaces/{workspace_id}/shell/share",
-            method_label="Workspace shell share creation",
+            expected_path="/api/workspaces/{workspace_id}/shares",
+            method_label="Workspace public share creation",
         )
         if isinstance(guard, HttpRouteResponse):
             return guard
@@ -3276,7 +3277,7 @@ class RunHttpRouteSurface:
                 "status": "rejected",
                 "error_family": "workspace_shell_write_failure",
                 "reason_code": "workspace_shell.invalid_request",
-                "message": "Workspace shell share payload is invalid.",
+                "message": "Workspace public share payload is invalid.",
                 "workspace_id": workspace_context.workspace_id,
             })
         request_auth = _request_auth(http_request)
@@ -3294,6 +3295,8 @@ class RunHttpRouteSurface:
         )
         persisted = public_share_payload_writer(payload) if public_share_payload_writer is not None else payload
         descriptor = describe_public_nex_link_share(persisted)
+        create_path = f"/api/workspaces/{workspace_context.workspace_id}/shares"
+        legacy_path = f"/api/workspaces/{workspace_context.workspace_id}/shell/share"
         return _route_response(201, {
             "status": "created",
             "workspace_id": workspace_context.workspace_id,
@@ -3335,9 +3338,43 @@ class RunHttpRouteSurface:
                 "self": f"/api/public-shares/{descriptor.share_id}",
                 "artifact": f"/api/public-shares/{descriptor.share_id}/artifact",
                 "public_share_path": descriptor.share_path,
-                "workspace_shell_share": f"/api/workspaces/{workspace_context.workspace_id}/shell/share",
+                "workspace_public_share_create": create_path,
+                "workspace_shell_share": create_path,
+                "workspace_shell_share_legacy": legacy_path,
             },
         })
+
+    @classmethod
+    def handle_create_workspace_shell_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        artifact_source: Any | None = None,
+        public_share_payload_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.path == f"/api/workspaces/{http_request.path_params.get('workspace_id')}/shell/share":
+            canonical = HttpRouteRequest(
+                method=http_request.method,
+                path=f"/api/workspaces/{http_request.path_params.get('workspace_id')}/shares",
+                headers=dict(http_request.headers),
+                path_params=dict(http_request.path_params),
+                query_params=dict(http_request.query_params),
+                json_body=http_request.json_body,
+                session_claims=dict(http_request.session_claims),
+            )
+        else:
+            canonical = http_request
+        return cls.handle_create_workspace_public_share(
+            http_request=canonical,
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            artifact_source=artifact_source,
+            public_share_payload_writer=public_share_payload_writer,
+            now_iso=now_iso,
+        )
 
     @classmethod
     def handle_get_workspace_public_share_history(
@@ -3409,7 +3446,9 @@ class RunHttpRouteSurface:
             "entries": entries,
             "links": {
                 "workspace": f"/api/workspaces/{workspace_id}",
-                "workspace_shell_share": f"/api/workspaces/{workspace_id}/shell/share",
+                "workspace_public_share_create": f"/api/workspaces/{workspace_id}/shares",
+                "workspace_shell_share": f"/api/workspaces/{workspace_id}/shares",
+                "workspace_shell_share_legacy": f"/api/workspaces/{workspace_id}/shell/share",
                 "workspace_share_create_context": f"/api/workspaces/{workspace_id}/shares/create-context",
             },
             "identity_policy": _workspace_public_share_history_identity_policy_body(),
@@ -3469,7 +3508,9 @@ class RunHttpRouteSurface:
             "prefill_expires_at": "",
             "links": {
                 "workspace": f"/api/workspaces/{workspace_id}",
-                "workspace_shell_share": f"/api/workspaces/{workspace_id}/shell/share",
+                "workspace_public_share_create": f"/api/workspaces/{workspace_id}/shares",
+                "workspace_shell_share": f"/api/workspaces/{workspace_id}/shares",
+                "workspace_shell_share_legacy": f"/api/workspaces/{workspace_id}/shell/share",
                 "workspace_share_history": f"/api/workspaces/{workspace_id}/shares",
             },
             "identity_policy": _workspace_public_share_create_context_identity_policy_body(),

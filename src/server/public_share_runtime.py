@@ -74,7 +74,7 @@ def build_workspace_public_share_history_payload(
         "routes": {
             "workspace_page": f"/app/workspaces/{workspace_id}?app_language={app_language}",
             "workspace_feedback_page": f"/app/workspaces/{workspace_id}/feedback?surface=workspace_shell&app_language={app_language}",
-            "workspace_share_create_api": f"/api/workspaces/{workspace_id}/shell/share",
+            "workspace_share_create_api": f"/api/workspaces/{workspace_id}/shares",
             "workspace_share_create_page": f"/app/workspaces/{workspace_id}/shares/create?app_language={app_language}",
             "workspace_share_history_page": f"/app/workspaces/{workspace_id}/shares?app_language={app_language}",
             "public_share_page_template": f"/app/public-shares/{{share_id}}?app_language={app_language}&workspace_id={workspace_id}",
