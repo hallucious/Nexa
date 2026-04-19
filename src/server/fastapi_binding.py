@@ -31,6 +31,7 @@ from src.server.public_share_runtime import (
     render_public_share_checkout_html,
     render_public_share_download_html,
     render_public_share_import_html,
+    render_public_share_create_workspace_html,
     render_public_share_run_html,
     render_public_share_detail_html,
     render_public_share_history_html,
@@ -1639,6 +1640,132 @@ class FastApiRouteBindings:
                 self.dependencies.workspace_artifact_source_writer(workspace_id, serialized)
             storage_role = str(serialized.get("meta", {}).get("storage_role") or "unknown")
             target = f"/app/workspaces/{workspace_id}?app_language={app_language}&action=import_copy&status=done&source_share_id={share_id}&storage_role={quote(storage_role)}"
+            return RedirectResponse(url=target, status_code=303)
+
+        @router.get("/app/public-shares/{share_id}/create-workspace")
+        async def get_public_share_create_workspace_page(request: Request, share_id: str) -> Response:
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            operation_capabilities = set(payload.get("operation_capabilities") or ())
+            payload["app_language"] = app_language
+            payload["prefill_workspace_title"] = str(query.get("title") or payload.get("title") or "Imported public share")
+            payload["prefill_workspace_description"] = str(query.get("description") or payload.get("summary") or "")
+            payload["prefill_create_mode"] = str(query.get("create_mode") or ("checkout_working_copy" if "checkout_working_copy" in operation_capabilities else "import_copy"))
+            payload["prefill_working_save_id"] = str(query.get("working_save_id") or "")
+            payload["notice"] = _public_share_notice_payload(request)
+            return HTMLResponse(content=render_public_share_create_workspace_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.post("/app/public-shares/{share_id}/create-workspace")
+        async def create_workspace_from_public_share_page(request: Request, share_id: str) -> Response:
+            query = dict(request.query_params)
+            form = _read_simple_form_data(await request.body())
+            app_language = str(query.get("app_language") or "en")
+            title = str(form.get("title") or "").strip()
+            description = str(form.get("description") or "").strip() or None
+            create_mode = str(form.get("create_mode") or "").strip()
+            working_save_id = str(form.get("working_save_id") or "").strip() or None
+            share_payload = self.dependencies.public_share_payload_provider(share_id) if self.dependencies.public_share_payload_provider is not None else None
+            if not isinstance(share_payload, Mapping):
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}&action=create_workspace_from_share&status=error&reason=share_not_found", status_code=303)
+            operation_capabilities = set(share_payload.get("operation_capabilities") or ())
+            if not create_mode:
+                create_mode = "checkout_working_copy" if "checkout_working_copy" in operation_capabilities else "import_copy"
+            from src.storage.share_api import ensure_public_nex_link_share_operation_allowed
+            try:
+                ensure_public_nex_link_share_operation_allowed(share_payload, create_mode)  # type: ignore[arg-type]
+            except ValueError as exc:
+                back = f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}&action=create_workspace_from_share&status=error&reason={quote(str(exc))}"
+                if title:
+                    back += f"&title={quote(title)}"
+                if description:
+                    back += f"&description={quote(description)}"
+                if create_mode:
+                    back += f"&create_mode={quote(create_mode)}"
+                if working_save_id:
+                    back += f"&working_save_id={quote(working_save_id)}"
+                return RedirectResponse(url=back, status_code=303)
+
+            create_title = title or str(share_payload.get("title") or share_payload.get("share_path") or "Imported public share")
+            create_description = description or (str(share_payload.get("summary") or "").strip() or None)
+            create_inbound = FrameworkInboundRequest(
+                method="POST",
+                path="/api/workspaces",
+                headers=dict(request.headers),
+                path_params={},
+                query_params={},
+                json_body={"title": create_title, "description": create_description},
+                session_claims=self._resolve_session_claims(request),
+            )
+            create_outbound = FrameworkRouteBindings.handle_create_workspace(
+                request=create_inbound,
+                workspace_id_factory=self.dependencies.workspace_id_factory or (lambda: 'workspace-missing-id-factory'),
+                membership_id_factory=self.dependencies.membership_id_factory or (lambda: 'membership-missing-id-factory'),
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else '',
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+                workspace_registry_writer=self.dependencies.workspace_registry_writer,
+            )
+            if create_outbound.status_code != 201:
+                payload = json.loads(create_outbound.body_text) if create_outbound.body_text else {}
+                reason = str(payload.get("reason_code") or "workspace_create_failed").strip() or "workspace_create_failed"
+                back = f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}&action=create_workspace_from_share&status=error&reason={quote(reason)}"
+                if title:
+                    back += f"&title={quote(title)}"
+                if description:
+                    back += f"&description={quote(description)}"
+                if create_mode:
+                    back += f"&create_mode={quote(create_mode)}"
+                if working_save_id:
+                    back += f"&working_save_id={quote(working_save_id)}"
+                return RedirectResponse(url=back, status_code=303)
+            created_payload = json.loads(create_outbound.body_text)
+            created_workspace_id = str(created_payload.get("workspace_id") or ((created_payload.get("workspace") or {}).get("workspace_id") if isinstance(created_payload.get("workspace"), Mapping) else "") or "").strip()
+            if not created_workspace_id:
+                return RedirectResponse(url=f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}&action=create_workspace_from_share&status=error&reason=workspace_id_missing", status_code=303)
+
+            from src.storage.validators.shared_validator import load_nex
+            from src.storage.serialization import serialize_nex_artifact
+            loaded_share = load_nex(share_payload["artifact"])
+            model = loaded_share.parsed_model
+            if create_mode == "checkout_working_copy":
+                from src.storage.lifecycle_api import create_working_save_from_commit_snapshot
+                working_save = create_working_save_from_commit_snapshot(model, working_save_id=working_save_id)  # type: ignore[arg-type]
+                serialized = serialize_nex_artifact(working_save)
+                result_ref = str(working_save.meta.working_save_id or "").strip()
+                result_role = "working_save"
+            else:
+                serialized = serialize_nex_artifact(model)
+                meta = dict(serialized.get("meta") or {})
+                result_role = str(meta.get("storage_role") or "unknown")
+                result_ref = str(meta.get("working_save_id") or meta.get("commit_id") or "").strip()
+            if self.dependencies.workspace_artifact_source_writer is not None:
+                self.dependencies.workspace_artifact_source_writer(created_workspace_id, serialized)
+            target = f"/app/workspaces/{created_workspace_id}?app_language={app_language}&action=create_workspace_from_share&status=done&source_share_id={share_id}&create_mode={quote(create_mode)}&storage_role={quote(result_role)}"
+            if result_ref:
+                target += f"&target_ref={quote(result_ref)}"
             return RedirectResponse(url=target, status_code=303)
 
         @router.get("/app/public-shares/{share_id}/run")

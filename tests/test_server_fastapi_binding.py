@@ -2138,6 +2138,57 @@ def test_fastapi_binding_public_share_import_product_flow_round_trip() -> None:
     assert shell_payload['commit_id'] == 'snap-fastapi-import-001'
 
 
+def test_fastapi_binding_public_share_create_workspace_product_flow_round_trip() -> None:
+    workspace_store = InMemoryWorkspaceRegistryStore()
+    artifact_store: dict[str, dict] = {}
+    share_payload = _share_payload('share-fastapi-create-workspace-001')
+
+    deps = FastApiRouteDependencies(
+        workspace_id_factory=lambda: 'ws-share-created',
+        membership_id_factory=lambda: 'membership-share-created',
+        now_iso_provider=lambda: '2026-04-16T12:00:00+00:00',
+        public_share_payload_provider=lambda share_id: share_payload if share_id == 'share-fastapi-create-workspace-001' else None,
+        public_share_payload_rows_provider=lambda: (share_payload,),
+        workspace_artifact_source_provider=lambda workspace_id: artifact_store.get(workspace_id),
+        workspace_artifact_source_writer=lambda workspace_id, artifact_source: artifact_store.__setitem__(workspace_id, artifact_source) or artifact_source,
+    )
+    deps = bind_workspace_registry_store(dependencies=deps, store=workspace_store)
+    client = TestClient(create_fastapi_app(dependencies=deps))
+
+    create_page = client.get('/app/public-shares/share-fastapi-create-workspace-001/create-workspace?app_language=en', headers=_session_headers())
+    assert create_page.status_code == 200
+    create_body = create_page.text
+    assert 'Create workspace from share' in create_body
+    assert 'name="title"' in create_body
+    assert 'name="create_mode"' in create_body
+    assert '/app/public-shares/share-fastapi-create-workspace-001?app_language=en' in create_body
+
+    post_response = client.post(
+        '/app/public-shares/share-fastapi-create-workspace-001/create-workspace?app_language=en',
+        headers=_session_headers(),
+        data={
+            'title': 'Created from Share',
+            'description': 'Imported from public share',
+            'create_mode': 'checkout_working_copy',
+            'working_save_id': 'ws-share-created-draft',
+        },
+        follow_redirects=False,
+    )
+    assert post_response.status_code == 303
+    assert post_response.headers['location'] == '/app/workspaces/ws-share-created?app_language=en&action=create_workspace_from_share&status=done&source_share_id=share-fastapi-create-workspace-001&create_mode=checkout_working_copy&storage_role=working_save&target_ref=ws-share-created-draft'
+
+    created_row = workspace_store.get_workspace_row('ws-share-created')
+    assert created_row is not None
+    assert created_row['title'] == 'Created from Share'
+
+    created_source = artifact_store.get('ws-share-created')
+    assert created_source is not None
+    assert created_source['meta']['storage_role'] == 'working_save'
+    assert created_source['meta']['working_save_id'] == 'ws-share-created-draft'
+    assert created_source['meta'].get('source_working_save_id') in (None, '') or isinstance(created_source['meta'].get('source_working_save_id'), str)
+
+
+
 def test_fastapi_binding_public_share_run_product_flow_round_trip() -> None:
     client = _make_client(artifact_source=_valid_working_save_artifact())
 
@@ -2175,6 +2226,7 @@ def test_fastapi_binding_public_share_catalog_compare_and_issuer_pages_round_tri
     assert '/app/public-shares/summary?app_language=en&amp;workspace_id=ws-001' in catalog_body
     assert '/app/public-shares/share-fastapi-001?app_language=en&amp;workspace_id=ws-001' in catalog_body
     assert '/app/public-shares/share-fastapi-001/compare?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001/create-workspace?app_language=en&amp;workspace_id=ws-001' in catalog_body
     assert '/app/public-shares/issuers/user-owner?app_language=en&amp;workspace_id=ws-001' in catalog_body
 
     summary_response = client.get('/app/public-shares/summary?app_language=en&workspace_id=ws-001', headers=_session_headers())
@@ -2189,16 +2241,19 @@ def test_fastapi_binding_public_share_catalog_compare_and_issuer_pages_round_tri
     assert 'Compare with workspace' in compare_body
     assert 'name="workspace_id" value="ws-001"' in compare_body
     assert 'Storage role match:' in compare_body
+    assert '/app/public-shares/share-fastapi-001/create-workspace?app_language=en&amp;workspace_id=ws-001' in compare_body
 
     detail_response = client.get('/app/public-shares/share-fastapi-001?app_language=en&workspace_id=ws-001', headers=_session_headers())
     assert detail_response.status_code == 200
     detail_body = detail_response.text
     assert '/app/public-shares/issuers/user-owner?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/app/public-shares/share-fastapi-001/create-workspace?app_language=en&amp;workspace_id=ws-001' in detail_body
 
     history_response = client.get('/app/public-shares/share-fastapi-001/history?app_language=en&workspace_id=ws-001', headers=_session_headers())
     assert history_response.status_code == 200
     history_body = history_response.text
     assert '/app/public-shares/issuers/user-owner?app_language=en&amp;workspace_id=ws-001' in history_body
+    assert '/app/public-shares/share-fastapi-001/create-workspace?app_language=en&amp;workspace_id=ws-001' in history_body
 
     issuer_response = client.get('/app/public-shares/issuers/user-owner?app_language=en&workspace_id=ws-001', headers=_session_headers())
     assert issuer_response.status_code == 200

@@ -270,6 +270,7 @@ def _public_catalog_entry_html(entry: Mapping[str, Any], *, app_language: str, w
     import_page = f"/app/public-shares/{share_id}/import?app_language={app_language}{workspace_query}"
     run_page = f"/app/public-shares/{share_id}/run?app_language={app_language}{workspace_query}"
     download_page = f"/app/public-shares/{share_id}/download?app_language={app_language}{workspace_query}"
+    create_workspace_page = f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}{workspace_query}"
     issuer_page = f"/app/public-shares/issuers/{issuer_user_ref}?app_language={app_language}{workspace_query}" if issuer_user_ref else ""
     operation_capabilities = set(entry.get("operation_capabilities") or ())
     compare_action_html = f'<a class="action-link secondary" href="{escape(compare_page)}">{escape(ui_text("server.public_share.compare_submit", app_language=app_language, fallback_text="Compare with workspace"))}</a>'
@@ -285,6 +286,9 @@ def _public_catalog_entry_html(entry: Mapping[str, Any], *, app_language: str, w
     download_action_html = ''
     if 'download_artifact' in operation_capabilities:
         download_action_html = f'<a class="action-link secondary" href="{escape(download_page)}">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</a>'
+    create_workspace_action_html = ''
+    if 'import_copy' in operation_capabilities or 'checkout_working_copy' in operation_capabilities:
+        create_workspace_action_html = f'<a class="action-link secondary" href="{escape(create_workspace_page)}">{escape(ui_text("server.public_share.create_workspace_submit", app_language=app_language, fallback_text="Create workspace from share"))}</a>'
     issuer_action_html = ''
     if issuer_user_ref:
         issuer_action_html = f'<a class="action-link secondary" href="{escape(issuer_page)}">{escape(ui_text("server.public_share.more_from_issuer", app_language=app_language, fallback_text="More from this issuer"))}</a>'
@@ -313,6 +317,7 @@ def _public_catalog_entry_html(entry: Mapping[str, Any], *, app_language: str, w
         {import_action_html}
         {run_action_html}
         {download_action_html}
+        {create_workspace_action_html}
       </div>
     </article>
     """
@@ -542,6 +547,7 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     import_page = f"/app/public-shares/{share_id}/import?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     run_page = f"/app/public-shares/{share_id}/run?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     compare_page = f"/app/public-shares/{share_id}/compare?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    create_workspace_page = f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     checkout_action_html = ""
     if "checkout_working_copy" in operation_capabilities:
         checkout_action_html = f'<a class="action-link" href="{escape(checkout_page)}">{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</a>'
@@ -554,6 +560,9 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     download_action_html = ""
     if "download_artifact" in operation_capabilities:
         download_action_html = f'<a class="action-link secondary" href="{escape(download_page)}">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</a>'
+    create_workspace_action_html = ""
+    if "import_copy" in operation_capabilities or "checkout_working_copy" in operation_capabilities:
+        create_workspace_action_html = f'<a class="action-link secondary" href="{escape(create_workspace_page)}">{escape(ui_text("server.public_share.create_workspace_submit", app_language=app_language, fallback_text="Create workspace from share"))}</a>'
     management_html = ""
     if can_manage:
         management_html = _public_share_management_controls_html(
@@ -594,6 +603,7 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
       {import_action_html}
       {run_action_html}
       {download_action_html}
+      {create_workspace_action_html}
       <a class="action-link secondary" href="{escape(compare_page)}">{escape(ui_text("server.public_share.compare_submit", app_language=app_language, fallback_text="Compare with workspace"))}</a>
       <a class="action-link secondary" href="{artifact_href}">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
       <a class="action-link secondary" href="{api_href}">{escape(ui_text('server.public_share.open_raw_share', app_language=app_language, fallback_text='Open raw share'))}</a>
@@ -846,6 +856,87 @@ def render_public_share_import_html(payload: Mapping[str, Any], *, app_language:
 
 
 
+def render_public_share_create_workspace_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
+    app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
+    share_id = escape(str(payload.get("share_id") or ""))
+    title = escape(str(payload.get("title") or payload.get("share_path") or ui_text("server.public_share.share_fallback", app_language=app_language, fallback_text="Public share")))
+    summary = escape(str(payload.get("summary") or payload.get("share_path") or ""))
+    lifecycle = dict(payload.get("lifecycle") or {})
+    source = dict(payload.get("source_artifact") or {})
+    operation_capabilities = set(payload.get("operation_capabilities") or ())
+    prefill_title = escape(str(payload.get("prefill_workspace_title") or payload.get("title") or "Imported public share"))
+    prefill_description = escape(str(payload.get("prefill_workspace_description") or payload.get("summary") or ""))
+    prefill_mode = str(payload.get("prefill_create_mode") or ("checkout_working_copy" if "checkout_working_copy" in operation_capabilities else "import_copy")).strip() or "import_copy"
+    prefill_working_save_id = escape(str(payload.get("prefill_working_save_id") or ""))
+    detail_page = f"/app/public-shares/{share_id}?app_language={app_language}"
+    history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}"
+    compare_page = f"/app/public-shares/{share_id}/compare?app_language={app_language}"
+    form_action = f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}"
+    if workspace_id:
+        detail_page += f"&workspace_id={workspace_id}"
+        history_page += f"&workspace_id={workspace_id}"
+        compare_page += f"&workspace_id={workspace_id}"
+        form_action += f"&workspace_id={workspace_id}"
+    notice_html = _public_share_notice_html(dict(payload.get("notice") or {}), app_language=app_language)
+    checkout_option_html = ""
+    if "checkout_working_copy" in operation_capabilities:
+        checkout_option_html = f'<option value="checkout_working_copy"{" selected" if prefill_mode == "checkout_working_copy" else ""}>{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</option>'
+    import_option_html = ""
+    if "import_copy" in operation_capabilities:
+        import_option_html = f'<option value="import_copy"{" selected" if prefill_mode == "import_copy" else ""}>{escape(ui_text("server.public_share.import_submit", app_language=app_language, fallback_text="Import copy to workspace"))}</option>'
+    capability_note = ui_text("server.public_share.create_workspace_summary", app_language=app_language, fallback_text="Create a brand-new workspace from this public share. Choose whether to import the artifact as-is or restore it as an editable working copy when supported.")
+    return f"""<!doctype html>
+<html lang="{app_language}">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{escape(ui_text('server.public_share.create_workspace_page_title', app_language=app_language, fallback_text='Create workspace from public share'))}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 0; padding: 24px; background: #f7f7f8; color: #111; }}
+    .shell {{ max-width: 960px; margin: 0 auto; background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }}
+    .card {{ border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; background: #fff; margin-top: 16px; }}
+    .actions {{ display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }}
+    .action-link {{ display: inline-block; border-radius: 10px; padding: 10px 14px; text-decoration: none; background: #111827; color: white; }}
+    .action-link.secondary {{ background: #374151; }}
+    label {{ display:block; margin-top: 12px; }}
+    input, textarea, select {{ width: 100%; box-sizing:border-box; border:1px solid #d1d5db; border-radius: 8px; padding: 8px 10px; }}
+    textarea {{ min-height: 96px; resize: vertical; }}
+    code {{ background:#f3f4f6; padding:2px 6px; border-radius:6px; }}
+  </style>
+</head>
+<body>
+  <main class="shell" role="main" aria-labelledby="public-share-create-workspace-title">
+    <h1 id="public-share-create-workspace-title">{escape(ui_text('server.public_share.create_workspace_submit', app_language=app_language, fallback_text='Create workspace from share'))}</h1>
+    <p><strong>{title}</strong></p>
+    <p>{summary}</p>
+    <div class="actions">
+      <a class="action-link secondary" href="{escape(detail_page)}">{escape(ui_text('server.public_share.back_to_share', app_language=app_language, fallback_text='Back to share'))}</a>
+      <a class="action-link secondary" href="{escape(history_page)}">{escape(ui_text('server.public_share.open_history', app_language=app_language, fallback_text='Open history'))}</a>
+      <a class="action-link secondary" href="{escape(compare_page)}">{escape(ui_text('server.public_share.compare_submit', app_language=app_language, fallback_text='Compare with workspace'))}</a>
+    </div>
+    <section class="card">
+      <h2>{escape(ui_text('server.public_share.create_workspace_context', app_language=app_language, fallback_text='Workspace creation context'))}</h2>
+      <ul>
+        <li>{escape(ui_text('server.public_share.share_id', app_language=app_language, fallback_text='Share id'))}: <code>{share_id}</code></li>
+        <li>{escape(ui_text('server.public_share.storage_role', app_language=app_language, fallback_text='Storage role'))}: <code>{escape(str(source.get('storage_role') or 'unknown'))}</code></li>
+        <li>{escape(ui_text('server.public_share.canonical_ref', app_language=app_language, fallback_text='Canonical ref'))}: <code>{escape(str(source.get('canonical_ref') or ''))}</code></li>
+        <li>{escape(ui_text('server.public_share.lifecycle_state', app_language=app_language, fallback_text='Lifecycle state'))}: <code>{escape(str(lifecycle.get('state') or 'unknown'))}</code></li>
+      </ul>
+      <p>{escape(capability_note)}</p>
+    </section>
+    <form method="post" action="{escape(form_action)}" class="card">
+      <label>{escape(ui_text('server.public_share.workspace_title_label', app_language=app_language, fallback_text='Workspace title'))}<input name="title" value="{prefill_title}" /></label>
+      <label>{escape(ui_text('server.public_share.workspace_description_label', app_language=app_language, fallback_text='Workspace description'))}<textarea name="description">{prefill_description}</textarea></label>
+      <label>{escape(ui_text('server.public_share.operation_label', app_language=app_language, fallback_text='Operation'))}<select name="create_mode">{checkout_option_html}{import_option_html}</select></label>
+      <label>{escape(ui_text('server.public_share.checkout_working_save_id', app_language=app_language, fallback_text='Working save id (optional)'))}<input name="working_save_id" value="{prefill_working_save_id}" placeholder="ws-restored-share" /></label>
+      <div class="actions"><button class="action-link" type="submit">{escape(ui_text('server.public_share.create_workspace_confirm', app_language=app_language, fallback_text='Create workspace'))}</button></div>
+    </form>
+    {notice_html}
+  </main>
+</body>
+</html>"""
+
+
 def render_public_share_run_html(payload: Mapping[str, Any], *, app_language: str | None = None, workspace_id: str | None = None) -> str:
     app_language = normalize_ui_language(app_language or payload.get("app_language") or "en")
     share_id = escape(str(payload.get("share_id") or ""))
@@ -1028,6 +1119,7 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     run_page = f"/app/public-shares/{share_id}/run?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     compare_page = f"/app/public-shares/{share_id}/compare?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     download_page = f"/app/public-shares/{share_id}/download?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    create_workspace_page = f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     issuer_user_ref = str(lifecycle.get("issued_by_user_ref") or "").strip()
     issuer_page = f"/app/public-shares/issuers/{issuer_user_ref}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "") if issuer_user_ref else ""
     checkout_action_html = ""
@@ -1042,6 +1134,9 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
     download_action_html = ""
     if "download_artifact" in operation_capabilities:
         download_action_html = f'<a class="action-link secondary" href="{escape(download_page)}">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</a>'
+    create_workspace_action_html = ""
+    if "import_copy" in operation_capabilities or "checkout_working_copy" in operation_capabilities:
+        create_workspace_action_html = f'<a class="action-link secondary" href="{escape(create_workspace_page)}">{escape(ui_text("server.public_share.create_workspace_submit", app_language=app_language, fallback_text="Create workspace from share"))}</a>'
     can_manage = bool(viewer_context.get("can_manage"))
     management_html = ""
     if can_manage:
@@ -1086,6 +1181,7 @@ def render_public_share_history_html(payload: Mapping[str, Any], *, app_language
       {import_action_html}
       {run_action_html}
       {download_action_html}
+      {create_workspace_action_html}
       <a class="action-link secondary" href="{escape(compare_page)}">{escape(ui_text("server.public_share.compare_submit", app_language=app_language, fallback_text="Compare with workspace"))}</a>
       <a class="action-link secondary" href="{artifact_href}">{escape(ui_text('server.public_share.open_artifact', app_language=app_language, fallback_text='Open artifact'))}</a>
     </div>
@@ -1429,6 +1525,7 @@ def render_public_share_compare_html(payload: Mapping[str, Any], *, app_language
     import_page = f"/app/public-shares/{share_id}/import?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     run_page = f"/app/public-shares/{share_id}/run?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     download_page = f"/app/public-shares/{share_id}/download?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+    create_workspace_page = f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     catalog_page = f"/app/public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     workspace_found = bool(compare.get("workspace_found"))
     same_role = bool(share_summary.get("storage_role") and workspace_summary.get("storage_role") and share_summary.get("storage_role") == workspace_summary.get("storage_role"))
@@ -1507,6 +1604,7 @@ def render_public_share_compare_html(payload: Mapping[str, Any], *, app_language
       <a class="action-link secondary" href="{escape(import_page)}">{escape(ui_text('server.public_share.import_submit', app_language=app_language, fallback_text='Import copy to workspace'))}</a>
       <a class="action-link secondary" href="{escape(run_page)}">{escape(ui_text('server.public_share.run_submit', app_language=app_language, fallback_text='Run in workspace'))}</a>
       <a class="action-link secondary" href="{escape(download_page)}">{escape(ui_text('server.public_share.download_submit', app_language=app_language, fallback_text='Download artifact'))}</a>
+      <a class="action-link secondary" href="{escape(create_workspace_page)}">{escape(ui_text('server.public_share.create_workspace_submit', app_language=app_language, fallback_text='Create workspace from share'))}</a>
     </div>
     <form method="get" action="/app/public-shares/{share_id}/compare" class="card">
       <input type="hidden" name="app_language" value="{escape(app_language)}" />
