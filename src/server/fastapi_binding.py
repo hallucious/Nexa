@@ -36,6 +36,7 @@ from src.server.public_share_runtime import (
     render_public_share_detail_html,
     render_public_share_history_html,
     render_public_share_related_html,
+    render_saved_public_share_collection_html,
     render_issuer_public_share_portfolio_html,
     render_issuer_public_share_summary_html,
     render_issuer_public_share_action_reports_html,
@@ -786,6 +787,26 @@ class FastApiRouteBindings:
                 "operation_capabilities": list(descriptor.operation_capabilities),
             }
 
+
+        def _saved_public_share_rows() -> list[dict[str, Any]]:
+            rows = self.dependencies.saved_public_share_rows_provider() if self.dependencies.saved_public_share_rows_provider is not None else ()
+            normalized: list[dict[str, Any]] = []
+            for row in rows:
+                share_id = str(row.get("share_id") or "").strip()
+                if not share_id:
+                    continue
+                normalized.append(
+                    {
+                        "share_id": share_id,
+                        "saved_at": str(row.get("saved_at") or ""),
+                        "saved_by_user_ref": str(row.get("saved_by_user_ref") or "").strip() or None,
+                    }
+                )
+            return normalized
+
+        def _saved_public_share_ids() -> set[str]:
+            return {row["share_id"] for row in _saved_public_share_rows()}
+
         def _related_public_share_entries(target_descriptor: Any, *, limit: int = 12) -> list[dict[str, Any]]:
             related: list[tuple[int, str, str, Any, bool, bool, list[str]]] = []
             target_ops = set(target_descriptor.operation_capabilities)
@@ -823,9 +844,12 @@ class FastApiRouteBindings:
             storage_role = str(query.get("storage_role") or "").strip() or None
             operation = str(query.get("operation") or "").strip() or None
             _, filtered = _filter_public_share_descriptors(search=search, storage_role=storage_role, operation=operation)
+            saved_ids = _saved_public_share_ids()
             entries: list[dict[str, Any]] = []
             for descriptor in filtered:
-                entries.append(_descriptor_to_public_share_entry(descriptor))
+                entry = _descriptor_to_public_share_entry(descriptor)
+                entry["is_saved"] = descriptor.share_id in saved_ids
+                entries.append(entry)
             entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
             payload = {
                 "app_language": app_language,
@@ -866,9 +890,12 @@ class FastApiRouteBindings:
             storage_role = str(query.get("storage_role") or "").strip() or None
             operation = str(query.get("operation") or "").strip() or None
             _, filtered = _filter_public_share_descriptors(search=search, storage_role=storage_role, operation=operation, issuer_user_ref=issuer_user_ref)
+            saved_ids = _saved_public_share_ids()
             entries: list[dict[str, Any]] = []
             for descriptor in filtered:
-                entries.append(_descriptor_to_public_share_entry(descriptor))
+                entry = _descriptor_to_public_share_entry(descriptor)
+                entry["is_saved"] = descriptor.share_id in saved_ids
+                entries.append(entry)
             entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
             payload = {"app_language": app_language, "workspace_id": workspace_id, "issuer_user_ref": issuer_user_ref, "entries": entries, "filters": {"q": search, "storage_role": storage_role, "operation": operation}}
             return HTMLResponse(content=render_public_share_issuer_catalog_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
@@ -894,6 +921,63 @@ class FastApiRouteBindings:
             }
             payload = {"app_language": app_language, "workspace_id": workspace_id, "issuer_user_ref": issuer_user_ref, "summary": summary}
             return HTMLResponse(content=render_public_share_issuer_summary_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+
+        @router.get("/app/users/me/saved-public-shares")
+        async def get_saved_public_shares_page(request: Request) -> Response:
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            rows = sorted(_saved_public_share_rows(), key=lambda row: (str(row.get("saved_at") or ""), str(row.get("share_id") or "")), reverse=True)
+            entries: list[dict[str, Any]] = []
+            for row in rows:
+                share_payload = self.dependencies.public_share_payload_provider(row["share_id"]) if self.dependencies.public_share_payload_provider is not None else None
+                if not isinstance(share_payload, Mapping):
+                    continue
+                try:
+                    from src.storage.share_api import describe_public_nex_link_share
+                    descriptor = describe_public_nex_link_share(dict(share_payload))
+                except Exception:
+                    continue
+                entry = _descriptor_to_public_share_entry(descriptor)
+                entry["is_saved"] = True
+                entry["saved_at"] = row.get("saved_at")
+                entries.append(entry)
+            payload = {"app_language": app_language, "workspace_id": workspace_id, "entries": entries}
+            return HTMLResponse(content=render_saved_public_share_collection_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.post("/app/public-shares/{share_id}/save")
+        async def save_public_share_page(request: Request, share_id: str) -> Response:
+            body = await request.body()
+            form = _read_simple_form_data(body)
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            return_to = str(form.get("return_to") or "").strip()
+            if not return_to.startswith("/app/"):
+                return_to = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+            existing_ids = _saved_public_share_ids()
+            if share_id not in existing_ids:
+                row = {
+                    "share_id": share_id,
+                    "saved_at": self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else "",
+                    "saved_by_user_ref": "user-owner",
+                }
+                self.dependencies.saved_public_share_writer(row)
+            return RedirectResponse(url=_append_action_status(return_to, action="save", status="done"), status_code=303)
+
+        @router.post("/app/public-shares/{share_id}/unsave")
+        async def unsave_public_share_page(request: Request, share_id: str) -> Response:
+            body = await request.body()
+            form = _read_simple_form_data(body)
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            return_to = str(form.get("return_to") or "").strip()
+            if not return_to.startswith("/app/"):
+                return_to = f"/app/users/me/saved-public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+            self.dependencies.saved_public_share_deleter(share_id)
+            return RedirectResponse(url=_append_action_status(return_to, action="unsave", status="done"), status_code=303)
 
         @router.get("/api/public-shares/{share_id}")
         async def get_public_share(request: Request, share_id: str) -> Response:
@@ -1068,6 +1152,11 @@ class FastApiRouteBindings:
                 from urllib.parse import quote
                 target += f"&reason={quote(reason)}"
             return target
+
+
+        def _append_action_status(target: str, *, action: str, status: str) -> str:
+            separator = '&' if '?' in target else '?'
+            return f"{target}{separator}action={action}&status={status}"
 
         def _public_share_notice_payload(request: Request) -> dict[str, str]:
             query = dict(request.query_params)
@@ -1416,6 +1505,7 @@ class FastApiRouteBindings:
                 "requested_by_user_ref": requested_by_user_ref,
                 "can_manage": bool(requested_by_user_ref and issued_by_user_ref and requested_by_user_ref == issued_by_user_ref),
             }
+            payload["is_saved"] = share_id in _saved_public_share_ids()
             payload["notice"] = _public_share_notice_payload(request)
             return HTMLResponse(content=render_public_share_detail_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
 
@@ -1465,6 +1555,7 @@ class FastApiRouteBindings:
                 "requested_by_user_ref": requested_by_user_ref,
                 "can_manage": bool(requested_by_user_ref and issued_by_user_ref and requested_by_user_ref == issued_by_user_ref),
             }
+            payload["is_saved"] = share_id in _saved_public_share_ids()
             payload["notice"] = _public_share_notice_payload(request)
             return HTMLResponse(content=render_public_share_history_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
 

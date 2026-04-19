@@ -185,7 +185,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None, saved_public_share_rows_provider=None, saved_public_share_writer=None, saved_public_share_deleter=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -403,6 +403,9 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
         public_share_payload_deleter=public_share_payload_deleter or (lambda _share_id: False),
         public_share_action_report_rows_provider=public_share_action_report_rows_provider or (lambda: ()),
         public_share_action_report_writer=public_share_action_report_writer or (lambda row: dict(row)),
+        saved_public_share_rows_provider=saved_public_share_rows_provider or (lambda: ()),
+        saved_public_share_writer=saved_public_share_writer or (lambda row: dict(row)),
+        saved_public_share_deleter=saved_public_share_deleter or (lambda _share_id: False),
         run_id_factory=lambda: "run-001",
         run_request_id_factory=lambda: "req-001",
         workspace_id_factory=lambda: 'ws-new',
@@ -2325,6 +2328,68 @@ def test_fastapi_binding_public_share_download_product_flow_round_trip() -> None
     assert artifact_payload['meta']['storage_role'] == 'commit_snapshot'
     assert artifact_payload['meta']['commit_id'] == 'snap-fastapi-share-001'
 
+
+
+def test_fastapi_binding_saved_public_share_collection_round_trip() -> None:
+    saved_rows: list[dict[str, str]] = []
+
+    def _saved_rows_provider():
+        return tuple(saved_rows)
+
+    def _saved_writer(row: dict) -> dict:
+        if not any(existing.get("share_id") == row.get("share_id") for existing in saved_rows):
+            saved_rows.append(dict(row))
+        return dict(row)
+
+    def _saved_deleter(share_id: str) -> bool:
+        before = len(saved_rows)
+        saved_rows[:] = [row for row in saved_rows if row.get("share_id") != share_id]
+        return len(saved_rows) != before
+
+    client = _make_client(
+        saved_public_share_rows_provider=_saved_rows_provider,
+        saved_public_share_writer=_saved_writer,
+        saved_public_share_deleter=_saved_deleter,
+    )
+
+    catalog_response = client.get('/app/public-shares?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert catalog_response.status_code == 200
+    catalog_body = catalog_response.text
+    assert '/app/users/me/saved-public-shares?app_language=en&amp;workspace_id=ws-001' in catalog_body
+    assert '/app/public-shares/share-fastapi-001/save?app_language=en&amp;workspace_id=ws-001' in catalog_body
+
+    save_response = client.post(
+        '/app/public-shares/share-fastapi-001/save?app_language=en&workspace_id=ws-001',
+        headers=_session_headers(),
+        data={'return_to': '/app/public-shares?app_language=en&workspace_id=ws-001'},
+        follow_redirects=False,
+    )
+    assert save_response.status_code == 303
+    assert save_response.headers['location'] == '/app/public-shares?app_language=en&workspace_id=ws-001&action=save&status=done'
+    assert saved_rows and saved_rows[0]['share_id'] == 'share-fastapi-001'
+
+    saved_page = client.get('/app/users/me/saved-public-shares?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert saved_page.status_code == 200
+    saved_body = saved_page.text
+    assert 'Saved public shares' in saved_body
+    assert 'FastAPI share' in saved_body
+    assert '/app/public-shares/share-fastapi-001/unsave?app_language=en&amp;workspace_id=ws-001' in saved_body
+
+    detail_response = client.get('/app/public-shares/share-fastapi-001?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert detail_response.status_code == 200
+    detail_body = detail_response.text
+    assert '/app/users/me/saved-public-shares?app_language=en&amp;workspace_id=ws-001' in detail_body
+    assert '/app/public-shares/share-fastapi-001/unsave?app_language=en&amp;workspace_id=ws-001' in detail_body
+
+    unsave_response = client.post(
+        '/app/public-shares/share-fastapi-001/unsave?app_language=en&workspace_id=ws-001',
+        headers=_session_headers(),
+        data={'return_to': '/app/users/me/saved-public-shares?app_language=en&workspace_id=ws-001'},
+        follow_redirects=False,
+    )
+    assert unsave_response.status_code == 303
+    assert unsave_response.headers['location'] == '/app/users/me/saved-public-shares?app_language=en&workspace_id=ws-001&action=unsave&status=done'
+    assert saved_rows == []
 
 
 def test_fastapi_binding_issuer_public_share_product_pages_round_trip() -> None:

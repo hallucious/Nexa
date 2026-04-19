@@ -75,6 +75,9 @@ PublicSharePayloadWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
 PublicSharePayloadDeleter = Callable[[str], bool]
 PublicShareActionReportRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
 PublicShareActionReportWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
+SavedPublicShareRowsProvider = Callable[[], Sequence[Mapping[str, Any]]]
+SavedPublicShareWriter = Callable[[Mapping[str, Any]], Mapping[str, Any]]
+SavedPublicShareDeleter = Callable[[str], bool]
 
 
 def _none_workspace(_: str) -> Optional[WorkspaceAuthorizationContext]:
@@ -189,6 +192,18 @@ def _noop_public_share_action_report_writer(row: Mapping[str, Any]) -> Mapping[s
     return dict(row)
 
 
+def _empty_saved_public_share_rows() -> Sequence[Mapping[str, Any]]:
+    return ()
+
+
+def _noop_saved_public_share_writer(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    return dict(row)
+
+
+def _noop_saved_public_share_deleter(_: str) -> bool:
+    return False
+
+
 @dataclass(frozen=True)
 class FastApiRouteDependencies:
     workspace_context_provider: WorkspaceContextProvider = _none_workspace
@@ -235,6 +250,9 @@ class FastApiRouteDependencies:
     public_share_payload_deleter: PublicSharePayloadDeleter = _noop_public_share_payload_deleter
     public_share_action_report_rows_provider: PublicShareActionReportRowsProvider = _empty_public_share_action_report_rows
     public_share_action_report_writer: PublicShareActionReportWriter = _noop_public_share_action_report_writer
+    saved_public_share_rows_provider: SavedPublicShareRowsProvider = _empty_saved_public_share_rows
+    saved_public_share_writer: SavedPublicShareWriter = _noop_saved_public_share_writer
+    saved_public_share_deleter: SavedPublicShareDeleter = _noop_saved_public_share_deleter
     admission_policy: ProductAdmissionPolicy = field(default_factory=ProductAdmissionPolicy)
     engine_launch_decider: Optional[EngineLaunchDecider] = None
     run_id_factory: Optional[IdentifierFactory] = None
