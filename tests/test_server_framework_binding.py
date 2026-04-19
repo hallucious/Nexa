@@ -461,6 +461,7 @@ def test_framework_binding_handles_public_share_catalog_round_trip() -> None:
     parsed = json.loads(response.body_text)
     assert parsed["returned_count"] == 2
     assert parsed["summary"]["runnable_share_count"] == 2
+    assert parsed["shares"][0]["capability_summary"]["can_create_workspace_from_share"] is True
     assert parsed["shares"][0]["identity"]["canonical_key"] == "share_id"
     assert parsed["shares"][0]["is_saved"] is True
     assert parsed["namespace_policy"]["family"] == "public-share-catalog"
@@ -517,6 +518,8 @@ def test_framework_binding_handles_public_share_round_trip() -> None:
     assert parsed["status"] == "ready"
     assert parsed["share_id"] == "share-framework-001"
     assert parsed["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
+    assert parsed["capability_summary"]["preferred_create_workspace_mode"] == "checkout_working_copy"
+    assert parsed["action_availability"]["create_workspace_from_share"]["allowed"] is True
     assert parsed["lifecycle"]["stored_state"] == "active"
     assert parsed["lifecycle"]["state"] == "active"
     assert parsed["audit_summary"]["event_count"] == 1

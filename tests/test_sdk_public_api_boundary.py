@@ -57,6 +57,8 @@ from src.sdk.server import (
     ProductIssuerPublicShareSummaryResponse,
     ProductLaunchOptions,
     ProductPublicShareArtifactResponse,
+    ProductPublicShareActionAvailabilityView,
+    ProductPublicShareCapabilitySummaryView,
     ProductPublicShareCatalogResponse,
     ProductPublicShareCatalogSummaryResponse,
     ProductPublicShareCompareSummaryResponse,
@@ -494,6 +496,16 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
         share_boundary={"share_family": "public_nex_link_share"},
         artifact_boundary={"format_family": ".nex"},
         links=ProductPublicShareLinks({"self": "/api/public-shares/share-1"}),
+        capability_summary=ProductPublicShareCapabilitySummaryView(
+            can_download_artifact=True,
+            can_import_copy=True,
+            can_run_artifact=True,
+            can_checkout_working_copy=True,
+            can_create_workspace_from_share=True,
+            create_workspace_supported_modes=("checkout_working_copy", "import_copy"),
+            preferred_create_workspace_mode="checkout_working_copy",
+        ),
+        action_availability=ProductPublicShareActionAvailabilityView({"checkout": {"allowed": True}}),
         identity={"canonical_key": "share_id", "canonical_value": "share-1"},
     )
     created = ProductWorkspaceShellShareCreatedResponse(
@@ -510,6 +522,8 @@ def test_server_sdk_surface_exposes_public_share_models() -> None:
         share_boundary=detail.share_boundary,
         artifact_boundary=detail.artifact_boundary,
         links=detail.links,
+        capability_summary=detail.capability_summary,
+        action_availability=detail.action_availability,
         identity=detail.identity,
     )
     history = ProductPublicShareHistoryResponse(

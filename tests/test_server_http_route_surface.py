@@ -248,6 +248,8 @@ def test_public_share_catalog_route_returns_filtered_entries() -> None:
     assert response.status_code == 200
     assert response.body["returned_count"] == 2
     assert response.body["summary"]["runnable_share_count"] == 2
+    assert response.body["shares"][0]["capability_summary"]["can_create_workspace_from_share"] is True
+    assert response.body["shares"][0]["action_availability"]["create_workspace_from_share"]["allowed"] is True
     assert response.body["shares"][0]["identity"]["canonical_key"] == "share_id"
     assert response.body["namespace_policy"]["family"] == "public-share-catalog"
 
@@ -272,7 +274,9 @@ def test_public_share_related_and_compare_routes_return_summary() -> None:
     )
     assert related.status_code == 200
     assert related.body["related_summary"]["total_related_count"] == 1
+    assert related.body["action_availability"]["create_workspace_from_share"]["allowed"] is True
     assert related.body["shares"][0]["same_storage_role"] is True
+    assert related.body["shares"][0]["capability_summary"]["can_create_workspace_from_share"] is True
 
     compare = RunHttpRouteSurface.handle_get_public_share_compare_summary(
         http_request=HttpRouteRequest(method="GET", path="/api/public-shares/share-owner-active/compare-summary", path_params={"share_id": "share-owner-active"}, query_params={"workspace_id": "ws-001"}),
@@ -283,6 +287,8 @@ def test_public_share_related_and_compare_routes_return_summary() -> None:
     assert compare.status_code == 200
     assert compare.body["compare"]["workspace_found"] is True
     assert compare.body["compare"]["storage_role_match"] is False
+    assert compare.body["capability_summary"]["can_run_artifact"] is True
+    assert compare.body["action_availability"]["run"]["allowed"] is True
 
 
 def test_public_share_route_returns_descriptor_without_authentication() -> None:
@@ -295,6 +301,10 @@ def test_public_share_route_returns_descriptor_without_authentication() -> None:
     assert response.body["status"] == "ready"
     assert response.body["share_id"] == "share-http-001"
     assert response.body["operation_capabilities"] == ["inspect_metadata", "download_artifact", "import_copy", "run_artifact", "checkout_working_copy"]
+    assert response.body["capability_summary"]["can_create_workspace_from_share"] is True
+    assert response.body["capability_summary"]["preferred_create_workspace_mode"] == "checkout_working_copy"
+    assert response.body["action_availability"]["checkout"]["allowed"] is True
+    assert response.body["action_availability"]["create_workspace_from_share"]["supported_modes"] == ["checkout_working_copy", "import_copy"]
     assert response.body["lifecycle"]["stored_state"] == "active"
     assert response.body["lifecycle"]["state"] == "active"
     assert response.body["audit_summary"]["event_count"] == 1

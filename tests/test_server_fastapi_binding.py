@@ -1985,6 +1985,8 @@ def test_fastapi_binding_public_share_routes_round_trip() -> None:
     payload = response.json()
     assert payload['share_id'] == 'share-fastapi-001'
     assert payload['operation_capabilities'] == ['inspect_metadata', 'download_artifact', 'import_copy', 'run_artifact', 'checkout_working_copy']
+    assert payload['capability_summary']['can_create_workspace_from_share'] is True
+    assert payload['action_availability']['create_workspace_from_share']['allowed'] is True
     assert payload['lifecycle']['stored_state'] == 'active'
     assert payload['lifecycle']['state'] == 'active'
     assert payload['audit_summary']['event_count'] == 1
@@ -2205,6 +2207,7 @@ def test_fastapi_binding_public_share_create_workspace_product_flow_round_trip()
     assert 'Create workspace from share' in create_body
     assert 'name="title"' in create_body
     assert 'name="create_mode"' in create_body
+    assert 'value="checkout_working_copy" selected' in create_body
     assert '/app/public-shares/share-fastapi-create-workspace-001?app_language=en' in create_body
 
     post_response = client.post(

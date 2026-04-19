@@ -784,6 +784,8 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     viewer_context = dict(payload.get("viewer_context") or {})
     notice = dict(payload.get("notice") or {})
     can_manage = bool(viewer_context.get("can_manage"))
+    capability_summary = dict(payload.get("capability_summary") or {})
+    action_availability = dict(payload.get("action_availability") or {})
     operation_capabilities = set(payload.get("operation_capabilities") or ())
     checkout_page = f"/app/public-shares/{share_id}/checkout?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     import_page = f"/app/public-shares/{share_id}/import?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
@@ -792,19 +794,19 @@ def render_public_share_detail_html(payload: Mapping[str, Any], *, app_language:
     related_page = f"/app/public-shares/{share_id}/related?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     create_workspace_page = f"/app/public-shares/{share_id}/create-workspace?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     checkout_action_html = ""
-    if "checkout_working_copy" in operation_capabilities:
+    if bool((action_availability.get("checkout") or {}).get("allowed", capability_summary.get("can_checkout_working_copy") or ("checkout_working_copy" in operation_capabilities))):
         checkout_action_html = f'<a class="action-link" href="{escape(checkout_page)}">{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</a>'
     import_action_html = ""
-    if "import_copy" in operation_capabilities:
+    if bool((action_availability.get("import") or {}).get("allowed", capability_summary.get("can_import_copy") or ("import_copy" in operation_capabilities))):
         import_action_html = f'<a class="action-link secondary" href="{escape(import_page)}">{escape(ui_text("server.public_share.import_submit", app_language=app_language, fallback_text="Import copy to workspace"))}</a>'
     run_action_html = ""
-    if "run_artifact" in operation_capabilities:
+    if bool((action_availability.get("run") or {}).get("allowed", capability_summary.get("can_run_artifact") or ("run_artifact" in operation_capabilities))):
         run_action_html = f'<a class="action-link secondary" href="{escape(run_page)}">{escape(ui_text("server.public_share.run_submit", app_language=app_language, fallback_text="Run in workspace"))}</a>'
     download_action_html = ""
-    if "download_artifact" in operation_capabilities:
+    if bool((action_availability.get("download") or {}).get("allowed", capability_summary.get("can_download_artifact") or ("download_artifact" in operation_capabilities))):
         download_action_html = f'<a class="action-link secondary" href="{escape(download_page)}">{escape(ui_text("server.public_share.download_submit", app_language=app_language, fallback_text="Download artifact"))}</a>'
     create_workspace_action_html = ""
-    if "import_copy" in operation_capabilities or "checkout_working_copy" in operation_capabilities:
+    if bool((action_availability.get("create_workspace_from_share") or {}).get("allowed", capability_summary.get("can_create_workspace_from_share") or ("import_copy" in operation_capabilities or "checkout_working_copy" in operation_capabilities))):
         create_workspace_action_html = f'<a class="action-link secondary" href="{escape(create_workspace_page)}">{escape(ui_text("server.public_share.create_workspace_submit", app_language=app_language, fallback_text="Create workspace from share"))}</a>'
     management_html = ""
     if can_manage:
@@ -886,6 +888,8 @@ def render_public_share_download_html(payload: Mapping[str, Any], *, app_languag
     source = dict(payload.get("source_artifact") or {})
     notice = dict(payload.get("notice") or {})
     links = dict(payload.get("links") or {})
+    capability_summary = dict(payload.get("capability_summary") or {})
+    action_availability = dict(payload.get("action_availability") or {})
     operation_capabilities = set(payload.get("operation_capabilities") or ())
     detail_page = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
@@ -959,13 +963,15 @@ def render_public_share_checkout_html(payload: Mapping[str, Any], *, app_languag
     viewer_context = dict(payload.get("viewer_context") or {})
     notice = dict(payload.get("notice") or {})
     links = dict(payload.get("links") or {})
+    capability_summary = dict(payload.get("capability_summary") or {})
+    action_availability = dict(payload.get("action_availability") or {})
     operation_capabilities = set(payload.get("operation_capabilities") or ())
     prefill_workspace_id = escape(str(payload.get("prefill_workspace_id") or workspace_id or ""))
     prefill_working_save_id = escape(str(payload.get("prefill_working_save_id") or ""))
     detail_page = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     checkout_action = f"/app/public-shares/{share_id}/checkout?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
-    can_checkout = "checkout_working_copy" in operation_capabilities
+    can_checkout = bool((action_availability.get("checkout") or {}).get("allowed", capability_summary.get("can_checkout_working_copy") or ("checkout_working_copy" in operation_capabilities)))
     notice_html = _public_share_notice_html(notice, app_language=app_language)
     capability_html = "<p><strong>Checkout available.</strong> This share can be restored into a workspace as a working copy.</p>" if can_checkout else f"<p><strong>{escape(ui_text('server.public_share.checkout_unavailable', app_language=app_language, fallback_text='Checkout unavailable.'))}</strong> {escape(ui_text('server.public_share.checkout_unavailable_summary', app_language=app_language, fallback_text='This share cannot currently be restored into a workspace.'))}</p>"
     disabled_attr = "" if can_checkout else " disabled"
@@ -1038,12 +1044,14 @@ def render_public_share_import_html(payload: Mapping[str, Any], *, app_language:
     source = dict(payload.get("source_artifact") or {})
     notice = dict(payload.get("notice") or {})
     links = dict(payload.get("links") or {})
+    capability_summary = dict(payload.get("capability_summary") or {})
+    action_availability = dict(payload.get("action_availability") or {})
     operation_capabilities = set(payload.get("operation_capabilities") or ())
     prefill_workspace_id = escape(str(payload.get("prefill_workspace_id") or workspace_id or ""))
     detail_page = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     import_action = f"/app/public-shares/{share_id}/import?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
-    can_import = "import_copy" in operation_capabilities
+    can_import = bool((action_availability.get("import") or {}).get("allowed", capability_summary.get("can_import_copy") or ("import_copy" in operation_capabilities)))
     notice_html = _public_share_notice_html(notice, app_language=app_language)
     capability_html = "<p><strong>Import available.</strong> This share can be imported into a workspace while preserving its source role.</p>" if can_import else f"<p><strong>{escape(ui_text('server.public_share.import_unavailable', app_language=app_language, fallback_text='Import unavailable.'))}</strong> {escape(ui_text('server.public_share.import_unavailable_summary', app_language=app_language, fallback_text='This share cannot currently be imported into a workspace.'))}</p>"
     disabled_attr = "" if can_import else " disabled"
@@ -1112,10 +1120,13 @@ def render_public_share_create_workspace_html(payload: Mapping[str, Any], *, app
     summary = escape(str(payload.get("summary") or payload.get("share_path") or ""))
     lifecycle = dict(payload.get("lifecycle") or {})
     source = dict(payload.get("source_artifact") or {})
+    capability_summary = dict(payload.get("capability_summary") or {})
+    action_availability = dict(payload.get("action_availability") or {})
     operation_capabilities = set(payload.get("operation_capabilities") or ())
     prefill_title = escape(str(payload.get("prefill_workspace_title") or payload.get("title") or "Imported public share"))
     prefill_description = escape(str(payload.get("prefill_workspace_description") or payload.get("summary") or ""))
-    prefill_mode = str(payload.get("prefill_create_mode") or ("checkout_working_copy" if "checkout_working_copy" in operation_capabilities else "import_copy")).strip() or "import_copy"
+    preferred_create_mode = str((action_availability.get("create_workspace_from_share") or {}).get("preferred_mode") or capability_summary.get("preferred_create_workspace_mode") or "").strip()
+    prefill_mode = str(payload.get("prefill_create_mode") or preferred_create_mode or ("checkout_working_copy" if "checkout_working_copy" in operation_capabilities else "import_copy")).strip() or "import_copy"
     prefill_working_save_id = escape(str(payload.get("prefill_working_save_id") or ""))
     detail_page = f"/app/public-shares/{share_id}?app_language={app_language}"
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}"
@@ -1128,10 +1139,10 @@ def render_public_share_create_workspace_html(payload: Mapping[str, Any], *, app
         form_action += f"&workspace_id={workspace_id}"
     notice_html = _public_share_notice_html(dict(payload.get("notice") or {}), app_language=app_language)
     checkout_option_html = ""
-    if "checkout_working_copy" in operation_capabilities:
+    if bool((action_availability.get("checkout") or {}).get("allowed", capability_summary.get("can_checkout_working_copy") or ("checkout_working_copy" in operation_capabilities))):
         checkout_option_html = f'<option value="checkout_working_copy"{" selected" if prefill_mode == "checkout_working_copy" else ""}>{escape(ui_text("server.public_share.checkout_submit", app_language=app_language, fallback_text="Restore to workspace"))}</option>'
     import_option_html = ""
-    if "import_copy" in operation_capabilities:
+    if bool((action_availability.get("import") or {}).get("allowed", capability_summary.get("can_import_copy") or ("import_copy" in operation_capabilities))):
         import_option_html = f'<option value="import_copy"{" selected" if prefill_mode == "import_copy" else ""}>{escape(ui_text("server.public_share.import_submit", app_language=app_language, fallback_text="Import copy to workspace"))}</option>'
     capability_note = ui_text("server.public_share.create_workspace_summary", app_language=app_language, fallback_text="Create a brand-new workspace from this public share. Choose whether to import the artifact as-is or restore it as an editable working copy when supported.")
     return f"""<!doctype html>
@@ -1195,13 +1206,15 @@ def render_public_share_run_html(payload: Mapping[str, Any], *, app_language: st
     source = dict(payload.get("source_artifact") or {})
     notice = dict(payload.get("notice") or {})
     links = dict(payload.get("links") or {})
+    capability_summary = dict(payload.get("capability_summary") or {})
+    action_availability = dict(payload.get("action_availability") or {})
     operation_capabilities = set(payload.get("operation_capabilities") or ())
     prefill_workspace_id = escape(str(payload.get("prefill_workspace_id") or workspace_id or ""))
     prefill_input_payload_json = escape(str(payload.get("prefill_input_payload_json") or ""))
     detail_page = f"/app/public-shares/{share_id}?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     history_page = f"/app/public-shares/{share_id}/history?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
     run_action = f"/app/public-shares/{share_id}/run?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
-    can_run = "run_artifact" in operation_capabilities
+    can_run = bool((action_availability.get("run") or {}).get("allowed", capability_summary.get("can_run_artifact") or ("run_artifact" in operation_capabilities)))
     notice_html = _public_share_notice_html(notice, app_language=app_language)
     capability_html = "<p><strong>Run available.</strong> This share can be executed from a workspace without mutating the shared source artifact.</p>" if can_run else f"<p><strong>{escape(ui_text('server.public_share.run_unavailable', app_language=app_language, fallback_text='Run unavailable.'))}</strong> {escape(ui_text('server.public_share.run_unavailable_summary', app_language=app_language, fallback_text='This share cannot currently be executed from a workspace.'))}</p>"
     disabled_attr = "" if can_run else " disabled"

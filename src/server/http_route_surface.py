@@ -688,6 +688,74 @@ def _normalize_saved_public_share_rows(rows: Sequence[Mapping[str, Any]], *, sav
     return tuple(normalized)
 
 
+def _public_share_capability_summary_body(descriptor: Any) -> dict[str, Any]:
+    operation_capabilities = set(getattr(descriptor, "operation_capabilities", ()) or ())
+    create_workspace_supported_modes: list[str] = []
+    if "checkout_working_copy" in operation_capabilities:
+        create_workspace_supported_modes.append("checkout_working_copy")
+    if "import_copy" in operation_capabilities:
+        create_workspace_supported_modes.append("import_copy")
+    preferred_create_workspace_mode = create_workspace_supported_modes[0] if create_workspace_supported_modes else None
+    return {
+        "can_download_artifact": "download_artifact" in operation_capabilities,
+        "can_import_copy": "import_copy" in operation_capabilities,
+        "can_run_artifact": "run_artifact" in operation_capabilities,
+        "can_checkout_working_copy": "checkout_working_copy" in operation_capabilities,
+        "can_create_workspace_from_share": bool(create_workspace_supported_modes),
+        "create_workspace_supported_modes": create_workspace_supported_modes,
+        "preferred_create_workspace_mode": preferred_create_workspace_mode,
+    }
+
+
+def _public_share_action_availability_body(descriptor: Any) -> dict[str, Any]:
+    share_id = str(getattr(descriptor, "share_id", "") or "").strip()
+    capability_summary = _public_share_capability_summary_body(descriptor)
+    return {
+        "download": {
+            "allowed": capability_summary["can_download_artifact"],
+            "operation": "download_artifact",
+            "api_route": f"/api/public-shares/{share_id}/artifact",
+            "page_route": f"/app/public-shares/{share_id}/download",
+            "requires_workspace_context": False,
+            "denial_reason_code": None if capability_summary["can_download_artifact"] else "public_share.download_not_allowed",
+        },
+        "import": {
+            "allowed": capability_summary["can_import_copy"],
+            "operation": "import_copy",
+            "api_route": f"/api/public-shares/{share_id}/artifact",
+            "page_route": f"/app/public-shares/{share_id}/import",
+            "requires_workspace_context": True,
+            "denial_reason_code": None if capability_summary["can_import_copy"] else "public_share.import_not_allowed",
+        },
+        "run": {
+            "allowed": capability_summary["can_run_artifact"],
+            "operation": "run_artifact",
+            "api_route": f"/api/public-shares/{share_id}/artifact",
+            "page_route": f"/app/public-shares/{share_id}/run",
+            "requires_workspace_context": True,
+            "denial_reason_code": None if capability_summary["can_run_artifact"] else "public_share.run_not_allowed",
+        },
+        "checkout": {
+            "allowed": capability_summary["can_checkout_working_copy"],
+            "operation": "checkout_working_copy",
+            "api_route": "/api/workspaces/{workspace_id}/shell/checkout",
+            "page_route": f"/app/public-shares/{share_id}/checkout",
+            "requires_workspace_context": True,
+            "denial_reason_code": None if capability_summary["can_checkout_working_copy"] else "public_share.checkout_not_allowed",
+        },
+        "create_workspace_from_share": {
+            "allowed": capability_summary["can_create_workspace_from_share"],
+            "operation": "create_workspace_from_share",
+            "api_route": None,
+            "page_route": f"/app/public-shares/{share_id}/create-workspace",
+            "requires_workspace_context": False,
+            "supported_modes": list(capability_summary["create_workspace_supported_modes"]),
+            "preferred_mode": capability_summary["preferred_create_workspace_mode"],
+            "denial_reason_code": None if capability_summary["can_create_workspace_from_share"] else "public_share.workspace_create_not_allowed",
+        },
+    }
+
+
 def _public_share_catalog_entry_body(descriptor: Any, *, is_saved: bool = False, saved_at: str | None = None) -> dict[str, Any]:
     return {
         "share_id": descriptor.share_id,
@@ -700,6 +768,8 @@ def _public_share_catalog_entry_body(descriptor: Any, *, is_saved: bool = False,
         "issued_by_user_ref": descriptor.issued_by_user_ref,
         "viewer_capabilities": list(descriptor.viewer_capabilities),
         "operation_capabilities": list(descriptor.operation_capabilities),
+        "capability_summary": _public_share_capability_summary_body(descriptor),
+        "action_availability": _public_share_action_availability_body(descriptor),
         "identity": _public_share_identity_body(descriptor),
         "is_saved": bool(is_saved),
         "saved_at": saved_at,
@@ -2942,6 +3012,8 @@ class RunHttpRouteSurface:
             "access_mode": descriptor.access_mode,
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
+            "capability_summary": _public_share_capability_summary_body(descriptor),
+            "action_availability": _public_share_action_availability_body(descriptor),
             "identity": _public_share_identity_body(descriptor),
             "identity_policy": _public_share_identity_policy_body(),
             "namespace_policy": _public_share_namespace_policy_body(),
@@ -3110,6 +3182,8 @@ class RunHttpRouteSurface:
             "status": "ready",
             "share_id": share_id,
             "identity": _public_share_identity_body(descriptor),
+            "capability_summary": _public_share_capability_summary_body(descriptor),
+            "action_availability": _public_share_action_availability_body(descriptor),
             "shares": shares,
             "related_summary": {"limit": limit, "total_related_count": len(shares)},
             "links": {"detail": f"/api/public-shares/{share_id}"},
@@ -3144,6 +3218,8 @@ class RunHttpRouteSurface:
             "status": "ready",
             "share_id": share_id,
             "identity": _public_share_identity_body(descriptor),
+            "capability_summary": _public_share_capability_summary_body(descriptor),
+            "action_availability": _public_share_action_availability_body(descriptor),
             "compare": compare,
             "links": {"detail": f"/api/public-shares/{share_id}", "artifact": f"/api/public-shares/{share_id}/artifact"},
             "identity_policy": _public_share_compare_identity_policy_body(),
@@ -3179,6 +3255,8 @@ class RunHttpRouteSurface:
             "access_mode": descriptor.access_mode,
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
+            "capability_summary": _public_share_capability_summary_body(descriptor),
+            "action_availability": _public_share_action_availability_body(descriptor),
             "identity": _public_share_identity_body(descriptor),
             "identity_policy": _public_share_identity_policy_body(),
             "namespace_policy": _public_share_namespace_policy_body(),
@@ -3819,6 +3897,8 @@ class RunHttpRouteSurface:
             "access_mode": descriptor.access_mode,
             "viewer_capabilities": list(descriptor.viewer_capabilities),
             "operation_capabilities": list(descriptor.operation_capabilities),
+            "capability_summary": _public_share_capability_summary_body(descriptor),
+            "action_availability": _public_share_action_availability_body(descriptor),
             "identity": _public_share_identity_body(descriptor),
             "identity_policy": _public_share_identity_policy_body(),
             "namespace_policy": _public_share_namespace_policy_body(),

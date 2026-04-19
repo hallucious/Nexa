@@ -70,6 +70,29 @@ class ProductPublicShareLinks:
 
 
 @dataclass(frozen=True)
+class ProductPublicShareCapabilitySummaryView:
+    can_download_artifact: bool = False
+    can_import_copy: bool = False
+    can_run_artifact: bool = False
+    can_checkout_working_copy: bool = False
+    can_create_workspace_from_share: bool = False
+    create_workspace_supported_modes: tuple[str, ...] = ()
+    preferred_create_workspace_mode: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class ProductPublicShareActionAvailabilityView:
+    values: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for key, value in self.values.items():
+            if not key:
+                raise ValueError("ProductPublicShareActionAvailabilityView keys must be non-empty")
+            if not isinstance(value, dict):
+                raise ValueError("ProductPublicShareActionAvailabilityView values must be dict objects")
+
+
+@dataclass(frozen=True)
 class ProductPublicShareDetailResponse:
     status: str
     share_id: str
@@ -83,6 +106,8 @@ class ProductPublicShareDetailResponse:
     share_boundary: dict[str, Any]
     artifact_boundary: dict[str, Any]
     links: ProductPublicShareLinks
+    capability_summary: ProductPublicShareCapabilitySummaryView = field(default_factory=ProductPublicShareCapabilitySummaryView)
+    action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     title: Optional[str] = None
     summary: Optional[str] = None
     viewer_capabilities: tuple[str, ...] = ()
@@ -196,6 +221,8 @@ class ProductPublicShareCatalogEntryView:
     expires_at: Optional[str] = None
     issued_by_user_ref: Optional[str] = None
     operation_capabilities: tuple[str, ...] = ()
+    capability_summary: ProductPublicShareCapabilitySummaryView = field(default_factory=ProductPublicShareCapabilitySummaryView)
+    action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     identity: Optional[dict[str, Any]] = None
     is_saved: bool = False
     saved_at: Optional[str] = None
@@ -379,6 +406,8 @@ class ProductPublicShareCompareSummaryResponse:
     status: str
     share_id: str
     compare: ProductPublicShareCompareSummaryView
+    capability_summary: ProductPublicShareCapabilitySummaryView = field(default_factory=ProductPublicShareCapabilitySummaryView)
+    action_availability: ProductPublicShareActionAvailabilityView = field(default_factory=ProductPublicShareActionAvailabilityView)
     links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
     identity: Optional[dict[str, Any]] = None
     identity_policy: Optional[dict[str, Any]] = None
