@@ -1566,6 +1566,8 @@ def test_build_public_mcp_surface_includes_public_share_resources_and_tools() ->
     assert "list_public_shares" in resources
     assert "get_public_share_catalog_summary" in resources
     assert "list_saved_public_shares" in resources
+    assert "save_public_share" in tools
+    assert "unsave_public_share" in tools
     assert "get_related_public_shares" in resources
     assert "get_public_share_compare_summary" in resources
     assert "get_public_share" in resources
@@ -1641,6 +1643,8 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert route_contracts["list_public_shares"].route_family == "public-share-catalog"
     assert route_contracts["get_public_share_catalog_summary"].route_family == "public-share-catalog-summary"
     assert route_contracts["list_saved_public_shares"].route_family == "saved-public-share-collection"
+    assert route_contracts["save_public_share"].route_family == "saved-public-share-mutation"
+    assert route_contracts["unsave_public_share"].route_family == "saved-public-share-mutation"
     assert route_contracts["get_related_public_shares"].route_family == "public-share-related"
     assert route_contracts["get_public_share_compare_summary"].route_family == "public-share-compare-summary"
     assert route_contracts["get_public_share"].route_family == "public-share-read"
@@ -1654,6 +1658,8 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["list_public_shares"].required_top_level_keys == ("returned_count", "shares", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_share_catalog_summary"].required_top_level_keys == ("summary", "status", "identity_policy", "namespace_policy")
     assert responses["list_saved_public_shares"].required_top_level_keys == ("saved_by_user_ref", "returned_count", "shares", "status", "identity_policy", "namespace_policy")
+    assert responses["save_public_share"].required_top_level_keys == ("share_id", "saved_by_user_ref", "saved", "status", "action", "identity_policy", "namespace_policy")
+    assert responses["unsave_public_share"].required_top_level_keys == ("share_id", "saved_by_user_ref", "saved", "status", "action", "identity_policy", "namespace_policy")
     assert responses["get_related_public_shares"].required_top_level_keys == ("share_id", "shares", "related_summary", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_share_compare_summary"].required_top_level_keys == ("share_id", "compare", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_nex_format"].required_top_level_keys == ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")

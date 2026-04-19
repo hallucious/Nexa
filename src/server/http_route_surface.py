@@ -47,6 +47,7 @@ from src.server.public_share_models import (
     ProductPublicShareImportAcceptedResponse,
     ProductPublicShareLinks,
     ProductPublicShareRunAcceptedResponse,
+    ProductSavedPublicShareMutationResponse,
 )
 from src.server.result_history_runtime import build_workspace_result_history_payload
 from src.storage.share_api import (
@@ -593,6 +594,29 @@ def _saved_public_share_collection_namespace_policy_body() -> dict[str, Any]:
         "family": "saved-public-share-collection",
         "canonical_route": "/api/users/me/saved-public-shares",
         "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
+
+def _saved_public_share_mutation_identity_policy_body(*, action: str, route_template: str) -> dict[str, Any]:
+    return {
+        "subject_boundary": "saved_public_share_mutation",
+        "action": action,
+        "canonical_route": route_template,
+        "share_id_source": "path_param",
+        "saved_by_user_ref_source": "authenticated_session",
+        "response_identity_posture": "share_and_saved_collection_identity_exposed",
+        "sdk_posture": "saved_public_share_state_mutation",
+    }
+
+
+def _saved_public_share_mutation_namespace_policy_body(*, action: str) -> dict[str, Any]:
+    return {
+        "namespace_scope": "saved_public_share_mutation",
+        "action": action,
+        "allowed_namespaces": ["share.public_descriptor", "saved_public_share.collection"],
+        "write_behavior": "bounded_saved_collection_mutation",
+        "cross_workspace_write": "not_applicable",
+        "sdk_posture": "saved_public_share_state_mutation",
     }
 
 
@@ -1863,6 +1887,8 @@ class RunHttpRouteSurface:
         ("list_public_shares", "GET", "/api/public-shares"),
         ("get_public_share_catalog_summary", "GET", "/api/public-shares/summary"),
         ("list_saved_public_shares", "GET", "/api/users/me/saved-public-shares"),
+        ("save_public_share", "POST", "/api/public-shares/{share_id}/save"),
+        ("unsave_public_share", "POST", "/api/public-shares/{share_id}/unsave"),
         ("get_related_public_shares", "GET", "/api/public-shares/{share_id}/related"),
         ("get_public_share_compare_summary", "GET", "/api/public-shares/{share_id}/compare-summary"),
         ("get_public_share", "GET", "/api/public-shares/{share_id}"),
@@ -3365,6 +3391,103 @@ class RunHttpRouteSurface:
             "identity_policy": _saved_public_share_collection_identity_policy_body(),
             "namespace_policy": _saved_public_share_collection_namespace_policy_body(),
         })
+
+
+    @classmethod
+    def handle_save_public_share(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_provider: Callable[[str], Mapping[str, Any] | None] | None = None,
+        saved_public_share_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        saved_public_share_writer: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        share_id = str((http_request.path_params or {}).get("share_id") or "").strip()
+        expected_path = f"/api/public-shares/{share_id}/save"
+        if http_request.method.upper() != "POST" or http_request.path != expected_path or not share_id:
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        auth = _request_auth(http_request)
+        if auth.requested_by_user_ref is None:
+            return _route_response(401, {
+                "status": "rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Authentication is required to save a public share.",
+                "share_id": share_id,
+            })
+        payload = share_payload_provider(share_id) if share_payload_provider is not None else None
+        if payload is None:
+            return _route_response(404, {"status": "missing", "reason_code": "public_share.not_found", "share_id": share_id})
+        saved_rows = _normalize_saved_public_share_rows(tuple(saved_public_share_rows_provider() or ()) if saved_public_share_rows_provider is not None else (), saved_by_user_ref=auth.requested_by_user_ref)
+        saved_lookup = {row["share_id"]: row for row in saved_rows}
+        existing = saved_lookup.get(share_id)
+        saved_at = str((existing or {}).get("saved_at") or "").strip() or (now_iso or datetime.now(UTC).isoformat())
+        status = "unchanged" if existing is not None else "updated"
+        if existing is None and saved_public_share_writer is not None:
+            saved_public_share_writer({
+                "share_id": share_id,
+                "saved_at": saved_at,
+                "saved_by_user_ref": auth.requested_by_user_ref,
+            })
+        response = ProductSavedPublicShareMutationResponse(
+            status=status,
+            action="save",
+            share_id=share_id,
+            saved_by_user_ref=auth.requested_by_user_ref,
+            saved=True,
+            saved_at=saved_at,
+            links=ProductPublicShareLinks({
+                "detail": f"/api/public-shares/{share_id}",
+                "saved_collection": "/api/users/me/saved-public-shares",
+                "unsave": f"/api/public-shares/{share_id}/unsave",
+            }),
+            identity_policy=_saved_public_share_mutation_identity_policy_body(action="save", route_template=expected_path),
+            namespace_policy=_saved_public_share_mutation_namespace_policy_body(action="save"),
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_unsave_public_share(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        saved_public_share_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        saved_public_share_deleter: Callable[[str], bool] | None = None,
+    ) -> HttpRouteResponse:
+        share_id = str((http_request.path_params or {}).get("share_id") or "").strip()
+        expected_path = f"/api/public-shares/{share_id}/unsave"
+        if http_request.method.upper() != "POST" or http_request.path != expected_path or not share_id:
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        auth = _request_auth(http_request)
+        if auth.requested_by_user_ref is None:
+            return _route_response(401, {
+                "status": "rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Authentication is required to unsave a public share.",
+                "share_id": share_id,
+            })
+        saved_rows = _normalize_saved_public_share_rows(tuple(saved_public_share_rows_provider() or ()) if saved_public_share_rows_provider is not None else (), saved_by_user_ref=auth.requested_by_user_ref)
+        saved_lookup = {row["share_id"]: row for row in saved_rows}
+        existing = saved_lookup.get(share_id)
+        status = "updated" if existing is not None else "unchanged"
+        if existing is not None and saved_public_share_deleter is not None:
+            saved_public_share_deleter(share_id)
+        response = ProductSavedPublicShareMutationResponse(
+            status=status,
+            action="unsave",
+            share_id=share_id,
+            saved_by_user_ref=auth.requested_by_user_ref,
+            saved=False,
+            saved_at=None,
+            links=ProductPublicShareLinks({
+                "detail": f"/api/public-shares/{share_id}",
+                "saved_collection": "/api/users/me/saved-public-shares",
+                "save": f"/api/public-shares/{share_id}/save",
+            }),
+            identity_policy=_saved_public_share_mutation_identity_policy_body(action="unsave", route_template=expected_path),
+            namespace_policy=_saved_public_share_mutation_namespace_policy_body(action="unsave"),
+        )
+        return _route_response(200, asdict(response))
 
     @classmethod
     def handle_get_related_public_shares(

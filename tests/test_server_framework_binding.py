@@ -146,6 +146,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "list_public_shares",
         "get_public_share_catalog_summary",
         "list_saved_public_shares",
+        "save_public_share",
+        "unsave_public_share",
         "get_related_public_shares",
         "get_public_share_compare_summary",
         "get_public_share",
@@ -584,6 +586,37 @@ def test_framework_binding_handles_public_share_artifact_round_trip() -> None:
     assert parsed["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
     assert parsed["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
 
+
+
+
+def test_framework_binding_handles_saved_public_share_mutations_round_trip() -> None:
+    saved_rows = [{"share_id": "share-framework-owner-active", "saved_at": "2026-04-16T12:05:00+00:00", "saved_by_user_ref": "user-owner"}]
+    written: list[dict] = []
+    deleted: list[str] = []
+
+    save_response = FrameworkRouteBindings.handle_save_public_share(
+        request=_request(method="POST", path="/api/public-shares/share-framework-001/save", path_params={"share_id": "share-framework-001"}),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+        saved_public_share_rows_provider=lambda: (),
+        saved_public_share_writer=lambda row: written.append(dict(row)) or dict(row),
+        now_iso="2026-04-16T13:10:00+00:00",
+    )
+    assert save_response.status_code == 200
+    parsed_save = json.loads(save_response.body_text)
+    assert parsed_save["action"] == "save"
+    assert parsed_save["saved"] is True
+    assert written[0]["share_id"] == "share-framework-001"
+
+    unsave_response = FrameworkRouteBindings.handle_unsave_public_share(
+        request=_request(method="POST", path="/api/public-shares/share-framework-owner-active/unsave", path_params={"share_id": "share-framework-owner-active"}),
+        saved_public_share_rows_provider=lambda: tuple(saved_rows),
+        saved_public_share_deleter=lambda share_id: deleted.append(share_id) or True,
+    )
+    assert unsave_response.status_code == 200
+    parsed_unsave = json.loads(unsave_response.body_text)
+    assert parsed_unsave["action"] == "unsave"
+    assert parsed_unsave["saved"] is False
+    assert deleted == ["share-framework-owner-active"]
 
 def test_framework_binding_handles_public_share_consumer_actions_round_trip() -> None:
     workspace_store: dict[str, dict] = {}

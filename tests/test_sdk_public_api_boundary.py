@@ -788,6 +788,8 @@ def test_sdk_root_exposes_public_share_mcp_surface() -> None:
     assert "list_public_shares" in resource_names
     assert "get_public_share_catalog_summary" in resource_names
     assert "list_saved_public_shares" in resource_names
+    assert "save_public_share" in tool_names
+    assert "unsave_public_share" in tool_names
     assert "get_related_public_shares" in resource_names
     assert "get_public_share_compare_summary" in resource_names
     assert "get_public_share" in resource_names

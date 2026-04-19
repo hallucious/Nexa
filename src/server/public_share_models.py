@@ -322,6 +322,29 @@ class ProductPublicShareRunAcceptedResponse:
             raise ValueError("ProductPublicShareRunAcceptedResponse.target_ref must be non-empty")
 
 
+
+@dataclass(frozen=True)
+class ProductSavedPublicShareMutationResponse:
+    status: str
+    action: str
+    share_id: str
+    saved_by_user_ref: str
+    saved: bool
+    saved_at: Optional[str] = None
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductSavedPublicShareMutationResponse.status must be non-empty")
+        if not self.action:
+            raise ValueError("ProductSavedPublicShareMutationResponse.action must be non-empty")
+        if not self.share_id:
+            raise ValueError("ProductSavedPublicShareMutationResponse.share_id must be non-empty")
+        if not self.saved_by_user_ref:
+            raise ValueError("ProductSavedPublicShareMutationResponse.saved_by_user_ref must be non-empty")
+
 @dataclass(frozen=True)
 class ProductPublicShareCatalogEntryView:
     share_id: str

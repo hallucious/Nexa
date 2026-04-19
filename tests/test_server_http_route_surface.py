@@ -265,6 +265,36 @@ def test_saved_public_share_collection_requires_authentication() -> None:
     assert response.body["reason_code"] == "public_share.authentication_required"
 
 
+
+
+def test_public_share_saved_state_mutation_routes_round_trip() -> None:
+    saved_rows = [{"share_id": "share-owner-active", "saved_at": "2026-04-16T11:55:00+00:00", "saved_by_user_ref": "user-owner"}]
+    written: list[dict] = []
+    deleted: list[str] = []
+
+    save_response = RunHttpRouteSurface.handle_save_public_share(
+        http_request=_auth_request(method="POST", path="/api/public-shares/share-http-save-001/save", path_params={"share_id": "share-http-save-001"}),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+        saved_public_share_rows_provider=lambda: tuple(saved_rows),
+        saved_public_share_writer=lambda row: written.append(dict(row)) or dict(row),
+        now_iso="2026-04-16T13:10:00+00:00",
+    )
+    assert save_response.status_code == 200
+    assert save_response.body["action"] == "save"
+    assert save_response.body["saved"] is True
+    assert save_response.body["saved_by_user_ref"] == "user-owner"
+    assert written[0]["share_id"] == "share-http-save-001"
+
+    unsave_response = RunHttpRouteSurface.handle_unsave_public_share(
+        http_request=_auth_request(method="POST", path="/api/public-shares/share-owner-active/unsave", path_params={"share_id": "share-owner-active"}),
+        saved_public_share_rows_provider=lambda: tuple(saved_rows),
+        saved_public_share_deleter=lambda share_id: deleted.append(share_id) or True,
+    )
+    assert unsave_response.status_code == 200
+    assert unsave_response.body["action"] == "unsave"
+    assert unsave_response.body["saved"] is False
+    assert deleted == ["share-owner-active"]
+
 def test_public_share_related_and_compare_routes_return_summary() -> None:
     related = RunHttpRouteSurface.handle_get_related_public_shares(
         http_request=HttpRouteRequest(method="GET", path="/api/public-shares/share-owner-active/related", path_params={"share_id": "share-owner-active"}),

@@ -65,6 +65,7 @@ from src.server.public_share_models import (
     ProductPublicShareRunAcceptedResponse,
     ProductRelatedPublicShareResponse,
     ProductSavedPublicShareCollectionResponse,
+    ProductSavedPublicShareMutationResponse,
     ProductWorkspaceShellShareCreatedResponse,
 )
 from src.server.run_action_log_models import ProductRunActionLogResponse
@@ -173,6 +174,7 @@ __all__ = [
     "ProductPublicShareCatalogResponse",
     "ProductPublicShareCatalogSummaryResponse",
     "ProductSavedPublicShareCollectionResponse",
+    "ProductSavedPublicShareMutationResponse",
     "ProductRelatedPublicShareResponse",
     "ProductPublicShareCompareSummaryResponse",
     "ProductPublicShareCheckoutAcceptedResponse",

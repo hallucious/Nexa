@@ -269,6 +269,18 @@ class FrameworkRouteBindings:
             summary="List saved public shares for the current authenticated user.",
         ),
         FrameworkRouteDefinition(
+            route_name="save_public_share",
+            method="POST",
+            path_template="/api/public-shares/{share_id}/save",
+            summary="Save a public share into the current authenticated user's saved-share collection.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="unsave_public_share",
+            method="POST",
+            path_template="/api/public-shares/{share_id}/unsave",
+            summary="Remove a public share from the current authenticated user's saved-share collection.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_related_public_shares",
             method="GET",
             path_template="/api/public-shares/{share_id}/related",
@@ -1459,6 +1471,41 @@ class FrameworkRouteBindings:
         )
         return cls.to_framework_response(response)
 
+
+
+    @classmethod
+    def handle_save_public_share(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_provider=None,
+        saved_public_share_rows_provider=None,
+        saved_public_share_writer=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_save_public_share(
+            cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+            saved_public_share_rows_provider=saved_public_share_rows_provider,
+            saved_public_share_writer=saved_public_share_writer,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_unsave_public_share(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        saved_public_share_rows_provider=None,
+        saved_public_share_deleter=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_unsave_public_share(
+            cls.to_http_route_request(request),
+            saved_public_share_rows_provider=saved_public_share_rows_provider,
+            saved_public_share_deleter=saved_public_share_deleter,
+        )
+        return cls.to_framework_response(response)
     @classmethod
     def handle_get_related_public_shares(
         cls,

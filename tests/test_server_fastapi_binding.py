@@ -2098,6 +2098,25 @@ def test_fastapi_binding_public_share_api_catalog_saved_related_and_compare_roun
     assert compare_response.json()['compare']['workspace_found'] is True
 
 
+
+
+def test_fastapi_binding_saved_public_share_mutation_api_round_trip() -> None:
+    saved_rows = [{"share_id": "share-fastapi-saved-001", "saved_at": "2026-04-16T12:00:00+00:00", "saved_by_user_ref": "user-owner"}]
+    client = _make_client(saved_public_share_rows_provider=lambda: list(saved_rows))
+
+    save_response = client.post('/api/public-shares/share-fastapi-001/save', headers=_session_headers())
+    assert save_response.status_code == 200
+    save_payload = save_response.json()
+    assert save_payload['action'] == 'save'
+    assert save_payload['saved'] is True
+    assert save_payload['saved_by_user_ref'] == 'user-owner'
+
+    unsave_response = client.post('/api/public-shares/share-fastapi-saved-001/unsave', headers=_session_headers())
+    assert unsave_response.status_code == 200
+    unsave_payload = unsave_response.json()
+    assert unsave_payload['action'] == 'unsave'
+    assert unsave_payload['saved'] is False
+
 def test_fastapi_binding_public_share_consumer_action_api_round_trip() -> None:
     client = _make_client(artifact_source=_valid_working_save_artifact())
 
