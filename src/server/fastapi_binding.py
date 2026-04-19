@@ -35,6 +35,7 @@ from src.server.public_share_runtime import (
     render_public_share_run_html,
     render_public_share_detail_html,
     render_public_share_history_html,
+    render_public_share_related_html,
     render_issuer_public_share_portfolio_html,
     render_issuer_public_share_summary_html,
     render_issuer_public_share_action_reports_html,
@@ -772,6 +773,47 @@ class FastApiRouteBindings:
                 filtered.append(descriptor)
             return visible, filtered
 
+        def _descriptor_to_public_share_entry(descriptor: Any) -> dict[str, Any]:
+            return {
+                "share_id": descriptor.share_id,
+                "share_path": descriptor.share_path,
+                "title": descriptor.title,
+                "summary": descriptor.summary,
+                "storage_role": descriptor.storage_role,
+                "lifecycle_state": descriptor.lifecycle_state,
+                "updated_at": descriptor.updated_at,
+                "issued_by_user_ref": descriptor.issued_by_user_ref,
+                "operation_capabilities": list(descriptor.operation_capabilities),
+            }
+
+        def _related_public_share_entries(target_descriptor: Any, *, limit: int = 12) -> list[dict[str, Any]]:
+            related: list[tuple[int, str, str, Any, bool, bool, list[str]]] = []
+            target_ops = set(target_descriptor.operation_capabilities)
+            for descriptor in _iter_active_public_share_descriptors():
+                if descriptor.share_id == target_descriptor.share_id:
+                    continue
+                same_issuer = bool(target_descriptor.issued_by_user_ref and descriptor.issued_by_user_ref == target_descriptor.issued_by_user_ref)
+                same_storage_role = descriptor.storage_role == target_descriptor.storage_role
+                shared_operations = sorted(target_ops.intersection(descriptor.operation_capabilities))
+                score = (4 if same_issuer else 0) + (2 if same_storage_role else 0) + len(shared_operations)
+                if score <= 0:
+                    continue
+                related.append((score, str(descriptor.updated_at or ""), str(descriptor.share_id or ""), descriptor, same_issuer, same_storage_role, shared_operations))
+            related.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+            entries: list[dict[str, Any]] = []
+            for score, _updated_at, _share_id, descriptor, same_issuer, same_storage_role, shared_operations in related[:limit]:
+                entry = _descriptor_to_public_share_entry(descriptor)
+                entry.update(
+                    {
+                        "match_score": score,
+                        "same_issuer": same_issuer,
+                        "same_storage_role": same_storage_role,
+                        "shared_operations": shared_operations,
+                    }
+                )
+                entries.append(entry)
+            return entries
+
         @router.get("/app/public-shares")
         async def get_public_share_catalog_page(request: Request) -> Response:
             query = dict(request.query_params)
@@ -783,17 +825,7 @@ class FastApiRouteBindings:
             _, filtered = _filter_public_share_descriptors(search=search, storage_role=storage_role, operation=operation)
             entries: list[dict[str, Any]] = []
             for descriptor in filtered:
-                entries.append({
-                    "share_id": descriptor.share_id,
-                    "share_path": descriptor.share_path,
-                    "title": descriptor.title,
-                    "summary": descriptor.summary,
-                    "storage_role": descriptor.storage_role,
-                    "lifecycle_state": descriptor.lifecycle_state,
-                    "updated_at": descriptor.updated_at,
-                    "issued_by_user_ref": descriptor.issued_by_user_ref,
-                    "operation_capabilities": list(descriptor.operation_capabilities),
-                })
+                entries.append(_descriptor_to_public_share_entry(descriptor))
             entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
             payload = {
                 "app_language": app_language,
@@ -836,17 +868,7 @@ class FastApiRouteBindings:
             _, filtered = _filter_public_share_descriptors(search=search, storage_role=storage_role, operation=operation, issuer_user_ref=issuer_user_ref)
             entries: list[dict[str, Any]] = []
             for descriptor in filtered:
-                entries.append({
-                    "share_id": descriptor.share_id,
-                    "share_path": descriptor.share_path,
-                    "title": descriptor.title,
-                    "summary": descriptor.summary,
-                    "storage_role": descriptor.storage_role,
-                    "lifecycle_state": descriptor.lifecycle_state,
-                    "updated_at": descriptor.updated_at,
-                    "issued_by_user_ref": descriptor.issued_by_user_ref,
-                    "operation_capabilities": list(descriptor.operation_capabilities),
-                })
+                entries.append(_descriptor_to_public_share_entry(descriptor))
             entries.sort(key=lambda item: (str(item.get("updated_at") or ""), str(item.get("share_id") or "")), reverse=True)
             payload = {"app_language": app_language, "workspace_id": workspace_id, "issuer_user_ref": issuer_user_ref, "entries": entries, "filters": {"q": search, "storage_role": storage_role, "operation": operation}}
             return HTMLResponse(content=render_public_share_issuer_catalog_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
@@ -1445,6 +1467,48 @@ class FastApiRouteBindings:
             }
             payload["notice"] = _public_share_notice_payload(request)
             return HTMLResponse(content=render_public_share_history_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.get("/app/public-shares/{share_id}/related")
+        async def get_public_share_related_page(request: Request, share_id: str) -> Response:
+            from src.storage.share_api import describe_public_nex_link_share
+
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path=f"/api/public-shares/{share_id}",
+                headers=dict(request.headers),
+                path_params={"share_id": share_id},
+                query_params=query,
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_get_public_share(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            share_payload = self.dependencies.public_share_payload_provider(share_id) if self.dependencies.public_share_payload_provider is not None else None
+            if not isinstance(share_payload, Mapping):
+                return RedirectResponse(url=f"/app/public-shares?app_language={app_language}{f'&workspace_id={workspace_id}' if workspace_id else ''}", status_code=303)
+            descriptor = describe_public_nex_link_share(dict(share_payload))
+            related_entries = _related_public_share_entries(descriptor)
+            payload["app_language"] = app_language
+            payload["workspace_id"] = workspace_id
+            payload["related"] = {
+                "entries": related_entries,
+                "summary": {
+                    "total_related_count": len(related_entries),
+                    "same_issuer_count": sum(1 for entry in related_entries if entry.get("same_issuer")),
+                    "same_storage_role_count": sum(1 for entry in related_entries if entry.get("same_storage_role")),
+                    "shared_operation_match_count": sum(1 for entry in related_entries if entry.get("shared_operations")),
+                },
+            }
+            return HTMLResponse(content=render_public_share_related_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
 
         @router.get("/app/public-shares/{share_id}/compare")
         async def get_public_share_compare_page(request: Request, share_id: str) -> Response:

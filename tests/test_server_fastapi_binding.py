@@ -2271,6 +2271,43 @@ def test_fastapi_binding_public_share_catalog_compare_and_issuer_pages_round_tri
     assert 'Inventory total' in issuer_summary_body
 
 
+def test_fastapi_binding_public_share_related_product_flow_round_trip() -> None:
+    primary = _share_payload('share-fastapi-001')
+    secondary = _share_payload('share-fastapi-002')
+    secondary['share']['title'] = 'FastAPI share related'
+    share_rows = (primary, secondary)
+    share_map = {row['share']['share_id']: row for row in share_rows}
+    client = _make_client(
+        public_share_payload_provider=lambda share_id: share_map.get(share_id),
+        public_share_payload_rows_provider=lambda: share_rows,
+    )
+
+    catalog_response = client.get('/app/public-shares?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert catalog_response.status_code == 200
+    catalog_body = catalog_response.text
+    assert '/app/public-shares/share-fastapi-001/related?app_language=en&amp;workspace_id=ws-001' in catalog_body
+
+    detail_response = client.get('/app/public-shares/share-fastapi-001?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert detail_response.status_code == 200
+    detail_body = detail_response.text
+    assert '/app/public-shares/share-fastapi-001/related?app_language=en&amp;workspace_id=ws-001' in detail_body
+
+    history_response = client.get('/app/public-shares/share-fastapi-001/history?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert history_response.status_code == 200
+    history_body = history_response.text
+    assert '/app/public-shares/share-fastapi-001/related?app_language=en&amp;workspace_id=ws-001' in history_body
+
+    related_response = client.get('/app/public-shares/share-fastapi-001/related?app_language=en&workspace_id=ws-001', headers=_session_headers())
+    assert related_response.status_code == 200
+    related_body = related_response.text
+    assert 'Related public shares' in related_body
+    assert 'FastAPI share related' in related_body
+    assert 'Match score' in related_body
+    assert '/app/public-shares/share-fastapi-002?app_language=en&amp;workspace_id=ws-001' in related_body
+    assert '/app/public-shares/share-fastapi-002/compare?app_language=en&amp;workspace_id=ws-001' in related_body
+    assert '/app/public-shares/share-fastapi-002/create-workspace?app_language=en&amp;workspace_id=ws-001' in related_body
+
+
 def test_fastapi_binding_public_share_download_product_flow_round_trip() -> None:
     client = _make_client()
 
