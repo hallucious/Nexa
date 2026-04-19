@@ -6,6 +6,7 @@ import json
 
 from src.server import (
     EngineResultEnvelope,
+    EngineRunLaunchResponse,
     EngineRunStatusSnapshot,
     EngineArtifactReference,
     EngineFinalOutput,
@@ -13,6 +14,7 @@ from src.server import (
     ExecutionTargetCatalogEntry,
     FrameworkInboundRequest,
     FrameworkRouteBindings,
+    ProductAdmissionPolicy,
     RunAuthorizationContext,
     WorkspaceAuthorizationContext,
 )
@@ -149,6 +151,10 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_public_share",
         "get_public_share_history",
         "get_public_share_artifact",
+        "checkout_public_share",
+        "import_public_share",
+        "create_workspace_from_public_share",
+        "run_public_share",
         "extend_public_share",
         "revoke_public_share",
         "archive_public_share",
@@ -577,6 +583,94 @@ def test_framework_binding_handles_public_share_artifact_round_trip() -> None:
     assert parsed["artifact_boundary"]["role_boundary"]["commit_boundary_posture"] == "already_crossed_commit_boundary"
     assert parsed["artifact_boundary"]["artifact_operation_boundaries"][0]["operation"] == "load_artifact"
     assert parsed["artifact_boundary"]["artifact_operation_boundaries"][4]["execution_anchor_posture"] == "working_save_runs_as_draft__commit_snapshot_runs_as_approved_anchor"
+
+
+def test_framework_binding_handles_public_share_consumer_actions_round_trip() -> None:
+    workspace_store: dict[str, dict] = {}
+    registry_rows: list[dict] = []
+    membership_rows: list[dict] = []
+
+    checkout = FrameworkRouteBindings.handle_checkout_public_share(
+        request=_request(method="POST", path="/api/public-shares/share-framework-001/checkout", path_params={"share_id": "share-framework-001"}, json_body={"workspace_id": "ws-001", "working_save_id": "ws-checked-out"}),
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Workspace", "continuity_source": "server", "archived": False} if workspace_id == "ws-001" else None,
+        workspace_run_rows_provider=lambda workspace_id: (),
+        workspace_result_rows_provider=lambda workspace_id: {},
+        onboarding_rows_provider=lambda: (),
+        workspace_artifact_source_provider=lambda workspace_id: _working_save("ws-current") if workspace_id == "ws-001" else None,
+        artifact_rows_lookup=lambda _run_id: (),
+        trace_rows_lookup=lambda _run_id: (),
+        workspace_artifact_source_writer=lambda workspace_id, artifact: workspace_store.setdefault(workspace_id, artifact) or artifact,
+        public_share_payload_provider=lambda share_id: _share_payload(share_id),
+        share_payload_rows_provider=lambda: (),
+        provider_binding_rows_provider=lambda workspace_id: (),
+        managed_secret_rows_provider=lambda: (),
+        provider_probe_rows_provider=lambda workspace_id: (),
+        feedback_rows_provider=lambda: (),
+    )
+    parsed_checkout = json.loads(checkout.body_text)
+    assert checkout.status_code == 200
+    assert parsed_checkout["action"] == "checkout_working_copy"
+    assert parsed_checkout["workspace_id"] == "ws-001"
+    assert parsed_checkout["working_save_id"] == "ws-checked-out"
+
+    imported = FrameworkRouteBindings.handle_import_public_share(
+        request=_request(method="POST", path="/api/public-shares/share-framework-001/import", path_params={"share_id": "share-framework-001"}, json_body={"workspace_id": "ws-001"}),
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Workspace", "continuity_source": "server", "archived": False} if workspace_id == "ws-001" else None,
+        workspace_artifact_source_writer=lambda workspace_id, artifact: workspace_store.setdefault(workspace_id, artifact) or artifact,
+        public_share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+    parsed_import = json.loads(imported.body_text)
+    assert imported.status_code == 200
+    assert parsed_import["action"] == "import_copy"
+    assert parsed_import["workspace_id"] == "ws-001"
+    assert parsed_import["storage_role"] == "commit_snapshot"
+
+    created = FrameworkRouteBindings.handle_create_workspace_from_public_share(
+        request=_request(method="POST", path="/api/public-shares/share-framework-001/create-workspace", path_params={"share_id": "share-framework-001"}, json_body={"title": "Imported Share Workspace", "create_mode": "checkout_working_copy", "working_save_id": "ws-created-draft"}),
+        workspace_id_factory=lambda: "ws-created",
+        membership_id_factory=lambda: "membership-created",
+        now_iso="2026-04-16T13:00:00+00:00",
+        workspace_rows_provider=lambda: tuple(registry_rows),
+        membership_rows_provider=lambda: tuple(membership_rows),
+        recent_run_rows_provider=lambda: (),
+        recent_provider_binding_rows_provider=lambda: (),
+        managed_secret_rows_provider=lambda: (),
+        recent_provider_probe_rows_provider=lambda: (),
+        onboarding_rows_provider=lambda: (),
+        workspace_registry_writer=lambda workspace_row, membership_row: (registry_rows.append(dict(workspace_row)), membership_rows.append(dict(membership_row))),
+        workspace_artifact_source_writer=lambda workspace_id, artifact: workspace_store.setdefault(workspace_id, artifact) or artifact,
+        public_share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+    parsed_created = json.loads(created.body_text)
+    assert created.status_code == 201
+    assert parsed_created["action"] == "create_workspace_from_share"
+    assert parsed_created["workspace_id"] == "ws-created"
+    assert parsed_created["create_mode"] == "checkout_working_copy"
+    assert parsed_created["storage_role"] == "working_save"
+
+    launched = FrameworkRouteBindings.handle_run_public_share(
+        request=_request(method="POST", path="/api/public-shares/share-framework-001/run", path_params={"share_id": "share-framework-001"}, json_body={"workspace_id": "ws-001", "input_payload": {"question": "hello"}}),
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Workspace", "continuity_source": "server", "archived": False} if workspace_id == "ws-001" else None,
+        target_catalog_provider=lambda workspace_id: {},
+        policy=ProductAdmissionPolicy(),
+        engine_launch_decider=lambda req: EngineRunLaunchResponse(launch_status="accepted", run_id="run-share-001", initial_status="queued"),
+        run_id_factory=lambda: "run-share-001",
+        now_iso="2026-04-16T13:05:00+00:00",
+        workspace_run_rows_provider=lambda workspace_id: (),
+        provider_binding_rows_provider=lambda workspace_id: (),
+        managed_secret_rows_provider=lambda: (),
+        provider_probe_rows_provider=lambda workspace_id: (),
+        onboarding_rows_provider=lambda: (),
+        public_share_payload_provider=lambda share_id: _share_payload(share_id),
+    )
+    parsed_launch = json.loads(launched.body_text)
+    assert launched.status_code == 202
+    assert parsed_launch["action"] == "run_artifact"
+    assert parsed_launch["run_id"] == "run-share-001"
+    assert parsed_launch["target_type"] == "commit_snapshot"
 
 
 def test_framework_binding_handles_workspace_shell_share_creation_round_trip() -> None:

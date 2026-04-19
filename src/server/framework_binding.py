@@ -299,6 +299,30 @@ class FrameworkRouteBindings:
             summary="Read the canonical public artifact for a bounded public share.",
         ),
         FrameworkRouteDefinition(
+            route_name="checkout_public_share",
+            method="POST",
+            path_template="/api/public-shares/{share_id}/checkout",
+            summary="Restore a public share commit snapshot into an existing workspace as a working copy.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="import_public_share",
+            method="POST",
+            path_template="/api/public-shares/{share_id}/import",
+            summary="Import a public share artifact into an existing workspace.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="create_workspace_from_public_share",
+            method="POST",
+            path_template="/api/public-shares/{share_id}/create-workspace",
+            summary="Create a new workspace directly from a public share artifact.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="run_public_share",
+            method="POST",
+            path_template="/api/public-shares/{share_id}/run",
+            summary="Launch a run directly from a public share artifact in an existing workspace.",
+        ),
+        FrameworkRouteDefinition(
             route_name="extend_public_share",
             method="POST",
             path_template="/api/public-shares/{share_id}/extend",
@@ -1507,6 +1531,142 @@ class FrameworkRouteBindings:
         response = RunHttpRouteSurface.handle_get_public_share_artifact(
             http_request=cls.to_http_route_request(request),
             share_payload_provider=share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_checkout_public_share(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context_provider=None,
+        workspace_row_provider=None,
+        workspace_run_rows_provider=None,
+        workspace_result_rows_provider=None,
+        onboarding_rows_provider=None,
+        workspace_artifact_source_provider=None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+        workspace_artifact_source_writer=None,
+        public_share_payload_provider=None,
+        share_payload_rows_provider=None,
+        provider_binding_rows_provider=None,
+        managed_secret_rows_provider=None,
+        provider_probe_rows_provider=None,
+        feedback_rows_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_checkout_public_share(
+            http_request=cls.to_http_route_request(request),
+            workspace_context_provider=workspace_context_provider,
+            workspace_row_provider=workspace_row_provider,
+            workspace_run_rows_provider=workspace_run_rows_provider,
+            workspace_result_rows_provider=workspace_result_rows_provider,
+            onboarding_rows_provider=onboarding_rows_provider,
+            workspace_artifact_source_provider=workspace_artifact_source_provider,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
+            workspace_artifact_source_writer=workspace_artifact_source_writer,
+            public_share_payload_provider=public_share_payload_provider,
+            share_payload_rows_provider=share_payload_rows_provider,
+            provider_binding_rows_provider=provider_binding_rows_provider,
+            managed_secret_rows_provider=managed_secret_rows_provider,
+            provider_probe_rows_provider=provider_probe_rows_provider,
+            feedback_rows_provider=feedback_rows_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_import_public_share(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context_provider=None,
+        workspace_row_provider=None,
+        workspace_artifact_source_writer=None,
+        public_share_payload_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_import_public_share(
+            http_request=cls.to_http_route_request(request),
+            workspace_context_provider=workspace_context_provider,
+            workspace_row_provider=workspace_row_provider,
+            workspace_artifact_source_writer=workspace_artifact_source_writer,
+            public_share_payload_provider=public_share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_create_workspace_from_public_share(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_id_factory,
+        membership_id_factory,
+        now_iso: str,
+        workspace_rows_provider=None,
+        membership_rows_provider=None,
+        recent_run_rows_provider=None,
+        recent_provider_binding_rows_provider=None,
+        managed_secret_rows_provider=None,
+        recent_provider_probe_rows_provider=None,
+        onboarding_rows_provider=None,
+        workspace_registry_writer=None,
+        workspace_artifact_source_writer=None,
+        public_share_payload_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_create_workspace_from_public_share(
+            http_request=cls.to_http_route_request(request),
+            workspace_id_factory=workspace_id_factory,
+            membership_id_factory=membership_id_factory,
+            now_iso=now_iso,
+            workspace_rows_provider=workspace_rows_provider,
+            membership_rows_provider=membership_rows_provider,
+            recent_run_rows_provider=recent_run_rows_provider,
+            recent_provider_binding_rows_provider=recent_provider_binding_rows_provider,
+            managed_secret_rows_provider=managed_secret_rows_provider,
+            recent_provider_probe_rows_provider=recent_provider_probe_rows_provider,
+            onboarding_rows_provider=onboarding_rows_provider,
+            workspace_registry_writer=workspace_registry_writer,
+            workspace_artifact_source_writer=workspace_artifact_source_writer,
+            public_share_payload_provider=public_share_payload_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_run_public_share(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context_provider=None,
+        workspace_row_provider=None,
+        target_catalog_provider=None,
+        policy: ProductAdmissionPolicy,
+        engine_launch_decider,
+        run_id_factory,
+        run_request_id_factory=None,
+        now_iso: str | None = None,
+        workspace_run_rows_provider=None,
+        provider_binding_rows_provider=None,
+        managed_secret_rows_provider=None,
+        provider_probe_rows_provider=None,
+        onboarding_rows_provider=None,
+        public_share_payload_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_run_public_share(
+            http_request=cls.to_http_route_request(request),
+            workspace_context_provider=workspace_context_provider,
+            workspace_row_provider=workspace_row_provider,
+            target_catalog_provider=target_catalog_provider,
+            policy=policy,
+            engine_launch_decider=engine_launch_decider,
+            run_id_factory=run_id_factory,
+            run_request_id_factory=run_request_id_factory,
+            now_iso=now_iso,
+            workspace_run_rows_provider=workspace_run_rows_provider,
+            provider_binding_rows_provider=provider_binding_rows_provider,
+            managed_secret_rows_provider=managed_secret_rows_provider,
+            provider_probe_rows_provider=provider_probe_rows_provider,
+            onboarding_rows_provider=onboarding_rows_provider,
+            public_share_payload_provider=public_share_payload_provider,
         )
         return cls.to_framework_response(response)
 

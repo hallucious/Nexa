@@ -208,6 +208,121 @@ class ProductPublicShareMutationResponse(ProductPublicShareDetailResponse):
 
 
 @dataclass(frozen=True)
+class ProductPublicShareCheckoutAcceptedResponse:
+    status: str
+    action: str
+    share_id: str
+    workspace_id: str
+    storage_role: str
+    target_ref: Optional[str] = None
+    source_share_id: Optional[str] = None
+    working_save_id: Optional[str] = None
+    transition: Optional[dict[str, Any]] = None
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareCheckoutAcceptedResponse.status must be non-empty")
+        if not self.action:
+            raise ValueError("ProductPublicShareCheckoutAcceptedResponse.action must be non-empty")
+        if not self.share_id:
+            raise ValueError("ProductPublicShareCheckoutAcceptedResponse.share_id must be non-empty")
+        if not self.workspace_id:
+            raise ValueError("ProductPublicShareCheckoutAcceptedResponse.workspace_id must be non-empty")
+        if not self.storage_role:
+            raise ValueError("ProductPublicShareCheckoutAcceptedResponse.storage_role must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareImportAcceptedResponse:
+    status: str
+    action: str
+    share_id: str
+    workspace_id: str
+    storage_role: str
+    target_ref: Optional[str] = None
+    source_share_id: Optional[str] = None
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareImportAcceptedResponse.status must be non-empty")
+        if not self.action:
+            raise ValueError("ProductPublicShareImportAcceptedResponse.action must be non-empty")
+        if not self.share_id:
+            raise ValueError("ProductPublicShareImportAcceptedResponse.share_id must be non-empty")
+        if not self.workspace_id:
+            raise ValueError("ProductPublicShareImportAcceptedResponse.workspace_id must be non-empty")
+        if not self.storage_role:
+            raise ValueError("ProductPublicShareImportAcceptedResponse.storage_role must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareCreateWorkspaceAcceptedResponse:
+    status: str
+    action: str
+    share_id: str
+    workspace_id: str
+    create_mode: str
+    storage_role: str
+    target_ref: Optional[str] = None
+    source_share_id: Optional[str] = None
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareCreateWorkspaceAcceptedResponse.status must be non-empty")
+        if not self.action:
+            raise ValueError("ProductPublicShareCreateWorkspaceAcceptedResponse.action must be non-empty")
+        if not self.share_id:
+            raise ValueError("ProductPublicShareCreateWorkspaceAcceptedResponse.share_id must be non-empty")
+        if not self.workspace_id:
+            raise ValueError("ProductPublicShareCreateWorkspaceAcceptedResponse.workspace_id must be non-empty")
+        if not self.create_mode:
+            raise ValueError("ProductPublicShareCreateWorkspaceAcceptedResponse.create_mode must be non-empty")
+        if not self.storage_role:
+            raise ValueError("ProductPublicShareCreateWorkspaceAcceptedResponse.storage_role must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareRunAcceptedResponse:
+    status: str
+    action: str
+    share_id: str
+    workspace_id: str
+    run_id: str
+    target_type: str
+    target_ref: str
+    source_share_id: Optional[str] = None
+    launch_context: Optional[dict[str, Any]] = None
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareRunAcceptedResponse.status must be non-empty")
+        if not self.action:
+            raise ValueError("ProductPublicShareRunAcceptedResponse.action must be non-empty")
+        if not self.share_id:
+            raise ValueError("ProductPublicShareRunAcceptedResponse.share_id must be non-empty")
+        if not self.workspace_id:
+            raise ValueError("ProductPublicShareRunAcceptedResponse.workspace_id must be non-empty")
+        if not self.run_id:
+            raise ValueError("ProductPublicShareRunAcceptedResponse.run_id must be non-empty")
+        if not self.target_type:
+            raise ValueError("ProductPublicShareRunAcceptedResponse.target_type must be non-empty")
+        if not self.target_ref:
+            raise ValueError("ProductPublicShareRunAcceptedResponse.target_ref must be non-empty")
+
+
+@dataclass(frozen=True)
 class ProductPublicShareCatalogEntryView:
     share_id: str
     share_path: str

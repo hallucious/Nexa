@@ -41,6 +41,13 @@ from src.server.starter_template_models import (
 )
 from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
+from src.server.public_share_models import (
+    ProductPublicShareCheckoutAcceptedResponse,
+    ProductPublicShareCreateWorkspaceAcceptedResponse,
+    ProductPublicShareImportAcceptedResponse,
+    ProductPublicShareLinks,
+    ProductPublicShareRunAcceptedResponse,
+)
 from src.server.result_history_runtime import build_workspace_result_history_payload
 from src.storage.share_api import (
     build_issuer_public_share_management_action_report,
@@ -623,6 +630,45 @@ def _public_share_compare_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _public_share_consumer_action_identity_policy_body(*, action: str, route_template: str) -> dict[str, Any]:
+    return {
+        "subject_boundary": "public_share_consumer_action",
+        "action": action,
+        "canonical_route": route_template,
+        "share_id_source": "path_param",
+        "workspace_identity_source": "request_body.workspace_id_when_required",
+        "response_identity_posture": "share_and_workspace_identity_exposed",
+        "sdk_posture": "public_share_action_write_projection",
+    }
+
+
+def _public_share_consumer_action_namespace_policy_body(*, action: str) -> dict[str, Any]:
+    return {
+        "namespace_scope": "public_share_consumer_action",
+        "action": action,
+        "allowed_namespaces": ["share.public_descriptor", "share.public_artifact", "workspace.public_artifact", "workspace.public_registry", "run.public_launch"],
+        "write_behavior": "bounded_server_side_mutation",
+        "cross_workspace_write": "explicit_workspace_context_required",
+        "sdk_posture": "public_share_action_write_projection",
+    }
+
+
+def _public_share_consumer_action_links(*, share_id: str, workspace_id: str | None = None, run_id: str | None = None) -> dict[str, str]:
+    links = {
+        "share_detail": f"/api/public-shares/{share_id}",
+        "share_history": f"/api/public-shares/{share_id}/history",
+        "share_artifact": f"/api/public-shares/{share_id}/artifact",
+    }
+    if workspace_id:
+        links["workspace_detail"] = f"/api/workspaces/{workspace_id}"
+        links["workspace_shell"] = f"/api/workspaces/{workspace_id}/shell"
+    if run_id:
+        links["run_status"] = f"/api/runs/{run_id}"
+        links["run_result"] = f"/api/runs/{run_id}/result"
+        links["run_artifacts"] = f"/api/runs/{run_id}/artifacts"
+    return links
+
+
 def _iter_active_public_share_descriptors(rows: Sequence[Mapping[str, Any]], *, now_iso: str | None = None) -> tuple[Any, ...]:
     descriptors = []
     for row in rows:
@@ -722,7 +768,7 @@ def _public_share_action_availability_body(descriptor: Any) -> dict[str, Any]:
         "import": {
             "allowed": capability_summary["can_import_copy"],
             "operation": "import_copy",
-            "api_route": f"/api/public-shares/{share_id}/artifact",
+            "api_route": f"/api/public-shares/{share_id}/import",
             "page_route": f"/app/public-shares/{share_id}/import",
             "requires_workspace_context": True,
             "denial_reason_code": None if capability_summary["can_import_copy"] else "public_share.import_not_allowed",
@@ -730,7 +776,7 @@ def _public_share_action_availability_body(descriptor: Any) -> dict[str, Any]:
         "run": {
             "allowed": capability_summary["can_run_artifact"],
             "operation": "run_artifact",
-            "api_route": f"/api/public-shares/{share_id}/artifact",
+            "api_route": f"/api/public-shares/{share_id}/run",
             "page_route": f"/app/public-shares/{share_id}/run",
             "requires_workspace_context": True,
             "denial_reason_code": None if capability_summary["can_run_artifact"] else "public_share.run_not_allowed",
@@ -738,7 +784,7 @@ def _public_share_action_availability_body(descriptor: Any) -> dict[str, Any]:
         "checkout": {
             "allowed": capability_summary["can_checkout_working_copy"],
             "operation": "checkout_working_copy",
-            "api_route": "/api/workspaces/{workspace_id}/shell/checkout",
+            "api_route": f"/api/public-shares/{share_id}/checkout",
             "page_route": f"/app/public-shares/{share_id}/checkout",
             "requires_workspace_context": True,
             "denial_reason_code": None if capability_summary["can_checkout_working_copy"] else "public_share.checkout_not_allowed",
@@ -746,7 +792,7 @@ def _public_share_action_availability_body(descriptor: Any) -> dict[str, Any]:
         "create_workspace_from_share": {
             "allowed": capability_summary["can_create_workspace_from_share"],
             "operation": "create_workspace_from_share",
-            "api_route": None,
+            "api_route": f"/api/public-shares/{share_id}/create-workspace",
             "page_route": f"/app/public-shares/{share_id}/create-workspace",
             "requires_workspace_context": False,
             "supported_modes": list(capability_summary["create_workspace_supported_modes"]),
@@ -1822,6 +1868,10 @@ class RunHttpRouteSurface:
         ("get_public_share", "GET", "/api/public-shares/{share_id}"),
         ("get_public_share_history", "GET", "/api/public-shares/{share_id}/history"),
         ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
+        ("checkout_public_share", "POST", "/api/public-shares/{share_id}/checkout"),
+        ("import_public_share", "POST", "/api/public-shares/{share_id}/import"),
+        ("create_workspace_from_public_share", "POST", "/api/public-shares/{share_id}/create-workspace"),
+        ("run_public_share", "POST", "/api/public-shares/{share_id}/run"),
         ("extend_public_share", "POST", "/api/public-shares/{share_id}/extend"),
         ("revoke_public_share", "POST", "/api/public-shares/{share_id}/revoke"),
         ("archive_public_share", "POST", "/api/public-shares/{share_id}/archive"),
@@ -3533,6 +3583,385 @@ class RunHttpRouteSurface:
                 "public_share_path": descriptor.share_path,
             },
         })
+
+    @classmethod
+    def handle_checkout_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context_provider=None,
+        workspace_row_provider=None,
+        workspace_run_rows_provider=None,
+        workspace_result_rows_provider=None,
+        onboarding_rows_provider=None,
+        workspace_artifact_source_provider=None,
+        artifact_rows_lookup=None,
+        trace_rows_lookup=None,
+        workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+        public_share_payload_provider=None,
+        share_payload_rows_provider=None,
+        provider_binding_rows_provider=None,
+        managed_secret_rows_provider=None,
+        provider_probe_rows_provider=None,
+        feedback_rows_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share checkout route only supports POST."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/checkout"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            return _route_response(400, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.invalid_request", "message": "Public share checkout payload is invalid.", "share_id": share_id})
+        workspace_id = str(body.get("workspace_id") or "").strip()
+        if not workspace_id:
+            return _route_response(400, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_id_required", "message": "Public share checkout requires a workspace_id.", "share_id": share_id})
+        working_save_id = str(body.get("working_save_id") or "").strip()
+        workspace_context = workspace_context_provider(workspace_id) if workspace_context_provider is not None else None
+        workspace_row = workspace_row_provider(workspace_id) if workspace_row_provider is not None else None
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_not_found", "message": "Requested workspace was not found.", "share_id": share_id, "workspace_id": workspace_id})
+        delegate_body: dict[str, Any] = {"share_id": share_id}
+        if working_save_id:
+            delegate_body["working_save_id"] = working_save_id
+        delegate_request = HttpRouteRequest(
+            method="POST",
+            path=f"/api/workspaces/{workspace_id}/shell/checkout",
+            headers=http_request.headers,
+            json_body=delegate_body,
+            path_params={"workspace_id": workspace_id},
+            query_params=http_request.query_params,
+            session_claims=http_request.session_claims,
+        )
+        delegate = cls.handle_checkout_workspace_shell(
+            http_request=delegate_request,
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+            recent_run_rows=workspace_run_rows_provider(workspace_id) if workspace_run_rows_provider is not None else (),
+            result_rows_by_run_id=workspace_result_rows_provider(workspace_id) if workspace_result_rows_provider is not None else None,
+            onboarding_rows=onboarding_rows_provider() if onboarding_rows_provider is not None else (),
+            artifact_source=workspace_artifact_source_provider(workspace_id) if workspace_artifact_source_provider is not None else None,
+            artifact_rows_lookup=artifact_rows_lookup,
+            trace_rows_lookup=trace_rows_lookup,
+            workspace_artifact_source_writer=workspace_artifact_source_writer,
+            public_share_payload_provider=public_share_payload_provider,
+            share_payload_rows_provider=share_payload_rows_provider,
+            provider_binding_rows=provider_binding_rows_provider(workspace_id) if provider_binding_rows_provider is not None else (),
+            managed_secret_rows=managed_secret_rows_provider() if managed_secret_rows_provider is not None else (),
+            provider_probe_rows=provider_probe_rows_provider(workspace_id) if provider_probe_rows_provider is not None else (),
+            feedback_rows=feedback_rows_provider() if feedback_rows_provider is not None else (),
+        )
+        if delegate.status_code != 200:
+            return delegate
+        payload = dict(delegate.body)
+        transition = dict(payload.get("transition") or {})
+        target_ref = str(transition.get("working_save_id") or payload.get("working_save_id") or "").strip() or None
+        response = ProductPublicShareCheckoutAcceptedResponse(
+            status="accepted",
+            action="checkout_working_copy",
+            share_id=share_id,
+            workspace_id=workspace_id,
+            storage_role=str(payload.get("storage_role") or "working_save"),
+            target_ref=target_ref,
+            source_share_id=share_id,
+            working_save_id=target_ref,
+            transition=transition or None,
+            links=ProductPublicShareLinks(_public_share_consumer_action_links(share_id=share_id, workspace_id=workspace_id)),
+            identity_policy=_public_share_consumer_action_identity_policy_body(action="checkout_working_copy", route_template=expected_path),
+            namespace_policy=_public_share_consumer_action_namespace_policy_body(action="checkout_working_copy"),
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_import_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context_provider=None,
+        workspace_row_provider=None,
+        workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+        public_share_payload_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share import route only supports POST."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/import"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            return _route_response(400, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.invalid_request", "message": "Public share import payload is invalid.", "share_id": share_id})
+        workspace_id = str(body.get("workspace_id") or "").strip()
+        if not workspace_id:
+            return _route_response(400, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_id_required", "message": "Public share import requires a workspace_id.", "share_id": share_id})
+        workspace_context = workspace_context_provider(workspace_id) if workspace_context_provider is not None else None
+        workspace_row = workspace_row_provider(workspace_id) if workspace_row_provider is not None else None
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_not_found", "message": "Requested workspace was not found.", "share_id": share_id, "workspace_id": workspace_id})
+        share_payload, _descriptor, error = _resolve_public_share_payload(share_id, public_share_payload_provider)
+        if error is not None:
+            return error
+        assert share_payload is not None
+        from src.storage.serialization import serialize_nex_artifact
+        from src.storage.validators.shared_validator import load_nex
+        try:
+            ensure_public_nex_link_share_operation_allowed(share_payload, "import_copy")
+        except ValueError as exc:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.import_not_allowed", "message": str(exc), "share_id": share_id, "workspace_id": workspace_id})
+        loaded_share = load_nex(share_payload["artifact"])
+        model = loaded_share.parsed_model
+        if model is None:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_artifact_invalid", "message": "Public share artifact is invalid.", "share_id": share_id, "workspace_id": workspace_id})
+        serialized = serialize_nex_artifact(model)
+        if workspace_artifact_source_writer is not None:
+            workspace_artifact_source_writer(workspace_id, serialized)
+        meta = dict(serialized.get("meta") or {})
+        target_ref = str(meta.get("working_save_id") or meta.get("commit_id") or "").strip() or None
+        response = ProductPublicShareImportAcceptedResponse(
+            status="accepted",
+            action="import_copy",
+            share_id=share_id,
+            workspace_id=workspace_id,
+            storage_role=str(meta.get("storage_role") or "unknown"),
+            target_ref=target_ref,
+            source_share_id=share_id,
+            links=ProductPublicShareLinks(_public_share_consumer_action_links(share_id=share_id, workspace_id=workspace_id)),
+            identity_policy=_public_share_consumer_action_identity_policy_body(action="import_copy", route_template=expected_path),
+            namespace_policy=_public_share_consumer_action_namespace_policy_body(action="import_copy"),
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_create_workspace_from_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_id_factory: Callable[[], str],
+        membership_id_factory: Callable[[], str],
+        now_iso: str,
+        workspace_rows_provider=None,
+        membership_rows_provider=None,
+        recent_run_rows_provider=None,
+        recent_provider_binding_rows_provider=None,
+        managed_secret_rows_provider=None,
+        recent_provider_probe_rows_provider=None,
+        onboarding_rows_provider=None,
+        workspace_registry_writer: Callable[[Mapping[str, Any], Mapping[str, Any]], Any] | None = None,
+        workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
+        public_share_payload_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share create-workspace route only supports POST."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/create-workspace"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            return _route_response(400, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.invalid_request", "message": "Public share create-workspace payload is invalid.", "share_id": share_id})
+        share_payload, descriptor, error = _resolve_public_share_payload(share_id, public_share_payload_provider)
+        if error is not None:
+            return error
+        assert share_payload is not None and descriptor is not None
+        title = str(body.get("title") or "").strip()
+        description = str(body.get("description") or "").strip() or None
+        create_mode = str(body.get("create_mode") or "").strip()
+        working_save_id = str(body.get("working_save_id") or "").strip() or None
+        operation_capabilities = set(getattr(descriptor, "operation_capabilities", ()) or ())
+        if not create_mode:
+            create_mode = "checkout_working_copy" if "checkout_working_copy" in operation_capabilities else "import_copy"
+        try:
+            ensure_public_nex_link_share_operation_allowed(share_payload, create_mode)
+        except ValueError as exc:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_create_not_allowed", "message": str(exc), "share_id": share_id})
+        create_request = HttpRouteRequest(
+            method="POST",
+            path="/api/workspaces",
+            headers=http_request.headers,
+            json_body={"title": title or str(getattr(descriptor, "title", None) or descriptor.share_path or "Imported public share"), "description": description or (str(getattr(descriptor, "summary", None) or "").strip() or None)},
+            path_params={},
+            query_params=http_request.query_params,
+            session_claims=http_request.session_claims,
+        )
+        create_response = cls.handle_create_workspace(
+            http_request=create_request,
+            workspace_id_factory=workspace_id_factory,
+            membership_id_factory=membership_id_factory,
+            now_iso=now_iso,
+            workspace_rows=workspace_rows_provider() if workspace_rows_provider is not None else (),
+            membership_rows=membership_rows_provider() if membership_rows_provider is not None else (),
+            recent_run_rows=recent_run_rows_provider() if recent_run_rows_provider is not None else (),
+            provider_binding_rows=recent_provider_binding_rows_provider() if recent_provider_binding_rows_provider is not None else (),
+            managed_secret_rows=managed_secret_rows_provider() if managed_secret_rows_provider is not None else (),
+            provider_probe_rows=recent_provider_probe_rows_provider() if recent_provider_probe_rows_provider is not None else (),
+            onboarding_rows=onboarding_rows_provider() if onboarding_rows_provider is not None else (),
+            workspace_registry_writer=workspace_registry_writer,
+        )
+        if create_response.status_code != 201:
+            return create_response
+        created_payload = dict(create_response.body)
+        workspace = dict(created_payload.get("workspace") or {})
+        created_workspace_id = str(created_payload.get("workspace_id") or workspace.get("workspace_id") or "").strip()
+        if not created_workspace_id:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_id_missing", "message": "Created workspace response did not include a workspace id.", "share_id": share_id})
+        from src.storage.serialization import serialize_nex_artifact
+        from src.storage.validators.shared_validator import load_nex
+        loaded_share = load_nex(share_payload["artifact"])
+        model = loaded_share.parsed_model
+        if model is None:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_artifact_invalid", "message": "Public share artifact is invalid.", "share_id": share_id, "workspace_id": created_workspace_id})
+        if create_mode == "checkout_working_copy":
+            from src.storage.lifecycle_api import create_working_save_from_commit_snapshot
+            working_save = create_working_save_from_commit_snapshot(model, working_save_id=working_save_id)
+            serialized = serialize_nex_artifact(working_save)
+            result_role = "working_save"
+            target_ref = str(working_save.meta.working_save_id or "").strip() or None
+        else:
+            serialized = serialize_nex_artifact(model)
+            meta = dict(serialized.get("meta") or {})
+            result_role = str(meta.get("storage_role") or "unknown")
+            target_ref = str(meta.get("working_save_id") or meta.get("commit_id") or "").strip() or None
+        if workspace_artifact_source_writer is not None:
+            workspace_artifact_source_writer(created_workspace_id, serialized)
+        response = ProductPublicShareCreateWorkspaceAcceptedResponse(
+            status="accepted",
+            action="create_workspace_from_share",
+            share_id=share_id,
+            workspace_id=created_workspace_id,
+            create_mode=create_mode,
+            storage_role=result_role,
+            target_ref=target_ref,
+            source_share_id=share_id,
+            links=ProductPublicShareLinks(_public_share_consumer_action_links(share_id=share_id, workspace_id=created_workspace_id)),
+            identity_policy=_public_share_consumer_action_identity_policy_body(action="create_workspace_from_share", route_template=expected_path),
+            namespace_policy=_public_share_consumer_action_namespace_policy_body(action="create_workspace_from_share"),
+        )
+        return _route_response(201, asdict(response))
+
+    @classmethod
+    def handle_run_public_share(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context_provider=None,
+        workspace_row_provider=None,
+        target_catalog_provider=None,
+        policy: ProductAdmissionPolicy,
+        engine_launch_decider: Callable[[EngineRunLaunchRequest], EngineRunLaunchResponse],
+        run_id_factory: Callable[[], str],
+        run_request_id_factory: Callable[[], str] | None = None,
+        now_iso: str | None = None,
+        workspace_run_rows_provider=None,
+        provider_binding_rows_provider=None,
+        managed_secret_rows_provider=None,
+        provider_probe_rows_provider=None,
+        onboarding_rows_provider=None,
+        public_share_payload_provider=None,
+    ) -> HttpRouteResponse:
+        if http_request.method != "POST":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share run route only supports POST."})
+        share_id = str(http_request.path_params.get("share_id") or "").strip() if http_request.path_params else ""
+        if not share_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.share_id_missing", "message": "Share id path parameter is required."})
+        expected_path = f"/api/public-shares/{share_id}/run"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        body = http_request.json_body
+        if not isinstance(body, Mapping):
+            return _route_response(400, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.invalid_request", "message": "Public share run payload is invalid.", "share_id": share_id})
+        workspace_id = str(body.get("workspace_id") or "").strip()
+        if not workspace_id:
+            return _route_response(400, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_id_required", "message": "Public share run requires a workspace_id.", "share_id": share_id})
+        workspace_context = workspace_context_provider(workspace_id) if workspace_context_provider is not None else None
+        workspace_row = workspace_row_provider(workspace_id) if workspace_row_provider is not None else None
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_not_found", "message": "Requested workspace was not found.", "share_id": share_id, "workspace_id": workspace_id})
+        share_payload, _descriptor, error = _resolve_public_share_payload(share_id, public_share_payload_provider)
+        if error is not None:
+            return error
+        assert share_payload is not None
+        from src.storage.validators.shared_validator import load_nex
+        try:
+            ensure_public_nex_link_share_operation_allowed(share_payload, "run_artifact")
+        except ValueError as exc:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.run_not_allowed", "message": str(exc), "share_id": share_id, "workspace_id": workspace_id})
+        input_payload = body.get("input_payload")
+        loaded_share = load_nex(share_payload["artifact"])
+        model = loaded_share.parsed_model
+        if model is None:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_artifact_invalid", "message": "Public share artifact is invalid.", "share_id": share_id, "workspace_id": workspace_id})
+        storage_role = str(getattr(model.meta, "storage_role", "") or "").strip()
+        target_ref = str(getattr(model.meta, "commit_id", "") or getattr(model.meta, "working_save_id", "") or "").strip()
+        if not target_ref or storage_role not in {"commit_snapshot", "working_save"}:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_target_unsupported", "message": "Public share artifact cannot be launched directly.", "share_id": share_id, "workspace_id": workspace_id})
+        target_type = "commit_snapshot" if storage_role == "commit_snapshot" else "working_save"
+        target_catalog = dict(target_catalog_provider(workspace_id) or {}) if target_catalog_provider is not None else {}
+        target_catalog[target_ref] = ExecutionTargetCatalogEntry(
+            workspace_id=workspace_id,
+            target_ref=target_ref,
+            target_type=target_type,
+            source=share_payload["artifact"],
+        )
+        launch_body: dict[str, Any] = {
+            "workspace_id": workspace_id,
+            "execution_target": {"target_type": target_type, "target_ref": target_ref},
+            "client_context": {"source": "public_share_run", "correlation_token": share_id},
+        }
+        if input_payload is not None:
+            launch_body["input_payload"] = input_payload
+        if target_type == "working_save":
+            launch_body["launch_options"] = {"allow_working_save_execution": True}
+        launch_request = HttpRouteRequest(
+            method="POST",
+            path="/api/runs",
+            headers=http_request.headers,
+            json_body=launch_body,
+            path_params={},
+            query_params=http_request.query_params,
+            session_claims=http_request.session_claims,
+        )
+        launch_response = cls.handle_launch(
+            http_request=launch_request,
+            workspace_context=workspace_context,
+            target_catalog=target_catalog,
+            policy=policy,
+            engine_launch_decider=engine_launch_decider,
+            run_id_factory=run_id_factory,
+            run_request_id_factory=run_request_id_factory,
+            now_iso=now_iso,
+            workspace_row=workspace_row,
+            recent_run_rows=workspace_run_rows_provider(workspace_id) if workspace_run_rows_provider is not None else (),
+            provider_binding_rows=provider_binding_rows_provider(workspace_id) if provider_binding_rows_provider is not None else (),
+            managed_secret_rows=managed_secret_rows_provider() if managed_secret_rows_provider is not None else (),
+            provider_probe_rows=provider_probe_rows_provider(workspace_id) if provider_probe_rows_provider is not None else (),
+            onboarding_rows=onboarding_rows_provider() if onboarding_rows_provider is not None else (),
+        )
+        if launch_response.status_code != 202:
+            return launch_response
+        launch_payload = dict(launch_response.body)
+        run_id = str(launch_payload.get("run_id") or "").strip()
+        response = ProductPublicShareRunAcceptedResponse(
+            status="accepted",
+            action="run_artifact",
+            share_id=share_id,
+            workspace_id=workspace_id,
+            run_id=run_id,
+            target_type=target_type,
+            target_ref=target_ref,
+            source_share_id=share_id,
+            launch_context=dict(launch_payload.get("launch_context") or {}) or None,
+            links=ProductPublicShareLinks(_public_share_consumer_action_links(share_id=share_id, workspace_id=workspace_id, run_id=run_id or None)),
+            identity_policy=_public_share_consumer_action_identity_policy_body(action="run_artifact", route_template=expected_path),
+            namespace_policy=_public_share_consumer_action_namespace_policy_body(action="run_artifact"),
+        )
+        return _route_response(202, asdict(response))
 
     @classmethod
     def handle_extend_public_share(

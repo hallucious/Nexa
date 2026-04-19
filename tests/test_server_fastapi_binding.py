@@ -2098,6 +2098,54 @@ def test_fastapi_binding_public_share_api_catalog_saved_related_and_compare_roun
     assert compare_response.json()['compare']['workspace_found'] is True
 
 
+def test_fastapi_binding_public_share_consumer_action_api_round_trip() -> None:
+    client = _make_client(artifact_source=_valid_working_save_artifact())
+
+    checkout_response = client.post(
+        '/api/public-shares/share-fastapi-001/checkout',
+        headers=_session_headers(),
+        json={'workspace_id': 'ws-001', 'working_save_id': 'ws-fastapi-checkout'},
+    )
+    assert checkout_response.status_code == 200
+    checkout_payload = checkout_response.json()
+    assert checkout_payload['action'] == 'checkout_working_copy'
+    assert checkout_payload['workspace_id'] == 'ws-001'
+    assert checkout_payload['working_save_id'] == 'ws-fastapi-checkout'
+
+    import_response = client.post(
+        '/api/public-shares/share-fastapi-001/import',
+        headers=_session_headers(),
+        json={'workspace_id': 'ws-001'},
+    )
+    assert import_response.status_code == 200
+    import_payload = import_response.json()
+    assert import_payload['action'] == 'import_copy'
+    assert import_payload['storage_role'] == 'commit_snapshot'
+
+    create_workspace_response = client.post(
+        '/api/public-shares/share-fastapi-001/create-workspace',
+        headers=_session_headers(),
+        json={'title': 'Created from share', 'create_mode': 'checkout_working_copy', 'working_save_id': 'ws-share-created-draft'},
+    )
+    assert create_workspace_response.status_code == 201
+    created_payload = create_workspace_response.json()
+    assert created_payload['action'] == 'create_workspace_from_share'
+    assert created_payload['workspace_id'] == 'ws-new'
+    assert created_payload['create_mode'] == 'checkout_working_copy'
+    assert created_payload['storage_role'] == 'working_save'
+
+    run_response = client.post(
+        '/api/public-shares/share-fastapi-001/run',
+        headers=_session_headers(),
+        json={'workspace_id': 'ws-001', 'input_payload': {'question': 'hello'}},
+    )
+    assert run_response.status_code == 202
+    run_payload = run_response.json()
+    assert run_payload['action'] == 'run_artifact'
+    assert run_payload['run_id'] == 'run-001'
+    assert run_payload['target_type'] == 'commit_snapshot'
+
+
 def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     client = _make_client()
     detail_response = client.get('/app/public-shares/share-fastapi-001?app_language=en&workspace_id=ws-001', headers=_session_headers())

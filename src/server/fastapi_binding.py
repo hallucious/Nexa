@@ -1061,6 +1061,84 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.post("/api/public-shares/{share_id}/checkout")
+        async def checkout_public_share(request: Request, share_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_checkout_public_share(
+                request=inbound,
+                workspace_context_provider=self.dependencies.workspace_context_provider,
+                workspace_row_provider=self.dependencies.workspace_row_provider,
+                workspace_run_rows_provider=self.dependencies.workspace_run_rows_provider,
+                workspace_result_rows_provider=self.dependencies.workspace_result_rows_provider,
+                onboarding_rows_provider=self.dependencies.onboarding_rows_provider,
+                workspace_artifact_source_provider=self.dependencies.workspace_artifact_source_provider,
+                artifact_rows_lookup=self.dependencies.artifact_rows_provider,
+                trace_rows_lookup=self.dependencies.trace_rows_provider,
+                workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+                public_share_payload_provider=self.dependencies.public_share_payload_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                provider_binding_rows_provider=self.dependencies.workspace_provider_binding_rows_provider,
+                managed_secret_rows_provider=self.dependencies.recent_managed_secret_rows_provider,
+                provider_probe_rows_provider=self.dependencies.workspace_provider_probe_rows_provider,
+                feedback_rows_provider=self.dependencies.feedback_rows_provider,
+            )
+            return self._framework_response(outbound)
+
+        @router.post("/api/public-shares/{share_id}/import")
+        async def import_public_share(request: Request, share_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_import_public_share(
+                request=inbound,
+                workspace_context_provider=self.dependencies.workspace_context_provider,
+                workspace_row_provider=self.dependencies.workspace_row_provider,
+                workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+                public_share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            return self._framework_response(outbound)
+
+        @router.post("/api/public-shares/{share_id}/create-workspace")
+        async def create_workspace_from_public_share(request: Request, share_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_create_workspace_from_public_share(
+                request=inbound,
+                workspace_id_factory=self.dependencies.workspace_id_factory or (lambda: 'workspace-missing-id-factory'),
+                membership_id_factory=self.dependencies.membership_id_factory or (lambda: 'membership-missing-id-factory'),
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else '',
+                workspace_rows_provider=self.dependencies.workspace_rows_provider,
+                membership_rows_provider=self.dependencies.workspace_membership_rows_provider,
+                recent_run_rows_provider=self.dependencies.recent_run_rows_provider,
+                recent_provider_binding_rows_provider=self.dependencies.recent_provider_binding_rows_provider,
+                managed_secret_rows_provider=self.dependencies.recent_managed_secret_rows_provider,
+                recent_provider_probe_rows_provider=self.dependencies.recent_provider_probe_rows_provider,
+                onboarding_rows_provider=self.dependencies.onboarding_rows_provider,
+                workspace_registry_writer=self.dependencies.workspace_registry_writer,
+                workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
+                public_share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            return self._framework_response(outbound)
+
+        @router.post("/api/public-shares/{share_id}/run")
+        async def run_public_share(request: Request, share_id: str, payload: dict[str, Any] | None = Body(default=None)) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id}, json_body=payload)
+            outbound = FrameworkRouteBindings.handle_run_public_share(
+                request=inbound,
+                workspace_context_provider=self.dependencies.workspace_context_provider,
+                workspace_row_provider=self.dependencies.workspace_row_provider,
+                target_catalog_provider=self.dependencies.target_catalog_provider,
+                policy=self.dependencies.admission_policy,
+                engine_launch_decider=self.dependencies.engine_launch_decider,
+                run_id_factory=self.dependencies.run_id_factory,
+                run_request_id_factory=self.dependencies.run_request_id_factory,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+                workspace_run_rows_provider=self.dependencies.workspace_run_rows_provider,
+                provider_binding_rows_provider=self.dependencies.workspace_provider_binding_rows_provider,
+                managed_secret_rows_provider=self.dependencies.recent_managed_secret_rows_provider,
+                provider_probe_rows_provider=self.dependencies.workspace_provider_probe_rows_provider,
+                onboarding_rows_provider=self.dependencies.onboarding_rows_provider,
+                public_share_payload_provider=self.dependencies.public_share_payload_provider,
+            )
+            return self._framework_response(outbound)
+
 
         @router.get("/app/public-shares/{share_id}/download")
         async def get_public_share_download_page(request: Request, share_id: str) -> Response:
