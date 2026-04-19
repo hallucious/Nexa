@@ -2050,6 +2050,47 @@ def test_fastapi_binding_workspace_share_history_page_round_trip() -> None:
     assert '/app/workspaces/ws-001/shares/create?app_language=en' in body
 
 
+def test_fastapi_binding_public_share_api_catalog_saved_related_and_compare_round_trip() -> None:
+    saved_rows = [{"share_id": "share-fastapi-001", "saved_at": "2026-04-16T08:00:00+00:00", "saved_by_user_ref": "user-owner"}]
+    client = _make_client(
+        public_share_payload_provider=lambda share_id: _share_payload(share_id),
+        public_share_payload_rows_provider=lambda: (
+            _share_payload("share-fastapi-001"),
+            export_public_nex_link_share(
+                _commit_snapshot("snap-fastapi-share-002"),
+                share_id="share-fastapi-002",
+                title="FastAPI share related",
+                created_at="2026-04-15T13:00:00+00:00",
+                updated_at="2026-04-15T13:30:00+00:00",
+                issued_by_user_ref="user-owner",
+            ),
+        ),
+        saved_public_share_rows_provider=lambda: list(saved_rows),
+    )
+
+    catalog_response = client.get('/api/public-shares?operation=run_artifact', headers=_session_headers())
+    assert catalog_response.status_code == 200
+    catalog_payload = catalog_response.json()
+    assert catalog_payload['returned_count'] == 2
+    assert catalog_payload['shares'][0]['identity']['canonical_key'] == 'share_id'
+
+    summary_response = client.get('/api/public-shares/summary?operation=run_artifact', headers=_session_headers())
+    assert summary_response.status_code == 200
+    assert summary_response.json()['summary']['runnable_share_count'] == 2
+
+    saved_response = client.get('/api/users/me/saved-public-shares', headers=_session_headers())
+    assert saved_response.status_code == 200
+    assert saved_response.json()['saved_by_user_ref'] == 'user-owner'
+
+    related_response = client.get('/api/public-shares/share-fastapi-001/related', headers=_session_headers())
+    assert related_response.status_code == 200
+    assert related_response.json()['related_summary']['total_related_count'] == 1
+
+    compare_response = client.get('/api/public-shares/share-fastapi-001/compare-summary?workspace_id=ws-001', headers=_session_headers())
+    assert compare_response.status_code == 200
+    assert compare_response.json()['compare']['workspace_found'] is True
+
+
 def test_fastapi_binding_public_share_product_pages_round_trip() -> None:
     client = _make_client()
     detail_response = client.get('/app/public-shares/share-fastapi-001?app_language=en&workspace_id=ws-001', headers=_session_headers())

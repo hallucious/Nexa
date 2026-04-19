@@ -979,6 +979,61 @@ class FastApiRouteBindings:
             self.dependencies.saved_public_share_deleter(share_id)
             return RedirectResponse(url=_append_action_status(return_to, action="unsave", status="done"), status_code=303)
 
+        @router.get("/api/public-shares")
+        async def list_public_shares(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_list_public_shares(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                saved_public_share_rows_provider=self.dependencies.saved_public_share_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/public-shares/summary")
+        async def get_public_share_catalog_summary(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_get_public_share_catalog_summary(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                saved_public_share_rows_provider=self.dependencies.saved_public_share_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/users/me/saved-public-shares")
+        async def list_saved_public_shares(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_list_saved_public_shares(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                saved_public_share_rows_provider=self.dependencies.saved_public_share_rows_provider,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/public-shares/{share_id}/related")
+        async def get_related_public_shares(request: Request, share_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
+            outbound = FrameworkRouteBindings.handle_get_related_public_shares(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                saved_public_share_rows_provider=self.dependencies.saved_public_share_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/public-shares/{share_id}/compare-summary")
+        async def get_public_share_compare_summary(request: Request, share_id: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"share_id": share_id})
+            outbound = FrameworkRouteBindings.handle_get_public_share_compare_summary(
+                request=inbound,
+                share_payload_provider=self.dependencies.public_share_payload_provider,
+                workspace_row_provider=self.dependencies.workspace_row_provider,
+                workspace_artifact_source_provider=self.dependencies.workspace_artifact_source_provider,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/public-shares/{share_id}")
         async def get_public_share(request: Request, share_id: str) -> Response:
             inbound = self._inbound_request(request=request, path_params={"share_id": share_id})

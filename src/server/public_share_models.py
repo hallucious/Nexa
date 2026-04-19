@@ -183,6 +183,215 @@ class ProductPublicShareMutationResponse(ProductPublicShareDetailResponse):
 
 
 @dataclass(frozen=True)
+class ProductPublicShareCatalogEntryView:
+    share_id: str
+    share_path: str
+    storage_role: str
+    lifecycle_state: str
+    title: Optional[str] = None
+    summary: Optional[str] = None
+    stored_lifecycle_state: Optional[str] = None
+    updated_at: Optional[str] = None
+    created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    issued_by_user_ref: Optional[str] = None
+    operation_capabilities: tuple[str, ...] = ()
+    identity: Optional[dict[str, Any]] = None
+    is_saved: bool = False
+    saved_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if not self.share_id:
+            raise ValueError("ProductPublicShareCatalogEntryView.share_id must be non-empty")
+        if not self.share_path:
+            raise ValueError("ProductPublicShareCatalogEntryView.share_path must be non-empty")
+        if not self.storage_role:
+            raise ValueError("ProductPublicShareCatalogEntryView.storage_role must be non-empty")
+        if not self.lifecycle_state:
+            raise ValueError("ProductPublicShareCatalogEntryView.lifecycle_state must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductRelatedPublicShareEntryView(ProductPublicShareCatalogEntryView):
+    match_score: int = 0
+    same_issuer: bool = False
+    same_storage_role: bool = False
+    shared_operations: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.match_score < 0:
+            raise ValueError("ProductRelatedPublicShareEntryView.match_score must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareCatalogSummaryView:
+    filtered_share_count: int
+    inventory_share_count: int
+    working_save_share_count: int
+    commit_snapshot_share_count: int
+    checkoutable_share_count: int
+    importable_share_count: int
+    runnable_share_count: int
+    downloadable_share_count: int
+    saved_share_count: int = 0
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "filtered_share_count",
+            "inventory_share_count",
+            "working_save_share_count",
+            "commit_snapshot_share_count",
+            "checkoutable_share_count",
+            "importable_share_count",
+            "runnable_share_count",
+            "downloadable_share_count",
+            "saved_share_count",
+        ):
+            if getattr(self, field_name) < 0:
+                raise ValueError(f"ProductPublicShareCatalogSummaryView.{field_name} must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductSavedPublicShareCollectionSummaryView:
+    total_saved_count: int
+    active_share_count: int
+    working_save_share_count: int
+    commit_snapshot_share_count: int
+    latest_saved_at: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "total_saved_count",
+            "active_share_count",
+            "working_save_share_count",
+            "commit_snapshot_share_count",
+        ):
+            if getattr(self, field_name) < 0:
+                raise ValueError(f"ProductSavedPublicShareCollectionSummaryView.{field_name} must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductRelatedPublicShareSummaryView:
+    total_related_count: int
+    same_issuer_count: int
+    same_storage_role_count: int
+    shared_operation_match_count: int
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "total_related_count",
+            "same_issuer_count",
+            "same_storage_role_count",
+            "shared_operation_match_count",
+        ):
+            if getattr(self, field_name) < 0:
+                raise ValueError(f"ProductRelatedPublicShareSummaryView.{field_name} must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareCompareSummaryView:
+    workspace_found: bool
+    share_artifact_summary: dict[str, Any]
+    workspace_id: Optional[str] = None
+    workspace_artifact_summary: Optional[dict[str, Any]] = None
+    share_storage_role: Optional[str] = None
+    workspace_storage_role: Optional[str] = None
+    storage_role_match: bool = False
+    canonical_ref_match: bool = False
+    artifact_digest_match: bool = False
+
+
+@dataclass(frozen=True)
+class ProductPublicShareCatalogResponse:
+    status: str
+    returned_count: int
+    summary: ProductPublicShareCatalogSummaryView
+    inventory_summary: ProductPublicShareCatalogSummaryView
+    shares: tuple[ProductPublicShareCatalogEntryView, ...] = ()
+    applied_filters: dict[str, Any] = field(default_factory=dict)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareCatalogResponse.status must be non-empty")
+        if self.returned_count < 0:
+            raise ValueError("ProductPublicShareCatalogResponse.returned_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareCatalogSummaryResponse:
+    status: str
+    summary: ProductPublicShareCatalogSummaryView
+    inventory_summary: ProductPublicShareCatalogSummaryView
+    applied_filters: dict[str, Any] = field(default_factory=dict)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareCatalogSummaryResponse.status must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductSavedPublicShareCollectionResponse:
+    status: str
+    saved_by_user_ref: str
+    returned_count: int
+    summary: ProductSavedPublicShareCollectionSummaryView
+    shares: tuple[ProductPublicShareCatalogEntryView, ...] = ()
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductSavedPublicShareCollectionResponse.status must be non-empty")
+        if not self.saved_by_user_ref:
+            raise ValueError("ProductSavedPublicShareCollectionResponse.saved_by_user_ref must be non-empty")
+        if self.returned_count < 0:
+            raise ValueError("ProductSavedPublicShareCollectionResponse.returned_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductRelatedPublicShareResponse:
+    status: str
+    share_id: str
+    related_summary: ProductRelatedPublicShareSummaryView
+    shares: tuple[ProductRelatedPublicShareEntryView, ...] = ()
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity: Optional[dict[str, Any]] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductRelatedPublicShareResponse.status must be non-empty")
+        if not self.share_id:
+            raise ValueError("ProductRelatedPublicShareResponse.share_id must be non-empty")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareCompareSummaryResponse:
+    status: str
+    share_id: str
+    compare: ProductPublicShareCompareSummaryView
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity: Optional[dict[str, Any]] = None
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareCompareSummaryResponse.status must be non-empty")
+        if not self.share_id:
+            raise ValueError("ProductPublicShareCompareSummaryResponse.share_id must be non-empty")
+
+
+@dataclass(frozen=True)
 class ProductIssuerPublicShareManagementEntryView:
     share_id: str
     share_path: str

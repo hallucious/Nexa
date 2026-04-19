@@ -251,6 +251,36 @@ class FrameworkRouteBindings:
             summary="Launch a run directly from the current workspace shell public artifact.",
         ),
         FrameworkRouteDefinition(
+            route_name="list_public_shares",
+            method="GET",
+            path_template="/api/public-shares",
+            summary="List active public shares through the public discovery catalog.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_public_share_catalog_summary",
+            method="GET",
+            path_template="/api/public-shares/summary",
+            summary="Read compact public share discovery catalog summary counts.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="list_saved_public_shares",
+            method="GET",
+            path_template="/api/users/me/saved-public-shares",
+            summary="List saved public shares for the current authenticated user.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_related_public_shares",
+            method="GET",
+            path_template="/api/public-shares/{share_id}/related",
+            summary="List related public shares for a target public share.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_public_share_compare_summary",
+            method="GET",
+            path_template="/api/public-shares/{share_id}/compare-summary",
+            summary="Read a bounded compare summary between a public share artifact and a workspace artifact.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_public_share",
             method="GET",
             path_template="/api/public-shares/{share_id}",
@@ -1353,6 +1383,91 @@ class FrameworkRouteBindings:
             artifact_source=artifact_source,
             public_share_payload_writer=public_share_payload_writer,
             now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_list_public_shares(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_rows_provider=None,
+        saved_public_share_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_public_shares(
+            cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            saved_public_share_rows_provider=saved_public_share_rows_provider,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_public_share_catalog_summary(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_rows_provider=None,
+        saved_public_share_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_public_share_catalog_summary(
+            cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            saved_public_share_rows_provider=saved_public_share_rows_provider,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_list_saved_public_shares(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_provider=None,
+        saved_public_share_rows_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_saved_public_shares(
+            cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+            saved_public_share_rows_provider=saved_public_share_rows_provider,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_related_public_shares(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_provider=None,
+        share_payload_rows_provider=None,
+        saved_public_share_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_related_public_shares(
+            cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+            share_payload_rows_provider=share_payload_rows_provider,
+            saved_public_share_rows_provider=saved_public_share_rows_provider,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_public_share_compare_summary(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_provider=None,
+        workspace_row_provider=None,
+        workspace_artifact_source_provider=None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_public_share_compare_summary(
+            cls.to_http_route_request(request),
+            share_payload_provider=share_payload_provider,
+            workspace_row_provider=workspace_row_provider,
+            workspace_artifact_source_provider=workspace_artifact_source_provider,
         )
         return cls.to_framework_response(response)
 

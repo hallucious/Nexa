@@ -623,6 +623,8 @@ def test_build_public_mcp_argument_schemas_returns_curated_contract_set() -> Non
     assert indexed["get_workspace"].path_fields[0].name == "workspace_id"
     assert indexed["list_workspaces"].route_name == "list_workspaces"
     assert indexed["get_recent_activity"].query_fields[1].name == "limit"
+    assert indexed["list_public_shares"].query_fields[0].name == "q"
+    assert indexed["get_public_share_compare_summary"].path_fields[0].name == "share_id"
     assert [field.name for field in indexed["checkout_workspace_shell"].body_fields] == ["working_save_id", "share_id"]
 
 
@@ -1561,6 +1563,11 @@ def test_build_public_mcp_surface_includes_public_share_resources_and_tools() ->
     assert "archive_public_share" in tools
     assert "delete_public_share" in tools
     assert "get_workspace_shell" in resources
+    assert "list_public_shares" in resources
+    assert "get_public_share_catalog_summary" in resources
+    assert "list_saved_public_shares" in resources
+    assert "get_related_public_shares" in resources
+    assert "get_public_share_compare_summary" in resources
     assert "get_public_share" in resources
     assert "get_public_share_history" in resources
     assert "get_public_share_artifact" in resources
@@ -1593,6 +1600,10 @@ def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() 
         "get_public_share_artifact",
         {"share_id": "share-1"},
     )
+    catalog_dispatch = bridge.build_framework_resource_dispatch(
+        "list_public_shares",
+        {"operation": "run_artifact"},
+    )
 
     assert shell_dispatch.handler_name == "handle_workspace_shell"
     assert shell_dispatch.request.path == "/api/workspaces/ws-1/shell"
@@ -1614,6 +1625,10 @@ def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() 
     assert artifact_dispatch.request.method == "GET"
     assert artifact_dispatch.request.path == "/api/public-shares/share-1/artifact"
 
+    assert catalog_dispatch.handler_name == "handle_list_public_shares"
+    assert catalog_dispatch.request.path == "/api/public-shares"
+    assert catalog_dispatch.request.query_params == {"operation": "run_artifact"}
+
 
 def test_build_public_mcp_contracts_include_public_share_route_families() -> None:
     route_contracts = {contract.route_name: contract for contract in build_public_mcp_route_contracts()}
@@ -1623,6 +1638,11 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert route_contracts["get_workspace_shell"].route_family == "workspace-shell-read"
     assert route_contracts["put_workspace_shell_draft"].route_family == "workspace-shell-draft-write"
     assert route_contracts["create_workspace_shell_share"].route_family == "public-share-create"
+    assert route_contracts["list_public_shares"].route_family == "public-share-catalog"
+    assert route_contracts["get_public_share_catalog_summary"].route_family == "public-share-catalog-summary"
+    assert route_contracts["list_saved_public_shares"].route_family == "saved-public-share-collection"
+    assert route_contracts["get_related_public_shares"].route_family == "public-share-related"
+    assert route_contracts["get_public_share_compare_summary"].route_family == "public-share-compare-summary"
     assert route_contracts["get_public_share"].route_family == "public-share-read"
     assert route_contracts["get_public_share_history"].route_family == "public-share-history"
     assert route_contracts["get_public_share_artifact"].route_family == "public-share-artifact"
@@ -1631,6 +1651,11 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["get_workspace_shell"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy")
     assert responses["put_workspace_shell_draft"].required_top_level_keys == ("workspace_id", "storage_role", "action_availability", "shell", "routes", "identity_policy", "namespace_policy")
     assert responses["create_workspace_shell_share"].success_status_codes == (201,)
+    assert responses["list_public_shares"].required_top_level_keys == ("returned_count", "shares", "status", "identity_policy", "namespace_policy")
+    assert responses["get_public_share_catalog_summary"].required_top_level_keys == ("summary", "status", "identity_policy", "namespace_policy")
+    assert responses["list_saved_public_shares"].required_top_level_keys == ("saved_by_user_ref", "returned_count", "shares", "status", "identity_policy", "namespace_policy")
+    assert responses["get_related_public_shares"].required_top_level_keys == ("share_id", "shares", "related_summary", "status", "identity_policy", "namespace_policy")
+    assert responses["get_public_share_compare_summary"].required_top_level_keys == ("share_id", "compare", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_nex_format"].required_top_level_keys == ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_mcp_manifest"].required_top_level_keys == ("status", "manifest", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_mcp_host_bridge"].required_top_level_keys == ("status", "host_bridge", "identity_policy", "namespace_policy", "routes")
@@ -1662,6 +1687,7 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["list_issuer_public_share_action_reports"].required_top_level_keys == ("issuer_user_ref", "reports", "status", "identity_policy", "namespace_policy")
     assert responses["get_issuer_public_share_action_report_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "status", "identity_policy", "namespace_policy")
     assert responses["revoke_issuer_public_shares"].required_top_level_keys == ("issuer_user_ref", "status", "action", "identity_policy", "namespace_policy")
+    assert "get_public_share_compare_summary" in lifecycles[("resource", "list_public_shares")].followup_route_names
 
     assert lifecycles[("resource", "get_workspace_shell")].status_resource_name == "get_workspace_shell"
     assert "commit_workspace_shell" in lifecycles[("resource", "get_workspace_shell")].followup_route_names

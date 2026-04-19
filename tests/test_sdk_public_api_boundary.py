@@ -57,9 +57,14 @@ from src.sdk.server import (
     ProductIssuerPublicShareSummaryResponse,
     ProductLaunchOptions,
     ProductPublicShareArtifactResponse,
+    ProductPublicShareCatalogResponse,
+    ProductPublicShareCatalogSummaryResponse,
+    ProductPublicShareCompareSummaryResponse,
     ProductPublicShareDetailResponse,
     ProductPublicShareHistoryResponse,
     ProductPublicShareMutationResponse,
+    ProductRelatedPublicShareResponse,
+    ProductSavedPublicShareCollectionResponse,
     ProductRunLaunchRequest,
     ProductRunStatusResponse,
     ProductSourceArtifactView,
@@ -612,6 +617,11 @@ def test_sdk_root_exposes_public_share_mcp_surface() -> None:
     resource_names = {resource.route_name for resource in manifest.resources}
     tool_names = {tool.route_name for tool in manifest.tools}
 
+    assert "list_public_shares" in resource_names
+    assert "get_public_share_catalog_summary" in resource_names
+    assert "list_saved_public_shares" in resource_names
+    assert "get_related_public_shares" in resource_names
+    assert "get_public_share_compare_summary" in resource_names
     assert "get_public_share" in resource_names
     assert "get_public_share_history" in resource_names
     assert "get_public_share_artifact" in resource_names

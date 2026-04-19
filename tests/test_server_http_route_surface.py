@@ -150,6 +150,13 @@ def _issuer_share_rows() -> tuple[dict, ...]:
 
 
 
+
+
+def _saved_public_share_rows() -> tuple[dict, ...]:
+    return (
+        {"share_id": "share-owner-active", "saved_at": "2026-04-16T10:00:00+00:00", "saved_by_user_ref": "user-owner"},
+    )
+
 def _issuer_action_report_rows() -> tuple[dict, ...]:
     return (
         {
@@ -228,6 +235,54 @@ def test_http_route_definitions_are_unique() -> None:
     assert len(definitions) == len(set(definitions))
 
 
+
+
+def test_public_share_catalog_route_returns_filtered_entries() -> None:
+    response = RunHttpRouteSurface.handle_list_public_shares(
+        http_request=_auth_request(method="GET", path="/api/public-shares", query_params={"operation": "run_artifact"}),
+        share_payload_rows_provider=_issuer_share_rows,
+        saved_public_share_rows_provider=_saved_public_share_rows,
+        now_iso="2026-04-16T12:45:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["returned_count"] == 2
+    assert response.body["summary"]["runnable_share_count"] == 2
+    assert response.body["shares"][0]["identity"]["canonical_key"] == "share_id"
+    assert response.body["namespace_policy"]["family"] == "public-share-catalog"
+
+
+def test_saved_public_share_collection_requires_authentication() -> None:
+    response = RunHttpRouteSurface.handle_list_saved_public_shares(
+        http_request=HttpRouteRequest(method="GET", path="/api/users/me/saved-public-shares"),
+        share_payload_provider=lambda share_id: _share_payload(share_id),
+        saved_public_share_rows_provider=_saved_public_share_rows,
+    )
+
+    assert response.status_code == 401
+    assert response.body["reason_code"] == "public_share.authentication_required"
+
+
+def test_public_share_related_and_compare_routes_return_summary() -> None:
+    related = RunHttpRouteSurface.handle_get_related_public_shares(
+        http_request=HttpRouteRequest(method="GET", path="/api/public-shares/share-owner-active/related", path_params={"share_id": "share-owner-active"}),
+        share_payload_provider=lambda share_id: next((row for row in _issuer_share_rows() if row["share"]["share_id"] == share_id), None),
+        share_payload_rows_provider=_issuer_share_rows,
+        now_iso="2026-04-16T12:45:00+00:00",
+    )
+    assert related.status_code == 200
+    assert related.body["related_summary"]["total_related_count"] == 1
+    assert related.body["shares"][0]["same_storage_role"] is True
+
+    compare = RunHttpRouteSurface.handle_get_public_share_compare_summary(
+        http_request=HttpRouteRequest(method="GET", path="/api/public-shares/share-owner-active/compare-summary", path_params={"share_id": "share-owner-active"}, query_params={"workspace_id": "ws-001"}),
+        share_payload_provider=lambda share_id: next((row for row in _issuer_share_rows() if row["share"]["share_id"] == share_id), None),
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Workspace", "continuity_source": "server", "archived": False},
+        workspace_artifact_source_provider=lambda _workspace_id: _working_save("ws-http-compare"),
+    )
+    assert compare.status_code == 200
+    assert compare.body["compare"]["workspace_found"] is True
+    assert compare.body["compare"]["storage_role_match"] is False
 
 
 def test_public_share_route_returns_descriptor_without_authentication() -> None:

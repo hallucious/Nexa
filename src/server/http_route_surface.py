@@ -554,6 +554,223 @@ def _public_share_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _public_share_catalog_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "share_id",
+        "collection_surface": "public-share-catalog",
+        "lookup_mode": "share_id_only",
+        "member_identity_policy": _public_share_identity_policy_body(),
+    }
+
+
+def _public_share_catalog_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-share-catalog",
+        "canonical_route": "/api/public-shares",
+        "summary_route": "/api/public-shares/summary",
+        "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
+
+def _saved_public_share_collection_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "saved_by_user_ref",
+        "lookup_mode": "authenticated_self_route",
+        "collection_surface": "saved-public-share-collection",
+        "member_identity_policy": _public_share_identity_policy_body(),
+    }
+
+
+def _saved_public_share_collection_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "saved-public-share-collection",
+        "canonical_route": "/api/users/me/saved-public-shares",
+        "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
+
+def _public_share_related_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "share_id",
+        "lookup_mode": "share_id_only",
+        "surface_family": "public-share-related",
+        "member_identity_policy": _public_share_identity_policy_body(),
+    }
+
+
+def _public_share_related_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-share-related",
+        "canonical_route": "/api/public-shares/{share_id}/related",
+        "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
+
+def _public_share_compare_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "share_id",
+        "lookup_mode": "share_id_only",
+        "surface_family": "public-share-compare-summary",
+        "member_identity_policy": _public_share_identity_policy_body(),
+    }
+
+
+def _public_share_compare_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-share-compare-summary",
+        "canonical_route": "/api/public-shares/{share_id}/compare-summary",
+        "member_namespace_policy": _public_share_namespace_policy_body(),
+    }
+
+
+def _iter_active_public_share_descriptors(rows: Sequence[Mapping[str, Any]], *, now_iso: str | None = None) -> tuple[Any, ...]:
+    descriptors = []
+    for row in rows:
+        try:
+            descriptor = describe_public_nex_link_share(row, now_iso=now_iso)
+        except Exception:
+            continue
+        if descriptor.archived:
+            continue
+        if descriptor.lifecycle_state != "active":
+            continue
+        descriptors.append(descriptor)
+    descriptors.sort(key=lambda item: (str(item.updated_at or ""), str(item.share_id or "")), reverse=True)
+    return tuple(descriptors)
+
+
+def _filter_public_share_descriptors(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    search: str = "",
+    storage_role: str | None = None,
+    operation: str | None = None,
+    issuer_user_ref: str | None = None,
+    now_iso: str | None = None,
+) -> tuple[tuple[Any, ...], tuple[Any, ...]]:
+    visible: list[Any] = []
+    filtered: list[Any] = []
+    normalized_search = str(search or "").strip().lower()
+    normalized_storage_role = str(storage_role or "").strip() or None
+    normalized_operation = str(operation or "").strip() or None
+    normalized_issuer = str(issuer_user_ref or "").strip() or None
+    for descriptor in _iter_active_public_share_descriptors(rows, now_iso=now_iso):
+        if normalized_issuer and descriptor.issued_by_user_ref != normalized_issuer:
+            continue
+        visible.append(descriptor)
+        haystack = " ".join(filter(None, (descriptor.title, descriptor.summary, descriptor.share_path, descriptor.issued_by_user_ref))).lower()
+        if normalized_search and normalized_search not in haystack:
+            continue
+        if normalized_storage_role and descriptor.storage_role != normalized_storage_role:
+            continue
+        if normalized_operation and normalized_operation not in descriptor.operation_capabilities:
+            continue
+        filtered.append(descriptor)
+    return tuple(visible), tuple(filtered)
+
+
+def _normalize_saved_public_share_rows(rows: Sequence[Mapping[str, Any]], *, saved_by_user_ref: str | None = None) -> tuple[dict[str, Any], ...]:
+    normalized_user = str(saved_by_user_ref or "").strip() or None
+    if normalized_user is None:
+        return ()
+    normalized: list[dict[str, Any]] = []
+    for row in rows:
+        share_id = str(row.get("share_id") or "").strip()
+        row_user = str(row.get("saved_by_user_ref") or "").strip() or None
+        if not share_id or row_user != normalized_user:
+            continue
+        normalized.append({
+            "share_id": share_id,
+            "saved_at": str(row.get("saved_at") or ""),
+            "saved_by_user_ref": row_user,
+        })
+    normalized.sort(key=lambda item: (str(item.get("saved_at") or ""), str(item.get("share_id") or "")), reverse=True)
+    return tuple(normalized)
+
+
+def _public_share_catalog_entry_body(descriptor: Any, *, is_saved: bool = False, saved_at: str | None = None) -> dict[str, Any]:
+    return {
+        "share_id": descriptor.share_id,
+        "share_path": descriptor.share_path,
+        "title": descriptor.title,
+        "summary": descriptor.summary,
+        "storage_role": descriptor.storage_role,
+        "lifecycle_state": descriptor.lifecycle_state,
+        "updated_at": descriptor.updated_at,
+        "issued_by_user_ref": descriptor.issued_by_user_ref,
+        "viewer_capabilities": list(descriptor.viewer_capabilities),
+        "operation_capabilities": list(descriptor.operation_capabilities),
+        "identity": _public_share_identity_body(descriptor),
+        "is_saved": bool(is_saved),
+        "saved_at": saved_at,
+    }
+
+
+def _public_share_catalog_summary_body(descriptors: Sequence[Any], *, inventory_count: int, saved_ids: set[str] | None = None) -> dict[str, Any]:
+    saved_ids = saved_ids or set()
+    return {
+        "inventory_share_count": int(inventory_count),
+        "filtered_share_count": len(tuple(descriptors)),
+        "working_save_share_count": sum(1 for descriptor in descriptors if descriptor.storage_role == "working_save"),
+        "commit_snapshot_share_count": sum(1 for descriptor in descriptors if descriptor.storage_role == "commit_snapshot"),
+        "runnable_share_count": sum(1 for descriptor in descriptors if "run_artifact" in descriptor.operation_capabilities),
+        "checkoutable_share_count": sum(1 for descriptor in descriptors if "checkout_working_copy" in descriptor.operation_capabilities),
+        "saved_share_count": sum(1 for descriptor in descriptors if descriptor.share_id in saved_ids),
+    }
+
+
+def _related_public_share_entries(target_descriptor: Any, rows: Sequence[Mapping[str, Any]], *, limit: int = 12, saved_ids: set[str] | None = None, now_iso: str | None = None) -> tuple[dict[str, Any], ...]:
+    saved_ids = saved_ids or set()
+    related: list[tuple[int, str, str, Any, bool, bool, list[str]]] = []
+    target_ops = set(target_descriptor.operation_capabilities)
+    for descriptor in _iter_active_public_share_descriptors(rows, now_iso=now_iso):
+        if descriptor.share_id == target_descriptor.share_id:
+            continue
+        same_issuer = bool(target_descriptor.issued_by_user_ref and descriptor.issued_by_user_ref == target_descriptor.issued_by_user_ref)
+        same_storage_role = descriptor.storage_role == target_descriptor.storage_role
+        shared_operations = sorted(target_ops.intersection(descriptor.operation_capabilities))
+        score = (4 if same_issuer else 0) + (2 if same_storage_role else 0) + len(shared_operations)
+        if score <= 0:
+            continue
+        related.append((score, str(descriptor.updated_at or ""), str(descriptor.share_id or ""), descriptor, same_issuer, same_storage_role, shared_operations))
+    related.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+    entries: list[dict[str, Any]] = []
+    for score, _updated_at, _share_id, descriptor, same_issuer, same_storage_role, shared_operations in related[:limit]:
+        entry = _public_share_catalog_entry_body(descriptor, is_saved=descriptor.share_id in saved_ids)
+        entry.update({
+            "match_score": score,
+            "same_issuer": same_issuer,
+            "same_storage_role": same_storage_role,
+            "shared_operations": shared_operations,
+        })
+        entries.append(entry)
+    return tuple(entries)
+
+
+def _artifact_compare_summary_body(artifact: Mapping[str, Any] | None) -> dict[str, Any]:
+    from src.server.public_share_runtime import _artifact_compare_summary
+    return _artifact_compare_summary(artifact)
+
+
+def _public_share_compare_summary_body(share_artifact: Mapping[str, Any] | None, workspace_artifact: Mapping[str, Any] | None, *, workspace_id: str | None = None) -> dict[str, Any]:
+    share_summary = _artifact_compare_summary_body(share_artifact)
+    workspace_summary = _artifact_compare_summary_body(workspace_artifact)
+    workspace_found = bool(workspace_id and workspace_artifact is not None)
+    return {
+        "workspace_id": workspace_id,
+        "workspace_found": workspace_found,
+        "share_artifact": share_artifact,
+        "workspace_artifact": workspace_artifact,
+        "share_storage_role": share_summary.get("storage_role") if share_summary.get("present") else None,
+        "workspace_storage_role": workspace_summary.get("storage_role") if workspace_summary.get("present") else None,
+        "storage_role_match": bool(share_summary.get("present") and workspace_summary.get("present") and share_summary.get("storage_role") == workspace_summary.get("storage_role")),
+        "canonical_ref_match": bool(share_summary.get("present") and workspace_summary.get("present") and share_summary.get("canonical_ref") == workspace_summary.get("canonical_ref")),
+        "artifact_digest_match": bool(share_summary.get("present") and workspace_summary.get("present") and share_summary.get("digest") == workspace_summary.get("digest")),
+        "share_summary": share_summary,
+        "workspace_summary": workspace_summary,
+    }
+
+
 def _issuer_public_share_management_identity_policy_body() -> dict[str, Any]:
     return {
         "canonical_key": "issuer_user_ref",
@@ -1403,6 +1620,11 @@ class RunHttpRouteSurface:
         ("checkout_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/checkout"),
         ("create_workspace_shell_share", "POST", "/api/workspaces/{workspace_id}/shell/share"),
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
+        ("list_public_shares", "GET", "/api/public-shares"),
+        ("get_public_share_catalog_summary", "GET", "/api/public-shares/summary"),
+        ("list_saved_public_shares", "GET", "/api/users/me/saved-public-shares"),
+        ("get_related_public_shares", "GET", "/api/public-shares/{share_id}/related"),
+        ("get_public_share_compare_summary", "GET", "/api/public-shares/{share_id}/compare-summary"),
         ("get_public_share", "GET", "/api/public-shares/{share_id}"),
         ("get_public_share_history", "GET", "/api/public-shares/{share_id}/history"),
         ("get_public_share_artifact", "GET", "/api/public-shares/{share_id}/artifact"),
@@ -2750,6 +2972,182 @@ class RunHttpRouteSurface:
                 "public_share_path": descriptor.share_path,
                 "workspace_shell_share": f"/api/workspaces/{workspace_context.workspace_id}/shell/share",
             },
+        })
+
+    @classmethod
+    def handle_list_public_shares(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        saved_public_share_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method.upper() != "GET" or http_request.path != "/api/public-shares":
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        query_params = dict(http_request.query_params or {})
+        search = str(query_params.get("q") or "").strip().lower()
+        storage_role = _parse_optional_string_query_param(query_params, "storage_role")
+        operation = _parse_optional_string_query_param(query_params, "operation")
+        share_rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        visible, filtered = _filter_public_share_descriptors(share_rows, search=search, storage_role=storage_role, operation=operation, now_iso=now_iso)
+        auth = _request_auth(http_request)
+        saved_rows = _normalize_saved_public_share_rows(tuple(saved_public_share_rows_provider() or ()) if saved_public_share_rows_provider is not None else (), saved_by_user_ref=auth.requested_by_user_ref)
+        saved_lookup = {row["share_id"]: row for row in saved_rows}
+        saved_ids = set(saved_lookup)
+        entries = [
+            _public_share_catalog_entry_body(descriptor, is_saved=descriptor.share_id in saved_ids, saved_at=saved_lookup.get(descriptor.share_id, {}).get("saved_at"))
+            for descriptor in filtered
+        ]
+        return _route_response(200, {
+            "status": "ready",
+            "returned_count": len(entries),
+            "shares": entries,
+            "summary": _public_share_catalog_summary_body(filtered, inventory_count=len(visible), saved_ids=saved_ids),
+            "inventory_summary": {"inventory_share_count": len(visible)},
+            "applied_filters": {"q": search or None, "storage_role": storage_role, "operation": operation},
+            "links": {"self": "/api/public-shares", "summary": "/api/public-shares/summary"},
+            "identity_policy": _public_share_catalog_identity_policy_body(),
+            "namespace_policy": _public_share_catalog_namespace_policy_body(),
+        })
+
+    @classmethod
+    def handle_get_public_share_catalog_summary(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        saved_public_share_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method.upper() != "GET" or http_request.path != "/api/public-shares/summary":
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        query_params = dict(http_request.query_params or {})
+        search = str(query_params.get("q") or "").strip().lower()
+        storage_role = _parse_optional_string_query_param(query_params, "storage_role")
+        operation = _parse_optional_string_query_param(query_params, "operation")
+        share_rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        visible, filtered = _filter_public_share_descriptors(share_rows, search=search, storage_role=storage_role, operation=operation, now_iso=now_iso)
+        auth = _request_auth(http_request)
+        saved_rows = _normalize_saved_public_share_rows(tuple(saved_public_share_rows_provider() or ()) if saved_public_share_rows_provider is not None else (), saved_by_user_ref=auth.requested_by_user_ref)
+        saved_ids = {row["share_id"] for row in saved_rows}
+        return _route_response(200, {
+            "status": "ready",
+            "summary": _public_share_catalog_summary_body(filtered, inventory_count=len(visible), saved_ids=saved_ids),
+            "inventory_summary": {"inventory_share_count": len(visible)},
+            "applied_filters": {"q": search or None, "storage_role": storage_role, "operation": operation},
+            "links": {"catalog": "/api/public-shares"},
+            "identity_policy": _public_share_catalog_identity_policy_body(),
+            "namespace_policy": _public_share_catalog_namespace_policy_body(),
+        })
+
+    @classmethod
+    def handle_list_saved_public_shares(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_provider: Callable[[str], Mapping[str, Any] | None] | None = None,
+        saved_public_share_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method.upper() != "GET" or http_request.path != "/api/users/me/saved-public-shares":
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        auth = _request_auth(http_request)
+        if auth.requested_by_user_ref is None:
+            return _route_response(401, {
+                "status": "rejected",
+                "reason_code": "public_share.authentication_required",
+                "message": "Authentication is required to list saved public shares.",
+            })
+        saved_rows = _normalize_saved_public_share_rows(tuple(saved_public_share_rows_provider() or ()) if saved_public_share_rows_provider is not None else (), saved_by_user_ref=auth.requested_by_user_ref)
+        entries = []
+        for row in saved_rows:
+            payload = share_payload_provider(row["share_id"]) if share_payload_provider is not None else None
+            if payload is None:
+                continue
+            try:
+                descriptor = describe_public_nex_link_share(payload)
+            except Exception:
+                continue
+            if descriptor.archived:
+                continue
+            entry = _public_share_catalog_entry_body(descriptor, is_saved=True, saved_at=row.get("saved_at"))
+            entries.append(entry)
+        return _route_response(200, {
+            "status": "ready",
+            "saved_by_user_ref": auth.requested_by_user_ref,
+            "returned_count": len(entries),
+            "summary": {"saved_share_count": len(entries)},
+            "shares": entries,
+            "links": {"catalog": "/api/public-shares"},
+            "identity_policy": _saved_public_share_collection_identity_policy_body(),
+            "namespace_policy": _saved_public_share_collection_namespace_policy_body(),
+        })
+
+    @classmethod
+    def handle_get_related_public_shares(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_provider: Callable[[str], Mapping[str, Any] | None] | None = None,
+        share_payload_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        saved_public_share_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        share_id = str((http_request.path_params or {}).get("share_id") or "").strip()
+        if http_request.method.upper() != "GET" or http_request.path != f"/api/public-shares/{share_id}/related" or not share_id:
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        payload = share_payload_provider(share_id) if share_payload_provider is not None else None
+        if payload is None:
+            return _route_response(404, {"status": "missing", "reason_code": "public_share.not_found", "share_id": share_id})
+        descriptor = describe_public_nex_link_share(payload, now_iso=now_iso)
+        limit = _parse_non_negative_int_query_param(http_request.query_params or {}, "limit") or 12
+        auth = _request_auth(http_request)
+        saved_rows = _normalize_saved_public_share_rows(tuple(saved_public_share_rows_provider() or ()) if saved_public_share_rows_provider is not None else (), saved_by_user_ref=auth.requested_by_user_ref)
+        saved_ids = {row["share_id"] for row in saved_rows}
+        rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        shares = list(_related_public_share_entries(descriptor, rows, limit=limit, saved_ids=saved_ids, now_iso=now_iso))
+        return _route_response(200, {
+            "status": "ready",
+            "share_id": share_id,
+            "identity": _public_share_identity_body(descriptor),
+            "shares": shares,
+            "related_summary": {"limit": limit, "total_related_count": len(shares)},
+            "links": {"detail": f"/api/public-shares/{share_id}"},
+            "identity_policy": _public_share_related_identity_policy_body(),
+            "namespace_policy": _public_share_related_namespace_policy_body(),
+        })
+
+    @classmethod
+    def handle_get_public_share_compare_summary(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_provider: Callable[[str], Mapping[str, Any] | None] | None = None,
+        workspace_row_provider: Callable[[str], Mapping[str, Any] | None] | None = None,
+        workspace_artifact_source_provider: Callable[[str], Any | None] | None = None,
+    ) -> HttpRouteResponse:
+        share_id = str((http_request.path_params or {}).get("share_id") or "").strip()
+        if http_request.method.upper() != "GET" or http_request.path != f"/api/public-shares/{share_id}/compare-summary" or not share_id:
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        payload = share_payload_provider(share_id) if share_payload_provider is not None else None
+        if payload is None:
+            return _route_response(404, {"status": "missing", "reason_code": "public_share.not_found", "share_id": share_id})
+        descriptor = describe_public_nex_link_share(payload)
+        workspace_id = str((http_request.query_params or {}).get("workspace_id") or "").strip() or None
+        workspace_artifact = None
+        if workspace_id and workspace_row_provider is not None and workspace_artifact_source_provider is not None:
+            workspace_row = workspace_row_provider(workspace_id)
+            artifact_source = workspace_artifact_source_provider(workspace_id)
+            workspace_artifact = _workspace_artifact_mapping(workspace_row, artifact_source) if workspace_row is not None else None
+        compare = _public_share_compare_summary_body(payload.get("artifact") if isinstance(payload, Mapping) else None, workspace_artifact, workspace_id=workspace_id)
+        return _route_response(200, {
+            "status": "ready",
+            "share_id": share_id,
+            "identity": _public_share_identity_body(descriptor),
+            "compare": compare,
+            "links": {"detail": f"/api/public-shares/{share_id}", "artifact": f"/api/public-shares/{share_id}/artifact"},
+            "identity_policy": _public_share_compare_identity_policy_body(),
+            "namespace_policy": _public_share_compare_namespace_policy_body(),
         })
 
     @classmethod

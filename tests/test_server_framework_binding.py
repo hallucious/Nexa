@@ -141,6 +141,11 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "checkout_workspace_shell",
         "create_workspace_shell_share",
         "launch_workspace_shell",
+        "list_public_shares",
+        "get_public_share_catalog_summary",
+        "list_saved_public_shares",
+        "get_related_public_shares",
+        "get_public_share_compare_summary",
         "get_public_share",
         "get_public_share_history",
         "get_public_share_artifact",
@@ -236,6 +241,14 @@ def _issuer_share_rows() -> tuple[dict, ...]:
 
 
 
+
+
+
+def _saved_public_share_rows() -> tuple[dict, ...]:
+    return (
+        {"share_id": "share-framework-owner-active", "saved_at": "2026-04-16T09:00:00+00:00", "saved_by_user_ref": "user-owner"},
+        {"share_id": "share-framework-other-active", "saved_at": "2026-04-16T08:00:00+00:00", "saved_by_user_ref": "user-owner"},
+    )
 
 def _issuer_action_report_rows() -> tuple[dict, ...]:
     return (
@@ -435,6 +448,63 @@ def test_framework_binding_handles_extend_issuer_public_shares_round_trip() -> N
     assert parsed["governance_summary"]["extend_action_report_count"] >= 1
     assert parsed["action_report"]["action"] == "extend_expiration"
     assert parsed["links"]["action_report_summary"] == "/api/users/me/public-shares/action-reports/summary"
+
+def test_framework_binding_handles_public_share_catalog_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_public_shares(
+        request=_request(method="GET", path="/api/public-shares", query_params={"operation": "run_artifact"}),
+        share_payload_rows_provider=_issuer_share_rows,
+        saved_public_share_rows_provider=_saved_public_share_rows,
+        now_iso="2026-04-16T12:45:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["returned_count"] == 2
+    assert parsed["summary"]["runnable_share_count"] == 2
+    assert parsed["shares"][0]["identity"]["canonical_key"] == "share_id"
+    assert parsed["shares"][0]["is_saved"] is True
+    assert parsed["namespace_policy"]["family"] == "public-share-catalog"
+
+
+def test_framework_binding_handles_saved_public_share_collection_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_saved_public_shares(
+        request=_request(method="GET", path="/api/users/me/saved-public-shares"),
+        share_payload_provider=lambda share_id: next((row for row in _issuer_share_rows() if row["share"]["share_id"] == share_id), None),
+        saved_public_share_rows_provider=_saved_public_share_rows,
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["saved_by_user_ref"] == "user-owner"
+    assert parsed["returned_count"] == 2
+    assert parsed["shares"][0]["saved_at"] == "2026-04-16T09:00:00+00:00"
+    assert parsed["identity_policy"]["canonical_key"] == "saved_by_user_ref"
+
+
+def test_framework_binding_handles_related_and_compare_public_share_round_trip() -> None:
+    related = FrameworkRouteBindings.handle_get_related_public_shares(
+        request=_request(method="GET", path="/api/public-shares/share-framework-owner-active/related", path_params={"share_id": "share-framework-owner-active"}),
+        share_payload_provider=lambda share_id: next((row for row in _issuer_share_rows() if row["share"]["share_id"] == share_id), None),
+        share_payload_rows_provider=_issuer_share_rows,
+        saved_public_share_rows_provider=_saved_public_share_rows,
+        now_iso="2026-04-16T12:45:00+00:00",
+    )
+    parsed_related = json.loads(related.body_text)
+    assert parsed_related["related_summary"]["total_related_count"] == 1
+    assert parsed_related["shares"][0]["match_score"] >= 1
+
+    compare = FrameworkRouteBindings.handle_get_public_share_compare_summary(
+        request=_request(method="GET", path="/api/public-shares/share-framework-owner-active/compare-summary", path_params={"share_id": "share-framework-owner-active"}, query_params={"workspace_id": "ws-001"}),
+        share_payload_provider=lambda share_id: next((row for row in _issuer_share_rows() if row["share"]["share_id"] == share_id), None),
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Workspace", "continuity_source": "server", "archived": False},
+        workspace_artifact_source_provider=lambda _workspace_id: _working_save("ws-compare-001"),
+    )
+    parsed_compare = json.loads(compare.body_text)
+    assert parsed_compare["compare"]["workspace_found"] is True
+    assert parsed_compare["compare"]["share_storage_role"] == "commit_snapshot"
+    assert parsed_compare["compare"]["workspace_storage_role"] == "working_save"
+    assert parsed_compare["namespace_policy"]["family"] == "public-share-compare-summary"
+
 
 def test_framework_binding_handles_public_share_round_trip() -> None:
     response = FrameworkRouteBindings.handle_get_public_share(
