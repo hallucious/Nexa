@@ -1886,6 +1886,8 @@ class RunHttpRouteSurface:
         ("launch_workspace_shell", "POST", "/api/workspaces/{workspace_id}/shell/launch"),
         ("list_public_shares", "GET", "/api/public-shares"),
         ("get_public_share_catalog_summary", "GET", "/api/public-shares/summary"),
+        ("list_public_shares_by_issuer", "GET", "/api/public-shares/issuers/{issuer_user_ref}"),
+        ("get_public_share_issuer_catalog_summary", "GET", "/api/public-shares/issuers/{issuer_user_ref}/summary"),
         ("list_saved_public_shares", "GET", "/api/users/me/saved-public-shares"),
         ("save_public_share", "POST", "/api/public-shares/{share_id}/save"),
         ("unsave_public_share", "POST", "/api/public-shares/{share_id}/unsave"),
@@ -3346,6 +3348,114 @@ class RunHttpRouteSurface:
             "inventory_summary": {"inventory_share_count": len(visible)},
             "applied_filters": {"q": search or None, "storage_role": storage_role, "operation": operation},
             "links": {"catalog": "/api/public-shares"},
+            "identity_policy": _public_share_catalog_identity_policy_body(),
+            "namespace_policy": _public_share_catalog_namespace_policy_body(),
+        })
+
+    @classmethod
+    def handle_list_public_shares_by_issuer(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        saved_public_share_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method.upper() != "GET":
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        issuer_user_ref = str(http_request.path_params.get("issuer_user_ref") or "").strip() if http_request.path_params else ""
+        if not issuer_user_ref:
+            return _route_response(400, {"status": "error", "reason_code": "public_share.issuer_user_ref_missing"})
+        expected_path = f"/api/public-shares/issuers/{issuer_user_ref}"
+        if http_request.path != expected_path:
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        query_params = dict(http_request.query_params or {})
+        search = str(query_params.get("q") or "").strip().lower()
+        storage_role = _parse_optional_string_query_param(query_params, "storage_role")
+        operation = _parse_optional_string_query_param(query_params, "operation")
+        share_rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        visible, filtered = _filter_public_share_descriptors(
+            share_rows,
+            search=search,
+            storage_role=storage_role,
+            operation=operation,
+            issuer_user_ref=issuer_user_ref,
+            now_iso=now_iso,
+        )
+        auth = _request_auth(http_request)
+        saved_rows = _normalize_saved_public_share_rows(
+            tuple(saved_public_share_rows_provider() or ()) if saved_public_share_rows_provider is not None else (),
+            saved_by_user_ref=auth.requested_by_user_ref,
+        )
+        saved_lookup = {row["share_id"]: row for row in saved_rows}
+        saved_ids = set(saved_lookup)
+        entries = [
+            _public_share_catalog_entry_body(descriptor, is_saved=descriptor.share_id in saved_ids, saved_at=saved_lookup.get(descriptor.share_id, {}).get("saved_at"))
+            for descriptor in filtered
+        ]
+        return _route_response(200, {
+            "status": "ready",
+            "issuer_user_ref": issuer_user_ref,
+            "returned_count": len(entries),
+            "shares": entries,
+            "summary": _public_share_catalog_summary_body(filtered, inventory_count=len(visible), saved_ids=saved_ids),
+            "inventory_summary": {"inventory_share_count": len(visible)},
+            "applied_filters": {"q": search or None, "storage_role": storage_role, "operation": operation},
+            "links": {
+                "self": f"/api/public-shares/issuers/{issuer_user_ref}",
+                "summary": f"/api/public-shares/issuers/{issuer_user_ref}/summary",
+                "catalog": "/api/public-shares",
+            },
+            "identity_policy": _public_share_catalog_identity_policy_body(),
+            "namespace_policy": _public_share_catalog_namespace_policy_body(),
+        })
+
+    @classmethod
+    def handle_get_public_share_issuer_catalog_summary(
+        cls,
+        http_request: HttpRouteRequest,
+        *,
+        share_payload_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        saved_public_share_rows_provider: Callable[[], Sequence[Mapping[str, Any]]] | None = None,
+        now_iso: str | None = None,
+    ) -> HttpRouteResponse:
+        if http_request.method.upper() != "GET":
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        issuer_user_ref = str(http_request.path_params.get("issuer_user_ref") or "").strip() if http_request.path_params else ""
+        if not issuer_user_ref:
+            return _route_response(400, {"status": "error", "reason_code": "public_share.issuer_user_ref_missing"})
+        expected_path = f"/api/public-shares/issuers/{issuer_user_ref}/summary"
+        if http_request.path != expected_path:
+            return _route_response(405, {"status": "error", "reason_code": "public_share.unsupported_route"})
+        query_params = dict(http_request.query_params or {})
+        search = str(query_params.get("q") or "").strip().lower()
+        storage_role = _parse_optional_string_query_param(query_params, "storage_role")
+        operation = _parse_optional_string_query_param(query_params, "operation")
+        share_rows = tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else ()
+        visible, filtered = _filter_public_share_descriptors(
+            share_rows,
+            search=search,
+            storage_role=storage_role,
+            operation=operation,
+            issuer_user_ref=issuer_user_ref,
+            now_iso=now_iso,
+        )
+        auth = _request_auth(http_request)
+        saved_rows = _normalize_saved_public_share_rows(
+            tuple(saved_public_share_rows_provider() or ()) if saved_public_share_rows_provider is not None else (),
+            saved_by_user_ref=auth.requested_by_user_ref,
+        )
+        saved_ids = {row["share_id"] for row in saved_rows}
+        return _route_response(200, {
+            "status": "ready",
+            "issuer_user_ref": issuer_user_ref,
+            "summary": _public_share_catalog_summary_body(filtered, inventory_count=len(visible), saved_ids=saved_ids),
+            "inventory_summary": {"inventory_share_count": len(visible)},
+            "applied_filters": {"q": search or None, "storage_role": storage_role, "operation": operation},
+            "links": {
+                "catalog": f"/api/public-shares/issuers/{issuer_user_ref}",
+                "global_catalog": "/api/public-shares",
+            },
             "identity_policy": _public_share_catalog_identity_policy_body(),
             "namespace_policy": _public_share_catalog_namespace_policy_body(),
         })

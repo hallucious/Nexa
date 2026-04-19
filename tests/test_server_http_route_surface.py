@@ -254,6 +254,41 @@ def test_public_share_catalog_route_returns_filtered_entries() -> None:
     assert response.body["namespace_policy"]["family"] == "public-share-catalog"
 
 
+def test_public_share_issuer_catalog_routes_return_issuer_filtered_entries() -> None:
+    response = RunHttpRouteSurface.handle_list_public_shares_by_issuer(
+        http_request=_auth_request(
+            method="GET",
+            path="/api/public-shares/issuers/user-owner",
+            path_params={"issuer_user_ref": "user-owner"},
+            query_params={"operation": "run_artifact"},
+        ),
+        share_payload_rows_provider=_issuer_share_rows,
+        saved_public_share_rows_provider=_saved_public_share_rows,
+        now_iso="2026-04-16T12:45:00+00:00",
+    )
+
+    assert response.status_code == 200
+    assert response.body["issuer_user_ref"] == "user-owner"
+    assert response.body["returned_count"] == 1
+    assert response.body["summary"]["runnable_share_count"] == 1
+    assert response.body["links"]["summary"] == "/api/public-shares/issuers/user-owner/summary"
+
+    summary_response = RunHttpRouteSurface.handle_get_public_share_issuer_catalog_summary(
+        http_request=_auth_request(
+            method="GET",
+            path="/api/public-shares/issuers/user-owner/summary",
+            path_params={"issuer_user_ref": "user-owner"},
+            query_params={"operation": "run_artifact"},
+        ),
+        share_payload_rows_provider=_issuer_share_rows,
+        saved_public_share_rows_provider=_saved_public_share_rows,
+        now_iso="2026-04-16T12:45:00+00:00",
+    )
+    assert summary_response.status_code == 200
+    assert summary_response.body["issuer_user_ref"] == "user-owner"
+    assert summary_response.body["summary"]["runnable_share_count"] == 1
+
+
 def test_saved_public_share_collection_requires_authentication() -> None:
     response = RunHttpRouteSurface.handle_list_saved_public_shares(
         http_request=HttpRouteRequest(method="GET", path="/api/users/me/saved-public-shares"),

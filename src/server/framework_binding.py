@@ -263,6 +263,18 @@ class FrameworkRouteBindings:
             summary="Read compact public share discovery catalog summary counts.",
         ),
         FrameworkRouteDefinition(
+            route_name="list_public_shares_by_issuer",
+            method="GET",
+            path_template="/api/public-shares/issuers/{issuer_user_ref}",
+            summary="List active public shares published by a specific issuer through the public discovery surface.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_public_share_issuer_catalog_summary",
+            method="GET",
+            path_template="/api/public-shares/issuers/{issuer_user_ref}/summary",
+            summary="Read compact public share catalog summary counts for a specific issuer.",
+        ),
+        FrameworkRouteDefinition(
             route_name="list_saved_public_shares",
             method="GET",
             path_template="/api/users/me/saved-public-shares",
@@ -1449,6 +1461,40 @@ class FrameworkRouteBindings:
         now_iso: str | None = None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_get_public_share_catalog_summary(
+            cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            saved_public_share_rows_provider=saved_public_share_rows_provider,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_list_public_shares_by_issuer(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_rows_provider=None,
+        saved_public_share_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_public_shares_by_issuer(
+            cls.to_http_route_request(request),
+            share_payload_rows_provider=share_payload_rows_provider,
+            saved_public_share_rows_provider=saved_public_share_rows_provider,
+            now_iso=now_iso,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_public_share_issuer_catalog_summary(
+        cls,
+        request: FrameworkInboundRequest,
+        *,
+        share_payload_rows_provider=None,
+        saved_public_share_rows_provider=None,
+        now_iso: str | None = None,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_public_share_issuer_catalog_summary(
             cls.to_http_route_request(request),
             share_payload_rows_provider=share_payload_rows_provider,
             saved_public_share_rows_provider=saved_public_share_rows_provider,

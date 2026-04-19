@@ -145,6 +145,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "launch_workspace_shell",
         "list_public_shares",
         "get_public_share_catalog_summary",
+        "list_public_shares_by_issuer",
+        "get_public_share_issuer_catalog_summary",
         "list_saved_public_shares",
         "save_public_share",
         "unsave_public_share",
@@ -479,6 +481,41 @@ def test_framework_binding_handles_public_share_catalog_round_trip() -> None:
     assert parsed["shares"][0]["identity"]["canonical_key"] == "share_id"
     assert parsed["shares"][0]["is_saved"] is True
     assert parsed["namespace_policy"]["family"] == "public-share-catalog"
+
+
+def test_framework_binding_handles_public_share_issuer_catalog_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_list_public_shares_by_issuer(
+        request=_request(
+            method="GET",
+            path="/api/public-shares/issuers/user-owner",
+            path_params={"issuer_user_ref": "user-owner"},
+            query_params={"operation": "run_artifact"},
+        ),
+        share_payload_rows_provider=_issuer_share_rows,
+        saved_public_share_rows_provider=_saved_public_share_rows,
+        now_iso="2026-04-16T12:45:00+00:00",
+    )
+
+    assert response.status_code == 200
+    parsed = json.loads(response.body_text)
+    assert parsed["issuer_user_ref"] == "user-owner"
+    assert parsed["returned_count"] == 1
+    assert parsed["summary"]["runnable_share_count"] == 1
+
+    summary = FrameworkRouteBindings.handle_get_public_share_issuer_catalog_summary(
+        request=_request(
+            method="GET",
+            path="/api/public-shares/issuers/user-owner/summary",
+            path_params={"issuer_user_ref": "user-owner"},
+            query_params={"operation": "run_artifact"},
+        ),
+        share_payload_rows_provider=_issuer_share_rows,
+        saved_public_share_rows_provider=_saved_public_share_rows,
+        now_iso="2026-04-16T12:45:00+00:00",
+    )
+    parsed_summary = json.loads(summary.body_text)
+    assert parsed_summary["issuer_user_ref"] == "user-owner"
+    assert parsed_summary["summary"]["runnable_share_count"] == 1
 
 
 def test_framework_binding_handles_saved_public_share_collection_round_trip() -> None:

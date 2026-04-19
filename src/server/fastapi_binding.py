@@ -1001,6 +1001,28 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/public-shares/issuers/{issuer_user_ref}")
+        async def list_public_shares_by_issuer(request: Request, issuer_user_ref: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"issuer_user_ref": issuer_user_ref})
+            outbound = FrameworkRouteBindings.handle_list_public_shares_by_issuer(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                saved_public_share_rows_provider=self.dependencies.saved_public_share_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
+        @router.get("/api/public-shares/issuers/{issuer_user_ref}/summary")
+        async def get_public_share_issuer_catalog_summary(request: Request, issuer_user_ref: str) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"issuer_user_ref": issuer_user_ref})
+            outbound = FrameworkRouteBindings.handle_get_public_share_issuer_catalog_summary(
+                request=inbound,
+                share_payload_rows_provider=self.dependencies.public_share_payload_rows_provider,
+                saved_public_share_rows_provider=self.dependencies.saved_public_share_rows_provider,
+                now_iso=self.dependencies.now_iso_provider() if self.dependencies.now_iso_provider is not None else None,
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/users/me/saved-public-shares")
         async def list_saved_public_shares(request: Request) -> Response:
             inbound = self._inbound_request(request=request)

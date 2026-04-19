@@ -2100,6 +2100,35 @@ def test_fastapi_binding_public_share_api_catalog_saved_related_and_compare_roun
 
 
 
+def test_fastapi_binding_public_share_issuer_catalog_api_round_trip() -> None:
+    saved_rows = [{"share_id": "share-fastapi-001", "saved_at": "2026-04-16T08:00:00+00:00", "saved_by_user_ref": "user-owner"}]
+    client = _make_client(
+        public_share_payload_rows_provider=lambda: (
+            _share_payload("share-fastapi-001"),
+            export_public_nex_link_share(
+                _commit_snapshot("snap-fastapi-share-002"),
+                share_id="share-fastapi-002",
+                title="FastAPI share related",
+                created_at="2026-04-15T13:00:00+00:00",
+                updated_at="2026-04-15T13:30:00+00:00",
+                issued_by_user_ref="user-owner",
+            ),
+        ),
+        saved_public_share_rows_provider=lambda: list(saved_rows),
+    )
+
+    response = client.get('/api/public-shares/issuers/user-owner?operation=run_artifact', headers=_session_headers())
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['issuer_user_ref'] == 'user-owner'
+    assert payload['returned_count'] == 2
+
+    summary = client.get('/api/public-shares/issuers/user-owner/summary?operation=run_artifact', headers=_session_headers())
+    assert summary.status_code == 200
+    assert summary.json()['issuer_user_ref'] == 'user-owner'
+    assert summary.json()['summary']['runnable_share_count'] == 2
+
+
 def test_fastapi_binding_saved_public_share_mutation_api_round_trip() -> None:
     saved_rows = [{"share_id": "share-fastapi-saved-001", "saved_at": "2026-04-16T12:00:00+00:00", "saved_by_user_ref": "user-owner"}]
     client = _make_client(saved_public_share_rows_provider=lambda: list(saved_rows))

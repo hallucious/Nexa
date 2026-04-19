@@ -502,6 +502,46 @@ class ProductPublicShareCatalogSummaryResponse:
 
 
 @dataclass(frozen=True)
+class ProductPublicShareIssuerCatalogResponse:
+    status: str
+    issuer_user_ref: str
+    returned_count: int
+    summary: ProductPublicShareCatalogSummaryView
+    inventory_summary: ProductPublicShareCatalogSummaryView
+    shares: tuple[ProductPublicShareCatalogEntryView, ...] = ()
+    applied_filters: dict[str, Any] = field(default_factory=dict)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareIssuerCatalogResponse.status must be non-empty")
+        if not self.issuer_user_ref:
+            raise ValueError("ProductPublicShareIssuerCatalogResponse.issuer_user_ref must be non-empty")
+        if self.returned_count < 0:
+            raise ValueError("ProductPublicShareIssuerCatalogResponse.returned_count must be >= 0")
+
+
+@dataclass(frozen=True)
+class ProductPublicShareIssuerCatalogSummaryResponse:
+    status: str
+    issuer_user_ref: str
+    summary: ProductPublicShareCatalogSummaryView
+    inventory_summary: ProductPublicShareCatalogSummaryView
+    applied_filters: dict[str, Any] = field(default_factory=dict)
+    links: ProductPublicShareLinks = field(default_factory=ProductPublicShareLinks)
+    identity_policy: Optional[dict[str, Any]] = None
+    namespace_policy: Optional[dict[str, Any]] = None
+
+    def __post_init__(self) -> None:
+        if not self.status:
+            raise ValueError("ProductPublicShareIssuerCatalogSummaryResponse.status must be non-empty")
+        if not self.issuer_user_ref:
+            raise ValueError("ProductPublicShareIssuerCatalogSummaryResponse.issuer_user_ref must be non-empty")
+
+
+@dataclass(frozen=True)
 class ProductSavedPublicShareCollectionResponse:
     status: str
     saved_by_user_ref: str

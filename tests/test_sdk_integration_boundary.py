@@ -1565,6 +1565,8 @@ def test_build_public_mcp_surface_includes_public_share_resources_and_tools() ->
     assert "get_workspace_shell" in resources
     assert "list_public_shares" in resources
     assert "get_public_share_catalog_summary" in resources
+    assert "list_public_shares_by_issuer" in resources
+    assert "get_public_share_issuer_catalog_summary" in resources
     assert "list_saved_public_shares" in resources
     assert "save_public_share" in tools
     assert "unsave_public_share" in tools
@@ -1606,6 +1608,10 @@ def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() 
         "list_public_shares",
         {"operation": "run_artifact"},
     )
+    issuer_catalog_dispatch = bridge.build_framework_resource_dispatch(
+        "list_public_shares_by_issuer",
+        {"issuer_user_ref": "user-owner", "operation": "run_artifact"},
+    )
 
     assert shell_dispatch.handler_name == "handle_workspace_shell"
     assert shell_dispatch.request.path == "/api/workspaces/ws-1/shell"
@@ -1631,6 +1637,10 @@ def test_build_public_mcp_host_bridge_scaffold_dispatches_public_share_routes() 
     assert catalog_dispatch.request.path == "/api/public-shares"
     assert catalog_dispatch.request.query_params == {"operation": "run_artifact"}
 
+    assert issuer_catalog_dispatch.handler_name == "handle_list_public_shares_by_issuer"
+    assert issuer_catalog_dispatch.request.path == "/api/public-shares/issuers/user-owner"
+    assert issuer_catalog_dispatch.request.query_params == {"operation": "run_artifact"}
+
 
 def test_build_public_mcp_contracts_include_public_share_route_families() -> None:
     route_contracts = {contract.route_name: contract for contract in build_public_mcp_route_contracts()}
@@ -1642,6 +1652,8 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert route_contracts["create_workspace_shell_share"].route_family == "public-share-create"
     assert route_contracts["list_public_shares"].route_family == "public-share-catalog"
     assert route_contracts["get_public_share_catalog_summary"].route_family == "public-share-catalog-summary"
+    assert route_contracts["list_public_shares_by_issuer"].route_family == "public-share-issuer-catalog"
+    assert route_contracts["get_public_share_issuer_catalog_summary"].route_family == "public-share-issuer-catalog-summary"
     assert route_contracts["list_saved_public_shares"].route_family == "saved-public-share-collection"
     assert route_contracts["save_public_share"].route_family == "saved-public-share-mutation"
     assert route_contracts["unsave_public_share"].route_family == "saved-public-share-mutation"
@@ -1657,6 +1669,8 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["create_workspace_shell_share"].success_status_codes == (201,)
     assert responses["list_public_shares"].required_top_level_keys == ("returned_count", "shares", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_share_catalog_summary"].required_top_level_keys == ("summary", "status", "identity_policy", "namespace_policy")
+    assert responses["list_public_shares_by_issuer"].required_top_level_keys == ("issuer_user_ref", "returned_count", "shares", "status", "identity_policy", "namespace_policy")
+    assert responses["get_public_share_issuer_catalog_summary"].required_top_level_keys == ("issuer_user_ref", "summary", "status", "identity_policy", "namespace_policy")
     assert responses["list_saved_public_shares"].required_top_level_keys == ("saved_by_user_ref", "returned_count", "shares", "status", "identity_policy", "namespace_policy")
     assert responses["save_public_share"].required_top_level_keys == ("share_id", "saved_by_user_ref", "saved", "status", "action", "identity_policy", "namespace_policy")
     assert responses["unsave_public_share"].required_top_level_keys == ("share_id", "saved_by_user_ref", "saved", "status", "action", "identity_policy", "namespace_policy")
