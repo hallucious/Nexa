@@ -256,3 +256,27 @@ def test_fastapi_binding_exposes_run_actions_route() -> None:
     body = response.json()
     assert body["returned_count"] == 1
     assert body["actions"][0]["action"] == "retry"
+
+
+def test_run_control_accepts_execution_target_fallback_for_source_artifact() -> None:
+    request_auth = _auth()
+    run_context = _run_context()
+    run_row = {
+        "run_id": "run-001",
+        "workspace_id": "ws-001",
+        "status": "failed",
+        "execution_target_type": "working_save",
+        "execution_target_ref": "ws-pause-001",
+        "source_working_save_id": "ws-pause-001",
+    }
+    outcome = RunControlService.apply_action(
+        request_auth=request_auth,
+        run_context=run_context,
+        action="retry",
+        run_record_row=run_row,
+        now_iso_factory=lambda: "2026-04-20T00:00:00Z",
+    )
+    assert outcome.accepted is not None
+    assert outcome.accepted.source_artifact is not None
+    assert outcome.accepted.source_artifact.storage_role == "working_save"
+    assert outcome.accepted.source_artifact.canonical_ref == "ws-pause-001"

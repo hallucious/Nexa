@@ -515,3 +515,29 @@ def test_status_read_exposes_policy_validation_feedback_in_recovery_view() -> No
     assert outcome.response.recovery.policy_validation.status == "invalid"
     assert outcome.response.recovery.policy_validation.reason == "negative_weight"
     assert outcome.response.recovery.policy_validation.fallback_applied is True
+
+
+def test_run_status_read_falls_back_to_execution_target_when_metrics_source_artifact_missing() -> None:
+    request_auth = _auth_context()
+    run_context = _run_context()
+    run_row = {
+        "run_id": "run-001",
+        "workspace_id": "ws-001",
+        "execution_target_type": "working_save",
+        "execution_target_ref": "ws-fallback-001",
+        "source_working_save_id": "ws-fallback-001",
+        "status": "running",
+        "status_family": "active",
+        "created_at": "2026-04-20T00:00:00Z",
+        "updated_at": "2026-04-20T00:00:00Z",
+    }
+    outcome = RunStatusReadService.read_status(
+        request_auth=request_auth,
+        run_context=run_context,
+        run_record_row=run_row,
+    )
+    assert outcome.response is not None
+    assert outcome.response.source_artifact is not None
+    assert outcome.response.source_artifact.storage_role == "working_save"
+    assert outcome.response.source_artifact.canonical_ref == "ws-fallback-001"
+    assert outcome.response.source_artifact.working_save_id == "ws-fallback-001"

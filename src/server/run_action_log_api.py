@@ -13,6 +13,7 @@ from src.server.run_action_log_models import (
     RunActionLogReadOutcome,
 )
 from src.server.workspace_onboarding_api import _activity_continuity_summary_for_workspace, _provider_continuity_summary_for_workspace, _continuity_projection_for_workspace
+from src.server.source_artifact_projection import project_source_artifact_payload
 
 
 def normalize_action_log_entries(run_record_row: Mapping[str, Any] | None) -> tuple[ProductRunActionLogEventView, ...]:
@@ -56,44 +57,7 @@ def latest_action_from_run_record(run_record_row: Mapping[str, Any] | None) -> P
 
 
 def _source_artifact_view_from_run_row(run_record_row: Mapping[str, Any] | None) -> dict[str, object] | None:
-    if not isinstance(run_record_row, Mapping):
-        return None
-    metrics = run_record_row.get("metrics")
-    source_payload = metrics.get("source_artifact") if isinstance(metrics, Mapping) else None
-    storage_role = None
-    canonical_ref = None
-    working_save_id = None
-    commit_id = None
-    source_working_save_id = None
-    if isinstance(source_payload, Mapping):
-        storage_role = str(source_payload.get("storage_role") or "").strip() or None
-        canonical_ref = str(source_payload.get("canonical_ref") or "").strip() or None
-        working_save_id = str(source_payload.get("working_save_id") or "").strip() or None
-        commit_id = str(source_payload.get("commit_id") or "").strip() or None
-        source_working_save_id = str(source_payload.get("source_working_save_id") or "").strip() or None
-    target_type = str(run_record_row.get("execution_target_type") or "").strip() or None
-    target_ref = str(run_record_row.get("execution_target_ref") or "").strip() or None
-    if storage_role is None and target_type in {"working_save", "commit_snapshot"}:
-        storage_role = target_type
-    if canonical_ref is None and target_ref:
-        canonical_ref = target_ref
-    if working_save_id is None and storage_role == "working_save" and target_ref:
-        working_save_id = target_ref
-    if commit_id is None and storage_role == "commit_snapshot" and target_ref:
-        commit_id = target_ref
-    row_source_ws = str(run_record_row.get("source_working_save_id") or "").strip() or None
-    if source_working_save_id is None and row_source_ws:
-        source_working_save_id = row_source_ws
-    if storage_role not in {"working_save", "commit_snapshot"} or not canonical_ref:
-        return None
-    payload: dict[str, object] = {"storage_role": storage_role, "canonical_ref": canonical_ref}
-    if working_save_id is not None:
-        payload["working_save_id"] = working_save_id
-    if commit_id is not None:
-        payload["commit_id"] = commit_id
-    if source_working_save_id is not None:
-        payload["source_working_save_id"] = source_working_save_id
-    return payload
+    return project_source_artifact_payload(run_record_row)
 
 
 class RunActionLogReadService:

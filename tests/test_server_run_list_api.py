@@ -197,3 +197,35 @@ def test_run_list_exposes_recovery_projection_for_retrying_run() -> None:
     assert outcome.response.runs[0].recovery.queue_job_id == "job-004"
     assert outcome.response.runs[0].actions is not None
     assert outcome.response.runs[0].actions.can_retry is True
+
+
+def test_run_list_falls_back_to_execution_target_when_metrics_source_artifact_missing() -> None:
+    request_auth = _auth()
+    workspace_context = _workspace()
+    run_rows = [
+        {
+            "run_id": "run-020",
+            "workspace_id": "ws-001",
+            "execution_target_type": "working_save",
+            "execution_target_ref": "ws-list-020",
+            "source_working_save_id": "ws-list-020",
+            "status": "running",
+            "status_family": "active",
+            "created_at": "2026-04-20T00:00:00Z",
+            "updated_at": "2026-04-20T00:00:00Z",
+            "started_at": "2026-04-20T00:00:00Z",
+            "requested_by_user_id": "user-owner",
+            "trace_available": False,
+            "artifact_count": 0,
+        }
+    ]
+    outcome = RunListReadService.list_workspace_runs(
+        request_auth=request_auth,
+        workspace_context=workspace_context,
+        run_rows=run_rows,
+        result_rows_by_run_id={},
+    )
+    assert outcome.response is not None
+    assert outcome.response.runs[0].source_artifact is not None
+    assert outcome.response.runs[0].source_artifact.storage_role == "working_save"
+    assert outcome.response.runs[0].source_artifact.canonical_ref == "ws-list-020"
