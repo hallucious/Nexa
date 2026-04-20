@@ -125,6 +125,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_public_nex_format",
         "get_public_sdk_catalog",
         "get_public_ecosystem_catalog",
+        "get_public_plugin_catalog",
         "get_public_mcp_manifest",
         "get_public_mcp_host_bridge",
         "get_workspace_result_history",
@@ -1169,6 +1170,18 @@ def test_framework_binding_handles_public_sdk_catalog_round_trip() -> None:
     assert payload["namespace_policy"]["family"] == "public-sdk-catalog"
     assert payload["routes"]["self"] == "/api/integrations/public-sdk/catalog"
 
+
+
+def test_framework_binding_handles_public_plugin_catalog_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_public_plugin_catalog(
+        request=_request(method="GET", path="/api/integrations/public-plugins/catalog"),
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.body_text)
+    assert payload["catalog"]["surface_family"] == "public-plugin-catalog"
+    assert payload["namespace_policy"]["family"] == "public-plugin-catalog"
+    assert payload["plugins"]
 
 def test_framework_binding_handles_public_ecosystem_catalog_round_trip() -> None:
     response = FrameworkRouteBindings.handle_public_ecosystem_catalog(

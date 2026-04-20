@@ -266,6 +266,7 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert any(resource.route_name == "get_public_nex_format" for resource in manifest.resources)
     assert any(resource.route_name == "get_public_sdk_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_public_ecosystem_catalog" for resource in manifest.resources)
+    assert any(resource.route_name == "get_public_plugin_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in manifest.resources)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
@@ -877,6 +878,15 @@ def test_server_sdk_surface_exposes_workspace_shell_models() -> None:
     assert checkout.transition["action"] == "checkout_workspace_shell"
     assert launch.launch_context["action"] == "launch_workspace_shell"
 
+
+
+def test_sdk_root_exposes_public_plugin_catalog_surface() -> None:
+    summary = sdk.describe_public_plugin_export_surface()
+
+    assert summary.discovery_routes["self"] == "/api/integrations/public-plugins/catalog"
+    assert summary.public_sdk_entrypoints["plugin_catalog_summary"] == "describe_public_plugin_export_surface"
+    assert summary.plugin_count > 0
+    assert "nexa.file_reader" in summary.plugin_ids
 
 def test_sdk_root_exposes_public_share_mcp_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")

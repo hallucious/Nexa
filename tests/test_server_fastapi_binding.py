@@ -587,6 +587,17 @@ def test_fastapi_binding_starter_template_routes_round_trip() -> None:
 
 
 
+
+def test_fastapi_binding_public_plugin_catalog_route_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/api/integrations/public-plugins/catalog')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['catalog']['surface_family'] == 'public-plugin-catalog'
+    assert payload['namespace_policy']['family'] == 'public-plugin-catalog'
+    assert payload['plugins']
+
 def test_fastapi_binding_public_ecosystem_catalog_route_round_trip() -> None:
     client = _make_client()
 

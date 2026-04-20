@@ -45,6 +45,7 @@ from src.server.starter_template_models import (
 from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_sdk_models import ProductPublicSdkCatalogResponse
 from src.server.public_ecosystem_models import ProductPublicEcosystemCatalogResponse
+from src.server.public_plugin_models import ProductPublicPluginCatalogResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.public_share_models import (
     ProductPublicShareCheckoutAcceptedResponse,
@@ -1959,6 +1960,22 @@ def _public_ecosystem_catalog_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _public_plugin_catalog_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "catalog.surface_family",
+        "canonical_value": "public-plugin-catalog",
+        "lookup_mode": "public_plugin_catalog",
+    }
+
+
+def _public_plugin_catalog_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-plugin-catalog",
+        "canonical_scope": "plugin-public-surface",
+        "write_policy": "read-only",
+    }
+
+
 def _public_sdk_catalog_body() -> dict[str, Any]:
     from src.sdk.integration import (
         build_public_mcp_resources,
@@ -1981,10 +1998,33 @@ def _public_sdk_catalog_body() -> dict[str, Any]:
         "routes": {
             "self": "/api/integrations/public-sdk/catalog",
             "public_nex_format": "/api/formats/public-nex",
+            "public_plugin_catalog": "/api/integrations/public-plugins/catalog",
             "public_mcp_manifest": "/api/integrations/public-mcp/manifest",
             "public_mcp_host_bridge": "/api/integrations/public-mcp/host-bridge",
             "public_share_catalog": "/api/public-shares",
             "provider_catalog": "/api/providers/catalog",
+        },
+    }
+
+
+def _public_plugin_catalog_body() -> dict[str, Any]:
+    from src.sdk.integration import describe_public_plugin_export_surface
+
+    summary = describe_public_plugin_export_surface()
+    plugins = [
+        {"plugin_id": plugin_id, "version": version, "description": ("Read a local text file into Nexa input context." if plugin_id == "nexa.file_reader" else "Fetch a URL as text into Nexa input context." if plugin_id == "nexa.url_reader" else "") }
+        for plugin_id, version in summary.plugin_versions.items()
+    ]
+    return {
+        "catalog": {
+            "surface_family": "public-plugin-catalog",
+            **summary.to_dict(),
+        },
+        "plugins": plugins,
+        "public_sdk_entrypoints": dict(summary.public_sdk_entrypoints),
+        "routes": {
+            "self": "/api/integrations/public-plugins/catalog",
+            **dict(summary.discovery_routes),
         },
     }
 
@@ -2003,6 +2043,11 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
             "surface_family": "public-nex-format",
             "route_family": "public-nex-format-read",
             "route": "/api/formats/public-nex",
+        },
+        "public_plugin_catalog": {
+            "surface_family": "public-plugin-catalog",
+            "route_family": "public-plugin-catalog-read",
+            "route": "/api/integrations/public-plugins/catalog",
         },
         "public_mcp_manifest": {
             "surface_family": "public-mcp-manifest",
@@ -2075,6 +2120,7 @@ class RunHttpRouteSurface:
         ("get_public_nex_format", "GET", "/api/formats/public-nex"),
         ("get_public_sdk_catalog", "GET", "/api/integrations/public-sdk/catalog"),
         ("get_public_ecosystem_catalog", "GET", "/api/integrations/public-ecosystem/catalog"),
+        ("get_public_plugin_catalog", "GET", "/api/integrations/public-plugins/catalog"),
         ("get_public_mcp_manifest", "GET", "/api/integrations/public-mcp/manifest"),
         ("get_public_mcp_host_bridge", "GET", "/api/integrations/public-mcp/host-bridge"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
@@ -6079,6 +6125,29 @@ class RunHttpRouteSurface:
             supported_contract_markers=tuple(payload["supported_contract_markers"]),
             supported_runtime_markers=tuple(payload["supported_runtime_markers"]),
             supported_transport_kinds=tuple(payload["supported_transport_kinds"]),
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_public_plugin_catalog(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public plugin catalog route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/integrations/public-plugins/catalog":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        payload = _public_plugin_catalog_body()
+        response = ProductPublicPluginCatalogResponse(
+            status="ready",
+            catalog=payload["catalog"],
+            plugins=tuple(payload["plugins"]),
+            identity_policy=_public_plugin_catalog_identity_policy_body(),
+            namespace_policy=_public_plugin_catalog_namespace_policy_body(),
+            routes=payload["routes"],
+            public_sdk_entrypoints=payload["public_sdk_entrypoints"],
         )
         return _route_response(200, asdict(response))
 
