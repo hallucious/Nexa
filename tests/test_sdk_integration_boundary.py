@@ -151,6 +151,8 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert contracts["list_starter_circuit_templates"].result_shape_profile.identity_keys == ("identity_policy", "namespace_policy")
     assert contracts["get_public_nex_format"].result_shape_profile.identity_keys == ("format_boundary", "identity_policy", "namespace_policy")
     assert contracts["get_public_mcp_manifest"].result_shape_profile.identity_keys == ("manifest", "identity_policy", "namespace_policy")
+    assert "supported_transport_kinds" in contracts["get_public_mcp_manifest"].result_shape_profile.state_keys
+    assert "supported_transport_kinds" in contracts["get_public_mcp_host_bridge"].result_shape_profile.state_keys
     assert contracts["list_workspace_runs"].result_shape_profile.identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
     assert contracts["get_run_trace"].result_shape_profile.identity_keys == ("run_id", "identity_policy", "namespace_policy")
     assert contracts["get_run_trace"].result_shape_profile.collection_item_identity_keys == ("event_id", "identity")
