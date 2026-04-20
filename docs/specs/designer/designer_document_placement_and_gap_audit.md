@@ -8,7 +8,7 @@
 This document finalizes the Designer specification bundle for Nexa by:
 
 - fixing the canonical project paths
-- distinguishing canonical spec names from temporary recreated delivery files
+- distinguishing canonical spec names from historical recreated delivery filenames
 - grouping the documents by role
 - checking for duplicate-role documents
 - checking for blocking missing documents inside the current Designer documentation track
@@ -23,7 +23,7 @@ would become a maintenance risk.
 Official rule:
 
 - canonical project paths must be fixed explicitly
-- recreated delivery files are temporary handoff artifacts, not canonical filenames
+- historical recreated delivery filenames are non-canonical handoff artifacts and should not remain in the repository
 - document role overlap must be called out
 - missing-document checks must be explicit
 
@@ -133,21 +133,22 @@ Role:
 Role:
 - canonical path audit, duplicate-role check, and gap audit
 
-## 4. Temporary Delivery Files That Are Not Canonical Filenames
+## 4. Historical Recreated Delivery Filenames
 
-The following file names were created only to re-deliver content when prior sandbox links expired.
-
-They are valid delivery artifacts, but they are **not** the canonical filenames that should live in the repository.
-
-### 4.1 Recreated delivery files
+The following filenames were previously used only to re-deliver content when prior sandbox links expired:
 
 - `precheck_to_preview_mapping_rules_recreated.md`
 - `preview_to_approval_decision_rules_recreated.md`
 - `approval_to_commit_gateway_rules_recreated.md`
 
+These names are historical delivery artifacts, not canonical repository filenames.
+
 Rule:
-- these should not become permanent repository filenames
-- their contents should be stored under the canonical paths listed in Section 3
+- these names should not remain as live repository paths
+- their contents belong under the canonical paths listed in Section 3
+
+Current repository status:
+- no recreated delivery filenames should remain after canonicalization
 
 ## 5. Duplicate-Role Check
 
@@ -155,17 +156,14 @@ Rule:
 No true duplicate-role canonical documents were found inside the Designer bundle itself.
 
 ### 5.2 Temporary duplicate deliveries
-There are temporary duplicate deliveries caused by link-expiration recovery:
+The prior recreated delivery duplicates have been collapsed back into their canonical filenames.
 
-- canonical intent-to-preview/approval/commit documents
-- recreated handoff copies of the same documents
-
-These are not conceptual duplicates.
-They are delivery duplicates.
+These were not conceptual duplicates.
+They were delivery duplicates.
 
 ### 5.3 Governance rule
-If both canonical-name and recreated-name versions exist in a working folder,
-keep only the canonical-name version in the repository structure.
+If a recreated-name version appears again in a working folder,
+keep only the canonical-name version in the repository structure and remove the recreated-name file before backup.
 
 ## 6. Role-Boundary Check
 

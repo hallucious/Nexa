@@ -58,10 +58,10 @@ This index exists to prevent that drift.
 ### 3.4 Review / Approval Boundary
 - `designer_validator_precheck_contract.md`
 - `circuit_draft_preview_contract.md`
-- `precheck_to_preview_mapping_rules_recreated.md`
-- `preview_to_approval_decision_rules_recreated.md`
+- `precheck_to_preview_mapping_rules.md`
+- `preview_to_approval_decision_rules.md`
 - `designer_approval_flow_contract.md`
-- `approval_to_commit_gateway_rules_recreated.md`
+- `approval_to_commit_gateway_rules.md`
 
 ### 3.5 Placement / Audit Documents
 - `designer_document_placement_and_gap_audit.md`
