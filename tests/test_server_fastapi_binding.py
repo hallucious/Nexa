@@ -618,6 +618,7 @@ def test_fastapi_binding_public_community_hub_page_renders_cross_linked_assets()
     assert '/app/templates/starter-circuits?app_language=en' in body
     assert '/app/public-shares?app_language=en' in body
     assert '/app/plugins?app_language=en' in body
+    assert '/app/mcp?app_language=en' in body
     assert '/app/ecosystem?app_language=en' in body
 
 def test_fastapi_binding_public_plugin_catalog_page_renders_plugin_cards() -> None:
@@ -644,6 +645,9 @@ def test_fastapi_binding_public_sdk_catalog_page_renders_sdk_entrypoints() -> No
     assert '/app/ecosystem?app_language=en' in body
     assert '/app/community?app_language=en' in body
     assert '/app/plugins?app_language=en' in body
+    assert '/app/mcp?app_language=en' in body
+    assert '/app/providers?app_language=en' in body
+    assert '/app/public-nex?app_language=en' in body
 
 def test_fastapi_binding_public_ecosystem_catalog_page_renders_surface_cards() -> None:
     client = _make_client()
@@ -657,6 +661,9 @@ def test_fastapi_binding_public_ecosystem_catalog_page_renders_surface_cards() -
     assert '/app/sdk?app_language=en' in body
     assert '/app/plugins?app_language=en' in body
     assert '/app/public-shares?app_language=en' in body
+    assert '/app/mcp?app_language=en' in body
+    assert '/app/providers?app_language=en' in body
+    assert '/app/public-nex?app_language=en' in body
 
 def test_fastapi_binding_public_ecosystem_catalog_route_round_trip() -> None:
     client = _make_client()
@@ -670,6 +677,44 @@ def test_fastapi_binding_public_ecosystem_catalog_route_round_trip() -> None:
     assert payload["namespace_policy"]["family"] == "public-ecosystem-catalog"
     assert payload["routes"]["self"] == "/api/integrations/public-ecosystem/catalog"
 
+def test_fastapi_binding_public_mcp_catalog_page_renders_manifest_and_bridge() -> None:
+    client = _make_client()
+    response = client.get('/app/mcp?app_language=en')
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'Public MCP surface' in body
+    assert 'nexa-public' in body
+    assert 'FrameworkRouteBindings' in body
+    assert '/api/integrations/public-mcp/manifest' in body
+    assert '/app/public-nex?app_language=en' in body
+
+
+def test_fastapi_binding_public_provider_catalog_page_renders_provider_cards() -> None:
+    client = _make_client()
+    response = client.get('/app/providers?app_language=en', headers=_session_headers())
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'Provider catalog' in body
+    assert 'OpenAI GPT' in body
+    assert '/app/ecosystem?app_language=en' in body
+    assert '/app/mcp?app_language=en' in body
+
+
+def test_fastapi_binding_public_nex_format_page_renders_role_boundaries() -> None:
+    client = _make_client()
+    response = client.get('/app/public-nex?app_language=en')
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'Public .nex format' in body
+    assert '.nex' in body
+    assert 'working_save_id' in body
+    assert 'commit_id' in body
+    assert '/app/mcp?app_language=en' in body
+
+
 def test_fastapi_binding_public_nex_format_route_round_trip() -> None:
     client = _make_client()
 
@@ -680,6 +725,9 @@ def test_fastapi_binding_public_nex_format_route_round_trip() -> None:
     assert payload["format_boundary"]["format_family"] == ".nex"
     assert payload["identity_policy"]["canonical_key"] == "format_boundary.format_family"
     assert payload["namespace_policy"]["family"] == "public-nex-format"
+    assert payload["routes"]["app_catalog_page"] == "/app/public-nex"
+    assert payload["routes"]["public_mcp_catalog_page"] == "/app/mcp"
+    assert payload["routes"]["provider_catalog_page"] == "/app/providers"
     assert payload["role_boundaries"]["commit_snapshot"]["storage_role"] == "commit_snapshot"
 
 

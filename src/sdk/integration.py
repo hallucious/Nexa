@@ -3919,6 +3919,7 @@ def describe_public_community_export_surface() -> PublicCommunityExportSurfaceSu
         "starter-template-catalog",
         "public-share-catalog",
         "public-plugin-catalog",
+        "public-mcp-catalog",
     )
     return PublicCommunityExportSurfaceSummary(
         discovery_routes={

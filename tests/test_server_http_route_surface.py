@@ -1559,6 +1559,9 @@ def test_public_sdk_catalog_route_returns_broader_sdk_export_surface() -> None:
     assert response.body["routes"]["ecosystem_catalog_page"] == "/app/ecosystem"
     assert response.body["routes"]["community_hub_page"] == "/app/community"
     assert response.body["routes"]["public_plugin_catalog_page"] == "/app/plugins"
+    assert response.body["routes"]["public_mcp_catalog_page"] == "/app/mcp"
+    assert response.body["routes"]["provider_catalog_page"] == "/app/providers"
+    assert response.body["routes"]["public_nex_format_page"] == "/app/public-nex"
     assert response.body["routes"]["public_plugin_catalog"] == "/api/integrations/public-plugins/catalog"
     assert response.body["public_sdk_entrypoints"]["artifact_import_copy"] == "import_public_nex_artifact"
     assert response.body["public_sdk_entrypoints"]["tool_catalog"] == "build_public_mcp_tools"
@@ -1600,6 +1603,9 @@ def test_public_ecosystem_catalog_route_returns_app_catalog_cross_links() -> Non
     assert response.body["routes"]["community_hub_page"] == "/app/community"
     assert response.body["routes"]["public_sdk_catalog_page"] == "/app/sdk"
     assert response.body["routes"]["public_plugin_catalog_page"] == "/app/plugins"
+    assert response.body["routes"]["public_mcp_catalog_page"] == "/app/mcp"
+    assert response.body["routes"]["provider_catalog_page"] == "/app/providers"
+    assert response.body["routes"]["public_nex_format_page"] == "/app/public-nex"
     assert response.body["surfaces"]["public_plugin_catalog"]["route"] == "/api/integrations/public-plugins/catalog"
     assert response.body["surfaces"]["public_community_catalog"]["route"] == "/api/integrations/public-community/catalog"
 
@@ -1618,12 +1624,35 @@ def test_public_community_catalog_route_returns_community_asset_surface() -> Non
     assert response.body["routes"]["starter_template_catalog_page"] == "/app/templates/starter-circuits"
     assert response.body["routes"]["public_share_catalog_page"] == "/app/public-shares"
     assert response.body["routes"]["public_plugin_catalog_page"] == "/app/plugins"
+    assert response.body["routes"]["public_mcp_catalog_page"] == "/app/mcp"
     assert response.body["routes"]["starter_template_catalog"] == "/api/templates/starter-circuits"
     assert response.body["public_sdk_entrypoints"]["community_catalog_summary"] == "describe_public_community_export_surface"
     assert response.body["assets"][0]["app_route"] == "/app/templates/starter-circuits"
     assert response.body["assets"][1]["app_route"] == "/app/public-shares"
     assert response.body["assets"][2]["app_route"] == "/app/plugins"
-    assert len(response.body["assets"]) == 3
+    assert response.body["assets"][3]["app_route"] == "/app/mcp"
+    assert len(response.body["assets"]) == 4
+
+def test_provider_catalog_route_returns_app_catalog_cross_links() -> None:
+    response = RunHttpRouteSurface.handle_list_provider_catalog(
+        http_request=_auth_request(method="GET", path="/api/providers/catalog"),
+        provider_catalog_rows=({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+            "local_env_var_hint": "OPENAI_API_KEY",
+            "default_secret_name_template": "nexa/{workspace_id}/providers/openai",
+        },),
+    )
+
+    assert response.status_code == 200
+    assert response.body["routes"]["self"] == "/api/providers/catalog"
+    assert response.body["routes"]["app_catalog_page"] == "/app/providers"
+    assert response.body["routes"]["public_mcp_catalog_page"] == "/app/mcp"
+    assert response.body["routes"]["public_sdk_catalog_page"] == "/app/sdk"
+
 
 def test_public_mcp_manifest_route_returns_manifest_export_surface() -> None:
     response = RunHttpRouteSurface.handle_public_mcp_manifest(

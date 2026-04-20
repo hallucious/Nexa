@@ -543,6 +543,12 @@ def _public_nex_format_body() -> dict[str, Any]:
         },
         "routes": {
             "format": "/api/formats/public-nex",
+            "app_catalog_page": "/app/public-nex",
+            "ecosystem_catalog_page": "/app/ecosystem",
+            "community_hub_page": "/app/community",
+            "public_sdk_catalog_page": "/app/sdk",
+            "public_mcp_catalog_page": "/app/mcp",
+            "provider_catalog_page": "/app/providers",
             "public_share_artifact": "/api/public-shares/{share_id}/artifact",
             "workspace_shell_commit": "/api/workspaces/{workspace_id}/shell/commit",
             "workspace_shell_checkout": "/api/workspaces/{workspace_id}/shell/checkout",
@@ -2018,6 +2024,9 @@ def _public_sdk_catalog_body() -> dict[str, Any]:
             "ecosystem_catalog_page": "/app/ecosystem",
             "community_hub_page": "/app/community",
             "public_plugin_catalog_page": "/app/plugins",
+            "public_mcp_catalog_page": "/app/mcp",
+            "provider_catalog_page": "/app/providers",
+            "public_nex_format_page": "/app/public-nex",
             "public_nex_format": "/api/formats/public-nex",
             "public_plugin_catalog": "/api/integrations/public-plugins/catalog",
             "public_community_catalog": "/api/integrations/public-community/catalog",
@@ -2091,6 +2100,15 @@ def _public_community_catalog_body() -> dict[str, Any]:
             "public_item_count": plugin_summary.plugin_count,
             "sample_ids": list(plugin_summary.plugin_ids[:3]),
         },
+        {
+            "asset_family": "public-mcp",
+            "surface_family": "public-mcp-catalog",
+            "community_role": "tool/resource compatibility bridge for external integrations",
+            "route": "/api/integrations/public-mcp/manifest",
+            "app_route": "/app/mcp",
+            "public_item_count": 2,
+            "sample_ids": ["manifest", "host-bridge"],
+        },
     ]
     return {
         "catalog": {
@@ -2105,6 +2123,7 @@ def _public_community_catalog_body() -> dict[str, Any]:
             "starter_template_catalog_page": "/app/templates/starter-circuits",
             "public_share_catalog_page": "/app/public-shares",
             "public_plugin_catalog_page": "/app/plugins",
+            "public_mcp_catalog_page": "/app/mcp",
             **dict(summary.discovery_routes),
         },
     }
@@ -2119,11 +2138,13 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
             "surface_family": "public-sdk-catalog",
             "route_family": "public-sdk-catalog-read",
             "route": "/api/integrations/public-sdk/catalog",
+            "app_route": "/app/sdk",
         },
         "public_nex_format": {
             "surface_family": "public-nex-format",
             "route_family": "public-nex-format-read",
             "route": "/api/formats/public-nex",
+            "app_route": "/app/public-nex",
         },
         "public_plugin_catalog": {
             "surface_family": "public-plugin-catalog",
@@ -2139,11 +2160,13 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
             "surface_family": "public-mcp-manifest",
             "route_family": "public-mcp-manifest-read",
             "route": "/api/integrations/public-mcp/manifest",
+            "app_route": "/app/mcp",
         },
         "public_mcp_host_bridge": {
             "surface_family": "public-mcp-host-bridge",
             "route_family": "public-mcp-host-bridge-read",
             "route": "/api/integrations/public-mcp/host-bridge",
+            "app_route": "/app/mcp",
         },
         "public_share_catalog": {
             "surface_family": "public-share-catalog",
@@ -2164,6 +2187,7 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
             "surface_family": "provider-catalog",
             "route_family": "provider-catalog-read",
             "route": "/api/providers/catalog",
+            "app_route": "/app/providers",
         },
     }
     return {
@@ -2182,6 +2206,9 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
             "community_hub_page": "/app/community",
             "public_sdk_catalog_page": "/app/sdk",
             "public_plugin_catalog_page": "/app/plugins",
+            "public_mcp_catalog_page": "/app/mcp",
+            "provider_catalog_page": "/app/providers",
+            "public_nex_format_page": "/app/public-nex",
             **dict(summary.discovery_routes),
         },
     }
@@ -7182,6 +7209,14 @@ class RunHttpRouteSurface:
             _inject_collection_identity(payload.get("providers"), canonical_key="provider_key", lookup_mode="provider_key_only")
             payload["identity_policy"] = _provider_catalog_identity_policy_body()
             payload["namespace_policy"] = _provider_catalog_namespace_policy_body()
+            payload["routes"] = {
+                "self": "/api/providers/catalog",
+                "app_catalog_page": "/app/providers",
+                "ecosystem_catalog_page": "/app/ecosystem",
+                "community_hub_page": "/app/community",
+                "public_sdk_catalog_page": "/app/sdk",
+                "public_mcp_catalog_page": "/app/mcp",
+            }
             return _route_response(200, payload)
         assert outcome.rejected is not None
         return _route_response(_reason_to_status_code(outcome.rejected.reason_code), asdict(outcome.rejected))

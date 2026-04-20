@@ -899,7 +899,7 @@ def test_sdk_root_exposes_public_community_catalog_surface() -> None:
     assert summary.discovery_routes["starter_template_catalog"] == "/api/templates/starter-circuits"
     assert summary.public_sdk_entrypoints["community_catalog_summary"] == "describe_public_community_export_surface"
     assert "public-share-catalog" in summary.asset_families
-    assert summary.asset_count == 3
+    assert summary.asset_count == 4
     assert summary.starter_template_count > 0
     assert summary.share_operation_count > 0
     assert summary.plugin_count > 0

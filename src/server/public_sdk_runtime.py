@@ -41,6 +41,24 @@ def render_public_sdk_catalog_html(
         plugin_route = f"{plugin_route}{joiner}app_language={app_language}"
     plugin_href = escape(plugin_route)
 
+    mcp_route = str(routes.get("public_mcp_catalog_page") or "/app/mcp").strip() or "/app/mcp"
+    if "app_language=" not in mcp_route:
+        joiner = "&" if "?" in mcp_route else "?"
+        mcp_route = f"{mcp_route}{joiner}app_language={app_language}"
+    mcp_href = escape(mcp_route)
+
+    provider_route = str(routes.get("provider_catalog_page") or "/app/providers").strip() or "/app/providers"
+    if "app_language=" not in provider_route:
+        joiner = "&" if "?" in provider_route else "?"
+        provider_route = f"{provider_route}{joiner}app_language={app_language}"
+    provider_href = escape(provider_route)
+
+    public_nex_route = str(routes.get("public_nex_format_page") or "/app/public-nex").strip() or "/app/public-nex"
+    if "app_language=" not in public_nex_route:
+        joiner = "&" if "?" in public_nex_route else "?"
+        public_nex_route = f"{public_nex_route}{joiner}app_language={app_language}"
+    public_nex_href = escape(public_nex_route)
+
     tool_items = "".join(
         f'<li><strong>{escape(str(item.get("name") or item.get("tool_id") or "tool"))}</strong>: {escape(str(item.get("description") or item.get("title") or "MCP/public SDK tool"))}</li>'
         for item in tools[:6]
@@ -95,11 +113,14 @@ def render_public_sdk_catalog_html(
   <body>
     <main role=\"main\" aria-labelledby=\"public-sdk-title\">
       <header>
-        <a class=\"top-link\" href=\"{raw_catalog_href}\">Open raw SDK catalog</a>
-        <a class=\"top-link\" href=\"{ecosystem_href}\">Open ecosystem catalog</a>
-        <a class=\"top-link\" href=\"{community_href}\">Open community hub</a>
-        <a class=\"top-link\" href=\"{plugin_href}\">Open public plugins</a>
-        <h1 id=\"public-sdk-title\">{title}</h1>
+        <a class="top-link" href="{raw_catalog_href}">Open raw SDK catalog</a>
+        <a class="top-link" href="{ecosystem_href}">Open ecosystem catalog</a>
+        <a class="top-link" href="{community_href}">Open community hub</a>
+        <a class="top-link" href="{plugin_href}">Open public plugins</a>
+        <a class="top-link" href="{mcp_href}">Open MCP surface</a>
+        <a class="top-link" href="{provider_href}">Open providers</a>
+        <a class="top-link" href="{public_nex_href}">Open public .nex</a>
+        <h1 id="public-sdk-title">{title}</h1>
         <p>{subtitle}</p>
       </header>
       <section class=\"summary-grid\" aria-label=\"Public SDK entrypoints\">{entrypoint_cards}</section>
