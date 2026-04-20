@@ -35,6 +35,7 @@ from src.sdk.artifacts import (
     resolve_public_nex_execution_target,
 )
 from src.server.framework_binding_models import FrameworkOutboundResponse
+from src.public_surface_registry import PUBLIC_COMMUNITY_ASSET_SURFACE_FAMILIES
 
 from src.sdk.server import (
     ProductExecutionTarget,
@@ -899,7 +900,7 @@ def test_sdk_root_exposes_public_community_catalog_surface() -> None:
     assert summary.discovery_routes["starter_template_catalog"] == "/api/templates/starter-circuits"
     assert summary.public_sdk_entrypoints["community_catalog_summary"] == "describe_public_community_export_surface"
     assert "public-share-catalog" in summary.asset_families
-    assert summary.asset_count == 4
+    assert summary.asset_count == len(PUBLIC_COMMUNITY_ASSET_SURFACE_FAMILIES)
     assert summary.starter_template_count > 0
     assert summary.share_operation_count > 0
     assert summary.plugin_count > 0

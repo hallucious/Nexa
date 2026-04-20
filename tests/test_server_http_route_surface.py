@@ -16,6 +16,14 @@ from src.server import (
     WorkspaceAuthorizationContext,
 )
 from src.storage.share_api import export_public_nex_link_share
+from src.public_surface_registry import (
+    PUBLIC_COMMUNITY_ASSET_SPECS,
+    build_provider_catalog_route_map,
+    build_public_community_route_map,
+    build_public_ecosystem_route_map,
+    build_public_nex_route_map,
+    build_public_sdk_route_map,
+)
 
 
 def _workspace() -> WorkspaceAuthorizationContext:
@@ -1554,15 +1562,9 @@ def test_public_sdk_catalog_route_returns_broader_sdk_export_surface() -> None:
     assert response.body["catalog"]["sdk_modules"] == ["artifacts", "server", "integration"]
     assert response.body["identity_policy"]["canonical_key"] == "catalog.surface_family"
     assert response.body["namespace_policy"]["family"] == "public-sdk-catalog"
-    assert response.body["routes"]["self"] == "/api/integrations/public-sdk/catalog"
-    assert response.body["routes"]["app_catalog_page"] == "/app/sdk"
-    assert response.body["routes"]["ecosystem_catalog_page"] == "/app/ecosystem"
-    assert response.body["routes"]["community_hub_page"] == "/app/community"
-    assert response.body["routes"]["public_plugin_catalog_page"] == "/app/plugins"
-    assert response.body["routes"]["public_mcp_catalog_page"] == "/app/mcp"
-    assert response.body["routes"]["provider_catalog_page"] == "/app/providers"
-    assert response.body["routes"]["public_nex_format_page"] == "/app/public-nex"
-    assert response.body["routes"]["public_plugin_catalog"] == "/api/integrations/public-plugins/catalog"
+    expected_routes = build_public_sdk_route_map()
+    assert response.body["routes"] == expected_routes
+    assert response.body["routes"]["public_plugin_catalog"] == expected_routes["public_plugin_catalog"]
     assert response.body["public_sdk_entrypoints"]["artifact_import_copy"] == "import_public_nex_artifact"
     assert response.body["public_sdk_entrypoints"]["tool_catalog"] == "build_public_mcp_tools"
     assert response.body["public_sdk_entrypoints"]["mcp_export_summary"] == "describe_public_mcp_export_surface"
@@ -1598,14 +1600,8 @@ def test_public_ecosystem_catalog_route_returns_app_catalog_cross_links() -> Non
     assert response.body["catalog"]["surface_family"] == "public-ecosystem-catalog"
     assert response.body["identity_policy"]["canonical_key"] == "catalog.surface_family"
     assert response.body["namespace_policy"]["family"] == "public-ecosystem-catalog"
-    assert response.body["routes"]["self"] == "/api/integrations/public-ecosystem/catalog"
-    assert response.body["routes"]["app_catalog_page"] == "/app/ecosystem"
-    assert response.body["routes"]["community_hub_page"] == "/app/community"
-    assert response.body["routes"]["public_sdk_catalog_page"] == "/app/sdk"
-    assert response.body["routes"]["public_plugin_catalog_page"] == "/app/plugins"
-    assert response.body["routes"]["public_mcp_catalog_page"] == "/app/mcp"
-    assert response.body["routes"]["provider_catalog_page"] == "/app/providers"
-    assert response.body["routes"]["public_nex_format_page"] == "/app/public-nex"
+    expected_routes = build_public_ecosystem_route_map(response.body["catalog"]["discovery_routes"])
+    assert response.body["routes"] == expected_routes
     assert response.body["surfaces"]["public_plugin_catalog"]["route"] == "/api/integrations/public-plugins/catalog"
     assert response.body["surfaces"]["public_community_catalog"]["route"] == "/api/integrations/public-community/catalog"
 
@@ -1619,19 +1615,12 @@ def test_public_community_catalog_route_returns_community_asset_surface() -> Non
     assert response.body["catalog"]["surface_family"] == "public-community-catalog"
     assert response.body["identity_policy"]["canonical_key"] == "catalog.surface_family"
     assert response.body["namespace_policy"]["family"] == "public-community-catalog"
-    assert response.body["routes"]["self"] == "/api/integrations/public-community/catalog"
-    assert response.body["routes"]["app_hub"] == "/app/community"
-    assert response.body["routes"]["starter_template_catalog_page"] == "/app/templates/starter-circuits"
-    assert response.body["routes"]["public_share_catalog_page"] == "/app/public-shares"
-    assert response.body["routes"]["public_plugin_catalog_page"] == "/app/plugins"
-    assert response.body["routes"]["public_mcp_catalog_page"] == "/app/mcp"
-    assert response.body["routes"]["starter_template_catalog"] == "/api/templates/starter-circuits"
+    expected_routes = build_public_community_route_map(response.body["catalog"]["discovery_routes"])
+    assert response.body["routes"] == expected_routes
+    assert response.body["routes"]["starter_template_catalog"] == expected_routes["starter_template_catalog"]
     assert response.body["public_sdk_entrypoints"]["community_catalog_summary"] == "describe_public_community_export_surface"
-    assert response.body["assets"][0]["app_route"] == "/app/templates/starter-circuits"
-    assert response.body["assets"][1]["app_route"] == "/app/public-shares"
-    assert response.body["assets"][2]["app_route"] == "/app/plugins"
-    assert response.body["assets"][3]["app_route"] == "/app/mcp"
-    assert len(response.body["assets"]) == 4
+    assert [asset["app_route"] for asset in response.body["assets"]] == [expected_routes[spec.app_route_key] for spec in PUBLIC_COMMUNITY_ASSET_SPECS]
+    assert len(response.body["assets"]) == len(PUBLIC_COMMUNITY_ASSET_SPECS)
 
 def test_provider_catalog_route_returns_app_catalog_cross_links() -> None:
     response = RunHttpRouteSurface.handle_list_provider_catalog(
