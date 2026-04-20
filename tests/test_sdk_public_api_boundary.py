@@ -288,6 +288,21 @@ def test_sdk_root_exposes_public_mcp_host_bridge_surface() -> None:
     assert dispatch.request.path == "/api/runs/run-1"
     assert dispatch.request.query_params == {"include": "summary"}
     assert dispatch.handler_name == "handle_run_status"
+
+
+def test_sdk_root_exposes_public_mcp_export_surface_summary() -> None:
+    summary = sdk.describe_public_mcp_export_surface()
+    bridge = sdk.build_public_mcp_host_bridge_scaffold()
+
+    assert isinstance(summary, sdk.PublicMcpExportSurfaceSummary)
+    assert summary.manifest_routes["self"] == "/api/integrations/public-mcp/manifest"
+    assert summary.host_bridge_routes["self"] == "/api/integrations/public-mcp/host-bridge"
+    assert summary.public_sdk_entrypoints["adapter_scaffold"] == "build_public_mcp_adapter_scaffold"
+    assert summary.public_sdk_entrypoints["response_contracts"] == "build_public_mcp_response_contracts"
+    assert summary.supported_contract_markers
+    assert summary.supported_runtime_markers
+    assert summary.tool_count > 0
+    assert summary.resource_count > 0
     assert any(binding.route_name == "get_run_status" for binding in bridge.export().resource_bindings)
 
 

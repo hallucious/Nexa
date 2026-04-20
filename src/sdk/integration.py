@@ -368,6 +368,28 @@ class PublicMcpCompatibilitySurface:
 
 
 @dataclass(frozen=True)
+class PublicMcpExportSurfaceSummary:
+    manifest_routes: Mapping[str, str]
+    host_bridge_routes: Mapping[str, str]
+    public_sdk_entrypoints: Mapping[str, str]
+    supported_contract_markers: tuple[str, ...]
+    supported_runtime_markers: tuple[str, ...]
+    tool_count: int
+    resource_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "manifest_routes": dict(self.manifest_routes),
+            "host_bridge_routes": dict(self.host_bridge_routes),
+            "public_sdk_entrypoints": dict(self.public_sdk_entrypoints),
+            "supported_contract_markers": list(self.supported_contract_markers),
+            "supported_runtime_markers": list(self.supported_runtime_markers),
+            "tool_count": self.tool_count,
+            "resource_count": self.resource_count,
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpCompatibilityPolicy:
     supported_contract_markers: tuple[str, ...] = ()
     supported_runtime_markers: tuple[str, ...] = ()
@@ -3548,6 +3570,41 @@ def build_public_mcp_host_bridge_scaffold(
             surface=surface,
             resource_uri_prefix=resource_uri_prefix,
         ),
+    )
+
+
+def describe_public_mcp_export_surface(
+    *,
+    surface: PublicMcpCompatibilitySurface | None = None,
+) -> PublicMcpExportSurfaceSummary:
+    """Return the canonical public MCP export metadata shared by route surfaces and SDK consumers."""
+
+    resolved_surface = surface or build_public_mcp_compatibility_surface()
+    return PublicMcpExportSurfaceSummary(
+        manifest_routes={
+            "self": "/api/integrations/public-mcp/manifest",
+            "host_bridge": "/api/integrations/public-mcp/host-bridge",
+            "public_nex_format": "/api/formats/public-nex",
+        },
+        host_bridge_routes={
+            "self": "/api/integrations/public-mcp/host-bridge",
+            "manifest": "/api/integrations/public-mcp/manifest",
+            "public_nex_format": "/api/formats/public-nex",
+        },
+        public_sdk_entrypoints={
+            "compatibility_surface": "build_public_mcp_compatibility_surface",
+            "adapter_scaffold": "build_public_mcp_adapter_scaffold",
+            "manifest_export": "build_public_mcp_manifest",
+            "host_bridge_scaffold": "build_public_mcp_host_bridge_scaffold",
+            "tool_catalog": "build_public_mcp_tools",
+            "resource_catalog": "build_public_mcp_resources",
+            "route_contracts": "build_public_mcp_route_contracts",
+            "response_contracts": "build_public_mcp_response_contracts",
+        },
+        supported_contract_markers=resolved_surface.contract_markers,
+        supported_runtime_markers=resolved_surface.runtime_markers,
+        tool_count=len(resolved_surface.tools),
+        resource_count=len(resolved_surface.resources),
     )
 
 

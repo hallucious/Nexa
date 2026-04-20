@@ -1554,6 +1554,11 @@ def test_public_mcp_manifest_route_returns_manifest_export_surface() -> None:
     assert response.body["identity_policy"]["canonical_key"] == "manifest.server.name"
     assert response.body["namespace_policy"]["family"] == "public-mcp-manifest"
     assert response.body["routes"]["host_bridge"] == "/api/integrations/public-mcp/host-bridge"
+    assert response.body["public_sdk_entrypoints"]["manifest_export"] == "build_public_mcp_manifest"
+    assert response.body["supported_contract_markers"]
+    assert response.body["supported_runtime_markers"]
+    assert response.body["tool_count"] > 0
+    assert response.body["resource_count"] > 0
 
 
 def test_public_mcp_host_bridge_route_returns_host_bridge_export_surface() -> None:
@@ -1567,6 +1572,11 @@ def test_public_mcp_host_bridge_route_returns_host_bridge_export_surface() -> No
     assert response.body["identity_policy"]["canonical_key"] == "host_bridge.framework_binding_class"
     assert response.body["namespace_policy"]["family"] == "public-mcp-host-bridge"
     assert response.body["routes"]["manifest"] == "/api/integrations/public-mcp/manifest"
+    assert response.body["public_sdk_entrypoints"]["host_bridge_scaffold"] == "build_public_mcp_host_bridge_scaffold"
+    assert response.body["supported_contract_markers"]
+    assert response.body["supported_runtime_markers"]
+    assert response.body["tool_count"] > 0
+    assert response.body["resource_count"] > 0
 
 
 def test_workspace_public_share_creation_returns_persisted_public_share_descriptor() -> None:

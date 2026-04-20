@@ -477,6 +477,14 @@ def _public_mcp_host_bridge_body(query_params: Mapping[str, Any] | None) -> dict
         resource_uri_prefix=_request_optional_text(query_params, "resource_uri_prefix") or "nexa://public",
     ).export()
     return _to_jsonable(export)
+
+
+def _public_mcp_export_surface_body() -> dict[str, Any]:
+    from src.sdk.integration import describe_public_mcp_export_surface
+
+    return describe_public_mcp_export_surface().to_dict()
+
+
 def _public_nex_format_body() -> dict[str, Any]:
     format_boundary = get_public_nex_format_boundary()
     return {
@@ -5903,16 +5911,18 @@ class RunHttpRouteSurface:
             return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
 
         payload = _public_mcp_manifest_body(http_request.query_params)
+        export_surface = _public_mcp_export_surface_body()
         response = ProductPublicMcpManifestResponse(
             status="ready",
             manifest=payload,
             identity_policy=_public_mcp_manifest_identity_policy_body(),
             namespace_policy=_public_mcp_manifest_namespace_policy_body(),
-            routes={
-                "self": "/api/integrations/public-mcp/manifest",
-                "host_bridge": "/api/integrations/public-mcp/host-bridge",
-                "public_nex_format": "/api/formats/public-nex",
-            },
+            routes=export_surface["manifest_routes"],
+            public_sdk_entrypoints=export_surface["public_sdk_entrypoints"],
+            supported_contract_markers=tuple(export_surface["supported_contract_markers"]),
+            supported_runtime_markers=tuple(export_surface["supported_runtime_markers"]),
+            tool_count=export_surface["tool_count"],
+            resource_count=export_surface["resource_count"],
         )
         return _route_response(200, asdict(response))
 
@@ -5928,15 +5938,18 @@ class RunHttpRouteSurface:
             return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
 
         payload = _public_mcp_host_bridge_body(http_request.query_params)
+        export_surface = _public_mcp_export_surface_body()
         response = ProductPublicMcpHostBridgeResponse(
             status="ready",
             host_bridge=payload,
             identity_policy=_public_mcp_host_bridge_identity_policy_body(),
             namespace_policy=_public_mcp_host_bridge_namespace_policy_body(),
-            routes={
-                "self": "/api/integrations/public-mcp/host-bridge",
-                "manifest": "/api/integrations/public-mcp/manifest",
-            },
+            routes=export_surface["host_bridge_routes"],
+            public_sdk_entrypoints=export_surface["public_sdk_entrypoints"],
+            supported_contract_markers=tuple(export_surface["supported_contract_markers"]),
+            supported_runtime_markers=tuple(export_surface["supported_runtime_markers"]),
+            tool_count=export_surface["tool_count"],
+            resource_count=export_surface["resource_count"],
         )
         return _route_response(200, asdict(response))
 

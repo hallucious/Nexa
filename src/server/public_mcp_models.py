@@ -11,6 +11,11 @@ class ProductPublicMcpManifestResponse:
     identity_policy: Mapping[str, Any] | None = None
     namespace_policy: Mapping[str, Any] | None = None
     routes: Mapping[str, str] = field(default_factory=dict)
+    public_sdk_entrypoints: Mapping[str, str] = field(default_factory=dict)
+    supported_contract_markers: tuple[str, ...] = ()
+    supported_runtime_markers: tuple[str, ...] = ()
+    tool_count: int | None = None
+    resource_count: int | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"ready", "accepted"}:
@@ -26,6 +31,11 @@ class ProductPublicMcpHostBridgeResponse:
     identity_policy: Mapping[str, Any] | None = None
     namespace_policy: Mapping[str, Any] | None = None
     routes: Mapping[str, str] = field(default_factory=dict)
+    public_sdk_entrypoints: Mapping[str, str] = field(default_factory=dict)
+    supported_contract_markers: tuple[str, ...] = ()
+    supported_runtime_markers: tuple[str, ...] = ()
+    tool_count: int | None = None
+    resource_count: int | None = None
 
     def __post_init__(self) -> None:
         if self.status not in {"ready", "accepted"}:
