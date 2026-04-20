@@ -18,7 +18,7 @@ from src.server.artifact_trace_read_models import (
     ProductRunArtifactsResponse,
     ProductRunTraceResponse,
 )
-from src.server.circuit_library_models import ProductCircuitLibraryResponse
+from src.server.circuit_library_models import ProductCircuitLibraryResponse, ProductWorkspaceCircuitLibraryResponse
 from src.server.starter_template_models import (
     ProductStarterTemplateApplyAcceptedResponse,
     ProductStarterTemplateCatalogResponse,
@@ -144,6 +144,7 @@ __all__ = [
     "ProductRecentActivityResponse",
     "ProductHistorySummaryResponse",
     "ProductCircuitLibraryResponse",
+    "ProductWorkspaceCircuitLibraryResponse",
     "ProductStarterTemplateCatalogResponse",
     "ProductStarterTemplateDetailResponse",
     "ProductWorkspaceStarterTemplateCatalogResponse",

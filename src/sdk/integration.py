@@ -3568,6 +3568,7 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "get_history_summary": "handle_history_summary",
     "list_workspaces": "handle_list_workspaces",
     "get_circuit_library": "handle_circuit_library",
+    "get_workspace_circuit_library": "handle_workspace_circuit_library",
     "list_starter_circuit_templates": "handle_list_starter_circuit_templates",
     "get_starter_circuit_template": "handle_get_starter_circuit_template",
     "list_workspace_starter_circuit_templates": "handle_list_workspace_starter_circuit_templates",
@@ -4060,6 +4061,12 @@ _ARGUMENT_SCHEMA_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             _schema_field("app_language", "query", "string", description="Optional language hint for localized circuit-library summaries."),
         ),
     },
+    "get_workspace_circuit_library": {
+        "path_fields": (_schema_field("workspace_id", "path", "string", required=True, description="Workspace whose beginner-facing circuit library surface should be read."),),
+        "query_fields": (
+            _schema_field("app_language", "query", "string", description="Optional language hint for localized workspace circuit-library summaries."),
+        ),
+    },
     "list_starter_circuit_templates": {
         "query_fields": (
             _schema_field("app_language", "query", "string", description="Optional language hint for localized starter-template catalog summaries."),
@@ -4209,6 +4216,7 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "delete_issuer_public_shares": {"route_family": "issuer-public-share-management", "transport_profile": "body-only"},
     "get_history_summary": {"route_family": "history-summary-read", "transport_profile": "query-only"},
     "get_circuit_library": {"route_family": "circuit-library-read", "transport_profile": "query-only"},
+    "get_workspace_circuit_library": {"route_family": "workspace-circuit-library-read", "transport_profile": "path-and-query"},
     "list_starter_circuit_templates": {"route_family": "starter-template-catalog-read", "transport_profile": "query-only"},
     "get_starter_circuit_template": {"route_family": "starter-template-detail-read", "transport_profile": "path-and-query"},
     "get_public_nex_format": {"route_family": "public-nex-format-read", "transport_profile": "no-arguments"},
@@ -4394,6 +4402,15 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_recommended_action": "retry_same_request",
     },
     "circuit-library-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "workspace-circuit-library-read": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
         "safe_to_retry_same_request_on_timeout": True,
@@ -4982,6 +4999,12 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "result_resource_name": "get_circuit_library",
         "followup_route_names": ("get_circuit_library", "list_workspaces", "get_workspace_result_history", "get_workspace_feedback", "get_workspace_shell", "get_onboarding"),
     },
+    "workspace-circuit-library-read": {
+        "lifecycle_class": "workspace-circuit-library-read",
+        "status_resource_name": "get_history_summary",
+        "result_resource_name": "get_workspace_circuit_library",
+        "followup_route_names": ("get_workspace_circuit_library", "get_workspace", "get_workspace_result_history", "get_workspace_feedback", "get_workspace_shell", "list_workspace_starter_circuit_templates", "get_workspace_starter_circuit_template"),
+    },
     "starter-template-catalog-read": {
         "lifecycle_class": "starter-template-catalog-read",
         "result_resource_name": "list_starter_circuit_templates",
@@ -5311,6 +5334,13 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_circuit_library": {
         "profile_kind": "circuit-library",
         "identity_keys": ("source_of_truth", "identity_policy", "namespace_policy"),
+        "state_keys": ("status", "app_language"),
+        "collection_field_name": "item_sections",
+        "collection_item_identity_keys": ("workspace_id", "identity"),
+    },
+    "get_workspace_circuit_library": {
+        "profile_kind": "workspace-circuit-library",
+        "identity_keys": ("workspace_id", "identity_policy", "namespace_policy"),
         "state_keys": ("status", "app_language"),
         "collection_field_name": "item_sections",
         "collection_item_identity_keys": ("workspace_id", "identity"),
@@ -5685,6 +5715,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_recent_activity": {"response_shape": "activity", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("returned_count", "activities", "identity_policy", "namespace_policy")},
     "get_history_summary": {"response_shape": "history-summary", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("scope", "identity_policy", "namespace_policy")},
     "get_circuit_library": {"response_shape": "circuit-library", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "source_of_truth", "library", "overview_section", "item_sections", "identity_policy", "namespace_policy", "routes")},
+    "get_workspace_circuit_library": {"response_shape": "workspace-circuit-library", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "source_of_truth", "library", "overview_section", "item_sections", "identity_policy", "namespace_policy", "routes")},
     "list_starter_circuit_templates": {"response_shape": "starter-template-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "templates", "routes", "identity_policy", "namespace_policy")},
     "get_starter_circuit_template": {"response_shape": "starter-template-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "template", "routes", "identity_policy", "namespace_policy")},
     "list_workspace_starter_circuit_templates": {"response_shape": "workspace-starter-template-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "catalog", "templates", "routes", "identity_policy", "namespace_policy")},
@@ -6103,6 +6134,13 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read the beginner-facing workflow library and continue/result-history reentry surfaces.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductCircuitLibraryResponse"),
         "tags": ("workspace", "library", "reentry"),
+    },
+    {
+        "name": "get_workspace_circuit_library",
+        "route_name": "get_workspace_circuit_library",
+        "description": "Read the workspace-scoped beginner-facing workflow library aligned to a target workspace context.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductWorkspaceCircuitLibraryResponse"),
+        "tags": ("workspace", "library", "detail"),
     },
     {
         "name": "list_starter_circuit_templates",

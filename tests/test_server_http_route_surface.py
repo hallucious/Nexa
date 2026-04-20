@@ -1288,7 +1288,7 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
     assert payload['routes']['workspace_history_summary'] == '/api/users/me/history-summary?workspace_id=ws-001'
     assert payload['routes']['workspace_result_history'] == '/api/workspaces/ws-001/result-history'
     assert payload['routes']['workspace_result_history_page'] == '/app/workspaces/ws-001/results?app_language=en'
-    assert payload['routes']['circuit_library'] == '/api/workspaces/library'
+    assert payload['routes']['circuit_library'] == '/api/workspaces/ws-001/library'
     assert payload['routes']['circuit_library_page'] == '/app/library?app_language=en'
     assert payload['routes']['starter_template_catalog'] == '/api/templates/starter-circuits'
     assert payload['routes']['starter_template_catalog_page'] == '/app/workspaces/ws-001/starter-templates?app_language=en'

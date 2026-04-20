@@ -1881,7 +1881,7 @@ def build_workspace_shell_runtime_payload(
             "workspace_feedback_page": f"/app/workspaces/{workspace_id}/feedback",
             "workspace_result_history": f"/api/workspaces/{workspace_id}/result-history",
             "workspace_result_history_page": f"/app/workspaces/{workspace_id}/results?app_language={app_language}",
-            "circuit_library": "/api/workspaces/library",
+            "circuit_library": f"/api/workspaces/{workspace_id}/library",
             "circuit_library_page": f"/app/library?app_language={app_language}",
             "workspace_circuit_library_page": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
             "starter_template_catalog": "/api/templates/starter-circuits",

@@ -171,6 +171,23 @@ class FastApiRouteBindings:
             )
             return self._framework_response(outbound)
 
+        @router.get("/api/workspaces/{workspace_id}/library")
+        async def get_workspace_circuit_library(workspace_id: str, request: Request) -> Response:
+            inbound = self._inbound_request(request=request, path_params={"workspace_id": workspace_id})
+            outbound = FrameworkRouteBindings.handle_workspace_circuit_library(
+                request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
+                workspace_rows=self.dependencies.workspace_rows_provider(),
+                membership_rows=self.dependencies.workspace_membership_rows_provider(),
+                recent_run_rows=self.dependencies.recent_run_rows_provider(),
+                provider_binding_rows=self.dependencies.recent_provider_binding_rows_provider(),
+                managed_secret_rows=self.dependencies.recent_managed_secret_rows_provider(),
+                provider_probe_rows=self.dependencies.recent_provider_probe_rows_provider(),
+                onboarding_rows=self.dependencies.onboarding_rows_provider(),
+            )
+            return self._framework_response(outbound)
+
         @router.get("/api/templates/starter-circuits")
         async def list_starter_circuit_templates(request: Request) -> Response:
             inbound = self._inbound_request(request=request)
@@ -2547,15 +2564,17 @@ class FastApiRouteBindings:
                 return JSONResponse(status_code=404, content={"error_family": "workspace_read_failure", "reason_code": "workspace.not_found", "message": "Requested workspace was not found."})
             inbound = FrameworkInboundRequest(
                 method=request.method,
-                path="/api/workspaces/library",
+                path=f"/api/workspaces/{workspace_id}/library",
                 headers=dict(request.headers),
-                path_params={},
+                path_params={"workspace_id": workspace_id},
                 query_params=dict(request.query_params),
                 json_body=None,
                 session_claims=self._resolve_session_claims(request),
             )
-            outbound = FrameworkRouteBindings.handle_circuit_library(
+            outbound = FrameworkRouteBindings.handle_workspace_circuit_library(
                 request=inbound,
+                workspace_context=self.dependencies.workspace_context_provider(workspace_id),
+                workspace_row=self.dependencies.workspace_row_provider(workspace_id),
                 workspace_rows=self.dependencies.workspace_rows_provider(),
                 membership_rows=self.dependencies.workspace_membership_rows_provider(),
                 recent_run_rows=self.dependencies.recent_run_rows_provider(),
@@ -2570,6 +2589,7 @@ class FastApiRouteBindings:
             payload = json.loads(outbound.body_text)
             app_language = str(dict(request.query_params).get("app_language") or payload.get("app_language") or "en")
             payload.setdefault("routes", {})["app_library"] = f"/app/workspaces/{workspace_id}/library?app_language={app_language}"
+            payload["routes"]["self"] = f"/api/workspaces/{workspace_id}/library"
             payload["routes"]["workspace_page"] = f"/app/workspaces/{workspace_id}?app_language={app_language}"
             payload["routes"]["starter_template_catalog_page"] = f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}"
             return HTMLResponse(content=render_circuit_library_runtime_html(payload), status_code=200)

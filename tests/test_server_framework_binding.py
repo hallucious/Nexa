@@ -116,6 +116,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "archive_issuer_public_shares",
         "list_workspaces",
         "get_circuit_library",
+        "get_workspace_circuit_library",
         "list_starter_circuit_templates",
         "get_starter_circuit_template",
         "list_workspace_starter_circuit_templates",
@@ -1203,6 +1204,33 @@ def test_framework_binding_handles_circuit_library_round_trip() -> None:
     assert parsed["library"]["items"][0]["continue_href"] == "/app/workspaces/ws-001/results?run_id=run-001"
     assert parsed["item_sections"][0]["identity"]["canonical_value"] == "ws-001"
     assert parsed["library"]["items"][0]["onboarding_incomplete"] is True
+
+def test_framework_binding_handles_workspace_circuit_library_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_workspace_circuit_library(
+        request=_request(method="GET", path="/api/workspaces/ws-001/library", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "owner_user_id": "user-owner", "title": "Primary Workspace", "description": "Main"},
+        workspace_rows=({"workspace_id": "ws-001", "owner_user_id": "user-owner", "title": "Primary Workspace", "description": "Main", "created_at": "2026-04-11T12:00:00+00:00", "updated_at": "2026-04-11T12:05:00+00:00", "last_run_id": "run-001", "last_result_status": "completed", "continuity_source": "server", "archived": False},),
+        membership_rows=(),
+        recent_run_rows=(_run_row(status="completed", status_family="terminal_success"),),
+        onboarding_rows=({
+            "onboarding_state_id": "onboard-001",
+            "user_id": "user-owner",
+            "workspace_id": "ws-001",
+            "first_success_achieved": False,
+            "advanced_surfaces_unlocked": False,
+            "current_step": "read_result",
+            "updated_at": "2026-04-11T12:09:00+00:00",
+        },),
+    )
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed["workspace_id"] == "ws-001"
+    assert parsed["identity_policy"]["surface_family"] == "workspace-circuit-library"
+    assert parsed["namespace_policy"]["family"] == "workspace-circuit-library"
+    assert parsed["routes"]["self"] == "/api/workspaces/ws-001/library"
+    assert parsed["routes"]["workspace"] == "/api/workspaces/ws-001"
+    assert parsed["routes"]["workspace_starter_template_catalog"] == "/api/workspaces/ws-001/starter-templates"
 
 def test_framework_binding_handles_workspace_provider_health_round_trip() -> None:
     from src.server import AwsSecretsManagerBindingConfig, AwsSecretsManagerSecretAuthority

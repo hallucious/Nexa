@@ -34,6 +34,7 @@ from src.server.run_control_api import RunControlService
 from src.server.run_action_log_api import RunActionLogReadService
 from src.server.workspace_shell_runtime import build_workspace_shell_runtime_payload, resolve_workspace_artifact_source, _default_working_save
 from src.server.circuit_library_runtime import build_circuit_library_payload
+from src.server.circuit_library_models import ProductCircuitLibraryResponse, ProductWorkspaceCircuitLibraryResponse
 from src.server.starter_template_models import (
     ProductStarterTemplateApplyAcceptedResponse,
     ProductStarterTemplateCatalogResponse,
@@ -1082,6 +1083,23 @@ def _circuit_library_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _workspace_circuit_library_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "workspace_id",
+        "surface_family": "workspace-circuit-library",
+        "member_identity_key": "workspace_id",
+    }
+
+
+def _workspace_circuit_library_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "workspace-circuit-library",
+        "canonical_route": "/api/workspaces/{workspace_id}/library",
+        "member_namespace_family": "workspace",
+        "continuity_surface": "workspace-scoped-return-use-library",
+    }
+
+
 def _workspace_result_history_identity_policy_body() -> dict[str, Any]:
     return {
         "canonical_key": "workspace_id",
@@ -1910,6 +1928,7 @@ class RunHttpRouteSurface:
         ("archive_issuer_public_shares", "POST", "/api/users/me/public-shares/actions/archive"),
         ("list_workspaces", "GET", "/api/workspaces"),
         ("get_circuit_library", "GET", "/api/workspaces/library"),
+        ("get_workspace_circuit_library", "GET", "/api/workspaces/{workspace_id}/library"),
         ("list_starter_circuit_templates", "GET", "/api/templates/starter-circuits"),
         ("get_starter_circuit_template", "GET", "/api/templates/starter-circuits/{template_id}"),
         ("list_workspace_starter_circuit_templates", "GET", "/api/workspaces/{workspace_id}/starter-templates"),
@@ -5772,6 +5791,94 @@ class RunHttpRouteSurface:
         payload["identity_policy"] = _circuit_library_identity_policy_body()
         payload["namespace_policy"] = _circuit_library_namespace_policy_body()
         return _route_response(200, payload)
+
+    @classmethod
+    def handle_workspace_circuit_library(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+        workspace_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        membership_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        recent_run_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_binding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace circuit library route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/library"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "circuit_library_read_failure",
+                "reason_code": "workspace.not_found",
+                "message": "Requested workspace was not found.",
+                "workspace_id": workspace_id,
+            })
+
+        request_auth = _request_auth(http_request)
+        if not request_auth.is_authenticated:
+            return _route_response(401, {
+                "status": "rejected",
+                "error_family": "circuit_library_read_failure",
+                "reason_code": "circuit_library.authentication_required",
+                "message": "Circuit library requires an authenticated session.",
+                "workspace_id": workspace_id,
+            })
+
+        app_language = _request_app_language(http_request.query_params)
+        payload = build_circuit_library_payload(
+            request_auth=request_auth,
+            workspace_rows=workspace_rows,
+            membership_rows=membership_rows,
+            recent_run_rows=recent_run_rows,
+            provider_binding_rows=provider_binding_rows,
+            managed_secret_rows=managed_secret_rows,
+            provider_probe_rows=provider_probe_rows,
+            onboarding_rows=onboarding_rows,
+            app_language=app_language,
+        )
+        if payload is None:
+            return _route_response(403, {
+                "status": "rejected",
+                "error_family": "circuit_library_read_failure",
+                "reason_code": "circuit_library.forbidden",
+                "message": "Current user is not allowed to read the circuit library.",
+                "workspace_id": workspace_id,
+            })
+        library = payload.get("library")
+        if isinstance(library, dict):
+            _inject_collection_identity(library.get("items"), canonical_key="workspace_id", lookup_mode="workspace_id_only")
+        _inject_collection_identity(payload.get("item_sections"), canonical_key="workspace_id", lookup_mode="workspace_id_only")
+        response = ProductWorkspaceCircuitLibraryResponse(
+            status="ready",
+            workspace_id=workspace_id,
+            source_of_truth=str(payload.get("source_of_truth") or "workspace_registry"),
+            library=dict(payload.get("library") or {}),
+            overview_section=dict(payload.get("overview_section") or {}),
+            item_sections=tuple(payload.get("item_sections") or ()),
+            app_language=app_language,
+            routes={
+                **dict(payload.get("routes") or {}),
+                "self": expected_path,
+                "workspace": f"/api/workspaces/{workspace_id}",
+                "workspace_page": f"/app/workspaces/{workspace_id}?app_language={app_language}",
+                "workspace_app_library": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
+                "workspace_starter_template_catalog": f"/api/workspaces/{workspace_id}/starter-templates",
+                "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
+            },
+            identity_policy=_workspace_circuit_library_identity_policy_body(),
+            namespace_policy=_workspace_circuit_library_namespace_policy_body(),
+        )
+        return _route_response(200, asdict(response))
 
 
     @classmethod

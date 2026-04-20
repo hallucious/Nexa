@@ -612,6 +612,15 @@ def test_fastapi_binding_circuit_library_routes_round_trip() -> None:
     assert api_payload['library']['items'][0]['result_history_href'] == '/app/workspaces/ws-001/results?run_id=run-001'
     assert api_payload['item_sections'][0]['identity']['canonical_value'] == 'ws-001'
 
+    api_workspace_response = client.get('/api/workspaces/ws-001/library', headers=_session_headers())
+    assert api_workspace_response.status_code == 200
+    api_workspace_payload = api_workspace_response.json()
+    assert api_workspace_payload['workspace_id'] == 'ws-001'
+    assert api_workspace_payload['identity_policy']['surface_family'] == 'workspace-circuit-library'
+    assert api_workspace_payload['namespace_policy']['family'] == 'workspace-circuit-library'
+    assert api_workspace_payload['routes']['self'] == '/api/workspaces/ws-001/library'
+    assert api_workspace_payload['routes']['workspace_starter_template_catalog'] == '/api/workspaces/ws-001/starter-templates'
+
     page_response = client.get('/app/library', headers=_session_headers())
     assert page_response.status_code == 200
     assert 'My workflows' in page_response.text
@@ -666,7 +675,7 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['routes']['public_share_history_page_template'] == '/app/public-shares/{share_id}/history?app_language=en&workspace_id=ws-001'
     assert payload['routes']['workspace_result_history'] == '/api/workspaces/ws-001/result-history'
     assert payload['routes']['workspace_result_history_page'] == '/app/workspaces/ws-001/results?app_language=en'
-    assert payload['routes']['circuit_library'] == '/api/workspaces/library'
+    assert payload['routes']['circuit_library'] == '/api/workspaces/ws-001/library'
     assert payload['routes']['circuit_library_page'] == '/app/library?app_language=en'
     assert payload['routes']['starter_template_catalog'] == '/api/templates/starter-circuits'
     assert payload['routes']['starter_template_catalog_page'] == '/app/workspaces/ws-001/starter-templates?app_language=en'

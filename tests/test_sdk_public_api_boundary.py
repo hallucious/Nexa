@@ -236,6 +236,7 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert any(resource.route_name == "get_provider_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_history_summary" for resource in manifest.resources)
     assert any(resource.route_name == "get_circuit_library" for resource in manifest.resources)
+    assert any(resource.route_name == "get_workspace_circuit_library" for resource in manifest.resources)
     assert any(resource.route_name == "list_starter_circuit_templates" for resource in manifest.resources)
     assert any(resource.route_name == "get_starter_circuit_template" for resource in manifest.resources)
     assert any(resource.route_name == "list_workspace_starter_circuit_templates" for resource in manifest.resources)
