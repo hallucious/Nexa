@@ -6,10 +6,10 @@ The current authoritative planning reference remains `nexa_implementation_order_
 
 The current verified repository baseline is:
 
-- latest confirmed repository baseline: `1175d72`
+- latest confirmed repository baseline: `857a0f9`
 - latest broad full-suite anchor: `2576 passed, 14 skipped`
 
-- post-anchor note: after the 2576/14 anchor, commit `1175d72` removed references to two intentionally deleted status documents, and no later full-suite anchor was reported
+- post-anchor note: none — the current broad full-suite anchor already corresponds to commit `857a0f9`
 
 ## 2. Current position
 

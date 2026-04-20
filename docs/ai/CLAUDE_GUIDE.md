@@ -87,7 +87,6 @@ docs/
 
 BLUEPRINT.md
 TRACKER.md
-FOUNDATION_MAP.md
 architecture/
 strategy/
 ai/

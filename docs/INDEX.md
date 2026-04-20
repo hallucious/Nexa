@@ -18,7 +18,6 @@
 |---|---|
 | `README.md` | public overview, quick start, official retained demo |
 | `docs/BLUEPRINT.md` | architecture overview, active spec list, invariants |
-| `docs/FOUNDATION_MAP.md` | canonical doc index, Active/Partial/Planned status |
 | `docs/TRACKER.md` | implementation tracker, release snapshot, next steps |
 | `docs/ARCHITECTURE_CONSTITUTION.md` | non-negotiable architectural principles |
 | `docs/CONTRIBUTING.md` | spec change procedure, PR requirements |
@@ -62,7 +61,7 @@
 
 # Spec Documents (`docs/specs/`)
 
-Active spec list: `docs/specs/_active_specs.yaml`
+Active contract/version registry: `src/contracts/spec_version_registry.py`
 
 | Directory | Contents |
 |---|---|
@@ -110,7 +109,7 @@ These new documents define multilingual UI behavior as a **UI-owned supporting r
 | `docs/specs/ui/ui_i18n_persistence_boundary_spec.md` | i18n persistence boundary within UI-owned state |
 | `docs/specs/ui/localization_test_strategy_spec.md` | localization regression and coverage strategy |
 
-**Important:** `docs/specs/_active_specs.yaml` is intentionally **not** updated by this bundle because these i18n documents are not yet code-synchronized active specs.
+**Important:** the active contract/version registry is intentionally **not** updated by this bundle because these i18n documents are not yet part of the code-synchronized active contract set.
 
 ---
 
@@ -121,17 +120,6 @@ These new documents define multilingual UI behavior as a **UI-owned supporting r
 - Current broad full-suite anchor: `2576 passed, 14 skipped`
 - Current restore-point commit: `1175d72`
 - Current post-anchor note: `1175d72` only removed references to two intentionally deleted status documents
-
----
-
-# Contract Tests
-
-```bash
-pytest tests/test_spec_version_sync_contract.py
-pytest tests/test_document_accumulation_contract.py
-pytest tests/test_blueprint_foundation_sync_contract.py
-pytest tests/test_foundation_autocheck_contract.py
-```
 
 ---
 

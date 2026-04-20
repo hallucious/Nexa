@@ -107,9 +107,8 @@ If issue or pull request templates are available in the repository, please use t
 ## 4. Terminology
 
 - **Active spec**: a spec enforced as a contract by the test suite
-- **Source of Truth**: `docs/specs/_active_specs.yaml`
+- **Source of Truth**: `src/contracts/spec_version_registry.py`
 - **Spec-Version Sync**: a spec document `Version:` line must match `src/contracts/spec_version_registry.py`
-- **FOUNDATION_MAP**: must reflect the active spec list exactly
 - **Savefile**: a runnable `.nex` artifact that may include circuit, state, resources, and UI-related data
 
 ---
@@ -120,20 +119,9 @@ If issue or pull request templates are available in the repository, please use t
 
 **Step 2** — Update `src/contracts/spec_version_registry.py` to match.
 
-**Step 3** — If adding or removing a spec, update `docs/specs/_active_specs.yaml`.
+**Step 3** — If adding, removing, or changing an active contract spec, update `src/contracts/spec_version_registry.py`.
 
-**Step 4** — Update `docs/FOUNDATION_MAP.md` active entries to match.
-
-**Step 5** — Run the contract tests:
-
-```bash
-pytest tests/test_spec_version_sync_contract.py
-pytest tests/test_document_accumulation_contract.py
-pytest tests/test_blueprint_foundation_sync_contract.py
-pytest tests/test_foundation_autocheck_contract.py
-```
-
-All must pass before merging.
+**Step 4** — Run the relevant contract tests for the affected surface and the general suite before merging.
 
 ---
 

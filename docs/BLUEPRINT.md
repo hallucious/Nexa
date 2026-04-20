@@ -56,19 +56,21 @@ This enables:
 
 ## 1. Foundation Layer
 
-The foundational design documents of this project are managed hierarchically by the following document:
+The current documentation spine for Nexa is maintained through the top-level reference set below:
 
-* `docs/FOUNDATION_MAP.md`
+* `docs/BLUEPRINT.md`
+* `docs/INDEX.md`
+* `docs/TRACKER.md`
 
-When performing structure changes or contract changes, FOUNDATION_MAP must be referenced, and the status and SemVer of the affected documents must be checked.
+When performing structure changes or contract changes, update these spine documents only when they materially affect architecture overview, repository navigation, or implementation status.
 
 ---
 
 ## 2. Active Specifications
 
-Currently active spec documents that are synchronized with the code.
+Currently active spec documents are tracked through the version registry and the contract-bearing spec paths listed there.
 
-Source-of-Truth: `docs/specs/_active_specs.yaml`
+Source-of-Truth: `src/contracts/spec_version_registry.py`
 
 ### 2.1 Foundation / Terminology
 
@@ -171,7 +173,7 @@ They are important for UI architecture continuity, but they are **not** yet part
 Rule:
 
 * These UI/i18n documents must respect engine-owned truth, approval truth, execution truth, and storage lifecycle truth.
-* They must not be added to `docs/specs/_active_specs.yaml` until code and contract tests are synchronized with them.
+* They must not be treated as active contract specs until they are intentionally added to the canonical contract/version registry flow.
 
 ---
 

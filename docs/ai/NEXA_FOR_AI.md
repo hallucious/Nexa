@@ -123,10 +123,10 @@ artifact.replace(...)
 
 All behaviors are governed by versioned contracts in `docs/specs/`.
 
-Active contracts: `docs/specs/_active_specs.yaml`
+Active contracts are tracked in `src/contracts/spec_version_registry.py`.
 
-Every active spec must:
-1. Exist at the listed path
+Every active contract spec must:
+1. Exist at the registered path
 2. Have a `Version: X.Y.Z` line
 3. Match the version in `src/contracts/spec_version_registry.py`
 

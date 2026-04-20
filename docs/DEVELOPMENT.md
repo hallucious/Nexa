@@ -145,9 +145,9 @@ src/
     config/         utils/          contracts/
 
 docs/
-    BLUEPRINT.md            FOUNDATION_MAP.md
+    BLUEPRINT.md            INDEX.md
     TRACKER.md              CONTRIBUTING.md
-    DEVELOPMENT.md          GLOSSARY.md  INDEX.md
+    DEVELOPMENT.md          GLOSSARY.md
     architecture/           strategy/           ai/
 ```
 
@@ -158,17 +158,8 @@ The legacy prompt contract package has been fully removed. Prompt execution is n
 
 # Spec-Version Synchronization
 
-Every active spec in `docs/specs/_active_specs.yaml` must:
-
-1. exist at that path
-2. have a `Version: X.Y.Z` header
-3. match the version in `src/contracts/spec_version_registry.py`
-
-Verify with:
-
-```bash
-pytest tests/test_spec_version_sync_contract.py
-```
+Active contract-bearing specs are tracked through `src/contracts/spec_version_registry.py`.
+When changing an active contract spec, update its `Version: X.Y.Z` header and keep the registry in sync.
 
 ---
 
