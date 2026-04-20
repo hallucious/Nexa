@@ -17,6 +17,7 @@ from src.server.circuit_library_runtime import render_circuit_library_runtime_ht
 from src.server.result_history_runtime import render_workspace_result_history_html
 from src.server.starter_template_runtime import render_starter_template_catalog_html, render_starter_template_detail_html
 from src.server.public_community_runtime import render_public_community_hub_html
+from src.server.public_plugin_runtime import render_public_plugin_catalog_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.server.public_share_runtime import (
@@ -2379,6 +2380,27 @@ class FastApiRouteBindings:
             reason = str(payload.get("reason_code") or "").strip() or None
             target = _public_share_delete_target(app_language=app_language, workspace_id=workspace_id, share_id=share_id, status=status, reason=reason)
             return RedirectResponse(url=target, status_code=303)
+
+        @router.get("/app/plugins")
+        async def get_public_plugin_catalog_page(request: Request) -> Response:
+            app_language = str(request.query_params.get("app_language") or "en")
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path="/api/integrations/public-plugins/catalog",
+                query_params=dict(request.query_params),
+                headers=dict(request.headers),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_public_plugin_catalog(request=inbound)
+            payload = json.loads(outbound.body_text)
+            payload["app_language"] = app_language
+            payload.setdefault("routes", {})["app_catalog_page"] = f"/app/plugins?app_language={app_language}"
+            payload.setdefault("routes", {})["community_hub_page"] = f"/app/community?app_language={app_language}"
+            return HTMLResponse(
+                content=render_public_plugin_catalog_html(payload, app_language=app_language),
+                status_code=200,
+            )
 
         @router.get("/app/community")
         async def get_public_community_hub_page(request: Request) -> Response:

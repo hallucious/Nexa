@@ -2042,6 +2042,8 @@ def _public_plugin_catalog_body() -> dict[str, Any]:
         "public_sdk_entrypoints": dict(summary.public_sdk_entrypoints),
         "routes": {
             "self": "/api/integrations/public-plugins/catalog",
+            "app_catalog_page": "/app/plugins",
+            "community_hub_page": "/app/community",
             **dict(summary.discovery_routes),
         },
     }
@@ -2081,6 +2083,7 @@ def _public_community_catalog_body() -> dict[str, Any]:
             "surface_family": "public-plugin-catalog",
             "community_role": "extendable community-facing capabilities",
             "route": "/api/integrations/public-plugins/catalog",
+            "app_route": "/app/plugins",
             "public_item_count": plugin_summary.plugin_count,
             "sample_ids": list(plugin_summary.plugin_ids[:3]),
         },
@@ -2097,6 +2100,7 @@ def _public_community_catalog_body() -> dict[str, Any]:
             "app_hub": "/app/community",
             "starter_template_catalog_page": "/app/templates/starter-circuits",
             "public_share_catalog_page": "/app/public-shares",
+            "public_plugin_catalog_page": "/app/plugins",
             **dict(summary.discovery_routes),
         },
     }
