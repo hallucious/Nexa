@@ -123,12 +123,12 @@ artifact.replace(...)
 
 All behaviors are governed by versioned contracts in `docs/specs/`.
 
-Runtime-facing contract versions are kept only in the runtime modules that actively consume them, primarily `src/engine/engine.py`.
+Runtime-facing contract versions are kept in `src/engine/engine.py`.
 
 Every runtime-bound contract spec must:
 1. Exist at its canonical path
 2. Have a `Version: X.Y.Z` line
-3. Match the corresponding constant in the consuming runtime module where applicable
+3. Match the corresponding constant in `src/engine/engine.py` where applicable
 
 ---
 

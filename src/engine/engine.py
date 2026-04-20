@@ -6,12 +6,19 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Union
 
-# Runtime-facing version constants live here because they are consumed directly by
-# engine execution/trace code. There is no separate central version registry.
+# Runtime-facing contract/spec version constants are defined here directly.
+# They are consumed by runtime code and selected tests; there is no longer a
+# separate central version module under src/contracts/.
 ENGINE_EXECUTION_MODEL_VERSION = "1.12.0"
 ENGINE_TRACE_MODEL_VERSION = "1.9.0"
 VALIDATION_ENGINE_CONTRACT_VERSION = "2.0.0"
 VALIDATION_RULE_CATALOG_VERSION = "2.0.0"
+VALIDATION_RULE_LIFECYCLE_VERSION = "1.0.0"
+EXECUTION_ENVIRONMENT_CONTRACT_VERSION = "1.4.0"
+GRAPH_EXECUTION_CONTRACT_VERSION = "1.0.0"
+CIRCUIT_RUNTIME_MODEL_VERSION = "1.0.0"
+CONTEXT_KEY_SCHEMA_CONTRACT_VERSION = "1.1.0"
+
 
 from .fingerprint import StructuralFingerprint, compute_fingerprint
 from .model import Channel, EngineStructure, FlowRule

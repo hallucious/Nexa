@@ -158,7 +158,7 @@ The legacy prompt contract package has been fully removed. Prompt execution is n
 
 # Spec-Version Synchronization
 
-Runtime-facing version constants are defined only in the runtime modules that actively consume them, primarily `src/engine/engine.py`.
+Runtime-facing version constants live in `src/engine/engine.py`.
 When changing a runtime-bound contract spec, update its `Version: X.Y.Z` header and keep the corresponding runtime constants in sync where applicable.
 
 ---

@@ -61,7 +61,7 @@
 
 # Spec Documents (`docs/specs/`)
 
-Active runtime-facing version constants now live alongside their consuming runtime modules, primarily `src/engine/engine.py`.
+Active runtime-facing version constants live in `src/engine/engine.py`.
 
 | Directory | Contents |
 |---|---|

@@ -104,7 +104,7 @@ This restriction protects the integrity of the runtime state and prevents plugin
 This contract is enforced by:
 - `src/contracts/context_key_schema.py` — constants, regex, and validator
 - `tests/test_context_key_schema_contract.py` — automated contract tests
-- runtime-facing version constants should live only in the runtime modules that actively consume them
+- `src/engine/engine.py` — runtime-facing version constant
 
 ## 8. Version History
 

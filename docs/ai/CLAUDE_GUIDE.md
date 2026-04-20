@@ -198,7 +198,7 @@ If a change affects system architecture, update documentation.
 11. Spec-Version Sync
 ────────────────
 
-Spec version changes for runtime-bound contracts require updating the consuming runtime module constant.
+Spec version changes for runtime-bound contracts require updating `src/engine/engine.py`.
 
 Contract tests must remain valid.
 
