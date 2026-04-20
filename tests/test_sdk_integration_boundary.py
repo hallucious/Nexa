@@ -1701,8 +1701,30 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["get_public_share_compare"].required_top_level_keys == ("share_id", "compare", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_share_compare_summary"].required_top_level_keys == ("share_id", "compare", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_nex_format"].required_top_level_keys == ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")
-    assert responses["get_public_mcp_manifest"].required_top_level_keys == ("status", "manifest", "identity_policy", "namespace_policy", "routes")
-    assert responses["get_public_mcp_host_bridge"].required_top_level_keys == ("status", "host_bridge", "identity_policy", "namespace_policy", "routes")
+    assert responses["get_public_mcp_manifest"].required_top_level_keys == (
+        "status",
+        "manifest",
+        "identity_policy",
+        "namespace_policy",
+        "routes",
+        "public_sdk_entrypoints",
+        "supported_contract_markers",
+        "supported_runtime_markers",
+        "tool_count",
+        "resource_count",
+    )
+    assert responses["get_public_mcp_host_bridge"].required_top_level_keys == (
+        "status",
+        "host_bridge",
+        "identity_policy",
+        "namespace_policy",
+        "routes",
+        "public_sdk_entrypoints",
+        "supported_contract_markers",
+        "supported_runtime_markers",
+        "tool_count",
+        "resource_count",
+    )
     assert responses["list_workspaces"].required_top_level_keys == ("returned_count", "workspaces", "identity_policy", "namespace_policy")
     assert responses["get_workspace"].required_top_level_keys == ("workspace_id", "identity_policy", "namespace_policy")
     assert responses["create_workspace"].required_top_level_keys == ("status", "workspace", "owner_membership_id", "identity_policy", "namespace_policy")
@@ -1751,6 +1773,27 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
 
 
 
+def test_public_mcp_response_contracts_match_route_surface_metadata_shape() -> None:
+    responses = {contract.route_name: contract for contract in build_public_mcp_response_contracts()}
+
+    assert responses["get_public_mcp_manifest"].required_top_level_keys[-5:] == (
+        "public_sdk_entrypoints",
+        "supported_contract_markers",
+        "supported_runtime_markers",
+        "tool_count",
+        "resource_count",
+    )
+    assert responses["get_public_mcp_host_bridge"].required_top_level_keys[-5:] == (
+        "public_sdk_entrypoints",
+        "supported_contract_markers",
+        "supported_runtime_markers",
+        "tool_count",
+        "resource_count",
+    )
+    assert responses["get_public_mcp_manifest"].result_shape_profile.collection_field_name == "manifest.tools"
+    assert responses["get_public_mcp_host_bridge"].result_shape_profile.collection_field_name == "host_bridge.tool_bindings"
+
+
 def test_public_mcp_manifest_and_host_bridge_resources_are_exported_with_expected_contracts() -> None:
     adapter = build_public_mcp_adapter_scaffold(base_url="https://api.nexa.test")
 
@@ -1761,5 +1804,27 @@ def test_public_mcp_manifest_and_host_bridge_resources_are_exported_with_expecte
 
     assert manifest_contract.route_family == "public-mcp-manifest-read"
     assert host_bridge_contract.route_family == "public-mcp-host-bridge-read"
-    assert manifest_response.required_top_level_keys == ("status", "manifest", "identity_policy", "namespace_policy", "routes")
-    assert host_bridge_response.required_top_level_keys == ("status", "host_bridge", "identity_policy", "namespace_policy", "routes")
+    assert manifest_response.required_top_level_keys == (
+        "status",
+        "manifest",
+        "identity_policy",
+        "namespace_policy",
+        "routes",
+        "public_sdk_entrypoints",
+        "supported_contract_markers",
+        "supported_runtime_markers",
+        "tool_count",
+        "resource_count",
+    )
+    assert host_bridge_response.required_top_level_keys == (
+        "status",
+        "host_bridge",
+        "identity_policy",
+        "namespace_policy",
+        "routes",
+        "public_sdk_entrypoints",
+        "supported_contract_markers",
+        "supported_runtime_markers",
+        "tool_count",
+        "resource_count",
+    )

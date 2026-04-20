@@ -1579,6 +1579,22 @@ def test_public_mcp_host_bridge_route_returns_host_bridge_export_surface() -> No
     assert response.body["resource_count"] > 0
 
 
+def test_public_mcp_routes_include_canonical_metadata_fields_required_by_sdk_contracts() -> None:
+    manifest_response = RunHttpRouteSurface.handle_public_mcp_manifest(
+        http_request=_auth_request(method="GET", path="/api/integrations/public-mcp/manifest")
+    )
+    host_bridge_response = RunHttpRouteSurface.handle_public_mcp_host_bridge(
+        http_request=_auth_request(method="GET", path="/api/integrations/public-mcp/host-bridge")
+    )
+
+    for body in (manifest_response.body, host_bridge_response.body):
+        assert "public_sdk_entrypoints" in body
+        assert "supported_contract_markers" in body
+        assert "supported_runtime_markers" in body
+        assert body["tool_count"] is not None
+        assert body["resource_count"] is not None
+
+
 def test_workspace_public_share_creation_returns_persisted_public_share_descriptor() -> None:
     share_store: dict[str, dict] = {}
 
