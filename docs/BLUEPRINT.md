@@ -70,7 +70,7 @@ When performing structure changes or contract changes, update these spine docume
 
 Currently active spec documents are tracked through the version registry and the contract-bearing spec paths listed there.
 
-Source-of-Truth: canonical spec documents plus `src/contracts/runtime_contract_versions.py` for runtime-facing version constants.
+Source-of-Truth: canonical spec documents; runtime-facing version constants live only where directly consumed by runtime code, primarily `src/engine/engine.py`.
 
 ### 2.1 Foundation / Terminology
 

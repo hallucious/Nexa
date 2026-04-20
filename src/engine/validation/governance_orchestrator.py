@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
-from src.contracts.runtime_contract_versions import (
+from ..engine import (
     ENGINE_EXECUTION_MODEL_VERSION,
     ENGINE_TRACE_MODEL_VERSION,
     VALIDATION_ENGINE_CONTRACT_VERSION,

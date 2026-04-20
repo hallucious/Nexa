@@ -6,12 +6,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from src.contracts.runtime_contract_versions import (
-    ENGINE_EXECUTION_MODEL_VERSION,
-    ENGINE_TRACE_MODEL_VERSION,
-    VALIDATION_ENGINE_CONTRACT_VERSION,
-    VALIDATION_RULE_CATALOG_VERSION,
-)
+# Runtime-facing version constants live here because they are consumed directly by
+# engine execution/trace code. There is no separate central version registry.
+ENGINE_EXECUTION_MODEL_VERSION = "1.12.0"
+ENGINE_TRACE_MODEL_VERSION = "1.9.0"
+VALIDATION_ENGINE_CONTRACT_VERSION = "2.0.0"
+VALIDATION_RULE_CATALOG_VERSION = "2.0.0"
 
 from .fingerprint import StructuralFingerprint, compute_fingerprint
 from .model import Channel, EngineStructure, FlowRule
