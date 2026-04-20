@@ -29,6 +29,12 @@ def render_public_ecosystem_catalog_html(
         community_hub_route = f"{community_hub_route}{joiner}app_language={app_language}"
     community_hub_href = escape(community_hub_route)
 
+    sdk_page_route = str(routes.get("public_sdk_catalog_page") or "/app/sdk").strip() or "/app/sdk"
+    if "app_language=" not in sdk_page_route:
+        joiner = "&" if "?" in sdk_page_route else "?"
+        sdk_page_route = f"{sdk_page_route}{joiner}app_language={app_language}"
+    sdk_page_href = escape(sdk_page_route)
+
     plugin_page_route = str(routes.get("public_plugin_catalog_page") or "/app/plugins").strip() or "/app/plugins"
     if "app_language=" not in plugin_page_route:
         joiner = "&" if "?" in plugin_page_route else "?"

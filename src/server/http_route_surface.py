@@ -2014,6 +2014,10 @@ def _public_sdk_catalog_body() -> dict[str, Any]:
         "supported_transport_kinds": list(summary.supported_transport_kinds),
         "routes": {
             "self": "/api/integrations/public-sdk/catalog",
+            "app_catalog_page": "/app/sdk",
+            "ecosystem_catalog_page": "/app/ecosystem",
+            "community_hub_page": "/app/community",
+            "public_plugin_catalog_page": "/app/plugins",
             "public_nex_format": "/api/formats/public-nex",
             "public_plugin_catalog": "/api/integrations/public-plugins/catalog",
             "public_community_catalog": "/api/integrations/public-community/catalog",
@@ -2176,6 +2180,7 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
             "self": "/api/integrations/public-ecosystem/catalog",
             "app_catalog_page": "/app/ecosystem",
             "community_hub_page": "/app/community",
+            "public_sdk_catalog_page": "/app/sdk",
             "public_plugin_catalog_page": "/app/plugins",
             **dict(summary.discovery_routes),
         },

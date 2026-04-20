@@ -19,6 +19,7 @@ from src.server.starter_template_runtime import render_starter_template_catalog_
 from src.server.public_community_runtime import render_public_community_hub_html
 from src.server.public_plugin_runtime import render_public_plugin_catalog_html
 from src.server.public_ecosystem_runtime import render_public_ecosystem_catalog_html
+from src.server.public_sdk_runtime import render_public_sdk_catalog_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.server.public_share_runtime import (
@@ -2404,6 +2405,30 @@ class FastApiRouteBindings:
                 status_code=200,
             )
 
+        @router.get("/app/sdk")
+        async def get_public_sdk_catalog_page(request: Request) -> Response:
+            app_language = str(request.query_params.get("app_language") or "en")
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path="/api/integrations/public-sdk/catalog",
+                query_params=dict(request.query_params),
+                headers=dict(request.headers),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_public_sdk_catalog(request=inbound)
+            payload = json.loads(outbound.body_text)
+            payload["app_language"] = app_language
+            routes = payload.setdefault("routes", {})
+            routes["app_catalog_page"] = f"/app/sdk?app_language={app_language}"
+            routes["ecosystem_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
+            routes["community_hub_page"] = f"/app/community?app_language={app_language}"
+            routes["public_plugin_catalog_page"] = f"/app/plugins?app_language={app_language}"
+            return HTMLResponse(
+                content=render_public_sdk_catalog_html(payload, app_language=app_language),
+                status_code=200,
+            )
+
         @router.get("/app/ecosystem")
         async def get_public_ecosystem_catalog_page(request: Request) -> Response:
             app_language = str(request.query_params.get("app_language") or "en")
@@ -2421,9 +2446,10 @@ class FastApiRouteBindings:
             routes = payload.setdefault("routes", {})
             routes["app_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
             routes["community_hub_page"] = f"/app/community?app_language={app_language}"
+            routes.setdefault("public_sdk_catalog_page", f"/app/sdk?app_language={app_language}")
             routes.setdefault("public_plugin_catalog_page", f"/app/plugins?app_language={app_language}")
             surface_page_routes = {
-                "public_sdk_catalog": f"/api/integrations/public-sdk/catalog?app_language={app_language}",
+                "public_sdk_catalog": f"/app/sdk?app_language={app_language}",
                 "public_nex_format": f"/api/formats/public-nex?app_language={app_language}",
                 "public_plugin_catalog": f"/app/plugins?app_language={app_language}",
                 "public_community_catalog": f"/app/community?app_language={app_language}",

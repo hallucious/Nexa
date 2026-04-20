@@ -631,6 +631,20 @@ def test_fastapi_binding_public_plugin_catalog_page_renders_plugin_cards() -> No
     assert '/api/integrations/public-plugins/catalog' in body
     assert '/app/community?app_language=en' in body
 
+def test_fastapi_binding_public_sdk_catalog_page_renders_sdk_entrypoints() -> None:
+    client = _make_client()
+    response = client.get('/app/sdk?app_language=en')
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'Public SDK catalog' in body
+    assert 'import_public_nex_artifact' in body
+    assert 'build_public_mcp_tools' in body
+    assert 'describe_public_mcp_export_surface' in body
+    assert '/app/ecosystem?app_language=en' in body
+    assert '/app/community?app_language=en' in body
+    assert '/app/plugins?app_language=en' in body
+
 def test_fastapi_binding_public_ecosystem_catalog_page_renders_surface_cards() -> None:
     client = _make_client()
     response = client.get('/app/ecosystem?app_language=en')
@@ -640,6 +654,7 @@ def test_fastapi_binding_public_ecosystem_catalog_page_renders_surface_cards() -
     assert 'Public ecosystem catalog' in body
     assert 'public-community-catalog' in body
     assert '/app/community?app_language=en' in body
+    assert '/app/sdk?app_language=en' in body
     assert '/app/plugins?app_language=en' in body
     assert '/app/public-shares?app_language=en' in body
 
