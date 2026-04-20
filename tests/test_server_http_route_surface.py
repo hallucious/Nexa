@@ -1603,3 +1603,127 @@ def test_workspace_public_share_creation_returns_persisted_public_share_descript
     assert response.body["links"]["workspace_shell_share"] == "/api/workspaces/ws-001/shares"
     assert response.body["links"]["workspace_shell_share_legacy"] == "/api/workspaces/ws-001/shell/share"
     assert "share-created-http-002" in share_store
+
+
+def test_import_public_share_route_uses_canonical_public_import_helper(monkeypatch) -> None:
+    share_payload = _share_payload("share-import-route-001")
+
+    import src.storage.nex_api as nex_api
+
+    original = nex_api.import_public_nex_artifact
+    calls = {"count": 0}
+
+    def _wrapped(model_or_data, **kwargs):
+        calls["count"] += 1
+        return original(model_or_data, **kwargs)
+
+    monkeypatch.setattr(nex_api, "import_public_nex_artifact", _wrapped)
+
+    written: dict[str, dict] = {}
+
+    response = RunHttpRouteSurface.handle_import_public_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/public-shares/share-import-route-001/import",
+            path_params={"share_id": "share-import-route-001"},
+            json_body={"workspace_id": "ws-001"},
+        ),
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Primary Workspace", "continuity_source": "server", "archived": False} if workspace_id == "ws-001" else None,
+        workspace_artifact_source_writer=lambda workspace_id, source: written.setdefault(workspace_id, dict(source)),
+        public_share_payload_provider=lambda share_id: share_payload if share_id == "share-import-route-001" else None,
+    )
+
+    assert response.status_code == 200
+    assert calls["count"] == 1
+    assert response.body["storage_role"] == "commit_snapshot"
+    assert written["ws-001"]["meta"]["storage_role"] == "commit_snapshot"
+
+
+def test_checkout_public_share_route_uses_canonical_public_checkout_helper(monkeypatch) -> None:
+    share_payload = _share_payload("share-checkout-route-001")
+
+    import src.storage.nex_api as nex_api
+
+    original = nex_api.checkout_public_nex_working_copy
+    calls = {"count": 0}
+
+    def _wrapped(model_or_data, **kwargs):
+        calls["count"] += 1
+        return original(model_or_data, **kwargs)
+
+    monkeypatch.setattr(nex_api, "checkout_public_nex_working_copy", _wrapped)
+
+    written: dict[str, dict] = {}
+
+    response = RunHttpRouteSurface.handle_checkout_public_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/public-shares/share-checkout-route-001/checkout",
+            path_params={"share_id": "share-checkout-route-001"},
+            json_body={"workspace_id": "ws-001", "working_save_id": "ws-from-share-route"},
+        ),
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Primary Workspace", "continuity_source": "server", "archived": False} if workspace_id == "ws-001" else None,
+        workspace_run_rows_provider=lambda workspace_id: (),
+        workspace_result_rows_provider=lambda workspace_id: {},
+        onboarding_rows_provider=lambda: (),
+        workspace_artifact_source_provider=lambda workspace_id: _commit_snapshot("snap-existing-workspace") if workspace_id == "ws-001" else None,
+        workspace_artifact_source_writer=lambda workspace_id, source: written.setdefault(workspace_id, dict(source)),
+        public_share_payload_provider=lambda share_id: share_payload if share_id == "share-checkout-route-001" else None,
+        share_payload_rows_provider=lambda: (),
+        provider_binding_rows_provider=lambda workspace_id: (),
+        managed_secret_rows_provider=lambda: (),
+        provider_probe_rows_provider=lambda workspace_id: (),
+        feedback_rows_provider=lambda: (),
+    )
+
+    assert response.status_code == 200
+    assert calls["count"] == 1
+    assert response.body["storage_role"] == "working_save"
+    assert written["ws-001"]["meta"]["storage_role"] == "working_save"
+
+
+def test_create_workspace_from_public_share_checkout_mode_uses_canonical_public_checkout_helper(monkeypatch) -> None:
+    share_payload = _share_payload("share-create-workspace-route-001")
+
+    import src.storage.nex_api as nex_api
+
+    original = nex_api.checkout_public_nex_working_copy
+    calls = {"count": 0}
+
+    def _wrapped(model_or_data, **kwargs):
+        calls["count"] += 1
+        return original(model_or_data, **kwargs)
+
+    monkeypatch.setattr(nex_api, "checkout_public_nex_working_copy", _wrapped)
+
+    written: dict[str, dict] = {}
+
+    response = RunHttpRouteSurface.handle_create_workspace_from_public_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/public-shares/share-create-workspace-route-001/create-workspace",
+            path_params={"share_id": "share-create-workspace-route-001"},
+            json_body={"create_mode": "checkout_working_copy", "working_save_id": "ws-created-from-share"},
+        ),
+        workspace_id_factory=lambda: "ws-created-001",
+        membership_id_factory=lambda: "member-created-001",
+        now_iso="2026-04-15T12:00:00+00:00",
+        workspace_rows_provider=lambda: (),
+        membership_rows_provider=lambda: (),
+        recent_run_rows_provider=lambda: (),
+        recent_provider_binding_rows_provider=lambda: (),
+        managed_secret_rows_provider=lambda: (),
+        recent_provider_probe_rows_provider=lambda: (),
+        onboarding_rows_provider=lambda: (),
+        workspace_registry_writer=lambda workspace, membership: {"workspace": dict(workspace), "membership": dict(membership)},
+        workspace_artifact_source_writer=lambda workspace_id, source: written.setdefault(workspace_id, dict(source)),
+        public_share_payload_provider=lambda share_id: share_payload if share_id == "share-create-workspace-route-001" else None,
+    )
+
+    assert response.status_code == 201
+    assert calls["count"] == 1
+    assert response.body["storage_role"] == "working_save"
+    assert response.body["workspace_id"] == "ws-created-001"
+    assert written["ws-created-001"]["meta"]["storage_role"] == "working_save"

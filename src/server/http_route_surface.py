@@ -2517,7 +2517,7 @@ class RunHttpRouteSurface:
         if isinstance(guard, HttpRouteResponse):
             return guard
         workspace_id, workspace_row, workspace_context = guard
-        from src.storage.lifecycle_api import create_working_save_from_commit_snapshot
+        from src.storage.nex_api import checkout_public_nex_working_copy, describe_public_nex_artifact
         from src.storage.serialization import serialize_working_save
         from src.storage.models.commit_snapshot_model import CommitSnapshotModel
         body = http_request.json_body
@@ -2540,18 +2540,26 @@ class RunHttpRouteSurface:
                 ensure_public_nex_link_share_operation_allowed(share_payload, "checkout_working_copy")
             except ValueError as exc:
                 return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.share_operation_not_allowed", "message": str(exc), "workspace_id": workspace_context.workspace_id, "share_id": source_share_id})
-            from src.storage.validators.shared_validator import load_nex
-            loaded_share = load_nex(share_payload["artifact"])
-            model = loaded_share.parsed_model
+            share_descriptor = describe_public_nex_artifact(share_payload["artifact"])
+            model = checkout_public_nex_working_copy(
+                share_payload["artifact"],
+                working_save_id=working_save_id or None,
+            )
         else:
             _source, model, _loaded = cls._load_workspace_shell_artifact_model(workspace_row, artifact_source)
-        if not isinstance(model, CommitSnapshotModel):
-            return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.checkout_requires_commit_snapshot", "message": "Workspace shell checkout requires a commit_snapshot source.", "workspace_id": workspace_context.workspace_id})
-        working_save = create_working_save_from_commit_snapshot(model, working_save_id=working_save_id)
+        if source_share_id:
+            commit_id = share_descriptor.canonical_ref
+        else:
+            if not isinstance(model, CommitSnapshotModel):
+                return _route_response(409, {"status": "rejected", "error_family": "workspace_shell_write_failure", "reason_code": "workspace_shell.checkout_requires_commit_snapshot", "message": "Workspace shell checkout requires a commit_snapshot source.", "workspace_id": workspace_context.workspace_id})
+            commit_id = model.meta.commit_id
+            working_save = checkout_public_nex_working_copy(model, working_save_id=working_save_id)
+        if source_share_id:
+            working_save = model
         serialized = serialize_working_save(working_save)
         persisted_source = workspace_artifact_source_writer(workspace_id, serialized) if workspace_artifact_source_writer is not None else serialized
         payload = build_workspace_shell_runtime_payload(workspace_row=workspace_row, artifact_source=persisted_source, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, onboarding_rows=onboarding_rows, artifact_rows_lookup=artifact_rows_lookup, trace_rows_lookup=trace_rows_lookup, share_payload_rows=tuple(share_payload_rows_provider() or ()) if share_payload_rows_provider is not None else (), provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, feedback_rows=feedback_rows, app_language_override=_request_app_language(http_request.query_params))
-        payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": model.meta.commit_id, "working_save_id": working_save.meta.working_save_id, "source_share_id": source_share_id}
+        payload["transition"] = {"action": "checkout_workspace_shell", "from_role": "commit_snapshot", "to_role": "working_save", "workspace_id": workspace_context.workspace_id, "commit_id": commit_id, "working_save_id": working_save.meta.working_save_id, "source_share_id": source_share_id}
         payload["identity_policy"] = _workspace_shell_identity_policy_body()
         payload["namespace_policy"] = _workspace_shell_namespace_policy_body()
         return _route_response(200, payload)
@@ -4236,16 +4244,16 @@ class RunHttpRouteSurface:
         if error is not None:
             return error
         assert share_payload is not None
+        from src.storage.nex_api import import_public_nex_artifact
         from src.storage.serialization import serialize_nex_artifact
-        from src.storage.validators.shared_validator import load_nex
         try:
             ensure_public_nex_link_share_operation_allowed(share_payload, "import_copy")
         except ValueError as exc:
             return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.import_not_allowed", "message": str(exc), "share_id": share_id, "workspace_id": workspace_id})
-        loaded_share = load_nex(share_payload["artifact"])
-        model = loaded_share.parsed_model
-        if model is None:
-            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_artifact_invalid", "message": "Public share artifact is invalid.", "share_id": share_id, "workspace_id": workspace_id})
+        try:
+            model = import_public_nex_artifact(share_payload["artifact"])
+        except ValueError as exc:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_artifact_invalid", "message": str(exc), "share_id": share_id, "workspace_id": workspace_id})
         serialized = serialize_nex_artifact(model)
         if workspace_artifact_source_writer is not None:
             workspace_artifact_source_writer(workspace_id, serialized)
@@ -4340,23 +4348,25 @@ class RunHttpRouteSurface:
         created_workspace_id = str(created_payload.get("workspace_id") or workspace.get("workspace_id") or "").strip()
         if not created_workspace_id:
             return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.workspace_id_missing", "message": "Created workspace response did not include a workspace id.", "share_id": share_id})
+        from src.storage.nex_api import checkout_public_nex_working_copy, import_public_nex_artifact
         from src.storage.serialization import serialize_nex_artifact
-        from src.storage.validators.shared_validator import load_nex
-        loaded_share = load_nex(share_payload["artifact"])
-        model = loaded_share.parsed_model
-        if model is None:
-            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_artifact_invalid", "message": "Public share artifact is invalid.", "share_id": share_id, "workspace_id": created_workspace_id})
-        if create_mode == "checkout_working_copy":
-            from src.storage.lifecycle_api import create_working_save_from_commit_snapshot
-            working_save = create_working_save_from_commit_snapshot(model, working_save_id=working_save_id)
-            serialized = serialize_nex_artifact(working_save)
-            result_role = "working_save"
-            target_ref = str(working_save.meta.working_save_id or "").strip() or None
-        else:
-            serialized = serialize_nex_artifact(model)
-            meta = dict(serialized.get("meta") or {})
-            result_role = str(meta.get("storage_role") or "unknown")
-            target_ref = str(meta.get("working_save_id") or meta.get("commit_id") or "").strip() or None
+        try:
+            if create_mode == "checkout_working_copy":
+                working_save = checkout_public_nex_working_copy(
+                    share_payload["artifact"],
+                    working_save_id=working_save_id,
+                )
+                serialized = serialize_nex_artifact(working_save)
+                result_role = "working_save"
+                target_ref = str(working_save.meta.working_save_id or "").strip() or None
+            else:
+                model = import_public_nex_artifact(share_payload["artifact"])
+                serialized = serialize_nex_artifact(model)
+                meta = dict(serialized.get("meta") or {})
+                result_role = str(meta.get("storage_role") or "unknown")
+                target_ref = str(meta.get("working_save_id") or meta.get("commit_id") or "").strip() or None
+        except ValueError as exc:
+            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_artifact_invalid", "message": str(exc), "share_id": share_id, "workspace_id": created_workspace_id})
         if workspace_artifact_source_writer is not None:
             workspace_artifact_source_writer(created_workspace_id, serialized)
         response = ProductPublicShareCreateWorkspaceAcceptedResponse(

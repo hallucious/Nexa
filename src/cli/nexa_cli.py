@@ -1072,8 +1072,7 @@ def _load_checkout_source(input_value: str):
 
 
 def savefile_checkout_command(args) -> int:
-    from src.storage.lifecycle_api import create_working_save_from_commit_snapshot
-    from src.storage.nex_api import validate_working_save
+    from src.storage.nex_api import checkout_public_nex_working_copy, validate_working_save
     from src.storage.serialization import save_nex_artifact_file
 
     input_path, commit_snapshot, source_mode = _load_checkout_source(args.input)
@@ -1083,7 +1082,7 @@ def savefile_checkout_command(args) -> int:
     if output_path.exists() and not args.force:
         raise FileExistsError(f"output already exists: {output_path}")
 
-    working_save = create_working_save_from_commit_snapshot(
+    working_save = checkout_public_nex_working_copy(
         commit_snapshot,
         working_save_id=getattr(args, "working_save_id", None),
     )
@@ -1223,6 +1222,7 @@ def savefile_share_info_command(args) -> int:
 
 
 def savefile_share_import_command(args) -> int:
+    from src.storage.nex_api import import_public_nex_artifact
     from src.storage.serialization import save_nex_artifact_file
 
     loaded_source = _load_cli_savefile_source(args.input)
@@ -1239,9 +1239,7 @@ def savefile_share_import_command(args) -> int:
 
     ensure_public_nex_link_share_operation_allowed(loaded_source["share_payload"], "import_copy")
 
-    parsed_model = loaded_source["loaded"].parsed_model
-    if parsed_model is None:
-        raise ValueError("public link share artifact is not loadable")
+    parsed_model = import_public_nex_artifact(loaded_source["share_payload"]["artifact"])
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     save_nex_artifact_file(parsed_model, output_path)

@@ -570,3 +570,63 @@ def test_is_savefile_contract_rejects_unknown_storage_role(tmp_path):
     # Without the legacy savefile 'ui' section, an unknown role must NOT
     # be accepted as a savefile contract.
     assert is_savefile_contract(str(path)) is False
+
+
+def test_savefile_checkout_uses_canonical_public_checkout_helper(tmp_path, monkeypatch, capsys):
+    in_path = tmp_path / "canonical_checkout_source.nex"
+    out_path = tmp_path / "canonical_checkout_output.nex"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-canonical-checkout")
+    save_nex_artifact_file(snapshot, in_path)
+
+    import src.storage.nex_api as nex_api
+
+    original = nex_api.checkout_public_nex_working_copy
+    calls = {"count": 0}
+
+    def _wrapped(model_or_data, **kwargs):
+        calls["count"] += 1
+        return original(model_or_data, **kwargs)
+
+    monkeypatch.setattr(nex_api, "checkout_public_nex_working_copy", _wrapped)
+    monkeypatch.setattr(
+        "sys.argv",
+        ["nexa", "savefile", "checkout", str(in_path), str(out_path), "--working-save-id", "canonical-ws"],
+    )
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert calls["count"] == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["working_save_id"] == "canonical-ws"
+
+
+def test_savefile_share_import_uses_canonical_public_import_helper(tmp_path, monkeypatch, capsys):
+    artifact_path = tmp_path / "canonical_import_source.nex"
+    share_path = tmp_path / "canonical_import_share.json"
+    imported_path = tmp_path / "canonical_import_output.nex"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(name="canonical_import"), commit_id="commit-canonical-import")
+    save_nex_artifact_file(snapshot, artifact_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path)])
+    assert main() == 0
+    capsys.readouterr()
+
+    import src.storage.nex_api as nex_api
+
+    original = nex_api.import_public_nex_artifact
+    calls = {"count": 0}
+
+    def _wrapped(model_or_data, **kwargs):
+        calls["count"] += 1
+        return original(model_or_data, **kwargs)
+
+    monkeypatch.setattr(nex_api, "import_public_nex_artifact", _wrapped)
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "import", str(share_path), str(imported_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert calls["count"] == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["storage_role"] == "commit_snapshot"
