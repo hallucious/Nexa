@@ -30,6 +30,7 @@ from src.sdk.artifacts import (
     create_commit_snapshot_from_working_save,
     create_working_save_from_commit_snapshot,
     import_public_nex_artifact,
+    resolve_public_nex_execution_target,
 )
 from src.server.framework_binding_models import FrameworkOutboundResponse
 
@@ -839,3 +840,9 @@ def test_sdk_root_exposes_public_share_mcp_surface() -> None:
     assert "create_workspace_public_share" in tool_names
     assert "extend_public_share" in tool_names
     assert "delete_public_share" in tool_names
+
+
+def test_public_artifact_sdk_exports_runtime_target_helper() -> None:
+    assert "resolve_public_nex_execution_target" in artifacts.__all__
+    assert hasattr(sdk, "resolve_public_nex_execution_target")
+    assert sdk.resolve_public_nex_execution_target is resolve_public_nex_execution_target

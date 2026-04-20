@@ -13,6 +13,7 @@ from src.contracts.nex_contract import (
     COMMIT_SNAPSHOT_ROLE,
     WORKING_SAVE_ROLE,
     PublicNexArtifactDescriptor,
+    PublicNexExecutionTargetDescriptor,
     PublicNexArtifactOperationBoundary,
     PublicNexFormatBoundary,
     PublicNexRoleBoundary,
@@ -65,7 +66,7 @@ _PUBLIC_NEX_FORMAT_BOUNDARY = PublicNexFormatBoundary(
         PublicNexArtifactOperationBoundary(
             operation="load_artifact",
             posture="role_aware_unified_loader",
-            canonical_api="load_nex",
+            canonical_api="resolve_public_nex_execution_target",
             canonical_http_method="GET",
             canonical_route="/api/public-shares/{share_id}/artifact",
             result_surface="public_share_artifact",
@@ -109,7 +110,7 @@ _PUBLIC_NEX_FORMAT_BOUNDARY = PublicNexFormatBoundary(
         PublicNexArtifactOperationBoundary(
             operation="run_artifact",
             posture="role_aware_runtime_entry",
-            canonical_api="load_nex",
+            canonical_api="resolve_public_nex_execution_target",
             canonical_http_method="GET",
             canonical_route="/api/public-shares/{share_id}/artifact",
             result_surface="public_share_artifact",
@@ -229,6 +230,37 @@ def checkout_public_nex_working_copy(
     )
 
 
+def resolve_public_nex_execution_target(
+    model_or_data: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any],
+) -> PublicNexExecutionTargetDescriptor:
+    model = import_public_nex_artifact(model_or_data)
+    parsed_meta = getattr(model, "meta", None)
+    storage_role = str(getattr(parsed_meta, "storage_role", "") or "").strip()
+    if storage_role == WORKING_SAVE_ROLE:
+        target_ref = str(getattr(parsed_meta, "working_save_id", "") or "").strip()
+        if not target_ref:
+            raise ValueError("public working_save artifact is missing working_save_id")
+        return PublicNexExecutionTargetDescriptor(
+            storage_role=WORKING_SAVE_ROLE,
+            target_type="working_save",
+            target_ref=target_ref,
+            execution_anchor_posture="working_save_runs_as_draft_anchor",
+        )
+    if storage_role == COMMIT_SNAPSHOT_ROLE:
+        target_ref = str(getattr(parsed_meta, "commit_id", "") or "").strip()
+        if not target_ref:
+            raise ValueError("public commit_snapshot artifact is missing commit_id")
+        source_working_save_id = str(getattr(parsed_meta, "source_working_save_id", "") or "").strip() or None
+        return PublicNexExecutionTargetDescriptor(
+            storage_role=COMMIT_SNAPSHOT_ROLE,
+            target_type="commit_snapshot",
+            target_ref=target_ref,
+            execution_anchor_posture="commit_snapshot_runs_as_approved_anchor",
+            source_working_save_id=source_working_save_id,
+        )
+    raise ValueError("public .nex artifact must resolve to a supported execution target")
+
+
 def describe_public_nex_artifact(
     model_or_data: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any],
 ) -> PublicNexArtifactDescriptor:
@@ -267,4 +299,5 @@ __all__ = [
     "export_public_nex_artifact",
     "import_public_nex_artifact",
     "checkout_public_nex_working_copy",
+    "resolve_public_nex_execution_target",
 ]

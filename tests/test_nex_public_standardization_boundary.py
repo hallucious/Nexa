@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from src.contracts.nex_contract import COMMIT_SNAPSHOT_ROLE, WORKING_SAVE_ROLE
 from src.storage.lifecycle_api import create_commit_snapshot_from_working_save
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
@@ -11,6 +12,7 @@ from src.storage.nex_api import (
     export_public_nex_artifact,
     get_public_nex_format_boundary,
     import_public_nex_artifact,
+    resolve_public_nex_execution_target,
 )
 
 
@@ -224,3 +226,28 @@ def test_checkout_public_nex_working_copy_converts_public_commit_snapshot_to_wor
 def test_checkout_public_nex_working_copy_rejects_working_save_source() -> None:
     with pytest.raises(ValueError, match="commit_snapshot source artifact"):
         checkout_public_nex_working_copy(_working_save())
+
+
+def test_public_nex_run_artifact_boundary_uses_canonical_runtime_target_helper():
+    boundary = get_public_nex_format_boundary()
+    run_boundary = next(item for item in boundary.artifact_operation_boundaries if item.operation == "run_artifact")
+
+    assert run_boundary.canonical_api == "resolve_public_nex_execution_target"
+
+
+def test_resolve_public_nex_execution_target_for_working_save():
+    descriptor = resolve_public_nex_execution_target(_working_save())
+
+    assert descriptor.storage_role == WORKING_SAVE_ROLE
+    assert descriptor.target_type == "working_save"
+    assert descriptor.target_ref == "ws-public-1"
+
+
+def test_resolve_public_nex_execution_target_for_commit_snapshot():
+    snapshot = create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-run-001")
+
+    descriptor = resolve_public_nex_execution_target(snapshot)
+
+    assert descriptor.storage_role == COMMIT_SNAPSHOT_ROLE
+    assert descriptor.target_type == "commit_snapshot"
+    assert descriptor.target_ref == "commit-run-001"

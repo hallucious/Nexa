@@ -13,7 +13,7 @@ from src.circuit.runtime_adapter import (
 from src.contracts.nex_contract import ALLOWED_STORAGE_ROLES
 from src.contracts.savefile_executor_aligned import SavefileExecutor
 from src.contracts.savefile_loader import load_savefile_from_path
-from src.storage.nex_api import load_nex
+from src.storage.nex_api import import_public_nex_artifact, load_nex, resolve_public_nex_execution_target
 from src.storage.share_api import (
     ensure_public_nex_link_share_operation_allowed,
     load_public_nex_link_share,
@@ -70,6 +70,8 @@ def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
             ensure_public_nex_link_share_operation_allowed(share_payload, "run_artifact")
             share = share_payload.get("share", {}) if isinstance(share_payload.get("share"), dict) else {}
             share_id = share.get("share_id") if isinstance(share.get("share_id"), str) else None
+            target = resolve_public_nex_execution_target(share_payload["artifact"])
+            model = import_public_nex_artifact(share_payload["artifact"])
             loaded = load_nex(share_payload["artifact"])
         else:
             meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
@@ -85,12 +87,17 @@ def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
             canonical_ref = None
             working_save_id = None
             commit_id = None
+            if share_id is not None:
+                canonical_ref = target.target_ref
+                working_save_id = target.target_ref if target.target_type == "working_save" else target.source_working_save_id
+                commit_id = target.target_ref if target.target_type == "commit_snapshot" else None
+                loaded = load_nex(share_payload["artifact"])
             parsed_meta = getattr(loaded.parsed_model, "meta", None)
-            if parsed_meta is not None:
+            if share_id is None and parsed_meta is not None:
                 working_save_id = getattr(parsed_meta, "working_save_id", None)
                 commit_id = getattr(parsed_meta, "commit_id", None)
                 canonical_ref = working_save_id or commit_id
-            if working_save_id is None:
+            if share_id is None and working_save_id is None:
                 lineage = getattr(loaded.parsed_model, "lineage", None)
                 if lineage is not None:
                     working_save_id = getattr(lineage, "source_working_save_id", None)

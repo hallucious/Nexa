@@ -630,3 +630,30 @@ def test_savefile_share_import_uses_canonical_public_import_helper(tmp_path, mon
     assert calls["count"] == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["storage_role"] == "commit_snapshot"
+
+
+def test_savefile_run_uses_canonical_public_runtime_target_helper(tmp_path, monkeypatch):
+    artifact_path = tmp_path / "canonical_run_source.nex"
+    share_path = tmp_path / "canonical_run_share.json"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(name="canonical_run"), commit_id="commit-canonical-run")
+    save_nex_artifact_file(snapshot, artifact_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path)])
+    assert main() == 0
+
+    import src.cli.savefile_runtime as savefile_runtime
+
+    original = savefile_runtime.resolve_public_nex_execution_target
+    calls = {"count": 0}
+
+    def _wrapped(model_or_data, **kwargs):
+        calls["count"] += 1
+        return original(model_or_data, **kwargs)
+
+    monkeypatch.setattr(savefile_runtime, "resolve_public_nex_execution_target", _wrapped)
+    monkeypatch.setattr("sys.argv", ["nexa", "run", str(share_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert calls["count"] == 1

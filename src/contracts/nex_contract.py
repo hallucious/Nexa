@@ -99,6 +99,15 @@ class PublicNexFormatBoundary:
 
 
 @dataclass(frozen=True)
+class PublicNexExecutionTargetDescriptor:
+    storage_role: StorageRole
+    target_type: Literal["working_save", "commit_snapshot"]
+    target_ref: str
+    execution_anchor_posture: str
+    source_working_save_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class PublicNexArtifactDescriptor:
     storage_role: StorageRole
     canonical_ref: str

@@ -1727,3 +1727,44 @@ def test_create_workspace_from_public_share_checkout_mode_uses_canonical_public_
     assert response.body["storage_role"] == "working_save"
     assert response.body["workspace_id"] == "ws-created-001"
     assert written["ws-created-001"]["meta"]["storage_role"] == "working_save"
+
+
+def test_run_public_share_route_uses_canonical_public_runtime_target_helper(monkeypatch) -> None:
+    share_payload = _share_payload("share-run-route-001")
+
+    import src.storage.nex_api as nex_api
+
+    original = nex_api.resolve_public_nex_execution_target
+    calls = {"count": 0}
+
+    def _wrapped(model_or_data, **kwargs):
+        calls["count"] += 1
+        return original(model_or_data, **kwargs)
+
+    monkeypatch.setattr(nex_api, "resolve_public_nex_execution_target", _wrapped)
+
+    response = RunHttpRouteSurface.handle_run_public_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/public-shares/share-run-route-001/run",
+            path_params={"share_id": "share-run-route-001"},
+            json_body={"workspace_id": "ws-001", "input_payload": {"text": "hello"}},
+        ),
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Primary Workspace", "continuity_source": "server", "archived": False} if workspace_id == "ws-001" else None,
+        public_share_payload_provider=lambda share_id: share_payload if share_id == "share-run-route-001" else None,
+        target_catalog_provider=lambda workspace_id: {},
+        policy=ProductAdmissionPolicy(allow_working_save_execution=True),
+        engine_launch_decider=lambda payload: EngineLaunchAdapter.accepted(run_id="run-public-share-001", initial_status="queued"),
+        run_id_factory=lambda: "run-public-share-001",
+    )
+
+    assert response.status_code == 202
+    assert calls["count"] == 1
+
+
+def test_public_nex_format_route_exposes_runtime_target_sdk_entrypoint() -> None:
+    response = RunHttpRouteSurface.handle_public_nex_format(http_request=HttpRouteRequest(method="GET", path="/api/formats/public-nex"))
+
+    assert response.status_code == 200
+    assert response.body["public_sdk_entrypoints"]["run_artifact"] == "resolve_public_nex_execution_target"

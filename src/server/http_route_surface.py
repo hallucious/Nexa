@@ -525,6 +525,7 @@ def _public_nex_format_body() -> dict[str, Any]:
             "validate_commit_snapshot": "validate_commit_snapshot",
             "import_copy": "import_public_nex_artifact",
             "checkout_working_copy": "checkout_public_nex_working_copy",
+            "run_artifact": "resolve_public_nex_execution_target",
             "commit_transition": "create_commit_snapshot_from_working_save",
             "checkout_transition": "create_working_save_from_commit_snapshot",
         },
@@ -2004,7 +2005,7 @@ class RunHttpRouteSurface:
     def _parse_launch_request(http_request: HttpRouteRequest) -> ProductRunLaunchRequest:
         from src.storage.models.commit_snapshot_model import CommitSnapshotModel
         from src.storage.models.working_save_model import WorkingSaveModel
-        from src.storage.validators.shared_validator import load_nex
+        from src.storage.nex_api import load_nex
         body = http_request.json_body
         if not isinstance(body, Mapping):
             raise ValueError("launch.request_body_invalid")
@@ -4426,21 +4427,18 @@ class RunHttpRouteSurface:
         if error is not None:
             return error
         assert share_payload is not None
-        from src.storage.validators.shared_validator import load_nex
+        from src.storage.nex_api import resolve_public_nex_execution_target
         try:
             ensure_public_nex_link_share_operation_allowed(share_payload, "run_artifact")
         except ValueError as exc:
             return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.run_not_allowed", "message": str(exc), "share_id": share_id, "workspace_id": workspace_id})
         input_payload = body.get("input_payload")
-        loaded_share = load_nex(share_payload["artifact"])
-        model = loaded_share.parsed_model
-        if model is None:
-            return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_artifact_invalid", "message": "Public share artifact is invalid.", "share_id": share_id, "workspace_id": workspace_id})
-        storage_role = str(getattr(model.meta, "storage_role", "") or "").strip()
-        target_ref = str(getattr(model.meta, "commit_id", "") or getattr(model.meta, "working_save_id", "") or "").strip()
-        if not target_ref or storage_role not in {"commit_snapshot", "working_save"}:
+        try:
+            target = resolve_public_nex_execution_target(share_payload["artifact"])
+        except ValueError:
             return _route_response(409, {"status": "rejected", "error_family": "public_share_action_rejected", "reason_code": "public_share.share_target_unsupported", "message": "Public share artifact cannot be launched directly.", "share_id": share_id, "workspace_id": workspace_id})
-        target_type = "commit_snapshot" if storage_role == "commit_snapshot" else "working_save"
+        target_ref = target.target_ref
+        target_type = target.target_type
         target_catalog = dict(target_catalog_provider(workspace_id) or {}) if target_catalog_provider is not None else {}
         target_catalog[target_ref] = ExecutionTargetCatalogEntry(
             workspace_id=workspace_id,
