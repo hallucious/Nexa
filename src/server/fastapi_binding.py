@@ -16,6 +16,7 @@ from src.server.workspace_shell_runtime import render_workspace_shell_runtime_ht
 from src.server.circuit_library_runtime import render_circuit_library_runtime_html
 from src.server.result_history_runtime import render_workspace_result_history_html
 from src.server.starter_template_runtime import render_starter_template_catalog_html, render_starter_template_detail_html
+from src.server.public_community_runtime import render_public_community_hub_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.server.public_share_runtime import (
@@ -2378,6 +2379,42 @@ class FastApiRouteBindings:
             reason = str(payload.get("reason_code") or "").strip() or None
             target = _public_share_delete_target(app_language=app_language, workspace_id=workspace_id, share_id=share_id, status=status, reason=reason)
             return RedirectResponse(url=target, status_code=303)
+
+        @router.get("/app/community")
+        async def get_public_community_hub_page(request: Request) -> Response:
+            inbound = FrameworkInboundRequest(
+                method=request.method,
+                path="/api/integrations/public-community/catalog",
+                headers=dict(request.headers),
+                path_params={},
+                query_params=dict(request.query_params),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_public_community_catalog(request=inbound)
+            framework_response = self._framework_response(outbound)
+            if framework_response.status_code != 200:
+                return framework_response
+            payload = json.loads(outbound.body_text)
+            query = dict(request.query_params)
+            app_language = str(query.get("app_language") or payload.get("app_language") or "en")
+            workspace_id = str(query.get("workspace_id") or "").strip() or None
+            payload["app_language"] = app_language
+            if workspace_id:
+                payload["workspace_id"] = workspace_id
+            payload.setdefault("routes", {})["app_hub"] = f"/app/community?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+            payload["routes"]["starter_template_catalog_page"] = f"/app/templates/starter-circuits?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+            payload["routes"]["public_share_catalog_page"] = f"/app/public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+            payload["routes"]["public_share_catalog_summary"] = f"/app/public-shares/summary?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+            for asset in list(payload.get("assets") or []):
+                asset_map = dict(asset or {})
+                if asset_map.get("asset_family") == "starter-templates":
+                    asset_map["app_route"] = payload["routes"]["starter_template_catalog_page"]
+                elif asset_map.get("asset_family") == "public-shares":
+                    asset_map["app_route"] = payload["routes"]["public_share_catalog_page"]
+                asset.clear()
+                asset.update(asset_map)
+            return HTMLResponse(content=render_public_community_hub_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
 
         @router.get("/app/templates/starter-circuits")
         async def get_starter_template_catalog_page(request: Request) -> Response:

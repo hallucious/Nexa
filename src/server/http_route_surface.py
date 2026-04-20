@@ -2063,6 +2063,7 @@ def _public_community_catalog_body() -> dict[str, Any]:
             "surface_family": "starter-template-catalog",
             "community_role": "remixable workflow starting points",
             "route": "/api/templates/starter-circuits",
+            "app_route": "/app/templates/starter-circuits",
             "public_item_count": len(starter_templates),
             "sample_ids": [template.template_id for template in starter_templates[:3]],
         },
@@ -2071,6 +2072,7 @@ def _public_community_catalog_body() -> dict[str, Any]:
             "surface_family": "public-share-catalog",
             "community_role": "shared public Nexa artifacts and run-ready examples",
             "route": "/api/public-shares",
+            "app_route": "/app/public-shares",
             "public_operation_count": len(share_boundary.supported_operations),
             "supported_operations": list(share_boundary.supported_operations),
         },
@@ -2092,6 +2094,9 @@ def _public_community_catalog_body() -> dict[str, Any]:
         "public_sdk_entrypoints": dict(summary.public_sdk_entrypoints),
         "routes": {
             "self": "/api/integrations/public-community/catalog",
+            "app_hub": "/app/community",
+            "starter_template_catalog_page": "/app/templates/starter-circuits",
+            "public_share_catalog_page": "/app/public-shares",
             **dict(summary.discovery_routes),
         },
     }

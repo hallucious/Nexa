@@ -608,6 +608,17 @@ def test_fastapi_binding_public_community_catalog_route_round_trip() -> None:
     assert payload['namespace_policy']['family'] == 'public-community-catalog'
     assert payload['assets']
 
+def test_fastapi_binding_public_community_hub_page_renders_cross_linked_assets() -> None:
+    client = _make_client()
+    response = client.get('/app/community?app_language=en')
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'Community hub' in body
+    assert '/app/templates/starter-circuits?app_language=en' in body
+    assert '/app/public-shares?app_language=en' in body
+    assert '/api/integrations/public-plugins/catalog' in body
+
 def test_fastapi_binding_public_ecosystem_catalog_route_round_trip() -> None:
     client = _make_client()
 

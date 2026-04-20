@@ -1592,8 +1592,13 @@ def test_public_community_catalog_route_returns_community_asset_surface() -> Non
     assert response.body["identity_policy"]["canonical_key"] == "catalog.surface_family"
     assert response.body["namespace_policy"]["family"] == "public-community-catalog"
     assert response.body["routes"]["self"] == "/api/integrations/public-community/catalog"
+    assert response.body["routes"]["app_hub"] == "/app/community"
+    assert response.body["routes"]["starter_template_catalog_page"] == "/app/templates/starter-circuits"
+    assert response.body["routes"]["public_share_catalog_page"] == "/app/public-shares"
     assert response.body["routes"]["starter_template_catalog"] == "/api/templates/starter-circuits"
     assert response.body["public_sdk_entrypoints"]["community_catalog_summary"] == "describe_public_community_export_surface"
+    assert response.body["assets"][0]["app_route"] == "/app/templates/starter-circuits"
+    assert response.body["assets"][1]["app_route"] == "/app/public-shares"
     assert len(response.body["assets"]) == 3
 
 def test_public_mcp_manifest_route_returns_manifest_export_surface() -> None:
