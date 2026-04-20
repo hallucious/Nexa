@@ -3,6 +3,8 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Mapping
 
+from src.server.public_runtime_utils import escaped_app_route
+
 
 def render_public_mcp_catalog_html(
     payload: Mapping[str, Any],
@@ -15,18 +17,12 @@ def render_public_mcp_catalog_html(
     routes = dict(payload.get("routes") or {})
     title = escape(str(payload.get("title") or "Public MCP surface"))
     subtitle = escape(str(payload.get("subtitle") or "Inspect the public MCP manifest and host bridge from one product-facing page."))
-    ecosystem_route = str(routes.get("ecosystem_catalog_page") or "/app/ecosystem").strip() or "/app/ecosystem"
-    if "app_language=" not in ecosystem_route:
-        ecosystem_route += ("&" if "?" in ecosystem_route else "?") + f"app_language={app_language}"
-    community_route = str(routes.get("community_hub_page") or "/app/community").strip() or "/app/community"
-    if "app_language=" not in community_route:
-        community_route += ("&" if "?" in community_route else "?") + f"app_language={app_language}"
-    public_nex_route = str(routes.get("public_nex_format_page") or "/app/public-nex").strip() or "/app/public-nex"
-    if "app_language=" not in public_nex_route:
-        public_nex_route += ("&" if "?" in public_nex_route else "?") + f"app_language={app_language}"
-    provider_route = str(routes.get("provider_catalog_page") or "/app/providers").strip() or "/app/providers"
-    if "app_language=" not in provider_route:
-        provider_route += ("&" if "?" in provider_route else "?") + f"app_language={app_language}"
+    public_hub_href = escaped_app_route(routes, "public_hub_page", "/app/public", app_language=app_language)
+    integration_hub_href = escaped_app_route(routes, "public_integration_hub_page", "/app/integrations", app_language=app_language)
+    ecosystem_route = escaped_app_route(routes, "ecosystem_catalog_page", "/app/ecosystem", app_language=app_language)
+    community_route = escaped_app_route(routes, "community_hub_page", "/app/community", app_language=app_language)
+    public_nex_route = escaped_app_route(routes, "public_nex_format_page", "/app/public-nex", app_language=app_language)
+    provider_route = escaped_app_route(routes, "provider_catalog_page", "/app/providers", app_language=app_language)
     manifest_server = dict(manifest.get("server") or {})
     return f"""<!doctype html>
 <html lang="{escape(app_language)}">
@@ -47,7 +43,7 @@ def render_public_mcp_catalog_html(
     <main>
       <h1>{title}</h1>
       <p>{subtitle}</p>
-      <p class="links"><a href="{escape(ecosystem_route)}">Ecosystem</a><a href="{escape(community_route)}">Community</a><a href="{escape(public_nex_route)}">Public .nex</a><a href="{escape(provider_route)}">Providers</a></p>
+      <p class="links"><a href="{public_hub_href}">Public hub</a><a href="{integration_hub_href}">Integration hub</a><a href="{ecosystem_route}">Ecosystem</a><a href="{community_route}">Community</a><a href="{public_nex_route}">Public .nex</a><a href="{provider_route}">Providers</a></p>
       <section class="grid">
         <article class="card">
           <h2>Manifest</h2>

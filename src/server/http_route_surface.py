@@ -2000,6 +2000,7 @@ def _public_community_catalog_namespace_policy_body() -> dict[str, Any]:
 
 
 def _public_sdk_catalog_body() -> dict[str, Any]:
+    from src.public_surface_registry import build_public_sdk_route_map
     from src.sdk.integration import (
         build_public_mcp_resources,
         build_public_mcp_tools,
@@ -2018,23 +2019,7 @@ def _public_sdk_catalog_body() -> dict[str, Any]:
         "supported_contract_markers": list(summary.supported_contract_markers),
         "supported_runtime_markers": list(summary.supported_runtime_markers),
         "supported_transport_kinds": list(summary.supported_transport_kinds),
-        "routes": {
-            "self": "/api/integrations/public-sdk/catalog",
-            "app_catalog_page": "/app/sdk",
-            "ecosystem_catalog_page": "/app/ecosystem",
-            "community_hub_page": "/app/community",
-            "public_plugin_catalog_page": "/app/plugins",
-            "public_mcp_catalog_page": "/app/mcp",
-            "provider_catalog_page": "/app/providers",
-            "public_nex_format_page": "/app/public-nex",
-            "public_nex_format": "/api/formats/public-nex",
-            "public_plugin_catalog": "/api/integrations/public-plugins/catalog",
-            "public_community_catalog": "/api/integrations/public-community/catalog",
-            "public_mcp_manifest": "/api/integrations/public-mcp/manifest",
-            "public_mcp_host_bridge": "/api/integrations/public-mcp/host-bridge",
-            "public_share_catalog": "/api/public-shares",
-            "provider_catalog": "/api/providers/catalog",
-        },
+        "routes": build_public_sdk_route_map(),
     }
 
 
@@ -2063,6 +2048,7 @@ def _public_plugin_catalog_body() -> dict[str, Any]:
 
 
 def _public_community_catalog_body() -> dict[str, Any]:
+    from src.public_surface_registry import build_public_community_route_map
     from src.sdk.integration import (
         describe_public_community_export_surface,
         describe_public_plugin_export_surface,
@@ -2117,19 +2103,12 @@ def _public_community_catalog_body() -> dict[str, Any]:
         },
         "assets": assets,
         "public_sdk_entrypoints": dict(summary.public_sdk_entrypoints),
-        "routes": {
-            "self": "/api/integrations/public-community/catalog",
-            "app_hub": "/app/community",
-            "starter_template_catalog_page": "/app/templates/starter-circuits",
-            "public_share_catalog_page": "/app/public-shares",
-            "public_plugin_catalog_page": "/app/plugins",
-            "public_mcp_catalog_page": "/app/mcp",
-            **dict(summary.discovery_routes),
-        },
+        "routes": build_public_community_route_map(summary.discovery_routes),
     }
 
 
 def _public_ecosystem_catalog_body() -> dict[str, Any]:
+    from src.public_surface_registry import build_public_ecosystem_route_map
     from src.sdk.integration import describe_public_ecosystem_export_surface
 
     summary = describe_public_ecosystem_export_surface()
@@ -2200,17 +2179,7 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
         "supported_contract_markers": list(summary.supported_contract_markers),
         "supported_runtime_markers": list(summary.supported_runtime_markers),
         "supported_transport_kinds": list(summary.supported_transport_kinds),
-        "routes": {
-            "self": "/api/integrations/public-ecosystem/catalog",
-            "app_catalog_page": "/app/ecosystem",
-            "community_hub_page": "/app/community",
-            "public_sdk_catalog_page": "/app/sdk",
-            "public_plugin_catalog_page": "/app/plugins",
-            "public_mcp_catalog_page": "/app/mcp",
-            "provider_catalog_page": "/app/providers",
-            "public_nex_format_page": "/app/public-nex",
-            **dict(summary.discovery_routes),
-        },
+        "routes": build_public_ecosystem_route_map(summary.discovery_routes),
     }
 
 

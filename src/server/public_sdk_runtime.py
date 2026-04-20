@@ -3,6 +3,8 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Mapping
 
+from src.server.public_runtime_utils import escaped_app_route
+
 
 def render_public_sdk_catalog_html(
     payload: Mapping[str, Any],
@@ -23,41 +25,14 @@ def render_public_sdk_catalog_html(
     )
     raw_catalog_href = escape(str(routes.get("self") or "/api/integrations/public-sdk/catalog"))
 
-    ecosystem_route = str(routes.get("ecosystem_catalog_page") or "/app/ecosystem").strip() or "/app/ecosystem"
-    if "app_language=" not in ecosystem_route:
-        joiner = "&" if "?" in ecosystem_route else "?"
-        ecosystem_route = f"{ecosystem_route}{joiner}app_language={app_language}"
-    ecosystem_href = escape(ecosystem_route)
-
-    community_route = str(routes.get("community_hub_page") or "/app/community").strip() or "/app/community"
-    if "app_language=" not in community_route:
-        joiner = "&" if "?" in community_route else "?"
-        community_route = f"{community_route}{joiner}app_language={app_language}"
-    community_href = escape(community_route)
-
-    plugin_route = str(routes.get("public_plugin_catalog_page") or "/app/plugins").strip() or "/app/plugins"
-    if "app_language=" not in plugin_route:
-        joiner = "&" if "?" in plugin_route else "?"
-        plugin_route = f"{plugin_route}{joiner}app_language={app_language}"
-    plugin_href = escape(plugin_route)
-
-    mcp_route = str(routes.get("public_mcp_catalog_page") or "/app/mcp").strip() or "/app/mcp"
-    if "app_language=" not in mcp_route:
-        joiner = "&" if "?" in mcp_route else "?"
-        mcp_route = f"{mcp_route}{joiner}app_language={app_language}"
-    mcp_href = escape(mcp_route)
-
-    provider_route = str(routes.get("provider_catalog_page") or "/app/providers").strip() or "/app/providers"
-    if "app_language=" not in provider_route:
-        joiner = "&" if "?" in provider_route else "?"
-        provider_route = f"{provider_route}{joiner}app_language={app_language}"
-    provider_href = escape(provider_route)
-
-    public_nex_route = str(routes.get("public_nex_format_page") or "/app/public-nex").strip() or "/app/public-nex"
-    if "app_language=" not in public_nex_route:
-        joiner = "&" if "?" in public_nex_route else "?"
-        public_nex_route = f"{public_nex_route}{joiner}app_language={app_language}"
-    public_nex_href = escape(public_nex_route)
+    public_hub_href = escaped_app_route(routes, "public_hub_page", "/app/public", app_language=app_language)
+    integration_hub_href = escaped_app_route(routes, "public_integration_hub_page", "/app/integrations", app_language=app_language)
+    ecosystem_href = escaped_app_route(routes, "ecosystem_catalog_page", "/app/ecosystem", app_language=app_language)
+    community_href = escaped_app_route(routes, "community_hub_page", "/app/community", app_language=app_language)
+    plugin_href = escaped_app_route(routes, "public_plugin_catalog_page", "/app/plugins", app_language=app_language)
+    mcp_href = escaped_app_route(routes, "public_mcp_catalog_page", "/app/mcp", app_language=app_language)
+    provider_href = escaped_app_route(routes, "provider_catalog_page", "/app/providers", app_language=app_language)
+    public_nex_href = escaped_app_route(routes, "public_nex_format_page", "/app/public-nex", app_language=app_language)
 
     tool_items = "".join(
         f'<li><strong>{escape(str(item.get("name") or item.get("tool_id") or "tool"))}</strong>: {escape(str(item.get("description") or item.get("title") or "MCP/public SDK tool"))}</li>'
@@ -114,6 +89,8 @@ def render_public_sdk_catalog_html(
     <main role=\"main\" aria-labelledby=\"public-sdk-title\">
       <header>
         <a class="top-link" href="{raw_catalog_href}">Open raw SDK catalog</a>
+        <a class="top-link" href="{public_hub_href}">Open public hub</a>
+        <a class="top-link" href="{integration_hub_href}">Open integration hub</a>
         <a class="top-link" href="{ecosystem_href}">Open ecosystem catalog</a>
         <a class="top-link" href="{community_href}">Open community hub</a>
         <a class="top-link" href="{plugin_href}">Open public plugins</a>

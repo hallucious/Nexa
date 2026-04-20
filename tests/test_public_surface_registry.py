@@ -28,3 +28,14 @@ def test_public_ecosystem_surface_specs_cover_surface_builder_output() -> None:
 def test_app_href_appends_language_and_workspace_when_requested() -> None:
     href = app_href("community_hub_page", app_language="ko", workspace_id="ws-001")
     assert href == "/app/community?app_language=ko&workspace_id=ws-001"
+
+
+
+def test_public_surface_registry_exposes_new_hub_routes() -> None:
+    assert PUBLIC_APP_ROUTES["public_hub_page"] == "/app/public"
+    assert PUBLIC_APP_ROUTES["public_integration_hub_page"] == "/app/integrations"
+
+
+def test_app_href_supports_public_hub_routes() -> None:
+    assert app_href("public_hub_page", app_language="en") == "/app/public?app_language=en"
+    assert app_href("public_integration_hub_page", app_language="en") == "/app/integrations?app_language=en"

@@ -23,6 +23,8 @@ from src.server.public_sdk_runtime import render_public_sdk_catalog_html
 from src.server.public_mcp_runtime import render_public_mcp_catalog_html
 from src.server.public_provider_runtime import render_public_provider_catalog_html
 from src.server.public_nex_runtime import render_public_nex_format_html
+from src.server.public_hub_runtime import render_public_hub_html
+from src.server.public_integration_runtime import render_public_integration_hub_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.server.public_share_runtime import (
@@ -2401,6 +2403,8 @@ class FastApiRouteBindings:
             payload = json.loads(outbound.body_text)
             payload["app_language"] = app_language
             payload.setdefault("routes", {})["app_catalog_page"] = f"/app/plugins?app_language={app_language}"
+            payload.setdefault("routes", {})["public_hub_page"] = f"/app/public?app_language={app_language}"
+            payload.setdefault("routes", {})["public_integration_hub_page"] = f"/app/integrations?app_language={app_language}"
             payload.setdefault("routes", {})["community_hub_page"] = f"/app/community?app_language={app_language}"
             payload.setdefault("routes", {})["ecosystem_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
             return HTMLResponse(
@@ -2424,6 +2428,8 @@ class FastApiRouteBindings:
             payload["app_language"] = app_language
             routes = payload.setdefault("routes", {})
             routes["app_catalog_page"] = f"/app/sdk?app_language={app_language}"
+            routes["public_hub_page"] = f"/app/public?app_language={app_language}"
+            routes["public_integration_hub_page"] = f"/app/integrations?app_language={app_language}"
             routes["ecosystem_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
             routes["community_hub_page"] = f"/app/community?app_language={app_language}"
             routes["public_plugin_catalog_page"] = f"/app/plugins?app_language={app_language}"
@@ -2451,6 +2457,8 @@ class FastApiRouteBindings:
             payload["app_language"] = app_language
             routes = payload.setdefault("routes", {})
             routes["app_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
+            routes["public_hub_page"] = f"/app/public?app_language={app_language}"
+            routes["public_integration_hub_page"] = f"/app/integrations?app_language={app_language}"
             routes["community_hub_page"] = f"/app/community?app_language={app_language}"
             routes.setdefault("public_sdk_catalog_page", f"/app/sdk?app_language={app_language}")
             routes.setdefault("public_plugin_catalog_page", f"/app/plugins?app_language={app_language}")
@@ -2500,6 +2508,8 @@ class FastApiRouteBindings:
                 "routes": {
                     "manifest": "/api/integrations/public-mcp/manifest",
                     "host_bridge": "/api/integrations/public-mcp/host-bridge",
+                    "public_hub_page": f"/app/public?app_language={app_language}",
+                    "public_integration_hub_page": f"/app/integrations?app_language={app_language}",
                     "ecosystem_catalog_page": f"/app/ecosystem?app_language={app_language}",
                     "community_hub_page": f"/app/community?app_language={app_language}",
                     "public_nex_format_page": f"/app/public-nex?app_language={app_language}",
@@ -2529,6 +2539,8 @@ class FastApiRouteBindings:
             payload["app_language"] = app_language
             payload.setdefault("routes", {})["self"] = "/api/providers/catalog"
             payload["routes"]["app_catalog_page"] = f"/app/providers?app_language={app_language}"
+            payload["routes"]["public_hub_page"] = f"/app/public?app_language={app_language}"
+            payload["routes"]["public_integration_hub_page"] = f"/app/integrations?app_language={app_language}"
             payload["routes"]["ecosystem_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
             payload["routes"]["community_hub_page"] = f"/app/community?app_language={app_language}"
             payload["routes"]["public_sdk_catalog_page"] = f"/app/sdk?app_language={app_language}"
@@ -2545,6 +2557,8 @@ class FastApiRouteBindings:
             payload = json.loads(outbound.body_text)
             payload["app_language"] = app_language
             payload.setdefault("routes", {})["app_catalog_page"] = f"/app/public-nex?app_language={app_language}"
+            payload["routes"]["public_hub_page"] = f"/app/public?app_language={app_language}"
+            payload["routes"]["public_integration_hub_page"] = f"/app/integrations?app_language={app_language}"
             payload["routes"]["ecosystem_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
             payload["routes"]["community_hub_page"] = f"/app/community?app_language={app_language}"
             payload["routes"]["public_sdk_catalog_page"] = f"/app/sdk?app_language={app_language}"
@@ -2574,6 +2588,8 @@ class FastApiRouteBindings:
             payload["app_language"] = app_language
             if workspace_id:
                 payload["workspace_id"] = workspace_id
+            payload.setdefault("routes", {})["public_hub_page"] = f"/app/public?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+            payload.setdefault("routes", {})["public_integration_hub_page"] = f"/app/integrations?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
             payload.setdefault("routes", {})["app_hub"] = f"/app/community?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
             payload["routes"]["starter_template_catalog_page"] = f"/app/templates/starter-circuits?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
             payload["routes"]["public_share_catalog_page"] = f"/app/public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
@@ -2591,6 +2607,64 @@ class FastApiRouteBindings:
                 asset.clear()
                 asset.update(asset_map)
             return HTMLResponse(content=render_public_community_hub_html(payload, app_language=app_language, workspace_id=workspace_id), status_code=200)
+
+        @router.get("/app/public")
+        async def get_public_hub_page(request: Request) -> Response:
+            app_language = str(request.query_params.get("app_language") or "en")
+            payload = {
+                "app_language": app_language,
+                "title": "Public surface hub",
+                "subtitle": "Browse community, ecosystem, shares, templates, and integration-facing public surfaces from one page.",
+                "routes": {
+                    "public_hub_page": f"/app/public?app_language={app_language}",
+                    "public_integration_hub_page": f"/app/integrations?app_language={app_language}",
+                    "community_hub_page": f"/app/community?app_language={app_language}",
+                    "public_ecosystem_catalog_page": f"/app/ecosystem?app_language={app_language}",
+                    "public_share_catalog_page": f"/app/public-shares?app_language={app_language}",
+                    "starter_template_catalog_page": f"/app/templates/starter-circuits?app_language={app_language}",
+                    "public_sdk_catalog_page": f"/app/sdk?app_language={app_language}",
+                    "public_plugin_catalog_page": f"/app/plugins?app_language={app_language}",
+                    "public_mcp_catalog_page": f"/app/mcp?app_language={app_language}",
+                    "provider_catalog_page": f"/app/providers?app_language={app_language}",
+                    "public_nex_format_page": f"/app/public-nex?app_language={app_language}",
+                },
+                "cards": [
+                    {"route_key": "community_hub_page", "fallback": "/app/community", "title": "Community hub", "summary": "Starter templates, public shares, plugins, and MCP-compatible community assets."},
+                    {"route_key": "public_ecosystem_catalog_page", "fallback": "/app/ecosystem", "title": "Ecosystem", "summary": "SDK, providers, public .nex, community, MCP, shares, and template surfaces."},
+                    {"route_key": "public_share_catalog_page", "fallback": "/app/public-shares", "title": "Public shares", "summary": "Browse shared public artifacts and reusable examples."},
+                    {"route_key": "starter_template_catalog_page", "fallback": "/app/templates/starter-circuits", "title": "Starter templates", "summary": "Open remixable starter workflows directly from the product-facing catalog."},
+                    {"route_key": "public_integration_hub_page", "fallback": "/app/integrations", "title": "Integration hub", "summary": "SDK, plugins, MCP, providers, and public .nex from one integration-focused page."},
+                ],
+            }
+            return HTMLResponse(content=render_public_hub_html(payload, app_language=app_language), status_code=200)
+
+        @router.get("/app/integrations")
+        async def get_public_integration_hub_page(request: Request) -> Response:
+            app_language = str(request.query_params.get("app_language") or "en")
+            payload = {
+                "app_language": app_language,
+                "title": "Public integration hub",
+                "subtitle": "Browse the integration-facing public surfaces that power the broader public/community product layer.",
+                "routes": {
+                    "public_hub_page": f"/app/public?app_language={app_language}",
+                    "public_integration_hub_page": f"/app/integrations?app_language={app_language}",
+                    "community_hub_page": f"/app/community?app_language={app_language}",
+                    "public_ecosystem_catalog_page": f"/app/ecosystem?app_language={app_language}",
+                    "public_sdk_catalog_page": f"/app/sdk?app_language={app_language}",
+                    "public_plugin_catalog_page": f"/app/plugins?app_language={app_language}",
+                    "public_mcp_catalog_page": f"/app/mcp?app_language={app_language}",
+                    "provider_catalog_page": f"/app/providers?app_language={app_language}",
+                    "public_nex_format_page": f"/app/public-nex?app_language={app_language}",
+                },
+                "cards": [
+                    {"route_key": "public_sdk_catalog_page", "fallback": "/app/sdk", "title": "SDK", "summary": "Curated public SDK entrypoints, tools, resources, and export summaries."},
+                    {"route_key": "public_plugin_catalog_page", "fallback": "/app/plugins", "title": "Plugins", "summary": "Community-facing plugin capabilities and raw integration catalog links."},
+                    {"route_key": "public_mcp_catalog_page", "fallback": "/app/mcp", "title": "MCP", "summary": "Manifest and host-bridge metadata for the public MCP-compatible surface."},
+                    {"route_key": "provider_catalog_page", "fallback": "/app/providers", "title": "Providers", "summary": "Managed provider options that power the public/community product surface."},
+                    {"route_key": "public_nex_format_page", "fallback": "/app/public-nex", "title": "Public .nex", "summary": "Role-aware public format rules, operation posture, and artifact boundary guidance."},
+                ],
+            }
+            return HTMLResponse(content=render_public_integration_hub_html(payload, app_language=app_language), status_code=200)
 
         @router.get("/app/templates/starter-circuits")
         async def get_starter_template_catalog_page(request: Request) -> Response:

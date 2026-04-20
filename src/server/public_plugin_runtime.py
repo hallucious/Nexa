@@ -3,6 +3,8 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Mapping
 
+from src.server.public_runtime_utils import escaped_app_route
+
 
 def render_public_plugin_catalog_html(
     payload: Mapping[str, Any],
@@ -20,11 +22,9 @@ def render_public_plugin_catalog_html(
         )
     )
     raw_catalog_href = escape(str(routes.get("self") or "/api/integrations/public-plugins/catalog"))
-    community_hub_route = str(routes.get("community_hub_page") or "/app/community").strip() or "/app/community"
-    if "app_language=" not in community_hub_route:
-        joiner = "&" if "?" in community_hub_route else "?"
-        community_hub_route = f"{community_hub_route}{joiner}app_language={app_language}"
-    community_hub_href = escape(community_hub_route)
+    public_hub_href = escaped_app_route(routes, "public_hub_page", "/app/public", app_language=app_language)
+    integration_hub_href = escaped_app_route(routes, "public_integration_hub_page", "/app/integrations", app_language=app_language)
+    community_hub_href = escaped_app_route(routes, "community_hub_page", "/app/community", app_language=app_language)
 
     cards: list[str] = []
     for plugin in list(payload.get("plugins") or ()):
@@ -71,6 +71,8 @@ def render_public_plugin_catalog_html(
     <main role=\"main\" aria-labelledby=\"public-plugin-title\">
       <header>
         <a class=\"top-link\" href=\"{raw_catalog_href}\">Open raw plugin catalog</a>
+        <a class=\"top-link\" href=\"{public_hub_href}\">Open public hub</a>
+        <a class=\"top-link\" href=\"{integration_hub_href}\">Open integration hub</a>
         <a class=\"top-link\" href=\"{community_hub_href}\">Open community hub</a>
         <h1 id=\"public-plugin-title\">{title}</h1>
         <p>{subtitle}</p>

@@ -3,6 +3,8 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Mapping
 
+from src.server.public_runtime_utils import escaped_app_route
+
 
 def render_public_nex_format_html(
     payload: Mapping[str, Any],
@@ -15,11 +17,6 @@ def render_public_nex_format_html(
     role_boundaries = dict(payload.get("role_boundaries") or {})
     working = dict(role_boundaries.get("working_save") or {})
     commit = dict(role_boundaries.get("commit_snapshot") or {})
-    def norm(route_key: str, fallback: str) -> str:
-        route = str(routes.get(route_key) or fallback).strip() or fallback
-        if "app_language=" not in route:
-            route += ("&" if "?" in route else "?") + f"app_language={app_language}"
-        return escape(route)
     return f"""<!doctype html>
 <html lang="{escape(app_language)}">
   <head>
@@ -39,7 +36,7 @@ def render_public_nex_format_html(
     <main>
       <h1>Public .nex format</h1>
       <p>Inspect the public .nex format boundary, role rules, and operation posture from a product-facing page.</p>
-      <p class="links"><a href="{norm('ecosystem_catalog_page','/app/ecosystem')}">Ecosystem</a><a href="{norm('public_mcp_catalog_page','/app/mcp')}">MCP</a><a href="{norm('provider_catalog_page','/app/providers')}">Providers</a><a href="{escape(str(routes.get('format') or '/api/formats/public-nex'))}">Raw format route</a></p>
+      <p class="links"><a href="{escaped_app_route(routes, 'public_hub_page', '/app/public', app_language=app_language)}">Public hub</a><a href="{escaped_app_route(routes, 'public_integration_hub_page', '/app/integrations', app_language=app_language)}">Integration hub</a><a href="{escaped_app_route(routes, 'ecosystem_catalog_page', '/app/ecosystem', app_language=app_language)}">Ecosystem</a><a href="{escaped_app_route(routes, 'public_mcp_catalog_page', '/app/mcp', app_language=app_language)}">MCP</a><a href="{escaped_app_route(routes, 'provider_catalog_page', '/app/providers', app_language=app_language)}">Providers</a><a href="{escape(str(routes.get('format') or '/api/formats/public-nex'))}">Raw format route</a></p>
       <section class="grid">
         <article class="card"><h2>Format family</h2><p><code>{escape(str(format_boundary.get('format_family') or '.nex'))}</code></p><p><strong>Roles:</strong> {escape(', '.join(format_boundary.get('supported_roles') or []))}</p></article>
         <article class="card"><h2>Working save</h2><p><strong>Identity:</strong> <code>{escape(str(working.get('identity_field') or 'working_save_id'))}</code></p><p><strong>Commit posture:</strong> {escape(str(working.get('commit_boundary_posture') or ''))}</p></article>

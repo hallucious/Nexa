@@ -3,6 +3,8 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Mapping
 
+from src.server.public_runtime_utils import escaped_app_route
+
 
 def render_public_ecosystem_catalog_html(
     payload: Mapping[str, Any],
@@ -23,23 +25,11 @@ def render_public_ecosystem_catalog_html(
     )
     raw_catalog_href = escape(str(routes.get("self") or "/api/integrations/public-ecosystem/catalog"))
 
-    community_hub_route = str(routes.get("community_hub_page") or "/app/community").strip() or "/app/community"
-    if "app_language=" not in community_hub_route:
-        joiner = "&" if "?" in community_hub_route else "?"
-        community_hub_route = f"{community_hub_route}{joiner}app_language={app_language}"
-    community_hub_href = escape(community_hub_route)
-
-    sdk_page_route = str(routes.get("public_sdk_catalog_page") or "/app/sdk").strip() or "/app/sdk"
-    if "app_language=" not in sdk_page_route:
-        joiner = "&" if "?" in sdk_page_route else "?"
-        sdk_page_route = f"{sdk_page_route}{joiner}app_language={app_language}"
-    sdk_page_href = escape(sdk_page_route)
-
-    plugin_page_route = str(routes.get("public_plugin_catalog_page") or "/app/plugins").strip() or "/app/plugins"
-    if "app_language=" not in plugin_page_route:
-        joiner = "&" if "?" in plugin_page_route else "?"
-        plugin_page_route = f"{plugin_page_route}{joiner}app_language={app_language}"
-    plugin_page_href = escape(plugin_page_route)
+    public_hub_href = escaped_app_route(routes, "public_hub_page", "/app/public", app_language=app_language)
+    integration_hub_href = escaped_app_route(routes, "public_integration_hub_page", "/app/integrations", app_language=app_language)
+    community_hub_href = escaped_app_route(routes, "community_hub_page", "/app/community", app_language=app_language)
+    sdk_page_href = escaped_app_route(routes, "public_sdk_catalog_page", "/app/sdk", app_language=app_language)
+    plugin_page_href = escaped_app_route(routes, "public_plugin_catalog_page", "/app/plugins", app_language=app_language)
 
     cards: list[str] = []
     for surface_name, surface_value in surfaces.items():
@@ -87,7 +77,10 @@ def render_public_ecosystem_catalog_html(
     <main role=\"main\" aria-labelledby=\"public-ecosystem-title\">
       <header>
         <a class=\"top-link\" href=\"{raw_catalog_href}\">Open raw ecosystem catalog</a>
+        <a class=\"top-link\" href=\"{public_hub_href}\">Open public hub</a>
+        <a class=\"top-link\" href=\"{integration_hub_href}\">Open integration hub</a>
         <a class=\"top-link\" href=\"{community_hub_href}\">Open community hub</a>
+        <a class=\"top-link\" href=\"{sdk_page_href}\">Open public SDK</a>
         <a class=\"top-link\" href=\"{plugin_page_href}\">Open public plugins</a>
         <h1 id=\"public-ecosystem-title\">{title}</h1>
         <p>{subtitle}</p>

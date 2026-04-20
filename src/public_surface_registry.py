@@ -20,6 +20,8 @@ PUBLIC_API_ROUTES: dict[str, str] = {
 
 
 PUBLIC_APP_ROUTES: dict[str, str] = {
+    "public_hub_page": "/app/public",
+    "public_integration_hub_page": "/app/integrations",
     "community_hub_page": "/app/community",
     "public_ecosystem_catalog_page": "/app/ecosystem",
     "public_sdk_catalog_page": "/app/sdk",
@@ -198,6 +200,8 @@ def build_public_sdk_route_map() -> dict[str, str]:
     return {
         "self": api_route("public_sdk_catalog"),
         "app_catalog_page": app_route("public_sdk_catalog_page"),
+        "public_hub_page": app_route("public_hub_page"),
+        "public_integration_hub_page": app_route("public_integration_hub_page"),
         "ecosystem_catalog_page": app_route("public_ecosystem_catalog_page"),
         "community_hub_page": app_route("community_hub_page"),
         "public_plugin_catalog_page": app_route("public_plugin_catalog_page"),
@@ -228,6 +232,8 @@ def build_public_plugin_route_map(discovery_routes: Mapping[str, str]) -> dict[s
 def build_public_community_route_map(discovery_routes: Mapping[str, str]) -> dict[str, str]:
     return {
         "self": api_route("public_community_catalog"),
+        "public_hub_page": app_route("public_hub_page"),
+        "public_integration_hub_page": app_route("public_integration_hub_page"),
         "app_hub": app_route("community_hub_page"),
         "starter_template_catalog_page": app_route("starter_template_catalog_page"),
         "public_share_catalog_page": app_route("public_share_catalog_page"),
@@ -242,6 +248,8 @@ def build_public_ecosystem_route_map(discovery_routes: Mapping[str, str]) -> dic
     return {
         "self": api_route("public_ecosystem_catalog"),
         "app_catalog_page": app_route("public_ecosystem_catalog_page"),
+        "public_hub_page": app_route("public_hub_page"),
+        "public_integration_hub_page": app_route("public_integration_hub_page"),
         "community_hub_page": app_route("community_hub_page"),
         "public_sdk_catalog_page": app_route("public_sdk_catalog_page"),
         "public_plugin_catalog_page": app_route("public_plugin_catalog_page"),
@@ -257,6 +265,8 @@ def build_provider_catalog_route_map() -> dict[str, str]:
     return {
         "self": api_route("provider_catalog"),
         "app_catalog_page": app_route("provider_catalog_page"),
+        "public_hub_page": app_route("public_hub_page"),
+        "public_integration_hub_page": app_route("public_integration_hub_page"),
         "ecosystem_catalog_page": app_route("public_ecosystem_catalog_page"),
         "community_hub_page": app_route("community_hub_page"),
         "public_sdk_catalog_page": app_route("public_sdk_catalog_page"),
@@ -268,6 +278,8 @@ def build_provider_catalog_route_map() -> dict[str, str]:
 def build_public_nex_route_map() -> dict[str, str]:
     return {
         "app_catalog_page": app_route("public_nex_format_page"),
+        "public_hub_page": app_route("public_hub_page"),
+        "public_integration_hub_page": app_route("public_integration_hub_page"),
         "ecosystem_catalog_page": app_route("public_ecosystem_catalog_page"),
         "community_hub_page": app_route("community_hub_page"),
         "public_sdk_catalog_page": app_route("public_sdk_catalog_page"),

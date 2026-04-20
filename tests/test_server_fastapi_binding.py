@@ -625,6 +625,8 @@ def test_fastapi_binding_public_community_hub_page_renders_cross_linked_assets()
     assert app_href('public_plugin_catalog_page', app_language='en') in body
     assert app_href('public_mcp_catalog_page', app_language='en') in body
     assert app_href('public_ecosystem_catalog_page', app_language='en') in body
+    assert app_href('public_hub_page', app_language='en') in body
+    assert app_href('public_integration_hub_page', app_language='en') in body
 
 def test_fastapi_binding_public_plugin_catalog_page_renders_plugin_cards() -> None:
     client = _make_client()
@@ -636,6 +638,8 @@ def test_fastapi_binding_public_plugin_catalog_page_renders_plugin_cards() -> No
     assert 'nexa.file_reader' in body
     assert '/api/integrations/public-plugins/catalog' in body
     assert '/app/community?app_language=en' in body
+    assert '/app/public?app_language=en' in body
+    assert '/app/integrations?app_language=en' in body
 
 def test_fastapi_binding_public_sdk_catalog_page_renders_sdk_entrypoints() -> None:
     client = _make_client()
@@ -653,6 +657,8 @@ def test_fastapi_binding_public_sdk_catalog_page_renders_sdk_entrypoints() -> No
     assert '/app/mcp?app_language=en' in body
     assert '/app/providers?app_language=en' in body
     assert app_href('public_nex_format_page', app_language='en') in body
+    assert app_href('public_hub_page', app_language='en') in body
+    assert app_href('public_integration_hub_page', app_language='en') in body
 
 def test_fastapi_binding_public_ecosystem_catalog_page_renders_surface_cards() -> None:
     client = _make_client()
@@ -669,6 +675,8 @@ def test_fastapi_binding_public_ecosystem_catalog_page_renders_surface_cards() -
     assert app_href('public_mcp_catalog_page', app_language='en') in body
     assert app_href('provider_catalog_page', app_language='en') in body
     assert app_href('public_nex_format_page', app_language='en') in body
+    assert app_href('public_hub_page', app_language='en') in body
+    assert app_href('public_integration_hub_page', app_language='en') in body
 
 def test_fastapi_binding_public_ecosystem_catalog_route_round_trip() -> None:
     client = _make_client()
@@ -693,6 +701,8 @@ def test_fastapi_binding_public_mcp_catalog_page_renders_manifest_and_bridge() -
     assert 'FrameworkRouteBindings' in body
     assert '/api/integrations/public-mcp/manifest' in body
     assert app_href('public_nex_format_page', app_language='en') in body
+    assert app_href('public_hub_page', app_language='en') in body
+    assert app_href('public_integration_hub_page', app_language='en') in body
 
 
 def test_fastapi_binding_public_provider_catalog_page_renders_provider_cards() -> None:
@@ -705,6 +715,8 @@ def test_fastapi_binding_public_provider_catalog_page_renders_provider_cards() -
     assert 'OpenAI GPT' in body
     assert app_href('public_ecosystem_catalog_page', app_language='en') in body
     assert app_href('public_mcp_catalog_page', app_language='en') in body
+    assert app_href('public_hub_page', app_language='en') in body
+    assert app_href('public_integration_hub_page', app_language='en') in body
 
 
 def test_fastapi_binding_public_nex_format_page_renders_role_boundaries() -> None:
@@ -718,6 +730,36 @@ def test_fastapi_binding_public_nex_format_page_renders_role_boundaries() -> Non
     assert 'working_save_id' in body
     assert 'commit_id' in body
     assert '/app/mcp?app_language=en' in body
+    assert '/app/public?app_language=en' in body
+    assert '/app/integrations?app_language=en' in body
+
+
+def test_fastapi_binding_public_hub_page_renders_public_surface_cards() -> None:
+    client = _make_client()
+    response = client.get('/app/public?app_language=en')
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'Public surface hub' in body
+    assert '/app/community?app_language=en' in body
+    assert '/app/ecosystem?app_language=en' in body
+    assert '/app/public-shares?app_language=en' in body
+    assert '/app/templates/starter-circuits?app_language=en' in body
+    assert '/app/integrations?app_language=en' in body
+
+
+def test_fastapi_binding_public_integration_hub_page_renders_integration_cards() -> None:
+    client = _make_client()
+    response = client.get('/app/integrations?app_language=en')
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'Public integration hub' in body
+    assert '/app/sdk?app_language=en' in body
+    assert '/app/plugins?app_language=en' in body
+    assert '/app/mcp?app_language=en' in body
+    assert '/app/providers?app_language=en' in body
+    assert '/app/public-nex?app_language=en' in body
 
 
 def test_fastapi_binding_public_nex_format_route_round_trip() -> None:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Mapping
 
+from src.server.public_runtime_utils import escaped_app_route, resolve_app_route
 from src.ui.i18n import normalize_ui_language, ui_text
 
 
@@ -38,8 +39,10 @@ def render_public_community_hub_html(
         )
     )
     raw_catalog_href = escape(str(routes.get("self") or "/api/integrations/public-community/catalog"))
-    ecosystem_href = escape(str(routes.get("public_ecosystem_catalog_page") or routes.get("public_ecosystem_catalog") or "/api/integrations/public-ecosystem/catalog"))
-    share_summary_href = escape(str(routes.get("public_share_catalog_summary") or "/app/public-shares/summary") + (workspace_query if routes.get("public_share_catalog_summary") == "/app/public-shares/summary" else ""))
+    public_hub_href = escaped_app_route(routes, "public_hub_page", "/app/public", app_language=app_language, workspace_id=workspace_id)
+    integration_hub_href = escaped_app_route(routes, "public_integration_hub_page", "/app/integrations", app_language=app_language, workspace_id=workspace_id)
+    ecosystem_href = escaped_app_route(routes, "public_ecosystem_catalog_page", str(routes.get("public_ecosystem_catalog") or "/api/integrations/public-ecosystem/catalog"), app_language=app_language, workspace_id=workspace_id)
+    share_summary_href = escape(resolve_app_route(routes, "public_share_catalog_summary", "/app/public-shares/summary", app_language=app_language, workspace_id=workspace_id))
     workspace_href = ""
     if workspace_id:
         workspace_href = escape(f"/app/workspaces/{workspace_id}?app_language={app_language}")
@@ -130,6 +133,8 @@ def render_public_community_hub_html(
     <main role="main" aria-labelledby="public-community-title">
       <header aria-labelledby="public-community-title">
         <a class="top-link" href="{raw_catalog_href}">{escape(ui_text("server.community.open_raw_catalog", app_language=app_language, fallback_text="Open raw community catalog"))}</a>
+        <a class="top-link" href="{public_hub_href}">Open public hub</a>
+        <a class="top-link" href="{integration_hub_href}">Open integration hub</a>
         <a class="top-link" href="{ecosystem_href}">{escape(ui_text("server.community.open_ecosystem", app_language=app_language, fallback_text="Open ecosystem catalog"))}</a>
         <a class="top-link" href="{share_summary_href}">{escape(ui_text("server.community.open_share_summary", app_language=app_language, fallback_text="Open public share summary"))}</a>
         {workspace_link_html}

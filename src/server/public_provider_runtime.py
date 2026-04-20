@@ -3,6 +3,8 @@ from __future__ import annotations
 from html import escape
 from typing import Any, Mapping
 
+from src.server.public_runtime_utils import escaped_app_route
+
 
 def render_public_provider_catalog_html(
     payload: Mapping[str, Any],
@@ -14,11 +16,6 @@ def render_public_provider_catalog_html(
     providers = list(payload.get("providers") or ())
     title = escape(str(payload.get("title") or "Provider catalog"))
     subtitle = escape(str(payload.get("subtitle") or "Browse managed provider options that power the public/community Nexa surface."))
-    def norm(route_key: str, fallback: str) -> str:
-        route = str(routes.get(route_key) or fallback).strip() or fallback
-        if "app_language=" not in route:
-            route += ("&" if "?" in route else "?") + f"app_language={app_language}"
-        return escape(route)
     cards = ''.join(
         f"<article class=\"card\"><h2>{escape(str(dict(p).get('display_name') or dict(p).get('provider_key') or 'provider'))}</h2><p><strong>Family:</strong> {escape(str(dict(p).get('provider_family') or ''))}</p><p><strong>Scope:</strong> {escape(str(dict(p).get('recommended_scope') or 'workspace'))}</p><p><strong>Managed:</strong> {escape(str(dict(p).get('managed_supported')))}</p></article>"
         for p in providers
@@ -41,7 +38,7 @@ def render_public_provider_catalog_html(
     <main>
       <h1>{title}</h1>
       <p>{subtitle}</p>
-      <p class="links"><a href="{norm('ecosystem_catalog_page','/app/ecosystem')}">Ecosystem</a><a href="{norm('community_hub_page','/app/community')}">Community</a><a href="{norm('public_sdk_catalog_page','/app/sdk')}">SDK</a><a href="{norm('public_mcp_catalog_page','/app/mcp')}">MCP</a><a href="{escape(str(routes.get('self') or '/api/providers/catalog'))}">Raw provider catalog</a></p>
+      <p class="links"><a href="{escaped_app_route(routes, 'public_hub_page', '/app/public', app_language=app_language)}">Public hub</a><a href="{escaped_app_route(routes, 'public_integration_hub_page', '/app/integrations', app_language=app_language)}">Integration hub</a><a href="{escaped_app_route(routes, 'ecosystem_catalog_page', '/app/ecosystem', app_language=app_language)}">Ecosystem</a><a href="{escaped_app_route(routes, 'community_hub_page', '/app/community', app_language=app_language)}">Community</a><a href="{escaped_app_route(routes, 'public_sdk_catalog_page', '/app/sdk', app_language=app_language)}">SDK</a><a href="{escaped_app_route(routes, 'public_mcp_catalog_page', '/app/mcp', app_language=app_language)}">MCP</a><a href="{escape(str(routes.get('self') or '/api/providers/catalog'))}">Raw provider catalog</a></p>
       <section class="grid">{cards}</section>
     </main>
   </body>

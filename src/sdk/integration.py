@@ -3717,11 +3717,15 @@ def describe_public_mcp_export_surface(
             "self": "/api/integrations/public-mcp/manifest",
             "host_bridge": "/api/integrations/public-mcp/host-bridge",
             "public_nex_format": "/api/formats/public-nex",
+            "public_hub_page": "/app/public",
+            "public_integration_hub_page": "/app/integrations",
         },
         host_bridge_routes={
             "self": "/api/integrations/public-mcp/host-bridge",
             "manifest": "/api/integrations/public-mcp/manifest",
             "public_nex_format": "/api/formats/public-nex",
+            "public_hub_page": "/app/public",
+            "public_integration_hub_page": "/app/integrations",
         },
         public_sdk_entrypoints={
             "compatibility_surface": "build_public_mcp_compatibility_surface",
