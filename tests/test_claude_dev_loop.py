@@ -41,7 +41,7 @@ def test_validate_rel_path_rejects_parent():
 
 def test_validate_rel_path_rejects_protected_prefix():
     try:
-        module.validate_rel_path("src/contracts/spec_version_registry.py")
+        module.validate_rel_path("src/contracts/runtime_contract_versions.py")
         assert False, "Expected ValueError"
     except ValueError:
         assert True

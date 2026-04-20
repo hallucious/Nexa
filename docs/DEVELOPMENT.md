@@ -158,8 +158,8 @@ The legacy prompt contract package has been fully removed. Prompt execution is n
 
 # Spec-Version Synchronization
 
-Active contract-bearing specs are tracked through `src/contracts/spec_version_registry.py`.
-When changing an active contract spec, update its `Version: X.Y.Z` header and keep the registry in sync.
+Runtime-facing version constants live in `src/contracts/runtime_contract_versions.py`.
+When changing a runtime-bound contract spec, update its `Version: X.Y.Z` header and keep the corresponding runtime constants in sync where applicable.
 
 ---
 

@@ -198,7 +198,7 @@ If a change affects system architecture, update documentation.
 11. Spec-Version Sync
 ────────────────
 
-Spec version changes require updating src/contracts/spec_version_registry.py.
+Spec version changes for runtime-bound contracts require updating `src/contracts/runtime_contract_versions.py`.
 
 Contract tests must remain valid.
 

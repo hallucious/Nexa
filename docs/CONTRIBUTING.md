@@ -107,8 +107,8 @@ If issue or pull request templates are available in the repository, please use t
 ## 4. Terminology
 
 - **Active spec**: a spec enforced as a contract by the test suite
-- **Source of Truth**: `src/contracts/spec_version_registry.py`
-- **Spec-Version Sync**: a spec document `Version:` line must match `src/contracts/spec_version_registry.py`
+- **Source of Truth**: canonical spec documents plus `src/contracts/runtime_contract_versions.py` for runtime-bound version constants
+- **Spec-Version Sync**: when a runtime-bound spec version changes, update the matching constant in `src/contracts/runtime_contract_versions.py` where applicable
 - **Savefile**: a runnable `.nex` artifact that may include circuit, state, resources, and UI-related data
 
 ---
@@ -117,11 +117,9 @@ If issue or pull request templates are available in the repository, please use t
 
 **Step 1** — Update the spec document and bump its `Version:` line.
 
-**Step 2** — Update `src/contracts/spec_version_registry.py` to match.
+**Step 2** — If the spec is runtime-bound, update the matching constant in `src/contracts/runtime_contract_versions.py`.
 
-**Step 3** — If adding, removing, or changing an active contract spec, update `src/contracts/spec_version_registry.py`.
-
-**Step 4** — Run the relevant contract tests for the affected surface and the general suite before merging.
+**Step 3** — Run the relevant contract tests for the affected surface and the general suite before merging.
 
 ---
 

@@ -61,7 +61,7 @@
 
 # Spec Documents (`docs/specs/`)
 
-Active contract/version registry: `src/contracts/spec_version_registry.py`
+Active runtime-facing version constants live in `src/contracts/runtime_contract_versions.py`.
 
 | Directory | Contents |
 |---|---|
