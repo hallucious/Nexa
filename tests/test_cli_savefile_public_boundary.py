@@ -536,3 +536,37 @@ def test_savefile_checkout_accepts_public_link_share_commit_snapshot(tmp_path, m
     assert payload["storage_role"] == "working_save"
     raw = json.loads(checkout_path.read_text(encoding="utf-8"))
     assert raw["meta"]["storage_role"] == "working_save"
+
+
+def test_is_savefile_contract_accepts_every_allowed_storage_role(tmp_path):
+    """_is_savefile_contract must accept every role declared in
+    ALLOWED_STORAGE_ROLES, not a hand-rolled literal set. This pins the
+    public-standardization boundary so adding a new role to
+    src.contracts.nex_contract does not require a parallel CLI edit."""
+    from src.contracts.nex_contract import ALLOWED_STORAGE_ROLES
+
+    for role in ALLOWED_STORAGE_ROLES:
+        path = tmp_path / f"role_{role}.nex"
+        payload = {
+            "meta": {"storage_role": role, "format_version": "1.0.0"},
+            "circuit": {"nodes": []},
+            "resources": {},
+            "state": {},
+        }
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        assert is_savefile_contract(str(path)) is True, f"role={role} must be accepted"
+
+
+def test_is_savefile_contract_rejects_unknown_storage_role(tmp_path):
+    """Unknown roles must not be routed through the public .nex surface."""
+    path = tmp_path / "unknown_role.nex"
+    payload = {
+        "meta": {"storage_role": "not_a_real_role", "format_version": "1.0.0"},
+        "circuit": {"nodes": []},
+        "resources": {},
+        "state": {},
+    }
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    # Without the legacy savefile 'ui' section, an unknown role must NOT
+    # be accepted as a savefile contract.
+    assert is_savefile_contract(str(path)) is False

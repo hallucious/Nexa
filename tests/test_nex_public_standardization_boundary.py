@@ -107,3 +107,81 @@ def test_describe_public_nex_artifact_returns_role_aware_identity() -> None:
     assert descriptor.forbidden_sections == ("runtime", "ui", "designer")
     assert descriptor.export_ready is True
     assert descriptor.source_working_save_id == "ws-public-1"
+
+
+def test_export_public_nex_artifact_rejects_unsupported_storage_role_on_dict_input() -> None:
+    payload = export_public_nex_artifact(_working_save())
+    payload["meta"]["storage_role"] = "not_a_real_role"
+
+    with pytest.raises(ValueError, match="explicit meta.storage_role"):
+        export_public_nex_artifact(payload)
+
+
+def test_export_public_nex_artifact_error_surfaces_blocking_finding_detail() -> None:
+    # Declaring commit_snapshot role but leaving runtime/ui in place is a
+    # non-canonical surface; the coerce step must surface the underlying
+    # blocking finding message (e.g. forbidden section) so external
+    # standardization consumers can identify the cause programmatically.
+    payload = export_public_nex_artifact(_working_save())
+    payload["meta"]["storage_role"] = "commit_snapshot"
+
+    with pytest.raises(ValueError) as exc:
+        export_public_nex_artifact(payload)
+
+    message = str(exc.value)
+    assert "not loadable for export" in message
+    # The blocking detail should be appended after the canonical prefix.
+    assert ":" in message
+
+
+def test_validate_working_save_does_not_silently_overwrite_conflicting_role() -> None:
+    # Previously, validate_working_save dict-path silently coerced any
+    # storage_role into working_save. That hid role confusion. The public
+    # standardization boundary now requires role conflicts on a dict input
+    # to surface as a WORKING_SAVE_ROLE_MISMATCH finding, symmetric with
+    # validate_commit_snapshot.
+    from src.storage.nex_api import validate_working_save
+
+    payload = {
+        "meta": {
+            "format_version": "1.0.0",
+            "storage_role": "commit_snapshot",
+            "working_save_id": "ws-1",
+            "name": "role_conflict",
+        },
+        "circuit": {"entry": "node1", "nodes": [], "edges": [], "outputs": []},
+        "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+        "ui": {"layout": {}, "metadata": {}},
+    }
+
+    report = validate_working_save(payload)
+
+    codes = {f.code for f in report.findings}
+    assert "WORKING_SAVE_ROLE_MISMATCH" in codes
+    assert report.result == "failed"
+
+
+def test_validate_working_save_defaults_missing_role_to_working_save() -> None:
+    # Role absent on dict input must continue to default to working_save
+    # (legacy-compat parity). Only an explicit conflicting role now fails.
+    from src.storage.nex_api import validate_working_save
+
+    payload = {
+        "meta": {
+            "format_version": "1.0.0",
+            "working_save_id": "ws-1",
+            "name": "missing_role",
+        },
+        "circuit": {"entry": "node1", "nodes": [{"id": "node1", "type": "plugin"}], "edges": [], "outputs": [{"name": "r", "source": "state.working.r"}]},
+        "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+        "ui": {"layout": {}, "metadata": {}},
+    }
+
+    report = validate_working_save(payload)
+
+    codes = {f.code for f in report.findings}
+    assert "WORKING_SAVE_ROLE_MISMATCH" not in codes

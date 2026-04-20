@@ -136,6 +136,13 @@ def get_public_nex_format_boundary() -> PublicNexFormatBoundary:
     return _PUBLIC_NEX_FORMAT_BOUNDARY
 
 
+def _first_blocking_finding_message(loaded: LoadedNexArtifact) -> str | None:
+    for finding in loaded.findings or []:
+        if getattr(finding, "blocking", False):
+            return getattr(finding, "message", None)
+    return None
+
+
 def _coerce_public_nex_model(
     model_or_data: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any],
 ) -> WorkingSaveModel | CommitSnapshotModel:
@@ -144,7 +151,9 @@ def _coerce_public_nex_model(
 
     if isinstance(model_or_data, LoadedNexArtifact):
         if model_or_data.parsed_model is None:
-            raise ValueError("Cannot export rejected public .nex artifact")
+            blocking = _first_blocking_finding_message(model_or_data)
+            suffix = f": {blocking}" if blocking else ""
+            raise ValueError(f"Cannot export rejected public .nex artifact{suffix}")
         return model_or_data.parsed_model
 
     if isinstance(model_or_data, dict):
@@ -154,7 +163,9 @@ def _coerce_public_nex_model(
             raise ValueError("public .nex export requires explicit meta.storage_role")
         loaded = load_nex(model_or_data, allow_legacy_fallback=False)
         if loaded.parsed_model is None:
-            raise ValueError("public .nex artifact is not loadable for export")
+            blocking = _first_blocking_finding_message(loaded)
+            suffix = f": {blocking}" if blocking else ""
+            raise ValueError(f"public .nex artifact is not loadable for export{suffix}")
         return loaded.parsed_model
 
     raise TypeError(

@@ -483,7 +483,21 @@ def validate_working_save(model_or_data: WorkingSaveModel | dict[str, Any], *, s
             data["designer"] = model_or_data.designer.data
     else:
         data = dict(model_or_data)
-        data.setdefault("meta", {})["storage_role"] = WORKING_SAVE_ROLE
+        meta = data.get("meta") if isinstance(data.get("meta"), dict) else None
+        if meta is None:
+            # No meta present at all: default to working_save so the
+            # downstream shared-backbone/role schema checks can still fire
+            # deterministically (kept for legacy-compat input parity).
+            data["meta"] = {"storage_role": WORKING_SAVE_ROLE}
+        elif "storage_role" not in meta:
+            # Role absent: default to working_save to preserve the existing
+            # permissive working_save dict input contract.
+            meta["storage_role"] = WORKING_SAVE_ROLE
+        # If the caller explicitly declared a different role, do NOT overwrite.
+        # Let _validate_working_save_schema emit WORKING_SAVE_ROLE_MISMATCH so
+        # the CLI / public validator surface treats role conflicts as findings
+        # rather than silently re-coercing the payload — this keeps
+        # validate_working_save symmetric with validate_commit_snapshot.
 
     findings = []
     findings.extend(_check_shared_backbone(data))

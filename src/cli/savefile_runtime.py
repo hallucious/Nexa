@@ -10,6 +10,7 @@ from src.circuit.runtime_adapter import (
     load_engine_from_legacy_nex_path,
     prepare_engine_from_legacy_nex_bundle,
 )
+from src.contracts.nex_contract import ALLOWED_STORAGE_ROLES
 from src.contracts.savefile_executor_aligned import SavefileExecutor
 from src.contracts.savefile_loader import load_savefile_from_path
 from src.storage.nex_api import load_nex
@@ -37,7 +38,7 @@ def is_savefile_contract(circuit_path: str) -> bool:
         return True
 
     meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
-    if meta.get("storage_role") in {"working_save", "commit_snapshot"}:
+    if meta.get("storage_role") in ALLOWED_STORAGE_ROLES:
         return True
 
     required = {"meta", "circuit", "resources", "state", "ui"}
@@ -73,7 +74,7 @@ def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
         else:
             meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
             storage_role = meta.get("storage_role")
-            if storage_role in {"working_save", "commit_snapshot"}:
+            if storage_role in ALLOWED_STORAGE_ROLES:
                 loaded = load_nex(circuit_path)
 
         if loaded is not None:

@@ -9,6 +9,7 @@ import time
 from dataclasses import asdict, is_dataclass, replace
 from pathlib import Path
 
+from src.contracts.nex_contract import ALLOWED_STORAGE_ROLES
 from src.storage.lifecycle_api import (
     create_serialized_circuit_execution_payload,
     create_serialized_execution_artifact_components,
@@ -736,7 +737,7 @@ def _read_json_object(path: Path) -> dict:
 
 def _is_public_nex_payload(data: dict) -> bool:
     meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
-    return meta.get("storage_role") in {"working_save", "commit_snapshot"}
+    return meta.get("storage_role") in ALLOWED_STORAGE_ROLES
 
 
 def _is_public_nex_link_share_payload(data: dict) -> bool:
@@ -1596,7 +1597,7 @@ def _is_savefile_contract(circuit_path: str) -> bool:
         return True
 
     meta = data.get("meta", {}) if isinstance(data.get("meta"), dict) else {}
-    if meta.get("storage_role") in {"working_save", "commit_snapshot"}:
+    if meta.get("storage_role") in ALLOWED_STORAGE_ROLES:
         return True
 
     required = {"meta", "circuit", "resources", "state", "ui"}
