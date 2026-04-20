@@ -18,6 +18,7 @@ from src.server.result_history_runtime import render_workspace_result_history_ht
 from src.server.starter_template_runtime import render_starter_template_catalog_html, render_starter_template_detail_html
 from src.server.public_community_runtime import render_public_community_hub_html
 from src.server.public_plugin_runtime import render_public_plugin_catalog_html
+from src.server.public_ecosystem_runtime import render_public_ecosystem_catalog_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
 from src.server.public_share_runtime import (
@@ -2397,8 +2398,49 @@ class FastApiRouteBindings:
             payload["app_language"] = app_language
             payload.setdefault("routes", {})["app_catalog_page"] = f"/app/plugins?app_language={app_language}"
             payload.setdefault("routes", {})["community_hub_page"] = f"/app/community?app_language={app_language}"
+            payload.setdefault("routes", {})["ecosystem_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
             return HTMLResponse(
                 content=render_public_plugin_catalog_html(payload, app_language=app_language),
+                status_code=200,
+            )
+
+        @router.get("/app/ecosystem")
+        async def get_public_ecosystem_catalog_page(request: Request) -> Response:
+            app_language = str(request.query_params.get("app_language") or "en")
+            inbound = FrameworkInboundRequest(
+                method="GET",
+                path="/api/integrations/public-ecosystem/catalog",
+                query_params=dict(request.query_params),
+                headers=dict(request.headers),
+                json_body=None,
+                session_claims=self._resolve_session_claims(request),
+            )
+            outbound = FrameworkRouteBindings.handle_public_ecosystem_catalog(request=inbound)
+            payload = json.loads(outbound.body_text)
+            payload["app_language"] = app_language
+            routes = payload.setdefault("routes", {})
+            routes["app_catalog_page"] = f"/app/ecosystem?app_language={app_language}"
+            routes["community_hub_page"] = f"/app/community?app_language={app_language}"
+            routes.setdefault("public_plugin_catalog_page", f"/app/plugins?app_language={app_language}")
+            surface_page_routes = {
+                "public_sdk_catalog": f"/api/integrations/public-sdk/catalog?app_language={app_language}",
+                "public_nex_format": f"/api/formats/public-nex?app_language={app_language}",
+                "public_plugin_catalog": f"/app/plugins?app_language={app_language}",
+                "public_community_catalog": f"/app/community?app_language={app_language}",
+                "public_mcp_manifest": f"/api/integrations/public-mcp/manifest?app_language={app_language}",
+                "public_mcp_host_bridge": f"/api/integrations/public-mcp/host-bridge?app_language={app_language}",
+                "public_share_catalog": f"/app/public-shares?app_language={app_language}",
+                "public_share_catalog_summary": f"/app/public-shares/summary?app_language={app_language}",
+                "starter_template_catalog": f"/app/templates/starter-circuits?app_language={app_language}",
+                "provider_catalog": f"/api/providers/catalog?app_language={app_language}",
+            }
+            for surface_name, surface in list((payload.get("surfaces") or {}).items()):
+                surface_map = dict(surface or {})
+                surface_map["app_route"] = surface_page_routes.get(surface_name, surface_map.get("route") or routes["app_catalog_page"])
+                surface.clear()
+                surface.update(surface_map)
+            return HTMLResponse(
+                content=render_public_ecosystem_catalog_html(payload, app_language=app_language),
                 status_code=200,
             )
 
@@ -2428,6 +2470,7 @@ class FastApiRouteBindings:
             payload["routes"]["starter_template_catalog_page"] = f"/app/templates/starter-circuits?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
             payload["routes"]["public_share_catalog_page"] = f"/app/public-shares?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
             payload["routes"]["public_share_catalog_summary"] = f"/app/public-shares/summary?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
+            payload["routes"]["public_ecosystem_catalog_page"] = f"/app/ecosystem?app_language={app_language}" + (f"&workspace_id={workspace_id}" if workspace_id else "")
             for asset in list(payload.get("assets") or []):
                 asset_map = dict(asset or {})
                 if asset_map.get("asset_family") == "starter-templates":

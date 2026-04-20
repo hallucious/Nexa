@@ -618,6 +618,7 @@ def test_fastapi_binding_public_community_hub_page_renders_cross_linked_assets()
     assert '/app/templates/starter-circuits?app_language=en' in body
     assert '/app/public-shares?app_language=en' in body
     assert '/app/plugins?app_language=en' in body
+    assert '/app/ecosystem?app_language=en' in body
 
 def test_fastapi_binding_public_plugin_catalog_page_renders_plugin_cards() -> None:
     client = _make_client()
@@ -629,6 +630,18 @@ def test_fastapi_binding_public_plugin_catalog_page_renders_plugin_cards() -> No
     assert 'nexa.file_reader' in body
     assert '/api/integrations/public-plugins/catalog' in body
     assert '/app/community?app_language=en' in body
+
+def test_fastapi_binding_public_ecosystem_catalog_page_renders_surface_cards() -> None:
+    client = _make_client()
+    response = client.get('/app/ecosystem?app_language=en')
+
+    assert response.status_code == 200
+    body = response.text
+    assert 'Public ecosystem catalog' in body
+    assert 'public-community-catalog' in body
+    assert '/app/community?app_language=en' in body
+    assert '/app/plugins?app_language=en' in body
+    assert '/app/public-shares?app_language=en' in body
 
 def test_fastapi_binding_public_ecosystem_catalog_route_round_trip() -> None:
     client = _make_client()

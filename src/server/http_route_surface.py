@@ -2174,6 +2174,9 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
         "supported_transport_kinds": list(summary.supported_transport_kinds),
         "routes": {
             "self": "/api/integrations/public-ecosystem/catalog",
+            "app_catalog_page": "/app/ecosystem",
+            "community_hub_page": "/app/community",
+            "public_plugin_catalog_page": "/app/plugins",
             **dict(summary.discovery_routes),
         },
     }

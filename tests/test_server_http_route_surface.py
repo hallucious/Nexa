@@ -1581,6 +1581,23 @@ def test_public_plugin_catalog_route_returns_public_plugin_surface() -> None:
     assert response.body["public_sdk_entrypoints"]["plugin_registry_loader"] == "load_plugin_registry"
     assert len(response.body["plugins"]) > 0
 
+def test_public_ecosystem_catalog_route_returns_app_catalog_cross_links() -> None:
+    response = RunHttpRouteSurface.handle_public_ecosystem_catalog(
+        http_request=HttpRouteRequest(method="GET", path="/api/integrations/public-ecosystem/catalog"),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["catalog"]["surface_family"] == "public-ecosystem-catalog"
+    assert response.body["identity_policy"]["canonical_key"] == "catalog.surface_family"
+    assert response.body["namespace_policy"]["family"] == "public-ecosystem-catalog"
+    assert response.body["routes"]["self"] == "/api/integrations/public-ecosystem/catalog"
+    assert response.body["routes"]["app_catalog_page"] == "/app/ecosystem"
+    assert response.body["routes"]["community_hub_page"] == "/app/community"
+    assert response.body["routes"]["public_plugin_catalog_page"] == "/app/plugins"
+    assert response.body["surfaces"]["public_plugin_catalog"]["route"] == "/api/integrations/public-plugins/catalog"
+    assert response.body["surfaces"]["public_community_catalog"]["route"] == "/api/integrations/public-community/catalog"
+
 def test_public_community_catalog_route_returns_community_asset_surface() -> None:
     response = RunHttpRouteSurface.handle_public_community_catalog(
         http_request=HttpRouteRequest(method="GET", path="/api/integrations/public-community/catalog"),

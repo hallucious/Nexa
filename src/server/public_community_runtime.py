@@ -38,7 +38,7 @@ def render_public_community_hub_html(
         )
     )
     raw_catalog_href = escape(str(routes.get("self") or "/api/integrations/public-community/catalog"))
-    ecosystem_href = escape(str(routes.get("public_ecosystem_catalog") or "/api/integrations/public-ecosystem/catalog"))
+    ecosystem_href = escape(str(routes.get("public_ecosystem_catalog_page") or routes.get("public_ecosystem_catalog") or "/api/integrations/public-ecosystem/catalog"))
     share_summary_href = escape(str(routes.get("public_share_catalog_summary") or "/app/public-shares/summary") + (workspace_query if routes.get("public_share_catalog_summary") == "/app/public-shares/summary" else ""))
     workspace_href = ""
     if workspace_id:
