@@ -25,6 +25,7 @@ from src.storage.nex_api import (
     describe_public_nex_artifact,
     export_public_nex_artifact,
     get_public_nex_format_boundary,
+    load_nex,
 )
 
 _ALLOWED_SHARE_LIFECYCLE_STATES: tuple[ShareLifecycleState, ...] = ("active", "expired", "revoked")
@@ -741,6 +742,16 @@ def extract_public_nex_link_share_artifact(source: str | Path | dict[str, Any]) 
     return dict(artifact)
 
 
+def load_public_nex_link_share_artifact_context(source: str | Path | dict[str, Any]):
+    payload = load_public_nex_link_share(source)
+    loaded = load_nex(payload["artifact"])
+    if loaded.parsed_model is None:
+        blocking_messages = [finding.message for finding in loaded.findings if getattr(finding, "blocking", False)]
+        detail = blocking_messages[0] if blocking_messages else f"public link share artifact could not be loaded ({loaded.load_status})"
+        raise ValueError(detail)
+    return payload, loaded
+
+
 def _stable_share_id(artifact_payload: dict[str, Any]) -> str:
     canonical = json.dumps(artifact_payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return f"share_{sha256(canonical.encode('utf-8')).hexdigest()[:16]}"
@@ -1336,6 +1347,7 @@ __all__ = [
     "get_public_nex_share_boundary",
     "is_public_nex_link_share_payload",
     "extract_public_nex_link_share_artifact",
+    "load_public_nex_link_share_artifact_context",
     "export_public_nex_link_share",
     "load_public_nex_link_share",
     "describe_public_nex_link_share",

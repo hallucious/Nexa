@@ -758,15 +758,9 @@ def _load_public_nex_artifact(input_path: Path):
 
 
 def _load_public_nex_link_share(input_path: Path) -> dict:
-    from src.storage.nex_api import load_nex
-    from src.storage.share_api import load_public_nex_link_share
+    from src.storage.share_api import load_public_nex_link_share_artifact_context
 
-    share_payload = load_public_nex_link_share(input_path)
-    loaded = load_nex(share_payload["artifact"])
-    if loaded.parsed_model is None:
-        blocking_messages = [finding.message for finding in loaded.findings if getattr(finding, "blocking", False)]
-        detail = blocking_messages[0] if blocking_messages else f"public link share artifact could not be loaded ({loaded.load_status})"
-        raise ValueError(detail)
+    share_payload, loaded = load_public_nex_link_share_artifact_context(input_path)
     return {"share_payload": share_payload, "loaded": loaded}
 
 

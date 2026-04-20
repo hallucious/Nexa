@@ -19,6 +19,7 @@ from src.storage.share_api import (
     get_public_nex_share_boundary,
     list_public_nex_link_share_audit_history,
     load_public_nex_link_share,
+    load_public_nex_link_share_artifact_context,
     revoke_public_nex_link_share,
     revoke_public_nex_link_shares_for_issuer,
     save_public_nex_link_share_file,
@@ -171,6 +172,18 @@ def test_load_public_nex_link_share_round_trips_commit_snapshot() -> None:
     assert descriptor.canonical_ref == "commit-share-1"
     assert descriptor.lifecycle_state == "active"
     assert descriptor.source_working_save_id == "ws-share-1"
+
+
+def test_load_public_nex_link_share_artifact_context_returns_loaded_artifact() -> None:
+    snapshot = create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-share-ctx")
+    payload = export_public_nex_link_share(snapshot, title="Published snapshot")
+
+    share_payload, loaded = load_public_nex_link_share_artifact_context(payload)
+
+    assert share_payload["share"]["share_id"] == payload["share"]["share_id"]
+    assert loaded.storage_role == "commit_snapshot"
+    assert loaded.parsed_model is not None
+    assert loaded.parsed_model.meta.commit_id == "commit-share-ctx"
 
 
 def test_load_public_nex_link_share_rejects_invalid_transport() -> None:

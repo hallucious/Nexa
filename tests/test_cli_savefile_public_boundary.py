@@ -601,6 +601,34 @@ def test_savefile_checkout_uses_canonical_public_checkout_helper(tmp_path, monke
     assert payload["working_save_id"] == "canonical-ws"
 
 
+def test_savefile_share_info_uses_canonical_public_share_artifact_context_helper(tmp_path, monkeypatch, capsys):
+    artifact_path = tmp_path / "canonical_share_info_source.nex"
+    share_path = tmp_path / "canonical_share_info_payload.json"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(name="canonical_share_info"), commit_id="commit-canonical-share-info")
+    save_nex_artifact_file(snapshot, artifact_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path)])
+    assert main() == 0
+    capsys.readouterr()
+
+    import src.storage.share_api as share_api
+
+    original = share_api.load_public_nex_link_share_artifact_context
+    calls = {"count": 0}
+
+    def _wrapped(source, **kwargs):
+        calls["count"] += 1
+        return original(source, **kwargs)
+
+    monkeypatch.setattr(share_api, "load_public_nex_link_share_artifact_context", _wrapped)
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "info", str(share_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert calls["count"] == 1
+
+
 def test_savefile_share_import_uses_canonical_public_import_helper(tmp_path, monkeypatch, capsys):
     artifact_path = tmp_path / "canonical_import_source.nex"
     share_path = tmp_path / "canonical_import_share.json"
@@ -630,6 +658,33 @@ def test_savefile_share_import_uses_canonical_public_import_helper(tmp_path, mon
     assert calls["count"] == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["storage_role"] == "commit_snapshot"
+
+
+def test_savefile_run_uses_canonical_public_share_artifact_context_helper(tmp_path, monkeypatch):
+    artifact_path = tmp_path / "canonical_run_context_source.nex"
+    share_path = tmp_path / "canonical_run_context_share.json"
+    snapshot = create_commit_snapshot_from_working_save(_working_save(name="canonical_run_context"), commit_id="commit-canonical-run-context")
+    save_nex_artifact_file(snapshot, artifact_path)
+
+    monkeypatch.setattr("sys.argv", ["nexa", "savefile", "share", "export", str(artifact_path), str(share_path)])
+    assert main() == 0
+
+    import src.cli.savefile_runtime as savefile_runtime
+
+    original = savefile_runtime.load_public_nex_link_share_artifact_context
+    calls = {"count": 0}
+
+    def _wrapped(source, **kwargs):
+        calls["count"] += 1
+        return original(source, **kwargs)
+
+    monkeypatch.setattr(savefile_runtime, "load_public_nex_link_share_artifact_context", _wrapped)
+    monkeypatch.setattr("sys.argv", ["nexa", "run", str(share_path)])
+
+    exit_code = main()
+
+    assert exit_code == 0
+    assert calls["count"] == 1
 
 
 def test_savefile_run_uses_canonical_public_runtime_target_helper(tmp_path, monkeypatch):
