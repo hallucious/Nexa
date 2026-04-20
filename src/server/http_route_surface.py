@@ -44,6 +44,7 @@ from src.server.starter_template_models import (
 )
 from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_sdk_models import ProductPublicSdkCatalogResponse
+from src.server.public_ecosystem_models import ProductPublicEcosystemCatalogResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.public_share_models import (
     ProductPublicShareCheckoutAcceptedResponse,
@@ -1942,6 +1943,22 @@ def _public_sdk_catalog_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _public_ecosystem_catalog_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "catalog.surface_family",
+        "canonical_value": "public-ecosystem-catalog",
+        "lookup_mode": "public_ecosystem_catalog",
+    }
+
+
+def _public_ecosystem_catalog_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-ecosystem-catalog",
+        "canonical_scope": "ecosystem-public-surface",
+        "write_policy": "read-only",
+    }
+
+
 def _public_sdk_catalog_body() -> dict[str, Any]:
     from src.sdk.integration import (
         build_public_mcp_resources,
@@ -1972,6 +1989,69 @@ def _public_sdk_catalog_body() -> dict[str, Any]:
     }
 
 
+def _public_ecosystem_catalog_body() -> dict[str, Any]:
+    from src.sdk.integration import describe_public_ecosystem_export_surface
+
+    summary = describe_public_ecosystem_export_surface()
+    surfaces = {
+        "public_sdk_catalog": {
+            "surface_family": "public-sdk-catalog",
+            "route_family": "public-sdk-catalog-read",
+            "route": "/api/integrations/public-sdk/catalog",
+        },
+        "public_nex_format": {
+            "surface_family": "public-nex-format",
+            "route_family": "public-nex-format-read",
+            "route": "/api/formats/public-nex",
+        },
+        "public_mcp_manifest": {
+            "surface_family": "public-mcp-manifest",
+            "route_family": "public-mcp-manifest-read",
+            "route": "/api/integrations/public-mcp/manifest",
+        },
+        "public_mcp_host_bridge": {
+            "surface_family": "public-mcp-host-bridge",
+            "route_family": "public-mcp-host-bridge-read",
+            "route": "/api/integrations/public-mcp/host-bridge",
+        },
+        "public_share_catalog": {
+            "surface_family": "public-share-catalog",
+            "route_family": "public-share-catalog",
+            "route": "/api/public-shares",
+        },
+        "public_share_catalog_summary": {
+            "surface_family": "public-share-catalog-summary",
+            "route_family": "public-share-catalog-summary",
+            "route": "/api/public-shares/summary",
+        },
+        "starter_template_catalog": {
+            "surface_family": "starter-template-catalog",
+            "route_family": "starter-template-catalog-read",
+            "route": "/api/templates/starter-circuits",
+        },
+        "provider_catalog": {
+            "surface_family": "provider-catalog",
+            "route_family": "provider-catalog-read",
+            "route": "/api/providers/catalog",
+        },
+    }
+    return {
+        "catalog": {
+            "surface_family": "public-ecosystem-catalog",
+            **summary.to_dict(),
+        },
+        "surfaces": surfaces,
+        "public_sdk_entrypoints": dict(summary.public_sdk_entrypoints),
+        "supported_contract_markers": list(summary.supported_contract_markers),
+        "supported_runtime_markers": list(summary.supported_runtime_markers),
+        "supported_transport_kinds": list(summary.supported_transport_kinds),
+        "routes": {
+            "self": "/api/integrations/public-ecosystem/catalog",
+            **dict(summary.discovery_routes),
+        },
+    }
+
+
 class RunHttpRouteSurface:
     _ROUTE_DEFINITIONS: tuple[tuple[str, str, str], ...] = (
         ("get_recent_activity", "GET", "/api/users/me/activity"),
@@ -1994,6 +2074,7 @@ class RunHttpRouteSurface:
         ("apply_starter_circuit_template", "POST", "/api/workspaces/{workspace_id}/starter-templates/{template_id}/apply"),
         ("get_public_nex_format", "GET", "/api/formats/public-nex"),
         ("get_public_sdk_catalog", "GET", "/api/integrations/public-sdk/catalog"),
+        ("get_public_ecosystem_catalog", "GET", "/api/integrations/public-ecosystem/catalog"),
         ("get_public_mcp_manifest", "GET", "/api/integrations/public-mcp/manifest"),
         ("get_public_mcp_host_bridge", "GET", "/api/integrations/public-mcp/host-bridge"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
@@ -5967,6 +6048,32 @@ class RunHttpRouteSurface:
             resources=tuple(payload["resources"]),
             identity_policy=_public_sdk_catalog_identity_policy_body(),
             namespace_policy=_public_sdk_catalog_namespace_policy_body(),
+            routes=payload["routes"],
+            public_sdk_entrypoints=payload["public_sdk_entrypoints"],
+            supported_contract_markers=tuple(payload["supported_contract_markers"]),
+            supported_runtime_markers=tuple(payload["supported_runtime_markers"]),
+            supported_transport_kinds=tuple(payload["supported_transport_kinds"]),
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_public_ecosystem_catalog(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public ecosystem catalog route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/integrations/public-ecosystem/catalog":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        payload = _public_ecosystem_catalog_body()
+        response = ProductPublicEcosystemCatalogResponse(
+            status="ready",
+            catalog=payload["catalog"],
+            surfaces=payload["surfaces"],
+            identity_policy=_public_ecosystem_catalog_identity_policy_body(),
+            namespace_policy=_public_ecosystem_catalog_namespace_policy_body(),
             routes=payload["routes"],
             public_sdk_entrypoints=payload["public_sdk_entrypoints"],
             supported_contract_markers=tuple(payload["supported_contract_markers"]),

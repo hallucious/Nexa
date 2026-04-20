@@ -1722,6 +1722,7 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["get_public_share_compare_summary"].required_top_level_keys == ("share_id", "compare", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_nex_format"].required_top_level_keys == ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_sdk_catalog"].required_top_level_keys == ("status", "catalog", "tools", "resources", "public_sdk_entrypoints", "supported_contract_markers", "supported_runtime_markers", "supported_transport_kinds", "identity_policy", "namespace_policy", "routes")
+    assert responses["get_public_ecosystem_catalog"].required_top_level_keys == ("status", "catalog", "surfaces", "public_sdk_entrypoints", "supported_contract_markers", "supported_runtime_markers", "supported_transport_kinds", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_mcp_manifest"].required_top_level_keys == (
         "status",
         "manifest",
@@ -1817,6 +1818,28 @@ def test_public_sdk_catalog_resource_is_exported_with_expected_contracts() -> No
         "routes",
     )
     assert response.result_shape_profile.profile_kind == "public-sdk-catalog"
+
+
+def test_public_ecosystem_catalog_resource_is_exported_with_expected_contracts() -> None:
+    adapter = build_public_mcp_adapter_scaffold(base_url="https://api.nexa.test")
+
+    contract = adapter.export_resource_contract("get_public_ecosystem_catalog")
+    response = adapter.export_resource_response_contract("get_public_ecosystem_catalog")
+
+    assert contract.route_family == "public-ecosystem-catalog-read"
+    assert response.required_top_level_keys == (
+        "status",
+        "catalog",
+        "surfaces",
+        "public_sdk_entrypoints",
+        "supported_contract_markers",
+        "supported_runtime_markers",
+        "supported_transport_kinds",
+        "identity_policy",
+        "namespace_policy",
+        "routes",
+    )
+    assert response.result_shape_profile.profile_kind == "public-ecosystem-catalog"
 
 
 def test_public_mcp_response_contracts_match_route_surface_metadata_shape() -> None:

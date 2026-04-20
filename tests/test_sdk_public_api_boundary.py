@@ -265,6 +265,7 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert any(resource.route_name == "get_workspace_starter_circuit_template" for resource in manifest.resources)
     assert any(resource.route_name == "get_public_nex_format" for resource in manifest.resources)
     assert any(resource.route_name == "get_public_sdk_catalog" for resource in manifest.resources)
+    assert any(resource.route_name == "get_public_ecosystem_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in manifest.resources)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
@@ -327,6 +328,19 @@ def test_sdk_root_exposes_public_sdk_export_surface_summary() -> None:
     assert summary.public_sdk_entrypoints["tool_catalog"] == "build_public_mcp_tools"
     assert summary.public_sdk_entrypoints["mcp_export_summary"] == "describe_public_mcp_export_surface"
     assert "public-sdk-catalog-read" in summary.public_route_families
+
+
+def test_sdk_root_exposes_public_ecosystem_export_surface_summary() -> None:
+    summary = sdk.describe_public_ecosystem_export_surface()
+
+    assert isinstance(summary, sdk.PublicEcosystemExportSurfaceSummary)
+    assert summary.discovery_routes["self"] == "/api/integrations/public-ecosystem/catalog"
+    assert summary.discovery_routes["public_sdk_catalog"] == "/api/integrations/public-sdk/catalog"
+    assert summary.public_sdk_entrypoints["ecosystem_catalog_summary"] == "describe_public_ecosystem_export_surface"
+    assert summary.public_sdk_entrypoints["public_share_boundary"] == "get_public_nex_share_boundary"
+    assert "public-ecosystem-catalog" in summary.surface_families
+    assert summary.starter_template_count > 0
+    assert summary.share_operation_count > 0
     assert summary.tool_count > 0
     assert summary.resource_count > 0
     assert summary.argument_schema_count > 0

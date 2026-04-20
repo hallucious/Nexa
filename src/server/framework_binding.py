@@ -137,6 +137,12 @@ class FrameworkRouteBindings:
             summary="Read the official public SDK / REST API catalog surface.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_public_ecosystem_catalog",
+            method="GET",
+            path_template="/api/integrations/public-ecosystem/catalog",
+            summary="Read the official public ecosystem discovery catalog surface.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_public_mcp_manifest",
             method="GET",
             path_template="/api/integrations/public-mcp/manifest",
@@ -731,6 +737,17 @@ class FrameworkRouteBindings:
         request: FrameworkInboundRequest,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_public_sdk_catalog(
+            http_request=cls.to_http_route_request(request),
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_public_ecosystem_catalog(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_public_ecosystem_catalog(
             http_request=cls.to_http_route_request(request),
         )
         return cls.to_framework_response(response)

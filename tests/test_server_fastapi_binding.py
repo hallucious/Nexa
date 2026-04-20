@@ -585,6 +585,20 @@ def test_fastapi_binding_starter_template_routes_round_trip() -> None:
     assert apply_payload['template']['supported_storage_roles'] == ['working_save']
 
 
+
+
+def test_fastapi_binding_public_ecosystem_catalog_route_round_trip() -> None:
+    client = _make_client()
+
+    api_response = client.get('/api/integrations/public-ecosystem/catalog')
+
+    assert api_response.status_code == 200
+    payload = api_response.json()
+    assert payload["catalog"]["surface_family"] == "public-ecosystem-catalog"
+    assert payload["identity_policy"]["canonical_key"] == "catalog.surface_family"
+    assert payload["namespace_policy"]["family"] == "public-ecosystem-catalog"
+    assert payload["routes"]["self"] == "/api/integrations/public-ecosystem/catalog"
+
 def test_fastapi_binding_public_nex_format_route_round_trip() -> None:
     client = _make_client()
 

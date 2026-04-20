@@ -23,6 +23,9 @@ from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
 from src.sdk.artifacts import PUBLIC_ARTIFACT_SDK_SURFACE_VERSION
 from src.sdk.server import PUBLIC_SERVER_SDK_SURFACE_VERSION
+from src.storage.nex_api import get_public_nex_format_boundary
+from src.storage.share_api import get_public_nex_share_boundary
+from src.designer.proposal_flow import list_starter_circuit_templates
 
 @dataclass(frozen=True)
 class PublicTypeRef:
@@ -422,6 +425,48 @@ class PublicSdkExportSurfaceSummary:
             "supported_transport_kinds": list(self.supported_transport_kinds),
             "tool_count": self.tool_count,
             "resource_count": self.resource_count,
+            "argument_schema_count": self.argument_schema_count,
+            "route_contract_count": self.route_contract_count,
+            "response_contract_count": self.response_contract_count,
+            "result_shape_profile_count": self.result_shape_profile_count,
+            "transport_contract_count": self.transport_contract_count,
+            "recovery_policy_count": self.recovery_policy_count,
+            "lifecycle_control_profile_count": self.lifecycle_control_profile_count,
+        }
+
+
+@dataclass(frozen=True)
+class PublicEcosystemExportSurfaceSummary:
+    discovery_routes: Mapping[str, str]
+    surface_families: tuple[str, ...]
+    public_sdk_entrypoints: Mapping[str, str]
+    supported_contract_markers: tuple[str, ...]
+    supported_runtime_markers: tuple[str, ...]
+    supported_transport_kinds: tuple[str, ...]
+    tool_count: int
+    resource_count: int
+    starter_template_count: int
+    share_operation_count: int
+    argument_schema_count: int
+    route_contract_count: int
+    response_contract_count: int
+    result_shape_profile_count: int
+    transport_contract_count: int
+    recovery_policy_count: int
+    lifecycle_control_profile_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "discovery_routes": dict(self.discovery_routes),
+            "surface_families": list(self.surface_families),
+            "public_sdk_entrypoints": dict(self.public_sdk_entrypoints),
+            "supported_contract_markers": list(self.supported_contract_markers),
+            "supported_runtime_markers": list(self.supported_runtime_markers),
+            "supported_transport_kinds": list(self.supported_transport_kinds),
+            "tool_count": self.tool_count,
+            "resource_count": self.resource_count,
+            "starter_template_count": self.starter_template_count,
+            "share_operation_count": self.share_operation_count,
             "argument_schema_count": self.argument_schema_count,
             "route_contract_count": self.route_contract_count,
             "response_contract_count": self.response_contract_count,
@@ -3720,6 +3765,67 @@ def describe_public_sdk_export_surface(
     )
 
 
+def describe_public_ecosystem_export_surface(
+    *,
+    surface: PublicMcpCompatibilitySurface | None = None,
+) -> PublicEcosystemExportSurfaceSummary:
+    """Return the broader public ecosystem discovery catalog summary."""
+
+    sdk_summary = describe_public_sdk_export_surface(surface=surface)
+    mcp_summary = describe_public_mcp_export_surface(surface=surface)
+    share_boundary = get_public_nex_share_boundary()
+    starter_templates = list_starter_circuit_templates()
+    discovery_routes = {
+        "self": "/api/integrations/public-ecosystem/catalog",
+        "public_sdk_catalog": "/api/integrations/public-sdk/catalog",
+        "public_nex_format": "/api/formats/public-nex",
+        "public_mcp_manifest": "/api/integrations/public-mcp/manifest",
+        "public_mcp_host_bridge": "/api/integrations/public-mcp/host-bridge",
+        "public_share_catalog": "/api/public-shares",
+        "public_share_catalog_summary": "/api/public-shares/summary",
+        "starter_template_catalog": "/api/templates/starter-circuits",
+        "provider_catalog": "/api/providers/catalog",
+    }
+    return PublicEcosystemExportSurfaceSummary(
+        discovery_routes=discovery_routes,
+        surface_families=(
+            "public-ecosystem-catalog",
+            "public-sdk-catalog",
+            "public-nex-format",
+            "public-mcp-manifest",
+            "public-mcp-host-bridge",
+            "public-share-catalog",
+            "public-share-catalog-summary",
+            "starter-template-catalog",
+            "provider-catalog",
+        ),
+        public_sdk_entrypoints={
+            "ecosystem_catalog_summary": "describe_public_ecosystem_export_surface",
+            "sdk_catalog_summary": "describe_public_sdk_export_surface",
+            "mcp_export_summary": "describe_public_mcp_export_surface",
+            "public_nex_format_boundary": "get_public_nex_format_boundary",
+            "public_share_boundary": "get_public_nex_share_boundary",
+            "starter_template_catalog": "list_starter_circuit_templates",
+            "provider_catalog_resource": "get_provider_catalog",
+            "public_share_catalog_summary_resource": "get_public_share_catalog_summary",
+        },
+        supported_contract_markers=sdk_summary.supported_contract_markers,
+        supported_runtime_markers=sdk_summary.supported_runtime_markers,
+        supported_transport_kinds=mcp_summary.supported_transport_kinds,
+        tool_count=sdk_summary.tool_count,
+        resource_count=sdk_summary.resource_count,
+        starter_template_count=len(starter_templates),
+        share_operation_count=len(share_boundary.supported_operations),
+        argument_schema_count=sdk_summary.argument_schema_count,
+        route_contract_count=sdk_summary.route_contract_count,
+        response_contract_count=sdk_summary.response_contract_count,
+        result_shape_profile_count=sdk_summary.result_shape_profile_count,
+        transport_contract_count=sdk_summary.transport_contract_count,
+        recovery_policy_count=sdk_summary.recovery_policy_count,
+        lifecycle_control_profile_count=sdk_summary.lifecycle_control_profile_count,
+    )
+
+
 _ROUTE_INDEX = {
     name: (method, path)
     for name, method, path in RunHttpRouteSurface._ROUTE_DEFINITIONS
@@ -3745,6 +3851,7 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "apply_starter_circuit_template": "handle_apply_starter_circuit_template",
     "get_public_nex_format": "handle_public_nex_format",
     "get_public_sdk_catalog": "handle_public_sdk_catalog",
+    "get_public_ecosystem_catalog": "handle_public_ecosystem_catalog",
     "get_public_mcp_manifest": "handle_public_mcp_manifest",
     "get_public_mcp_host_bridge": "handle_public_mcp_host_bridge",
     "get_workspace_result_history": "handle_workspace_result_history",
@@ -4391,6 +4498,7 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "get_starter_circuit_template": {"route_family": "starter-template-detail-read", "transport_profile": "path-and-query"},
     "get_public_nex_format": {"route_family": "public-nex-format-read", "transport_profile": "no-arguments"},
     "get_public_sdk_catalog": {"route_family": "public-sdk-catalog-read", "transport_profile": "no-arguments"},
+    "get_public_ecosystem_catalog": {"route_family": "public-ecosystem-catalog-read", "transport_profile": "no-arguments"},
     "get_public_mcp_manifest": {"route_family": "public-mcp-manifest-read", "transport_profile": "query-only"},
     "get_public_mcp_host_bridge": {"route_family": "public-mcp-host-bridge-read", "transport_profile": "query-only"},
     "get_workspace_result_history": {"route_family": "workspace-result-history-read", "transport_profile": "path-and-query"},
@@ -4645,6 +4753,15 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_recommended_action": "retry_same_request",
     },
     "public-sdk-catalog-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-ecosystem-catalog-read": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
         "safe_to_retry_same_request_on_timeout": True,
@@ -5219,7 +5336,12 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
     "public-sdk-catalog-read": {
         "lifecycle_class": "public-sdk-catalog-read",
         "result_resource_name": "get_public_sdk_catalog",
-        "followup_route_names": ("get_public_sdk_catalog", "get_public_nex_format", "get_public_mcp_manifest", "get_public_mcp_host_bridge", "get_public_share_catalog_summary", "get_provider_catalog"),
+        "followup_route_names": ("get_public_sdk_catalog", "get_public_ecosystem_catalog", "get_public_nex_format", "get_public_mcp_manifest", "get_public_mcp_host_bridge", "get_public_share_catalog_summary", "get_provider_catalog"),
+    },
+    "public-ecosystem-catalog-read": {
+        "lifecycle_class": "public-ecosystem-catalog-read",
+        "result_resource_name": "get_public_ecosystem_catalog",
+        "followup_route_names": ("get_public_ecosystem_catalog", "get_public_sdk_catalog", "get_public_nex_format", "get_public_mcp_manifest", "get_public_mcp_host_bridge", "list_public_shares", "get_public_share_catalog_summary", "list_starter_circuit_templates", "get_provider_catalog"),
     },
     "public-mcp-manifest-read": {
         "lifecycle_class": "public-mcp-manifest-read",
@@ -5570,6 +5692,18 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             "supported_runtime_markers",
             "supported_transport_kinds",
         ),
+    },
+    "get_public_ecosystem_catalog": {
+        "profile_kind": "public-ecosystem-catalog",
+        "identity_keys": ("catalog", "identity_policy", "namespace_policy"),
+        "state_keys": (
+            "status",
+            "supported_contract_markers",
+            "supported_runtime_markers",
+            "supported_transport_kinds",
+        ),
+        "collection_field_name": "surfaces",
+        "collection_item_identity_keys": ("surface_family", "route_family"),
     },
     "get_public_mcp_manifest": {
         "profile_kind": "public-mcp-manifest",
@@ -5931,6 +6065,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_workspace_starter_circuit_template": {"response_shape": "workspace-starter-template-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "template", "routes", "identity_policy", "namespace_policy")},
     "get_public_nex_format": {"response_shape": "public-nex-format", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")},
     "get_public_sdk_catalog": {"response_shape": "public-sdk-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "tools", "resources", "public_sdk_entrypoints", "supported_contract_markers", "supported_runtime_markers", "supported_transport_kinds", "identity_policy", "namespace_policy", "routes")},
+    "get_public_ecosystem_catalog": {"response_shape": "public-ecosystem-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "surfaces", "public_sdk_entrypoints", "supported_contract_markers", "supported_runtime_markers", "supported_transport_kinds", "identity_policy", "namespace_policy", "routes")},
     "get_public_mcp_manifest": {
         "response_shape": "public-mcp-manifest",
         "success_status_codes": (200,),
@@ -6427,6 +6562,13 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read the official public SDK / REST API catalog surface, export counts, and canonical discovery entrypoints.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductPublicSdkCatalogResponse"),
         "tags": ("integration", "sdk", "catalog"),
+    },
+    {
+        "name": "get_public_ecosystem_catalog",
+        "route_name": "get_public_ecosystem_catalog",
+        "description": "Read the official public ecosystem discovery catalog spanning SDK, public artifacts, MCP, shares, templates, and provider surfaces.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicEcosystemCatalogResponse"),
+        "tags": ("integration", "ecosystem", "catalog"),
     },
     {
         "name": "get_public_mcp_manifest",
