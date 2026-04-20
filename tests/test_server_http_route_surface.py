@@ -1543,6 +1543,28 @@ def test_public_share_delete_route_removes_share_for_issuer() -> None:
     assert "share-delete-http-001" not in share_store
 
 
+def test_public_sdk_catalog_route_returns_broader_sdk_export_surface() -> None:
+    response = RunHttpRouteSurface.handle_public_sdk_catalog(
+        http_request=HttpRouteRequest(method="GET", path="/api/integrations/public-sdk/catalog"),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["catalog"]["surface_family"] == "public-sdk-catalog"
+    assert response.body["catalog"]["sdk_modules"] == ["artifacts", "server", "integration"]
+    assert response.body["identity_policy"]["canonical_key"] == "catalog.surface_family"
+    assert response.body["namespace_policy"]["family"] == "public-sdk-catalog"
+    assert response.body["routes"]["self"] == "/api/integrations/public-sdk/catalog"
+    assert response.body["public_sdk_entrypoints"]["artifact_import_copy"] == "import_public_nex_artifact"
+    assert response.body["public_sdk_entrypoints"]["tool_catalog"] == "build_public_mcp_tools"
+    assert response.body["public_sdk_entrypoints"]["mcp_export_summary"] == "describe_public_mcp_export_surface"
+    assert response.body["supported_contract_markers"]
+    assert response.body["supported_runtime_markers"]
+    assert response.body["supported_transport_kinds"]
+    assert len(response.body["tools"]) > 0
+    assert len(response.body["resources"]) > 0
+
+
 def test_public_mcp_manifest_route_returns_manifest_export_surface() -> None:
     response = RunHttpRouteSurface.handle_public_mcp_manifest(
         http_request=HttpRouteRequest(method="GET", path="/api/integrations/public-mcp/manifest", query_params={"base_url": "https://api.nexa.test"}),

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.server.public_nex_models import ProductPublicNexFormatResponse
+from src.server.public_sdk_models import ProductPublicSdkCatalogResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.starter_template_models import (
     ProductStarterTemplateApplyAcceptedResponse,
@@ -234,6 +235,7 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert ProductWorkspaceStarterTemplateDetailResponse is not None
     assert ProductStarterTemplateApplyAcceptedResponse is not None
     assert ProductPublicNexFormatResponse is not None
+    assert ProductPublicSdkCatalogResponse is not None
     assert ProductPublicMcpManifestResponse is not None
     assert ProductPublicMcpHostBridgeResponse is not None
     assert ProductWorkspaceResultHistoryResponse is not None
@@ -262,6 +264,7 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert any(resource.route_name == "list_workspace_starter_circuit_templates" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_starter_circuit_template" for resource in manifest.resources)
     assert any(resource.route_name == "get_public_nex_format" for resource in manifest.resources)
+    assert any(resource.route_name == "get_public_sdk_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in manifest.resources)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
@@ -311,6 +314,31 @@ def test_sdk_root_exposes_public_mcp_export_surface_summary() -> None:
     assert summary.tool_count > 0
     assert summary.resource_count > 0
     assert any(binding.route_name == "get_run_status" for binding in bridge.export().resource_bindings)
+
+
+def test_sdk_root_exposes_public_sdk_export_surface_summary() -> None:
+    summary = sdk.describe_public_sdk_export_surface()
+
+    assert isinstance(summary, sdk.PublicSdkExportSurfaceSummary)
+    assert summary.sdk_modules == ("artifacts", "server", "integration")
+    assert summary.surface_versions["artifacts"] == artifacts.PUBLIC_ARTIFACT_SDK_SURFACE_VERSION
+    assert summary.surface_versions["server"] == server.PUBLIC_SERVER_SDK_SURFACE_VERSION
+    assert summary.public_sdk_entrypoints["artifact_import_copy"] == "import_public_nex_artifact"
+    assert summary.public_sdk_entrypoints["tool_catalog"] == "build_public_mcp_tools"
+    assert summary.public_sdk_entrypoints["mcp_export_summary"] == "describe_public_mcp_export_surface"
+    assert "public-sdk-catalog-read" in summary.public_route_families
+    assert summary.tool_count > 0
+    assert summary.resource_count > 0
+    assert summary.argument_schema_count > 0
+    assert summary.route_contract_count > 0
+    assert summary.response_contract_count > 0
+    assert summary.result_shape_profile_count > 0
+    assert summary.transport_contract_count > 0
+    assert summary.recovery_policy_count > 0
+    assert summary.lifecycle_control_profile_count > 0
+    assert summary.supported_contract_markers
+    assert summary.supported_runtime_markers
+    assert summary.supported_transport_kinds
 
 
 def test_sdk_root_exposes_public_mcp_argument_schema_catalog() -> None:

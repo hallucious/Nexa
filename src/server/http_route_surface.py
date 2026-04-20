@@ -43,6 +43,7 @@ from src.server.starter_template_models import (
     ProductWorkspaceStarterTemplateDetailResponse,
 )
 from src.server.public_nex_models import ProductPublicNexFormatResponse
+from src.server.public_sdk_models import ProductPublicSdkCatalogResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.public_share_models import (
     ProductPublicShareCheckoutAcceptedResponse,
@@ -1925,6 +1926,52 @@ def _request_auth(request: HttpRouteRequest):
     )
 
 
+def _public_sdk_catalog_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "catalog.surface_family",
+        "canonical_value": "public-sdk-catalog",
+        "lookup_mode": "public_sdk_catalog",
+    }
+
+
+def _public_sdk_catalog_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-sdk-catalog",
+        "canonical_scope": "sdk-public-surface",
+        "write_policy": "read-only",
+    }
+
+
+def _public_sdk_catalog_body() -> dict[str, Any]:
+    from src.sdk.integration import (
+        build_public_mcp_resources,
+        build_public_mcp_tools,
+        describe_public_sdk_export_surface,
+    )
+
+    summary = describe_public_sdk_export_surface()
+    return {
+        "catalog": {
+            "surface_family": "public-sdk-catalog",
+            **summary.to_dict(),
+        },
+        "tools": [asdict(tool) for tool in build_public_mcp_tools()],
+        "resources": [asdict(resource) for resource in build_public_mcp_resources()],
+        "public_sdk_entrypoints": dict(summary.public_sdk_entrypoints),
+        "supported_contract_markers": list(summary.supported_contract_markers),
+        "supported_runtime_markers": list(summary.supported_runtime_markers),
+        "supported_transport_kinds": list(summary.supported_transport_kinds),
+        "routes": {
+            "self": "/api/integrations/public-sdk/catalog",
+            "public_nex_format": "/api/formats/public-nex",
+            "public_mcp_manifest": "/api/integrations/public-mcp/manifest",
+            "public_mcp_host_bridge": "/api/integrations/public-mcp/host-bridge",
+            "public_share_catalog": "/api/public-shares",
+            "provider_catalog": "/api/providers/catalog",
+        },
+    }
+
+
 class RunHttpRouteSurface:
     _ROUTE_DEFINITIONS: tuple[tuple[str, str, str], ...] = (
         ("get_recent_activity", "GET", "/api/users/me/activity"),
@@ -1946,6 +1993,7 @@ class RunHttpRouteSurface:
         ("get_workspace_starter_circuit_template", "GET", "/api/workspaces/{workspace_id}/starter-templates/{template_id}"),
         ("apply_starter_circuit_template", "POST", "/api/workspaces/{workspace_id}/starter-templates/{template_id}/apply"),
         ("get_public_nex_format", "GET", "/api/formats/public-nex"),
+        ("get_public_sdk_catalog", "GET", "/api/integrations/public-sdk/catalog"),
         ("get_public_mcp_manifest", "GET", "/api/integrations/public-mcp/manifest"),
         ("get_public_mcp_host_bridge", "GET", "/api/integrations/public-mcp/host-bridge"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
@@ -5898,6 +5946,34 @@ class RunHttpRouteSurface:
         )
         return _route_response(200, asdict(response))
 
+
+
+    @classmethod
+    def handle_public_sdk_catalog(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public SDK catalog route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/integrations/public-sdk/catalog":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        payload = _public_sdk_catalog_body()
+        response = ProductPublicSdkCatalogResponse(
+            status="ready",
+            catalog=payload["catalog"],
+            tools=tuple(payload["tools"]),
+            resources=tuple(payload["resources"]),
+            identity_policy=_public_sdk_catalog_identity_policy_body(),
+            namespace_policy=_public_sdk_catalog_namespace_policy_body(),
+            routes=payload["routes"],
+            public_sdk_entrypoints=payload["public_sdk_entrypoints"],
+            supported_contract_markers=tuple(payload["supported_contract_markers"]),
+            supported_runtime_markers=tuple(payload["supported_runtime_markers"]),
+            supported_transport_kinds=tuple(payload["supported_transport_kinds"]),
+        )
+        return _route_response(200, asdict(response))
 
     @classmethod
     def handle_public_mcp_manifest(

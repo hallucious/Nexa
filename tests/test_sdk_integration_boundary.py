@@ -171,6 +171,7 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert contracts["get_public_mcp_host_bridge"].result_shape_profile.identity_keys == ("host_bridge", "identity_policy", "namespace_policy")
     assert contracts["list_issuer_public_shares"].result_shape_profile.collection_item_identity_keys == ("share_id", "identity")
     assert indexed["get_public_nex_format"].path == "/api/formats/public-nex"
+    assert indexed["get_public_sdk_catalog"].path == "/api/integrations/public-sdk/catalog"
     assert indexed["list_issuer_public_shares"].path == "/api/users/me/public-shares"
     assert indexed["get_issuer_public_share_summary"].path == "/api/users/me/public-shares/summary"
     assert indexed["get_workspace_shell"].path.endswith("/shell")
@@ -200,6 +201,7 @@ def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> Non
     assert any(resource.route_name == "get_provider_catalog" for resource in surface.resources)
     assert any(resource.route_name == "get_history_summary" for resource in surface.resources)
     assert any(resource.route_name == "get_public_nex_format" for resource in surface.resources)
+    assert any(resource.route_name == "get_public_sdk_catalog" for resource in surface.resources)
     assert any(resource.route_name == "list_starter_circuit_templates" for resource in surface.resources)
     assert any(resource.route_name == "get_starter_circuit_template" for resource in surface.resources)
     assert any(resource.route_name == "get_workspace_circuit_library" for resource in surface.resources)
@@ -1719,6 +1721,7 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
     assert responses["get_public_share_compare"].required_top_level_keys == ("share_id", "compare", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_share_compare_summary"].required_top_level_keys == ("share_id", "compare", "capability_summary", "action_availability", "status", "identity_policy", "namespace_policy")
     assert responses["get_public_nex_format"].required_top_level_keys == ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")
+    assert responses["get_public_sdk_catalog"].required_top_level_keys == ("status", "catalog", "tools", "resources", "public_sdk_entrypoints", "supported_contract_markers", "supported_runtime_markers", "supported_transport_kinds", "identity_policy", "namespace_policy", "routes")
     assert responses["get_public_mcp_manifest"].required_top_level_keys == (
         "status",
         "manifest",
@@ -1791,6 +1794,29 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
         "get_public_share_artifact",
     )
 
+
+
+def test_public_sdk_catalog_resource_is_exported_with_expected_contracts() -> None:
+    adapter = build_public_mcp_adapter_scaffold(base_url="https://api.nexa.test")
+
+    contract = adapter.export_resource_contract("get_public_sdk_catalog")
+    response = adapter.export_resource_response_contract("get_public_sdk_catalog")
+
+    assert contract.route_family == "public-sdk-catalog-read"
+    assert response.required_top_level_keys == (
+        "status",
+        "catalog",
+        "tools",
+        "resources",
+        "public_sdk_entrypoints",
+        "supported_contract_markers",
+        "supported_runtime_markers",
+        "supported_transport_kinds",
+        "identity_policy",
+        "namespace_policy",
+        "routes",
+    )
+    assert response.result_shape_profile.profile_kind == "public-sdk-catalog"
 
 
 def test_public_mcp_response_contracts_match_route_surface_metadata_shape() -> None:

@@ -21,6 +21,8 @@ from src.server.framework_binding import FrameworkRouteBindings
 from src.server.framework_binding_models import FrameworkInboundRequest, FrameworkRouteDefinition
 from src.server.http_route_models import HttpRouteRequest
 from src.server.http_route_surface import RunHttpRouteSurface
+from src.sdk.artifacts import PUBLIC_ARTIFACT_SDK_SURFACE_VERSION
+from src.sdk.server import PUBLIC_SERVER_SDK_SURFACE_VERSION
 
 @dataclass(frozen=True)
 class PublicTypeRef:
@@ -389,6 +391,46 @@ class PublicMcpExportSurfaceSummary:
             "tool_count": self.tool_count,
             "resource_count": self.resource_count,
         }
+
+@dataclass(frozen=True)
+class PublicSdkExportSurfaceSummary:
+    sdk_modules: tuple[str, ...]
+    surface_versions: Mapping[str, str]
+    public_sdk_entrypoints: Mapping[str, str]
+    public_route_families: tuple[str, ...]
+    supported_contract_markers: tuple[str, ...]
+    supported_runtime_markers: tuple[str, ...]
+    supported_transport_kinds: tuple[str, ...]
+    tool_count: int
+    resource_count: int
+    argument_schema_count: int
+    route_contract_count: int
+    response_contract_count: int
+    result_shape_profile_count: int
+    transport_contract_count: int
+    recovery_policy_count: int
+    lifecycle_control_profile_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sdk_modules": list(self.sdk_modules),
+            "surface_versions": dict(self.surface_versions),
+            "public_sdk_entrypoints": dict(self.public_sdk_entrypoints),
+            "public_route_families": list(self.public_route_families),
+            "supported_contract_markers": list(self.supported_contract_markers),
+            "supported_runtime_markers": list(self.supported_runtime_markers),
+            "supported_transport_kinds": list(self.supported_transport_kinds),
+            "tool_count": self.tool_count,
+            "resource_count": self.resource_count,
+            "argument_schema_count": self.argument_schema_count,
+            "route_contract_count": self.route_contract_count,
+            "response_contract_count": self.response_contract_count,
+            "result_shape_profile_count": self.result_shape_profile_count,
+            "transport_contract_count": self.transport_contract_count,
+            "recovery_policy_count": self.recovery_policy_count,
+            "lifecycle_control_profile_count": self.lifecycle_control_profile_count,
+        }
+
 
 
 @dataclass(frozen=True)
@@ -3618,6 +3660,66 @@ def describe_public_mcp_export_surface(
     )
 
 
+def describe_public_sdk_export_surface(
+    *,
+    surface: PublicMcpCompatibilitySurface | None = None,
+) -> PublicSdkExportSurfaceSummary:
+    """Return the broader public SDK / REST API export catalog summary."""
+
+    resolved_surface = surface or build_public_mcp_compatibility_surface()
+    compatibility_policy = build_public_mcp_compatibility_policy()
+    route_contracts = build_public_mcp_route_contracts()
+    response_contracts = build_public_mcp_response_contracts()
+    argument_schemas = build_public_mcp_argument_schemas()
+    result_shape_profiles = build_public_mcp_result_shape_profiles()
+    transport_contracts = build_public_mcp_transport_contracts()
+    recovery_policies = build_public_mcp_recovery_policies()
+    lifecycle_control_profiles = build_public_mcp_lifecycle_control_profiles()
+    return PublicSdkExportSurfaceSummary(
+        sdk_modules=("artifacts", "server", "integration"),
+        surface_versions={
+            "artifacts": PUBLIC_ARTIFACT_SDK_SURFACE_VERSION,
+            "server": PUBLIC_SERVER_SDK_SURFACE_VERSION,
+            "integration": "1.0",
+        },
+        public_sdk_entrypoints={
+            "artifact_load": "load_nex",
+            "artifact_validate_working_save": "validate_working_save",
+            "artifact_validate_commit_snapshot": "validate_commit_snapshot",
+            "artifact_import_copy": "import_public_nex_artifact",
+            "artifact_checkout_working_copy": "checkout_public_nex_working_copy",
+            "artifact_run_target": "resolve_public_nex_execution_target",
+            "server_route_surface": "RunHttpRouteSurface",
+            "server_framework_bindings": "FrameworkRouteBindings",
+            "tool_catalog": "build_public_mcp_tools",
+            "resource_catalog": "build_public_mcp_resources",
+            "argument_schemas": "build_public_mcp_argument_schemas",
+            "route_contracts": "build_public_mcp_route_contracts",
+            "response_contracts": "build_public_mcp_response_contracts",
+            "result_shape_profiles": "build_public_mcp_result_shape_profiles",
+            "transport_contracts": "build_public_mcp_transport_contracts",
+            "recovery_policies": "build_public_mcp_recovery_policies",
+            "lifecycle_control_profiles": "build_public_mcp_lifecycle_control_profiles",
+            "compatibility_surface": "build_public_mcp_compatibility_surface",
+            "compatibility_policy": "build_public_mcp_compatibility_policy",
+            "mcp_export_summary": "describe_public_mcp_export_surface",
+        },
+        public_route_families=tuple(sorted({contract.route_family for contract in route_contracts})),
+        supported_contract_markers=resolved_surface.contract_markers,
+        supported_runtime_markers=resolved_surface.runtime_markers,
+        supported_transport_kinds=compatibility_policy.supported_transport_kinds,
+        tool_count=len(resolved_surface.tools),
+        resource_count=len(resolved_surface.resources),
+        argument_schema_count=len(argument_schemas),
+        route_contract_count=len(route_contracts),
+        response_contract_count=len(response_contracts),
+        result_shape_profile_count=len(result_shape_profiles),
+        transport_contract_count=len(transport_contracts),
+        recovery_policy_count=len(recovery_policies),
+        lifecycle_control_profile_count=len(lifecycle_control_profiles),
+    )
+
+
 _ROUTE_INDEX = {
     name: (method, path)
     for name, method, path in RunHttpRouteSurface._ROUTE_DEFINITIONS
@@ -3642,6 +3744,7 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "get_workspace_starter_circuit_template": "handle_get_workspace_starter_circuit_template",
     "apply_starter_circuit_template": "handle_apply_starter_circuit_template",
     "get_public_nex_format": "handle_public_nex_format",
+    "get_public_sdk_catalog": "handle_public_sdk_catalog",
     "get_public_mcp_manifest": "handle_public_mcp_manifest",
     "get_public_mcp_host_bridge": "handle_public_mcp_host_bridge",
     "get_workspace_result_history": "handle_workspace_result_history",
@@ -4287,6 +4390,7 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "list_starter_circuit_templates": {"route_family": "starter-template-catalog-read", "transport_profile": "query-only"},
     "get_starter_circuit_template": {"route_family": "starter-template-detail-read", "transport_profile": "path-and-query"},
     "get_public_nex_format": {"route_family": "public-nex-format-read", "transport_profile": "no-arguments"},
+    "get_public_sdk_catalog": {"route_family": "public-sdk-catalog-read", "transport_profile": "no-arguments"},
     "get_public_mcp_manifest": {"route_family": "public-mcp-manifest-read", "transport_profile": "query-only"},
     "get_public_mcp_host_bridge": {"route_family": "public-mcp-host-bridge-read", "transport_profile": "query-only"},
     "get_workspace_result_history": {"route_family": "workspace-result-history-read", "transport_profile": "path-and-query"},
@@ -4532,6 +4636,15 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_recommended_action": "read_status_resource",
     },
     "public-nex-format-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-sdk-catalog-read": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
         "safe_to_retry_same_request_on_timeout": True,
@@ -5103,6 +5216,11 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "result_resource_name": "get_public_nex_format",
         "followup_route_names": ("get_public_nex_format", "get_public_share_artifact", "create_workspace_shell_share", "commit_workspace_shell", "checkout_workspace_shell"),
     },
+    "public-sdk-catalog-read": {
+        "lifecycle_class": "public-sdk-catalog-read",
+        "result_resource_name": "get_public_sdk_catalog",
+        "followup_route_names": ("get_public_sdk_catalog", "get_public_nex_format", "get_public_mcp_manifest", "get_public_mcp_host_bridge", "get_public_share_catalog_summary", "get_provider_catalog"),
+    },
     "public-mcp-manifest-read": {
         "lifecycle_class": "public-mcp-manifest-read",
         "result_resource_name": "get_public_mcp_manifest",
@@ -5442,6 +5560,16 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "state_keys": ("status",),
         "collection_field_name": "artifact_operation_boundaries",
         "collection_item_identity_keys": ("operation",),
+    },
+    "get_public_sdk_catalog": {
+        "profile_kind": "public-sdk-catalog",
+        "identity_keys": ("catalog", "identity_policy", "namespace_policy"),
+        "state_keys": (
+            "status",
+            "supported_contract_markers",
+            "supported_runtime_markers",
+            "supported_transport_kinds",
+        ),
     },
     "get_public_mcp_manifest": {
         "profile_kind": "public-mcp-manifest",
@@ -5802,6 +5930,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "list_workspace_starter_circuit_templates": {"response_shape": "workspace-starter-template-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "catalog", "templates", "routes", "identity_policy", "namespace_policy")},
     "get_workspace_starter_circuit_template": {"response_shape": "workspace-starter-template-detail", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "workspace_id", "template", "routes", "identity_policy", "namespace_policy")},
     "get_public_nex_format": {"response_shape": "public-nex-format", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "format_boundary", "role_boundaries", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")},
+    "get_public_sdk_catalog": {"response_shape": "public-sdk-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "tools", "resources", "public_sdk_entrypoints", "supported_contract_markers", "supported_runtime_markers", "supported_transport_kinds", "identity_policy", "namespace_policy", "routes")},
     "get_public_mcp_manifest": {
         "response_shape": "public-mcp-manifest",
         "success_status_codes": (200,),
@@ -6291,6 +6420,13 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "description": "Read the public .nex format boundary, role-aware operation catalog, and SDK entrypoints.",
         "response_type": PublicTypeRef("src.sdk.server", "ProductPublicNexFormatResponse"),
         "tags": ("artifacts", "public-nex", "standardization"),
+    },
+    {
+        "name": "get_public_sdk_catalog",
+        "route_name": "get_public_sdk_catalog",
+        "description": "Read the official public SDK / REST API catalog surface, export counts, and canonical discovery entrypoints.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicSdkCatalogResponse"),
+        "tags": ("integration", "sdk", "catalog"),
     },
     {
         "name": "get_public_mcp_manifest",

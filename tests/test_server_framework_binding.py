@@ -123,6 +123,7 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_workspace_starter_circuit_template",
         "apply_starter_circuit_template",
         "get_public_nex_format",
+        "get_public_sdk_catalog",
         "get_public_mcp_manifest",
         "get_public_mcp_host_bridge",
         "get_workspace_result_history",
@@ -1153,6 +1154,19 @@ def test_framework_binding_handles_starter_template_routes_round_trip() -> None:
     assert apply_payload["template"]["supported_storage_roles"] == ["working_save"]
     assert catalog_payload["routes"]["app_catalog"] == "/app/templates/starter-circuits?app_language=en"
     assert catalog_payload["routes"]["app_library"] == "/app/library?app_language=en"
+
+
+def test_framework_binding_handles_public_sdk_catalog_round_trip() -> None:
+    response = FrameworkRouteBindings.handle_public_sdk_catalog(
+        request=_request(method="GET", path="/api/integrations/public-sdk/catalog"),
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.body_text)
+    assert payload["catalog"]["surface_family"] == "public-sdk-catalog"
+    assert payload["identity_policy"]["canonical_key"] == "catalog.surface_family"
+    assert payload["namespace_policy"]["family"] == "public-sdk-catalog"
+    assert payload["routes"]["self"] == "/api/integrations/public-sdk/catalog"
 
 
 def test_framework_binding_handles_public_nex_format_round_trip() -> None:

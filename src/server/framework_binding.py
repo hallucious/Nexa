@@ -131,6 +131,12 @@ class FrameworkRouteBindings:
             summary="Read the public .nex format boundary and role-aware operation catalog.",
         ),
         FrameworkRouteDefinition(
+            route_name="get_public_sdk_catalog",
+            method="GET",
+            path_template="/api/integrations/public-sdk/catalog",
+            summary="Read the official public SDK / REST API catalog surface.",
+        ),
+        FrameworkRouteDefinition(
             route_name="get_public_mcp_manifest",
             method="GET",
             path_template="/api/integrations/public-mcp/manifest",
@@ -717,6 +723,17 @@ class FrameworkRouteBindings:
         )
         return cls.to_framework_response(response)
 
+
+    @classmethod
+    def handle_public_sdk_catalog(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_public_sdk_catalog(
+            http_request=cls.to_http_route_request(request),
+        )
+        return cls.to_framework_response(response)
 
     @classmethod
     def handle_public_mcp_manifest(
