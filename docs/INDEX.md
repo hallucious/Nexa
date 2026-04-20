@@ -8,9 +8,7 @@
 2. `docs/BLUEPRINT.md` — architecture overview, invariants, active spec list
 3. `docs/architecture/ARCHITECTURE.md` — execution model and runtime structure
 4. `docs/TRACKER.md` — implemented surface, completed milestones, next targets
-5. `docs/status/CURRENT_STATE.md` — latest implementation truth snapshot and sector-status matrix
-6. `docs/status/CURRENT_IMPLEMENTATION_STATE.md` — short-form implementation truth sheet for the current code baseline
-7. `docs/DEVELOPMENT.md` — local setup, testing, and contributor workflow
+5. `docs/DEVELOPMENT.md` — local setup, testing, and contributor workflow
 
 ---
 
@@ -22,8 +20,6 @@
 | `docs/BLUEPRINT.md` | architecture overview, active spec list, invariants |
 | `docs/FOUNDATION_MAP.md` | canonical doc index, Active/Partial/Planned status |
 | `docs/TRACKER.md` | implementation tracker, release snapshot, next steps |
-| `docs/status/CURRENT_STATE.md` | latest implementation truth snapshot and sector status matrix |
-| `docs/status/CURRENT_IMPLEMENTATION_STATE.md` | short-form implementation truth sheet for the current code baseline |
 | `docs/ARCHITECTURE_CONSTITUTION.md` | non-negotiable architectural principles |
 | `docs/CONTRIBUTING.md` | spec change procedure, PR requirements |
 | `docs/DEVELOPMENT.md` | environment setup, testing, contributor workflow |
