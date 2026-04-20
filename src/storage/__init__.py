@@ -23,9 +23,11 @@ from src.storage.lifecycle_api import (
     create_serialized_audit_replay_components,
 )
 from src.storage.nex_api import (
+    checkout_public_nex_working_copy,
     describe_public_nex_artifact,
     export_public_nex_artifact,
     get_public_nex_format_boundary,
+    import_public_nex_artifact,
     load_nex,
     validate_commit_snapshot,
     validate_working_save,
@@ -64,6 +66,8 @@ __all__ = [
     'get_public_nex_format_boundary',
     'describe_public_nex_artifact',
     'export_public_nex_artifact',
+    'import_public_nex_artifact',
+    'checkout_public_nex_working_copy',
     'get_public_nex_share_boundary',
     'extract_public_nex_link_share_artifact',
     'export_public_nex_link_share',

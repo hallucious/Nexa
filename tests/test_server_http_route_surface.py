@@ -861,6 +861,8 @@ def test_public_nex_format_route_returns_role_aware_standardization_surface() ->
     operations = response.body["format_boundary"]["artifact_operation_boundaries"]
     assert any(entry["operation"] == "load_artifact" for entry in operations)
     assert response.body["public_sdk_entrypoints"]["load_artifact"] == "load_nex"
+    assert response.body["public_sdk_entrypoints"]["import_copy"] == "import_public_nex_artifact"
+    assert response.body["public_sdk_entrypoints"]["checkout_working_copy"] == "checkout_public_nex_working_copy"
     assert response.body["identity_policy"]["canonical_key"] == "format_boundary.format_family"
     assert response.body["namespace_policy"]["family"] == "public-nex-format"
     assert response.body["routes"]["public_share_artifact"] == "/api/public-shares/{share_id}/artifact"

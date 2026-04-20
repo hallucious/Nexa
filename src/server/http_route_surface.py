@@ -523,6 +523,8 @@ def _public_nex_format_body() -> dict[str, Any]:
             "load_artifact": "load_nex",
             "validate_working_save": "validate_working_save",
             "validate_commit_snapshot": "validate_commit_snapshot",
+            "import_copy": "import_public_nex_artifact",
+            "checkout_working_copy": "checkout_public_nex_working_copy",
             "commit_transition": "create_commit_snapshot_from_working_save",
             "checkout_transition": "create_working_save_from_commit_snapshot",
         },

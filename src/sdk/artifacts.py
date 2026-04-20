@@ -15,6 +15,7 @@ from src.contracts.nex_contract import (
     ValidationReport,
 )
 from src.storage import (
+    checkout_public_nex_working_copy,
     create_commit_snapshot_from_working_save,
     create_execution_record_from_commit_snapshot,
     create_execution_record_from_snapshot,
@@ -22,6 +23,7 @@ from src.storage import (
     create_serialized_execution_record_from_commit_snapshot,
     create_serialized_working_save_from_commit_snapshot,
     create_working_save_from_commit_snapshot,
+    import_public_nex_artifact,
     load_nex,
     validate_commit_snapshot,
     validate_working_save,
@@ -74,6 +76,8 @@ __all__ = [
     "load_nex",
     "validate_working_save",
     "validate_commit_snapshot",
+    "import_public_nex_artifact",
+    "checkout_public_nex_working_copy",
     "create_commit_snapshot_from_working_save",
     "create_working_save_from_commit_snapshot",
     "create_execution_record_from_snapshot",

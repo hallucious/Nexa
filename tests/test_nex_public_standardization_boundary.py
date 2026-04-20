@@ -6,9 +6,11 @@ from src.storage.lifecycle_api import create_commit_snapshot_from_working_save
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.storage.nex_api import (
+    checkout_public_nex_working_copy,
     describe_public_nex_artifact,
     export_public_nex_artifact,
     get_public_nex_format_boundary,
+    import_public_nex_artifact,
 )
 
 
@@ -185,3 +187,40 @@ def test_validate_working_save_defaults_missing_role_to_working_save() -> None:
 
     codes = {f.code for f in report.findings}
     assert "WORKING_SAVE_ROLE_MISMATCH" not in codes
+
+
+def test_public_nex_boundary_declares_canonical_import_and_checkout_entrypoints() -> None:
+    operations = {entry.operation: entry for entry in get_public_nex_format_boundary().artifact_operation_boundaries}
+
+    assert operations["import_copy"].canonical_api == "import_public_nex_artifact"
+    assert operations["checkout_working_copy"].canonical_api == "checkout_public_nex_working_copy"
+
+
+def test_import_public_nex_artifact_returns_role_preserving_canonical_copy() -> None:
+    payload = export_public_nex_artifact(_working_save())
+    payload["internal_note"] = {"debug": True}
+
+    imported = import_public_nex_artifact(payload)
+
+    assert isinstance(imported, WorkingSaveModel)
+    assert imported.meta.storage_role == "working_save"
+    assert imported.meta.working_save_id == "ws-public-1"
+    assert not hasattr(imported, "internal_note")
+
+
+def test_checkout_public_nex_working_copy_converts_public_commit_snapshot_to_working_save() -> None:
+    snapshot = create_commit_snapshot_from_working_save(_working_save(), commit_id="commit-public-checkout")
+    payload = export_public_nex_artifact(snapshot)
+
+    working_copy = checkout_public_nex_working_copy(payload, working_save_id="ws-checkout-1")
+
+    assert isinstance(working_copy, WorkingSaveModel)
+    assert working_copy.meta.storage_role == "working_save"
+    assert working_copy.meta.working_save_id == "ws-checkout-1"
+    assert working_copy.meta.name == "public_demo"
+    assert working_copy.runtime.status == "draft"
+
+
+def test_checkout_public_nex_working_copy_rejects_working_save_source() -> None:
+    with pytest.raises(ValueError, match="commit_snapshot source artifact"):
+        checkout_public_nex_working_copy(_working_save())

@@ -26,8 +26,10 @@ from src.sdk.artifacts import (
     UIModel,
     WorkingSaveMeta,
     WorkingSaveModel,
+    checkout_public_nex_working_copy,
     create_commit_snapshot_from_working_save,
     create_working_save_from_commit_snapshot,
+    import_public_nex_artifact,
 )
 from src.server.framework_binding_models import FrameworkOutboundResponse
 
@@ -156,6 +158,23 @@ def test_artifact_sdk_surface_exposes_role_aware_lifecycle_api() -> None:
     assert reopened.meta.storage_role == WORKING_SAVE_ROLE
     assert reopened.meta.working_save_id == "ws-public-2"
     assert snapshot.meta.source_working_save_id == "ws-public-1"
+
+
+def test_artifact_sdk_surface_exposes_public_import_and_checkout_helpers() -> None:
+    working = _working_save_model()
+    payload = artifacts.create_serialized_commit_snapshot_from_working_save(
+        working,
+        commit_id="commit-public-import-1",
+    )
+
+    imported = import_public_nex_artifact(payload)
+    working_copy = checkout_public_nex_working_copy(payload, working_save_id="ws-public-import-2")
+
+    assert imported.meta.storage_role == COMMIT_SNAPSHOT_ROLE
+    assert working_copy.meta.storage_role == WORKING_SAVE_ROLE
+    assert working_copy.meta.working_save_id == "ws-public-import-2"
+    assert hasattr(sdk, "import_public_nex_artifact")
+    assert hasattr(sdk, "checkout_public_nex_working_copy")
 
 
 def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:

@@ -30,6 +30,7 @@ from src.storage.serialization import (
     serialize_working_save,
     validate_serialized_storage_artifact_for_write,
 )
+from src.storage.lifecycle_api import create_working_save_from_commit_snapshot
 from src.storage.validators.shared_validator import (
     load_nex,
     validate_commit_snapshot,
@@ -97,7 +98,7 @@ _PUBLIC_NEX_FORMAT_BOUNDARY = PublicNexFormatBoundary(
         PublicNexArtifactOperationBoundary(
             operation="import_copy",
             posture="role_preserving_public_import_copy",
-            canonical_api="load_nex",
+            canonical_api="import_public_nex_artifact",
             canonical_http_method="GET",
             canonical_route="/api/public-shares/{share_id}/artifact",
             result_surface="public_share_artifact",
@@ -120,7 +121,7 @@ _PUBLIC_NEX_FORMAT_BOUNDARY = PublicNexFormatBoundary(
         PublicNexArtifactOperationBoundary(
             operation="checkout_working_copy",
             posture="commit_snapshot_to_working_save_checkout",
-            canonical_api="load_nex",
+            canonical_api="checkout_public_nex_working_copy",
             canonical_http_method="GET",
             canonical_route="/api/public-shares/{share_id}/artifact",
             result_surface="public_share_artifact",
@@ -186,6 +187,48 @@ def export_public_nex_artifact(
     return payload
 
 
+def import_public_nex_artifact(
+    model_or_data: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any],
+) -> WorkingSaveModel | CommitSnapshotModel:
+    payload = export_public_nex_artifact(model_or_data)
+    loaded = load_nex(payload, allow_legacy_fallback=False)
+    if loaded.parsed_model is None:
+        blocking = _first_blocking_finding_message(loaded)
+        suffix = f": {blocking}" if blocking else ""
+        raise ValueError(f"public .nex artifact is not importable{suffix}")
+    return loaded.parsed_model
+
+
+def checkout_public_nex_working_copy(
+    model_or_data: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any],
+    *,
+    working_save_id: str | None = None,
+    created_at: str | None = None,
+    updated_at: str | None = None,
+    runtime_status: str = "draft",
+    validation_summary: dict[str, Any] | None = None,
+    last_run: dict[str, Any] | None = None,
+    errors: list[Any] | None = None,
+    ui_layout: dict[str, Any] | None = None,
+    ui_metadata: dict[str, Any] | None = None,
+) -> WorkingSaveModel:
+    model = import_public_nex_artifact(model_or_data)
+    if isinstance(model, WorkingSaveModel):
+        raise ValueError("checkout_public_nex_working_copy requires commit_snapshot source artifact")
+    return create_working_save_from_commit_snapshot(
+        model,
+        working_save_id=working_save_id,
+        created_at=created_at,
+        updated_at=updated_at,
+        runtime_status=runtime_status,
+        validation_summary=validation_summary,
+        last_run=last_run,
+        errors=errors,
+        ui_layout=ui_layout,
+        ui_metadata=ui_metadata,
+    )
+
+
 def describe_public_nex_artifact(
     model_or_data: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any],
 ) -> PublicNexArtifactDescriptor:
@@ -222,4 +265,6 @@ __all__ = [
     "get_public_nex_format_boundary",
     "describe_public_nex_artifact",
     "export_public_nex_artifact",
+    "import_public_nex_artifact",
+    "checkout_public_nex_working_copy",
 ]
