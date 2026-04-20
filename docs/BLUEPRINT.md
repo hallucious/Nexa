@@ -203,8 +203,8 @@ Engine
 
 Current implementation baseline:
 
-* latest confirmed repository baseline: `47b381f`
-* latest verified baseline: `2574 passed, 14 skipped`
+* latest confirmed repository baseline: `1175d72`
+* latest broad full-suite anchor: `2576 passed, 14 skipped`
 * the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
 * the repository has already pushed the major public/community product-facing Phase 9 branch to the point where it is materially closed on the current branch
 * the matching public surface seam family has also been materially closed enough that route/link/count drift is no longer the default next seam
@@ -216,9 +216,8 @@ Interpretation rule:
 
 * do not treat repeated public/community page additions or generic seam polishing as the default next line
 * do not reopen Phase 7 / Phase 8 / Phase 4.5 seams by habit
-* use the verified `47b381f` / `2574 passed, 14 skipped` baseline as the current top-level reality until a later verified baseline supersedes it
-
-
+* interpret the current top-level reality as: restore from `1175d72`, use `2576 passed, 14 skipped` as the last broad confidence anchor, and remember that the only post-anchor change was document-reference cleanup
+* the next official move should start in repository-audit / sector-classification mode rather than default implementation mode
 * do not treat provider probe persistence as the next still-open main seam for this baseline
 * do not treat local `.nex.ui` continuity and server continuity as the same thing
 * do not skip the explicit proposal boundary:

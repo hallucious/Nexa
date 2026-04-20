@@ -6,8 +6,10 @@ The current authoritative planning reference remains `nexa_implementation_order_
 
 The current verified repository baseline is:
 
-- latest confirmed repository baseline: `47b381f`
-- latest verified baseline: `2574 passed, 14 skipped`
+- latest confirmed repository baseline: `1175d72`
+- latest broad full-suite anchor: `2576 passed, 14 skipped`
+
+- post-anchor note: after the 2576/14 anchor, commit `1175d72` removed references to two intentionally deleted status documents, and no later full-suite anchor was reported
 
 ## 2. Current position
 
@@ -28,7 +30,13 @@ That means:
 - do not continue public/community work through fake progress or polishing
 - do not reopen earlier seams by habit
 - do not start Phase 4.5 production-grade infrastructure work without the explicit gate decisions required by the roadmap
+- do not group cleanup work by phase number or chronology
+- organize the next repository understanding and cleanup work by sector / file kind / system role
 
 ## 4. Immediate implication
 
 The repository is now at the point where the question is no longer “how do we finish the same public/community sweep?” but rather “what is the next real trunk after that sweep has been materially closed?”
+
+The current single strategic objective is:
+
+- start the Docs / Governance / Index sector inventory and canonical-map work for all major NON-Phase-9 areas

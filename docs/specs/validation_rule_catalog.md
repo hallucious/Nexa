@@ -5,7 +5,7 @@ Category: misc
 Depends On:
 
 
-> **NOTE**: THIS FILE IS A COMPATIBILITY COPY. CANONICAL VERSION IS IN 
+> **NOTE**: THIS FILE IS A COMPATIBILITY COPY. CANONICAL VERSION IS IN `docs/specs/policies/validation_rule_catalog.md`
 
 # Validation Rule Catalog
 Version: 1.1.0

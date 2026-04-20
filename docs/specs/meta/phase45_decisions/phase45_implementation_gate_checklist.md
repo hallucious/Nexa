@@ -1,7 +1,7 @@
 # Phase 4.5 Implementation Gate Checklist v1
 
 ## Recommended save path
-`docs/specs/meta/phase45_implementation_gate_checklist.md`
+`docs/specs/meta/phase45_decisions/phase45_implementation_gate_checklist.md`
 
 ## 1. Purpose
 

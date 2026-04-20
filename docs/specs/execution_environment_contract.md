@@ -4,6 +4,9 @@ Status: Active
 Category: misc
 Depends On:
 
+> **NOTE**: THIS FILE IS A COMPATIBILITY COPY. CANONICAL VERSION IS IN `docs/specs/contracts/execution_environment_contract.md`
+
+
 # Execution Environment Contract (No-IO v1)
 Version: 1.4.0
 Status: Official Contract
