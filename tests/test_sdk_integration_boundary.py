@@ -133,8 +133,12 @@ def test_mcp_resource_descriptors_follow_public_route_surface() -> None:
     assert indexed["get_circuit_library"].path == "/api/workspaces/library"
     assert indexed["list_starter_circuit_templates"].path == "/api/templates/starter-circuits"
     assert indexed["get_starter_circuit_template"].path == "/api/templates/starter-circuits/{template_id}"
+    assert indexed["list_workspace_starter_circuit_templates"].path == "/api/workspaces/{workspace_id}/starter-templates"
+    assert indexed["get_workspace_starter_circuit_template"].path == "/api/workspaces/{workspace_id}/starter-templates/{template_id}"
     contracts = {contract.route_name: contract for contract in build_public_mcp_response_contracts()}
     assert contracts["list_starter_circuit_templates"].result_shape_profile.collection_item_identity_keys == ("template_ref", "template_id")
+    assert contracts["list_workspace_starter_circuit_templates"].result_shape_profile.identity_keys == ("workspace_id", "identity_policy", "namespace_policy")
+    assert contracts["get_workspace_starter_circuit_template"].result_shape_profile.identity_keys == ("workspace_id", "template.template_ref", "template.template_id", "identity_policy", "namespace_policy")
     assert contracts["get_public_share"].result_shape_profile.identity_keys == ("share_id", "identity", "identity_policy", "namespace_policy")
     assert contracts["list_issuer_public_shares"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
     assert contracts["get_issuer_public_share_summary"].result_shape_profile.identity_keys == ("issuer_user_ref", "identity_policy", "namespace_policy")
@@ -193,6 +197,8 @@ def test_build_public_mcp_compatibility_surface_returns_curated_surface() -> Non
     assert any(resource.route_name == "get_public_nex_format" for resource in surface.resources)
     assert any(resource.route_name == "list_starter_circuit_templates" for resource in surface.resources)
     assert any(resource.route_name == "get_starter_circuit_template" for resource in surface.resources)
+    assert any(resource.route_name == "list_workspace_starter_circuit_templates" for resource in surface.resources)
+    assert any(resource.route_name == "get_workspace_starter_circuit_template" for resource in surface.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in surface.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in surface.resources)
 
@@ -207,6 +213,8 @@ def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> No
     library_export = scaffold.export_resource("get_circuit_library", query_params={"app_language": "ko"})
     template_catalog_export = scaffold.export_resource("list_starter_circuit_templates", query_params={"app_language": "ko"})
     template_detail_export = scaffold.export_resource("get_starter_circuit_template", path_params={"template_id": "text_summarizer"}, query_params={"app_language": "ko"})
+    workspace_template_catalog_export = scaffold.export_resource("list_workspace_starter_circuit_templates", path_params={"workspace_id": "ws-001"}, query_params={"app_language": "ko"})
+    workspace_template_detail_export = scaffold.export_resource("get_workspace_starter_circuit_template", path_params={"workspace_id": "ws-001", "template_id": "text_summarizer"}, query_params={"app_language": "ko"})
     public_nex_export = scaffold.export_resource("get_public_nex_format")
     profiles = build_public_mcp_result_shape_profiles()
     export = scaffold.export()
@@ -220,6 +228,8 @@ def test_build_public_mcp_adapter_scaffold_exports_runnable_bridge_shape() -> No
     assert status_export.invocation.path == "/api/runs/run-1"
     assert template_catalog_export.invocation.path == "/api/templates/starter-circuits"
     assert template_detail_export.invocation.path == "/api/templates/starter-circuits/text_summarizer"
+    assert workspace_template_catalog_export.invocation.path == "/api/workspaces/ws-001/starter-templates"
+    assert workspace_template_detail_export.invocation.path == "/api/workspaces/ws-001/starter-templates/text_summarizer"
     assert public_nex_export.invocation.path == "/api/formats/public-nex"
     profiles_by_kind = {profile.profile_kind: profile for profile in profiles}
     assert profiles_by_kind["circuit-library"].identity_keys == ("source_of_truth", "identity_policy", "namespace_policy")

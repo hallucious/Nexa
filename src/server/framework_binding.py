@@ -101,6 +101,18 @@ class FrameworkRouteBindings:
             summary="Read one starter template from the public catalog.",
         ),
         FrameworkRouteDefinition(
+            route_name="list_workspace_starter_circuit_templates",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/starter-templates",
+            summary="Read the workspace-scoped starter-template catalog surface.",
+        ),
+        FrameworkRouteDefinition(
+            route_name="get_workspace_starter_circuit_template",
+            method="GET",
+            path_template="/api/workspaces/{workspace_id}/starter-templates/{template_id}",
+            summary="Read one workspace-scoped starter-template detail surface.",
+        ),
+        FrameworkRouteDefinition(
             route_name="apply_starter_circuit_template",
             method="POST",
             path_template="/api/workspaces/{workspace_id}/starter-templates/{template_id}/apply",
@@ -582,6 +594,36 @@ class FrameworkRouteBindings:
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_get_starter_circuit_template(
             http_request=cls.to_http_route_request(request),
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_list_workspace_starter_circuit_templates(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_list_workspace_starter_circuit_templates(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
+        )
+        return cls.to_framework_response(response)
+
+    @classmethod
+    def handle_get_workspace_starter_circuit_template(
+        cls,
+        *,
+        request: FrameworkInboundRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+    ) -> FrameworkOutboundResponse:
+        response = RunHttpRouteSurface.handle_get_workspace_starter_circuit_template(
+            http_request=cls.to_http_route_request(request),
+            workspace_context=workspace_context,
+            workspace_row=workspace_row,
         )
         return cls.to_framework_response(response)
 

@@ -563,6 +563,19 @@ def test_fastapi_binding_starter_template_routes_round_trip() -> None:
     assert detail_payload['template']['identity']['legacy_value'] == 'text_summarizer'
     assert detail_payload['template']['compatibility']['family'] == 'workspace-shell-draft'
 
+    workspace_catalog_response = client.get('/api/workspaces/ws-001/starter-templates', headers=_session_headers())
+    assert workspace_catalog_response.status_code == 200
+    workspace_catalog_payload = workspace_catalog_response.json()
+    assert workspace_catalog_payload['workspace_id'] == 'ws-001'
+    assert workspace_catalog_payload['routes']['self'] == '/api/workspaces/ws-001/starter-templates'
+    assert workspace_catalog_payload['templates'][0]['routes']['self'] == '/api/workspaces/ws-001/starter-templates/text_summarizer'
+
+    workspace_detail_response = client.get('/api/workspaces/ws-001/starter-templates/text_summarizer', headers=_session_headers())
+    assert workspace_detail_response.status_code == 200
+    workspace_detail_payload = workspace_detail_response.json()
+    assert workspace_detail_payload['workspace_id'] == 'ws-001'
+    assert workspace_detail_payload['template']['routes']['workspace_catalog'] == '/api/workspaces/ws-001/starter-templates'
+
     apply_response = client.post('/api/workspaces/ws-001/starter-templates/text_summarizer/apply', headers=_session_headers())
     assert apply_response.status_code == 200
     apply_payload = apply_response.json()
@@ -765,6 +778,7 @@ def test_fastapi_binding_workspace_starter_template_catalog_page_round_trip() ->
     assert '/app/workspaces/ws-001?app_language=en' in body
     assert '/app/workspaces/ws-001/starter-templates/text_summarizer?app_language=en' in body
     assert '/app/workspaces/ws-001/feedback?surface=starter_templates&amp;app_language=en' in body
+    assert '/api/workspaces/ws-001/starter-templates' in body
     assert 'Review in workspace' in body
 
 
@@ -779,6 +793,7 @@ def test_fastapi_binding_workspace_starter_template_detail_page_round_trip() -> 
     assert 'Use template' in body
     assert '/app/workspaces/ws-001/starter-templates/text_summarizer/apply?app_language=en' in body
     assert '/app/workspaces/ws-001/feedback?surface=starter_templates&amp;template_id=text_summarizer&amp;app_language=en' in body
+    assert '/api/workspaces/ws-001/starter-templates/text_summarizer' in body
     assert 'Back to starter templates' in body
     assert 'Open workspace' in body
 

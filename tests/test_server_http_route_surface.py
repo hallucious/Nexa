@@ -771,6 +771,45 @@ def test_starter_template_detail_route_returns_one_template() -> None:
     assert response.body["routes"]["catalog"] == "/api/templates/starter-circuits"
 
 
+def test_workspace_starter_template_catalog_route_returns_workspace_scoped_template_exchange_surface() -> None:
+    response = RunHttpRouteSurface.handle_list_workspace_starter_circuit_templates(
+        http_request=HttpRouteRequest(
+            method="GET",
+            path="/api/workspaces/ws-001/starter-templates",
+            path_params={"workspace_id": "ws-001"},
+            query_params={"app_language": "ko"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "owner_user_id": "user-owner", "title": "Primary Workspace", "artifact_source": _working_save("ws-template-001")},
+    )
+
+    assert response.status_code == 200
+    assert response.body["workspace_id"] == "ws-001"
+    assert response.body["routes"]["self"] == "/api/workspaces/ws-001/starter-templates"
+    template = next(item for item in response.body["templates"] if item["template_id"] == "text_summarizer")
+    assert template["routes"]["self"] == "/api/workspaces/ws-001/starter-templates/text_summarizer"
+    assert template["routes"]["workspace_apply"] == "/api/workspaces/ws-001/starter-templates/text_summarizer/apply"
+    assert template["routes"]["global_detail"] == "/api/templates/starter-circuits/text_summarizer"
+
+
+def test_workspace_starter_template_detail_route_returns_workspace_scoped_template_detail() -> None:
+    response = RunHttpRouteSurface.handle_get_workspace_starter_circuit_template(
+        http_request=HttpRouteRequest(
+            method="GET",
+            path="/api/workspaces/ws-001/starter-templates/nexa-curated:text_summarizer@1.0",
+            path_params={"workspace_id": "ws-001", "template_id": "nexa-curated:text_summarizer@1.0"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "owner_user_id": "user-owner", "title": "Primary Workspace", "artifact_source": _working_save("ws-template-001")},
+    )
+
+    assert response.status_code == 200
+    assert response.body["workspace_id"] == "ws-001"
+    assert response.body["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
+    assert response.body["template"]["routes"]["workspace_catalog"] == "/api/workspaces/ws-001/starter-templates"
+    assert response.body["routes"]["global_detail"] == "/api/templates/starter-circuits/text_summarizer"
+
+
 def test_apply_starter_template_route_updates_workspace_shell_draft() -> None:
     workspace_row = {
         "workspace_id": "ws-001",

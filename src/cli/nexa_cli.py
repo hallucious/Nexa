@@ -1179,6 +1179,7 @@ def savefile_share_export_command(args) -> int:
     )
     descriptor = describe_public_nex_link_share(written)
     history = list_public_nex_link_share_audit_history(written)
+    export_lifecycle_state = descriptor.stored_lifecycle_state
     payload = {
         "status": "ok",
         "input": str(source["input_path"]),
@@ -1193,7 +1194,7 @@ def savefile_share_export_command(args) -> int:
         "viewer_capabilities": list(descriptor.viewer_capabilities),
         "operation_capabilities": list(descriptor.operation_capabilities),
         "stored_lifecycle_state": descriptor.stored_lifecycle_state,
-        "lifecycle_state": descriptor.lifecycle_state,
+        "lifecycle_state": export_lifecycle_state,
         "created_at": descriptor.created_at,
         "updated_at": descriptor.updated_at,
         "expires_at": descriptor.expires_at,

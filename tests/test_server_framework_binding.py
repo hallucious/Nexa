@@ -118,6 +118,8 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
         "get_circuit_library",
         "list_starter_circuit_templates",
         "get_starter_circuit_template",
+        "list_workspace_starter_circuit_templates",
+        "get_workspace_starter_circuit_template",
         "apply_starter_circuit_template",
         "get_public_nex_format",
         "get_public_mcp_manifest",
@@ -1084,6 +1086,24 @@ def test_framework_binding_handles_starter_template_routes_round_trip() -> None:
             path_params={"template_id": "text_summarizer"},
         ),
     )
+    workspace_catalog_response = FrameworkRouteBindings.handle_list_workspace_starter_circuit_templates(
+        request=_request(
+            method="GET",
+            path="/api/workspaces/ws-001/starter-templates",
+            path_params={"workspace_id": "ws-001"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "owner_user_id": "user-owner", "title": "Primary Workspace", "artifact_source": _working_save("ws-template-001")},
+    )
+    workspace_detail_response = FrameworkRouteBindings.handle_get_workspace_starter_circuit_template(
+        request=_request(
+            method="GET",
+            path="/api/workspaces/ws-001/starter-templates/text_summarizer",
+            path_params={"workspace_id": "ws-001", "template_id": "text_summarizer"},
+        ),
+        workspace_context=_workspace(),
+        workspace_row={"workspace_id": "ws-001", "owner_user_id": "user-owner", "title": "Primary Workspace", "artifact_source": _working_save("ws-template-001")},
+    )
     apply_response = FrameworkRouteBindings.handle_apply_starter_circuit_template(
         request=_request(
             method="POST",
@@ -1115,6 +1135,15 @@ def test_framework_binding_handles_starter_template_routes_round_trip() -> None:
     assert detail_payload["template"]["template_ref"] == "nexa-curated:text_summarizer@1.0"
     assert detail_payload["template"]["identity"]["legacy_value"] == "text_summarizer"
     assert detail_payload["template"]["compatibility"]["family"] == "workspace-shell-draft"
+    assert workspace_catalog_response.status_code == 200
+    workspace_catalog_payload = json.loads(workspace_catalog_response.body_text)
+    assert workspace_catalog_payload["workspace_id"] == "ws-001"
+    assert workspace_catalog_payload["routes"]["self"] == "/api/workspaces/ws-001/starter-templates"
+    assert workspace_catalog_payload["templates"][0]["routes"]["self"] == "/api/workspaces/ws-001/starter-templates/text_summarizer"
+    assert workspace_detail_response.status_code == 200
+    workspace_detail_payload = json.loads(workspace_detail_response.body_text)
+    assert workspace_detail_payload["workspace_id"] == "ws-001"
+    assert workspace_detail_payload["template"]["routes"]["workspace_catalog"] == "/api/workspaces/ws-001/starter-templates"
     assert apply_response.status_code == 200
     apply_payload = json.loads(apply_response.body_text)
     assert apply_payload["template"]["template_id"] == "text_summarizer"

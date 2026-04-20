@@ -23,6 +23,8 @@ from src.server.starter_template_models import (
     ProductStarterTemplateApplyAcceptedResponse,
     ProductStarterTemplateCatalogResponse,
     ProductStarterTemplateDetailResponse,
+    ProductWorkspaceStarterTemplateCatalogResponse,
+    ProductWorkspaceStarterTemplateDetailResponse,
 )
 from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
@@ -144,6 +146,8 @@ __all__ = [
     "ProductCircuitLibraryResponse",
     "ProductStarterTemplateCatalogResponse",
     "ProductStarterTemplateDetailResponse",
+    "ProductWorkspaceStarterTemplateCatalogResponse",
+    "ProductWorkspaceStarterTemplateDetailResponse",
     "ProductStarterTemplateApplyAcceptedResponse",
     "ProductPublicNexFormatResponse",
     "ProductPublicMcpManifestResponse",

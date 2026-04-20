@@ -38,6 +38,8 @@ from src.server.starter_template_models import (
     ProductStarterTemplateApplyAcceptedResponse,
     ProductStarterTemplateCatalogResponse,
     ProductStarterTemplateDetailResponse,
+    ProductWorkspaceStarterTemplateCatalogResponse,
+    ProductWorkspaceStarterTemplateDetailResponse,
 )
 from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
@@ -1910,6 +1912,8 @@ class RunHttpRouteSurface:
         ("get_circuit_library", "GET", "/api/workspaces/library"),
         ("list_starter_circuit_templates", "GET", "/api/templates/starter-circuits"),
         ("get_starter_circuit_template", "GET", "/api/templates/starter-circuits/{template_id}"),
+        ("list_workspace_starter_circuit_templates", "GET", "/api/workspaces/{workspace_id}/starter-templates"),
+        ("get_workspace_starter_circuit_template", "GET", "/api/workspaces/{workspace_id}/starter-templates/{template_id}"),
         ("apply_starter_circuit_template", "POST", "/api/workspaces/{workspace_id}/starter-templates/{template_id}/apply"),
         ("get_public_nex_format", "GET", "/api/formats/public-nex"),
         ("get_public_mcp_manifest", "GET", "/api/integrations/public-mcp/manifest"),
@@ -3294,7 +3298,7 @@ class RunHttpRouteSurface:
             issued_by_user_ref=request_auth.requested_by_user_ref,
         )
         persisted = public_share_payload_writer(payload) if public_share_payload_writer is not None else payload
-        descriptor = describe_public_nex_link_share(persisted)
+        descriptor = describe_public_nex_link_share(persisted, now_iso=now_iso)
         create_path = f"/api/workspaces/{workspace_context.workspace_id}/shares"
         legacy_path = f"/api/workspaces/{workspace_context.workspace_id}/shell/share"
         return _route_response(201, {
@@ -5377,6 +5381,19 @@ class RunHttpRouteSurface:
             },
         }
 
+    @staticmethod
+    def _workspace_starter_template_view(spec, *, workspace_id: str, app_language: str) -> dict[str, Any]:
+        template = RunHttpRouteSurface._starter_template_view(spec, app_language=app_language)
+        routes = dict(template.get("routes") or {})
+        routes.update({
+            "self": f"/api/workspaces/{workspace_id}/starter-templates/{spec.template_id}",
+            "workspace_catalog": f"/api/workspaces/{workspace_id}/starter-templates",
+            "workspace_apply": f"/api/workspaces/{workspace_id}/starter-templates/{spec.template_id}/apply",
+            "global_detail": f"/api/templates/starter-circuits/{spec.template_id}",
+        })
+        template["routes"] = routes
+        return template
+
     @classmethod
     def handle_list_starter_circuit_templates(
         cls,
@@ -5458,6 +5475,127 @@ class RunHttpRouteSurface:
                 "self": expected_path,
                 "catalog": "/api/templates/starter-circuits",
                 "workspace_library": "/api/workspaces/library",
+            },
+            identity_policy=_starter_template_identity_policy_body(),
+            namespace_policy=_starter_template_namespace_policy_body(),
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_list_workspace_starter_circuit_templates(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace starter template catalog route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/starter-templates"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "starter_template_read_failure",
+                "reason_code": "workspace.not_found",
+                "message": "Requested workspace was not found.",
+                "workspace_id": workspace_id,
+            })
+        app_language = _request_app_language(http_request.query_params)
+        templates = [cls._workspace_starter_template_view(spec, workspace_id=workspace_id, app_language=app_language) for spec in list_starter_circuit_templates()]
+        categories: dict[str, dict[str, Any]] = {}
+        for item in templates:
+            category_id = str(item.get("category_id") or "").strip()
+            if category_id not in categories:
+                categories[category_id] = {
+                    "category_id": category_id,
+                    "display_name": item["category"],
+                    "template_count": 0,
+                }
+            categories[category_id]["template_count"] += 1
+        response = ProductWorkspaceStarterTemplateCatalogResponse(
+            status="ready",
+            workspace_id=workspace_id,
+            catalog={
+                "family": "starter-circuit-template-catalog",
+                "title": ui_text("template_gallery.title", app_language=app_language, fallback_text="Starter workflows"),
+                "subtitle": ui_text("template_gallery.subtitle", app_language=app_language, fallback_text="Choose a starter workflow to begin faster."),
+                "template_count": len(templates),
+                "category_count": len(categories),
+                "identity_policy": _starter_template_identity_policy_body(),
+                "namespace_policy": _starter_template_namespace_policy_body(),
+            },
+            categories=tuple(categories.values()),
+            templates=tuple(templates),
+            app_language=app_language,
+            routes={
+                "self": expected_path,
+                "workspace": f"/api/workspaces/{workspace_id}",
+                "workspace_library": "/api/workspaces/library",
+                "global_catalog": "/api/templates/starter-circuits",
+                "app_catalog": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
+                "app_library": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
+            },
+            identity_policy=_starter_template_identity_policy_body(),
+            namespace_policy=_starter_template_namespace_policy_body(),
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_get_workspace_starter_circuit_template(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+        workspace_context: Optional[WorkspaceAuthorizationContext],
+        workspace_row: Optional[Mapping[str, Any]],
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Workspace starter template detail route only supports GET."})
+        workspace_id = str(http_request.path_params.get("workspace_id") or "").strip() if http_request.path_params else ""
+        if not workspace_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.workspace_id_missing", "message": "Workspace id path parameter is required."})
+        template_id = str(http_request.path_params.get("template_id") or "").strip() if http_request.path_params else ""
+        if not template_id:
+            return _route_response(400, {"error_family": "route_error", "reason_code": "route.template_id_missing", "message": "Template id path parameter is required."})
+        expected_path = f"/api/workspaces/{workspace_id}/starter-templates/{template_id}"
+        if http_request.path.rstrip("/") != expected_path:
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+        if workspace_context is None or workspace_row is None:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "starter_template_read_failure",
+                "reason_code": "workspace.not_found",
+                "message": "Requested workspace was not found.",
+                "workspace_id": workspace_id,
+            })
+        try:
+            spec = get_starter_circuit_template(template_id)
+        except KeyError:
+            return _route_response(404, {
+                "status": "rejected",
+                "error_family": "starter_template_read_failure",
+                "reason_code": "starter_template.not_found",
+                "message": "Requested starter template was not found.",
+                "workspace_id": workspace_id,
+                "template_id": template_id,
+            })
+        app_language = _request_app_language(http_request.query_params)
+        template = cls._workspace_starter_template_view(spec, workspace_id=workspace_id, app_language=app_language)
+        response = ProductWorkspaceStarterTemplateDetailResponse(
+            status="ready",
+            workspace_id=workspace_id,
+            template=template,
+            app_language=app_language,
+            routes={
+                "self": expected_path,
+                "workspace": f"/api/workspaces/{workspace_id}",
+                "workspace_catalog": f"/api/workspaces/{workspace_id}/starter-templates",
+                "workspace_library": "/api/workspaces/library",
+                "global_detail": f"/api/templates/starter-circuits/{spec.template_id}",
             },
             identity_policy=_starter_template_identity_policy_body(),
             namespace_policy=_starter_template_namespace_policy_body(),
