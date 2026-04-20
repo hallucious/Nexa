@@ -598,6 +598,16 @@ def test_fastapi_binding_public_plugin_catalog_route_round_trip() -> None:
     assert payload['namespace_policy']['family'] == 'public-plugin-catalog'
     assert payload['plugins']
 
+def test_fastapi_binding_public_community_catalog_route_round_trip() -> None:
+    client = _make_client()
+    response = client.get('/api/integrations/public-community/catalog')
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['catalog']['surface_family'] == 'public-community-catalog'
+    assert payload['namespace_policy']['family'] == 'public-community-catalog'
+    assert payload['assets']
+
 def test_fastapi_binding_public_ecosystem_catalog_route_round_trip() -> None:
     client = _make_client()
 

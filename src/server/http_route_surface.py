@@ -46,6 +46,7 @@ from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_sdk_models import ProductPublicSdkCatalogResponse
 from src.server.public_ecosystem_models import ProductPublicEcosystemCatalogResponse
 from src.server.public_plugin_models import ProductPublicPluginCatalogResponse
+from src.server.public_community_models import ProductPublicCommunityCatalogResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.public_share_models import (
     ProductPublicShareCheckoutAcceptedResponse,
@@ -1976,6 +1977,22 @@ def _public_plugin_catalog_namespace_policy_body() -> dict[str, Any]:
     }
 
 
+def _public_community_catalog_identity_policy_body() -> dict[str, Any]:
+    return {
+        "canonical_key": "catalog.surface_family",
+        "canonical_value": "public-community-catalog",
+        "lookup_mode": "public_community_catalog",
+    }
+
+
+def _public_community_catalog_namespace_policy_body() -> dict[str, Any]:
+    return {
+        "family": "public-community-catalog",
+        "canonical_scope": "community-public-surface",
+        "write_policy": "read-only",
+    }
+
+
 def _public_sdk_catalog_body() -> dict[str, Any]:
     from src.sdk.integration import (
         build_public_mcp_resources,
@@ -1999,6 +2016,7 @@ def _public_sdk_catalog_body() -> dict[str, Any]:
             "self": "/api/integrations/public-sdk/catalog",
             "public_nex_format": "/api/formats/public-nex",
             "public_plugin_catalog": "/api/integrations/public-plugins/catalog",
+            "public_community_catalog": "/api/integrations/public-community/catalog",
             "public_mcp_manifest": "/api/integrations/public-mcp/manifest",
             "public_mcp_host_bridge": "/api/integrations/public-mcp/host-bridge",
             "public_share_catalog": "/api/public-shares",
@@ -2029,6 +2047,56 @@ def _public_plugin_catalog_body() -> dict[str, Any]:
     }
 
 
+def _public_community_catalog_body() -> dict[str, Any]:
+    from src.sdk.integration import (
+        describe_public_community_export_surface,
+        describe_public_plugin_export_surface,
+    )
+
+    summary = describe_public_community_export_surface()
+    plugin_summary = describe_public_plugin_export_surface()
+    share_boundary = get_public_nex_share_boundary()
+    starter_templates = list_starter_circuit_templates()
+    assets = [
+        {
+            "asset_family": "starter-templates",
+            "surface_family": "starter-template-catalog",
+            "community_role": "remixable workflow starting points",
+            "route": "/api/templates/starter-circuits",
+            "public_item_count": len(starter_templates),
+            "sample_ids": [template.template_id for template in starter_templates[:3]],
+        },
+        {
+            "asset_family": "public-shares",
+            "surface_family": "public-share-catalog",
+            "community_role": "shared public Nexa artifacts and run-ready examples",
+            "route": "/api/public-shares",
+            "public_operation_count": len(share_boundary.supported_operations),
+            "supported_operations": list(share_boundary.supported_operations),
+        },
+        {
+            "asset_family": "public-plugins",
+            "surface_family": "public-plugin-catalog",
+            "community_role": "extendable community-facing capabilities",
+            "route": "/api/integrations/public-plugins/catalog",
+            "public_item_count": plugin_summary.plugin_count,
+            "sample_ids": list(plugin_summary.plugin_ids[:3]),
+        },
+    ]
+    return {
+        "catalog": {
+            "surface_family": "public-community-catalog",
+            **summary.to_dict(),
+        },
+        "assets": assets,
+        "public_sdk_entrypoints": dict(summary.public_sdk_entrypoints),
+        "routes": {
+            "self": "/api/integrations/public-community/catalog",
+            **dict(summary.discovery_routes),
+        },
+    }
+
+
 def _public_ecosystem_catalog_body() -> dict[str, Any]:
     from src.sdk.integration import describe_public_ecosystem_export_surface
 
@@ -2048,6 +2116,11 @@ def _public_ecosystem_catalog_body() -> dict[str, Any]:
             "surface_family": "public-plugin-catalog",
             "route_family": "public-plugin-catalog-read",
             "route": "/api/integrations/public-plugins/catalog",
+        },
+        "public_community_catalog": {
+            "surface_family": "public-community-catalog",
+            "route_family": "public-community-catalog-read",
+            "route": "/api/integrations/public-community/catalog",
         },
         "public_mcp_manifest": {
             "surface_family": "public-mcp-manifest",
@@ -2121,6 +2194,7 @@ class RunHttpRouteSurface:
         ("get_public_sdk_catalog", "GET", "/api/integrations/public-sdk/catalog"),
         ("get_public_ecosystem_catalog", "GET", "/api/integrations/public-ecosystem/catalog"),
         ("get_public_plugin_catalog", "GET", "/api/integrations/public-plugins/catalog"),
+        ("get_public_community_catalog", "GET", "/api/integrations/public-community/catalog"),
         ("get_public_mcp_manifest", "GET", "/api/integrations/public-mcp/manifest"),
         ("get_public_mcp_host_bridge", "GET", "/api/integrations/public-mcp/host-bridge"),
         ("get_workspace_result_history", "GET", "/api/workspaces/{workspace_id}/result-history"),
@@ -6146,6 +6220,29 @@ class RunHttpRouteSurface:
             plugins=tuple(payload["plugins"]),
             identity_policy=_public_plugin_catalog_identity_policy_body(),
             namespace_policy=_public_plugin_catalog_namespace_policy_body(),
+            routes=payload["routes"],
+            public_sdk_entrypoints=payload["public_sdk_entrypoints"],
+        )
+        return _route_response(200, asdict(response))
+
+    @classmethod
+    def handle_public_community_catalog(
+        cls,
+        *,
+        http_request: HttpRouteRequest,
+    ) -> HttpRouteResponse:
+        if http_request.method != "GET":
+            return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public community catalog route only supports GET."})
+        if http_request.path.rstrip("/") != "/api/integrations/public-community/catalog":
+            return _route_response(404, {"error_family": "route_error", "reason_code": "route.not_found", "message": "Requested route was not found."})
+
+        payload = _public_community_catalog_body()
+        response = ProductPublicCommunityCatalogResponse(
+            status="ready",
+            catalog=payload["catalog"],
+            assets=tuple(payload["assets"]),
+            identity_policy=_public_community_catalog_identity_policy_body(),
+            namespace_policy=_public_community_catalog_namespace_policy_body(),
             routes=payload["routes"],
             public_sdk_entrypoints=payload["public_sdk_entrypoints"],
         )

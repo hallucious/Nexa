@@ -1,4 +1,4 @@
-# Plugin Namespace Policy Contract v1.0
+# Plugin Namespace Policy Contract v1.1-c
 
 ## Recommended save path
 `docs/specs/plugins/plugin_namespace_policy_contract.md`
@@ -153,6 +153,23 @@ Runtime must enforce:
 - violation recording
 - no silent widening
 - policy-linked traceability
+
+
+
+## 15A. MCP Capability Bridge
+
+MCP-facing capability exposure must remain governed by namespace and external-target policy rather than floating as free metadata.
+
+Canonical bridge rules:
+- MCP tool capability -> action / write-capable external-effect surface
+- MCP resource capability -> read-oriented external surface
+- MCP prompt capability -> prompt/template surface
+
+Normative implications:
+- `exposed_mcp_capabilities` must not be treated as free-floating metadata
+- `exposed_mcp_capabilities` must follow the same interpretation path used for external read targets and external write targets
+- MCP capability exposure must therefore remain visible to builder validation and runtime enforcement
+- MCP compatibility must not be used to widen internal or external authority silently
 
 ## 16. Trace and Audit Model
 

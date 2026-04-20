@@ -1,4 +1,4 @@
-# Plugin Contract Family Index v1.0
+# Plugin Contract Family Index v1.1-b
 
 ## Recommended save path
 `docs/specs/plugins/plugin_contract_family_index.md`
@@ -82,7 +82,8 @@ Unless otherwise noted, most of this plugin family should currently be read as `
 13. Plugin Lifecycle State Machine Contract
 
 ### 4.4 Integration / Family Governance Layer
-14. Plugin Contract Family Index
+14. Plugin Classification & MCP Compatibility Contract
+15. Plugin Contract Family Index
 
 ## 6. Canonical Reading Order
 
@@ -99,7 +100,8 @@ Unless otherwise noted, most of this plugin family should currently be read as `
 11. Plugin Runtime Observability Contract
 12. Plugin Runtime Governance Contract
 13. Plugin Lifecycle State Machine Contract
-14. Plugin Contract Family Index
+14. Plugin Classification & MCP Compatibility Contract
+15. Plugin Contract Family Index
 
 ## 7. Contract-by-Contract Question Map
 
@@ -116,6 +118,7 @@ Unless otherwise noted, most of this plugin family should currently be read as `
 - Plugin Runtime Observability Contract: How do execution facts become events, metrics, trace slices, and artifact-linked evidence?
 - Plugin Runtime Governance Contract: How does accumulated runtime evidence change operational posture?
 - Plugin Lifecycle State Machine Contract: How do all plugin states fit together as one explicit lifecycle machine?
+- Plugin Classification & MCP Compatibility Contract: Which plugin classes should or should not be primarily modeled as MCP-native, and how does approved classification bridge into artifact and loading truth?
 - Plugin Contract Family Index: How should the whole family be read, navigated, and implemented?
 
 ## 8. Reading Order vs Real Dependency Structure
@@ -148,6 +151,11 @@ The real dependency structure is better understood as a graph with strong direct
 - Failure / Recovery -> Runtime Observability
 - Runtime Observability -> Runtime Governance
 - Runtime Governance -> Lifecycle State Machine
+- Designer-to-Plugin-Builder Intake -> Plugin Classification & MCP Compatibility
+- Plugin Builder Spec -> Plugin Classification & MCP Compatibility
+- Plugin Classification & MCP Compatibility -> Runtime Artifact / Manifest
+- Plugin Classification & MCP Compatibility -> Runtime Loading / Installation
+- Plugin Classification & MCP Compatibility -> Plugin Namespace Policy
 
 This graph is not exhaustive,
 but it is more accurate than a single linear chain.

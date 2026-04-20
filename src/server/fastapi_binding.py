@@ -263,6 +263,12 @@ class FastApiRouteBindings:
             outbound = FrameworkRouteBindings.handle_public_plugin_catalog(request=inbound)
             return self._framework_response(outbound)
 
+        @router.get("/api/integrations/public-community/catalog")
+        async def get_public_community_catalog(request: Request) -> Response:
+            inbound = self._inbound_request(request=request)
+            outbound = FrameworkRouteBindings.handle_public_community_catalog(request=inbound)
+            return self._framework_response(outbound)
+
         @router.get("/api/integrations/public-mcp/manifest")
         async def get_public_mcp_manifest(request: Request) -> Response:
             inbound = self._inbound_request(request=request)

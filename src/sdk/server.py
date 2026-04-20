@@ -30,6 +30,7 @@ from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_sdk_models import ProductPublicSdkCatalogResponse
 from src.server.public_ecosystem_models import ProductPublicEcosystemCatalogResponse
 from src.server.public_plugin_models import ProductPublicPluginCatalogResponse
+from src.server.public_community_models import ProductPublicCommunityCatalogResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.recent_activity_models import ProductHistorySummaryResponse, ProductRecentActivityResponse
 from src.server.provider_health_models import (
@@ -157,6 +158,7 @@ __all__ = [
     "ProductPublicSdkCatalogResponse",
     "ProductPublicEcosystemCatalogResponse",
     "ProductPublicPluginCatalogResponse",
+    "ProductPublicCommunityCatalogResponse",
     "ProductPublicMcpManifestResponse",
     "ProductPublicMcpHostBridgeResponse",
     "ProductWorkspaceCreateRequest",

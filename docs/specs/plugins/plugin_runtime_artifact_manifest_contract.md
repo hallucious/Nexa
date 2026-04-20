@@ -1,4 +1,4 @@
-# Plugin Runtime Artifact / Manifest Contract v1.0
+# Plugin Runtime Artifact / Manifest Contract v1.1-b
 
 ## Recommended save path
 `docs/specs/plugins/plugin_runtime_artifact_manifest_contract.md`
@@ -96,6 +96,12 @@ PluginArtifactManifest
 - input_contract_summary: PluginArtifactManifestInputSummary
 - output_contract_summary: PluginArtifactManifestOutputSummary
 - approved_namespace_policy_ref: string
+- approved_classification_ref: string | null
+- approved_classification_summary:
+    - approved_class: string | null
+    - mcp_compatibility_level: string | null
+    - runtime_authority_model: string | null
+    - policy_version: string | null
 - side_effect_summary: PluginSideEffectSummary
 - dependency_summary: PluginDependencySummary
 - verification_summary: PluginVerificationSummary
@@ -162,6 +168,12 @@ Normative bridge rule:
 - a runtime-usable artifact must expose or resolve an explicit runtime-facing `plugin_type` before loading/install acceptance
 - that runtime-facing type may be carried directly in the artifact/manifest layer or resolved by a declared loading/install rule
 - category alone is not sufficient to determine runtime/plugin-role behavior
+
+
+Approved-classification bridge rule:
+- proposal-stage MCP classification must not become artifact truth by implication
+- approved MCP classification must be embedded in, or explicitly referenced by, artifact/manifest truth
+- runtime loading/install and registry summary layers must consume approved classification rather than raw proposal classification
 
 ## 13. Relationship to Current Codebase Alignment
 

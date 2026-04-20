@@ -1,4 +1,4 @@
-# Designer-to-Plugin-Builder Intake Contract v1.0
+# Designer-to-Plugin-Builder Intake Contract v1.1-c
 
 ## Recommended save path
 `docs/specs/plugins/designer_to_plugin_builder_intake_contract.md`
@@ -199,6 +199,7 @@ PluginBuilderSpecDraft
 - safety_constraint_draft: SafetyConstraintDraft
 - verification_requirement_draft: VerificationRequirementDraft
 - registration_intent_draft: RegistrationIntentDraft
+- classification_request_draft: ClassificationRequestDraft | null
 - unresolved_fields: list[UnresolvedField]
 - assumptions: list[DesignerAssumption]
 - notes: string | null
@@ -231,6 +232,7 @@ The intake must support draft sections for:
 - safety constraints
 - verification requirements
 - registration intent
+- classification request
 
 Each section must support unresolved questions when Designer AI cannot safely determine final truth.
 
@@ -244,6 +246,21 @@ The intake must explicitly expose:
 - clarification questions
 
 A future AI or human reader must be able to see exactly what Designer AI did not know.
+
+
+
+## 12A. Classification Request Draft
+
+ClassificationRequestDraft
+- requested_class: enum("internal_native", "mcp_native", "hybrid", "adapter", "unknown")
+- requested_mcp_compatibility_level: enum("none", "mcp_wrapped", "mcp_partial", "mcp_native", "unknown")
+- requested_runtime_authority_model: string | null
+- requested_mcp_capabilities: list[string]
+- rationale: string | null
+- unresolved_questions: list[string]
+
+This object is proposal-space only.
+It must not be treated as approved classification truth until Builder approves or revises it.
 
 ## 13. Intake Acceptance Rules
 

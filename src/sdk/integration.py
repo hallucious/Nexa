@@ -768,6 +768,28 @@ class PublicPluginExportSurfaceSummary:
 
 
 @dataclass(frozen=True)
+class PublicCommunityExportSurfaceSummary:
+    discovery_routes: Mapping[str, str]
+    public_sdk_entrypoints: Mapping[str, str]
+    asset_families: tuple[str, ...]
+    asset_count: int
+    starter_template_count: int
+    share_operation_count: int
+    plugin_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "discovery_routes": dict(self.discovery_routes),
+            "public_sdk_entrypoints": dict(self.public_sdk_entrypoints),
+            "asset_families": list(self.asset_families),
+            "asset_count": self.asset_count,
+            "starter_template_count": self.starter_template_count,
+            "share_operation_count": self.share_operation_count,
+            "plugin_count": self.plugin_count,
+        }
+
+
+@dataclass(frozen=True)
 class PublicMcpOrchestrationSummary:
     name: str
     route_name: str
@@ -3801,6 +3823,7 @@ def describe_public_ecosystem_export_surface(
         "public_sdk_catalog": "/api/integrations/public-sdk/catalog",
         "public_nex_format": "/api/formats/public-nex",
         "public_plugin_catalog": "/api/integrations/public-plugins/catalog",
+        "public_community_catalog": "/api/integrations/public-community/catalog",
         "public_mcp_manifest": "/api/integrations/public-mcp/manifest",
         "public_mcp_host_bridge": "/api/integrations/public-mcp/host-bridge",
         "public_share_catalog": "/api/public-shares",
@@ -3815,6 +3838,7 @@ def describe_public_ecosystem_export_surface(
             "public-sdk-catalog",
             "public-nex-format",
             "public-plugin-catalog",
+            "public-community-catalog",
             "public-mcp-manifest",
             "public-mcp-host-bridge",
             "public-share-catalog",
@@ -3827,6 +3851,7 @@ def describe_public_ecosystem_export_surface(
             "sdk_catalog_summary": "describe_public_sdk_export_surface",
             "mcp_export_summary": "describe_public_mcp_export_surface",
             "plugin_catalog_summary": "describe_public_plugin_export_surface",
+            "community_catalog_summary": "describe_public_community_export_surface",
             "public_nex_format_boundary": "get_public_nex_format_boundary",
             "public_share_boundary": "get_public_nex_share_boundary",
             "starter_template_catalog": "list_starter_circuit_templates",
@@ -3865,6 +3890,7 @@ def describe_public_plugin_export_surface() -> PublicPluginExportSurfaceSummary:
             "self": "/api/integrations/public-plugins/catalog",
             "public_sdk_catalog": "/api/integrations/public-sdk/catalog",
             "public_ecosystem_catalog": "/api/integrations/public-ecosystem/catalog",
+            "public_community_catalog": "/api/integrations/public-community/catalog",
             "public_mcp_manifest": "/api/integrations/public-mcp/manifest",
         },
         public_sdk_entrypoints={
@@ -3872,12 +3898,49 @@ def describe_public_plugin_export_surface() -> PublicPluginExportSurfaceSummary:
             "plugin_registry_loader": "load_plugin_registry",
             "sdk_catalog_summary": "describe_public_sdk_export_surface",
             "ecosystem_catalog_summary": "describe_public_ecosystem_export_surface",
+            "community_catalog_summary": "describe_public_community_export_surface",
             "mcp_export_summary": "describe_public_mcp_export_surface",
             "plugin_catalog_summary": "describe_public_plugin_export_surface",
         },
         plugin_count=len(plugin_ids),
         plugin_ids=plugin_ids,
         plugin_versions={plugin_id: registry[plugin_id].version for plugin_id in plugin_ids},
+    )
+
+
+def describe_public_community_export_surface() -> PublicCommunityExportSurfaceSummary:
+    """Return the public community-facing asset catalog summary."""
+
+    share_boundary = get_public_nex_share_boundary()
+    starter_templates = list_starter_circuit_templates()
+    plugin_summary = describe_public_plugin_export_surface()
+    asset_families = (
+        "public-community-catalog",
+        "starter-template-catalog",
+        "public-share-catalog",
+        "public-plugin-catalog",
+    )
+    return PublicCommunityExportSurfaceSummary(
+        discovery_routes={
+            "self": "/api/integrations/public-community/catalog",
+            "public_ecosystem_catalog": "/api/integrations/public-ecosystem/catalog",
+            "public_plugin_catalog": "/api/integrations/public-plugins/catalog",
+            "public_share_catalog": "/api/public-shares",
+            "public_share_catalog_summary": "/api/public-shares/summary",
+            "starter_template_catalog": "/api/templates/starter-circuits",
+        },
+        public_sdk_entrypoints={
+            "community_catalog_summary": "describe_public_community_export_surface",
+            "plugin_catalog_summary": "describe_public_plugin_export_surface",
+            "starter_template_catalog": "list_starter_circuit_templates",
+            "public_share_boundary": "get_public_nex_share_boundary",
+            "ecosystem_catalog_summary": "describe_public_ecosystem_export_surface",
+        },
+        asset_families=asset_families,
+        asset_count=len(asset_families) - 1,
+        starter_template_count=len(starter_templates),
+        share_operation_count=len(share_boundary.supported_operations),
+        plugin_count=plugin_summary.plugin_count,
     )
 
 
@@ -3908,6 +3971,7 @@ _FRAMEWORK_HANDLER_BY_ROUTE_NAME: dict[str, str] = {
     "get_public_sdk_catalog": "handle_public_sdk_catalog",
     "get_public_ecosystem_catalog": "handle_public_ecosystem_catalog",
     "get_public_plugin_catalog": "handle_public_plugin_catalog",
+    "get_public_community_catalog": "handle_public_community_catalog",
     "get_public_mcp_manifest": "handle_public_mcp_manifest",
     "get_public_mcp_host_bridge": "handle_public_mcp_host_bridge",
     "get_workspace_result_history": "handle_workspace_result_history",
@@ -4556,6 +4620,7 @@ _ROUTE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, str]] = {
     "get_public_sdk_catalog": {"route_family": "public-sdk-catalog-read", "transport_profile": "no-arguments"},
     "get_public_ecosystem_catalog": {"route_family": "public-ecosystem-catalog-read", "transport_profile": "no-arguments"},
     "get_public_plugin_catalog": {"route_family": "public-plugin-catalog-read", "transport_profile": "no-arguments"},
+    "get_public_community_catalog": {"route_family": "public-community-catalog-read", "transport_profile": "no-arguments"},
     "get_public_mcp_manifest": {"route_family": "public-mcp-manifest-read", "transport_profile": "query-only"},
     "get_public_mcp_host_bridge": {"route_family": "public-mcp-host-bridge-read", "transport_profile": "query-only"},
     "get_workspace_result_history": {"route_family": "workspace-result-history-read", "transport_profile": "path-and-query"},
@@ -4828,6 +4893,15 @@ _RECOVERY_POLICY_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
         "response_timeout_recommended_action": "retry_same_request",
     },
     "public-plugin-catalog-read": {
+        "idempotency_class": "read-only",
+        "timeout_retryable": True,
+        "safe_to_retry_same_request_on_timeout": True,
+        "timeout_recommended_action": "retry_same_request",
+        "response_timeout_retryable": True,
+        "safe_to_retry_same_request_on_response_timeout": True,
+        "response_timeout_recommended_action": "retry_same_request",
+    },
+    "public-community-catalog-read": {
         "idempotency_class": "read-only",
         "timeout_retryable": True,
         "safe_to_retry_same_request_on_timeout": True,
@@ -5412,7 +5486,12 @@ _LIFECYCLE_CONTROL_BY_ROUTE_FAMILY: dict[str, dict[str, object]] = {
     "public-plugin-catalog-read": {
         "lifecycle_class": "public-plugin-catalog-read",
         "result_resource_name": "get_public_plugin_catalog",
-        "followup_route_names": ("get_public_plugin_catalog", "get_public_sdk_catalog", "get_public_ecosystem_catalog", "get_public_mcp_manifest"),
+        "followup_route_names": ("get_public_plugin_catalog", "get_public_community_catalog", "get_public_sdk_catalog", "get_public_ecosystem_catalog", "get_public_mcp_manifest"),
+    },
+    "public-community-catalog-read": {
+        "lifecycle_class": "public-community-catalog-read",
+        "result_resource_name": "get_public_community_catalog",
+        "followup_route_names": ("get_public_community_catalog", "get_public_ecosystem_catalog", "get_public_plugin_catalog", "list_public_shares", "get_public_share_catalog_summary", "list_starter_circuit_templates"),
     },
     "public-mcp-manifest-read": {
         "lifecycle_class": "public-mcp-manifest-read",
@@ -5783,6 +5862,13 @@ _RESULT_SHAPE_PROFILE_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
         "collection_field_name": "plugins",
         "collection_item_identity_keys": ("plugin_id", "version"),
     },
+    "get_public_community_catalog": {
+        "profile_kind": "public-community-catalog",
+        "identity_keys": ("catalog", "identity_policy", "namespace_policy"),
+        "state_keys": ("status",),
+        "collection_field_name": "assets",
+        "collection_item_identity_keys": ("asset_family", "surface_family"),
+    },
     "get_public_mcp_manifest": {
         "profile_kind": "public-mcp-manifest",
         "identity_keys": ("manifest", "identity_policy", "namespace_policy"),
@@ -6145,6 +6231,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
     "get_public_sdk_catalog": {"response_shape": "public-sdk-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "tools", "resources", "public_sdk_entrypoints", "supported_contract_markers", "supported_runtime_markers", "supported_transport_kinds", "identity_policy", "namespace_policy", "routes")},
     "get_public_ecosystem_catalog": {"response_shape": "public-ecosystem-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "surfaces", "public_sdk_entrypoints", "supported_contract_markers", "supported_runtime_markers", "supported_transport_kinds", "identity_policy", "namespace_policy", "routes")},
     "get_public_plugin_catalog": {"response_shape": "public-plugin-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "plugins", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")},
+    "get_public_community_catalog": {"response_shape": "public-community-catalog", "success_status_codes": (200,), "body_kind": "object", "required_top_level_keys": ("status", "catalog", "assets", "public_sdk_entrypoints", "identity_policy", "namespace_policy", "routes")},
     "get_public_mcp_manifest": {
         "response_shape": "public-mcp-manifest",
         "success_status_codes": (200,),
@@ -6657,6 +6744,13 @@ _RESOURCE_SPECS: tuple[dict[str, object], ...] = (
         "tags": ("integration", "plugins", "catalog"),
     },
     {
+        "name": "get_public_community_catalog",
+        "route_name": "get_public_community_catalog",
+        "description": "Read the official public community asset catalog spanning starter templates, public shares, and plugin discovery.",
+        "response_type": PublicTypeRef("src.sdk.server", "ProductPublicCommunityCatalogResponse"),
+        "tags": ("integration", "community", "catalog"),
+    },
+    {
         "name": "get_public_mcp_manifest",
         "route_name": "get_public_mcp_manifest",
         "description": "Read the public MCP manifest export surface for packaging and ecosystem discovery.",
@@ -7048,6 +7142,7 @@ __all__ = [
     "build_public_mcp_adapter_scaffold",
     "build_public_mcp_manifest",
     "build_public_mcp_host_bridge_scaffold",
+    "describe_public_sdk_export_surface",
 ]
 
 def _append_unique(values: list[str], value: str | None) -> None:

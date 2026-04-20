@@ -1581,6 +1581,21 @@ def test_public_plugin_catalog_route_returns_public_plugin_surface() -> None:
     assert response.body["public_sdk_entrypoints"]["plugin_registry_loader"] == "load_plugin_registry"
     assert len(response.body["plugins"]) > 0
 
+def test_public_community_catalog_route_returns_community_asset_surface() -> None:
+    response = RunHttpRouteSurface.handle_public_community_catalog(
+        http_request=HttpRouteRequest(method="GET", path="/api/integrations/public-community/catalog"),
+    )
+
+    assert response.status_code == 200
+    assert response.body["status"] == "ready"
+    assert response.body["catalog"]["surface_family"] == "public-community-catalog"
+    assert response.body["identity_policy"]["canonical_key"] == "catalog.surface_family"
+    assert response.body["namespace_policy"]["family"] == "public-community-catalog"
+    assert response.body["routes"]["self"] == "/api/integrations/public-community/catalog"
+    assert response.body["routes"]["starter_template_catalog"] == "/api/templates/starter-circuits"
+    assert response.body["public_sdk_entrypoints"]["community_catalog_summary"] == "describe_public_community_export_surface"
+    assert len(response.body["assets"]) == 3
+
 def test_public_mcp_manifest_route_returns_manifest_export_surface() -> None:
     response = RunHttpRouteSurface.handle_public_mcp_manifest(
         http_request=HttpRouteRequest(method="GET", path="/api/integrations/public-mcp/manifest", query_params={"base_url": "https://api.nexa.test"}),

@@ -1,4 +1,4 @@
-# Plugin Builder Spec Contract v1.0
+# Plugin Builder Spec Contract v1.1-c
 
 ## Recommended save path
 `docs/specs/plugins/plugin_builder_spec_contract.md`
@@ -254,12 +254,14 @@ Purpose:
 - verify manifest completeness
 - verify forbidden patterns
 - verify required metadata presence
+- evaluate and approve/revise/reject requested classification
 
 Primary outputs:
 - validation report
 - blocking findings
 - warning findings
 - policy findings
+- approved classification outcome
 
 ### 8.5 Verification Stage
 Purpose:
@@ -410,6 +412,7 @@ PluginBuilderSpec
 - safety_constraints: SafetyConstraintSet
 - verification_requirements: VerificationRequirementSet
 - registration_intent: RegistrationIntent
+- classification_request: ClassificationRequest | null
 - notes: string | null
 
 This object must be canonical enough that another AI, another human, or a later Nexa component can understand exactly what was intended.
@@ -663,6 +666,15 @@ Validation must include at minimum:
 - unresolved required dependency declarations
 
 Validation must remain a distinct internal stage even though the external product concept is one builder.
+
+
+
+Recommended classification-related categories include:
+- CLASSIFICATION_REQUEST_AMBIGUOUS
+- CLASSIFICATION_MCP_COMPATIBILITY_UNCLEAR
+- CLASSIFICATION_RUNTIME_AUTHORITY_UNCLEAR
+- CLASSIFICATION_ADAPTER_RECURSION_DETECTED
+- CLASSIFICATION_APPROVAL_REQUIRED
 
 ## 21. Verification Responsibility
 

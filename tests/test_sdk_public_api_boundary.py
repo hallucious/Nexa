@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.server.public_nex_models import ProductPublicNexFormatResponse
 from src.server.public_sdk_models import ProductPublicSdkCatalogResponse
+from src.server.public_community_models import ProductPublicCommunityCatalogResponse
 from src.server.public_mcp_models import ProductPublicMcpHostBridgeResponse, ProductPublicMcpManifestResponse
 from src.server.starter_template_models import (
     ProductStarterTemplateApplyAcceptedResponse,
@@ -236,6 +237,7 @@ def test_server_sdk_surface_exposes_public_launch_and_read_models() -> None:
     assert ProductStarterTemplateApplyAcceptedResponse is not None
     assert ProductPublicNexFormatResponse is not None
     assert ProductPublicSdkCatalogResponse is not None
+    assert ProductPublicCommunityCatalogResponse is not None
     assert ProductPublicMcpManifestResponse is not None
     assert ProductPublicMcpHostBridgeResponse is not None
     assert ProductWorkspaceResultHistoryResponse is not None
@@ -267,6 +269,7 @@ def test_sdk_root_exposes_public_mcp_manifest_surface() -> None:
     assert any(resource.route_name == "get_public_sdk_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_public_ecosystem_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_public_plugin_catalog" for resource in manifest.resources)
+    assert any(resource.route_name == "get_public_community_catalog" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_result_history" for resource in manifest.resources)
     assert any(resource.route_name == "get_workspace_feedback" for resource in manifest.resources)
     launch_manifest = next(tool for tool in manifest.tools if tool.route_name == "launch_run")
@@ -887,6 +890,19 @@ def test_sdk_root_exposes_public_plugin_catalog_surface() -> None:
     assert summary.public_sdk_entrypoints["plugin_catalog_summary"] == "describe_public_plugin_export_surface"
     assert summary.plugin_count > 0
     assert "nexa.file_reader" in summary.plugin_ids
+
+def test_sdk_root_exposes_public_community_catalog_surface() -> None:
+    summary = sdk.describe_public_community_export_surface()
+
+    assert isinstance(summary, sdk.PublicCommunityExportSurfaceSummary)
+    assert summary.discovery_routes["self"] == "/api/integrations/public-community/catalog"
+    assert summary.discovery_routes["starter_template_catalog"] == "/api/templates/starter-circuits"
+    assert summary.public_sdk_entrypoints["community_catalog_summary"] == "describe_public_community_export_surface"
+    assert "public-share-catalog" in summary.asset_families
+    assert summary.asset_count == 3
+    assert summary.starter_template_count > 0
+    assert summary.share_operation_count > 0
+    assert summary.plugin_count > 0
 
 def test_sdk_root_exposes_public_share_mcp_surface() -> None:
     manifest = sdk.build_public_mcp_manifest(base_url="https://api.nexa.test")

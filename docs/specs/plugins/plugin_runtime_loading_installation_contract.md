@@ -1,4 +1,4 @@
-# Plugin Runtime Loading / Installation Contract v1.0
+# Plugin Runtime Loading / Installation Contract v1.1-b
 
 ## Recommended save path
 `docs/specs/plugins/plugin_runtime_loading_installation_contract.md`
@@ -88,6 +88,27 @@ Runtime must perform:
 - dependency readiness check
 - governance/scope check
 
+### 8.1 MCP-aware classification preflight
+
+Loading/install must consume approved classification explicitly rather than by implication.
+
+Minimum MCP-aware preflight rules:
+- if approved classification is `internal_native`, no MCP-facing capability preflight is required by default
+- if approved classification is `mcp_native`, runtime must verify that the MCP-facing capability surface or required adapter surface is available and coherent
+- if approved classification is `hybrid`, runtime must verify both Nexa runtime constraints and MCP-surface coherence
+- if approved classification is `adapter`, runtime must verify both sides of the translation boundary or reject activation readiness
+
+Plugin type resolution rule:
+- installation/load acceptance must not proceed to activation with `plugin_type` unresolved
+- if the artifact manifest carries `plugin_type`, runtime may use that value directly
+- if the artifact manifest leaves `plugin_type` null, the loading stage must resolve it through an explicit loading/install rule
+- acceptable resolution sources include builder/template metadata, discovery metadata, or an operator-supplied resolution rule
+- a plugin with unresolved runtime-facing `plugin_type` must not proceed as activation-ready
+
+Approved classification consumption rule:
+- loading/install must consume approved classification from artifact/manifest truth or its explicit classification reference
+- proposal-only classification must not be used as activation-ready truth
+
 ## 9. Activation Rules
 
 Loading and activation are separate.
@@ -147,12 +168,3 @@ A plugin should not become active merely because it was built or published.
 It becomes usable only when a target runtime explicitly accepts, loads, and activates it under enforceable policy and verification boundaries.
 
 That is the canonical meaning of Plugin Runtime Loading / Installation in Nexa.
-
-
-Plugin type resolution rule:
-- installation/load acceptance must not proceed to activation with `plugin_type` unresolved
-- if the artifact manifest carries `plugin_type`, runtime may use that value directly
-- if the artifact manifest leaves `plugin_type` null, the loading stage must resolve it through an explicit loading/install rule
-- acceptable resolution sources include builder/template metadata, discovery metadata, or an operator-supplied resolution rule
-- a plugin with unresolved runtime-facing `plugin_type` must not proceed as activation-ready
-
