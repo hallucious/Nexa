@@ -298,9 +298,16 @@ def test_sdk_root_exposes_public_mcp_export_surface_summary() -> None:
     assert summary.manifest_routes["self"] == "/api/integrations/public-mcp/manifest"
     assert summary.host_bridge_routes["self"] == "/api/integrations/public-mcp/host-bridge"
     assert summary.public_sdk_entrypoints["adapter_scaffold"] == "build_public_mcp_adapter_scaffold"
+    assert summary.public_sdk_entrypoints["argument_schemas"] == "build_public_mcp_argument_schemas"
+    assert summary.public_sdk_entrypoints["transport_contracts"] == "build_public_mcp_transport_contracts"
+    assert summary.public_sdk_entrypoints["result_shape_profiles"] == "build_public_mcp_result_shape_profiles"
     assert summary.public_sdk_entrypoints["response_contracts"] == "build_public_mcp_response_contracts"
+    assert summary.public_sdk_entrypoints["recovery_policies"] == "build_public_mcp_recovery_policies"
+    assert summary.public_sdk_entrypoints["lifecycle_control_profiles"] == "build_public_mcp_lifecycle_control_profiles"
+    assert summary.public_sdk_entrypoints["compatibility_policy"] == "build_public_mcp_compatibility_policy"
     assert summary.supported_contract_markers
     assert summary.supported_runtime_markers
+    assert summary.supported_transport_kinds
     assert summary.tool_count > 0
     assert summary.resource_count > 0
     assert any(binding.route_name == "get_run_status" for binding in bridge.export().resource_bindings)

@@ -14,6 +14,7 @@ class ProductPublicMcpManifestResponse:
     public_sdk_entrypoints: Mapping[str, str] = field(default_factory=dict)
     supported_contract_markers: tuple[str, ...] = ()
     supported_runtime_markers: tuple[str, ...] = ()
+    supported_transport_kinds: tuple[str, ...] = ()
     tool_count: int | None = None
     resource_count: int | None = None
 
@@ -34,6 +35,7 @@ class ProductPublicMcpHostBridgeResponse:
     public_sdk_entrypoints: Mapping[str, str] = field(default_factory=dict)
     supported_contract_markers: tuple[str, ...] = ()
     supported_runtime_markers: tuple[str, ...] = ()
+    supported_transport_kinds: tuple[str, ...] = ()
     tool_count: int | None = None
     resource_count: int | None = None
 

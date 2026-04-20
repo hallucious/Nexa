@@ -1555,8 +1555,11 @@ def test_public_mcp_manifest_route_returns_manifest_export_surface() -> None:
     assert response.body["namespace_policy"]["family"] == "public-mcp-manifest"
     assert response.body["routes"]["host_bridge"] == "/api/integrations/public-mcp/host-bridge"
     assert response.body["public_sdk_entrypoints"]["manifest_export"] == "build_public_mcp_manifest"
+    assert response.body["public_sdk_entrypoints"]["transport_contracts"] == "build_public_mcp_transport_contracts"
+    assert response.body["public_sdk_entrypoints"]["compatibility_policy"] == "build_public_mcp_compatibility_policy"
     assert response.body["supported_contract_markers"]
     assert response.body["supported_runtime_markers"]
+    assert response.body["supported_transport_kinds"]
     assert response.body["tool_count"] > 0
     assert response.body["resource_count"] > 0
 
@@ -1573,8 +1576,11 @@ def test_public_mcp_host_bridge_route_returns_host_bridge_export_surface() -> No
     assert response.body["namespace_policy"]["family"] == "public-mcp-host-bridge"
     assert response.body["routes"]["manifest"] == "/api/integrations/public-mcp/manifest"
     assert response.body["public_sdk_entrypoints"]["host_bridge_scaffold"] == "build_public_mcp_host_bridge_scaffold"
+    assert response.body["public_sdk_entrypoints"]["result_shape_profiles"] == "build_public_mcp_result_shape_profiles"
+    assert response.body["public_sdk_entrypoints"]["recovery_policies"] == "build_public_mcp_recovery_policies"
     assert response.body["supported_contract_markers"]
     assert response.body["supported_runtime_markers"]
+    assert response.body["supported_transport_kinds"]
     assert response.body["tool_count"] > 0
     assert response.body["resource_count"] > 0
 
@@ -1591,6 +1597,7 @@ def test_public_mcp_routes_include_canonical_metadata_fields_required_by_sdk_con
         assert "public_sdk_entrypoints" in body
         assert "supported_contract_markers" in body
         assert "supported_runtime_markers" in body
+        assert "supported_transport_kinds" in body
         assert body["tool_count"] is not None
         assert body["resource_count"] is not None
 

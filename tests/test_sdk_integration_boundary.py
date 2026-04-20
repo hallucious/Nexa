@@ -47,6 +47,7 @@ from src.sdk.integration import (
     build_public_mcp_lifecycle_control_profiles,
     build_public_mcp_compatibility_policy,
     build_public_mcp_compatibility_surface,
+    describe_public_mcp_export_surface,
     build_public_mcp_manifest,
     build_public_mcp_host_bridge_scaffold,
     build_public_mcp_resources,
@@ -644,6 +645,21 @@ def test_build_public_mcp_argument_schemas_returns_curated_contract_set() -> Non
     assert indexed["get_public_share_compare_summary"].path_fields[0].name == "share_id"
     assert [field.name for field in indexed["checkout_workspace_shell"].body_fields] == ["working_save_id", "share_id"]
 
+
+
+
+def test_describe_public_mcp_export_surface_reports_transport_kinds_and_full_export_catalog() -> None:
+    summary = describe_public_mcp_export_surface()
+
+    assert summary.public_sdk_entrypoints["argument_schemas"] == "build_public_mcp_argument_schemas"
+    assert summary.public_sdk_entrypoints["transport_contracts"] == "build_public_mcp_transport_contracts"
+    assert summary.public_sdk_entrypoints["result_shape_profiles"] == "build_public_mcp_result_shape_profiles"
+    assert summary.public_sdk_entrypoints["recovery_policies"] == "build_public_mcp_recovery_policies"
+    assert summary.public_sdk_entrypoints["lifecycle_control_profiles"] == "build_public_mcp_lifecycle_control_profiles"
+    assert summary.public_sdk_entrypoints["compatibility_policy"] == "build_public_mcp_compatibility_policy"
+    assert summary.supported_transport_kinds
+    assert "http-route-bridge" in summary.supported_transport_kinds
+    assert "framework-bridge" in summary.supported_transport_kinds
 
 def test_build_public_mcp_compatibility_policy_exports_supported_markers() -> None:
     policy = build_public_mcp_compatibility_policy()
@@ -1710,6 +1726,7 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
         "public_sdk_entrypoints",
         "supported_contract_markers",
         "supported_runtime_markers",
+        "supported_transport_kinds",
         "tool_count",
         "resource_count",
     )
@@ -1722,6 +1739,7 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
         "public_sdk_entrypoints",
         "supported_contract_markers",
         "supported_runtime_markers",
+        "supported_transport_kinds",
         "tool_count",
         "resource_count",
     )
@@ -1776,17 +1794,19 @@ def test_build_public_mcp_contracts_include_public_share_route_families() -> Non
 def test_public_mcp_response_contracts_match_route_surface_metadata_shape() -> None:
     responses = {contract.route_name: contract for contract in build_public_mcp_response_contracts()}
 
-    assert responses["get_public_mcp_manifest"].required_top_level_keys[-5:] == (
+    assert responses["get_public_mcp_manifest"].required_top_level_keys[-6:] == (
         "public_sdk_entrypoints",
         "supported_contract_markers",
         "supported_runtime_markers",
+        "supported_transport_kinds",
         "tool_count",
         "resource_count",
     )
-    assert responses["get_public_mcp_host_bridge"].required_top_level_keys[-5:] == (
+    assert responses["get_public_mcp_host_bridge"].required_top_level_keys[-6:] == (
         "public_sdk_entrypoints",
         "supported_contract_markers",
         "supported_runtime_markers",
+        "supported_transport_kinds",
         "tool_count",
         "resource_count",
     )
@@ -1813,6 +1833,7 @@ def test_public_mcp_manifest_and_host_bridge_resources_are_exported_with_expecte
         "public_sdk_entrypoints",
         "supported_contract_markers",
         "supported_runtime_markers",
+        "supported_transport_kinds",
         "tool_count",
         "resource_count",
     )
@@ -1825,6 +1846,7 @@ def test_public_mcp_manifest_and_host_bridge_resources_are_exported_with_expecte
         "public_sdk_entrypoints",
         "supported_contract_markers",
         "supported_runtime_markers",
+        "supported_transport_kinds",
         "tool_count",
         "resource_count",
     )

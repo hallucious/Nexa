@@ -374,6 +374,7 @@ class PublicMcpExportSurfaceSummary:
     public_sdk_entrypoints: Mapping[str, str]
     supported_contract_markers: tuple[str, ...]
     supported_runtime_markers: tuple[str, ...]
+    supported_transport_kinds: tuple[str, ...]
     tool_count: int
     resource_count: int
 
@@ -384,6 +385,7 @@ class PublicMcpExportSurfaceSummary:
             "public_sdk_entrypoints": dict(self.public_sdk_entrypoints),
             "supported_contract_markers": list(self.supported_contract_markers),
             "supported_runtime_markers": list(self.supported_runtime_markers),
+            "supported_transport_kinds": list(self.supported_transport_kinds),
             "tool_count": self.tool_count,
             "resource_count": self.resource_count,
         }
@@ -3580,6 +3582,7 @@ def describe_public_mcp_export_surface(
     """Return the canonical public MCP export metadata shared by route surfaces and SDK consumers."""
 
     resolved_surface = surface or build_public_mcp_compatibility_surface()
+    compatibility_policy = build_public_mcp_compatibility_policy()
     return PublicMcpExportSurfaceSummary(
         manifest_routes={
             "self": "/api/integrations/public-mcp/manifest",
@@ -3593,16 +3596,23 @@ def describe_public_mcp_export_surface(
         },
         public_sdk_entrypoints={
             "compatibility_surface": "build_public_mcp_compatibility_surface",
+            "compatibility_policy": "build_public_mcp_compatibility_policy",
             "adapter_scaffold": "build_public_mcp_adapter_scaffold",
             "manifest_export": "build_public_mcp_manifest",
             "host_bridge_scaffold": "build_public_mcp_host_bridge_scaffold",
             "tool_catalog": "build_public_mcp_tools",
             "resource_catalog": "build_public_mcp_resources",
+            "argument_schemas": "build_public_mcp_argument_schemas",
             "route_contracts": "build_public_mcp_route_contracts",
+            "transport_contracts": "build_public_mcp_transport_contracts",
+            "result_shape_profiles": "build_public_mcp_result_shape_profiles",
             "response_contracts": "build_public_mcp_response_contracts",
+            "recovery_policies": "build_public_mcp_recovery_policies",
+            "lifecycle_control_profiles": "build_public_mcp_lifecycle_control_profiles",
         },
         supported_contract_markers=resolved_surface.contract_markers,
         supported_runtime_markers=resolved_surface.runtime_markers,
+        supported_transport_kinds=compatibility_policy.supported_transport_kinds,
         tool_count=len(resolved_surface.tools),
         resource_count=len(resolved_surface.resources),
     )
@@ -5803,6 +5813,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             "public_sdk_entrypoints",
             "supported_contract_markers",
             "supported_runtime_markers",
+            "supported_transport_kinds",
             "tool_count",
             "resource_count",
         ),
@@ -5820,6 +5831,7 @@ _RESPONSE_CONTRACT_BY_ROUTE_NAME: dict[str, dict[str, object]] = {
             "public_sdk_entrypoints",
             "supported_contract_markers",
             "supported_runtime_markers",
+            "supported_transport_kinds",
             "tool_count",
             "resource_count",
         ),

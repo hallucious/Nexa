@@ -5921,6 +5921,7 @@ class RunHttpRouteSurface:
             public_sdk_entrypoints=export_surface["public_sdk_entrypoints"],
             supported_contract_markers=tuple(export_surface["supported_contract_markers"]),
             supported_runtime_markers=tuple(export_surface["supported_runtime_markers"]),
+            supported_transport_kinds=tuple(export_surface["supported_transport_kinds"]),
             tool_count=export_surface["tool_count"],
             resource_count=export_surface["resource_count"],
         )
@@ -5948,6 +5949,7 @@ class RunHttpRouteSurface:
             public_sdk_entrypoints=export_surface["public_sdk_entrypoints"],
             supported_contract_markers=tuple(export_surface["supported_contract_markers"]),
             supported_runtime_markers=tuple(export_surface["supported_runtime_markers"]),
+            supported_transport_kinds=tuple(export_surface["supported_transport_kinds"]),
             tool_count=export_surface["tool_count"],
             resource_count=export_surface["resource_count"],
         )
