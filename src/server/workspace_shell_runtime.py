@@ -10,12 +10,12 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
-from src.storage.validators.shared_validator import load_nex
 from src.ui.builder_shell import read_builder_shell_view_model
 from src.ui.i18n import normalize_ui_language, ui_language_from_sources, ui_text
 from src.ui.template_gallery import read_template_gallery_view_model
 from src.server.workspace_shell_sections import build_shell_section
 from src.server.workspace_onboarding_api import _provider_continuity_summary_for_workspace
+from src.storage.nex_api import coerce_nex_loaded_artifact, resolve_nex_execution_target
 from src.storage.share_api import describe_public_nex_link_share
 
 _WORKSPACE_ARTIFACT_KEYS: tuple[str, ...] = (
@@ -64,7 +64,7 @@ def resolve_workspace_artifact_source(
 def _load_workspace_model(source: Any | None, workspace_row: Mapping[str, Any] | None):
     if source is None:
         return _default_working_save(workspace_row), None
-    loaded = load_nex(source)
+    loaded = coerce_nex_loaded_artifact(source)
     if isinstance(loaded, LoadedNexArtifact) and loaded.parsed_model is not None:
         return loaded.parsed_model, loaded
     return _default_working_save(workspace_row), loaded if isinstance(loaded, LoadedNexArtifact) else None
@@ -81,17 +81,14 @@ def _storage_role(model: Any) -> str:
 
 
 def _execution_target_for(model: Any) -> dict[str, Any] | None:
-    if isinstance(model, WorkingSaveModel):
-        return {
-            "target_type": "working_save",
-            "target_ref": model.meta.working_save_id,
-        }
-    if isinstance(model, CommitSnapshotModel):
-        return {
-            "target_type": "commit_snapshot",
-            "target_ref": model.meta.commit_id,
-        }
-    return None
+    try:
+        descriptor = resolve_nex_execution_target(model)
+    except (TypeError, ValueError):
+        return None
+    return {
+        "target_type": descriptor.target_type,
+        "target_ref": descriptor.target_ref,
+    }
 
 
 def _workspace_shell_action_availability(model: Any) -> dict[str, dict[str, Any]]:

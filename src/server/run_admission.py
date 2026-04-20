@@ -26,7 +26,7 @@ from src.server.run_read_models import ProductSourceArtifactView
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.storage.nex_api import load_nex
+from src.storage.nex_api import coerce_nex_loaded_artifact, resolve_nex_execution_target
 
 
 def _iso_now() -> str:
@@ -115,85 +115,7 @@ def _source_artifact_view_from_resolved_target(resolved_target: ResolvedExecutio
 class ExecutionTargetResolver:
     @staticmethod
     def _load_source(source: Any) -> LoadedNexArtifact:
-        if isinstance(source, LoadedNexArtifact):
-            return source
-        if isinstance(source, (WorkingSaveModel, CommitSnapshotModel)):
-            if isinstance(source, WorkingSaveModel):
-                raw = {
-                    "meta": {
-                        "format_version": source.meta.format_version,
-                        "storage_role": "working_save",
-                        "working_save_id": source.meta.working_save_id,
-                    },
-                    "circuit": {
-                        "nodes": [dict(node) for node in source.circuit.nodes],
-                        "edges": [dict(edge) for edge in source.circuit.edges],
-                        "entry": source.circuit.entry,
-                        "outputs": [dict(output) for output in source.circuit.outputs],
-                        "subcircuits": dict(source.circuit.subcircuits),
-                    },
-                    "resources": {
-                        "prompts": dict(source.resources.prompts),
-                        "providers": dict(source.resources.providers),
-                        "plugins": dict(source.resources.plugins),
-                    },
-                    "state": {
-                        "input": dict(source.state.input),
-                        "working": dict(source.state.working),
-                        "memory": dict(source.state.memory),
-                    },
-                    "runtime": {
-                        "status": source.runtime.status,
-                        "validation_summary": dict(source.runtime.validation_summary),
-                        "last_run": dict(source.runtime.last_run),
-                        "errors": list(source.runtime.errors),
-                    },
-                    "ui": {
-                        "layout": dict(source.ui.layout),
-                        "metadata": dict(source.ui.metadata),
-                    },
-                }
-            else:
-                raw = {
-                    "meta": {
-                        "format_version": source.meta.format_version,
-                        "storage_role": "commit_snapshot",
-                        "commit_id": source.meta.commit_id,
-                    },
-                    "circuit": {
-                        "nodes": [dict(node) for node in source.circuit.nodes],
-                        "edges": [dict(edge) for edge in source.circuit.edges],
-                        "entry": source.circuit.entry,
-                        "outputs": [dict(output) for output in source.circuit.outputs],
-                        "subcircuits": dict(source.circuit.subcircuits),
-                    },
-                    "resources": {
-                        "prompts": dict(source.resources.prompts),
-                        "providers": dict(source.resources.providers),
-                        "plugins": dict(source.resources.plugins),
-                    },
-                    "state": {
-                        "input": dict(source.state.input),
-                        "working": dict(source.state.working),
-                        "memory": dict(source.state.memory),
-                    },
-                    "validation": {
-                        "validation_result": source.validation.validation_result,
-                        "summary": dict(source.validation.summary),
-                    },
-                    "approval": {
-                        "approval_completed": source.approval.approval_completed,
-                        "approval_status": source.approval.approval_status,
-                        "summary": dict(source.approval.summary),
-                    },
-                    "lineage": {
-                        "parent_commit_id": source.lineage.parent_commit_id,
-                        "source_working_save_id": source.lineage.source_working_save_id,
-                        "metadata": dict(source.lineage.metadata),
-                    },
-                }
-            return load_nex(raw)
-        return load_nex(source)
+        return coerce_nex_loaded_artifact(source)
 
     @classmethod
     def resolve(
@@ -234,13 +156,9 @@ class ExecutionTargetResolver:
         parsed = loaded.parsed_model
         storage_role = loaded.storage_role
         resolved_target_type = _normalize_target_type(request.execution_target.target_type)
-        if storage_role == "commit_snapshot":
-            canonical_ref = parsed.meta.commit_id  # type: ignore[union-attr]
-            allowed_type = "commit_snapshot"
-        elif storage_role == "working_save":
-            canonical_ref = parsed.meta.working_save_id  # type: ignore[union-attr]
-            allowed_type = "working_save"
-        else:
+        try:
+            descriptor = resolve_nex_execution_target(loaded)
+        except ValueError:
             return None, ProductRunLaunchRejectedResponse(
                 status="rejected",
                 failure_family="product_rejection",
@@ -248,6 +166,8 @@ class ExecutionTargetResolver:
                 message="Requested execution target resolved to an unsupported storage role.",
                 workspace_id=request.workspace_id,
             )
+        canonical_ref = descriptor.target_ref
+        allowed_type = descriptor.target_type
         if canonical_ref != entry.target_ref or canonical_ref != request.execution_target.target_ref:
             return None, ProductRunLaunchRejectedResponse(
                 status="rejected",

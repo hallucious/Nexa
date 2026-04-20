@@ -199,3 +199,32 @@ def test_run_records_schema_and_migration_now_include_execution_target_and_statu
     assert "execution_target_ref TEXT NOT NULL" in joined
     assert "status_family TEXT" in joined
     assert "trace_available BOOLEAN NOT NULL DEFAULT FALSE" in joined
+
+
+def test_run_admission_accepts_typed_commit_snapshot_catalog_source() -> None:
+    from src.storage.nex_api import import_public_nex_artifact
+
+    typed_snapshot = import_public_nex_artifact(_commit_snapshot("snap-typed-001"))
+    request = ProductRunLaunchRequest(
+        workspace_id="ws-001",
+        execution_target=ProductExecutionTarget(target_type="approved_snapshot", target_ref="snap-typed-001"),
+    )
+
+    outcome = RunAdmissionService.admit(
+        request=request,
+        request_auth=_auth_context(),
+        workspace_context=_workspace(),
+        target_catalog={
+            "snap-typed-001": ExecutionTargetCatalogEntry(
+                workspace_id="ws-001",
+                target_ref="snap-typed-001",
+                target_type="approved_snapshot",
+                source=typed_snapshot,
+            )
+        },
+    )
+
+    assert outcome.accepted is True
+    assert outcome.accepted_response is not None
+    assert outcome.accepted_response.execution_target.target_type == "commit_snapshot"
+    assert outcome.accepted_response.execution_target.target_ref == "snap-typed-001"

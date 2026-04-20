@@ -1768,3 +1768,22 @@ def test_public_nex_format_route_exposes_runtime_target_sdk_entrypoint() -> None
 
     assert response.status_code == 200
     assert response.body["public_sdk_entrypoints"]["run_artifact"] == "resolve_public_nex_execution_target"
+
+
+def test_launch_workspace_shell_route_accepts_loaded_artifact_source() -> None:
+    from src.storage.nex_api import import_public_nex_artifact
+
+    typed_snapshot = import_public_nex_artifact(_commit_snapshot('snap-shell-loaded-001'))
+    response = RunHttpRouteSurface.handle_launch_workspace_shell(
+        http_request=_auth_request(method='POST', path='/api/workspaces/ws-001/shell/launch', path_params={'workspace_id': 'ws-001'}, json_body={'input_payload': {'question': 'hello loaded'}}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=typed_snapshot,
+        run_id_factory=lambda: 'run-shell-loaded-001',
+        run_request_id_factory=lambda: 'req-shell-loaded-001',
+        now_iso='2026-04-20T09:01:00+00:00',
+    )
+    assert response.status_code == 202
+    assert response.body['execution_target']['target_type'] == 'commit_snapshot'
+    assert response.body['execution_target']['target_ref'] == 'snap-shell-loaded-001'
+    assert response.body['source_artifact']['canonical_ref'] == 'snap-shell-loaded-001'

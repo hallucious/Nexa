@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.storage.nex_api import load_nex, validate_commit_snapshot, validate_working_save
+from src.storage.nex_api import coerce_nex_loaded_artifact, load_nex, resolve_nex_execution_target, validate_commit_snapshot, validate_working_save
 from src.contracts.nex_contract import COMMIT_SNAPSHOT_ROLE, WORKING_SAVE_ROLE
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
@@ -214,3 +214,42 @@ def test_load_nex_reports_invalid_subcircuits_shape() -> None:
     assert loaded.load_status == "loaded_with_findings"
     codes = {f.code for f in loaded.findings}
     assert "NEX_CIRCUIT_SUBCIRCUITS_INVALID" in codes
+
+
+def test_coerce_nex_loaded_artifact_accepts_typed_commit_snapshot() -> None:
+    from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
+    from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
+
+    model = CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="snap-coerce-001"),
+        circuit=CircuitModel(nodes=[], edges=[], entry="n1", outputs=[{"name": "x", "source": "state.working.x"}], subcircuits={}),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(parent_commit_id=None, source_working_save_id=None, metadata={}),
+    )
+
+    loaded = coerce_nex_loaded_artifact(model)
+
+    assert loaded.parsed_model is not None
+    assert loaded.storage_role == "commit_snapshot"
+    assert loaded.parsed_model.meta.commit_id == "snap-coerce-001"
+
+
+def test_resolve_nex_execution_target_accepts_loaded_working_save() -> None:
+    payload = {
+        "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-resolve-001"},
+        "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+        "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+        "state": {"input": {}, "working": {}, "memory": {}},
+        "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+        "ui": {"layout": {}, "metadata": {}},
+    }
+    loaded = load_nex(payload)
+
+    descriptor = resolve_nex_execution_target(loaded)
+
+    assert descriptor.storage_role == "working_save"
+    assert descriptor.target_type == "working_save"
+    assert descriptor.target_ref == "ws-resolve-001"

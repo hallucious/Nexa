@@ -70,6 +70,8 @@ __all__ = [
     'export_public_nex_artifact',
     'import_public_nex_artifact',
     'checkout_public_nex_working_copy',
+    'coerce_nex_loaded_artifact',
+    'resolve_nex_execution_target',
     'resolve_public_nex_execution_target',
     'get_public_nex_share_boundary',
     'extract_public_nex_link_share_artifact',

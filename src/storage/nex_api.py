@@ -12,6 +12,7 @@ from src.contracts.nex_contract import (
     ALLOWED_STORAGE_ROLES,
     COMMIT_SNAPSHOT_ROLE,
     WORKING_SAVE_ROLE,
+    NexExecutionTargetDescriptor,
     PublicNexArtifactDescriptor,
     PublicNexExecutionTargetDescriptor,
     PublicNexArtifactOperationBoundary,
@@ -28,6 +29,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.storage.serialization import (
     serialize_commit_snapshot,
+    serialize_nex_artifact,
     serialize_working_save,
     validate_serialized_storage_artifact_for_write,
 )
@@ -145,6 +147,53 @@ def _first_blocking_finding_message(loaded: LoadedNexArtifact) -> str | None:
     return None
 
 
+def coerce_nex_loaded_artifact(
+    source: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any] | str | Path,
+    *,
+    allow_legacy_fallback: bool = True,
+) -> LoadedNexArtifact:
+    if isinstance(source, LoadedNexArtifact):
+        return source
+    if isinstance(source, (WorkingSaveModel, CommitSnapshotModel)):
+        return load_nex(serialize_nex_artifact(source), allow_legacy_fallback=False)
+    return load_nex(source, allow_legacy_fallback=allow_legacy_fallback)
+
+
+def resolve_nex_execution_target(
+    source: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any] | str | Path,
+) -> NexExecutionTargetDescriptor:
+    loaded = coerce_nex_loaded_artifact(source, allow_legacy_fallback=False)
+    if loaded.parsed_model is None:
+        blocking = _first_blocking_finding_message(loaded)
+        suffix = f": {blocking}" if blocking else ""
+        raise ValueError(f"Nexa artifact cannot be resolved as an execution target{suffix}")
+    parsed_meta = getattr(loaded.parsed_model, "meta", None)
+    storage_role = str(getattr(parsed_meta, "storage_role", "") or "").strip()
+    if storage_role == WORKING_SAVE_ROLE:
+        target_ref = str(getattr(parsed_meta, "working_save_id", "") or "").strip()
+        if not target_ref:
+            raise ValueError("working_save artifact is missing working_save_id")
+        return NexExecutionTargetDescriptor(
+            storage_role=WORKING_SAVE_ROLE,
+            target_type="working_save",
+            target_ref=target_ref,
+            execution_anchor_posture="working_save_runs_as_draft_anchor",
+        )
+    if storage_role == COMMIT_SNAPSHOT_ROLE:
+        target_ref = str(getattr(parsed_meta, "commit_id", "") or "").strip()
+        if not target_ref:
+            raise ValueError("commit_snapshot artifact is missing commit_id")
+        source_working_save_id = str(getattr(parsed_meta, "source_working_save_id", "") or "").strip() or None
+        return NexExecutionTargetDescriptor(
+            storage_role=COMMIT_SNAPSHOT_ROLE,
+            target_type="commit_snapshot",
+            target_ref=target_ref,
+            execution_anchor_posture="commit_snapshot_runs_as_approved_anchor",
+            source_working_save_id=source_working_save_id,
+        )
+    raise ValueError("Nexa artifact must resolve to a supported execution target")
+
+
 def _coerce_public_nex_model(
     model_or_data: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any],
 ) -> WorkingSaveModel | CommitSnapshotModel:
@@ -233,32 +282,14 @@ def checkout_public_nex_working_copy(
 def resolve_public_nex_execution_target(
     model_or_data: WorkingSaveModel | CommitSnapshotModel | LoadedNexArtifact | dict[str, Any],
 ) -> PublicNexExecutionTargetDescriptor:
-    model = import_public_nex_artifact(model_or_data)
-    parsed_meta = getattr(model, "meta", None)
-    storage_role = str(getattr(parsed_meta, "storage_role", "") or "").strip()
-    if storage_role == WORKING_SAVE_ROLE:
-        target_ref = str(getattr(parsed_meta, "working_save_id", "") or "").strip()
-        if not target_ref:
-            raise ValueError("public working_save artifact is missing working_save_id")
-        return PublicNexExecutionTargetDescriptor(
-            storage_role=WORKING_SAVE_ROLE,
-            target_type="working_save",
-            target_ref=target_ref,
-            execution_anchor_posture="working_save_runs_as_draft_anchor",
-        )
-    if storage_role == COMMIT_SNAPSHOT_ROLE:
-        target_ref = str(getattr(parsed_meta, "commit_id", "") or "").strip()
-        if not target_ref:
-            raise ValueError("public commit_snapshot artifact is missing commit_id")
-        source_working_save_id = str(getattr(parsed_meta, "source_working_save_id", "") or "").strip() or None
-        return PublicNexExecutionTargetDescriptor(
-            storage_role=COMMIT_SNAPSHOT_ROLE,
-            target_type="commit_snapshot",
-            target_ref=target_ref,
-            execution_anchor_posture="commit_snapshot_runs_as_approved_anchor",
-            source_working_save_id=source_working_save_id,
-        )
-    raise ValueError("public .nex artifact must resolve to a supported execution target")
+    descriptor = resolve_nex_execution_target(import_public_nex_artifact(model_or_data))
+    return PublicNexExecutionTargetDescriptor(
+        storage_role=descriptor.storage_role,
+        target_type=descriptor.target_type,
+        target_ref=descriptor.target_ref,
+        execution_anchor_posture=descriptor.execution_anchor_posture,
+        source_working_save_id=descriptor.source_working_save_id,
+    )
 
 
 def describe_public_nex_artifact(
@@ -299,5 +330,7 @@ __all__ = [
     "export_public_nex_artifact",
     "import_public_nex_artifact",
     "checkout_public_nex_working_copy",
+    "coerce_nex_loaded_artifact",
+    "resolve_nex_execution_target",
     "resolve_public_nex_execution_target",
 ]
