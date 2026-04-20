@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from src.contracts.spec_versions import (
+from src.contracts.runtime_contract_versions import (
     ENGINE_EXECUTION_MODEL_VERSION,
     ENGINE_TRACE_MODEL_VERSION,
     VALIDATION_ENGINE_CONTRACT_VERSION,

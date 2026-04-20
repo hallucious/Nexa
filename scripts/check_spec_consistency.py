@@ -9,7 +9,7 @@ DOCS_SPECS = ROOT / "docs" / "specs"
 ACTIVE_SPECS_PRIMARY = DOCS_SPECS / "_active_specs.yaml"
 ACTIVE_SPECS_FALLBACK = DOCS_SPECS / "indexes" / "_active_specs.yaml"
 
-SPEC_VERSIONS_FILE = ROOT / "src" / "contracts" / "spec_versions.py"
+SPEC_VERSIONS_FILE = ROOT / "src" / "contracts" / "spec_version_registry.py"
 FOUNDATION_MAP = ROOT / "docs" / "FOUNDATION_MAP.md"
 
 
@@ -38,7 +38,7 @@ def load_active_specs(active_specs_file: Path):
 
 def load_spec_versions():
     if not SPEC_VERSIONS_FILE.exists():
-        raise FileNotFoundError(f"spec_versions.py not found: {SPEC_VERSIONS_FILE}")
+        raise FileNotFoundError(f"spec_version_registry.py not found: {SPEC_VERSIONS_FILE}")
 
     spec = importlib.util.spec_from_file_location(
         "nexa_spec_versions_module",
@@ -47,12 +47,12 @@ def load_spec_versions():
     module = importlib.util.module_from_spec(spec)
 
     if spec.loader is None:
-        raise RuntimeError("Failed to load spec_versions.py")
+        raise RuntimeError("Failed to load spec_version_registry.py")
 
     spec.loader.exec_module(module)
 
     if not hasattr(module, "SPEC_VERSIONS"):
-        raise RuntimeError("SPEC_VERSIONS not found in spec_versions.py")
+        raise RuntimeError("SPEC_VERSIONS not found in spec_version_registry.py")
 
     spec_versions = getattr(module, "SPEC_VERSIONS")
 

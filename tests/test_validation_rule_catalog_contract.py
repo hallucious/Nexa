@@ -3,7 +3,7 @@ from __future__ import annotations
 """Step52: Validation Rule Catalog Formalization Contract
 
 Invariant:
-- docs/specs/validation_rule_catalog.md (Implemented Rules table) is authoritative.
+- docs/specs/policies/validation_rule_catalog.md (Implemented Rules table) is authoritative.
 - ValidationEngine must emit violations whose (rule_id, rule_name, severity, location_type)
   exactly match the catalog rows for implemented rules.
 """
@@ -23,7 +23,7 @@ def _repo_root() -> Path:
 
 
 def _load_catalog_table() -> Dict[str, Tuple[str, str, str]]:
-    doc = (_repo_root() / "docs" / "specs" / "validation_rule_catalog.md").read_text(encoding="utf-8")
+    doc = (_repo_root() / "docs" / "specs" / "policies" / "validation_rule_catalog.md").read_text(encoding="utf-8")
     # Find Implemented Rules table block
     # We parse lines between the header and the next blank line after table
     lines = doc.splitlines()

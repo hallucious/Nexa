@@ -162,7 +162,7 @@ Every active spec in `docs/specs/_active_specs.yaml` must:
 
 1. exist at that path
 2. have a `Version: X.Y.Z` header
-3. match the version in `src/contracts/spec_versions.py`
+3. match the version in `src/contracts/spec_version_registry.py`
 
 Verify with:
 

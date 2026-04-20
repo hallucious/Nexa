@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import re
 
-from src.contracts.spec_versions import SPEC_VERSIONS
+from src.contracts.spec_version_registry import SPEC_VERSIONS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ACTIVE_SPECS_YAML = REPO_ROOT / "docs/specs/_active_specs.yaml"

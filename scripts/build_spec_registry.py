@@ -30,8 +30,8 @@ yaml_path.write_text(
     encoding="utf-8",
 )
 
-# spec_versions.py
-spec_file = Path("src/contracts/spec_versions.py")
+# spec_version_registry.py
+spec_file = Path("src/contracts/spec_version_registry.py")
 
 lines = ["SPEC_VERSIONS = {\n"]
 

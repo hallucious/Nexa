@@ -128,7 +128,7 @@ Active contracts: `docs/specs/_active_specs.yaml`
 Every active spec must:
 1. Exist at the listed path
 2. Have a `Version: X.Y.Z` line
-3. Match the version in `src/contracts/spec_versions.py`
+3. Match the version in `src/contracts/spec_version_registry.py`
 
 ---
 

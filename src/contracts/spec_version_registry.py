@@ -3,8 +3,17 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-# Spec ↔ Code Version Sync Constants
-# This module belongs to the contracts layer (not runtime logic).
+from src.contracts.runtime_contract_versions import (
+    CIRCUIT_RUNTIME_MODEL_VERSION,
+    CONTEXT_KEY_SCHEMA_CONTRACT_VERSION,
+    ENGINE_EXECUTION_MODEL_VERSION,
+    ENGINE_TRACE_MODEL_VERSION,
+    EXECUTION_ENVIRONMENT_CONTRACT_VERSION,
+    GRAPH_EXECUTION_CONTRACT_VERSION,
+    VALIDATION_ENGINE_CONTRACT_VERSION,
+    VALIDATION_RULE_CATALOG_VERSION,
+    VALIDATION_RULE_LIFECYCLE_VERSION,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -27,19 +36,6 @@ def _extract_version(rel_path: str, default: str) -> str:
     return default
 
 
-# Keep these as literal string constants because contract tests regex-match them directly.
-ENGINE_EXECUTION_MODEL_VERSION = "1.12.0"
-ENGINE_TRACE_MODEL_VERSION = "1.9.0"
-VALIDATION_ENGINE_CONTRACT_VERSION = "2.0.0"
-VALIDATION_RULE_CATALOG_VERSION = "2.0.0"
-VALIDATION_RULE_LIFECYCLE_VERSION = "1.0.0"
-EXECUTION_ENVIRONMENT_CONTRACT_VERSION = "1.4.0"
-
-GRAPH_EXECUTION_CONTRACT_VERSION = "1.0.0"
-CIRCUIT_RUNTIME_MODEL_VERSION = "1.0.0"
-CONTEXT_KEY_SCHEMA_CONTRACT_VERSION = "1.1.0"
-
-
 SPEC_VERSIONS = {
     # legacy / compatibility paths
     "docs/specs/terminology.md": _extract_version("docs/specs/terminology.md", "1.0.1"),
@@ -56,9 +52,6 @@ SPEC_VERSIONS = {
     "docs/specs/universal_provider_architecture.md": _extract_version("docs/specs/universal_provider_architecture.md", "1.0.0"),
     "docs/specs/circuit_contract.md": _extract_version("docs/specs/circuit_contract.md", "1.0.0"),
     "docs/specs/validation_engine_contract.md": _extract_version("docs/specs/validation_engine_contract.md", VALIDATION_ENGINE_CONTRACT_VERSION),
-    "docs/specs/validation_rule_catalog.md": _extract_version("docs/specs/validation_rule_catalog.md", VALIDATION_RULE_CATALOG_VERSION),
-    "docs/specs/validation_rule_lifecycle.md": _extract_version("docs/specs/validation_rule_lifecycle.md", VALIDATION_RULE_LIFECYCLE_VERSION),
-    "docs/specs/execution_environment_contract.md": _extract_version("docs/specs/execution_environment_contract.md", EXECUTION_ENVIRONMENT_CONTRACT_VERSION),
     "docs/specs/graph_execution_contract.md": _extract_version("docs/specs/graph_execution_contract.md", GRAPH_EXECUTION_CONTRACT_VERSION),
     "docs/specs/circuit_runtime_model.md": _extract_version("docs/specs/circuit_runtime_model.md", CIRCUIT_RUNTIME_MODEL_VERSION),
 
@@ -76,7 +69,7 @@ SPEC_VERSIONS = {
     "docs/specs/contracts/validation_engine_contract.md": _extract_version("docs/specs/contracts/validation_engine_contract.md", VALIDATION_ENGINE_CONTRACT_VERSION),
 
     "docs/specs/policies/validation_rule_catalog.md": _extract_version("docs/specs/policies/validation_rule_catalog.md", VALIDATION_RULE_CATALOG_VERSION),
-    "docs/specs/policies/validation_rule_lifecycle.md": _extract_version("docs/specs/policies/validation_rule_lifecycle.md", "1.0.0"),
+    "docs/specs/policies/validation_rule_lifecycle.md": _extract_version("docs/specs/policies/validation_rule_lifecycle.md", VALIDATION_RULE_LIFECYCLE_VERSION),
 
     "docs/specs/architecture/circuit_contract.md": _extract_version("docs/specs/architecture/circuit_contract.md", "1.0.0"),
     "docs/specs/architecture/node_abstraction.md": _extract_version("docs/specs/architecture/node_abstraction.md", "1.0.0"),

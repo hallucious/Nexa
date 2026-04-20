@@ -7,7 +7,7 @@ Invariant:
 - This strengthens the spec-version sync contract at the execution artifact level.
 """
 
-from src.contracts.spec_versions import ENGINE_EXECUTION_MODEL_VERSION, ENGINE_TRACE_MODEL_VERSION
+from src.contracts.runtime_contract_versions import ENGINE_EXECUTION_MODEL_VERSION, ENGINE_TRACE_MODEL_VERSION
 from src.engine.engine import Engine
 from src.engine.model import Channel
 

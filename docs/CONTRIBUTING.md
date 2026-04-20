@@ -108,7 +108,7 @@ If issue or pull request templates are available in the repository, please use t
 
 - **Active spec**: a spec enforced as a contract by the test suite
 - **Source of Truth**: `docs/specs/_active_specs.yaml`
-- **Spec-Version Sync**: a spec document `Version:` line must match `src/contracts/spec_versions.py`
+- **Spec-Version Sync**: a spec document `Version:` line must match `src/contracts/spec_version_registry.py`
 - **FOUNDATION_MAP**: must reflect the active spec list exactly
 - **Savefile**: a runnable `.nex` artifact that may include circuit, state, resources, and UI-related data
 
@@ -118,7 +118,7 @@ If issue or pull request templates are available in the repository, please use t
 
 **Step 1** — Update the spec document and bump its `Version:` line.
 
-**Step 2** — Update `src/contracts/spec_versions.py` to match.
+**Step 2** — Update `src/contracts/spec_version_registry.py` to match.
 
 **Step 3** — If adding or removing a spec, update `docs/specs/_active_specs.yaml`.
 

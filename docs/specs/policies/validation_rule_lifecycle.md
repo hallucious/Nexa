@@ -48,4 +48,4 @@ Defines lifecycle governance for rule_id in validation_rule_catalog.md.
 - Tests must prevent drift between:
   - validation_rule_catalog.md
   - validation_rule_lifecycle.md
-  - spec_versions.py
+  - spec_version_registry.py

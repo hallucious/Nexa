@@ -2,7 +2,7 @@
 
 Enforces structural contracts defined in:
 - docs/specs/validation_engine_contract.md
-- docs/specs/validation_rule_catalog.md
+- docs/specs/policies/validation_rule_catalog.md
 """
 
 from .result import ValidationResult, Violation, Severity

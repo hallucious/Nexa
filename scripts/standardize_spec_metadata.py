@@ -10,7 +10,7 @@ REPO_ROOT = Path(".").resolve()
 SPECS_ROOT = REPO_ROOT / "docs" / "specs"
 
 ACTIVE_SPECS_PATH = SPECS_ROOT / "_active_specs.yaml"
-SPEC_VERSIONS_PATH = REPO_ROOT / "src" / "contracts" / "spec_versions.py"
+SPEC_VERSIONS_PATH = REPO_ROOT / "src" / "contracts" / "spec_version_registry.py"
 
 
 def scan_spec_files():
