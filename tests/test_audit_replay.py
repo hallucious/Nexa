@@ -5,8 +5,8 @@ import json
 import zipfile
 
 from src.cli.nexa_cli import build_parser, replay_command
-from src.engine.audit_replay import replay_audit_pack
-from src.engine.execution_audit_pack import ExecutionAuditPackBuilder
+from src.cli.audit_replay import replay_audit_pack
+from src.cli.execution_audit_pack import ExecutionAuditPackBuilder
 from src.storage.execution_record_api import materialize_execution_record_from_payload
 
 

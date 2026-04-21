@@ -57,7 +57,7 @@ from src.governance.quota import (
 from src.safety.input_safety import evaluate_input_safety
 from src.circuit.circuit_scheduler import CircuitScheduler
 from src.circuit.circuit_validator import CircuitValidator, CircuitValidationError
-from src.circuit.fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
+from src.contracts.circuit_fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
 from src.engine.validation.public_api import (
     PostDecisionResult,
     PreDecisionResult,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.server.workspace_onboarding_models import (
+from src.contracts.workspace_library_contract import (
     ProductActivityContinuitySummary,
     ProductWorkspaceLinks,
     ProductWorkspaceListResponse,

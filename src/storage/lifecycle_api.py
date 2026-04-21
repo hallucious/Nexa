@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from src.circuit.fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
+from src.contracts.circuit_fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
 from datetime import datetime, timezone
 
 from src.engine.execution_snapshot import ExecutionSnapshot

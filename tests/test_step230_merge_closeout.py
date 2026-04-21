@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from src.circuit.circuit_runner import CircuitRunner
-from src.circuit.fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
+from src.contracts.circuit_fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
 from src.engine.human_decision_registry import HumanDecisionRegistry
 from src.engine.node_execution_runtime import ReviewRequiredPause
 from src.storage.execution_record_api import create_serialized_execution_record_from_circuit_run

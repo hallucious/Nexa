@@ -1,4 +1,4 @@
-from src.engine.execution_audit_pack import (
+from src.cli.execution_audit_pack import (
     ExecutionAuditPackBuilder,
 )
 from src.engine.execution_snapshot_diff import (

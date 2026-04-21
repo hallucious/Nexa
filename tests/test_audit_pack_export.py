@@ -5,7 +5,7 @@ import json
 import zipfile
 
 from src.cli.nexa_cli import build_parser, export_command
-from src.engine.execution_audit_pack import ExecutionAuditPackBuilder
+from src.cli.execution_audit_pack import ExecutionAuditPackBuilder
 
 
 def _sample_run_payload() -> dict:

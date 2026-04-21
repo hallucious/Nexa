@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import pytest
 from src.engine.paused_run_state import PausedRunState, PausedRunStateError
-from src.circuit.fingerprint import compute_execution_surface_fingerprint
+from src.contracts.circuit_fingerprint import compute_execution_surface_fingerprint
 from src.engine.node_execution_runtime import ReviewRequiredPause
 from src.circuit.circuit_runner import (
     CircuitRunner,

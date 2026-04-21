@@ -1814,7 +1814,7 @@ def compare_command(args):
 
 
 def export_command(args) -> int:
-    from src.engine.execution_audit_pack import ExecutionAuditPackBuilder
+    from src.cli.execution_audit_pack import ExecutionAuditPackBuilder
 
     input_path = Path(args.input)
     if not input_path.exists():
@@ -1837,7 +1837,7 @@ def export_command(args) -> int:
 
 
 def replay_command(args) -> int:
-    from src.engine.audit_replay import replay_audit_pack
+    from src.cli.audit_replay import replay_audit_pack
 
     try:
         result = replay_audit_pack(args.input)

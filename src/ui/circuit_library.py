@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Mapping, Sequence
 
-from src.server.workspace_onboarding_models import (
+from src.contracts.workspace_library_contract import (
     ProductActivityContinuitySummary,
     ProductWorkspaceListResponse,
     ProductWorkspaceSummaryView,

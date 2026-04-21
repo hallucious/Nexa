@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.circuit.fingerprint import compute_execution_surface_fingerprint
+from src.contracts.circuit_fingerprint import compute_execution_surface_fingerprint
 from src.engine.execution_artifact_hashing import ExecutionHashReport
 from src.engine.execution_snapshot import ExecutionSnapshotBuilder
 from src.engine.execution_timeline import ExecutionTimeline, NodeExecutionSpan
