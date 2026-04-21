@@ -265,3 +265,36 @@ def test_designer_panel_uses_beginner_action_labels_before_first_success() -> No
     assert labels["submit_request"] == "Build workflow"
     assert labels["preview_patch"] == "Review workflow"
     assert labels["approve_for_commit"] == "Approve workflow"
+
+
+def test_designer_panel_surfaces_external_input_guidance_for_empty_working_save() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_designer_panel_view_model(source)
+
+    assert vm.external_input_guidance.visible is True
+    assert vm.external_input_guidance.has_configured_input is False
+    assert {option.action_id for option in vm.external_input_guidance.options} == {"open_file_input", "enter_url_input"}
+
+
+def test_designer_panel_marks_external_input_guidance_complete_when_file_reader_exists() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-file", name="File Draft"),
+        circuit=CircuitModel(nodes=[{"id": "reader", "execution": {"plugin": {"plugin_id": "nexa.file_reader"}}}], edges=[], entry="reader", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={"nexa.file_reader": {}}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_designer_panel_view_model(source)
+
+    assert vm.external_input_guidance.has_configured_input is True
+    assert vm.external_input_guidance.configured_input_kind == "file"

@@ -113,6 +113,13 @@ def read_builder_action_schema(
         and designer_view.template_gallery.templates
     )
 
+    external_input_needed = bool(
+        source_role == "working_save"
+        and designer_view is not None
+        and designer_view.external_input_guidance.visible
+        and not designer_view.external_input_guidance.has_configured_input
+    )
+
     beginner_preunlock = False
     if beginner_surface_active(source) and not beginner_advanced_surfaces_unlocked(source):
         beginner_preunlock = True
@@ -248,6 +255,21 @@ def read_builder_action_schema(
                 True,
             )
         )
+    if external_input_needed:
+        contextual_actions.extend([
+            _action(
+                "open_file_input",
+                ui_text("builder.action.open_file_input", app_language=app_language),
+                "external_input",
+                True,
+            ),
+            _action(
+                "enter_url_input",
+                ui_text("builder.action.enter_url_input", app_language=app_language),
+                "external_input",
+                True,
+            ),
+        ])
 
     if designer_view is not None:
         contextual_actions.extend(

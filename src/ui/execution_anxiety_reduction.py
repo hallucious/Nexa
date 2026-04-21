@@ -8,6 +8,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.designer_panel import DesignerPanelViewModel
+from src.ui.external_input_guidance import detect_external_input_kind
 from src.ui.execution_panel import ExecutionPanelViewModel
 from src.ui.i18n import ui_text
 from src.ui.validation_panel import ValidationPanelViewModel
@@ -104,10 +105,6 @@ def _viewport_tier(metadata: Mapping[str, Any]) -> str:
 def _is_mobile_tier(viewport_tier: str) -> bool:
     return viewport_tier in {"mobile", "tablet", "small_touch", "narrow_workspace", "split_view"}
 
-
-def _has_external_input(source: Any) -> tuple[bool, str | None]:
-    if not isinstance(source, WorkingSaveModel):
-        return False, None
     nodes = list(source.circuit.nodes or [])
     plugins = source.resources.plugins if isinstance(source.resources.plugins, Mapping) else {}
     for node in nodes:
@@ -166,7 +163,7 @@ def read_privacy_transparency_view(
     provider_label, provider_value, provider_severity = _provider_access_summary(designer_view, app_language=app_language)
     facts.append(PrivacyTransparencyFactView("provider_access", provider_label, provider_value, provider_severity))
 
-    external_input, external_input_kind = _has_external_input(source_unwrapped)
+    external_input, external_input_kind = detect_external_input_kind(source_unwrapped)
     if external_input:
         external_value = ui_text(
             f"phase6.privacy.external_input.{external_input_kind}",
@@ -249,6 +246,8 @@ def read_contextual_help_view(
             suggested_actions=(
                 ContextualHelpActionView("open_designer", ui_text("beginner.onboarding.start.action", app_language=app_language, fallback_text="Open Designer"), "designer"),
                 ContextualHelpActionView("browse_templates", ui_text("phase6.help.start.templates", app_language=app_language, fallback_text="Browse templates"), "designer.templates"),
+                ContextualHelpActionView("open_file_input", ui_text("phase6.help.start.file", app_language=app_language, fallback_text="Start from a file"), "designer.external_input.file"),
+                ContextualHelpActionView("enter_url_input", ui_text("phase6.help.start.url", app_language=app_language, fallback_text="Start from a web address"), "designer.external_input.url"),
             ),
             deep_help_enabled=not beginner_mode,
         )

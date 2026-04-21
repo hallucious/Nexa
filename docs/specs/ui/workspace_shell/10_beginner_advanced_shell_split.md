@@ -31,11 +31,17 @@ Only density, simultaneity, and explanatory surface change.
 - minimize simultaneous density
 
 Beginner default should favor:
-- graph
-- designer input
+- designer input as the default visible primary surface for an empty workspace
 - validation summary
-- run action
-- result reading
+- one clear next action
+- run action when relevant
+- result reading when relevant
+
+Graph may remain visible as a structural anchor after workflow creation,
+but it must not be the first required interaction surface in a beginner's first session.
+
+The beginner shell may keep graph visible in a reduced or secondary role,
+but first-session initiation must remain Designer-first rather than graph-first.
 
 Beginner should hide or collapse:
 - deep trace

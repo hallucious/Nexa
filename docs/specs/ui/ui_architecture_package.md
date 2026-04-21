@@ -147,6 +147,23 @@ and Designer-AI proposal flow.
 9. Diff Viewer
 10. Theme / Layout Layer
 
+6.3 Reconciliation note: historical core-slot language vs current closure scope
+
+The core-slot taxonomy in this document is a historical UI architecture classification,
+not a statement that every listed slot must be part of the same implementation batch.
+
+In later runtime-closure planning, Storage may be treated as closure-critical
+or core-equivalent for practical product-flow reasons,
+even though it appears here in the extended-slot group.
+
+Likewise, Designer remains a core architectural slot in the long-term UI module system,
+even when a specific closure batch focuses on a different practical shell set.
+
+This note exists to prevent ambiguity between:
+- long-term module taxonomy
+- short-term closure scope
+- beginner-shell first-session surface rules
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 7. MODULE RESPONSIBILITIES AND FORBIDDEN SCOPE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

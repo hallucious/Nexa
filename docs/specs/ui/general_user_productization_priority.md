@@ -17,6 +17,13 @@ The distinction is:
 - spec / engine / canonical term: circuit
 - beginner-facing display term: workflow (when beginner-shell policy applies)
 
+When beginner-shell display policy applies, the official display remapping is:
+- Circuit -> Workflow
+- Node -> Step
+- Provider -> AI model
+
+See `beginner_shell_compression_policy.md` for the canonical display-layer mapping.
+
 ## 2. Core Decision Criterion
 
 Priority is determined by one rule:
@@ -46,7 +53,7 @@ The following assumptions apply to this priority order:
 - engine contracts and architecture principles remain unchanged
 - Beginner Shell Compression Policy v1.2 is implemented in parallel
 - deployment strategy (SaaS vs local-first) is not yet fixed
-- later stages may begin only after earlier blocking conditions are sufficiently resolved, though independent work may run in parallel where rational
+- stage numbering defines strategic product priority, not a strict rule that no later-stage independent work may be implemented earlier; however, earlier-stage blockers still govern what must be completed before Nexa can be considered product-ready for general users
 
 ## 4. Stage 1 — Establish the First-Success Loop
 
@@ -475,6 +482,16 @@ Examples:
 These are downstream expansion systems, not immediate general-user blockers.
 
 ## 9. Summary Table
+
+Interpretation note
+
+This document orders productization priority.
+It does not require every later-stage implementation artifact to wait until every earlier-stage item is fully closed.
+
+Independent or enabling work may be implemented earlier in parallel where rational.
+However, later-stage completion does not change the fact that Stage 1 first-success blockers
+remain the primary product-readiness gate.
+
 
 | Stage | Item | Current State | Completion Criterion |
 |------|------|-----------|-----------|

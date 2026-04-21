@@ -15,6 +15,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.provider_setup_guidance import ProviderSetupGuidanceView, ProviderInlineKeyEntryView, read_provider_setup_guidance_view_model, read_provider_inline_key_entry_view
+from src.ui.external_input_guidance import ExternalInputGuidanceView, read_external_input_guidance_view_model
 from src.ui.template_gallery import TemplateGalleryViewModel, read_template_gallery_view_model
 
 
@@ -147,6 +148,7 @@ class DesignerPanelViewModel:
     related_targets: list[DesignerTargetRefView] = field(default_factory=list)
     template_gallery: TemplateGalleryViewModel = field(default_factory=TemplateGalleryViewModel)
     provider_setup_guidance: ProviderSetupGuidanceView = field(default_factory=ProviderSetupGuidanceView)
+    external_input_guidance: ExternalInputGuidanceView = field(default_factory=ExternalInputGuidanceView)
     provider_inline_key_entry: ProviderInlineKeyEntryView = field(default_factory=ProviderInlineKeyEntryView)
     summary_signals: list[DesignerSummarySignalView] = field(default_factory=list)
     explanation: str | None = None
@@ -268,6 +270,7 @@ def read_designer_panel_view_model(
 
     placeholder_key = "designer.request.input_placeholder.beginner" if _is_beginner_empty_workspace(source) else "designer.request.input_placeholder"
     template_gallery_vm = read_template_gallery_view_model(source)
+    external_input_guidance_vm = read_external_input_guidance_view_model(source)
     # Merge metadata-stored session keys with caller-supplied keys.
     # Caller-supplied keys take priority (freshly pasted key overrides stored key).
     metadata_session_keys = _session_keys_from_metadata(source)
@@ -414,6 +417,7 @@ def read_designer_panel_view_model(
         related_targets=related_targets,
         template_gallery=template_gallery_vm,
         provider_setup_guidance=provider_setup_guidance_vm,
+        external_input_guidance=external_input_guidance_vm,
         provider_inline_key_entry=inline_key_entry_vm,
         summary_signals=summary_signals,
         explanation=explanation,
@@ -429,6 +433,7 @@ __all__ = [
     "DesignerPrecheckStateView",
     "DesignerPreviewStateView",
     "ProviderSetupGuidanceView",
+    "ExternalInputGuidanceView",
     "DesignerRequestStateView",
     "DesignerRevisionStateView",
     "DesignerTargetRefView",

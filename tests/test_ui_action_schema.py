@@ -137,3 +137,16 @@ def test_action_schema_surfaces_provider_setup_and_template_actions_for_empty_be
     actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
     assert actions["open_provider_setup"].enabled is True
     assert actions["create_circuit_from_template"].enabled is True
+
+
+def test_action_schema_surfaces_external_input_actions_for_empty_beginner_workspace(monkeypatch, tmp_path) -> None:
+    for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "PERPLEXITY_API_KEY", "PPLX_API_KEY"]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    designer = read_designer_panel_view_model(_empty_working_save())
+    vm = read_builder_action_schema(_empty_working_save(), designer_view=designer)
+
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["open_file_input"].enabled is True
+    assert actions["enter_url_input"].enabled is True

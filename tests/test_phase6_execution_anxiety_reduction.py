@@ -165,3 +165,12 @@ def test_builder_shell_surfaces_phase6_result_help_from_result_reading_summary()
     assert vm.contextual_help.stage == "result"
     assert vm.contextual_help.title == "Result ready"
     assert vm.contextual_help.summary == "Final answer"
+
+
+def test_builder_shell_start_help_surfaces_external_input_actions_for_beginner_path() -> None:
+    vm = read_builder_shell_view_model(_working_save())
+
+    targets = {action.target for action in vm.contextual_help.suggested_actions}
+    assert vm.contextual_help.stage == "start"
+    assert "designer.external_input.file" in targets
+    assert "designer.external_input.url" in targets

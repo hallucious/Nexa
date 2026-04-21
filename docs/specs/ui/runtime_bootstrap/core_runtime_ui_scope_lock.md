@@ -38,6 +38,29 @@ but the practical closure set must include Storage because:
 - Working Save / Commit Snapshot / Execution Record boundary must remain visible
 - end-user flow breaks if storage role visibility is weak
 
+### 2.1 Scope interpretation note
+
+This document defines the current runtime-closure batch,
+not the full long-term UI slot taxonomy.
+
+Therefore, the closure set in this document should not be read as redefining
+the historical core-slot classification from `ui_architecture_package.md`.
+
+In this closure document, Storage is included because current shell closure,
+product-flow integration, and storage-lifecycle readability depend on it.
+
+Designer is not part of the current 6-module closure batch,
+but that does not make Designer non-core in the broader UI architecture.
+Designer remains:
+- architecturally important
+- required for proposal-based design flow
+- important to beginner-shell entry behavior
+
+The distinction is:
+- historical architecture core slot = long-term structural role
+- current closure scope = immediate implementation batch
+- beginner first-session primary surface = onboarding exposure rule
+
 ## 3. Why These 6 Are In
 
 ### 3.1 Shell

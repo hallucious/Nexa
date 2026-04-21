@@ -109,7 +109,9 @@ Internal contracts and implementation names remain unchanged.
 ### 4.7 Graph view timing
 The graph view must not be the first primary surface shown to a beginner in their first session.
 
-The graph may appear after the first workflow has been generated or after first success, but it must not be the first required interaction surface.
+The graph may appear after the first workflow has been generated or after first success, but it must not be the first required interaction surface in the beginner's first session.
+
+Graph may remain visible as a structural anchor in a reduced or secondary role.
 
 ### 4.8 Advanced surface unlocking
 Advanced surfaces must unlock progressively only after either:
