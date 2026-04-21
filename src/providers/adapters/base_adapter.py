@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, Optional, Protocol, Tuple
 
-from src.providers.provider_contract import ProviderRequest, ProviderResult
+from src.providers.provider_adapter_contract import ProviderRequest, ProviderResult
 
 
 StreamChunk = Dict[str, Any]

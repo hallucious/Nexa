@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from src.providers.provider_contract import ProviderRequest, map_exception_to_reason_code
+from src.providers.provider_adapter_contract import ProviderRequest, map_exception_to_reason_code
 from src.providers.adapters.base_adapter import ProviderAdapter
 
 

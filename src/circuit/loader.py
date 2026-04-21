@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from .model import CircuitModel, EdgeModel, NodeModel
-from .validator import validate_circuit
+from .legacy_validator import validate_circuit
 
 
 SUPPORTED_SCHEMA = "hyper-ai.definition_language"

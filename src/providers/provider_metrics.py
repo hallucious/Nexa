@@ -1,9 +1,9 @@
-
 from __future__ import annotations
+
 import time
 
 
-class ProviderMetrics:
+class ProviderRuntimeMetrics:
     def __init__(self):
         self.latency_ms: float | None = None
         self.cost: float | None = None
@@ -17,7 +17,7 @@ def record_latency(start_time: float) -> float:
 def attach_metrics(provider, latency_ms: float):
     metrics = getattr(provider, "metrics", None)
     if metrics is None:
-        metrics = ProviderMetrics()
+        metrics = ProviderRuntimeMetrics()
         provider.metrics = metrics
 
     metrics.latency_ms = latency_ms

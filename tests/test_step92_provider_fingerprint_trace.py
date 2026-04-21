@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional
 import pytest
 
 from src.platform.worker import wrap_text_provider
-from src.providers.provider_contract import ProviderResult, make_success
+from src.providers.provider_adapter_contract import ProviderResult, make_success
 
 
 @dataclass

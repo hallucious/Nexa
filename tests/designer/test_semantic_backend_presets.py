@@ -25,7 +25,7 @@ from src.designer.semantic_backend_presets import (
     normalize_semantic_backend_preset,
     semantic_backend_preset_is_available,
 )
-from src.providers.provider_contract import ProviderMetrics, ProviderResult
+from src.providers.provider_adapter_contract import ProviderMetrics, ProviderResult
 import src.providers.claude_provider as claude_provider_module
 
 

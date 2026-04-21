@@ -18,7 +18,7 @@ from src.designer.models.designer_session_state_card import (
 from src.designer.normalization_context import RequestNormalizationContext
 from src.designer.request_normalizer import DesignerRequestNormalizer
 from src.designer.semantic_backend import GenerateTextSemanticBackend
-from src.providers.provider_contract import ProviderMetrics, ProviderResult
+from src.providers.provider_adapter_contract import ProviderMetrics, ProviderResult
 
 
 class _GenerateTextProvider:

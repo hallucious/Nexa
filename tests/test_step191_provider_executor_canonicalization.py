@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.engine.node_execution_runtime import NodeExecutionRuntime
 from src.platform.provider_executor import ProviderExecutor
 from src.platform.provider_registry import ProviderRegistry
-from src.providers.provider_contract import ProviderResult as CanonicalProviderResult
+from src.providers.provider_adapter_contract import ProviderResult as AdapterProviderResult
 
 
 class LegacyDictProvider:
@@ -18,7 +18,7 @@ class LegacyDictProvider:
 
 class CanonicalEnvelopeProvider:
     def execute(self, request):
-        return CanonicalProviderResult(
+        return AdapterProviderResult(
             success=True,
             text="hello",
             raw={

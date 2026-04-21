@@ -4,7 +4,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from src.providers.provider_contract import (
+from src.providers.provider_adapter_contract import (
     ProviderRequest,
     ProviderResult,
     compute_provider_fingerprint,

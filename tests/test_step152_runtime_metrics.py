@@ -1,5 +1,5 @@
 from src.engine.node_execution_runtime import NodeExecutionRuntime
-from src.providers.provider_contract import ProviderResult, ProviderMetrics
+from src.providers.provider_adapter_contract import ProviderResult, ProviderMetrics
 
 
 class DummyProviderExecutor:

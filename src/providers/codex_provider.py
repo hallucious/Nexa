@@ -12,7 +12,7 @@ class CodexTextResult:
     text: str
     raw: Dict[str, Any]
 
-from src.providers.provider_contract import ProviderResult, compute_provider_fingerprint
+from src.providers.provider_adapter_contract import ProviderResult, compute_provider_fingerprint
 from src.providers.universal_provider import UniversalProvider
 from src.providers.adapters.base_adapter import AdapterConfig
 from src.providers.adapters.openai_compatible_adapter import OpenAICompatibleAdapter

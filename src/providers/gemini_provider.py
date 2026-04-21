@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from src.providers.provider_contract import ProviderResult, make_failure, make_success, map_exception_to_reason_code
+from src.providers.provider_adapter_contract import ProviderResult, make_failure, make_success, map_exception_to_reason_code
 import json
 import os
 import urllib.request
@@ -199,7 +199,7 @@ class GeminiProvider:
 
         return text_out, raw
     def fingerprint(self) -> str:
-        from src.providers.provider_contract import compute_provider_fingerprint
+        from src.providers.provider_adapter_contract import compute_provider_fingerprint
 
         info = {
             "provider": type(self).__name__,

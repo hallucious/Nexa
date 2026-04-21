@@ -1,5 +1,5 @@
 import pytest
-from src.circuit.validator import validate_circuit
+from src.circuit.legacy_validator import validate_circuit
 
 
 def minimal():

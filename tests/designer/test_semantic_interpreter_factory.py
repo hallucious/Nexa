@@ -7,7 +7,7 @@ import src.providers.claude_provider as claude_provider_module
 
 from src.designer.semantic_interpreter import LLMBackedStructuredSemanticInterpreter, LegacyRuleBasedSemanticInterpreter
 from src.designer.semantic_interpreter_factory import build_designer_semantic_interpreter
-from src.providers.provider_contract import ProviderMetrics, ProviderResult
+from src.providers.provider_adapter_contract import ProviderMetrics, ProviderResult
 
 
 class _GenerateTextProvider:

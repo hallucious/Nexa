@@ -1,7 +1,8 @@
-
 from __future__ import annotations
+
 import time
-from src.providers.provider_metrics import record_latency, attach_metrics
+
+from src.providers.provider_metrics import ProviderRuntimeMetrics, attach_metrics, record_latency
 
 
 class MockProvider:
@@ -22,4 +23,5 @@ def test_step100_attach_metrics():
     attach_metrics(p, 123.4)
 
     assert hasattr(p, "metrics")
+    assert isinstance(p.metrics, ProviderRuntimeMetrics)
     assert p.metrics.latency_ms == 123.4

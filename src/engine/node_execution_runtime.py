@@ -13,7 +13,7 @@ from src.platform.prompt_spec import PromptSpecError
 from src.platform.plugin_result import PluginResult, normalize_plugin_result
 from src.automation.trigger_model import DEFAULT_TRIGGER_SOURCE, normalize_trigger_source
 from src.contracts.provider_contract import ProviderRequest
-from src.providers.provider_contract import ProviderResult
+from src.providers.provider_adapter_contract import ProviderResult
 from src.contracts.budget_routing_contract import RiskLevel, RoutingContext
 from src.contracts.branch_contract import create_branch
 from src.contracts.confidence_contract import BasisType, ConfidenceBasis, build_assessment

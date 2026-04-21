@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Tuple
 
 from src.platform.worker import WorkerResult, wrap_text_provider
-from src.providers.provider_contract import make_success, make_failure, ProviderResult
+from src.providers.provider_adapter_contract import make_success, make_failure, ProviderResult
 
 
 class _FakeProvider:

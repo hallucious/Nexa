@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 
 import pytest
 
-from src.providers.provider_contract import ProviderRequest
+from src.providers.provider_adapter_contract import ProviderRequest
 from src.providers.universal_provider import UniversalProvider
 
 

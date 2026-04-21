@@ -6,12 +6,12 @@ from typing import Any, Dict, Optional
 from src.contracts.provider_contract import (
     ProviderError,
     ProviderRequest,
-    ProviderResult as RuntimeProviderResult,
+    ProviderResult as EngineProviderResult,
 )
 from src.platform.provider_registry import ProviderRegistry
-from src.providers.provider_contract import (
+from src.providers.provider_adapter_contract import (
     ProviderMetrics,
-    ProviderResult as CanonicalProviderResult,
+    ProviderResult as AdapterProviderResult,
 )
 
 
@@ -60,7 +60,7 @@ class GenerateTextProviderBridge:
         allowed = set(signature.parameters.keys())
         return {key: value for key, value in kwargs.items() if key in allowed}
 
-    def execute(self, request: ProviderRequest) -> RuntimeProviderResult:
+    def execute(self, request: ProviderRequest) -> EngineProviderResult:
         if not hasattr(self.provider, "generate_text"):
             raise TypeError(
                 f"Provider '{self.provider_name}' must expose generate_text(...) for GenerateTextProviderBridge"
@@ -74,7 +74,7 @@ class GenerateTextProviderBridge:
         try:
             raw_result = self.provider.generate_text(**kwargs)
         except Exception as exc:
-            return RuntimeProviderResult(
+            return EngineProviderResult(
                 output=None,
                 raw_text=None,
                 structured=None,
@@ -90,18 +90,18 @@ class GenerateTextProviderBridge:
 
         return self._normalize_generate_text_result(raw_result)
 
-    def _normalize_generate_text_result(self, raw_result: Any) -> RuntimeProviderResult:
-        if isinstance(raw_result, RuntimeProviderResult):
+    def _normalize_generate_text_result(self, raw_result: Any) -> EngineProviderResult:
+        if isinstance(raw_result, EngineProviderResult):
             return raw_result
 
-        if isinstance(raw_result, CanonicalProviderResult):
+        if isinstance(raw_result, AdapterProviderResult):
             return self._canonical_to_runtime_result(raw_result)
 
         if isinstance(raw_result, tuple) and len(raw_result) == 3:
             text, raw, err = raw_result
             trace = {"provider": self.provider_name}
             if err is not None:
-                return RuntimeProviderResult(
+                return EngineProviderResult(
                     output=text,
                     raw_text=None if text is None else str(text),
                     structured=dict(raw) if isinstance(raw, dict) else None,
@@ -114,7 +114,7 @@ class GenerateTextProviderBridge:
                     ),
                     stream=dict(raw.get("stream")) if isinstance(raw, dict) and isinstance(raw.get("stream"), dict) else None,
                 )
-            return RuntimeProviderResult(
+            return EngineProviderResult(
                 output=text,
                 raw_text=None if text is None else str(text),
                 structured=dict(raw) if isinstance(raw, dict) else None,
@@ -124,7 +124,7 @@ class GenerateTextProviderBridge:
                 stream=dict(raw.get("stream")) if isinstance(raw, dict) and isinstance(raw.get("stream"), dict) else None,
             )
 
-        return RuntimeProviderResult(
+        return EngineProviderResult(
             output=raw_result,
             raw_text=str(raw_result) if raw_result is not None else None,
             structured=None,
@@ -136,8 +136,8 @@ class GenerateTextProviderBridge:
 
     def _canonical_to_runtime_result(
         self,
-        result: CanonicalProviderResult,
-    ) -> RuntimeProviderResult:
+        result: AdapterProviderResult,
+    ) -> EngineProviderResult:
         raw = dict(result.raw) if isinstance(result.raw, dict) else {}
         trace = raw.get("trace") if isinstance(raw.get("trace"), dict) else {}
         trace = {"provider": self.provider_name, **trace}
@@ -153,7 +153,7 @@ class GenerateTextProviderBridge:
                 message=str(result.error or "provider execution failed"),
                 retryable=False,
             )
-        return RuntimeProviderResult(
+        return EngineProviderResult(
             output=output,
             raw_text=result.text,
             structured=structured,
@@ -167,13 +167,13 @@ class GenerateTextProviderBridge:
 class ProviderExecutor:
     """
     Execute provider calls through ProviderRegistry and normalize results
-    into the canonical providers.ProviderResult contract.
+    into the canonical provider-adapter result contract.
     """
 
     def __init__(self, registry: ProviderRegistry) -> None:
         self.registry = registry
 
-    def execute(self, request: ProviderRequest) -> CanonicalProviderResult:
+    def execute(self, request: ProviderRequest) -> AdapterProviderResult:
         provider = self.registry.resolve(request.provider_id)
 
         if not hasattr(provider, "execute"):
@@ -184,11 +184,11 @@ class ProviderExecutor:
         raw_result = provider.execute(request)
         return self._canonicalize_result(raw_result, request=request)
 
-    def _canonicalize_result(self, raw_result: Any, *, request: ProviderRequest) -> CanonicalProviderResult:
-        if isinstance(raw_result, CanonicalProviderResult):
+    def _canonicalize_result(self, raw_result: Any, *, request: ProviderRequest) -> AdapterProviderResult:
+        if isinstance(raw_result, AdapterProviderResult):
             return self._canonicalize_canonical_result(raw_result)
 
-        if isinstance(raw_result, RuntimeProviderResult):
+        if isinstance(raw_result, EngineProviderResult):
             return self._canonicalize_runtime_result(raw_result, request=request)
 
         if isinstance(raw_result, dict):
@@ -196,7 +196,7 @@ class ProviderExecutor:
                 return self._canonicalize_canonical_dict(raw_result)
             return self._canonicalize_runtime_dict(raw_result, request=request)
 
-        return CanonicalProviderResult(
+        return AdapterProviderResult(
             success=True,
             text=str(raw_result) if raw_result is not None else None,
             raw={"output": raw_result, "provider_id": request.provider_id},
@@ -221,9 +221,9 @@ class ProviderExecutor:
             )
         return ProviderMetrics(latency_ms=0)
 
-    def _canonicalize_canonical_result(self, result: CanonicalProviderResult) -> CanonicalProviderResult:
+    def _canonicalize_canonical_result(self, result: AdapterProviderResult) -> AdapterProviderResult:
         raw = result.raw if isinstance(result.raw, dict) else {}
-        return CanonicalProviderResult(
+        return AdapterProviderResult(
             success=bool(result.success),
             text=result.text,
             raw=raw,
@@ -232,11 +232,11 @@ class ProviderExecutor:
             metrics=self._coerce_metrics(result.metrics),
         )
 
-    def _canonicalize_canonical_dict(self, payload: Dict[str, Any]) -> CanonicalProviderResult:
+    def _canonicalize_canonical_dict(self, payload: Dict[str, Any]) -> AdapterProviderResult:
         raw = payload.get("raw")
         if not isinstance(raw, dict):
             raw = {}
-        return CanonicalProviderResult(
+        return AdapterProviderResult(
             success=bool(payload.get("success", False)),
             text=payload.get("text"),
             raw=raw,
@@ -247,10 +247,10 @@ class ProviderExecutor:
 
     def _canonicalize_runtime_result(
         self,
-        result: RuntimeProviderResult,
+        result: EngineProviderResult,
         *,
         request: ProviderRequest,
-    ) -> CanonicalProviderResult:
+    ) -> AdapterProviderResult:
         raw: Dict[str, Any] = {
             "provider_id": request.provider_id,
             "output": result.output,
@@ -272,7 +272,7 @@ class ProviderExecutor:
         if text is None and isinstance(result.output, (str, int, float, bool)):
             text = str(result.output)
 
-        return CanonicalProviderResult(
+        return AdapterProviderResult(
             success=result.error is None,
             text=text,
             raw=raw,
@@ -281,7 +281,7 @@ class ProviderExecutor:
             metrics=ProviderMetrics(latency_ms=0),
         )
 
-    def _canonicalize_runtime_dict(self, payload: Dict[str, Any], *, request: ProviderRequest) -> CanonicalProviderResult:
+    def _canonicalize_runtime_dict(self, payload: Dict[str, Any], *, request: ProviderRequest) -> AdapterProviderResult:
         error = payload.get("error")
         reason_code: Optional[str] = None
         error_text: Optional[str] = None
@@ -314,7 +314,7 @@ class ProviderExecutor:
         if isinstance(structured, dict):
             raw["structured"] = dict(structured)
 
-        return CanonicalProviderResult(
+        return AdapterProviderResult(
             success=error_text is None,
             text=text,
             raw=raw,

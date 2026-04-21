@@ -5,7 +5,7 @@ import os
 from src.providers.env_diagnostics import resolve_api_key_or_raise
 from typing import Optional
 
-from src.providers.provider_contract import ProviderResult, compute_provider_fingerprint
+from src.providers.provider_adapter_contract import ProviderResult, compute_provider_fingerprint
 from src.providers.universal_provider import UniversalProvider
 from src.providers.adapters.base_adapter import AdapterConfig
 from src.providers.adapters.anthropic_messages_adapter import AnthropicMessagesAdapter

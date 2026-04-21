@@ -5,7 +5,7 @@ from src.contracts.nex_contract import WORKING_SAVE_ROLE
 from src.contracts.savefile_executor_aligned import execute_ai_node
 from src.contracts.savefile_format import NodeSpec
 from src.platform.provider_registry import ProviderRegistry
-from src.providers.provider_contract import make_failure
+from src.providers.provider_adapter_contract import make_failure
 from src.storage.execution_savefile_adapter import (
     ExecutionSavefileAdapter,
     execution_savefile_from_commit_snapshot_model,

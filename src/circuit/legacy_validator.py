@@ -1,3 +1,9 @@
+"""Legacy definition validator for the original hyper-ai.definition_language schema.
+
+This module remains only for legacy definition loading paths and is not the
+canonical node-runtime validator.
+"""
+
 from typing import Dict, Any, Set, List
 
 

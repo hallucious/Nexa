@@ -12,7 +12,7 @@ from src.engine.node_execution_runtime import NodeExecutionRuntime
 from src.providers.adapters.anthropic_messages_adapter import AnthropicMessagesAdapter
 from src.providers.adapters.base_adapter import AdapterConfig
 from src.providers.adapters.openai_compatible_adapter import OpenAICompatibleAdapter
-from src.providers.provider_contract import make_success
+from src.providers.provider_adapter_contract import make_success
 
 
 class _DummyRegistry:

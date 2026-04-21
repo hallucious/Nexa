@@ -5,7 +5,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Dict, Iterator, Optional, Tuple
 
-from src.providers.provider_contract import ProviderRequest
+from src.providers.provider_adapter_contract import ProviderRequest
 
 from .base_adapter import AdapterConfig, ProviderAdapter, StreamChunk
 

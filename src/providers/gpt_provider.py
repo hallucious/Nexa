@@ -6,7 +6,7 @@ from src.providers.env_diagnostics import resolve_api_key_or_raise
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from src.providers.provider_contract import ProviderResult, compute_provider_fingerprint
+from src.providers.provider_adapter_contract import ProviderResult, compute_provider_fingerprint
 from src.providers.universal_provider import UniversalProvider
 from src.providers.adapters.base_adapter import AdapterConfig
 from src.providers.adapters.openai_compatible_adapter import OpenAICompatibleAdapter

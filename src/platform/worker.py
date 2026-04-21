@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Protocol, Tuple, Union
 
 from .safe_exec import safe_call
-from src.providers.provider_contract import ProviderResult
+from src.providers.provider_adapter_contract import ProviderResult
 
 
 @dataclass
