@@ -8,6 +8,10 @@ from src.ui.builder_interaction_hub import read_builder_interaction_hub_view_mod
 from src.ui.command_dispatch_contract import read_command_dispatch_contract_view_model
 
 
+from src.ui.execution_panel import read_execution_panel_view_model
+from src.ui.action_schema import read_builder_action_schema
+from src.ui.command_routing import read_builder_command_routing_view_model
+from src.ui.intent_emission import read_intent_emission_view_model
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
@@ -68,3 +72,16 @@ def test_command_dispatch_contract_exposes_required_fields_for_beginner_producti
     assert result_history.boundary_target == "ui_boundary"
     assert any(field.field_name == "working_save_id" for field in file_input.required_fields)
     assert any(field.field_name == "run_id" for field in result_history.required_fields)
+
+
+def test_dispatch_contract_includes_core_workspace_navigation_fields() -> None:
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+    interaction_hub = read_builder_interaction_hub_view_model(working, execution_record=_run())
+    intent_emission = read_intent_emission_view_model(working, interaction_hub=interaction_hub)
+
+    vm = read_command_dispatch_contract_view_model(working, interaction_hub=interaction_hub, intent_emission=intent_emission)
+    contracts = {item.action_id: item for item in vm.contracts}
+    assert [field.field_name for field in contracts["open_visual_editor"].required_fields] == ["workspace_id", "panel_id"]
+    assert [field.field_name for field in contracts["open_node_configuration"].required_fields] == ["workspace_id", "panel_id"]
+    assert [field.field_name for field in contracts["open_runtime_monitoring"].required_fields] == ["workspace_id", "panel_id"]

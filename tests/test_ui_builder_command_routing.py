@@ -142,3 +142,16 @@ def test_builder_command_routing_projects_productization_actions_into_explicit_w
     assert routes["open_circuit_library"].preferred_workspace_id == "library"
     assert routes["open_result_history"].preferred_panel_id == "result_history"
     assert routes["open_feedback_channel"].preferred_panel_id == "feedback_channel"
+
+
+def test_command_routing_exposes_core_workspace_navigation_actions() -> None:
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+    execution = read_execution_panel_view_model(working, execution_record=_run())
+    action_schema = read_builder_action_schema(working, execution_view=execution)
+
+    vm = read_builder_command_routing_view_model(working, action_schema=action_schema)
+    routes = {route.action_id: route for route in vm.routes}
+    assert routes["open_visual_editor"].preferred_workspace_id == "visual_editor"
+    assert routes["open_node_configuration"].preferred_workspace_id == "node_configuration"
+    assert routes["open_runtime_monitoring"].preferred_workspace_id == "runtime_monitoring"

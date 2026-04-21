@@ -76,6 +76,9 @@ def _dispatch_mode(action_id: str, target_domain: str) -> str:
 def _required_fields(action_id: str) -> list[DispatchFieldView]:
     mapping = {
         "save_working_save": [DispatchFieldView("working_save_id", True, "storage.current_working_save"), DispatchFieldView("storage_role", True, "adapter.source_role")],
+        "open_visual_editor": [DispatchFieldView("workspace_id", True, "shell.visual_editor"), DispatchFieldView("panel_id", False, "panel.graph")],
+        "open_node_configuration": [DispatchFieldView("workspace_id", True, "shell.node_configuration"), DispatchFieldView("panel_id", False, "panel.inspector")],
+        "open_runtime_monitoring": [DispatchFieldView("workspace_id", True, "shell.runtime_monitoring"), DispatchFieldView("panel_id", False, "panel.execution")],
         "review_draft": [DispatchFieldView("working_save_id", True, "storage.current_working_save"), DispatchFieldView("validation_status", True, "validation.overall_status")],
         "commit_snapshot": [DispatchFieldView("working_save_id", True, "storage.current_working_save"), DispatchFieldView("approval_id", False, "designer.approval_state"), DispatchFieldView("review_state", True, "proposal_commit.summary")],
         "open_latest_commit": [DispatchFieldView("commit_id", True, "storage.latest_commit_ref")],

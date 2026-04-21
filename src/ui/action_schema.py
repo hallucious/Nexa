@@ -216,7 +216,31 @@ def read_builder_action_schema(
         ),
     ]
 
+    graph_navigation_available = isinstance(source, (WorkingSaveModel, CommitSnapshotModel))
+    runtime_navigation_available = execution_view is not None
+
     generic_secondary_actions = [] if beginner_preunlock else [
+        _action(
+            "open_visual_editor",
+            ui_text("builder.action.open_visual_editor", app_language=app_language),
+            "workspace_navigation",
+            graph_navigation_available,
+            reason_disabled=None if graph_navigation_available else ui_text("builder.reason.visual_editor_requires_graph", app_language=app_language),
+        ),
+        _action(
+            "open_node_configuration",
+            ui_text("builder.action.open_node_configuration", app_language=app_language),
+            "workspace_navigation",
+            graph_navigation_available,
+            reason_disabled=None if graph_navigation_available else ui_text("builder.reason.configuration_requires_graph", app_language=app_language),
+        ),
+        _action(
+            "open_runtime_monitoring",
+            ui_text("builder.action.open_runtime_monitoring", app_language=app_language),
+            "workspace_navigation",
+            runtime_navigation_available,
+            reason_disabled=None if runtime_navigation_available else ui_text("builder.reason.runtime_monitoring_requires_execution", app_language=app_language),
+        ),
         _action(
             "replay_latest",
             ui_text("builder.action.replay_latest", app_language=app_language),

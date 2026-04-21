@@ -10,6 +10,9 @@ from src.ui.builder_interaction_hub import read_builder_interaction_hub_view_mod
 from src.ui.intent_emission import read_intent_emission_view_model
 
 
+from src.ui.execution_panel import read_execution_panel_view_model
+from src.ui.action_schema import read_builder_action_schema
+from src.ui.command_routing import read_builder_command_routing_view_model
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
@@ -111,3 +114,15 @@ def test_intent_emission_projects_beginner_productization_actions_into_ui_naviga
 
     assert result_history.payload_contract_id == "ui.result_history_open_request"
     assert result_history.emit_allowed is True
+
+
+def test_intent_emission_includes_core_workspace_navigation_payloads() -> None:
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+    interaction_hub = read_builder_interaction_hub_view_model(working, execution_record=_run())
+
+    vm = read_intent_emission_view_model(working, interaction_hub=interaction_hub)
+    emissions = {item.action_id: item for item in vm.emissions}
+    assert emissions["open_visual_editor"].payload_contract_id == "ui.visual_editor_open_request"
+    assert emissions["open_node_configuration"].payload_contract_id == "ui.node_configuration_open_request"
+    assert emissions["open_runtime_monitoring"].payload_contract_id == "ui.runtime_monitoring_open_request"

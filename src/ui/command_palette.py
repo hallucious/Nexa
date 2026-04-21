@@ -225,6 +225,9 @@ def _diff_entries(
 
 def _action_entries(action_schema: BuilderActionSchemaView) -> list[CommandPaletteEntryView]:
     workspace_map = {
+        "open_visual_editor": ("visual_editor", "graph"),
+        "open_node_configuration": ("node_configuration", "inspector"),
+        "open_runtime_monitoring": ("runtime_monitoring", "execution"),
         "run_current": ("runtime_monitoring", "execution"),
         "run_from_commit": ("runtime_monitoring", "execution"),
         "cancel_run": ("runtime_monitoring", "execution"),

@@ -189,3 +189,14 @@ def test_action_schema_surfaces_watch_progress_action_for_running_execution() ->
     vm = read_builder_action_schema(_working_save(), execution_view=execution)
     actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
     assert actions["watch_run_progress"].enabled is True
+
+
+def test_action_schema_surfaces_core_workspace_navigation_actions_after_beginner_unlock() -> None:
+    working = _working_save(metadata={"beginner_first_success_achieved": True})
+    execution = read_execution_panel_view_model(working, execution_record=_run())
+
+    vm = read_builder_action_schema(working, execution_view=execution)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["open_visual_editor"].enabled is True
+    assert actions["open_node_configuration"].enabled is True
+    assert actions["open_runtime_monitoring"].enabled is True

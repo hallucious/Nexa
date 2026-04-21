@@ -9,6 +9,8 @@ from src.ui.command_palette import read_command_palette_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
 
 
+from src.ui.execution_panel import read_execution_panel_view_model
+from src.ui.action_schema import read_builder_action_schema
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Palette Draft"),
@@ -142,3 +144,16 @@ def test_command_palette_maps_beginner_and_return_use_actions_to_expected_panels
     assert action_entries["watch_run_progress"].preferred_workspace_id == "runtime_monitoring"
     assert action_entries["open_circuit_library"].preferred_panel_id == "circuit_library"
     assert action_entries["open_result_history"].preferred_panel_id == "result_history"
+
+
+def test_command_palette_includes_core_workspace_navigation_entries_after_beginner_unlock() -> None:
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+    execution = read_execution_panel_view_model(working, execution_record=_run())
+    action_schema = read_builder_action_schema(working, execution_view=execution)
+
+    vm = read_command_palette_view_model(working, action_schema=action_schema)
+    entries = {entry.action_id: entry for entry in vm.entries if entry.entry_type == "action" and entry.action_id is not None}
+    assert entries["open_visual_editor"].preferred_workspace_id == "visual_editor"
+    assert entries["open_node_configuration"].preferred_workspace_id == "node_configuration"
+    assert entries["open_runtime_monitoring"].preferred_workspace_id == "runtime_monitoring"

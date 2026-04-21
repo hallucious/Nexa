@@ -60,6 +60,9 @@ def _storage_role(source) -> str:
 def _route_template(action_id: str) -> tuple[str, str, str | None, str, str, str]:
     mapping = {
         "save_working_save": ("storage.save_working_save", "storage", None, "visual_editor", "storage", "working_save_api"),
+        "open_visual_editor": ("ui.open_visual_editor", "ui", None, "visual_editor", "graph", "ui_boundary"),
+        "open_node_configuration": ("ui.open_node_configuration", "ui", None, "node_configuration", "inspector", "ui_boundary"),
+        "open_runtime_monitoring": ("ui.open_runtime_monitoring", "ui", None, "runtime_monitoring", "execution", "ui_boundary"),
         "review_draft": ("designer.review_draft", "designer", "proposal_commit", "node_configuration", "validation", "designer_flow"),
         "commit_snapshot": ("storage.commit_snapshot", "storage", "proposal_commit", "node_configuration", "designer", "commit_gateway"),
         "open_latest_commit": ("storage.open_latest_commit", "storage", None, "visual_editor", "storage", "ui_boundary"),

@@ -57,6 +57,9 @@ def _storage_role(source) -> str:
 def _emission_template(action_id: str, *, app_language: str) -> tuple[str, str, str, str]:
     mapping = {
         "save_working_save": ("storage_intent", "storage", "working_save.persist", "Persist current working save"),
+        "open_visual_editor": ("ui_navigation_intent", "ui", "ui.visual_editor_open_request", "Open the visual editor workspace"),
+        "open_node_configuration": ("ui_navigation_intent", "ui", "ui.node_configuration_open_request", "Open the node configuration workspace"),
+        "open_runtime_monitoring": ("ui_navigation_intent", "ui", "ui.runtime_monitoring_open_request", "Open the runtime monitoring workspace"),
         "review_draft": ("review_intent", "designer", "proposal.review_request", "Request draft review and validation"),
         "commit_snapshot": ("commit_intent", "storage", "commit.snapshot_request", "Create approved commit snapshot"),
         "open_latest_commit": ("storage_intent", "storage", "commit.snapshot_inspect_request", "Open latest approved commit snapshot"),
