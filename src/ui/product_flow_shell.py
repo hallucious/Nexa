@@ -184,6 +184,31 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
 
     active_workspace_id = shell_vm.active_workspace_id
     focus_reason = "steady_state"
+    explicit_panel = shell_vm.coordination.active_panel
+    if explicit_panel in {"circuit_library", "feedback_channel"}:
+        return ProductFlowFocusView(
+            active_workspace_id="library",
+            active_workspace_label=_workspace_label("library", app_language=app_language),
+            active_right_panel_id=explicit_panel,
+            active_right_panel_label=_panel_label(explicit_panel, app_language=app_language),
+            active_bottom_panel_id="storage",
+            active_bottom_panel_label=_panel_label("storage", app_language=app_language),
+            recommended_action_id=recommended_action_id,
+            recommended_flow_id=recommended_flow_id,
+            focus_reason="explicit_return_use_surface",
+        )
+    if explicit_panel == "result_history":
+        return ProductFlowFocusView(
+            active_workspace_id="runtime_monitoring",
+            active_workspace_label=_workspace_label("runtime_monitoring", app_language=app_language),
+            active_right_panel_id="result_history",
+            active_right_panel_label=_panel_label("result_history", app_language=app_language),
+            active_bottom_panel_id="execution",
+            active_bottom_panel_label=_panel_label("execution", app_language=app_language),
+            recommended_action_id=recommended_action_id,
+            recommended_flow_id=recommended_flow_id,
+            focus_reason="explicit_return_use_surface",
+        )
     beginner_empty_designer = (
         shell_vm.diagnostics.beginner_mode
         and shell_vm.diagnostics.empty_workspace_mode
@@ -228,29 +253,40 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
             active_bottom_panel_id = "diff" if shell_vm.diff is not None else "storage"
             focus_reason = "configuration_review"
     else:
-        active_workspace_id = "node_configuration" if beginner_empty_designer else "visual_editor"
-        if shell_vm.coordination.active_panel in {"designer", "validation", "inspector"}:
+        if shell_vm.coordination.active_panel in {"circuit_library", "feedback_channel"}:
+            active_workspace_id = "library"
             active_right_panel_id = shell_vm.coordination.active_panel
-        elif shell_vm.inspector is not None and shell_vm.inspector.object_type not in {"none", "unknown"}:
-            active_right_panel_id = "inspector"
-        else:
-            active_right_panel_id = "designer"
-        if beginner_empty_designer:
-            active_bottom_panel_id = "validation" if shell_vm.validation is not None and shell_vm.validation.summary.blocking_count else "storage"
-            focus_reason = "start_with_goal"
-        elif shell_vm.diff is not None:
-            active_bottom_panel_id = "diff"
-            focus_reason = "preview_compare"
-        elif shell_vm.validation is not None and (
-            shell_vm.validation.summary.blocking_count
-            or shell_vm.validation.summary.warning_count
-            or shell_vm.validation.summary.confirmation_count
-        ):
-            active_bottom_panel_id = "validation"
-            focus_reason = "validation_followup"
-        else:
             active_bottom_panel_id = "storage"
-            focus_reason = "draft_edit"
+            focus_reason = "return_use_surface"
+        elif shell_vm.coordination.active_panel == "result_history":
+            active_workspace_id = "runtime_monitoring"
+            active_right_panel_id = "result_history"
+            active_bottom_panel_id = "execution"
+            focus_reason = "result_history_surface"
+        else:
+            active_workspace_id = "node_configuration" if beginner_empty_designer else "visual_editor"
+            if shell_vm.coordination.active_panel in {"designer", "validation", "inspector"}:
+                active_right_panel_id = shell_vm.coordination.active_panel
+            elif shell_vm.inspector is not None and shell_vm.inspector.object_type not in {"none", "unknown"}:
+                active_right_panel_id = "inspector"
+            else:
+                active_right_panel_id = "designer"
+            if beginner_empty_designer:
+                active_bottom_panel_id = "validation" if shell_vm.validation is not None and shell_vm.validation.summary.blocking_count else "storage"
+                focus_reason = "start_with_goal"
+            elif shell_vm.diff is not None:
+                active_bottom_panel_id = "diff"
+                focus_reason = "preview_compare"
+            elif shell_vm.validation is not None and (
+                shell_vm.validation.summary.blocking_count
+                or shell_vm.validation.summary.warning_count
+                or shell_vm.validation.summary.confirmation_count
+            ):
+                active_bottom_panel_id = "validation"
+                focus_reason = "validation_followup"
+            else:
+                active_bottom_panel_id = "storage"
+                focus_reason = "draft_edit"
 
     if not beginner_empty_designer and not (beginner_surface and active_workspace_id == "runtime_monitoring") and handoff is not None and handoff.primary_workspace_id is not None and handoff.primary_panel_id is not None:
         if stage_id != "run" and handoff.primary_action_id is not None and handoff.primary_enabled:
@@ -283,8 +319,8 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
     if shell_vm is None:
         return [], []
 
-    right_stack_ids = ["inspector", "designer", "validation", "execution", "trace_timeline", "artifact"]
-    bottom_dock_ids = ["validation", "storage", "execution", "trace_timeline", "artifact", "diff"]
+    right_stack_ids = ["inspector", "designer", "validation", "execution", "trace_timeline", "artifact", "circuit_library", "result_history", "feedback_channel"]
+    bottom_dock_ids = ["validation", "storage", "execution", "trace_timeline", "artifact", "diff", "result_history", "feedback_channel"]
     hidden_in_beginner = set()
     if shell_vm.diagnostics.beginner_mode and not shell_vm.diagnostics.advanced_surfaces_unlocked:
         hidden_in_beginner = {"trace_timeline", "diff"}
@@ -300,6 +336,9 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
         "trace_timeline": shell_vm.trace_timeline.timeline_status if shell_vm.trace_timeline is not None else "empty",
         "artifact": shell_vm.artifact.viewer_status if shell_vm.artifact is not None else "empty",
         "diff": shell_vm.diff.viewer_status if shell_vm.diff is not None else "hidden",
+        "circuit_library": shell_vm.circuit_library.library_status if shell_vm.circuit_library is not None else "empty",
+        "result_history": shell_vm.result_history.history_status if shell_vm.result_history is not None else "empty",
+        "feedback_channel": shell_vm.feedback_channel.channel_status if shell_vm.feedback_channel is not None else "empty",
     }
     workspace_by_panel = {
         "inspector": "node_configuration",
@@ -310,6 +349,9 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
         "trace_timeline": "runtime_monitoring",
         "artifact": "runtime_monitoring",
         "diff": "visual_editor",
+        "circuit_library": "library",
+        "result_history": "runtime_monitoring",
+        "feedback_channel": "library",
     }
 
     right_stack = [

@@ -12,6 +12,9 @@ from src.ui.diff_viewer import DiffViewerViewModel
 from src.ui.execution_panel import ExecutionPanelViewModel
 from src.ui.graph_workspace import GraphWorkspaceViewModel
 from src.ui.storage_panel import StoragePanelViewModel
+from src.ui.circuit_library import CircuitLibraryViewModel
+from src.ui.result_history import ResultHistoryViewModel
+from src.ui.feedback_channel import FeedbackChannelViewModel
 from src.ui.validation_panel import ValidationPanelViewModel
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel
 from src.ui.artifact_viewer import ArtifactViewerViewModel
@@ -130,12 +133,21 @@ def _default_visible_panels(
     designer_view: DesignerPanelViewModel | None = None,
     trace_view: TraceTimelineViewerViewModel | None = None,
     artifact_view: ArtifactViewerViewModel | None = None,
+    circuit_library_view: CircuitLibraryViewModel | None = None,
+    result_history_view: ResultHistoryViewModel | None = None,
+    feedback_channel_view: FeedbackChannelViewModel | None = None,
 ) -> list[str]:
     beginner_shell_active = _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view)
     panels: list[str] = []
     if beginner_shell_active:
         if designer_view is not None:
             panels.append("designer")
+        if circuit_library_view is not None and circuit_library_view.visible:
+            panels.append("circuit_library")
+        if result_history_view is not None and result_history_view.visible:
+            panels.append("result_history")
+        if feedback_channel_view is not None and feedback_channel_view.visible:
+            panels.append("feedback_channel")
         if validation_view is not None and validation_view.overall_status == "blocked":
             panels.append("validation")
     else:
@@ -192,6 +204,9 @@ def read_panel_coordination_state(
     designer_view: DesignerPanelViewModel | None = None,
     trace_view: TraceTimelineViewerViewModel | None = None,
     artifact_view: ArtifactViewerViewModel | None = None,
+    circuit_library_view: CircuitLibraryViewModel | None = None,
+    result_history_view: ResultHistoryViewModel | None = None,
+    feedback_channel_view: FeedbackChannelViewModel | None = None,
     explanation: str | None = None,
 ) -> BuilderPanelCoordinationStateView:
     source = _unwrap(source)
@@ -238,6 +253,9 @@ def read_panel_coordination_state(
             designer_view=designer_view,
             trace_view=trace_view,
             artifact_view=artifact_view,
+            circuit_library_view=circuit_library_view,
+            result_history_view=result_history_view,
+            feedback_channel_view=feedback_channel_view,
         )
     else:
         visible_panels = [str(v) for v in visible_panels_raw if v is not None]
@@ -309,6 +327,12 @@ def read_panel_coordination_state(
             badges.append(PanelBadgeView(panel_id="artifact", badge_style="info", count=artifact_count, label=artifact_view.viewer_status))
     if storage_view is not None and storage_view.diagnostics.lifecycle_warning_count:
         badges.append(PanelBadgeView(panel_id="storage", badge_style="warning", count=storage_view.diagnostics.lifecycle_warning_count, label=ui_text("panel.badge.storage_diagnostics", app_language=app_language, fallback_text="storage diagnostics")))
+    if circuit_library_view is not None and circuit_library_view.returned_count:
+        badges.append(PanelBadgeView(panel_id="circuit_library", badge_style="info", count=circuit_library_view.returned_count, label=circuit_library_view.library_status))
+    if result_history_view is not None and result_history_view.returned_count:
+        badges.append(PanelBadgeView(panel_id="result_history", badge_style="info", count=result_history_view.returned_count, label=result_history_view.history_status))
+    if feedback_channel_view is not None and feedback_channel_view.returned_count:
+        badges.append(PanelBadgeView(panel_id="feedback_channel", badge_style="attention", count=feedback_channel_view.returned_count, label=feedback_channel_view.channel_status))
 
     stale_reference_count = 0
     if selection.primary_ref is None and any([
@@ -320,6 +344,15 @@ def read_panel_coordination_state(
         selection.selected_diff_change_id,
     ]):
         stale_reference_count += 1
+    supplemental_panels = {
+        'circuit_library': circuit_library_view is not None and circuit_library_view.visible,
+        'result_history': result_history_view is not None and result_history_view.visible,
+        'feedback_channel': feedback_channel_view is not None and feedback_channel_view.visible,
+    }
+    if active_panel in supplemental_panels and supplemental_panels[active_panel] and active_panel not in visible_panels:
+        visible_panels.append(active_panel)
+        if active_panel not in panel_order:
+            panel_order.append(active_panel)
     if active_panel not in visible_panels:
         stale_reference_count += 1
 

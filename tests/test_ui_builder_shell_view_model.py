@@ -414,3 +414,33 @@ def test_builder_shell_projects_template_gallery_through_designer_for_empty_work
     assert vm.designer.template_gallery.category_count >= 5
     assert vm.designer.provider_setup_guidance.visible is True
     assert vm.designer.provider_setup_guidance.primary_action_target == "provider_setup"
+
+
+
+def test_builder_shell_projects_library_workspace_surface_from_active_panel() -> None:
+    source = _working_save()
+    source.ui.metadata["active_panel"] = "circuit_library"
+    vm = read_builder_shell_view_model(source, execution_record=_run())
+
+    assert vm.active_workspace_id == "library"
+    assert vm.circuit_library is not None
+    assert vm.circuit_library.visible is True
+    assert vm.coordination.active_panel == "circuit_library"
+
+
+
+def test_builder_shell_projects_result_history_surface_for_recent_runs() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={"run_id": "run-local", "status": "completed", "summary": "Recent result details are available.", "output_preview": "hello"}, errors=[]),
+        ui=UIModel(layout={}, metadata={"active_panel": "result_history", "app_language": "ko-KR"}),
+    )
+    vm = read_builder_shell_view_model(source)
+
+    assert vm.active_workspace_id == "runtime_monitoring"
+    assert vm.result_history is not None
+    assert vm.result_history.visible is True
+    assert vm.coordination.active_panel == "result_history"

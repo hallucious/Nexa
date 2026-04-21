@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from typing import Any
 
 from src.contracts.nex_contract import ValidationReport
@@ -10,6 +11,12 @@ from src.designer.models.designer_approval_flow import DesignerApprovalFlowState
 from src.designer.models.designer_intent import DesignerIntent
 from src.designer.models.designer_session_state_card import DesignerSessionStateCard
 from src.designer.models.validation_precheck import ValidationPrecheck
+from src.contracts.workspace_library_contract import (
+    ProductActivityContinuitySummary,
+    ProductWorkspaceLinks,
+    ProductWorkspaceListResponse,
+    ProductWorkspaceSummaryView,
+)
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
@@ -39,6 +46,9 @@ from src.ui.node_configuration_workspace import NodeConfigurationWorkspaceViewMo
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.trace_timeline_viewer import TraceTimelineViewerViewModel, read_trace_timeline_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
+from src.ui.circuit_library import CircuitLibraryViewModel, read_circuit_library_view_model
+from src.ui.result_history import ResultHistoryViewModel, read_result_history_view_model
+from src.ui.feedback_channel import FeedbackChannelViewModel, read_feedback_channel_view_model
 
 
 @dataclass(frozen=True)
@@ -98,6 +108,9 @@ class BuilderShellViewModel:
     visual_editor: VisualEditorWorkspaceViewModel | None = None
     runtime_monitoring: RuntimeMonitoringWorkspaceViewModel | None = None
     node_configuration: NodeConfigurationWorkspaceViewModel | None = None
+    circuit_library: CircuitLibraryViewModel | None = None
+    result_history: ResultHistoryViewModel | None = None
+    feedback_channel: FeedbackChannelViewModel | None = None
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
     beginner_onboarding: BeginnerOnboardingHintView = field(default_factory=BeginnerOnboardingHintView)
@@ -135,6 +148,163 @@ def _ui_layout(source) -> dict[str, Any]:
         return dict(source.ui.layout or {})
     return {}
 
+
+
+def _workspace_identity(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None, *, execution_record: ExecutionRecordModel | None = None) -> tuple[str | None, str | None, str | None]:
+    if isinstance(source, WorkingSaveModel):
+        return source.meta.working_save_id or None, source.meta.name or source.meta.working_save_id or None, source.meta.updated_at or source.meta.created_at or (execution_record.meta.finished_at if execution_record is not None else None) or '1970-01-01T00:00:00Z'
+    if isinstance(source, CommitSnapshotModel):
+        workspace_id = source.meta.source_working_save_id or source.lineage.source_working_save_id or source.meta.commit_id or None
+        return workspace_id, source.meta.name or workspace_id, source.meta.updated_at or source.meta.created_at or (execution_record.meta.finished_at if execution_record is not None else None) or '1970-01-01T00:00:00Z'
+    record = execution_record if execution_record is not None else (source if isinstance(source, ExecutionRecordModel) else None)
+    if isinstance(record, ExecutionRecordModel):
+        workspace_id = record.source.working_save_id or record.source.commit_id or None
+        return workspace_id, record.meta.title or workspace_id, record.meta.finished_at or record.meta.started_at or record.meta.created_at or None
+    return None, None, None
+
+
+def _synthetic_library_view(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None, *, execution_record: ExecutionRecordModel | None, app_language: str) -> CircuitLibraryViewModel | None:
+    workspace_id, workspace_title, updated_at = _workspace_identity(source, execution_record=execution_record)
+    if workspace_id is None or workspace_title is None or updated_at is None:
+        return None
+    latest_run_id = None
+    last_result_status = None
+    activity = None
+    onboarding_state = None
+    if isinstance(source, WorkingSaveModel):
+        last_run = source.runtime.last_run or {}
+        latest_run_id = str(last_run.get('run_id') or '').strip() or None
+        last_result_status = str(last_run.get('status') or last_run.get('semantic_status') or '').strip() or None
+        activity = ProductActivityContinuitySummary(
+            recent_run_count=1 if latest_run_id is not None else 0,
+            active_run_count=1 if execution_record is not None and execution_record.meta.status in {'running', 'queued'} else 0,
+            latest_activity_at=updated_at,
+            latest_run_id=latest_run_id,
+        )
+        metadata = dict(source.ui.metadata or {})
+        onboarding_state = {
+            'current_step': metadata.get('beginner_current_step') or metadata.get('onboarding_step') or ('read_result' if metadata.get('beginner_first_success_achieved') else 'enter_goal'),
+            'first_success_achieved': bool(metadata.get('beginner_first_success_achieved')),
+        }
+    elif isinstance(execution_record, ExecutionRecordModel):
+        latest_run_id = execution_record.meta.run_id
+        last_result_status = execution_record.meta.status
+        activity = ProductActivityContinuitySummary(
+            recent_run_count=1,
+            active_run_count=1 if execution_record.meta.status in {'running', 'queued'} else 0,
+            latest_activity_at=updated_at,
+            latest_run_id=latest_run_id,
+        )
+    summary = ProductWorkspaceSummaryView(
+        workspace_id=workspace_id,
+        title=workspace_title,
+        role='owner',
+        updated_at=updated_at,
+        last_run_id=latest_run_id,
+        last_result_status=last_result_status,
+        activity_continuity=activity,
+        links=ProductWorkspaceLinks(
+            detail=f'/app/workspaces/{workspace_id}',
+            runs=f'/app/workspaces/{workspace_id}/results',
+            onboarding=f'/app/workspaces/{workspace_id}',
+        ),
+    )
+    return read_circuit_library_view_model(
+        ProductWorkspaceListResponse(returned_count=1, workspaces=(summary,)),
+        app_language=app_language,
+        onboarding_state_by_workspace_id={workspace_id: onboarding_state} if onboarding_state is not None else None,
+    )
+
+
+def _synthetic_result_history_view(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None, *, execution_record: ExecutionRecordModel | None, app_language: str) -> ResultHistoryViewModel | None:
+    workspace_id, workspace_title, _updated_at = _workspace_identity(source, execution_record=execution_record)
+    if workspace_id is None or workspace_title is None:
+        return None
+    runs = []
+    result_rows_by_run_id: dict[str, object] = {}
+    onboarding_state = None
+    if isinstance(source, WorkingSaveModel):
+        metadata = dict(source.ui.metadata or {})
+        onboarding_state = {
+            'current_step': metadata.get('beginner_current_step') or metadata.get('onboarding_step') or ('read_result' if metadata.get('beginner_first_success_achieved') else 'enter_goal'),
+            'first_success_achieved': bool(metadata.get('beginner_first_success_achieved')),
+        }
+        last_run = source.runtime.last_run or {}
+        run_id = str(last_run.get('run_id') or '').strip()
+        if run_id:
+            status_value = str(last_run.get('status') or last_run.get('semantic_status') or 'completed').strip().lower()
+            status_family = 'active' if status_value in {'running', 'queued'} else ('terminal_partial' if status_value == 'partial' else ('terminal_failure' if status_value in {'failed', 'cancelled', 'error'} else 'terminal_success'))
+            runs.append(SimpleNamespace(
+                run_id=run_id,
+                workspace_id=workspace_id,
+                status_family=status_family,
+                created_at=str(last_run.get('started_at') or source.meta.updated_at or source.meta.created_at or ''),
+                updated_at=str(last_run.get('finished_at') or source.meta.updated_at or source.meta.created_at or ''),
+                completed_at=str(last_run.get('finished_at') or source.meta.updated_at or source.meta.created_at or ''),
+                result_state=status_value,
+                result_summary=SimpleNamespace(title='Latest run result', description=str(last_run.get('summary') or 'Recent result details are available.')),
+                source_artifact=None,
+            ))
+            result_rows_by_run_id[run_id] = SimpleNamespace(
+                run_id=run_id,
+                workspace_id=workspace_id,
+                result_state='ready_partial' if status_family == 'terminal_partial' else ('ready_failure' if status_family == 'terminal_failure' else ('running' if status_family == 'active' else 'ready_success')),
+                final_status=status_value,
+                result_summary=SimpleNamespace(title='Latest run result', description=str(last_run.get('summary') or 'Recent result details are available.')),
+                final_output=SimpleNamespace(output_key='answer', value_preview=str(last_run.get('output_preview') or '')),
+                source_artifact=None,
+                updated_at=str(last_run.get('finished_at') or source.meta.updated_at or source.meta.created_at or ''),
+            )
+    record = execution_record if execution_record is not None else (source if isinstance(source, ExecutionRecordModel) else None)
+    if isinstance(record, ExecutionRecordModel):
+        output_preview = None
+        output_key = None
+        if record.outputs.final_outputs:
+            first_output = record.outputs.final_outputs[0]
+            output_preview = str(first_output.value_payload if first_output.value_payload not in (None, '') else (first_output.value_summary or ''))
+            output_key = first_output.output_ref.split('.')[-1] if first_output.output_ref else 'answer'
+        status_value = record.meta.status.strip().lower()
+        status_family = 'active' if status_value in {'running', 'queued'} else ('terminal_partial' if status_value == 'partial' else ('terminal_failure' if status_value in {'failed', 'cancelled', 'error'} else 'terminal_success'))
+        runs = [SimpleNamespace(
+            run_id=record.meta.run_id,
+            workspace_id=workspace_id,
+            status_family=status_family,
+            created_at=record.meta.created_at,
+            updated_at=record.meta.finished_at or record.meta.started_at,
+            completed_at=record.meta.finished_at,
+            result_state=status_value,
+            result_summary=SimpleNamespace(title=record.outputs.output_summary or 'Latest run result', description=record.outputs.output_summary or 'Recent result details are available.'),
+            source_artifact=None,
+        )]
+        result_rows_by_run_id = {
+            record.meta.run_id: SimpleNamespace(
+                run_id=record.meta.run_id,
+                workspace_id=workspace_id,
+                result_state='ready_partial' if status_family == 'terminal_partial' else ('ready_failure' if status_family == 'terminal_failure' else ('running' if status_family == 'active' else 'ready_success')),
+                final_status=status_value,
+                result_summary=SimpleNamespace(title=record.outputs.output_summary or 'Latest run result', description=record.outputs.output_summary or 'Recent result details are available.'),
+                final_output=SimpleNamespace(output_key=output_key or 'answer', value_preview=output_preview or ''),
+                source_artifact=None,
+                updated_at=record.meta.finished_at or record.meta.started_at,
+            )
+        }
+    response = SimpleNamespace(workspace_id=workspace_id, workspace_title=workspace_title, runs=tuple(runs))
+    return read_result_history_view_model(response, result_rows_by_run_id=result_rows_by_run_id, app_language=app_language, selected_run_id=(runs[0].run_id if runs else None), onboarding_state=onboarding_state)
+
+
+def _synthetic_feedback_channel_view(source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None, *, execution_record: ExecutionRecordModel | None, app_language: str) -> FeedbackChannelViewModel | None:
+    workspace_id, workspace_title, _updated_at = _workspace_identity(source, execution_record=execution_record)
+    if workspace_id is None or workspace_title is None:
+        return None
+    prefill_run_id = execution_record.meta.run_id if isinstance(execution_record, ExecutionRecordModel) else None
+    prefill_surface = 'result_history' if prefill_run_id else 'workspace_shell'
+    return read_feedback_channel_view_model(
+        workspace_id=workspace_id,
+        workspace_title=workspace_title,
+        app_language=app_language,
+        prefill_surface=prefill_surface,
+        prefill_run_id=prefill_run_id,
+    )
 
 def _is_empty_working_save(source: WorkingSaveModel | None) -> bool:
     if not isinstance(source, WorkingSaveModel):
@@ -317,6 +487,10 @@ def read_builder_shell_view_model(
         # default shell comparison is only available when explicit commit target is supplied later.
         diff_vm = None
 
+    circuit_library_vm = _synthetic_library_view(source_unwrapped, execution_record=execution_record, app_language=app_language)
+    result_history_vm = _synthetic_result_history_view(source_unwrapped, execution_record=execution_record, app_language=app_language)
+    feedback_channel_vm = _synthetic_feedback_channel_view(source_unwrapped, execution_record=execution_record, app_language=app_language)
+
     coordination_vm = read_panel_coordination_state(
         source_unwrapped,
         graph_view=graph_vm,
@@ -327,6 +501,9 @@ def read_builder_shell_view_model(
         designer_view=designer_vm,
         trace_view=trace_vm,
         artifact_view=artifact_vm,
+        circuit_library_view=circuit_library_vm,
+        result_history_view=result_history_vm,
+        feedback_channel_view=feedback_channel_vm,
     )
     action_schema = read_builder_action_schema(
         source_unwrapped,
@@ -426,7 +603,9 @@ def read_builder_shell_view_model(
     elif diagnostics.panel_coordination_warning or warning_count > 0:
         shell_status = "partial"
 
-    if coordination_vm.active_panel in {"execution", "trace_timeline", "artifact"} or shell_mode in {"runtime_monitoring", "run_review"}:
+    if coordination_vm.active_panel in {"circuit_library", "feedback_channel"}:
+        active_workspace_id = "library"
+    elif coordination_vm.active_panel in {"result_history", "execution", "trace_timeline", "artifact"} or shell_mode in {"runtime_monitoring", "run_review"}:
         active_workspace_id = "runtime_monitoring"
     elif shell_mode == "designer_review" or (beginner_mode and empty_workspace_mode):
         active_workspace_id = "node_configuration"
@@ -512,6 +691,9 @@ def read_builder_shell_view_model(
         visual_editor=visual_editor_vm,
         runtime_monitoring=runtime_monitoring_vm,
         node_configuration=node_configuration_vm,
+        circuit_library=circuit_library_vm,
+        result_history=result_history_vm,
+        feedback_channel=feedback_channel_vm,
         layout=layout_vm,
         diagnostics=diagnostics,
         beginner_onboarding=beginner_onboarding,

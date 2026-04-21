@@ -341,3 +341,31 @@ def test_product_flow_shell_prefers_execution_result_focus_for_beginner_run_revi
     vm = read_product_flow_shell_view_model(source, validation_report=_validation_report(), execution_record=_run_completed())
     assert vm.focus.active_workspace_id == "runtime_monitoring"
     assert vm.focus.active_right_panel_id == "execution"
+
+
+
+def test_product_flow_shell_focuses_library_surface_when_return_use_panel_is_active() -> None:
+    source = _working_save()
+    source.ui.metadata["active_panel"] = "circuit_library"
+    vm = read_product_flow_shell_view_model(source)
+
+    assert vm.focus.active_workspace_id == "library"
+    assert vm.focus.active_right_panel_id == "circuit_library"
+    assert any(target.target_id == "circuit_library" for target in vm.right_stack_targets)
+
+
+
+def test_product_flow_shell_focuses_result_history_surface_when_history_panel_is_active() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Product Flow Draft"),
+        circuit=CircuitModel(nodes=[{"id": "n1", "label": "Draft Generator"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={"run_id": "run-local", "status": "completed", "summary": "Recent result details are available.", "output_preview": "hello"}, errors=[]),
+        ui=UIModel(layout={}, metadata={"active_panel": "result_history", "app_language": "ko-KR"}),
+    )
+    vm = read_product_flow_shell_view_model(source)
+
+    assert vm.focus.active_workspace_id == "runtime_monitoring"
+    assert vm.focus.active_right_panel_id == "result_history"
+    assert any(target.target_id == "result_history" for target in vm.right_stack_targets + vm.bottom_dock_targets)
