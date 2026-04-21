@@ -1,7 +1,7 @@
 import pytest
 
 from src.contracts.savefile_loader import load_savefile
-from src.contracts.savefile_validator import SavefileValidationError, validate_savefile
+from src.savefiles.validator import SavefileValidationError, validate_savefile
 
 
 def _base_payload():

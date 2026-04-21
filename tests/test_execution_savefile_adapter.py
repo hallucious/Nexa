@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.cli.savefile_runtime import _load_execution_context
 from src.contracts.nex_contract import WORKING_SAVE_ROLE
-from src.contracts.savefile_executor_aligned import execute_ai_node
+from src.savefiles.executor import execute_ai_node
 from src.contracts.savefile_format import NodeSpec
 from src.platform.provider_registry import ProviderRegistry
 from src.providers.provider_adapter_contract import make_failure

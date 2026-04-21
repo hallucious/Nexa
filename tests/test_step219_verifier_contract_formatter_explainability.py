@@ -1,7 +1,7 @@
 from src.engine.execution_regression_detector import RegressionResult, RegressionSummary, VerificationRegression
 from src.engine.execution_regression_formatter import format_regression, format_regression_json
 from src.engine.execution_regression_policy import evaluate_regression_policy
-from src.engine.policy_explainability import build_explainability
+from src.policy.policy_explainability import build_explainability
 
 
 def _verification_result():

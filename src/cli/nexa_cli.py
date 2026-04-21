@@ -926,7 +926,7 @@ def savefile_new_command(args) -> int:
 
 
 def savefile_validate_command(args) -> int:
-    from src.contracts.savefile_validator import validate_savefile
+    from src.savefiles.validator import validate_savefile
     from src.storage.nex_api import validate_commit_snapshot, validate_working_save
 
     loaded_source = _load_cli_savefile_source(args.input)
@@ -1027,7 +1027,7 @@ def _persist_edited_savefile(savefile, input_path: Path, mode: str) -> None:
         return
 
     from src.contracts.savefile_serializer import save_savefile_file
-    from src.contracts.savefile_validator import validate_savefile
+    from src.savefiles.validator import validate_savefile
 
     validate_savefile(savefile)
     save_savefile_file(savefile, str(input_path))

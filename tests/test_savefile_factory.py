@@ -3,7 +3,7 @@ from __future__ import annotations
 from src.contracts.savefile_factory import create_savefile, make_minimal_savefile
 from src.contracts.savefile_loader import load_savefile
 from src.contracts.savefile_serializer import serialize_savefile
-from src.contracts.savefile_validator import validate_savefile
+from src.savefiles.validator import validate_savefile
 
 
 def test_create_savefile_materializes_explicit_empty_sections():

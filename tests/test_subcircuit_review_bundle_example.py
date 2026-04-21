@@ -1,6 +1,6 @@
 from src.contracts.savefile_loader import load_savefile
-from src.contracts.savefile_validator import validate_savefile
-from src.contracts.savefile_executor_aligned import SavefileExecutor
+from src.savefiles.validator import validate_savefile
+from src.savefiles.executor import SavefileExecutor
 from src.contracts.provider_contract import ProviderResult
 from src.platform.provider_registry import ProviderRegistry
 

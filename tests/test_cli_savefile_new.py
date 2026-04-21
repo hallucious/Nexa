@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 from src.cli.nexa_cli import build_parser, main
-from src.contracts.savefile_validator import validate_savefile
+from src.savefiles.validator import validate_savefile
 from src.storage.execution_savefile_adapter import execution_savefile_from_loaded_nex_artifact
 from src.storage.nex_api import load_nex
 

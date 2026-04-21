@@ -13,7 +13,7 @@ from src.circuit.runtime_adapter import (
     prepare_engine_from_legacy_nex_bundle,
 )
 from src.contracts.nex_contract import ALLOWED_STORAGE_ROLES
-from src.contracts.savefile_executor_aligned import SavefileExecutor
+from src.savefiles.executor import SavefileExecutor
 from src.contracts.savefile_loader import load_savefile_from_path
 from src.storage.nex_api import load_nex, resolve_public_nex_execution_target
 from src.storage.share_api import (
@@ -23,8 +23,8 @@ from src.storage.share_api import (
     is_public_nex_link_share_payload,
 )
 from src.storage.execution_savefile_adapter import execution_savefile_from_loaded_nex_artifact
-from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
-from src.contracts.savefile_validator import validate_savefile
+from src.savefiles.provider_builder import build_provider_registry_from_savefile
+from src.savefiles.validator import validate_savefile
 from src.cli.cli_policy_integration import apply_baseline_policy
 
 

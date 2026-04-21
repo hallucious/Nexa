@@ -1,7 +1,7 @@
 
-from src.providers.provider_execution import ProviderExecution
-from src.providers.provider_result import ProviderResult
-from src.providers.provider_trace import ProviderTrace
+from src.providers.legacy_provider_execution import ProviderExecution
+from src.providers.legacy_provider_result import ProviderResult
+from src.providers.legacy_provider_trace import ProviderTrace
 
 
 class MockProvider:

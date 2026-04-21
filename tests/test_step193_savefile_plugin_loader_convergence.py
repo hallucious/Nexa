@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from src.contracts.savefile_executor_aligned import execute_plugin_node
+from src.savefiles.executor import execute_plugin_node
 from src.contracts.savefile_format import (
     CircuitSpec,
     NodeSpec,

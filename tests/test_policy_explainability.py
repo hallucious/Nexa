@@ -1,5 +1,5 @@
 from src.contracts.policy_result_contract import PolicyDecision
-from src.engine.policy_explainability import build_explainability
+from src.policy.policy_explainability import build_explainability
 
 
 def test_structural_only():

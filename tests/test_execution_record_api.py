@@ -21,7 +21,7 @@ from src.storage.serialization import save_execution_record_file, serialize_exec
 
 
 
-from src.contracts.savefile_executor_aligned import NodeExecutionResult, SavefileExecutionTrace
+from src.savefiles.executor import NodeExecutionResult, SavefileExecutionTrace
 from tests.savefile_test_helpers import make_demo_savefile
 
 

@@ -15,7 +15,7 @@ from src.contracts.savefile_format import (
 )
 from tests.savefile_test_helpers import make_demo_savefile_payload
 from src.contracts.savefile_loader import load_savefile
-from src.contracts.savefile_validator import SavefileValidationError, validate_savefile
+from src.savefiles.validator import SavefileValidationError, validate_savefile
 
 
 def _minimal_savefile_dict():

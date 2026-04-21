@@ -13,7 +13,7 @@ from src.contracts.savefile_serializer import (
     save_savefile_file,
     serialize_savefile,
 )
-from src.contracts.savefile_validator import validate_savefile
+from src.savefiles.validator import validate_savefile
 from tests.savefile_test_helpers import make_demo_savefile, make_demo_savefile_payload
 
 

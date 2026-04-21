@@ -1,10 +1,14 @@
+"""Legacy provider compatibility module.
+
+Deprecated: retained only for legacy step-contract coverage; new provider work should use provider_adapter_contract.py and platform/provider_executor.py.
+"""
 
 from __future__ import annotations
 from typing import Any, Optional
 
 from src.providers.universal_provider import UniversalProvider
-from src.providers.provider_result import ProviderResult
-from src.providers.provider_trace import ProviderTrace
+from src.providers.legacy_provider_result import ProviderResult
+from src.providers.legacy_provider_trace import ProviderTrace
 
 
 class ProviderExecution:

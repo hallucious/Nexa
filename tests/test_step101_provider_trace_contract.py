@@ -1,5 +1,5 @@
 
-from src.providers.provider_trace import ProviderTrace
+from src.providers.legacy_provider_trace import ProviderTrace
 
 
 def test_step101_trace_records_attempt():

@@ -11,7 +11,7 @@ from src.contracts.savefile_format import (
     StateSpec,
     UISpec,
 )
-from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
+from src.savefiles.provider_builder import build_provider_registry_from_savefile
 from src.platform.provider_executor import GenerateTextProviderBridge
 
 

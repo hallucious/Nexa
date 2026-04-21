@@ -1,6 +1,6 @@
 
-from src.providers.provider_result import ProviderResult
-from src.providers.provider_trace import ProviderTrace
+from src.providers.legacy_provider_result import ProviderResult
+from src.providers.legacy_provider_trace import ProviderTrace
 
 
 def test_step102_provider_result_basic():

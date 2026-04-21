@@ -11,7 +11,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.contracts.status_taxonomy import lookup_reason_code_record
 from src.contracts.policy_result_contract import ExplainabilityResult, PolicyDecision
-from src.engine.policy_explainability import build_explainability
+from src.policy.policy_explainability import build_explainability
 from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
 from src.ui.friendly_error_messages import FriendlyErrorView, friendly_error_from_candidates
 

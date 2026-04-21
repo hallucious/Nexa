@@ -2,8 +2,8 @@ from pathlib import Path
 import sys
 
 from src.contracts.savefile_loader import load_savefile
-from src.contracts.savefile_validator import SavefileValidationError, validate_savefile
-from src.contracts.savefile_executor_aligned import SavefileExecutor
+from src.savefiles.validator import SavefileValidationError, validate_savefile
+from src.savefiles.executor import SavefileExecutor
 from src.platform.provider_registry import ProviderRegistry
 
 

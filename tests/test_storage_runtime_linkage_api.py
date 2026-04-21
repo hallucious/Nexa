@@ -188,7 +188,7 @@ def test_create_serialized_execution_transition_returns_execution_record_updated
     assert transition['last_run_summary']['replay_ready'] is True
 
 
-from src.contracts.savefile_executor_aligned import NodeExecutionResult, SavefileExecutionTrace
+from src.savefiles.executor import NodeExecutionResult, SavefileExecutionTrace
 from tests.savefile_test_helpers import make_demo_savefile
 
 
