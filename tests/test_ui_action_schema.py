@@ -24,14 +24,14 @@ def _empty_working_save() -> WorkingSaveModel:
     )
 
 
-def _working_save() -> WorkingSaveModel:
+def _working_save(*, metadata: dict | None = None) -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
         circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
-        ui=UIModel(layout={}, metadata={}),
+        ui=UIModel(layout={}, metadata=dict(metadata or {})),
     )
 
 
@@ -150,3 +150,25 @@ def test_action_schema_surfaces_external_input_actions_for_empty_beginner_worksp
     actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
     assert actions["open_file_input"].enabled is True
     assert actions["enter_url_input"].enabled is True
+
+
+def test_action_schema_surfaces_return_use_actions_after_first_success() -> None:
+    working = _working_save(metadata={"beginner_first_success_achieved": True})
+    storage = read_storage_view_model(working, latest_execution_record=_run())
+    execution = read_execution_panel_view_model(working, execution_record=_run())
+
+    vm = read_builder_action_schema(working, storage_view=storage, execution_view=execution)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["open_circuit_library"].enabled is True
+    assert actions["open_result_history"].enabled is True
+    assert actions["open_feedback_channel"].enabled is True
+
+
+def test_action_schema_surfaces_return_use_actions_for_execution_record_history_role() -> None:
+    storage = read_storage_view_model(_run())
+    execution = read_execution_panel_view_model(_run(), execution_record=_run())
+
+    vm = read_builder_action_schema(_run(), storage_view=storage, execution_view=execution)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["open_result_history"].enabled is True
+    assert actions["open_feedback_channel"].enabled is True

@@ -52,6 +52,27 @@ def _storage_role(source) -> str:
     return "none"
 
 
+def _ui_metadata(source) -> dict[str, object]:
+    if isinstance(source, WorkingSaveModel):
+        return dict(source.ui.metadata or {})
+    return {}
+
+
+def _workspace_anchor_id(source) -> str | None:
+    if isinstance(source, WorkingSaveModel):
+        return str(source.meta.working_save_id or "").strip() or None
+    if isinstance(source, CommitSnapshotModel):
+        return str(source.meta.source_working_save_id or "").strip() or None
+    return None
+
+
+def _return_use_ready(source) -> bool:
+    if isinstance(source, ExecutionRecordModel):
+        return True
+    metadata = _ui_metadata(source)
+    return bool(metadata.get("beginner_first_success_achieved"))
+
+
 def _action(action_id: str, label: str, action_kind: str, enabled: bool, *, reason_disabled: str | None = None, destructive: bool = False, requires_confirmation: bool = False) -> BuilderActionView:
     return BuilderActionView(
         action_id=action_id,
@@ -118,6 +139,17 @@ def read_builder_action_schema(
         and designer_view is not None
         and designer_view.external_input_guidance.visible
         and not designer_view.external_input_guidance.has_configured_input
+    )
+
+    workspace_anchor_id = _workspace_anchor_id(source)
+    return_use_ready = _return_use_ready(source)
+    has_return_result_surface = bool(
+        isinstance(source, ExecutionRecordModel)
+        or has_execution_record
+    )
+    has_feedback_surface = bool(
+        workspace_anchor_id is not None
+        or isinstance(source, ExecutionRecordModel)
     )
 
     beginner_preunlock = False
@@ -288,6 +320,33 @@ def read_builder_action_schema(
                     "designer",
                     designer_view.request_state.request_status in {"submitted", "editing"} or designer_view.intent_state.intent_id is not None,
                     reason_disabled=None if (designer_view.request_state.request_status in {"submitted", "editing"} or designer_view.intent_state.intent_id is not None) else ui_text("builder.reason.no_active_designer_proposal", app_language=app_language),
+                ),
+            ]
+        )
+
+    if return_use_ready:
+        contextual_actions.extend(
+            [
+                _action(
+                    "open_circuit_library",
+                    ui_text("builder.action.open_circuit_library", app_language=app_language),
+                    "return_use",
+                    workspace_anchor_id is not None,
+                    reason_disabled=None if workspace_anchor_id is not None else ui_text("builder.reason.library_requires_workspace", app_language=app_language),
+                ),
+                _action(
+                    "open_result_history",
+                    ui_text("builder.action.open_result_history", app_language=app_language),
+                    "return_use",
+                    has_return_result_surface,
+                    reason_disabled=None if has_return_result_surface else ui_text("builder.reason.result_history_requires_run", app_language=app_language),
+                ),
+                _action(
+                    "open_feedback_channel",
+                    ui_text("builder.action.open_feedback_channel", app_language=app_language),
+                    "return_use",
+                    has_feedback_surface,
+                    reason_disabled=None if has_feedback_surface else ui_text("builder.reason.feedback_requires_workspace", app_language=app_language),
                 ),
             ]
         )

@@ -54,6 +54,9 @@ _ENTRY_ORDER = (
     "approval_decision",
     "commit_snapshot",
     "run_current",
+    "reopen_recent_results",
+    "open_workflow_library",
+    "open_feedback_channel",
     "inspect_trace",
     "inspect_artifacts",
     "compare_results",
@@ -107,17 +110,22 @@ def _choose_followthrough(runbook: ProductFlowRunbookViewModel | None, primary: 
     if runbook is None or primary is None:
         return None
     ordered = _ordered_entries(runbook)
+    entries = _entry_map(runbook)
     try:
         start_index = next(index for index, item in enumerate(ordered) if item.entry_id == primary.entry_id)
     except StopIteration:
         return None
+
+    if source_role == "working_save" and primary.entry_id in {"commit_snapshot", "run_current"}:
+        candidate = entries.get("reopen_recent_results")
+        if candidate is not None and candidate.enabled:
+            return candidate
 
     if primary.entry_id == "run_current" and beginner_surface and source_role == "working_save":
         return None
 
     if primary.entry_id == "run_current":
         preferred_ids = ("inspect_trace", "inspect_artifacts", "compare_results")
-        entries = _entry_map(runbook)
         for entry_id in preferred_ids:
             candidate = entries.get(entry_id)
             if candidate is not None and (candidate.enabled or candidate.complete):
@@ -134,9 +142,9 @@ def _choose_followthrough(runbook: ProductFlowRunbookViewModel | None, primary: 
 def _prioritized_primary(runbook: ProductFlowRunbookViewModel | None, *, source_role: str) -> ProductFlowRunbookEntryView | None:
     entries = _entry_map(runbook)
     if source_role == "working_save":
-        priority = ("connect_provider", "choose_template", "commit_snapshot", "approval_decision", "review_proposal", "run_current")
+        priority = ("connect_provider", "choose_template", "commit_snapshot", "approval_decision", "review_proposal", "run_current", "reopen_recent_results", "open_workflow_library", "open_feedback_channel")
     elif source_role == "commit_snapshot":
-        priority = ("run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot")
+        priority = ("run_current", "open_workflow_library", "open_feedback_channel", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot")
     elif source_role == "execution_record":
         priority = ("inspect_trace", "inspect_artifacts", "compare_results", "run_current")
     else:

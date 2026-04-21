@@ -24,14 +24,16 @@ def _empty_working_save() -> WorkingSaveModel:
     )
 
 
-def _working_save() -> WorkingSaveModel:
+def _working_save(*, metadata: dict | None = None) -> WorkingSaveModel:
+    merged_metadata = {"app_language": "ko-KR"}
+    merged_metadata.update(dict(metadata or {}))
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Handoff Draft"),
         circuit=CircuitModel(nodes=[{"id": "n1", "label": "Draft Generator"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={"run_id": "run-001"}, errors=[]),
-        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+        ui=UIModel(layout={}, metadata=merged_metadata),
     )
 
 
@@ -240,3 +242,29 @@ def test_product_flow_handoff_uses_provider_setup_as_primary_for_empty_beginner_
     assert vm.primary_entry_id == "connect_provider"
     assert vm.primary_action_id == "open_provider_setup"
     assert vm.followthrough_entry_id == "choose_template"
+
+
+def test_product_flow_handoff_exposes_recent_results_as_followthrough_after_first_success() -> None:
+    vm = read_product_flow_handoff_view_model(
+        _working_save(metadata={"beginner_first_success_achieved": True}),
+        validation_report=_validation_report(),
+        execution_record=_run("completed"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.followthrough_entry_id == "reopen_recent_results"
+    assert vm.followthrough_action_id == "open_result_history"
+    assert vm.followthrough_available is True
+
+
+def test_product_flow_handoff_keeps_recent_results_available_for_execution_record_role() -> None:
+    vm = read_product_flow_handoff_view_model(_run("completed"), execution_record=_run("completed"))
+
+    assert vm.primary_entry_id in {"inspect_trace", "inspect_artifacts", "compare_results", "run_current"}
+    entry_ids = {vm.primary_entry_id, vm.followthrough_entry_id}
+    assert "reopen_recent_results" in entry_ids or vm.primary_action_id != "open_result_history"

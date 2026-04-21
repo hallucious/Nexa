@@ -24,14 +24,16 @@ def _empty_working_save() -> WorkingSaveModel:
     )
 
 
-def _working_save() -> WorkingSaveModel:
+def _working_save(*, metadata: dict | None = None) -> WorkingSaveModel:
+    merged_metadata = {"app_language": "ko-KR"}
+    merged_metadata.update(dict(metadata or {}))
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Runbook Draft"),
         circuit=CircuitModel(nodes=[{"id": "n1", "label": "Draft Generator"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
         runtime=RuntimeModel(status="draft", validation_summary={}, last_run={"run_id": "run-001"}, errors=[]),
-        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+        ui=UIModel(layout={}, metadata=merged_metadata),
     )
 
 
@@ -226,3 +228,30 @@ def test_product_flow_runbook_prioritizes_provider_setup_before_template_and_rev
     entries = {entry.entry_id: entry for entry in vm.entries}
     assert entries["connect_provider"].action_id == "open_provider_setup"
     assert entries["choose_template"].action_id == "create_circuit_from_template"
+
+
+def test_product_flow_runbook_exposes_return_use_entries_after_first_success() -> None:
+    vm = read_product_flow_runbook_view_model(
+        _working_save(metadata={"beginner_first_success_achieved": True}),
+        validation_report=_validation_report(),
+        execution_record=_run("completed"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    entries = {entry.entry_id: entry for entry in vm.entries}
+    assert entries["reopen_recent_results"].enabled is True
+    assert entries["open_workflow_library"].enabled is True
+    assert entries["open_feedback_channel"].enabled is True
+
+
+def test_product_flow_runbook_keeps_recent_results_available_for_execution_record_return_use() -> None:
+    vm = read_product_flow_runbook_view_model(_run("completed"), execution_record=_run("completed"))
+
+    entry = next(entry for entry in vm.entries if entry.entry_id == "reopen_recent_results")
+    assert entry.action_id == "open_result_history"
+    assert entry.enabled is True

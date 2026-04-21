@@ -67,6 +67,26 @@ def _storage_role(source) -> str:
     return "none"
 
 
+def _ui_metadata(source) -> dict[str, object]:
+    if isinstance(source, WorkingSaveModel):
+        return dict(source.ui.metadata or {})
+    return {}
+
+
+def _return_use_ready(source) -> bool:
+    if isinstance(source, ExecutionRecordModel):
+        return True
+    return bool(_ui_metadata(source).get("beginner_first_success_achieved"))
+
+
+def _workspace_anchor_id(source) -> str | None:
+    if isinstance(source, WorkingSaveModel):
+        return str(source.meta.working_save_id or "").strip() or None
+    if isinstance(source, CommitSnapshotModel):
+        return str(source.meta.source_working_save_id or "").strip() or None
+    return None
+
+
 def _status_label(status: str, *, app_language: str) -> str:
     return ui_text(f"runbook.entry_status.{status}", app_language=app_language, fallback_text=status.replace("_", " ").title())
 
@@ -131,7 +151,9 @@ def _diff_target_ref(workflow_hub: BuilderWorkflowHubViewModel | None) -> str | 
     return None
 
 
-def _recommended_followthrough_entry(*, workflow_hub: BuilderWorkflowHubViewModel | None, beginner_surface: bool = False) -> str:
+def _recommended_followthrough_entry(*, workflow_hub: BuilderWorkflowHubViewModel | None, beginner_surface: bool = False, return_use_ready: bool = False) -> str:
+    if return_use_ready:
+        return "reopen_recent_results"
     if beginner_surface:
         return "run_current"
     if _has_trace(workflow_hub):
@@ -188,6 +210,10 @@ def read_product_flow_runbook_view_model(
     proposal_commit = workflow_hub.proposal_commit if workflow_hub is not None else None
     execution_launch = workflow_hub.execution_launch if workflow_hub is not None else None
     beginner_surface = beginner_surface_active(source_unwrapped, execution_record)
+    return_use_ready = _return_use_ready(source_unwrapped)
+    workspace_anchor_id = _workspace_anchor_id(source_unwrapped)
+    has_result_history = bool(source_role == "execution_record" or execution_record is not None or (workflow_hub is not None and workflow_hub.shell is not None and workflow_hub.shell.storage is not None and workflow_hub.shell.storage.execution_record_card is not None and workflow_hub.shell.storage.execution_record_card.run_id is not None))
+    feedback_available = bool(workspace_anchor_id is not None or source_role == "execution_record")
     designer_view = workflow_hub.shell.designer if workflow_hub is not None and workflow_hub.shell is not None else None
     provider_setup_needed = bool(
         source_role == "working_save"
@@ -353,6 +379,45 @@ def read_product_flow_runbook_view_model(
             complete=compare_results_status == "complete",
             reason_disabled=(compare_action.reason_disabled if compare_action is not None and not compare_action.enabled and not _has_diff(workflow_hub) else observe_step.blocking_reason if observe_step is not None and not _has_diff(workflow_hub) else None),
         ),
+        ProductFlowRunbookEntryView(
+            entry_id="open_workflow_library",
+            label=ui_text("runbook.entry.open_workflow_library", app_language=app_language, fallback_text="Open workflow library"),
+            entry_status=("ready" if return_use_ready and workspace_anchor_id is not None else "inactive"),
+            entry_status_label=_status_label(("ready" if return_use_ready and workspace_anchor_id is not None else "inactive"), app_language=app_language),
+            preferred_workspace_id="library",
+            preferred_panel_id="circuit_library",
+            action_id=("open_circuit_library" if return_use_ready and workspace_anchor_id is not None else None),
+            target_ref=(f"workspace:{workspace_anchor_id}" if return_use_ready and workspace_anchor_id is not None else None),
+            enabled=bool(return_use_ready and workspace_anchor_id is not None),
+            complete=False,
+            reason_disabled=(None if return_use_ready and workspace_anchor_id is not None else ui_text("builder.reason.library_requires_workspace", app_language=app_language, fallback_text="A saved workflow is needed before you can reopen the library.")),
+        ),
+        ProductFlowRunbookEntryView(
+            entry_id="reopen_recent_results",
+            label=ui_text("runbook.entry.reopen_recent_results", app_language=app_language, fallback_text="Reopen recent results"),
+            entry_status=("ready" if return_use_ready and has_result_history else "inactive"),
+            entry_status_label=_status_label(("ready" if return_use_ready and has_result_history else "inactive"), app_language=app_language),
+            preferred_workspace_id="runtime_monitoring",
+            preferred_panel_id="result_history",
+            action_id=("open_result_history" if return_use_ready and has_result_history else None),
+            target_ref=(f"run:{execution_record.meta.run_id}" if isinstance(execution_record, ExecutionRecordModel) and execution_record.meta.run_id else None),
+            enabled=bool(return_use_ready and has_result_history),
+            complete=False,
+            reason_disabled=(None if return_use_ready and has_result_history else ui_text("builder.reason.result_history_requires_run", app_language=app_language, fallback_text="Run the workflow once before reopening recent results.")),
+        ),
+        ProductFlowRunbookEntryView(
+            entry_id="open_feedback_channel",
+            label=ui_text("runbook.entry.open_feedback_channel", app_language=app_language, fallback_text="Send feedback"),
+            entry_status=("ready" if return_use_ready and feedback_available else "inactive"),
+            entry_status_label=_status_label(("ready" if return_use_ready and feedback_available else "inactive"), app_language=app_language),
+            preferred_workspace_id="runtime_monitoring" if source_role == "execution_record" else "library",
+            preferred_panel_id="feedback",
+            action_id=("open_feedback_channel" if return_use_ready and feedback_available else None),
+            target_ref=(f"workspace:{workspace_anchor_id}" if workspace_anchor_id is not None else None),
+            enabled=bool(return_use_ready and feedback_available),
+            complete=False,
+            reason_disabled=(None if return_use_ready and feedback_available else ui_text("builder.reason.feedback_requires_workspace", app_language=app_language, fallback_text="Open a workflow or result before sending feedback.")),
+        ),
     ]
 
     if journey is None:
@@ -365,7 +430,7 @@ def read_product_flow_runbook_view_model(
             "approval": "approval_decision",
             "commit_snapshot": "commit_snapshot",
             "run_current": "run_current",
-            "observe_results": _recommended_followthrough_entry(workflow_hub=workflow_hub, beginner_surface=beginner_surface and source_role == "working_save"),
+            "observe_results": _recommended_followthrough_entry(workflow_hub=workflow_hub, beginner_surface=beginner_surface and source_role == "working_save", return_use_ready=return_use_ready),
         }
         current_entry_id = mapping.get(journey.current_step_id, "review_proposal")
 
