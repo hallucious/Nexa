@@ -13,7 +13,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.builder_shell import BuilderShellViewModel, read_builder_shell_view_model
 from src.ui.execution_launch_workflow import ExecutionLaunchWorkflowViewModel, read_execution_launch_workflow_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
@@ -187,9 +187,9 @@ def read_builder_workflow_hub_view_model(
         hub_status_label=ui_text(f"hub.status.{hub_status}", app_language=app_language, fallback_text=hub_status.replace("_", " ")),
         storage_role=storage_role,
         active_workflow_id=active,
-        active_workflow_label=ui_text(f"workflow.{active}", app_language=app_language, fallback_text=active.replace("_", " ")),
+        active_workflow_label=beginner_ui_text(f"workflow.{active}", beginner_text_key=f"workflow.{active}.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text=active.replace("_", " ")),
         recommended_workflow_id=recommended,
-        recommended_workflow_label=ui_text(f"workflow.{recommended}", app_language=app_language, fallback_text=recommended.replace("_", " ")),
+        recommended_workflow_label=beginner_ui_text(f"workflow.{recommended}", beginner_text_key=f"workflow.{recommended}.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text=recommended.replace("_", " ")),
         proposal_commit=proposal_commit_vm,
         execution_launch=execution_launch_vm,
         shell=shell_vm,

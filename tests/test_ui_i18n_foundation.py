@@ -71,7 +71,7 @@ def test_ui_i18n_localizes_designer_panel_strings_from_working_save_preference()
         ),
     )
     assert vm.request_state.input_placeholder == "원하는 회로 변경 내용을 입력하세요."
-    assert vm.suggested_actions[0].label == "요청 제출"
+    assert vm.suggested_actions[0].label == "워크플로우 만들기"
 
 
 def test_ui_i18n_localizes_storage_execution_validation_and_builder_actions() -> None:

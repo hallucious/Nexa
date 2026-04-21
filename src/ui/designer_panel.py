@@ -13,7 +13,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_ui_text, ui_language_from_sources, ui_text
 from src.ui.provider_setup_guidance import ProviderSetupGuidanceView, ProviderInlineKeyEntryView, read_provider_setup_guidance_view_model, read_provider_inline_key_entry_view
 from src.ui.template_gallery import TemplateGalleryViewModel, read_template_gallery_view_model
 
@@ -353,16 +353,16 @@ def read_designer_panel_view_model(
         attempt_count=(len(session_state_card.revision_state.attempt_history) if session_state_card is not None else 0),
     )
     suggested_actions = [
-        DesignerActionHint("submit_request", ui_text("designer.action.submit_request", app_language=app_language), request_state.can_submit, request_state.submit_reason_disabled),
+        DesignerActionHint("submit_request", beginner_ui_text("designer.action.submit_request", beginner_text_key="designer.action.submit_request.beginner", sources=(source,), app_language=app_language), request_state.can_submit, request_state.submit_reason_disabled),
         DesignerActionHint(
             "preview_patch",
-            ui_text("designer.action.preview_patch", app_language=app_language),
+            beginner_ui_text("designer.action.preview_patch", beginner_text_key="designer.action.preview_patch.beginner", sources=(source,), app_language=app_language),
             precheck_state.can_proceed_to_preview and patch_state.patch_id is not None,
             None if precheck_state.can_proceed_to_preview and patch_state.patch_id is not None else ui_text("designer.action.preview_patch_disabled", app_language=app_language),
         ),
         DesignerActionHint(
             "approve_for_commit",
-            ui_text("designer.action.approve_for_commit", app_language=app_language),
+            beginner_ui_text("designer.action.approve_for_commit", beginner_text_key="designer.action.approve_for_commit.beginner", sources=(source,), app_language=app_language),
             preview_state.preview_status == "ready" and precheck_state.overall_status in {"pass", "pass_with_warnings", "confirmation_required"},
             None if preview_state.preview_status == "ready" and precheck_state.overall_status in {"pass", "pass_with_warnings", "confirmation_required"} else ui_text("designer.action.approve_for_commit_disabled", app_language=app_language),
         ),

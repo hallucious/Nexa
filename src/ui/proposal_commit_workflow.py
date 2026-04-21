@@ -20,7 +20,7 @@ from src.ui.node_configuration_workspace import NodeConfigurationWorkspaceViewMo
 from src.ui.storage_panel import StoragePanelViewModel, read_storage_view_model
 from src.ui.validation_panel import ValidationPanelViewModel, read_validation_panel_view_model
 from src.ui.visual_editor_workspace import VisualEditorWorkspaceViewModel, read_visual_editor_workspace_view_model
-from src.ui.i18n import beginner_language_enabled, ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_language_enabled, beginner_ui_text, ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -238,13 +238,13 @@ def read_proposal_commit_workflow_view_model(
 
     next_step_label = None
     if has_precheck and precheck_state is not None and precheck_state.overall_status == "blocked":
-        next_step_label = ui_text("proposal.next.resolve_blocking", app_language=app_language, fallback_text="Resolve blocking findings")
+        next_step_label = beginner_ui_text("proposal.next.resolve_blocking", beginner_text_key="proposal.next.resolve_blocking.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text="Resolve blocking findings")
     elif has_approval and approval_state is not None and approval_state.commit_eligible:
-        next_step_label = ui_text("proposal.next.commit_snapshot", app_language=app_language, fallback_text="Commit snapshot")
+        next_step_label = beginner_ui_text("proposal.next.commit_snapshot", beginner_text_key="proposal.next.commit_snapshot.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text="Commit snapshot")
     elif has_preview and preview_state is not None:
-        next_step_label = ui_text("proposal.next.review_preview", app_language=app_language, fallback_text="Review preview and approval state")
+        next_step_label = beginner_ui_text("proposal.next.review_preview", beginner_text_key="proposal.next.review_preview.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text="Review preview and approval state")
     elif has_intent and intent_state is not None:
-        next_step_label = ui_text("proposal.next.generate_patch", app_language=app_language, fallback_text="Generate patch and preview")
+        next_step_label = beginner_ui_text("proposal.next.generate_patch", beginner_text_key="proposal.next.generate_patch.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text="Generate patch and preview")
     elif storage_role == "commit_snapshot":
         launch_action = _find_action(action_schema, "run_from_commit")
         if launch_action is not None and launch_action.enabled:
@@ -255,7 +255,7 @@ def read_proposal_commit_workflow_view_model(
         if compare_action is not None and compare_action.enabled:
             next_step_label = compare_action.label
     elif storage_role == "working_save":
-        next_step_label = ui_text("proposal.next.start_designer", app_language=app_language, fallback_text="Start a designer proposal or review current draft")
+        next_step_label = beginner_ui_text("proposal.next.start_designer", beginner_text_key="proposal.next.start_designer.beginner", sources=(source_unwrapped, execution_record), app_language=app_language, fallback_text="Start a designer proposal or review current draft")
 
     summary = ProposalCommitSummaryView(
         current_intent_id=intent_state.intent_id if has_intent and intent_state is not None else None,

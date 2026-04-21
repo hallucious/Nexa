@@ -25,8 +25,11 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "designer.request.input_placeholder.beginner": "What would you like to build? Describe your goal.",
         "designer.request.read_only_disabled": "Designer editing is read-only outside Working Save.",
         "designer.action.submit_request": "Submit request",
+        "designer.action.submit_request.beginner": "Build workflow",
         "designer.action.preview_patch": "Preview patch",
+        "designer.action.preview_patch.beginner": "Review workflow",
         "designer.action.approve_for_commit": "Approve for commit",
+        "designer.action.approve_for_commit.beginner": "Approve workflow",
         "designer.action.preview_patch_disabled": "Preview requires a patch and passing precheck",
         "designer.action.approve_for_commit_disabled": "Preview or precheck not ready",
 
@@ -361,10 +364,15 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "intent.preview.generic": "Emit intent for {action_id}",
 
         "proposal.next.resolve_blocking": "Resolve blocking findings",
+        "proposal.next.resolve_blocking.beginner": "Fix this step",
         "proposal.next.commit_snapshot": "Commit snapshot",
+        "proposal.next.commit_snapshot.beginner": "Save workflow",
         "proposal.next.review_preview": "Review preview and approval state",
+        "proposal.next.review_preview.beginner": "Review workflow",
         "proposal.next.generate_patch": "Generate patch and preview",
+        "proposal.next.generate_patch.beginner": "Prepare workflow",
         "proposal.next.start_designer": "Start a designer proposal or review current draft",
+        "proposal.next.start_designer.beginner": "Start building your workflow",
 
         "launch.next.monitor_live": "Monitor live execution",
         "launch.next.replay_latest": "Replay or inspect latest run",
@@ -593,7 +601,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "product.status.terminal": "History focus",
 
         "workflow.proposal_commit": "Proposal & Commit",
+        "workflow.proposal_commit.beginner": "Review workflow",
         "workflow.execution_launch": "Execution Launch",
+        "workflow.execution_launch.beginner": "Run workflow",
 
         "hub.status.empty": "No active hub data",
         "hub.status.ready": "Ready",
@@ -740,8 +750,11 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "designer.request.input_placeholder.beginner": "어떤 것을 만들고 싶으세요? 목표를 설명해주세요.",
         "designer.request.read_only_disabled": "Working Save 외부에서는 Designer 편집이 읽기 전용입니다.",
         "designer.action.submit_request": "요청 제출",
+        "designer.action.submit_request.beginner": "워크플로우 만들기",
         "designer.action.preview_patch": "패치 미리보기",
+        "designer.action.preview_patch.beginner": "워크플로우 검토",
         "designer.action.approve_for_commit": "커밋 승인",
+        "designer.action.approve_for_commit.beginner": "워크플로우 승인",
         "designer.action.preview_patch_disabled": "미리보기에는 패치와 통과된 사전 점검이 필요합니다",
         "designer.action.approve_for_commit_disabled": "미리보기 또는 사전 점검이 아직 준비되지 않았습니다",
 
@@ -1018,10 +1031,15 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "intent.preview.generic": "{action_id}에 대한 intent 생성",
 
         "proposal.next.resolve_blocking": "차단 결과 해결",
+        "proposal.next.resolve_blocking.beginner": "이 단계를 수정",
         "proposal.next.commit_snapshot": "커밋 스냅샷 생성",
+        "proposal.next.commit_snapshot.beginner": "워크플로우 저장",
         "proposal.next.review_preview": "미리보기와 승인 상태 검토",
+        "proposal.next.review_preview.beginner": "워크플로우 검토",
         "proposal.next.generate_patch": "패치와 미리보기 생성",
+        "proposal.next.generate_patch.beginner": "워크플로우 준비",
         "proposal.next.start_designer": "Designer 제안을 시작하거나 현재 드래프트 검토",
+        "proposal.next.start_designer.beginner": "워크플로우 만들기 시작",
 
         "launch.next.monitor_live": "실시간 실행 모니터링",
         "launch.next.replay_latest": "최신 실행 재실행 또는 검토",
@@ -1196,7 +1214,9 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "product.status.terminal": "히스토리 중심",
 
         "workflow.proposal_commit": "제안 및 커밋",
+        "workflow.proposal_commit.beginner": "워크플로우 검토",
         "workflow.execution_launch": "실행 시작",
+        "workflow.execution_launch.beginner": "워크플로우 실행",
 
         "hub.status.empty": "활성 허브 데이터가 없습니다",
         "hub.status.ready": "준비됨",

@@ -185,7 +185,7 @@ def test_proposal_commit_workflow_localizes_next_step_for_korean_app_language() 
 
     vm = read_proposal_commit_workflow_view_model(working, selected_ref="node:n1", validation_report=_validation_report())
 
-    assert vm.summary.next_step_label == "Designer 제안을 시작하거나 현재 드래프트 검토"
+    assert vm.summary.next_step_label == "워크플로우 만들기 시작"
 
 
 def test_proposal_commit_workflow_propagates_latest_run_into_commit_snapshot_storage_context() -> None:
@@ -246,3 +246,20 @@ def test_proposal_commit_workflow_disables_beginner_confirmation_after_first_suc
     assert vm.beginner_mode is False
     assert vm.hide_internal_governance_by_default is False
     assert vm.beginner_confirmation.visible is False
+
+
+def test_proposal_commit_workflow_uses_beginner_review_label_before_first_success() -> None:
+    vm = read_proposal_commit_workflow_view_model(
+        _working_save(),
+        selected_ref="node:n1",
+        validation_report=_validation_report(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.summary.next_step_label == "Save workflow"
+

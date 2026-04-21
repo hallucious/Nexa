@@ -148,7 +148,6 @@ def test_builder_workflow_hub_recommends_proposal_commit_when_designer_flow_is_a
         _working_save("designer"),
         selected_ref="node:n1",
         validation_report=_validation_report(),
-        execution_record=_run(),
         preview_overlay=GraphPreviewOverlay(overlay_id="ov-1", summary="preview"),
         session_state_card=_session_card(),
         intent=_intent(),
@@ -160,7 +159,7 @@ def test_builder_workflow_hub_recommends_proposal_commit_when_designer_flow_is_a
     assert vm.recommended_workflow_id == "proposal_commit"
     assert vm.active_workflow_id == "proposal_commit"
     assert vm.proposal_commit is not None
-    assert vm.recommended_workflow_label == "제안 및 커밋"
+    assert vm.recommended_workflow_label == "워크플로우 검토"
 
 
 def test_builder_workflow_hub_recommends_execution_launch_when_run_is_live() -> None:
@@ -188,3 +187,9 @@ def test_builder_workflow_hub_marks_execution_record_as_terminal_history_context
     vm = read_builder_workflow_hub_view_model(_run())
     assert vm.storage_role == "execution_record"
     assert vm.hub_status == "terminal"
+
+
+def test_builder_workflow_hub_uses_beginner_execution_label_before_first_success() -> None:
+    vm = read_builder_workflow_hub_view_model(_working_save("execution"), validation_report=_validation_report(), execution_record=_run("running"))
+    assert vm.active_workflow_label == "워크플로우 실행"
+    assert vm.recommended_workflow_label == "워크플로우 실행"

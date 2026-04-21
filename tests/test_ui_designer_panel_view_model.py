@@ -247,3 +247,21 @@ def test_designer_panel_surfaces_policy_validation_summary_signal() -> None:
     signal = next(signal for signal in vm.summary_signals if signal.family == "policy_validation")
     assert signal.severity == "warning"
     assert "negative_weight" in signal.summary
+
+
+def test_designer_panel_uses_beginner_action_labels_before_first_success() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_designer_panel_view_model(source)
+    labels = {action.action_type: action.label for action in vm.suggested_actions}
+
+    assert labels["submit_request"] == "Build workflow"
+    assert labels["preview_patch"] == "Review workflow"
+    assert labels["approve_for_commit"] == "Approve workflow"
