@@ -13,7 +13,7 @@ from src.ui.execution_panel import read_execution_panel_view_model
 from src.ui.panel_coordination import read_panel_coordination_state
 from src.ui.storage_panel import read_storage_view_model
 from src.ui.validation_panel import read_validation_panel_view_model
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 
 
 def _working_save() -> WorkingSaveModel:

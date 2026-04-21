@@ -1,4 +1,4 @@
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.engine.execution_timeline import ExecutionTimelineBuilder
 
 

@@ -6,7 +6,7 @@ from src.storage.models.commit_snapshot_model import CommitApprovalModel, Commit
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
 from src.ui.builder_interaction_hub import read_builder_interaction_hub_view_model
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 
 
 def _working_save() -> WorkingSaveModel:

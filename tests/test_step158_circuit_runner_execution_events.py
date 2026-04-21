@@ -22,7 +22,7 @@ class DummyRuntime:
         self.execution_id = execution_id
 
     def _emit_event(self, event_type, payload, node_id=None):
-        from src.engine.execution_event import ExecutionEvent
+        from src.contracts.execution_event_contract import ExecutionEvent
 
         self.event_emitter.emit(
             ExecutionEvent.now(

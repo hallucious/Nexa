@@ -17,7 +17,7 @@ from src.ui.action_schema import read_builder_action_schema
 from src.ui.panel_coordination import read_panel_coordination_state
 from src.ui.builder_shell import read_builder_shell_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 
 
 def _working_save() -> WorkingSaveModel:

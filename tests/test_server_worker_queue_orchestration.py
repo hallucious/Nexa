@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.server import (
     ExecutionTargetCatalogEntry,
     ProductExecutionTarget,

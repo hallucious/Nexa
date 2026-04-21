@@ -1,15 +1,13 @@
-from dataclasses import dataclass, field
 from typing import Dict, List
 
-from src.engine.execution_regression_policy import PolicyDecision
+from src.contracts.policy_result_contract import (  # noqa: F401 — re-exported for callers
+    ExplainabilityResult,
+    PolicyDecision,
+)
 
-
-@dataclass(frozen=True)
-class ExplainabilityResult:
-    status: str
-    summary: str
-    categories: Dict[str, List[str]]
-    verification_contracts: List[str] = field(default_factory=list)
+# ExplainabilityResult and PolicyDecision are defined in
+# src.contracts.policy_result_contract and re-exported here for backward
+# compatibility. New code should import from src.contracts.policy_result_contract.
 
 
 def build_explainability(decision: PolicyDecision) -> ExplainabilityResult:

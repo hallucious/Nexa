@@ -6,7 +6,7 @@ from typing import Any, Iterable, Optional
 
 from src.contracts.artifact_contract import TypedArtifactEnvelope
 from src.contracts.nex_contract import ValidationFinding
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionIssue, ExecutionRecordModel
 from src.server.boundary_models import (
     EngineArtifactReference,

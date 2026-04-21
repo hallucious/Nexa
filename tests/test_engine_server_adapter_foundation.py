@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.contracts.artifact_contract import make_typed_artifact
 from src.contracts.nex_contract import ValidationFinding
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.server import (
     ArtifactReferenceAdapter,
     EngineLaunchAdapter,

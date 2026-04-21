@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from src.circuit.circuit_runner import CircuitRunner
 from src.engine.execution_event_emitter import ExecutionEventEmitter
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.engine.execution_timeline import ExecutionTimelineBuilder
 from src.engine.node_execution_runtime import NodeExecutionRuntime, ReviewRequiredPause
 from src.engine.validation.result import Severity, ValidationResult, ValidationDecision, Violation

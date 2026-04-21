@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.engine.execution_event_emitter import ExecutionEventEmitter
 from src.engine.node_execution_runtime import Artifact, NodeExecutionRuntime, ReviewRequiredPause
 from src.platform.plugin_result import PluginResult

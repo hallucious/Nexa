@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from src.engine.cli import _render_policy_output, main
-from src.engine.execution_regression_policy import PolicyDecision
+from src.contracts.policy_result_contract import PolicyDecision
 
 
 def _example_nex_dict():

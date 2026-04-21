@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import replace
 from typing import Any, Dict, List, Optional
 
+from src.contracts.policy_result_contract import (  # noqa: F401 — re-exported for callers
+    POLICY_STATUS_FAIL,
+    POLICY_STATUS_PASS,
+    POLICY_STATUS_WARN,
+    VALID_POLICY_STATUSES,
+    PolicyDecision,
+)
 from src.contracts.verifier_reason_codes import explain_verification_regression_resolution
 from src.engine.change_signal_extractor import ChangeSignal
 from src.engine.execution_regression_detector import (
@@ -15,26 +22,9 @@ from src.engine.execution_regression_detector import (
     VerificationRegression,
 )
 
-POLICY_STATUS_PASS = "PASS"
-POLICY_STATUS_WARN = "WARN"
-POLICY_STATUS_FAIL = "FAIL"
-
-VALID_POLICY_STATUSES = frozenset({
-    POLICY_STATUS_PASS,
-    POLICY_STATUS_WARN,
-    POLICY_STATUS_FAIL,
-})
-
-
-@dataclass
-class PolicyDecision:
-    status: str
-    reasons: List[str] = field(default_factory=list)
-    details: Dict[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if self.status not in VALID_POLICY_STATUSES:
-            raise ValueError(f"Invalid policy status: {self.status!r}")
+# PolicyDecision, POLICY_STATUS_*, VALID_POLICY_STATUSES are defined in
+# src.contracts.policy_result_contract and re-exported here for backward
+# compatibility. New code should import from src.contracts.policy_result_contract.
 
 
 def _trigger_line(regression: object) -> str:

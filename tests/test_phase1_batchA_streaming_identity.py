@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Tuple
 from src.automation.trigger_model import DEFAULT_TRIGGER_SOURCE, normalize_trigger_source
 from src.circuit.circuit_runner import CircuitRunner
 from src.contracts.status_taxonomy import ExecutionStatus, LaunchStatus, StreamingStatus
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.engine.execution_event_emitter import ExecutionEventEmitter
 from src.engine.node_execution_runtime import NodeExecutionRuntime
 from src.providers.adapters.anthropic_messages_adapter import AnthropicMessagesAdapter

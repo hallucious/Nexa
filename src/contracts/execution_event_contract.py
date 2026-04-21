@@ -1,3 +1,18 @@
+"""
+execution_event_contract.py
+
+ExecutionEvent is a shared event type consumed by multiple layers:
+  engine  — emits events during node execution
+  server  — adapts events for HTTP transport and queue orchestration
+  ui      — renders event-driven execution panels and timelines
+
+Placing this type in contracts makes the cross-layer dependency explicit
+and prevents server/ui from reaching into engine internals.
+
+ExecutionEventEmitter is engine-internal behavior (collection + file I/O)
+and stays in src.engine.execution_event_emitter.
+"""
+
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
@@ -43,3 +58,6 @@ class ExecutionEvent:
         if payload.get("automation_id") is None:
             payload["automation_id"] = None
         return payload
+
+
+__all__ = ["ExecutionEvent"]

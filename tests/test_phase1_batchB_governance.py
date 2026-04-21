@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from src.automation.output_destination import attempt_delivery
 from src.circuit.circuit_runner import CircuitRunner
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.engine.execution_event_emitter import ExecutionEventEmitter
 from src.governance.quota import QuotaPolicy, QuotaScope, QuotaStateRecord, evaluate_quota
 from src.safety.input_safety import evaluate_input_safety

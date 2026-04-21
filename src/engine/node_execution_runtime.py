@@ -26,7 +26,7 @@ from src.engine.compiled_resource_graph import (
     CompiledResourceGraph,
     compile_execution_config_to_graph,
 )
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.engine.execution_event_emitter import ExecutionEventEmitter
 from src.engine.final_output_resolver import (
     FinalOutputResolverError,

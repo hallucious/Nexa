@@ -7,7 +7,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel, NodeTimingCard, OutputResultCard
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.contracts.status_taxonomy import lookup_reason_code_record
 from src.contracts.confidence_contract import classify_confidence
 from src.ui.i18n import ui_language_from_sources, ui_text

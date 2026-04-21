@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable, Optional
 from uuid import uuid4
 
-from src.engine.execution_event import ExecutionEvent
+from src.contracts.execution_event_contract import ExecutionEvent
 from src.server.adapters import ArtifactReferenceAdapter, ExecutionRecordResultAdapter, TraceEventAdapter
 from src.server.run_admission_models import RunAdmissionOutcome
 from src.server.worker_queue_models import (
