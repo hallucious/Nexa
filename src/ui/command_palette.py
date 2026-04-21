@@ -10,6 +10,7 @@ from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
 from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer_view_model
+from src.ui.designer_panel import DesignerPanelViewModel, read_designer_panel_view_model
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
@@ -239,6 +240,15 @@ def _action_entries(action_schema: BuilderActionSchemaView) -> list[CommandPalet
         "select_rollback_target": ("visual_editor", "storage"),
         "open_diff": ("visual_editor", "diff"),
         "compare_runs": ("visual_editor", "diff"),
+        "open_provider_setup": ("node_configuration", "designer"),
+        "create_circuit_from_template": ("node_configuration", "designer"),
+        "open_file_input": ("node_configuration", "designer"),
+        "enter_url_input": ("node_configuration", "designer"),
+        "review_run_cost": ("runtime_monitoring", "execution"),
+        "watch_run_progress": ("runtime_monitoring", "execution"),
+        "open_circuit_library": ("library", "circuit_library"),
+        "open_result_history": ("runtime_monitoring", "result_history"),
+        "open_feedback_channel": ("library", "feedback_channel"),
     }
     entries: list[CommandPaletteEntryView] = []
     for action in [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions]:
@@ -275,6 +285,7 @@ def read_command_palette_view_model(
     action_schema: BuilderActionSchemaView | None = None,
     coordination_state: BuilderPanelCoordinationStateView | None = None,
     approval_flow: DesignerApprovalFlowState | None = None,
+    designer_view: DesignerPanelViewModel | None = None,
     explanation: str | None = None,
 ) -> CommandPaletteViewModel:
     source_unwrapped = _unwrap(source)
@@ -298,7 +309,18 @@ def read_command_palette_view_model(
     if diff_view is None and preview_overlay is not None and source_unwrapped is not None:
         diff_view = read_diff_view_model(diff_mode="preview_vs_current", source=preview_overlay, target=source_unwrapped)
     coordination_state = coordination_state or read_panel_coordination_state(source_unwrapped, graph_view=graph_view, storage_view=storage_view, execution_view=execution_view, validation_view=validation_view)
-    action_schema = action_schema or read_builder_action_schema(source_unwrapped, storage_view=storage_view, validation_view=validation_view, execution_view=execution_view)
+    designer_view = designer_view or (
+        read_designer_panel_view_model(source_unwrapped)
+        if isinstance(source_unwrapped, (WorkingSaveModel, CommitSnapshotModel))
+        else None
+    )
+    action_schema = action_schema or read_builder_action_schema(
+        source_unwrapped,
+        storage_view=storage_view,
+        validation_view=validation_view,
+        execution_view=execution_view,
+        designer_view=designer_view,
+    )
 
     entries = [
         *_action_entries(action_schema),

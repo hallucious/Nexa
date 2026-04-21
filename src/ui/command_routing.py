@@ -75,6 +75,15 @@ def _route_template(action_id: str) -> tuple[str, str, str | None, str, str, str
         "compare_runs": ("comparison.compare_runs", "comparison", "execution_launch", "visual_editor", "diff", "diff_engine"),
         "approve_for_commit": ("designer.approve_for_commit", "designer", "proposal_commit", "node_configuration", "designer", "approval_flow"),
         "request_revision": ("designer.request_revision", "designer", "proposal_commit", "node_configuration", "designer", "designer_flow"),
+        "open_provider_setup": ("ui.open_provider_setup", "ui", "proposal_commit", "node_configuration", "designer", "ui_boundary"),
+        "create_circuit_from_template": ("ui.open_template_gallery", "ui", "proposal_commit", "node_configuration", "designer", "ui_boundary"),
+        "open_file_input": ("ui.open_file_input", "ui", "proposal_commit", "node_configuration", "designer", "ui_boundary"),
+        "enter_url_input": ("ui.enter_url_input", "ui", "proposal_commit", "node_configuration", "designer", "ui_boundary"),
+        "review_run_cost": ("ui.review_run_cost", "ui", "execution_launch", "runtime_monitoring", "execution", "ui_boundary"),
+        "watch_run_progress": ("ui.watch_run_progress", "ui", "execution_launch", "runtime_monitoring", "execution", "ui_boundary"),
+        "open_circuit_library": ("ui.open_circuit_library", "ui", None, "library", "circuit_library", "ui_boundary"),
+        "open_result_history": ("ui.open_result_history", "ui", None, "runtime_monitoring", "result_history", "ui_boundary"),
+        "open_feedback_channel": ("ui.open_feedback_channel", "ui", None, "library", "feedback_channel", "ui_boundary"),
     }
     return mapping.get(action_id, (f"builder.{action_id}", "builder", None, "visual_editor", "graph", "ui_boundary"))
 

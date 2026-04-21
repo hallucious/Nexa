@@ -85,3 +85,29 @@ def test_intent_emission_localizes_preview_text_for_korean_app_language() -> Non
     run_item = next(item for item in vm.emissions if item.action_id == "run_current")
 
     assert run_item.emission_preview == "현재 대상 실행 시작"
+
+
+def test_intent_emission_projects_beginner_productization_actions_into_ui_navigation_contracts() -> None:
+    beginner = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner", name="Starter"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+    beginner_hub = read_builder_interaction_hub_view_model(beginner, validation_report=_validation_report(), approval_flow=_approval(False))
+    beginner_vm = read_intent_emission_view_model(beginner, interaction_hub=beginner_hub)
+    provider_setup = next(item for item in beginner_vm.emissions if item.action_id == "open_provider_setup")
+
+    assert provider_setup.emission_type == "ui_navigation_intent"
+    assert provider_setup.payload_contract_id == "ui.provider_setup_open_request"
+
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+    hub = read_builder_interaction_hub_view_model(working, validation_report=_validation_report(), execution_record=_run(), approval_flow=_approval(False))
+    vm = read_intent_emission_view_model(working, interaction_hub=hub)
+    result_history = next(item for item in vm.emissions if item.action_id == "open_result_history")
+
+    assert result_history.payload_contract_id == "ui.result_history_open_request"
+    assert result_history.emit_allowed is True

@@ -72,6 +72,15 @@ def _emission_template(action_id: str, *, app_language: str) -> tuple[str, str, 
         "compare_runs": ("comparison_intent", "comparison", "comparison.run_diff_request", "Compare execution runs"),
         "approve_for_commit": ("approval_decision_intent", "designer", "approval.decision_request", "Approve current designer proposal"),
         "request_revision": ("designer_revision_intent", "designer", "proposal.revision_request", "Request revision for current proposal"),
+        "open_provider_setup": ("ui_navigation_intent", "ui", "ui.provider_setup_open_request", "Open provider setup guidance"),
+        "create_circuit_from_template": ("ui_navigation_intent", "ui", "ui.template_gallery_open_request", "Open starter workflow templates"),
+        "open_file_input": ("ui_navigation_intent", "ui", "ui.file_input_open_request", "Open file-based input path"),
+        "enter_url_input": ("ui_navigation_intent", "ui", "ui.url_input_open_request", "Open URL-based input path"),
+        "review_run_cost": ("ui_navigation_intent", "ui", "ui.execution_cost_review_request", "Open expected run usage review"),
+        "watch_run_progress": ("ui_navigation_intent", "ui", "ui.run_progress_focus_request", "Focus the current run progress view"),
+        "open_circuit_library": ("ui_navigation_intent", "ui", "ui.workflow_library_open_request", "Open the workflow library"),
+        "open_result_history": ("ui_navigation_intent", "ui", "ui.result_history_open_request", "Open recent result history"),
+        "open_feedback_channel": ("ui_navigation_intent", "ui", "ui.feedback_channel_open_request", "Open the feedback channel"),
     }
     emission_type, target_domain, payload_contract_id, preview = mapping.get(action_id, ("builder_intent", "builder", f"builder.{action_id}", ui_text("intent.preview.generic", app_language=app_language, fallback_text=f"Emit intent for {action_id}", action_id=action_id)))
     return emission_type, target_domain, payload_contract_id, ui_text(f"intent.preview.{action_id}", app_language=app_language, fallback_text=preview)

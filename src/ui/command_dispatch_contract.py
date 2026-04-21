@@ -91,6 +91,15 @@ def _required_fields(action_id: str) -> list[DispatchFieldView]:
         "compare_runs": [DispatchFieldView("run_id", True, "storage.execution_record"), DispatchFieldView("comparison_target_ref", False, "storage.recent_execution_refs")],
         "approve_for_commit": [DispatchFieldView("approval_id", True, "designer.approval_state"), DispatchFieldView("decision", True, "ui.user_decision")],
         "request_revision": [DispatchFieldView("approval_id", False, "designer.approval_state"), DispatchFieldView("revision_reason", True, "ui.user_input")],
+        "open_provider_setup": [DispatchFieldView("working_save_id", True, "storage.current_working_save")],
+        "create_circuit_from_template": [DispatchFieldView("working_save_id", True, "storage.current_working_save"), DispatchFieldView("template_id", False, "designer.template_gallery")],
+        "open_file_input": [DispatchFieldView("working_save_id", True, "storage.current_working_save")],
+        "enter_url_input": [DispatchFieldView("working_save_id", True, "storage.current_working_save")],
+        "review_run_cost": [DispatchFieldView("run_id", False, "execution.current_run"), DispatchFieldView("cost_visibility", True, "execution.cost_visibility")],
+        "watch_run_progress": [DispatchFieldView("run_id", True, "execution.current_run"), DispatchFieldView("waiting_feedback", True, "execution.waiting_feedback")],
+        "open_circuit_library": [DispatchFieldView("working_save_id", True, "storage.current_working_save")],
+        "open_result_history": [DispatchFieldView("run_id", False, "storage.execution_record"), DispatchFieldView("working_save_id", False, "storage.current_working_save")],
+        "open_feedback_channel": [DispatchFieldView("working_save_id", False, "storage.current_working_save"), DispatchFieldView("run_id", False, "storage.execution_record")],
     }
     return mapping.get(action_id, [DispatchFieldView("action_id", True, "interaction.selected_action")])
 

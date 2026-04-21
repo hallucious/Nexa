@@ -106,3 +106,39 @@ def test_command_palette_uses_beginner_storage_jump_labels_before_first_success(
     assert vm.placeholder == "단계, 문제, 실행, 액션 검색"
     assert labels["jump:storage:working_save"] == "현재 초안 열기"
     assert labels["jump:storage:execution_record"] == "결과 기록 열기"
+
+
+def test_command_palette_maps_beginner_and_return_use_actions_to_expected_panels() -> None:
+    beginner = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-beginner", name="Starter"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+    )
+
+    beginner_vm = read_command_palette_view_model(
+        beginner,
+        validation_report=_validation_report(),
+        approval_flow=_approval(),
+    )
+    beginner_actions = {entry.action_id: entry for entry in beginner_vm.entries if entry.entry_type == "action" and entry.action_id is not None}
+
+    assert beginner_actions["open_provider_setup"].preferred_workspace_id == "node_configuration"
+    assert beginner_actions["open_file_input"].preferred_panel_id == "designer"
+
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+    vm = read_command_palette_view_model(
+        working,
+        validation_report=_validation_report(),
+        execution_record=_run(status="running"),
+        approval_flow=_approval(),
+    )
+
+    action_entries = {entry.action_id: entry for entry in vm.entries if entry.entry_type == "action" and entry.action_id is not None}
+
+    assert action_entries["watch_run_progress"].preferred_workspace_id == "runtime_monitoring"
+    assert action_entries["open_circuit_library"].preferred_panel_id == "circuit_library"
+    assert action_entries["open_result_history"].preferred_panel_id == "result_history"

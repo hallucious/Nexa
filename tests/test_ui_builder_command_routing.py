@@ -116,3 +116,29 @@ def test_builder_command_routing_marks_blocked_when_all_routes_disabled() -> Non
     assert routing.enabled_route_count == 0
     assert routing.disabled_route_count == 2
     assert routing.routing_status == "blocked"
+
+
+def test_builder_command_routing_projects_productization_actions_into_explicit_workspace_targets() -> None:
+    action_schema = BuilderActionSchemaView(
+        source_role="working_save",
+        contextual_actions=[
+            BuilderActionView("open_provider_setup", "Connect AI model", "provider_setup", True),
+            BuilderActionView("create_circuit_from_template", "Choose starter workflow", "template_gallery", True),
+            BuilderActionView("open_file_input", "Use a file", "external_input", True),
+            BuilderActionView("watch_run_progress", "Watch progress", "execution_monitoring", True),
+            BuilderActionView("open_circuit_library", "Open workflow library", "return_use", True),
+            BuilderActionView("open_result_history", "Open recent results", "return_use", True),
+            BuilderActionView("open_feedback_channel", "Send feedback", "return_use", True),
+        ],
+    )
+
+    routing = read_builder_command_routing_view_model(_working_save(), action_schema=action_schema)
+    routes = {route.action_id: route for route in routing.routes}
+
+    assert routes["open_provider_setup"].preferred_workspace_id == "node_configuration"
+    assert routes["create_circuit_from_template"].preferred_panel_id == "designer"
+    assert routes["open_file_input"].preferred_panel_id == "designer"
+    assert routes["watch_run_progress"].preferred_workspace_id == "runtime_monitoring"
+    assert routes["open_circuit_library"].preferred_workspace_id == "library"
+    assert routes["open_result_history"].preferred_panel_id == "result_history"
+    assert routes["open_feedback_channel"].preferred_panel_id == "feedback_channel"

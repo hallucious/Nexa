@@ -50,3 +50,21 @@ def test_command_dispatch_contract_marks_execution_record_terminal_when_dispatch
     assert vm.source_role == "execution_record"
     assert vm.enabled_dispatch_count >= 1
     assert vm.dispatch_status == "terminal"
+
+
+def test_command_dispatch_contract_exposes_required_fields_for_beginner_productization_actions() -> None:
+    working = _working_save()
+    working.ui.metadata["beginner_first_success_achieved"] = True
+
+    hub = read_builder_interaction_hub_view_model(
+        working,
+        validation_report=ValidationReport(role="working_save", findings=[], blocking_count=0, warning_count=0, result="passed"),
+        execution_record=_run(),
+    )
+    vm = read_command_dispatch_contract_view_model(working, interaction_hub=hub)
+    result_history = next(item for item in vm.contracts if item.action_id == "open_result_history")
+    file_input = next(item for item in vm.contracts if item.action_id == "open_file_input")
+
+    assert result_history.boundary_target == "ui_boundary"
+    assert any(field.field_name == "working_save_id" for field in file_input.required_fields)
+    assert any(field.field_name == "run_id" for field in result_history.required_fields)
