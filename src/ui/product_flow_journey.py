@@ -14,7 +14,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_surface_active, ui_language_from_sources, ui_text
 
 
 @dataclass(frozen=True)
@@ -113,6 +113,7 @@ def read_product_flow_journey_view_model(
 
     proposal_commit = workflow_hub.proposal_commit if workflow_hub is not None else None
     execution_launch = workflow_hub.execution_launch if workflow_hub is not None else None
+    beginner_surface = beginner_surface_active(source_unwrapped, execution_record)
 
     has_intent = bool(proposal_commit is not None and proposal_commit.summary.current_intent_id)
     has_preview = bool(proposal_commit is not None and proposal_commit.summary.current_preview_id)
@@ -126,7 +127,7 @@ def read_product_flow_journey_view_model(
     )
     run_complete = bool(execution_launch is not None and execution_launch.summary.run_id is not None)
     live_run = bool(execution_launch is not None and execution_launch.summary.execution_status in {"running", "queued"})
-    observability_ready = run_complete and _has_trace_or_artifacts(workflow_hub)
+    observability_ready = run_complete and (_has_trace_or_artifacts(workflow_hub) or (beginner_surface and not live_run))
 
     steps: list[ProductFlowJourneyStepView] = []
 
@@ -258,16 +259,16 @@ def read_product_flow_journey_view_model(
         observe_status = "ready"
     else:
         observe_status = "waiting"
-    observe_block = None if observe_status != "waiting" else ui_text("journey.reason.observe_requires_run", app_language=app_language, fallback_text="Run output is required before trace, artifacts, and diff follow-through")
+    observe_block = None if observe_status != "waiting" else ui_text("journey.reason.observe_requires_run.beginner" if beginner_surface and not live_run else "journey.reason.observe_requires_run", app_language=app_language, fallback_text=("Run the workflow to read the result." if beginner_surface and not live_run else "Run output is required before trace, artifacts, and diff follow-through"))
     steps.append(
         ProductFlowJourneyStepView(
             step_id="observe_results",
-            step_label=ui_text("journey.step.observe_results", app_language=app_language, fallback_text="Trace, artifacts, and diff"),
+            step_label=ui_text("journey.step.observe_results.beginner" if beginner_surface and not live_run else "journey.step.observe_results", app_language=app_language, fallback_text=("Read result" if beginner_surface and not live_run else "Trace, artifacts, and diff")),
             step_status=observe_status,
             step_status_label=_status_label(observe_status, app_language=app_language),
             target_ref=(execution_launch.summary.run_id if execution_launch is not None else None),
             preferred_workspace_id="runtime_monitoring",
-            preferred_panel_id=("trace_timeline" if live_run else "artifact"),
+            preferred_panel_id=("execution" if beginner_surface and not live_run else ("trace_timeline" if live_run else "artifact")),
             complete=observe_status == "complete",
             actionable=observe_status in {"ready", "active"},
             blocking_reason=observe_block,

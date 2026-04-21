@@ -385,6 +385,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "journey.step.commit_snapshot": "Commit snapshot",
         "journey.step.run_current": "Run current",
         "journey.step.observe_results": "Trace, artifacts, and diff",
+        "journey.step.observe_results.beginner": "Read result",
         "journey.step_status.inactive": "Inactive",
         "journey.step_status.waiting": "Waiting",
         "journey.step_status.ready": "Ready",
@@ -418,6 +419,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "journey.reason.commit_requires_review": "Review flow must reach approval before commit",
         "journey.reason.run_requires_commit": "A runnable target is required before launch",
         "journey.reason.observe_requires_run": "Run output is required before trace, artifacts, and diff follow-through",
+        "journey.reason.observe_requires_run.beginner": "Run the workflow to read the result.",
 
         "runbook.entry.review_proposal": "Review proposal",
         "runbook.entry.approval_decision": "Approve or revise",
@@ -1052,6 +1054,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "journey.step.commit_snapshot": "커밋 스냅샷",
         "journey.step.run_current": "현재 실행",
         "journey.step.observe_results": "트레이스·아티팩트·차이 보기",
+        "journey.step.observe_results.beginner": "결과 읽기",
         "journey.step_status.inactive": "비활성",
         "journey.step_status.waiting": "대기",
         "journey.step_status.ready": "준비",
@@ -1070,6 +1073,7 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "journey.reason.commit_requires_review": "커밋 전에 검토 흐름이 승인 단계에 도달해야 합니다",
         "journey.reason.run_requires_commit": "실행 전에 실행 가능한 대상이 필요합니다",
         "journey.reason.observe_requires_run": "트레이스·아티팩트·차이 보기를 위해 실행 결과가 필요합니다",
+        "journey.reason.observe_requires_run.beginner": "결과를 읽으려면 먼저 워크플로우를 실행하세요.",
 
         "runbook.status.terminal_review": "런북이 종결된 실행 이력 검토 상태입니다",
         "handoff.status.terminal_review": "다음 단계 핸드오프가 종결된 실행 이력 검토 상태입니다",
@@ -2151,7 +2155,7 @@ def _beginner_first_success_achieved(*sources: Any) -> bool:
     return False
 
 
-def beginner_language_enabled(*sources: Any) -> bool:
+def beginner_surface_active(*sources: Any) -> bool:
     has_working_save = False
     for source in sources:
         source = _unwrap_beginner_source(source)
@@ -2162,9 +2166,19 @@ def beginner_language_enabled(*sources: Any) -> bool:
                 return False
             if str(metadata.get('user_mode') or '').lower() == 'advanced':
                 return False
-    if not has_working_save:
+    return has_working_save
+
+
+def beginner_advanced_surfaces_unlocked(*sources: Any) -> bool:
+    if not beginner_surface_active(*sources):
+        return True
+    return _beginner_first_success_achieved(*sources)
+
+
+def beginner_language_enabled(*sources: Any) -> bool:
+    if not beginner_surface_active(*sources):
         return False
-    return not _beginner_first_success_achieved(*sources)
+    return not beginner_advanced_surfaces_unlocked(*sources)
 
 
 def beginner_ui_text(text_key: str, *, beginner_text_key: str | None = None, sources: tuple[Any, ...] = (), app_language: str | None = None, fallback_text: str | None = None, params: Mapping[str, Any] | None = None, **kwargs: Any) -> str:
@@ -2199,6 +2213,8 @@ __all__ = [
     'resolve_display_text',
     'ui_language_from_sources',
     'ui_text',
+    'beginner_surface_active',
+    'beginner_advanced_surfaces_unlocked',
     'beginner_language_enabled',
     'beginner_ui_text',
 ]

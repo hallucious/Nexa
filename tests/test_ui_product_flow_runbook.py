@@ -162,7 +162,7 @@ def test_product_flow_runbook_highlights_commit_entry_after_review_is_approved()
     assert commit_entry.action_id == "commit_snapshot"
 
 
-def test_product_flow_runbook_moves_to_trace_followthrough_after_completed_run() -> None:
+def test_product_flow_runbook_keeps_beginner_result_reading_on_run_entry_after_completed_run() -> None:
     vm = read_product_flow_runbook_view_model(
         _working_save(),
         validation_report=_validation_report(),
@@ -175,12 +175,17 @@ def test_product_flow_runbook_moves_to_trace_followthrough_after_completed_run()
         approval_flow=_approval(),
     )
 
-    assert vm.current_entry_id == "inspect_trace"
+    assert vm.current_entry_id == "run_current"
+    assert vm.recommended_entry_id == "run_current"
+    run_entry = next(entry for entry in vm.entries if entry.entry_id == "run_current")
     trace_entry = next(entry for entry in vm.entries if entry.entry_id == "inspect_trace")
     artifact_entry = next(entry for entry in vm.entries if entry.entry_id == "inspect_artifacts")
+    assert run_entry.entry_status == "complete"
+    assert run_entry.enabled is True
     assert trace_entry.entry_status == "complete"
-    assert trace_entry.enabled is True
+    assert trace_entry.enabled is False
     assert artifact_entry.entry_status == "complete"
+    assert artifact_entry.enabled is False
     assert vm.completed_entry_count >= 4
 
 

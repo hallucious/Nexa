@@ -107,3 +107,10 @@ def test_execution_launch_workflow_keeps_commit_snapshot_launch_ready_even_with_
     assert vm.can_launch is True
     assert vm.action_state.run_action is not None
     assert vm.action_state.run_action.action_id == "run_from_commit"
+
+
+def test_execution_launch_workflow_hides_replay_and_diff_actions_before_first_success() -> None:
+    vm = read_execution_launch_workflow_view_model(_working_save(), validation_report=_validation_report())
+    action_ids = {action.action_id for action in vm.action_schema.secondary_actions}
+    assert "replay_latest" not in action_ids
+    assert "open_diff" not in action_ids

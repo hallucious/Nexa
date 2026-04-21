@@ -19,7 +19,7 @@ from src.ui.builder_execution_adapter_hub import BuilderExecutionAdapterHubViewM
 from src.ui.builder_shell import BuilderShellViewModel, read_builder_shell_view_model
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_surface_active, ui_language_from_sources, ui_text
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, read_product_flow_journey_view_model
 from src.ui.product_flow_runbook import ProductFlowRunbookViewModel, read_product_flow_runbook_view_model
 from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_product_flow_handoff_view_model
@@ -178,7 +178,7 @@ def _change_count(shell_vm: BuilderShellViewModel | None) -> int:
     return shell_vm.diff.summary.total_change_count
 
 
-def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_action_id: str | None, recommended_flow_id: str | None, *, app_language: str, handoff: ProductFlowHandoffViewModel | None = None) -> ProductFlowFocusView:
+def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_action_id: str | None, recommended_flow_id: str | None, *, app_language: str, source=None, execution_record=None, handoff: ProductFlowHandoffViewModel | None = None) -> ProductFlowFocusView:
     if shell_vm is None:
         return ProductFlowFocusView()
 
@@ -189,10 +189,19 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
         and shell_vm.diagnostics.empty_workspace_mode
         and not shell_vm.diagnostics.advanced_surfaces_unlocked
     )
+    beginner_surface = beginner_surface_active(source, execution_record)
 
     if stage_id == "run":
         active_workspace_id = "runtime_monitoring"
-        if shell_vm.execution is not None and shell_vm.execution.execution_status in {"running", "queued"}:
+        if beginner_surface:
+            active_right_panel_id = "execution"
+            if shell_vm.execution is not None and shell_vm.execution.execution_status in {"running", "queued"}:
+                active_bottom_panel_id = "trace_timeline" if shell_vm.trace_timeline is not None and shell_vm.trace_timeline.events else "artifact"
+                focus_reason = "beginner_live_execution"
+            else:
+                active_bottom_panel_id = "storage"
+                focus_reason = "read_result_first"
+        elif shell_vm.execution is not None and shell_vm.execution.execution_status in {"running", "queued"}:
             active_right_panel_id = "execution"
             active_bottom_panel_id = "trace_timeline" if shell_vm.trace_timeline is not None and shell_vm.trace_timeline.events else "artifact"
             focus_reason = "live_execution"
@@ -243,7 +252,7 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
             active_bottom_panel_id = "storage"
             focus_reason = "draft_edit"
 
-    if not beginner_empty_designer and handoff is not None and handoff.primary_workspace_id is not None and handoff.primary_panel_id is not None:
+    if not beginner_empty_designer and not (beginner_surface and active_workspace_id == "runtime_monitoring") and handoff is not None and handoff.primary_workspace_id is not None and handoff.primary_panel_id is not None:
         if stage_id != "run" and handoff.primary_action_id is not None and handoff.primary_enabled:
             active_workspace_id = handoff.primary_workspace_id
             active_right_panel_id = handoff.primary_panel_id
@@ -277,8 +286,10 @@ def _surface_targets(shell_vm: BuilderShellViewModel | None, *, app_language: st
     right_stack_ids = ["inspector", "designer", "validation", "execution", "trace_timeline", "artifact"]
     bottom_dock_ids = ["validation", "storage", "execution", "trace_timeline", "artifact", "diff"]
     hidden_in_beginner = set()
-    if shell_vm.diagnostics.beginner_mode and not shell_vm.diagnostics.advanced_surfaces_unlocked and shell_vm.shell_mode not in {"runtime_monitoring", "run_review"}:
-        hidden_in_beginner = {"trace_timeline", "artifact", "diff"}
+    if shell_vm.diagnostics.beginner_mode and not shell_vm.diagnostics.advanced_surfaces_unlocked:
+        hidden_in_beginner = {"trace_timeline", "diff"}
+        if shell_vm.execution is None or shell_vm.execution.execution_status not in {"running", "queued"}:
+            hidden_in_beginner.add("artifact")
 
     status_by_panel = {
         "inspector": "ready" if shell_vm.inspector is not None else "empty",
@@ -537,7 +548,7 @@ def read_product_flow_shell_view_model(
     stage_id = _stage_id(shell_vm, workflow_hub)
     recommended_flow_id = end_user_flow_hub.recommended_flow_id if end_user_flow_hub is not None else None
     recommended_action_id = (transition_vm.next_action_id if transition_vm is not None else None) or (next((entry.action_id for entry in (runbook_vm.entries if runbook_vm is not None else []) if entry.entry_id == runbook_vm.recommended_entry_id and entry.action_id is not None), None) if runbook_vm is not None else None) or (execution_adapter_hub.recommended_action_id if execution_adapter_hub is not None else None)
-    focus = _focus(shell_vm, stage_id, recommended_action_id, recommended_flow_id, app_language=app_language, handoff=handoff_vm)
+    focus = _focus(shell_vm, stage_id, recommended_action_id, recommended_flow_id, app_language=app_language, source=source_unwrapped, execution_record=execution_record, handoff=handoff_vm)
     right_stack_targets, bottom_dock_targets = _surface_targets(shell_vm, app_language=app_language, focus=focus)
 
     stage = ProductFlowStageView(

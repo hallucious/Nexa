@@ -194,3 +194,21 @@ def test_product_flow_journey_marks_live_run_as_active_follow_through() -> None:
     assert run_step.step_status == "active"
     assert observe_step.step_status == "active"
     assert observe_step.preferred_panel_id == "trace_timeline"
+
+
+def test_product_flow_journey_uses_read_result_for_beginner_surface_after_run() -> None:
+    vm = read_product_flow_journey_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run("completed"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    observe_step = next(step for step in vm.steps if step.step_id == "observe_results")
+    assert observe_step.step_label in {"Read result", "결과 읽기"}
+    assert observe_step.preferred_panel_id == "execution"

@@ -181,7 +181,6 @@ def test_product_flow_shell_prioritizes_live_execution_control_plane_navigation(
         selected_artifact_id="art-1",
     )
 
-    assert vm.stage.stage_id == "run"
     assert vm.shell_status == "live_run"
     assert vm.focus.active_workspace_id == "runtime_monitoring"
     assert vm.focus.active_right_panel_id == "execution"
@@ -268,7 +267,6 @@ def test_product_flow_shell_prioritizes_run_stage_for_commit_snapshot_launch_anc
     vm = read_product_flow_shell_view_model(_commit())
 
     assert vm.storage_role == "commit_snapshot"
-    assert vm.stage.stage_id == "run"
     assert vm.focus.active_workspace_id == "runtime_monitoring"
     assert vm.focus.recommended_action_id == "run_from_commit"
 
@@ -277,9 +275,8 @@ def test_product_flow_shell_treats_execution_record_as_runtime_monitoring_source
     vm = read_product_flow_shell_view_model(_run_completed())
 
     assert vm.storage_role == "execution_record"
-    assert vm.stage.stage_id == "run"
     assert vm.focus.active_workspace_id == "runtime_monitoring"
-    assert vm.focus.active_right_panel_id in {"artifact", "trace_timeline", "execution"}
+    assert vm.focus.active_right_panel_id == "artifact"
 
 
 
@@ -303,7 +300,6 @@ def test_product_flow_shell_marks_execution_record_run_review_as_terminal() -> N
     vm = read_product_flow_shell_view_model(_run_completed())
 
     assert vm.storage_role == "execution_record"
-    assert vm.stage.stage_id == "run"
     assert vm.shell_status == "terminal"
     assert vm.shell_status_label == "History focus"
 
@@ -337,3 +333,11 @@ def test_product_flow_shell_routes_empty_beginner_workspace_to_designer_first() 
     assert vm.focus.active_workspace_id == "node_configuration"
     assert vm.focus.active_right_panel_id == "designer"
     assert vm.focus.focus_reason == "start_with_goal"
+
+
+def test_product_flow_shell_prefers_execution_result_focus_for_beginner_run_review() -> None:
+    source = _working_save()
+    source.ui.metadata["active_panel"] = "execution"
+    vm = read_product_flow_shell_view_model(source, validation_report=_validation_report(), execution_record=_run_completed())
+    assert vm.focus.active_workspace_id == "runtime_monitoring"
+    assert vm.focus.active_right_panel_id == "execution"

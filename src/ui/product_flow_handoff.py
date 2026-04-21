@@ -14,7 +14,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_surface_active, ui_language_from_sources, ui_text
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, read_product_flow_journey_view_model
 from src.ui.product_flow_runbook import ProductFlowRunbookEntryView, ProductFlowRunbookViewModel, read_product_flow_runbook_view_model
 
@@ -101,13 +101,16 @@ def _choose_primary(runbook: ProductFlowRunbookViewModel | None) -> ProductFlowR
     return ordered[0] if ordered else None
 
 
-def _choose_followthrough(runbook: ProductFlowRunbookViewModel | None, primary: ProductFlowRunbookEntryView | None) -> ProductFlowRunbookEntryView | None:
+def _choose_followthrough(runbook: ProductFlowRunbookViewModel | None, primary: ProductFlowRunbookEntryView | None, *, source_role: str, beginner_surface: bool) -> ProductFlowRunbookEntryView | None:
     if runbook is None or primary is None:
         return None
     ordered = _ordered_entries(runbook)
     try:
         start_index = next(index for index, item in enumerate(ordered) if item.entry_id == primary.entry_id)
     except StopIteration:
+        return None
+
+    if primary.entry_id == "run_current" and beginner_surface and source_role == "working_save":
         return None
 
     if primary.entry_id == "run_current":
@@ -162,6 +165,8 @@ def read_product_flow_handoff_view_model(
     source_role = _storage_role(source_unwrapped)
     app_language = ui_language_from_sources(source_unwrapped, execution_record)
 
+    beginner_surface = beginner_surface_active(source_unwrapped, execution_record)
+
     workflow_hub = workflow_hub or read_builder_workflow_hub_view_model(
         source_unwrapped if source_unwrapped is not None else execution_record,
         validation_report=validation_report,
@@ -202,7 +207,7 @@ def read_product_flow_handoff_view_model(
     ) if (source_unwrapped is not None or execution_record is not None) else None
 
     primary = _prioritized_primary(runbook, source_role=source_role)
-    followthrough = _choose_followthrough(runbook, primary)
+    followthrough = _choose_followthrough(runbook, primary, source_role=source_role, beginner_surface=beginner_surface)
 
     if primary is None:
         handoff_status = "empty"

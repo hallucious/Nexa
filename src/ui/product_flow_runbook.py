@@ -14,7 +14,7 @@ from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
 from src.ui.builder_workflow_hub import BuilderWorkflowHubViewModel, read_builder_workflow_hub_view_model
-from src.ui.i18n import ui_language_from_sources, ui_text
+from src.ui.i18n import beginner_surface_active, ui_language_from_sources, ui_text
 from src.ui.product_flow_journey import ProductFlowJourneyViewModel, ProductFlowJourneyStepView, read_product_flow_journey_view_model
 
 
@@ -131,7 +131,9 @@ def _diff_target_ref(workflow_hub: BuilderWorkflowHubViewModel | None) -> str | 
     return None
 
 
-def _recommended_followthrough_entry(*, workflow_hub: BuilderWorkflowHubViewModel | None) -> str:
+def _recommended_followthrough_entry(*, workflow_hub: BuilderWorkflowHubViewModel | None, beginner_surface: bool = False) -> str:
+    if beginner_surface:
+        return "run_current"
     if _has_trace(workflow_hub):
         return "inspect_trace"
     if _has_artifacts(workflow_hub):
@@ -185,6 +187,7 @@ def read_product_flow_runbook_view_model(
 
     proposal_commit = workflow_hub.proposal_commit if workflow_hub is not None else None
     execution_launch = workflow_hub.execution_launch if workflow_hub is not None else None
+    beginner_surface = beginner_surface_active(source_unwrapped, execution_record)
 
     review_step = _find_step(journey, "preview_review")
     approval_step = _find_step(journey, "approval")
@@ -278,9 +281,9 @@ def read_product_flow_runbook_view_model(
             entry_status_label=_status_label(inspect_trace_status, app_language=app_language),
             preferred_workspace_id="runtime_monitoring",
             preferred_panel_id="trace_timeline",
-            action_id=("open_trace" if _has_trace(workflow_hub) else replay_action.action_id if replay_action is not None and replay_action.enabled and not _has_trace(workflow_hub) else None),
+            action_id=(None if beginner_surface and source_role == "working_save" else ("open_trace" if _has_trace(workflow_hub) else replay_action.action_id if replay_action is not None and replay_action.enabled and not _has_trace(workflow_hub) else None)),
             target_ref=_trace_target_ref(workflow_hub),
-            enabled=bool(_has_trace(workflow_hub) or (replay_action is not None and replay_action.enabled)),
+            enabled=bool(False if beginner_surface and source_role == "working_save" else (_has_trace(workflow_hub) or (replay_action is not None and replay_action.enabled))),
             complete=inspect_trace_status == "complete",
             reason_disabled=(observe_step.blocking_reason if not _has_trace(workflow_hub) and not (replay_action is not None and replay_action.enabled) and observe_step is not None else None),
         ),
@@ -291,9 +294,9 @@ def read_product_flow_runbook_view_model(
             entry_status_label=_status_label(inspect_artifact_status, app_language=app_language),
             preferred_workspace_id="runtime_monitoring",
             preferred_panel_id="artifact",
-            action_id=("open_artifacts" if _has_artifacts(workflow_hub) else replay_action.action_id if replay_action is not None and replay_action.enabled and not _has_artifacts(workflow_hub) else None),
+            action_id=(None if beginner_surface and source_role == "working_save" else ("open_artifacts" if _has_artifacts(workflow_hub) else replay_action.action_id if replay_action is not None and replay_action.enabled and not _has_artifacts(workflow_hub) else None)),
             target_ref=_artifact_target_ref(workflow_hub),
-            enabled=_has_artifacts(workflow_hub),
+            enabled=False if beginner_surface and source_role == "working_save" else _has_artifacts(workflow_hub),
             complete=inspect_artifact_status == "complete",
             reason_disabled=(observe_step.blocking_reason if not _has_artifacts(workflow_hub) and observe_step is not None else None),
         ),
@@ -304,9 +307,9 @@ def read_product_flow_runbook_view_model(
             entry_status_label=_status_label(compare_results_status, app_language=app_language),
             preferred_workspace_id="runtime_monitoring" if _has_diff(workflow_hub) else "visual_editor",
             preferred_panel_id="diff",
-            action_id=((compare_action.action_id if compare_action is not None and compare_action.enabled and compare_action.action_id == "compare_runs" else None) or ("open_diff" if _has_diff(workflow_hub) else None)),
+            action_id=(None if beginner_surface and source_role == "working_save" else ((compare_action.action_id if compare_action is not None and compare_action.enabled and compare_action.action_id == "compare_runs" else None) or ("open_diff" if _has_diff(workflow_hub) else None))),
             target_ref=_diff_target_ref(workflow_hub),
-            enabled=bool(_has_diff(workflow_hub) or (compare_action is not None and compare_action.enabled and compare_action.action_id == "compare_runs")),
+            enabled=bool(False if beginner_surface and source_role == "working_save" else (_has_diff(workflow_hub) or (compare_action is not None and compare_action.enabled and compare_action.action_id == "compare_runs"))),
             complete=compare_results_status == "complete",
             reason_disabled=(compare_action.reason_disabled if compare_action is not None and not compare_action.enabled and not _has_diff(workflow_hub) else observe_step.blocking_reason if observe_step is not None and not _has_diff(workflow_hub) else None),
         ),
@@ -320,7 +323,7 @@ def read_product_flow_runbook_view_model(
             "approval": "approval_decision",
             "commit_snapshot": "commit_snapshot",
             "run_current": "run_current",
-            "observe_results": _recommended_followthrough_entry(workflow_hub=workflow_hub),
+            "observe_results": _recommended_followthrough_entry(workflow_hub=workflow_hub, beginner_surface=beginner_surface and source_role == "working_save"),
         }
         current_entry_id = mapping.get(journey.current_step_id, "review_proposal")
 

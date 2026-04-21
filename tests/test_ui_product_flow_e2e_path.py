@@ -164,13 +164,14 @@ def test_product_flow_e2e_path_prioritizes_commit_then_run_for_reviewed_working_
     assert vm.next_workspace_id == "node_configuration"
 
 
-def test_product_flow_e2e_path_prefers_followthrough_targets_when_completed_run_history_exists() -> None:
+def test_product_flow_e2e_path_keeps_beginner_result_path_on_commit_and_run_when_completed_history_exists() -> None:
     vm = read_product_flow_e2e_path_view_model(_working_save(), execution_record=_run("completed"))
 
     assert vm.source_role == "working_save"
     assert vm.path_status == "actionable"
-    assert vm.current_checkpoint_id == "run" or vm.current_checkpoint_id == "commit"
-    assert any(checkpoint.checkpoint_id in {"trace", "artifact", "diff"} and checkpoint.actionable for checkpoint in vm.checkpoints)
+    assert vm.current_checkpoint_id in {"commit", "run"}
+    assert vm.recommended_checkpoint_id in {"commit", "run"}
+    assert all(not checkpoint.actionable for checkpoint in vm.checkpoints if checkpoint.checkpoint_id in {"trace", "artifact", "diff"})
     assert vm.actionable_checkpoint_count >= 1
 
 
