@@ -18,7 +18,12 @@ import os
 
 from src.platform.provider_executor import GenerateTextProviderBridge
 from src.platform.provider_registry import ProviderRegistry
+from typing import TYPE_CHECKING
+
 from src.contracts.savefile_format import Savefile
+
+if TYPE_CHECKING:
+    from src.storage.execution_savefile_adapter import ExecutionSavefileAdapter
 from src.contracts.provider_contract import (
     ProviderRequest,
     ProviderResult as ContractProviderResult,
@@ -32,7 +37,7 @@ def _to_ascii_safe(s: str) -> str:
     return s.encode("ascii", errors="ignore").decode("ascii")
 
 
-def build_provider_registry_from_savefile(savefile: Savefile) -> ProviderRegistry:
+def build_provider_registry_from_savefile(savefile: Savefile | "ExecutionSavefileAdapter") -> ProviderRegistry:
     registry = ProviderRegistry()
 
     for provider_id, provider_resource in savefile.resources.providers.items():

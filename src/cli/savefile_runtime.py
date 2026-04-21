@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,7 +22,7 @@ from src.storage.share_api import (
     load_public_nex_link_share_artifact_context,
     is_public_nex_link_share_payload,
 )
-from src.storage.legacy_savefile_bridge import savefile_from_loaded_nex_artifact
+from src.storage.execution_savefile_adapter import execution_savefile_from_loaded_nex_artifact
 from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
 from src.contracts.savefile_validator import validate_savefile
 from src.engine.cli_policy_integration import apply_baseline_policy
@@ -100,7 +102,7 @@ def _load_execution_context(circuit_path: str) -> SavefileExecutionContext:
                 if lineage is not None:
                     working_save_id = getattr(lineage, "source_working_save_id", None)
             return SavefileExecutionContext(
-                savefile=savefile_from_loaded_nex_artifact(loaded),
+                savefile=execution_savefile_from_loaded_nex_artifact(loaded),
                 storage_role=loaded.storage_role,
                 canonical_ref=canonical_ref,
                 public_load_status=loaded.load_status,
@@ -122,7 +124,9 @@ def execute_savefile(
     savefile = context.savefile
 
     if input_overrides:
-        savefile.state.input.update(dict(input_overrides))
+        merged_input = dict(savefile.state.input)
+        merged_input.update(dict(input_overrides))
+        savefile = replace(savefile, state=replace(savefile.state, input=merged_input))
 
     validate_savefile(savefile)
     provider_registry = build_provider_registry_from_savefile(savefile)

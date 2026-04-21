@@ -14,16 +14,19 @@ Validates:
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Set, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Set, Optional
 
 from src.contracts.savefile_format import Savefile, NodeSpec
+
+if TYPE_CHECKING:
+    from src.storage.execution_savefile_adapter import ExecutionSavefileAdapter
 
 
 class SavefileValidationError(Exception):
     """Raised when savefile validation fails."""
 
 
-def validate_savefile(savefile: Savefile) -> List[str]:
+def validate_savefile(savefile: Savefile | "ExecutionSavefileAdapter") -> List[str]:
     warnings: List[str] = []
 
     if not savefile.meta.name:

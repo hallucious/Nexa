@@ -12,9 +12,12 @@ from __future__ import annotations
 import copy
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from src.contracts.savefile_format import Savefile, NodeSpec
+from src.contracts.savefile_format import EdgeSpec, Savefile, NodeSpec
+
+if TYPE_CHECKING:
+    from src.storage.execution_savefile_adapter import ExecutionSavefileAdapter
 from src.contracts.provider_contract import ProviderRequest, ProviderResult
 from src.platform.plugin_executor import execute_plugin_entry
 from src.platform.provider_registry import ProviderRegistry
@@ -109,7 +112,7 @@ def _set_nested(data: Dict[str, Any], key: str, value: Any) -> None:
     current[parts[-1]] = value
 
 
-def topological_sort(savefile: Savefile) -> List[str]:
+def topological_sort(savefile: Savefile | "ExecutionSavefileAdapter") -> List[str]:
     """Return nodes in correct dependency order (full DAG execution)."""
     in_degree: Dict[str, int] = {node.id: 0 for node in savefile.circuit.nodes}
     graph: Dict[str, List[str]] = {node.id: [] for node in savefile.circuit.nodes}
@@ -139,7 +142,7 @@ def topological_sort(savefile: Savefile) -> List[str]:
 
 def execute_plugin_node(
     node: NodeSpec,
-    savefile: Savefile,
+    savefile: Savefile | "ExecutionSavefileAdapter",
     state: Dict[str, Any],
     node_outputs: Dict[str, Any],
 ) -> NodeExecutionResult:
@@ -217,7 +220,7 @@ def execute_plugin_node(
 
 def execute_ai_node(
     node: NodeSpec,
-    savefile: Savefile,
+    savefile: Savefile | "ExecutionSavefileAdapter",
     state: Dict[str, Any],
     node_outputs: Dict[str, Any],
     provider_registry: ProviderRegistry,
@@ -285,13 +288,21 @@ def execute_ai_node(
 
     try:
         provider_result: ProviderResult = provider.execute(provider_request)
+        trace_payload = getattr(provider_result, "trace", {}) or {}
+        artifacts_payload = getattr(provider_result, "artifacts", []) or []
+        if hasattr(provider_result, "output"):
+            output_payload = provider_result.output
+        else:
+            output_payload = {"text": getattr(provider_result, "text", None)}
 
-        if provider_result.error:
+        if getattr(provider_result, "error", None):
+            error_val = provider_result.error
+            error_msg = error_val.message if hasattr(error_val, "message") else str(error_val)
             return NodeExecutionResult(
                 node_id=node.id,
                 status="failure",
-                error=f"Provider error: {provider_result.error.message}",
-                trace=provider_result.trace or {},
+                error=f"Provider error: {error_msg}",
+                trace=trace_payload,
             )
 
     except Exception as e:
@@ -304,9 +315,9 @@ def execute_ai_node(
     return NodeExecutionResult(
         node_id=node.id,
         status="success",
-        output=provider_result.output,
-        artifacts=provider_result.artifacts or [],
-        trace=provider_result.trace or {},
+        output=output_payload,
+        artifacts=artifacts_payload,
+        trace=trace_payload,
     )
 
 
@@ -372,7 +383,7 @@ def _resolve_bound_subcircuit_outputs(
 
 def execute_subcircuit_node(
     node: NodeSpec,
-    savefile: Savefile,
+    savefile: Savefile | "ExecutionSavefileAdapter",
     state: Dict[str, Any],
     node_outputs: Dict[str, Any],
     provider_registry: ProviderRegistry,
@@ -420,8 +431,10 @@ def execute_subcircuit_node(
         for n in child_circuit.get("nodes", [])
     ]
     child_edges = [
-        type(savefile.circuit.edges[0])(from_node=e.get("from") or e.get("from_node"), to_node=e.get("to") or e.get("to_node"))
-        if savefile.circuit.edges else __import__("src.contracts.savefile_format", fromlist=["EdgeSpec"]).EdgeSpec(from_node=e.get("from") or e.get("from_node"), to_node=e.get("to") or e.get("to_node"))
+        EdgeSpec(
+            from_node=e.get("from") or e.get("from_node"),
+            to_node=e.get("to") or e.get("to_node"),
+        )
         for e in child_circuit.get("edges", [])
     ]
     from src.contracts.savefile_format import CircuitSpec, Savefile as SavefileModel
@@ -495,7 +508,7 @@ class SavefileExecutor:
 
     def execute(
         self,
-        savefile: Savefile,
+        savefile: Savefile | "ExecutionSavefileAdapter",
         run_id: str = "savefile-run",
         *,
         _depth: int = 0,
