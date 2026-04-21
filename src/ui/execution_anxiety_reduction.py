@@ -298,12 +298,12 @@ def read_contextual_help_view(
             deep_help_enabled=True,
         )
 
-    if execution_view is not None and execution_view.execution_status == "completed" and execution_view.latest_outputs:
+    if execution_view is not None and execution_view.result_reading.visible:
         return ContextualHelpView(
             visible=True,
             stage="result",
-            title=ui_text("phase6.help.result.title", app_language=app_language, fallback_text="Read the result"),
-            summary=execution_view.latest_outputs[0].value_summary,
+            title=execution_view.result_reading.title or ui_text("phase6.help.result.title", app_language=app_language, fallback_text="Read the result"),
+            summary=execution_view.result_reading.summary,
             suggested_actions=(
                 ContextualHelpActionView("open_output", ui_text("phase6.help.result.action", app_language=app_language, fallback_text="Open result"), "execution.output"),
             ),

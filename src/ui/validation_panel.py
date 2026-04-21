@@ -549,10 +549,18 @@ def _beginner_summary(
     overall_status: str,
     source_mode: str,
     all_findings: list[ValidationFindingView],
+    friendly_error: FriendlyErrorView,
     app_language: str,
 ) -> BeginnerValidationSummaryView:
     if not beginner_language_enabled(source, execution_record):
         return BeginnerValidationSummaryView()
+    if friendly_error.visible:
+        return BeginnerValidationSummaryView(
+            status_signal=_beginner_status_signal("blocked", app_language=app_language),
+            cause=friendly_error.message or friendly_error.title or ui_text("validation.beginner.cause.ready", app_language=app_language),
+            next_action_type=friendly_error.action_target,
+            next_action_label=friendly_error.action_label,
+        )
     top_finding = all_findings[0] if all_findings else None
     cause = top_finding.message if top_finding is not None else ui_text("validation.beginner.cause.ready", app_language=app_language)
     action_type, action_label = _beginner_next_action(overall_status=overall_status, source_mode=source_mode, app_language=app_language)
@@ -588,6 +596,7 @@ def _target_summaries(all_findings: list[ValidationFindingView], *, app_language
 
 def _friendly_error_for_validation(
     *,
+    source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | None,
     validation_report: ValidationReport | None,
     precheck: ValidationPrecheck | None,
     execution_record: ExecutionRecordModel | None,
@@ -620,6 +629,18 @@ def _friendly_error_for_validation(
                 "issue_code": issue.issue_code,
                 "message": issue.message or issue.reason or issue.fix_hint,
             })
+
+    if isinstance(source, WorkingSaveModel):
+        for error in source.runtime.errors:
+            if isinstance(error, dict):
+                candidates.append({
+                    "source_kind": "runtime",
+                    "issue_code": error.get("issue_code") if isinstance(error.get("issue_code"), str) else None,
+                    "reason_code": error.get("reason_code") if isinstance(error.get("reason_code"), str) else None,
+                    "message": error.get("message") if isinstance(error.get("message"), str) else str(error),
+                })
+            else:
+                candidates.append({"source_kind": "runtime", "message": str(error)})
 
     for family_prefix in ("launch", "safety", "quota", "delivery", "streaming"):
         reason_key = f"{family_prefix}_reason_code"
@@ -719,6 +740,7 @@ def read_validation_panel_view_model(
     all_findings = [*blocking_findings, *warning_findings, *confirmation_findings, *informational_findings]
     related_targets = _target_summaries(all_findings, app_language=app_language)
     friendly_error = _friendly_error_for_validation(
+        source=source,
         validation_report=validation_report,
         precheck=precheck,
         execution_record=execution_record,
@@ -787,7 +809,7 @@ def read_validation_panel_view_model(
         grouped_sections=_group_by_severity(all_findings, app_language=app_language),
         related_targets=related_targets,
         suggested_actions=suggested_actions,
-        beginner_summary=_beginner_summary(source=source, execution_record=execution_record, overall_status=overall_status, source_mode=source_mode, all_findings=all_findings, app_language=app_language),
+        beginner_summary=_beginner_summary(source=source, execution_record=execution_record, overall_status=overall_status, source_mode=source_mode, all_findings=all_findings, friendly_error=friendly_error, app_language=app_language),
         hide_raw_findings_by_default=beginner_mode,
         explanation=explanation,
         explainability=_explainability_from_report(validation_report, precheck, execution_record),

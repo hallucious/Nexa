@@ -115,3 +115,14 @@ def test_validation_panel_surfaces_friendly_input_safety_message_from_governance
     assert vm.friendly_error.visible is True
     assert vm.friendly_error.error_code == "INPUT_SAFETY_BLOCKED"
     assert vm.friendly_error.action_label == "Review input"
+
+
+def test_validation_panel_beginner_summary_prefers_friendly_error_message_and_action() -> None:
+    source = _working_save(errors=[{"issue_code": "API_KEY_MISSING", "message": "OPENAI_API_KEY missing"}])
+
+    vm = read_validation_panel_view_model(source)
+
+    assert vm.beginner_summary.status_signal == "Cannot run yet."
+    assert vm.beginner_summary.cause == "AI connection settings are required before you can run this workflow."
+    assert vm.beginner_summary.next_action_type == "provider_setup"
+    assert vm.beginner_summary.next_action_label == "Open setup"

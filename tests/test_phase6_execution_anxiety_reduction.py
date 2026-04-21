@@ -145,3 +145,23 @@ def test_builder_shell_surfaces_phase6_privacy_transparency_for_session_key_and_
     assert fact_values["external_input"] == "웹 주소에서 읽음"
     assert fact_labels["storage_boundary"] == "저장 경계"
     assert fact_labels["session_key_persistence"] == "세션 키"
+
+
+def test_builder_shell_surfaces_phase6_result_help_from_result_reading_summary() -> None:
+    record = ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-010", record_format_version="1.0.0", created_at="2026-04-13T00:00:00Z", started_at="2026-04-13T00:00:00Z", finished_at="2026-04-13T00:00:05Z", status="completed"),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(total_duration_ms=1200, event_count=1),
+        node_results=NodeResultsModel(),
+        outputs=ExecutionOutputModel(final_outputs=[OutputResultCard(output_ref="result", source_node="n1", value_summary="Final answer", value_payload="Final answer")]),
+        artifacts=ExecutionArtifactsModel(),
+        diagnostics=ExecutionDiagnosticsModel(),
+        observability=ExecutionObservabilityModel(),
+    )
+
+    vm = read_builder_shell_view_model(_working_save(external_input="file"), execution_record=record)
+
+    assert vm.contextual_help.stage == "result"
+    assert vm.contextual_help.title == "Result ready"
+    assert vm.contextual_help.summary == "Final answer"

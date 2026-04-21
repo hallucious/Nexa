@@ -75,6 +75,19 @@ class OutputSummaryView:
 
 
 @dataclass(frozen=True)
+class ResultReadingSummaryView:
+    visible: bool = False
+    state: str = "hidden"
+    title: str | None = None
+    summary: str | None = None
+    primary_text: str | None = None
+    copy_action_label: str | None = None
+    artifact_ref: str | None = None
+    open_artifact_action_label: str | None = None
+    output_ref: str | None = None
+
+
+@dataclass(frozen=True)
 class ExecutionDiagnosticsSummary:
     warning_count: int = 0
     error_count: int = 0
@@ -188,6 +201,7 @@ class ExecutionPanelViewModel:
     active_context: ActiveExecutionContextView = field(default_factory=ActiveExecutionContextView)
     recent_events: list[ExecutionEventView] = field(default_factory=list)
     latest_outputs: list[OutputSummaryView] = field(default_factory=list)
+    result_reading: ResultReadingSummaryView = field(default_factory=ResultReadingSummaryView)
     diagnostics: ExecutionDiagnosticsSummary = field(default_factory=ExecutionDiagnosticsSummary)
     timing: ExecutionTimingView = field(default_factory=ExecutionTimingView)
     metrics: ExecutionMetricsView = field(default_factory=ExecutionMetricsView)
@@ -593,6 +607,36 @@ def _latest_outputs_from_live_events(
     if fallback_record is not None:
         return _latest_outputs_from_record(fallback_record, app_language=app_language)
     return []
+
+
+def _result_reading_from_outputs(
+    execution_status: str,
+    outputs: Sequence[OutputSummaryView],
+    *,
+    app_language: str,
+) -> ResultReadingSummaryView:
+    if not outputs:
+        return ResultReadingSummaryView()
+
+    primary = outputs[0]
+    state = "partial" if primary.streaming_in_progress or execution_status in {"running", "partial"} else "ready"
+    title_key = "execution.result.partial.title" if state == "partial" else "execution.result.ready.title"
+    summary = primary.value_summary or (primary.preview_items[0] if primary.preview_items else None)
+    if not summary:
+        summary_key = "execution.result.partial.summary" if state == "partial" else "execution.result.ready.summary"
+        summary = ui_text(summary_key, app_language=app_language)
+    primary_text = primary.full_value or ("\n".join(primary.preview_items) if primary.preview_items else None)
+    return ResultReadingSummaryView(
+        visible=True,
+        state=state,
+        title=ui_text(title_key, app_language=app_language),
+        summary=summary,
+        primary_text=primary_text,
+        copy_action_label=primary.copy_action_label,
+        artifact_ref=primary.artifact_ref,
+        open_artifact_action_label=primary.open_artifact_action_label,
+        output_ref=primary.output_ref,
+    )
 
 
 def _diagnostics_from_record(record: ExecutionRecordModel) -> ExecutionDiagnosticsSummary:
@@ -1075,6 +1119,7 @@ def read_execution_panel_view_model(
             active_context=active_context,
             recent_events=recent_events,
             latest_outputs=latest_outputs,
+            result_reading=_result_reading_from_outputs(execution_status, latest_outputs, app_language=app_language),
             diagnostics=_diagnostics_from_record(execution_record),
             timing=ExecutionTimingView(
                 started_at=execution_record.meta.started_at,
@@ -1109,6 +1154,7 @@ def read_execution_panel_view_model(
         run_identity=_run_identity_for_idle_source(source),
         progress=ExecutionProgressView(progress_mode="indeterminate", indeterminate_message=ui_text("execution.panel.no_execution_record", app_language=app_language)),
         active_context=ActiveExecutionContextView(status_message=ui_text("execution.panel.no_active_execution", app_language=app_language)),
+        result_reading=ResultReadingSummaryView(),
         diagnostics=ExecutionDiagnosticsSummary(),
         control_state=_control_state_for_idle_source(source, app_language=app_language),
         governance_signals=governance_signals,
@@ -1133,6 +1179,7 @@ __all__ = [
     "ActiveExecutionContextView",
     "ExecutionEventView",
     "OutputSummaryView",
+    "ResultReadingSummaryView",
     "ExecutionDiagnosticsSummary",
     "ExecutionTimingView",
     "ExecutionMetricsView",
