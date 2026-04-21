@@ -53,7 +53,9 @@ _ENTRY_ORDER = (
     "review_proposal",
     "approval_decision",
     "commit_snapshot",
+    "review_run_cost",
     "run_current",
+    "watch_run_progress",
     "reopen_recent_results",
     "open_workflow_library",
     "open_feedback_channel",
@@ -121,6 +123,16 @@ def _choose_followthrough(runbook: ProductFlowRunbookViewModel | None, primary: 
         if candidate is not None and candidate.enabled:
             return candidate
 
+    if primary.entry_id == "commit_snapshot":
+        run_candidate = entries.get("run_current")
+        if run_candidate is not None and (run_candidate.enabled or run_candidate.complete):
+            return run_candidate
+
+    if primary.entry_id == "run_current":
+        progress_candidate = entries.get("watch_run_progress")
+        if progress_candidate is not None and progress_candidate.enabled:
+            return progress_candidate
+
     if primary.entry_id == "run_current" and beginner_surface and source_role == "working_save":
         return None
 
@@ -141,12 +153,15 @@ def _choose_followthrough(runbook: ProductFlowRunbookViewModel | None, primary: 
 
 def _prioritized_primary(runbook: ProductFlowRunbookViewModel | None, *, source_role: str) -> ProductFlowRunbookEntryView | None:
     entries = _entry_map(runbook)
+    progress_candidate = entries.get("watch_run_progress")
+    if progress_candidate is not None and progress_candidate.enabled:
+        return progress_candidate
     if source_role == "working_save":
-        priority = ("connect_provider", "choose_template", "commit_snapshot", "approval_decision", "review_proposal", "run_current", "reopen_recent_results", "open_workflow_library", "open_feedback_channel")
+        priority = ("connect_provider", "choose_template", "commit_snapshot", "approval_decision", "review_proposal", "run_current", "review_run_cost", "reopen_recent_results", "open_workflow_library", "open_feedback_channel")
     elif source_role == "commit_snapshot":
-        priority = ("run_current", "open_workflow_library", "open_feedback_channel", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot")
+        priority = ("run_current", "review_run_cost", "open_workflow_library", "open_feedback_channel", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot")
     elif source_role == "execution_record":
-        priority = ("inspect_trace", "inspect_artifacts", "compare_results", "run_current")
+        priority = ("inspect_trace", "inspect_artifacts", "compare_results", "run_current", "review_run_cost")
     else:
         priority = ()
     for entry_id in priority:

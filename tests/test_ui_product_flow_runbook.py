@@ -24,7 +24,7 @@ def _empty_working_save() -> WorkingSaveModel:
     )
 
 
-def _working_save(*, metadata: dict | None = None) -> WorkingSaveModel:
+def _working_save(*, metadata: dict | None = None, last_run: dict | None = None) -> WorkingSaveModel:
     merged_metadata = {"app_language": "ko-KR"}
     merged_metadata.update(dict(metadata or {}))
     return WorkingSaveModel(
@@ -32,7 +32,7 @@ def _working_save(*, metadata: dict | None = None) -> WorkingSaveModel:
         circuit=CircuitModel(nodes=[{"id": "n1", "label": "Draft Generator"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
-        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={"run_id": "run-001"}, errors=[]),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run=({"run_id": "run-001"} | dict(last_run or {})), errors=[]),
         ui=UIModel(layout={}, metadata=merged_metadata),
     )
 
@@ -61,7 +61,7 @@ def _run(status: str = "completed") -> ExecutionRecordModel:
             artifact_summary="1 artifact",
         ),
         diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
-        observability=ExecutionObservabilityModel(),
+        observability=ExecutionObservabilityModel(metrics={"cost_estimate": 1.25, "actual_cost": (0.75 if status != "running" else None)}),
     )
 
 
@@ -255,3 +255,37 @@ def test_product_flow_runbook_keeps_recent_results_available_for_execution_recor
     entry = next(entry for entry in vm.entries if entry.entry_id == "reopen_recent_results")
     assert entry.action_id == "open_result_history"
     assert entry.enabled is True
+
+
+def test_product_flow_runbook_surfaces_cost_review_entry_when_estimate_is_available() -> None:
+    vm = read_product_flow_runbook_view_model(
+        _working_save(last_run={"estimated_cost": 1.25}),
+        validation_report=_validation_report(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    entries = {entry.entry_id: entry for entry in vm.entries}
+    assert entries["review_run_cost"].enabled is True
+    assert entries["review_run_cost"].action_id == "review_run_cost"
+
+
+def test_product_flow_runbook_surfaces_watch_progress_for_running_execution() -> None:
+    vm = read_product_flow_runbook_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run("running"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.current_entry_id == "watch_run_progress"
+    assert vm.recommended_entry_id == "watch_run_progress"

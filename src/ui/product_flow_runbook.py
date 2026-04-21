@@ -246,6 +246,17 @@ def read_product_flow_runbook_view_model(
     replay_action = _find_action(execution_launch.action_state if execution_launch is not None else None, "replay_action")
     compare_action = _find_action(execution_launch.action_state if execution_launch is not None else None, "compare_action")
 
+    execution_view = execution_launch.runtime_monitoring.execution if execution_launch is not None and execution_launch.runtime_monitoring is not None else None
+    cost_review_enabled = bool(
+        execution_view is not None
+        and execution_view.cost_visibility.visible
+        and execution_view.execution_status in {"idle", "unknown"}
+    )
+    watch_progress_enabled = bool(
+        execution_view is not None
+        and execution_view.waiting_feedback.visible
+    )
+
     inspect_trace_status = "complete" if _has_trace(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_trace(workflow_hub) else _entry_status_from_step(observe_step))
     inspect_artifact_status = "complete" if _has_artifacts(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_artifacts(workflow_hub) else _entry_status_from_step(observe_step))
     compare_results_status = "complete" if _has_diff(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_diff(workflow_hub) else _entry_status_from_step(observe_step))
@@ -322,6 +333,19 @@ def read_product_flow_runbook_view_model(
             reason_disabled=(commit_action.reason_disabled if commit_action is not None and not commit_action.enabled else commit_step.blocking_reason if commit_step is not None and not commit_step.actionable and not commit_step.complete else None),
         ),
         ProductFlowRunbookEntryView(
+            entry_id="review_run_cost",
+            label=ui_text("runbook.entry.review_run_cost", app_language=app_language, fallback_text="Review expected usage"),
+            entry_status=("ready" if cost_review_enabled else ("inactive" if source_role == "execution_record" else "waiting")),
+            entry_status_label=_status_label(("ready" if cost_review_enabled else ("inactive" if source_role == "execution_record" else "waiting")), app_language=app_language),
+            preferred_workspace_id="runtime_monitoring",
+            preferred_panel_id="execution",
+            action_id=("review_run_cost" if cost_review_enabled else None),
+            target_ref=(execution_launch.summary.commit_anchor_ref if execution_launch is not None else None),
+            enabled=cost_review_enabled,
+            complete=False,
+            reason_disabled=(None if cost_review_enabled else ui_text("builder.reason.run_requires_runnable_target", app_language=app_language, fallback_text="Running requires a draft or commit target with no blocking validation and no active run.")),
+        ),
+        ProductFlowRunbookEntryView(
             entry_id="run_current",
             label=ui_text("runbook.entry.run_current", app_language=app_language, fallback_text="Launch or monitor run"),
             entry_status=_entry_status_from_step(run_step),
@@ -339,6 +363,19 @@ def read_product_flow_runbook_view_model(
             complete=bool(run_step is not None and run_step.complete),
             requires_confirmation=bool(cancel_action is not None and cancel_action.enabled and cancel_action.requires_confirmation),
             reason_disabled=(run_action.reason_disabled if run_action is not None and not run_action.enabled and not ((cancel_action is not None and cancel_action.enabled) or (replay_action is not None and replay_action.enabled)) else run_step.blocking_reason if run_step is not None and not run_step.actionable and not run_step.complete else None),
+        ),
+        ProductFlowRunbookEntryView(
+            entry_id="watch_run_progress",
+            label=ui_text("runbook.entry.watch_run_progress", app_language=app_language, fallback_text="Watch run progress"),
+            entry_status=("active" if watch_progress_enabled else ("inactive" if execution_view is not None and execution_view.execution_status not in {"running", "queued"} else _entry_status_from_step(run_step))),
+            entry_status_label=_status_label(("active" if watch_progress_enabled else ("inactive" if execution_view is not None and execution_view.execution_status not in {"running", "queued"} else _entry_status_from_step(run_step))), app_language=app_language),
+            preferred_workspace_id="runtime_monitoring",
+            preferred_panel_id="execution",
+            action_id=("watch_run_progress" if watch_progress_enabled else None),
+            target_ref=(execution_launch.summary.run_id if execution_launch is not None else None),
+            enabled=watch_progress_enabled,
+            complete=False,
+            reason_disabled=(None if watch_progress_enabled else ui_text("builder.reason.no_active_run_to_cancel", app_language=app_language, fallback_text="No active run is available to cancel.")),
         ),
         ProductFlowRunbookEntryView(
             entry_id="inspect_trace",
@@ -429,26 +466,26 @@ def read_product_flow_runbook_view_model(
             "preview_review": "review_proposal",
             "approval": "approval_decision",
             "commit_snapshot": "commit_snapshot",
-            "run_current": "run_current",
+            "run_current": ("watch_run_progress" if watch_progress_enabled else "run_current"),
             "observe_results": _recommended_followthrough_entry(workflow_hub=workflow_hub, beginner_surface=beginner_surface and source_role == "working_save", return_use_ready=return_use_ready),
         }
         current_entry_id = mapping.get(journey.current_step_id, "review_proposal")
 
     entries_by_id = {entry.entry_id: entry for entry in entries}
     if source_role == "commit_snapshot":
-        preferred = next((entry_id for entry_id in ("run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot") if entry_id in entries_by_id and (entries_by_id[entry_id].enabled or entries_by_id[entry_id].complete)), None)
+        preferred = next((entry_id for entry_id in ("watch_run_progress", "run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot") if entry_id in entries_by_id and (entries_by_id[entry_id].enabled or entries_by_id[entry_id].complete)), None)
         if preferred is not None:
             current_entry_id = preferred
     elif source_role == "execution_record":
-        preferred = next((entry_id for entry_id in ("inspect_trace", "inspect_artifacts", "compare_results", "run_current") if entry_id in entries_by_id and (entries_by_id[entry_id].enabled or entries_by_id[entry_id].complete)), None)
+        preferred = next((entry_id for entry_id in ("watch_run_progress", "inspect_trace", "inspect_artifacts", "compare_results", "run_current") if entry_id in entries_by_id and (entries_by_id[entry_id].enabled or entries_by_id[entry_id].complete)), None)
         if preferred is not None:
             current_entry_id = preferred
 
     recommended_entry = next((entry for entry in entries if entry.entry_id == current_entry_id and entry.enabled), None)
     if recommended_entry is None and source_role == "commit_snapshot":
-        recommended_entry = next((entries_by_id[entry_id] for entry_id in ("run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot") if entry_id in entries_by_id and entries_by_id[entry_id].enabled), None)
+        recommended_entry = next((entries_by_id[entry_id] for entry_id in ("watch_run_progress", "run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot") if entry_id in entries_by_id and entries_by_id[entry_id].enabled), None)
     if recommended_entry is None and source_role == "execution_record":
-        recommended_entry = next((entries_by_id[entry_id] for entry_id in ("inspect_trace", "inspect_artifacts", "compare_results", "run_current") if entry_id in entries_by_id and entries_by_id[entry_id].enabled), None)
+        recommended_entry = next((entries_by_id[entry_id] for entry_id in ("watch_run_progress", "inspect_trace", "inspect_artifacts", "compare_results", "run_current") if entry_id in entries_by_id and entries_by_id[entry_id].enabled), None)
     if recommended_entry is None:
         recommended_entry = next((entry for entry in entries if entry.entry_status in {"active", "ready"} and entry.enabled), None)
     if recommended_entry is None:
@@ -477,6 +514,12 @@ def read_product_flow_runbook_view_model(
     elif source_role == "working_save" and starter_templates_available and entries_by_id.get("choose_template") is not None and current_entry_id != "connect_provider":
         recommended_entry = entries_by_id["choose_template"]
         current_entry_id = "choose_template"
+    elif watch_progress_enabled and entries_by_id.get("watch_run_progress") is not None:
+        recommended_entry = entries_by_id["watch_run_progress"]
+        current_entry_id = "watch_run_progress"
+    elif cost_review_enabled and current_entry_id == "run_current" and entries_by_id.get("review_run_cost") is not None:
+        recommended_entry = entries_by_id["review_run_cost"]
+        current_entry_id = "review_run_cost"
 
     return ProductFlowRunbookViewModel(
         runbook_status=runbook_status,

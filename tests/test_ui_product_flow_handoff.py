@@ -24,7 +24,7 @@ def _empty_working_save() -> WorkingSaveModel:
     )
 
 
-def _working_save(*, metadata: dict | None = None) -> WorkingSaveModel:
+def _working_save(*, metadata: dict | None = None, last_run: dict | None = None) -> WorkingSaveModel:
     merged_metadata = {"app_language": "ko-KR"}
     merged_metadata.update(dict(metadata or {}))
     return WorkingSaveModel(
@@ -32,7 +32,7 @@ def _working_save(*, metadata: dict | None = None) -> WorkingSaveModel:
         circuit=CircuitModel(nodes=[{"id": "n1", "label": "Draft Generator"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
-        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={"run_id": "run-001"}, errors=[]),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run=({"run_id": "run-001"} | dict(last_run or {})), errors=[]),
         ui=UIModel(layout={}, metadata=merged_metadata),
     )
 
@@ -57,7 +57,7 @@ def _run(status: str = "completed") -> ExecutionRecordModel:
         outputs=ExecutionOutputModel(output_summary=("in progress" if status == "running" else "done"), final_outputs=[OutputResultCard(output_ref="result", source_node="n1", value_summary="done", value_ref="art-1")]),
         artifacts=ExecutionArtifactsModel(artifact_refs=[ArtifactRecordCard(artifact_id="art-1", artifact_type="final_output", producer_node="n1", hash="abc123", ref="artifact://art-1", summary="final answer", artifact_schema_version="1.0.0")], artifact_count=1, artifact_summary="1 artifact"),
         diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
-        observability=ExecutionObservabilityModel(),
+        observability=ExecutionObservabilityModel(metrics={"cost_estimate": 1.25, "actual_cost": (0.75 if status != "running" else None)}),
     )
 
 
@@ -268,3 +268,36 @@ def test_product_flow_handoff_keeps_recent_results_available_for_execution_recor
     assert vm.primary_entry_id in {"inspect_trace", "inspect_artifacts", "compare_results", "run_current"}
     entry_ids = {vm.primary_entry_id, vm.followthrough_entry_id}
     assert "reopen_recent_results" in entry_ids or vm.primary_action_id != "open_result_history"
+
+
+def test_product_flow_handoff_keeps_commit_primary_while_cost_review_entry_exists() -> None:
+    vm = read_product_flow_handoff_view_model(
+        _working_save(last_run={"estimated_cost": 1.25}),
+        validation_report=_validation_report(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.primary_entry_id == "commit_snapshot"
+    assert vm.followthrough_entry_id == "run_current"
+
+
+def test_product_flow_handoff_prefers_watch_progress_for_running_execution() -> None:
+    vm = read_product_flow_handoff_view_model(
+        _working_save(),
+        validation_report=_validation_report(),
+        execution_record=_run("running"),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.primary_entry_id == "watch_run_progress"
+    assert vm.primary_action_id == "watch_run_progress"

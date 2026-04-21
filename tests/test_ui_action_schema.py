@@ -24,13 +24,13 @@ def _empty_working_save() -> WorkingSaveModel:
     )
 
 
-def _working_save(*, metadata: dict | None = None) -> WorkingSaveModel:
+def _working_save(*, metadata: dict | None = None, last_run: dict | None = None) -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
         circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
         resources=ResourcesModel(prompts={}, providers={}, plugins={}),
         state=StateModel(input={}, working={}, memory={}),
-        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run=dict(last_run or {}), errors=[]),
         ui=UIModel(layout={}, metadata=dict(metadata or {})),
     )
 
@@ -172,3 +172,20 @@ def test_action_schema_surfaces_return_use_actions_for_execution_record_history_
     actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
     assert actions["open_result_history"].enabled is True
     assert actions["open_feedback_channel"].enabled is True
+
+
+def test_action_schema_surfaces_cost_review_action_when_expected_usage_is_available() -> None:
+    working = _working_save(last_run={"estimated_cost": 1.25})
+    execution = read_execution_panel_view_model(working)
+
+    vm = read_builder_action_schema(working, execution_view=execution)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["review_run_cost"].enabled is True
+
+
+def test_action_schema_surfaces_watch_progress_action_for_running_execution() -> None:
+    execution = read_execution_panel_view_model(_working_save(), execution_record=_run(status="running"))
+
+    vm = read_builder_action_schema(_working_save(), execution_view=execution)
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["watch_run_progress"].enabled is True

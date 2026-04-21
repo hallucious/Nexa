@@ -151,6 +151,15 @@ def read_builder_action_schema(
         workspace_anchor_id is not None
         or isinstance(source, ExecutionRecordModel)
     )
+    cost_visibility_ready = bool(
+        execution_view is not None
+        and execution_view.cost_visibility.visible
+        and execution_status not in {"running", "queued"}
+    )
+    waiting_feedback_ready = bool(
+        execution_view is not None
+        and execution_view.waiting_feedback.visible
+    )
 
     beginner_preunlock = False
     if beginner_surface_active(source) and not beginner_advanced_surfaces_unlocked(source):
@@ -322,6 +331,26 @@ def read_builder_action_schema(
                     reason_disabled=None if (designer_view.request_state.request_status in {"submitted", "editing"} or designer_view.intent_state.intent_id is not None) else ui_text("builder.reason.no_active_designer_proposal", app_language=app_language),
                 ),
             ]
+        )
+
+    if cost_visibility_ready:
+        contextual_actions.append(
+            _action(
+                "review_run_cost",
+                ui_text("builder.action.review_run_cost", app_language=app_language),
+                "execution_cost",
+                True,
+            )
+        )
+
+    if waiting_feedback_ready:
+        contextual_actions.append(
+            _action(
+                "watch_run_progress",
+                execution_view.waiting_feedback.next_action_label or ui_text("builder.action.watch_run_progress", app_language=app_language),
+                "execution_monitoring",
+                True,
+            )
         )
 
     if return_use_ready:
