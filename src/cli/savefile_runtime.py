@@ -25,7 +25,7 @@ from src.storage.share_api import (
 from src.storage.execution_savefile_adapter import execution_savefile_from_loaded_nex_artifact
 from src.contracts.savefile_provider_builder import build_provider_registry_from_savefile
 from src.contracts.savefile_validator import validate_savefile
-from src.engine.cli_policy_integration import apply_baseline_policy
+from src.cli.cli_policy_integration import apply_baseline_policy
 
 
 def is_savefile_contract(circuit_path: str) -> bool:

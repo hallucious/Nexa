@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from src.engine.semantic_policy import SemanticPolicyDecision
-from src.engine.cli_semantic_output import format_semantic_policy_output
+from src.cli.cli_semantic_output import format_semantic_policy_output
 from src.contracts.regression_reason_codes import (
     NODE_REMOVED_SUCCESS,
     NODE_SUCCESS_TO_FAILURE,

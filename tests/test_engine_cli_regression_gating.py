@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import zipfile
 
-from src.engine.cli import build_parser, main
+from src.cli.engine_cli import build_parser, main
 
 
 def _example_nex_dict():

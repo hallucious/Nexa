@@ -1,4 +1,4 @@
-from src.engine.cli_policy_integration import print_policy
+from src.cli.cli_policy_integration import print_policy
 from src.engine.semantic_policy import SemanticPolicyDecision
 
 

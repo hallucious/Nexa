@@ -1,4 +1,4 @@
-from src.engine.cli_policy_integration import build_regression_result_from_summaries
+from src.cli.cli_policy_integration import build_regression_result_from_summaries
 from src.engine.execution_regression_policy import POLICY_STATUS_FAIL, evaluate_regression_policy
 
 

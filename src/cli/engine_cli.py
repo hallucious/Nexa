@@ -3,7 +3,7 @@
 The canonical public CLI entrypoint is ``src.cli.nexa_cli:main`` as exposed
 through ``pyproject.toml`` and ``nexa.py``. This module remains only as a
 bounded compatibility surface for engine-specific tests and old callers that
-still import ``src.engine.cli`` directly.
+import the engine-specific CLI compatibility module directly.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import argparse
 from typing import List, Optional, Sequence
 
 from src.cli.savefile_runtime import run_legacy_nex, run_legacy_nex_bundle
-from src.engine.cli_policy_integration import render_regression_policy_output
+from src.cli.cli_policy_integration import render_regression_policy_output
 from src.engine.engine import Engine
 from src.engine.types import NodeStatus
 

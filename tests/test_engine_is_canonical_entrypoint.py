@@ -3,13 +3,21 @@ from __future__ import annotations
 import importlib
 import inspect
 import pkgutil
+
+import pytest
 from pathlib import Path
 
 
 def test_engine_cli_importable():
-    mod = importlib.import_module("src.engine.cli")
+    mod = importlib.import_module("src.cli.engine_cli")
     assert mod is not None
 
+
+
+
+def test_engine_cli_module_moved_out_of_engine_package():
+    with pytest.raises(ModuleNotFoundError):
+        importlib.import_module("src.engine.cli")
 
 def test_public_cli_entrypoint_is_nexa_cli():
     project_root = Path(__file__).resolve().parents[1]
@@ -21,7 +29,7 @@ def test_public_cli_entrypoint_is_nexa_cli():
 
 
 def test_engine_cli_is_compatibility_wrapper_for_public_cli():
-    mod = importlib.import_module("src.engine.cli")
+    mod = importlib.import_module("src.cli.engine_cli")
     assert getattr(mod, "CANONICAL_PUBLIC_CLI") == "src.cli.nexa_cli:main"
 
 

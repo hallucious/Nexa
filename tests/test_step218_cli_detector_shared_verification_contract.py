@@ -1,4 +1,4 @@
-from src.engine.cli_policy_integration import build_regression_result_from_summaries
+from src.cli.cli_policy_integration import build_regression_result_from_summaries
 from src.engine.execution_regression_detector import detect_regressions
 from src.engine.execution_diff_model import ArtifactDiff, NodeDiff, RunDiff
 

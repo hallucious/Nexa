@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_engine_cli_keeps_only_minimal_compatibility_surface_inline() -> None:
-    cli_source = Path("src/engine/cli.py").read_text(encoding="utf-8")
+    cli_source = Path("src/cli/engine_cli.py").read_text(encoding="utf-8")
     assert "from src.engine.cli_compat_runner import" not in cli_source
     assert "def build_parser(" in cli_source
     assert "def _parse_node_ids(" in cli_source
@@ -12,11 +12,11 @@ def test_engine_cli_keeps_only_minimal_compatibility_surface_inline() -> None:
     assert "def run_engine(" in cli_source
     assert "def main(" in cli_source
     assert "from src.cli.savefile_runtime import run_legacy_nex, run_legacy_nex_bundle" in cli_source
-    assert "from src.engine.cli_policy_integration import render_regression_policy_output" in cli_source
+    assert "from src.cli.cli_policy_integration import render_regression_policy_output" in cli_source
 
 
 def test_legacy_nex_plugin_validation_moves_to_external_loader() -> None:
-    cli_source = Path("src/engine/cli.py").read_text(encoding="utf-8")
+    cli_source = Path("src/cli/engine_cli.py").read_text(encoding="utf-8")
     loader_source = Path("src/platform/external_loader.py").read_text(encoding="utf-8")
     assert "def _resolve_legacy_plugins(" not in cli_source
     assert "def validate_legacy_nex_plugins(" in loader_source
@@ -42,7 +42,7 @@ def test_legacy_nex_runtime_preparation_stays_in_runtime_adapter_but_summary_dis
 
 
 def test_engine_cli_policy_and_summary_dispatch_move_to_savefile_runtime() -> None:
-    cli_source = Path("src/engine/cli.py").read_text(encoding="utf-8")
+    cli_source = Path("src/cli/engine_cli.py").read_text(encoding="utf-8")
     runtime_source = Path("src/cli/savefile_runtime.py").read_text(encoding="utf-8")
     assert "def _build_regression_result_from_summaries(" not in cli_source
     assert "def _load_policy_overrides(" not in cli_source
@@ -64,3 +64,9 @@ def test_legacy_nex_runtime_module_is_physically_absent() -> None:
 
 def test_cli_compat_runner_module_is_physically_absent() -> None:
     assert not Path("src/engine/cli_compat_runner.py").exists()
+
+
+def test_engine_cli_modules_are_physically_absent_after_move() -> None:
+    assert not Path("src/engine/cli.py").exists()
+    assert not Path("src/engine/cli_policy_integration.py").exists()
+    assert not Path("src/engine/cli_semantic_output.py").exists()

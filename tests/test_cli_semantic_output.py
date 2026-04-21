@@ -1,4 +1,4 @@
-from src.engine.cli_semantic_output import format_semantic_policy_output
+from src.cli.cli_semantic_output import format_semantic_policy_output
 from src.engine.semantic_policy import SemanticPolicyDecision
 
 

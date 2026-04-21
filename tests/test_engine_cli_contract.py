@@ -13,7 +13,7 @@ from typing import List
 
 
 def test_engine_cli_dry_run_returns_zero_and_prints(capsys):
-    from src.engine.cli import main
+    from src.cli.engine_cli import main
 
     rc = main(["--dry-run"])
     assert rc == 0
@@ -22,7 +22,7 @@ def test_engine_cli_dry_run_returns_zero_and_prints(capsys):
 
 
 def test_engine_cli_default_returns_zero_and_prints(capsys):
-    from src.engine.cli import main
+    from src.cli.engine_cli import main
 
     rc = main([])
     assert rc == 0
