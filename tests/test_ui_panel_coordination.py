@@ -169,7 +169,7 @@ def test_panel_coordination_defaults_empty_beginner_workspace_to_designer_and_hi
     vm = read_panel_coordination_state(source, graph_view=graph, designer_view=designer)
 
     assert vm.active_panel == "designer"
-    assert vm.visible_panels == ["graph", "designer"]
+    assert vm.visible_panels == ["designer"]
     assert "diff" not in vm.visible_panels
     assert "trace_timeline" not in vm.visible_panels
     assert "artifact" not in vm.visible_panels

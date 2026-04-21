@@ -321,3 +321,19 @@ def test_product_flow_shell_hides_advanced_targets_before_first_success() -> Non
     assert "trace_timeline" not in bottom_ids
     assert "artifact" not in bottom_ids
     assert "diff" not in bottom_ids
+
+
+def test_product_flow_shell_routes_empty_beginner_workspace_to_designer_first() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Starter"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+    vm = read_product_flow_shell_view_model(source, validation_report=_validation_report())
+
+    assert vm.focus.active_workspace_id == "node_configuration"
+    assert vm.focus.active_right_panel_id == "designer"
+    assert vm.focus.focus_reason == "start_with_goal"

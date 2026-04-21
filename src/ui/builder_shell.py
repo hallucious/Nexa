@@ -428,7 +428,7 @@ def read_builder_shell_view_model(
 
     if coordination_vm.active_panel in {"execution", "trace_timeline", "artifact"} or shell_mode in {"runtime_monitoring", "run_review"}:
         active_workspace_id = "runtime_monitoring"
-    elif shell_mode == "designer_review":
+    elif shell_mode == "designer_review" or (beginner_mode and empty_workspace_mode):
         active_workspace_id = "node_configuration"
     else:
         active_workspace_id = "visual_editor"

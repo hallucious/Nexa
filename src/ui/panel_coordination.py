@@ -131,32 +131,30 @@ def _default_visible_panels(
     trace_view: TraceTimelineViewerViewModel | None = None,
     artifact_view: ArtifactViewerViewModel | None = None,
 ) -> list[str]:
-    if _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view):
-        panels: list[str] = []
+    beginner_shell_active = _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view)
+    panels: list[str] = []
+    if beginner_shell_active:
         if designer_view is not None:
             panels.append("designer")
-        if graph_view is not None:
-            panels.append("graph")
         if validation_view is not None and validation_view.overall_status == "blocked":
             panels.append("validation")
     else:
-        panels: list[str] = []
         if graph_view is not None:
             panels.extend(["graph", "inspector"])
-    if validation_view is not None:
-        panels.append("validation")
-    if storage_view is not None:
-        panels.append("storage")
-    if execution_view is not None:
-        panels.append("execution")
-    if trace_view is not None and trace_view.timeline_status != "idle":
-        panels.append("trace_timeline")
-    if artifact_view is not None and artifact_view.viewer_status != "idle":
-        panels.append("artifact")
-    if diff_view is not None and diff_view.viewer_status != "hidden":
-        panels.append("diff")
-    if designer_view is not None:
-        panels.append("designer")
+        if validation_view is not None:
+            panels.append("validation")
+        if storage_view is not None:
+            panels.append("storage")
+        if execution_view is not None:
+            panels.append("execution")
+        if trace_view is not None and trace_view.timeline_status != "idle":
+            panels.append("trace_timeline")
+        if artifact_view is not None and artifact_view.viewer_status != "idle":
+            panels.append("artifact")
+        if diff_view is not None and diff_view.viewer_status != "hidden":
+            panels.append("diff")
+        if designer_view is not None:
+            panels.append("designer")
     if not panels:
         panels.append("graph")
     seen: set[str] = set()
@@ -247,7 +245,10 @@ def read_panel_coordination_state(
     beginner_shell_active = _beginner_shell_active(source, graph_view=graph_view, execution_view=execution_view)
     advanced_unlocked = _advanced_surfaces_unlocked(metadata, execution_view=execution_view)
     if beginner_shell_active and not advanced_unlocked:
-        visible_panels = [panel_id for panel_id in visible_panels if panel_id not in _ADVANCED_ONLY_PANELS]
+        allowed_panels = {"designer"}
+        if validation_view is not None and validation_view.overall_status == "blocked":
+            allowed_panels.add("validation")
+        visible_panels = [panel_id for panel_id in visible_panels if panel_id not in _ADVANCED_ONLY_PANELS and panel_id in allowed_panels]
     panel_order = [str(v) for v in metadata.get("panel_order", visible_panels) if v is not None]
     if beginner_shell_active and not advanced_unlocked:
         panel_order = [panel_id for panel_id in panel_order if panel_id not in _ADVANCED_ONLY_PANELS]

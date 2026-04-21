@@ -132,6 +132,8 @@ def _badge_count(shell_vm: BuilderShellViewModel, panel_id: str) -> int:
 
 
 def _stage_id(shell_vm: BuilderShellViewModel | None, workflow_hub: BuilderWorkflowHubViewModel | None) -> str:
+    if shell_vm is not None and shell_vm.diagnostics.beginner_mode and shell_vm.diagnostics.empty_workspace_mode:
+        return "build"
     if shell_vm is not None and shell_vm.shell_mode in {"runtime_monitoring", "run_review"}:
         return "run"
     if shell_vm is not None and shell_vm.shell_mode == "designer_review":
@@ -182,6 +184,11 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
 
     active_workspace_id = shell_vm.active_workspace_id
     focus_reason = "steady_state"
+    beginner_empty_designer = (
+        shell_vm.diagnostics.beginner_mode
+        and shell_vm.diagnostics.empty_workspace_mode
+        and not shell_vm.diagnostics.advanced_surfaces_unlocked
+    )
 
     if stage_id == "run":
         active_workspace_id = "runtime_monitoring"
@@ -212,14 +219,17 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
             active_bottom_panel_id = "diff" if shell_vm.diff is not None else "storage"
             focus_reason = "configuration_review"
     else:
-        active_workspace_id = "visual_editor"
+        active_workspace_id = "node_configuration" if beginner_empty_designer else "visual_editor"
         if shell_vm.coordination.active_panel in {"designer", "validation", "inspector"}:
             active_right_panel_id = shell_vm.coordination.active_panel
         elif shell_vm.inspector is not None and shell_vm.inspector.object_type not in {"none", "unknown"}:
             active_right_panel_id = "inspector"
         else:
             active_right_panel_id = "designer"
-        if shell_vm.diff is not None:
+        if beginner_empty_designer:
+            active_bottom_panel_id = "validation" if shell_vm.validation is not None and shell_vm.validation.summary.blocking_count else "storage"
+            focus_reason = "start_with_goal"
+        elif shell_vm.diff is not None:
             active_bottom_panel_id = "diff"
             focus_reason = "preview_compare"
         elif shell_vm.validation is not None and (
@@ -233,7 +243,7 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
             active_bottom_panel_id = "storage"
             focus_reason = "draft_edit"
 
-    if handoff is not None and handoff.primary_workspace_id is not None and handoff.primary_panel_id is not None:
+    if not beginner_empty_designer and handoff is not None and handoff.primary_workspace_id is not None and handoff.primary_panel_id is not None:
         if stage_id != "run" and handoff.primary_action_id is not None and handoff.primary_enabled:
             active_workspace_id = handoff.primary_workspace_id
             active_right_panel_id = handoff.primary_panel_id

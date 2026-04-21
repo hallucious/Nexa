@@ -330,6 +330,7 @@ def test_builder_shell_projects_beginner_empty_workspace_state() -> None:
     assert vm.diagnostics.beginner_mode is True
     assert vm.diagnostics.empty_workspace_mode is True
     assert vm.diagnostics.advanced_surfaces_unlocked is False
+    assert vm.coordination.visible_panels == ["designer"]
     assert vm.designer is not None
     assert vm.designer.request_state.input_placeholder == "What would you like to build? Describe your goal."
 
@@ -347,7 +348,8 @@ def test_builder_shell_uses_beginner_workspace_labels_before_first_success() -> 
 
     assert vm.top_bar.storage_badge.label == "저장되지 않음"
     assert vm.command_palette.placeholder == "단계, 문제, 실행, 액션 검색"
-    assert vm.active_workspace_label == "비주얼 에디터"
+    assert vm.active_workspace_id == "node_configuration"
+    assert vm.active_workspace_label == "단계 설정"
 
 
 def test_builder_shell_projects_beginner_onboarding_hint_for_empty_workspace() -> None:
