@@ -2,8 +2,20 @@ import json
 from pathlib import Path
 
 from src.cli.nexa_cli import build_parser, main
-from src.contracts.savefile_loader import load_savefile_from_path
 from src.contracts.savefile_validator import validate_savefile
+from src.storage.execution_savefile_adapter import execution_savefile_from_loaded_nex_artifact
+from src.storage.nex_api import load_nex
+
+
+def _load_new_savefile(path):
+    """Load a file produced by 'nexa savefile new' through the correct storage path.
+
+    'savefile new' produces working_save format (.nex), which must be routed
+    through the storage layer (load_nex -> adapter) rather than the contracts
+    loader (load_savefile_from_path), which expects canonical savefile format.
+    """
+    loaded = load_nex(str(path))
+    return execution_savefile_from_loaded_nex_artifact(loaded)
 
 
 def test_cli_parser_accepts_savefile_new_defaults():
@@ -45,7 +57,7 @@ def test_savefile_new_command_writes_valid_plugin_savefile(tmp_path, monkeypatch
     assert payload["status"] == "ok"
     assert out_path.exists()
 
-    savefile = load_savefile_from_path(str(out_path))
+    savefile = _load_new_savefile(out_path)
     warnings = validate_savefile(savefile)
     assert warnings == []
     assert savefile.meta.name == "demo_contract"
@@ -77,7 +89,7 @@ def test_savefile_new_command_writes_valid_ai_savefile_from_template(tmp_path, m
     exit_code = main()
 
     assert exit_code == 0
-    savefile = load_savefile_from_path(str(out_path))
+    savefile = _load_new_savefile(out_path)
     warnings = validate_savefile(savefile)
     assert warnings == []
     node = savefile.circuit.nodes[0]
@@ -111,7 +123,7 @@ def test_savefile_new_template_takes_precedence_over_node_type(tmp_path, monkeyp
     exit_code = main()
 
     assert exit_code == 0
-    savefile = load_savefile_from_path(str(out_path))
+    savefile = _load_new_savefile(out_path)
     assert savefile.circuit.nodes[0].type == "ai"
     assert savefile.ui.metadata["template"] == "ai"
 
