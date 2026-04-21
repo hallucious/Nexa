@@ -205,21 +205,21 @@ Engine
 
 Current implementation baseline:
 
-* latest confirmed repository baseline: `1175d72`
-* latest broad full-suite anchor: `2576 passed, 14 skipped`
-* the canonical macro roadmap still comes from `nexa_implementation_order_final_v2_2.md`
-* the repository has already pushed the major public/community product-facing Phase 9 branch to the point where it is materially closed on the current branch
-* the matching public surface seam family has also been materially closed enough that route/link/count drift is no longer the default next seam
+* latest confirmed repository baseline: `0ab543a`
+* latest broad full-suite anchor: `2675 passed, 9 skipped`
+* the repository has completed sector-based consolidation (Sectors A~H)
+* Phase 9 public/community product-facing branch is materially closed
+* sector consolidation is complete — boundary violations and dead files resolved
 * `src.sdk` remains the curated public SDK surface and `src.sdk.integration` remains the primary integration-boundary module
 * `src/server/` still contains the continuity/product families that make the earlier roadmap phases real in code rather than speculative
-* the next official move should therefore be treated as a **new trunk decision** rather than another extension of the same public/community sweep
+* the next official move should be treated as a **new trunk decision** after sector consolidation
 
 Interpretation rule:
 
-* do not treat repeated public/community page additions or generic seam polishing as the default next line
+* do not reopen sector consolidation work — it is complete
 * do not reopen Phase 7 / Phase 8 / Phase 4.5 seams by habit
-* interpret the current top-level reality as: restore from `1175d72`, use `2576 passed, 14 skipped` as the last broad confidence anchor, and remember that the only post-anchor change was document-reference cleanup
-* the next official move should start in repository-audit / sector-classification mode rather than default implementation mode
+* interpret the current top-level reality as: restore from `0ab543a`, use `2675 passed, 9 skipped` as the last broad confidence anchor
+* the next official move should start from a clean sector map rather than historical phase ordering
 * do not treat provider probe persistence as the next still-open main seam for this baseline
 * do not treat local `.nex.ui` continuity and server continuity as the same thing
 * do not skip the explicit proposal boundary:

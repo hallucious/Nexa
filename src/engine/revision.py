@@ -10,7 +10,7 @@ from .fingerprint import StructuralFingerprint
 class Revision:
     """Structural revision of an Engine.
 
-    Contract reference: docs/specs/engine_constraints.md, trace_model.md.
+    Contract reference: docs/specs/architecture/trace_model.md.
     A Revision is immutable once published.
     """
     revision_id: str

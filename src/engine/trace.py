@@ -31,7 +31,7 @@ class NodeTrace:
 class ExecutionTrace:
     """Graph-based trace for a single Engine execution (immutable).
 
-    Hard Requirement (docs/specs/trace_model.md v1.0.1):
+    Hard Requirement (docs/specs/architecture/trace_model.md v1.0.1):
     - Trace MUST include every node_id in the Engine graph.
     - Missing coverage invalidates the trace.
     """
@@ -60,7 +60,7 @@ class ExecutionTrace:
 
 
     # ---------------------------------------------------------------------
-    # Serialization API (docs/specs/trace_model.md v1.2.0)
+    # Serialization API (docs/specs/architecture/trace_model.md v1.2.0)
     # ---------------------------------------------------------------------
 
     @staticmethod
