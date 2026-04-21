@@ -28,7 +28,7 @@ from src.server import (
     create_fastapi_app,
 )
 from src.storage.share_api import export_public_nex_link_share
-from src.public_surface_registry import (
+from src.server.public_surface_registry import (
     PUBLIC_COMMUNITY_ASSET_SPECS,
     PUBLIC_COMMUNITY_ASSET_SURFACE_FAMILIES,
     app_href,

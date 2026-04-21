@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.public_surface_registry import (
+from src.server.public_surface_registry import (
     PUBLIC_API_ROUTES,
     PUBLIC_APP_ROUTES,
     PUBLIC_COMMUNITY_ASSET_SPECS,

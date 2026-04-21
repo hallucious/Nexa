@@ -35,7 +35,7 @@ from src.sdk.artifacts import (
     resolve_public_nex_execution_target,
 )
 from src.server.framework_binding_models import FrameworkOutboundResponse
-from src.public_surface_registry import PUBLIC_COMMUNITY_ASSET_SURFACE_FAMILIES
+from src.server.public_surface_registry import PUBLIC_COMMUNITY_ASSET_SURFACE_FAMILIES
 
 from src.sdk.server import (
     ProductExecutionTarget,

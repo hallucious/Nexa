@@ -2000,7 +2000,7 @@ def _public_community_catalog_namespace_policy_body() -> dict[str, Any]:
 
 
 def _public_sdk_catalog_body() -> dict[str, Any]:
-    from src.public_surface_registry import build_public_sdk_route_map
+    from src.server.public_surface_registry import build_public_sdk_route_map
     from src.sdk.integration import (
         build_public_mcp_resources,
         build_public_mcp_tools,
@@ -2048,7 +2048,7 @@ def _public_plugin_catalog_body() -> dict[str, Any]:
 
 
 def _public_community_catalog_body() -> dict[str, Any]:
-    from src.public_surface_registry import build_public_community_route_map
+    from src.server.public_surface_registry import build_public_community_route_map
     from src.sdk.integration import (
         describe_public_community_export_surface,
         describe_public_plugin_export_surface,
@@ -2108,7 +2108,7 @@ def _public_community_catalog_body() -> dict[str, Any]:
 
 
 def _public_ecosystem_catalog_body() -> dict[str, Any]:
-    from src.public_surface_registry import build_public_ecosystem_route_map
+    from src.server.public_surface_registry import build_public_ecosystem_route_map
     from src.sdk.integration import describe_public_ecosystem_export_surface
 
     summary = describe_public_ecosystem_export_surface()

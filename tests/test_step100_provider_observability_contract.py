@@ -1,7 +1,7 @@
 
 from __future__ import annotations
 import time
-from src.providers.observability import record_latency, attach_metrics
+from src.providers.provider_metrics import record_latency, attach_metrics
 
 
 class MockProvider:
