@@ -58,18 +58,14 @@ from src.safety.input_safety import evaluate_input_safety
 from src.circuit.circuit_scheduler import CircuitScheduler
 from src.circuit.circuit_validator import CircuitValidator, CircuitValidationError
 from src.circuit.fingerprint import compute_circuit_fingerprint, compute_execution_surface_fingerprint
-from src.engine.validation.decision_policy import (
+from src.engine.validation.public_api import (
     PostDecisionResult,
     PreDecisionResult,
     ValidationDecisionPolicy,
-)
-from src.engine.validation.governance_shapes import (
     build_decision_block,
     build_post_validation_block,
     build_pre_validation_block,
     violations_as_dicts,
-)
-from src.engine.validation.result import (
     Severity,
     ValidationDecision,
     ValidationResult,
