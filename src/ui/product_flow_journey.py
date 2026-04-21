@@ -114,6 +114,20 @@ def read_product_flow_journey_view_model(
     proposal_commit = workflow_hub.proposal_commit if workflow_hub is not None else None
     execution_launch = workflow_hub.execution_launch if workflow_hub is not None else None
     beginner_surface = beginner_surface_active(source_unwrapped, execution_record)
+    designer_view = workflow_hub.shell.designer if workflow_hub is not None and workflow_hub.shell is not None else None
+    provider_setup_needed = bool(
+        source_role == "working_save"
+        and designer_view is not None
+        and designer_view.template_gallery.visible
+        and (designer_view.provider_setup_guidance.visible or designer_view.provider_inline_key_entry.visible)
+        and not designer_view.provider_inline_key_entry.has_connected_provider
+    )
+    starter_templates_available = bool(
+        source_role == "working_save"
+        and designer_view is not None
+        and designer_view.template_gallery.visible
+        and designer_view.template_gallery.templates
+    )
 
     has_intent = bool(proposal_commit is not None and proposal_commit.summary.current_intent_id)
     has_preview = bool(proposal_commit is not None and proposal_commit.summary.current_preview_id)
@@ -130,6 +144,34 @@ def read_product_flow_journey_view_model(
     observability_ready = run_complete and (_has_trace_or_artifacts(workflow_hub) or (beginner_surface and not live_run))
 
     steps: list[ProductFlowJourneyStepView] = []
+
+    if source_role == "working_save":
+        connect_status = "ready" if provider_setup_needed else "complete"
+        steps.append(
+            ProductFlowJourneyStepView(
+                step_id="connect_provider",
+                step_label=ui_text("journey.step.connect_provider", app_language=app_language, fallback_text="Connect AI model"),
+                step_status=connect_status,
+                step_status_label=_status_label(connect_status, app_language=app_language),
+                preferred_workspace_id="node_configuration",
+                preferred_panel_id="designer",
+                complete=connect_status == "complete",
+                actionable=connect_status == "ready",
+            )
+        )
+        choose_template_status = "ready" if starter_templates_available else "complete"
+        steps.append(
+            ProductFlowJourneyStepView(
+                step_id="choose_template",
+                step_label=ui_text("journey.step.choose_template", app_language=app_language, fallback_text="Choose starter workflow"),
+                step_status=choose_template_status,
+                step_status_label=_status_label(choose_template_status, app_language=app_language),
+                preferred_workspace_id="node_configuration",
+                preferred_panel_id="designer",
+                complete=choose_template_status == "complete",
+                actionable=choose_template_status == "ready",
+            )
+        )
 
     designer_status = "complete" if has_intent else ("ready" if source_role == "working_save" else "inactive")
     steps.append(
@@ -345,7 +387,7 @@ def read_product_flow_journey_view_model(
         journey_status=journey_status,
         journey_status_label=ui_text(f"journey.status.{journey_status}", app_language=app_language, fallback_text=journey_status.replace("_", " ").title()),
         source_role=source_role,
-        current_step_id=current_step.step_id if current_step is not None else "designer_request",
+        current_step_id=current_step.step_id if current_step is not None else ("connect_provider" if source_role == "working_save" else "designer_request"),
         ready_step_count=ready_step_count,
         blocked_step_count=blocked_step_count,
         completed_step_count=completed_step_count,

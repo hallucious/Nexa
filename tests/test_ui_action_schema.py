@@ -13,6 +13,17 @@ from src.ui.validation_panel import read_validation_panel_view_model
 from src.ui.designer_panel import read_designer_panel_view_model
 
 
+def _empty_working_save() -> WorkingSaveModel:
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty Draft"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Draft"),
@@ -113,3 +124,16 @@ def test_action_schema_prioritizes_execution_record_inspection_actions_for_histo
     assert "replay_latest" not in primary_ids
     actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
     assert actions["open_latest_run"].enabled is True
+
+
+def test_action_schema_surfaces_provider_setup_and_template_actions_for_empty_beginner_workspace(monkeypatch, tmp_path) -> None:
+    for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "PERPLEXITY_API_KEY", "PPLX_API_KEY"]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    designer = read_designer_panel_view_model(_empty_working_save())
+    vm = read_builder_action_schema(_empty_working_save(), designer_view=designer)
+
+    actions = {a.action_id: a for a in vm.primary_actions + vm.secondary_actions + vm.contextual_actions}
+    assert actions["open_provider_setup"].enabled is True
+    assert actions["create_circuit_from_template"].enabled is True

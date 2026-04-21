@@ -188,7 +188,23 @@ def read_product_flow_runbook_view_model(
     proposal_commit = workflow_hub.proposal_commit if workflow_hub is not None else None
     execution_launch = workflow_hub.execution_launch if workflow_hub is not None else None
     beginner_surface = beginner_surface_active(source_unwrapped, execution_record)
+    designer_view = workflow_hub.shell.designer if workflow_hub is not None and workflow_hub.shell is not None else None
+    provider_setup_needed = bool(
+        source_role == "working_save"
+        and designer_view is not None
+        and designer_view.template_gallery.visible
+        and (designer_view.provider_setup_guidance.visible or designer_view.provider_inline_key_entry.visible)
+        and not designer_view.provider_inline_key_entry.has_connected_provider
+    )
+    starter_templates_available = bool(
+        source_role == "working_save"
+        and designer_view is not None
+        and designer_view.template_gallery.visible
+        and designer_view.template_gallery.templates
+    )
 
+    connect_step = _find_step(journey, "connect_provider")
+    choose_template_step = _find_step(journey, "choose_template")
     review_step = _find_step(journey, "preview_review")
     approval_step = _find_step(journey, "approval")
     commit_step = _find_step(journey, "commit_snapshot")
@@ -209,6 +225,30 @@ def read_product_flow_runbook_view_model(
     compare_results_status = "complete" if _has_diff(workflow_hub) and observe_step is not None and observe_step.complete else ("ready" if _has_diff(workflow_hub) else _entry_status_from_step(observe_step))
 
     entries = [
+        ProductFlowRunbookEntryView(
+            entry_id="connect_provider",
+            label=ui_text("runbook.entry.connect_provider", app_language=app_language, fallback_text="Connect AI model"),
+            entry_status=("ready" if provider_setup_needed else "complete") if source_role == "working_save" else "inactive",
+            entry_status_label=_status_label(("ready" if provider_setup_needed else "complete") if source_role == "working_save" else "inactive", app_language=app_language),
+            preferred_workspace_id="node_configuration",
+            preferred_panel_id="designer",
+            action_id=("open_provider_setup" if provider_setup_needed else None),
+            target_ref=None,
+            enabled=bool(provider_setup_needed),
+            complete=bool(source_role == "working_save" and not provider_setup_needed),
+        ),
+        ProductFlowRunbookEntryView(
+            entry_id="choose_template",
+            label=ui_text("runbook.entry.choose_template", app_language=app_language, fallback_text="Choose starter workflow"),
+            entry_status=("ready" if starter_templates_available else "complete") if source_role == "working_save" else "inactive",
+            entry_status_label=_status_label(("ready" if starter_templates_available else "complete") if source_role == "working_save" else "inactive", app_language=app_language),
+            preferred_workspace_id="node_configuration",
+            preferred_panel_id="designer",
+            action_id=("create_circuit_from_template" if starter_templates_available else None),
+            target_ref=None,
+            enabled=bool(starter_templates_available),
+            complete=bool(source_role == "working_save" and not starter_templates_available),
+        ),
         ProductFlowRunbookEntryView(
             entry_id="review_proposal",
             label=ui_text("runbook.entry.review_proposal", app_language=app_language, fallback_text="Review proposal"),
@@ -319,6 +359,8 @@ def read_product_flow_runbook_view_model(
         current_entry_id = "review_proposal"
     else:
         mapping = {
+            "connect_provider": "connect_provider",
+            "choose_template": "choose_template",
             "preview_review": "review_proposal",
             "approval": "approval_decision",
             "commit_snapshot": "commit_snapshot",
@@ -363,6 +405,13 @@ def read_product_flow_runbook_view_model(
         runbook_status = "complete"
     else:
         runbook_status = "ready"
+
+    if source_role == "working_save" and provider_setup_needed and entries_by_id.get("connect_provider") is not None:
+        recommended_entry = entries_by_id["connect_provider"]
+        current_entry_id = "connect_provider"
+    elif source_role == "working_save" and starter_templates_available and entries_by_id.get("choose_template") is not None and current_entry_id != "connect_provider":
+        recommended_entry = entries_by_id["choose_template"]
+        current_entry_id = "choose_template"
 
     return ProductFlowRunbookViewModel(
         runbook_status=runbook_status,

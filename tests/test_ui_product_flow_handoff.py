@@ -13,6 +13,17 @@ from src.storage.models.working_save_model import RuntimeModel, UIModel, Working
 from src.ui.product_flow_handoff import ProductFlowHandoffViewModel, read_product_flow_handoff_view_model
 
 
+def _empty_working_save() -> WorkingSaveModel:
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Handoff Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Handoff Draft"),
@@ -217,3 +228,15 @@ def test_product_flow_closure_uses_handoff_followthrough_action_identity() -> No
 
     assert follow_stage.required_action_id == "open_artifacts"
     assert follow_stage.recommended_flow_id == "flow:open_artifacts"
+
+
+def test_product_flow_handoff_uses_provider_setup_as_primary_for_empty_beginner_workspace(monkeypatch, tmp_path) -> None:
+    for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "PERPLEXITY_API_KEY", "PPLX_API_KEY"]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    vm = read_product_flow_handoff_view_model(_empty_working_save())
+
+    assert vm.primary_entry_id == "connect_provider"
+    assert vm.primary_action_id == "open_provider_setup"
+    assert vm.followthrough_entry_id == "choose_template"

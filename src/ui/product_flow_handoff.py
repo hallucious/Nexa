@@ -48,6 +48,8 @@ class ProductFlowHandoffViewModel:
 SourceLike = WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None
 
 _ENTRY_ORDER = (
+    "connect_provider",
+    "choose_template",
     "review_proposal",
     "approval_decision",
     "commit_snapshot",
@@ -132,7 +134,7 @@ def _choose_followthrough(runbook: ProductFlowRunbookViewModel | None, primary: 
 def _prioritized_primary(runbook: ProductFlowRunbookViewModel | None, *, source_role: str) -> ProductFlowRunbookEntryView | None:
     entries = _entry_map(runbook)
     if source_role == "working_save":
-        priority = ("commit_snapshot", "approval_decision", "review_proposal", "run_current")
+        priority = ("connect_provider", "choose_template", "commit_snapshot", "approval_decision", "review_proposal", "run_current")
     elif source_role == "commit_snapshot":
         priority = ("run_current", "inspect_trace", "inspect_artifacts", "compare_results", "commit_snapshot")
     elif source_role == "execution_record":
@@ -141,7 +143,13 @@ def _prioritized_primary(runbook: ProductFlowRunbookViewModel | None, *, source_
         priority = ()
     for entry_id in priority:
         candidate = entries.get(entry_id)
-        if candidate is not None and (candidate.enabled or candidate.complete):
+        if candidate is None:
+            continue
+        if entry_id in {"connect_provider", "choose_template"}:
+            if candidate.enabled:
+                return candidate
+            continue
+        if candidate.enabled or candidate.complete:
             return candidate
     return _choose_primary(runbook)
 

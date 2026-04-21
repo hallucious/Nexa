@@ -239,6 +239,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "builder.action.open_diff": "Open Diff",
         "builder.action.approve_for_commit": "Approve Proposal",
         "builder.action.request_revision": "Request Revision",
+        "builder.action.open_provider_setup": "Connect AI model",
+        "builder.action.create_circuit_from_template": "Choose starter workflow",
         "builder.reason.only_working_save": "Only working saves can be saved as drafts.",
         "builder.reason.review_requires_ready_working_save": "Draft review requires a working save with non-blocking validation and no active run.",
         "builder.reason.commit_requires_ready_state": "Commit requires a working save, non-blocking review state, no active run, and approval eligibility when designer flow is present.",
@@ -380,6 +382,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "launch.next.resolve_validation": "Resolve validation or select a run target",
 
         "journey.step.designer_request": "Designer request",
+        "journey.step.connect_provider": "Connect AI model",
+        "journey.step.choose_template": "Choose starter workflow",
         "journey.step.preview_review": "Preview and review",
         "journey.step.approval": "Approval",
         "journey.step.commit_snapshot": "Commit snapshot",
@@ -422,6 +426,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "journey.reason.observe_requires_run.beginner": "Run the workflow to read the result.",
 
         "runbook.entry.review_proposal": "Review proposal",
+        "runbook.entry.connect_provider": "Connect AI model",
+        "runbook.entry.choose_template": "Choose starter workflow",
         "runbook.entry.approval_decision": "Approve or revise",
         "runbook.entry.commit_snapshot": "Commit snapshot",
         "runbook.entry.run_current": "Launch or monitor run",
@@ -908,6 +914,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "builder.action.open_diff": "차이 보기",
         "builder.action.approve_for_commit": "제안 승인",
         "builder.action.request_revision": "수정 요청",
+        "builder.action.open_provider_setup": "AI 모델 연결",
+        "builder.action.create_circuit_from_template": "스타터 워크플로우 선택",
         "builder.reason.only_working_save": "working save만 드래프트로 저장할 수 있습니다.",
         "builder.reason.review_requires_ready_working_save": "드래프트 검토에는 차단 결과가 없는 working save와 비활성 실행 상태가 필요합니다.",
         "builder.reason.commit_requires_ready_state": "커밋에는 working save, 비차단 검토 상태, 비활성 실행 상태, 그리고 Designer 승인 가능 상태가 필요합니다.",
@@ -1049,6 +1057,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "launch.next.resolve_validation": "검증을 해결하거나 실행 대상을 선택",
 
         "journey.step.designer_request": "디자이너 요청",
+        "journey.step.connect_provider": "AI 모델 연결",
+        "journey.step.choose_template": "스타터 워크플로우 선택",
         "journey.step.preview_review": "미리보기 및 검토",
         "journey.step.approval": "승인",
         "journey.step.commit_snapshot": "커밋 스냅샷",
@@ -1352,6 +1362,8 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
         "provider_setup.title": "AI 모델 연결",
 
         "runbook.entry.approval_decision": "승인 또는 수정",
+        "runbook.entry.connect_provider": "AI 모델 연결",
+        "runbook.entry.choose_template": "스타터 워크플로우 선택",
         "runbook.entry.commit_snapshot": "커밋 스냅샷",
         "runbook.entry.compare_results": "결과 비교",
         "runbook.entry.inspect_artifacts": "아티팩트 검사",

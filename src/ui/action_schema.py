@@ -99,6 +99,20 @@ def read_builder_action_schema(
     elif isinstance(source, ExecutionRecordModel):
         has_execution_record = True
 
+    provider_setup_needed = bool(
+        source_role == "working_save"
+        and designer_view is not None
+        and designer_view.template_gallery.visible
+        and (designer_view.provider_setup_guidance.visible or designer_view.provider_inline_key_entry.visible)
+        and not designer_view.provider_inline_key_entry.has_connected_provider
+    )
+    starter_templates_available = bool(
+        source_role == "working_save"
+        and designer_view is not None
+        and designer_view.template_gallery.visible
+        and designer_view.template_gallery.templates
+    )
+
     beginner_preunlock = False
     if beginner_surface_active(source) and not beginner_advanced_surfaces_unlocked(source):
         beginner_preunlock = True
@@ -216,6 +230,25 @@ def read_builder_action_schema(
         ]
 
     contextual_actions: list[BuilderActionView] = []
+    if provider_setup_needed:
+        contextual_actions.append(
+            _action(
+                "open_provider_setup",
+                ui_text("builder.action.open_provider_setup", app_language=app_language),
+                "provider_setup",
+                True,
+            )
+        )
+    if starter_templates_available:
+        contextual_actions.append(
+            _action(
+                "create_circuit_from_template",
+                ui_text("builder.action.create_circuit_from_template", app_language=app_language),
+                "template_gallery",
+                True,
+            )
+        )
+
     if designer_view is not None:
         contextual_actions.extend(
             [

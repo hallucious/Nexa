@@ -13,6 +13,17 @@ from src.storage.models.working_save_model import RuntimeModel, UIModel, Working
 from src.ui.product_flow_runbook import read_product_flow_runbook_view_model
 
 
+def _empty_working_save() -> WorkingSaveModel:
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Runbook Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Runbook Draft"),
@@ -201,3 +212,17 @@ def test_product_flow_runbook_marks_live_execution_as_live_and_offers_cancel_or_
     assert run_entry.entry_status == "active"
     assert run_entry.enabled is True
     assert run_entry.action_id == "cancel_run"
+
+
+def test_product_flow_runbook_prioritizes_provider_setup_before_template_and_review(monkeypatch, tmp_path) -> None:
+    for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "PERPLEXITY_API_KEY", "PPLX_API_KEY"]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    vm = read_product_flow_runbook_view_model(_empty_working_save())
+
+    assert vm.current_entry_id == "connect_provider"
+    assert vm.recommended_entry_id == "connect_provider"
+    entries = {entry.entry_id: entry for entry in vm.entries}
+    assert entries["connect_provider"].action_id == "open_provider_setup"
+    assert entries["choose_template"].action_id == "create_circuit_from_template"

@@ -13,6 +13,17 @@ from src.storage.models.working_save_model import RuntimeModel, UIModel, Working
 from src.ui.product_flow_journey import read_product_flow_journey_view_model
 
 
+def _empty_working_save() -> WorkingSaveModel:
+    return WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Journey Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+
 def _working_save() -> WorkingSaveModel:
     return WorkingSaveModel(
         meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-001", name="Journey Draft"),
@@ -212,3 +223,16 @@ def test_product_flow_journey_uses_read_result_for_beginner_surface_after_run() 
     observe_step = next(step for step in vm.steps if step.step_id == "observe_results")
     assert observe_step.step_label in {"Read result", "결과 읽기"}
     assert observe_step.preferred_panel_id == "execution"
+
+
+def test_product_flow_journey_prefers_provider_setup_before_other_beginner_steps(monkeypatch, tmp_path) -> None:
+    for key in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "PERPLEXITY_API_KEY", "PPLX_API_KEY"]:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    vm = read_product_flow_journey_view_model(_empty_working_save())
+
+    assert vm.current_step_id == "connect_provider"
+    steps = {step.step_id: step for step in vm.steps}
+    assert steps["connect_provider"].actionable is True
+    assert steps["choose_template"].actionable is True
