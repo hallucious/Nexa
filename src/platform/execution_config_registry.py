@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-from src.engine.execution_config_hash import generate_execution_config_id
+from src.platform.execution_config_hash import generate_execution_config_id
 
 
 class ExecutionConfigRegistryError(Exception):

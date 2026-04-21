@@ -2,7 +2,7 @@
 import json
 import pytest
 
-from src.engine.execution_config_hash import generate_execution_config_id
+from src.platform.execution_config_hash import generate_execution_config_id
 from src.engine.node_spec_resolver import NodeSpecResolver, validate_execution_config_ref
 from src.platform.execution_config_registry import (
     ExecutionConfigRefError,

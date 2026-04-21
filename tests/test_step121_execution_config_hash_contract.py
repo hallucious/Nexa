@@ -1,6 +1,6 @@
 import copy
 
-from src.engine.execution_config_hash import (
+from src.platform.execution_config_hash import (
     canonicalize_execution_config_json,
     compute_execution_config_hash,
     generate_execution_config_id,
