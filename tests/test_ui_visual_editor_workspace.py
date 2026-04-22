@@ -309,3 +309,56 @@ def test_visual_editor_workspace_exposes_run_focus_summary_and_shortcuts() -> No
         "replay_latest",
     ]
     assert vm.action_shortcuts[0].emphasis == "runtime"
+
+
+
+def test_visual_editor_workspace_handoff_prefers_designer_entry_for_empty_state() -> None:
+    working = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "en-US"}),
+    )
+
+    vm = read_visual_editor_workspace_view_model(working)
+
+    assert vm.workspace_handoff.destination_workspace == "visual_editor"
+    assert vm.workspace_handoff.destination_panel == "designer"
+    assert vm.workspace_handoff.action_id == "create_circuit_from_template"
+    assert vm.workspace_handoff.reason == "Stay in the visual editor and start from the designer entry surface."
+
+
+def test_visual_editor_workspace_handoff_routes_blocked_selection_to_node_configuration() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_blocking_validation())
+
+    assert vm.workspace_handoff.destination_workspace == "node_configuration"
+    assert vm.workspace_handoff.destination_panel == "inspector"
+    assert vm.workspace_handoff.target_ref == "node:n2"
+    assert vm.workspace_handoff.action_id == "open_node_configuration"
+
+
+def test_visual_editor_workspace_handoff_routes_previewing_to_diff_inside_editor() -> None:
+    overlay = GraphPreviewOverlay(
+        overlay_id="preview-3",
+        summary="preview changes",
+        added_node_ids=["n3"],
+        updated_node_ids=["n2"],
+        removed_edge_ids=[],
+    )
+
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+
+    assert vm.workspace_handoff.destination_workspace == "visual_editor"
+    assert vm.workspace_handoff.destination_panel == "diff"
+    assert vm.workspace_handoff.action_id == "open_diff"
+
+
+def test_visual_editor_workspace_handoff_routes_run_focus_to_runtime_monitoring() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run_with_focus())
+
+    assert vm.workspace_handoff.destination_workspace == "runtime_monitoring"
+    assert vm.workspace_handoff.destination_panel == "execution"
+    assert vm.workspace_handoff.target_ref == "node:n2"
+    assert vm.workspace_handoff.action_id == "open_runtime_monitoring"

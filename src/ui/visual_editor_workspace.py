@@ -86,6 +86,16 @@ class EditorActionShortcutView:
 
 
 @dataclass(frozen=True)
+class EditorWorkspaceHandoffView:
+    destination_workspace: str = "visual_editor"
+    destination_panel: str | None = None
+    target_ref: str | None = None
+    action_id: str | None = None
+    action_label: str | None = None
+    reason: str | None = None
+
+
+@dataclass(frozen=True)
 class VisualEditorWorkspaceViewModel:
     workspace_status: str = "ready"
     workspace_status_label: str | None = None
@@ -101,6 +111,7 @@ class VisualEditorWorkspaceViewModel:
     readiness: EditorReadinessView = field(default_factory=EditorReadinessView)
     focus_hint: EditorFocusHintView = field(default_factory=EditorFocusHintView)
     selection_summary: EditorSelectionSummaryView = field(default_factory=EditorSelectionSummaryView)
+    workspace_handoff: EditorWorkspaceHandoffView = field(default_factory=EditorWorkspaceHandoffView)
     local_actions: list[BuilderActionView] = field(default_factory=list)
     action_shortcuts: list[EditorActionShortcutView] = field(default_factory=list)
     can_edit_graph: bool = False
@@ -710,6 +721,81 @@ def _editor_action_shortcuts(
         )
     return out
 
+
+def _editor_workspace_handoff(
+    *,
+    workspace_status: str,
+    selection_summary: EditorSelectionSummaryView,
+    local_actions: list[BuilderActionView],
+    app_language: str,
+) -> EditorWorkspaceHandoffView:
+    action_map = {action.action_id: action for action in local_actions}
+
+    def handoff(action_id: str | None, *, destination_workspace: str, destination_panel: str | None, reason_key: str, fallback_reason: str) -> EditorWorkspaceHandoffView:
+        action = action_map.get(action_id) if action_id is not None else None
+        return EditorWorkspaceHandoffView(
+            destination_workspace=destination_workspace,
+            destination_panel=destination_panel,
+            target_ref=selection_summary.target_ref,
+            action_id=action_id,
+            action_label=_action_label(action, app_language=app_language),
+            reason=ui_text(reason_key, app_language=app_language, fallback_text=fallback_reason),
+        )
+
+    if workspace_status == "empty":
+        return handoff(
+            "create_circuit_from_template",
+            destination_workspace="visual_editor",
+            destination_panel="designer",
+            reason_key="workspace.visual_editor.handoff.empty",
+            fallback_reason="Stay in the visual editor and start from the designer entry surface.",
+        )
+
+    if workspace_status == "previewing":
+        return handoff(
+            "open_diff",
+            destination_workspace="visual_editor",
+            destination_panel="diff",
+            reason_key="workspace.visual_editor.handoff.previewing",
+            fallback_reason="Open diff inside the visual editor to review the proposed graph changes.",
+        )
+
+    if selection_summary.selection_mode in {"node", "edge"} or workspace_status == "blocked":
+        return handoff(
+            "open_node_configuration",
+            destination_workspace="node_configuration",
+            destination_panel="inspector",
+            reason_key="workspace.visual_editor.handoff.configuration",
+            fallback_reason="Move to node configuration to inspect or repair the current selection.",
+        )
+
+    if selection_summary.selection_mode == "run_focus":
+        return handoff(
+            "open_runtime_monitoring",
+            destination_workspace="runtime_monitoring",
+            destination_panel="execution",
+            reason_key="workspace.visual_editor.handoff.run_focus",
+            fallback_reason="Move to runtime monitoring to inspect the active run focus.",
+        )
+
+    if workspace_status == "reviewing":
+        return handoff(
+            "open_diff",
+            destination_workspace="visual_editor",
+            destination_panel="diff",
+            reason_key="workspace.visual_editor.handoff.reviewing",
+            fallback_reason="Open diff to compare the reviewed graph with its surrounding context.",
+        )
+
+    return handoff(
+        "open_node_configuration",
+        destination_workspace="node_configuration",
+        destination_panel="inspector",
+        reason_key="workspace.visual_editor.handoff.default",
+        fallback_reason="Open node configuration when you want to inspect the current graph selection in more detail.",
+    )
+
+
 def read_visual_editor_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -862,6 +948,12 @@ def read_visual_editor_workspace_view_model(
         local_actions=local_actions,
         app_language=app_language,
     )
+    workspace_handoff = _editor_workspace_handoff(
+        workspace_status=workspace_status,
+        selection_summary=selection_summary,
+        local_actions=local_actions,
+        app_language=app_language,
+    )
 
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -878,6 +970,7 @@ def read_visual_editor_workspace_view_model(
         readiness=readiness,
         focus_hint=focus_hint,
         selection_summary=selection_summary,
+        workspace_handoff=workspace_handoff,
         local_actions=local_actions,
         action_shortcuts=action_shortcuts,
         can_edit_graph=storage_role == "working_save",
@@ -894,6 +987,7 @@ __all__ = [
     "EditorFocusHintView",
     "EditorSelectionSummaryView",
     "EditorActionShortcutView",
+    "EditorWorkspaceHandoffView",
     "VisualEditorWorkspaceViewModel",
     "read_visual_editor_workspace_view_model",
 ]
