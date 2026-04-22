@@ -1778,6 +1778,314 @@ def _share_history_section(
     )
 
 
+
+
+def _server_product_stage(*, stage_id: str, stage_label: str, stage_state: str, blocker_count: int, pending_count: int, summary: str | None, recommended_action_id: str | None, recommended_action_label: str | None, recommended_action_target: str | None, app_language: str) -> dict[str, Any]:
+    return {
+        "stage_id": stage_id,
+        "stage_label": stage_label,
+        "stage_state": stage_state,
+        "stage_state_label": ui_text(
+            f"shell.product_readiness.stage_state.{stage_state}",
+            app_language=app_language,
+            fallback_text=stage_state.replace("_", " "),
+        ),
+        "blocker_count": blocker_count,
+        "pending_count": pending_count,
+        "summary": summary,
+        "recommended_action_id": recommended_action_id,
+        "recommended_action_label": recommended_action_label,
+        "recommended_action_target": recommended_action_target,
+    }
+
+
+def _server_product_readiness_review(
+    shell_map: Mapping[str, Any],
+    *,
+    onboarding_state: Mapping[str, Any] | None,
+    latest_run_row: Mapping[str, Any] | None,
+    latest_run_status_preview: Mapping[str, Any] | None,
+    latest_run_result_preview: Mapping[str, Any] | None,
+    provider_binding_rows: Sequence[Mapping[str, Any]],
+    managed_secret_rows: Sequence[Mapping[str, Any]],
+    feedback_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
+    routes: Mapping[str, Any],
+    app_language: str,
+) -> dict[str, Any]:
+    product_readiness = shell_map.get("product_readiness") or {}
+    local_stages = list(product_readiness.get("stages") or [])
+    local_setup_state = str((local_stages[0].get("stage_state") if len(local_stages) > 0 and isinstance(local_stages[0], Mapping) else "") or "").strip()
+    local_run_state = str((local_stages[1].get("stage_state") if len(local_stages) > 1 and isinstance(local_stages[1], Mapping) else "") or "").strip()
+
+    onboarding_step = _normalized_onboarding_current_step(onboarding_state)
+    first_success = bool((onboarding_state or {}).get("first_success_achieved")) or str((latest_run_result_preview or {}).get("result_state") or "").strip() in {"ready_success", "ready_partial"}
+    has_server_provider = any(
+        str(row.get("workspace_id") or "").strip() == workspace_id and bool(row.get("enabled", True))
+        for row in provider_binding_rows
+    ) or any(str(row.get("workspace_id") or "").strip() == workspace_id for row in managed_secret_rows)
+    has_history = latest_run_row is not None
+    has_feedback_route = bool(routes.get("workspace_feedback") and routes.get("workspace_feedback_page"))
+    has_library_route = bool(routes.get("circuit_library_page") or routes.get("workspace_circuit_library_page"))
+    has_result_history_route = bool(routes.get("workspace_result_history_page"))
+    current_status = str((latest_run_status_preview or {}).get("execution_state") or (latest_run_row or {}).get("status") or "").strip()
+    run_active = current_status in {"queued", "running", "paused", "claimed", "pending", "in_progress"}
+    result_ready = str((latest_run_result_preview or {}).get("result_state") or "").strip() in {"ready_success", "ready_partial"}
+    validation_status = str(((shell_map.get("validation") or {}).get("overall_status") or "")).strip()
+
+    if first_success:
+        setup_state = "complete"
+        setup_blockers = 0
+        setup_pending = 0
+        setup_summary = ui_text(
+            "shell.product_readiness.summary.entry_complete",
+            app_language=app_language,
+            fallback_text="The beginner entry path is already crossed. Reuse the existing workflow surfaces instead of reopening first-step setup.",
+        )
+        setup_action_id = None
+        setup_action_label = None
+        setup_action_target = None
+    elif local_setup_state == "goal_entry_needed" or onboarding_step == "enter_goal" or str((((shell_map.get("designer") or {}).get("request_state") or {}).get("request_status") or "")).strip() == "empty":
+        setup_state = "goal_entry_needed"
+        setup_blockers = 0
+        setup_pending = 1
+        setup_summary = ui_text(
+            "shell.product_readiness.summary.goal_entry_needed",
+            app_language=app_language,
+            fallback_text="Start from a goal, starter template, file, or web address so the first workflow shape exists.",
+        )
+        setup_action_id = "open_designer"
+        setup_action_label = ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer")
+        setup_action_target = "designer"
+    elif not has_server_provider:
+        setup_state = "provider_setup_needed"
+        setup_blockers = 1
+        setup_pending = 0
+        setup_summary = ui_text(
+            "shell.product_readiness.summary.provider_setup_needed",
+            app_language=app_language,
+            fallback_text="Connect an AI model before the first workflow can run successfully.",
+        )
+        setup_action_id = "open_provider_bindings"
+        setup_action_label = ui_text("server.shell.open_provider_bindings", app_language=app_language, fallback_text="Open provider bindings")
+        setup_action_target = str(routes.get("workspace_provider_bindings") or "") or None
+    else:
+        setup_state = "entry_ready" if local_setup_state in {"", "provider_setup_needed", "entry_ready", "ready"} else local_setup_state
+        setup_blockers = 0
+        setup_pending = 0 if setup_state == "complete" else 1
+        setup_summary = ui_text(
+            "shell.product_readiness.summary.entry_ready",
+            app_language=app_language,
+            fallback_text="Starter entry surfaces are available. You can continue from a template, file, URL, or direct goal entry.",
+        )
+        setup_action_id = "open_starter_templates"
+        setup_action_label = ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates")
+        setup_action_target = str(routes.get("starter_template_catalog_page") or routes.get("starter_template_catalog") or "") or None
+
+    setup_stage = _server_product_stage(
+        stage_id="first_success_setup",
+        stage_label=ui_text("shell.product_readiness.stage.first_success_setup", app_language=app_language, fallback_text="First success setup"),
+        stage_state=setup_state,
+        blocker_count=setup_blockers,
+        pending_count=setup_pending,
+        summary=setup_summary,
+        recommended_action_id=setup_action_id,
+        recommended_action_label=setup_action_label,
+        recommended_action_target=setup_action_target,
+        app_language=app_language,
+    )
+
+    if result_ready:
+        run_state = "complete"
+        run_blockers = 0
+        run_pending = 0
+        run_summary = ui_text(
+            "shell.product_readiness.summary.result_ready",
+            app_language=app_language,
+            fallback_text="A readable result is already available for the first-success path.",
+        )
+        run_action_id = "open_result_history"
+        run_action_label = ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page")
+        run_action_target = str(routes.get("workspace_result_history_page") or routes.get("latest_run_result") or "") or None
+    elif run_active:
+        run_state = "run_in_progress"
+        run_blockers = 1
+        run_pending = 0
+        run_summary = ui_text(
+            "shell.product_readiness.summary.run_in_progress",
+            app_language=app_language,
+            fallback_text="A run is still active. Keep monitoring it before treating the first-success path as settled.",
+        )
+        run_action_id = "open_runtime_status"
+        run_action_label = ui_text("server.shell.open_run_status", app_language=app_language, fallback_text="Open run status")
+        run_action_target = str(routes.get("latest_run_status") or "") or None
+    elif validation_status == "blocked" or local_run_state == "fix_before_run" or onboarding_step in {"review_preview", "approve"}:
+        run_state = "fix_before_run"
+        run_blockers = 1
+        run_pending = 0
+        run_summary = ui_text(
+            "shell.product_readiness.summary.fix_before_run",
+            app_language=app_language,
+            fallback_text="Fix the blocking issue before the first run can continue.",
+        )
+        run_action_id = "open_validation_detail"
+        run_action_label = ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail")
+        run_action_target = "validation.detail"
+    elif has_server_provider and bool((shell_map.get("action_availability") or {}).get("launch", {}).get("allowed")):
+        run_state = "ready_to_run"
+        run_blockers = 0
+        run_pending = 1
+        run_summary = ui_text(
+            "shell.product_readiness.summary.ready_to_run",
+            app_language=app_language,
+            fallback_text="The workflow is ready enough to run. Review the expected usage, then launch it and read the result.",
+        )
+        run_action_id = "launch_run"
+        run_action_label = ui_text("server.shell.launch_run", app_language=app_language, fallback_text="Launch run")
+        run_action_target = str(routes.get("workspace_shell_launch") or routes.get("launch_run") or "") or None
+    else:
+        run_state = local_run_state or "inactive"
+        run_blockers = 0
+        run_pending = 1 if not first_success else 0
+        run_summary = ui_text(
+            "shell.product_readiness.summary.run_waiting",
+            app_language=app_language,
+            fallback_text="The run path is not active yet. Keep moving through review and approval until the run action becomes available.",
+        )
+        run_action_id = None
+        run_action_label = None
+        run_action_target = None
+
+    run_stage = _server_product_stage(
+        stage_id="first_success_run",
+        stage_label=ui_text("shell.product_readiness.stage.first_success_run", app_language=app_language, fallback_text="First success run"),
+        stage_state=run_state,
+        blocker_count=run_blockers,
+        pending_count=run_pending,
+        summary=run_summary,
+        recommended_action_id=run_action_id,
+        recommended_action_label=run_action_label,
+        recommended_action_target=run_action_target,
+        app_language=app_language,
+    )
+
+    if not first_success and not has_history:
+        return_state = "inactive"
+        return_blockers = 0
+        return_pending = 0
+        return_summary = ui_text(
+            "shell.product_readiness.summary.return_use_inactive",
+            app_language=app_language,
+            fallback_text="Return-use surfaces unlock after the first successful run and result reading path are established.",
+        )
+        return_action_id = None
+        return_action_label = None
+        return_action_target = None
+    elif not has_history or not has_result_history_route:
+        return_state = "history_needed"
+        return_blockers = 1
+        return_pending = 0
+        return_summary = ui_text(
+            "shell.product_readiness.summary.history_needed",
+            app_language=app_language,
+            fallback_text="The return-use path still needs readable result history so people can reopen what happened last time without entering deep trace tooling.",
+        )
+        return_action_id = "open_result_history"
+        return_action_label = ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page")
+        return_action_target = str(routes.get("workspace_result_history_page") or "") or None
+    elif has_library_route and has_feedback_route:
+        return_state = "complete"
+        return_blockers = 0
+        return_pending = 0
+        return_summary = ui_text(
+            "shell.product_readiness.summary.return_use_ready",
+            app_language=app_language,
+            fallback_text="Library, recent results, and feedback routes are all available for return visits.",
+        )
+        return_action_id = "open_circuit_library"
+        return_action_label = ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library")
+        return_action_target = str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or "") or None
+    else:
+        return_state = "return_use_ready"
+        return_blockers = 0
+        return_pending = 1
+        return_summary = ui_text(
+            "shell.product_readiness.summary.return_use_ready",
+            app_language=app_language,
+            fallback_text="Library, recent results, and feedback routes are all available for return visits.",
+        )
+        return_action_id = "open_feedback"
+        return_action_label = ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page")
+        return_action_target = str(routes.get("workspace_feedback_page") or routes.get("workspace_feedback") or "") or None
+
+    return_stage = _server_product_stage(
+        stage_id="return_use",
+        stage_label=ui_text("shell.product_readiness.stage.return_use", app_language=app_language, fallback_text="Return use"),
+        stage_state=return_state,
+        blocker_count=return_blockers,
+        pending_count=return_pending,
+        summary=return_summary,
+        recommended_action_id=return_action_id,
+        recommended_action_label=return_action_label,
+        recommended_action_target=return_action_target,
+        app_language=app_language,
+    )
+
+    stages = [setup_stage, run_stage, return_stage]
+    if (setup_stage["blocker_count"] or setup_stage["stage_state"] in {"goal_entry_needed", "provider_setup_needed"}) and not has_history:
+        review_state = "hold_first_success_setup"
+        bottleneck_stage = setup_stage
+        summary = ui_text(
+            "shell.product_readiness.summary.hold_first_success_setup",
+            app_language=app_language,
+            fallback_text="The next real product bottleneck is still inside the first-success setup path. Finish goal entry or provider setup before widening scope.",
+        )
+    elif run_stage["blocker_count"] or run_stage["stage_state"] in {"fix_before_run", "ready_to_run", "run_in_progress", "waiting"}:
+        review_state = "hold_first_success_run"
+        bottleneck_stage = run_stage
+        summary = ui_text(
+            "shell.product_readiness.summary.hold_first_success_run",
+            app_language=app_language,
+            fallback_text="The next real product bottleneck is still inside the first-success run path. Finish review, run, and readable result follow-through before widening scope.",
+        )
+    elif return_stage["blocker_count"]:
+        review_state = "hold_return_use"
+        bottleneck_stage = return_stage
+        summary = ui_text(
+            "shell.product_readiness.summary.hold_return_use",
+            app_language=app_language,
+            fallback_text="The first-success path is healthy enough, but return-use is still the next product bottleneck. Strengthen library/result-history/feedback continuity before widening scope.",
+        )
+    else:
+        review_state = "product_surface_stable"
+        bottleneck_stage = return_stage
+        summary = ui_text(
+            "shell.product_readiness.summary.product_surface_stable",
+            app_language=app_language,
+            fallback_text="The current beginner-first and return-use product surfaces are provisionally stable. Choose the next true project bottleneck instead of polishing these paths further.",
+        )
+
+    return {
+        "authority": "server",
+        "review_state": review_state,
+        "review_label": ui_text(
+            f"shell.product_readiness.state.{review_state}",
+            app_language=app_language,
+            fallback_text=review_state.replace("_", " "),
+        ),
+        "next_bottleneck_stage": None if review_state == "product_surface_stable" else bottleneck_stage["stage_id"],
+        "next_bottleneck_label": None if review_state == "product_surface_stable" else bottleneck_stage["stage_label"],
+        "recommended_action_id": None if review_state == "product_surface_stable" else bottleneck_stage["recommended_action_id"],
+        "recommended_action_label": None if review_state == "product_surface_stable" else bottleneck_stage["recommended_action_label"],
+        "recommended_action_target": None if review_state == "product_surface_stable" else bottleneck_stage["recommended_action_target"],
+        "uses_onboarding_state": onboarding_state is not None,
+        "uses_provider_bindings": has_server_provider,
+        "uses_run_history": has_history,
+        "stages": stages,
+        "summary": summary,
+    }
+
+
 def build_workspace_shell_runtime_payload(
     *,
     workspace_row: Mapping[str, Any] | None,
@@ -1836,19 +2144,7 @@ def build_workspace_shell_runtime_payload(
         onboarding_state=onboarding_state,
     )
 
-    payload = {
-        "workspace_id": workspace_id,
-        "workspace_title": workspace_title,
-        "app_language": app_language,
-        "storage_role": _storage_role(model),
-        "action_availability": _workspace_shell_action_availability(model),
-        "click_test_ready": launch_request_template is not None,
-        "working_save_id": getattr(getattr(model, "meta", None), "working_save_id", None),
-        "commit_id": getattr(getattr(model, "meta", None), "commit_id", None),
-        "shell": asdict(shell_vm),
-        "template_gallery": asdict(template_gallery) if template_gallery is not None else None,
-        "launch_request_template": launch_request_template,
-        "routes": {
+    routes = {
             "workspace_shell": f"/api/workspaces/{workspace_id}/shell",
             "workspace_page": f"/app/workspaces/{workspace_id}",
             "launch_run": "/api/runs",
@@ -1883,7 +2179,35 @@ def build_workspace_shell_runtime_payload(
             "workspace_circuit_library_page": f"/app/workspaces/{workspace_id}/library?app_language={app_language}",
             "starter_template_catalog": "/api/templates/starter-circuits",
             "starter_template_catalog_page": f"/app/workspaces/{workspace_id}/starter-templates?app_language={app_language}",
-        },
+        }
+
+    server_product_readiness_review = _server_product_readiness_review(
+        asdict(shell_vm),
+        onboarding_state=onboarding_state,
+        latest_run_row=latest_run_row,
+        latest_run_status_preview=latest_run_status_preview,
+        latest_run_result_preview=latest_run_result_preview,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        feedback_rows=feedback_rows,
+        workspace_id=workspace_id,
+        routes=routes,
+        app_language=app_language,
+    )
+
+    payload = {
+        "workspace_id": workspace_id,
+        "workspace_title": workspace_title,
+        "app_language": app_language,
+        "storage_role": _storage_role(model),
+        "action_availability": _workspace_shell_action_availability(model),
+        "click_test_ready": launch_request_template is not None,
+        "working_save_id": getattr(getattr(model, "meta", None), "working_save_id", None),
+        "commit_id": getattr(getattr(model, "meta", None), "commit_id", None),
+        "shell": asdict(shell_vm),
+        "template_gallery": asdict(template_gallery) if template_gallery is not None else None,
+        "launch_request_template": launch_request_template,
+        "routes": routes,
         "latest_run_status_preview": latest_run_status_preview,
         "latest_run_result_preview": latest_run_result_preview,
         "latest_run_artifacts_preview": latest_run_artifacts_preview,
@@ -1918,6 +2242,7 @@ def build_workspace_shell_runtime_payload(
             navigation=navigation,
             onboarding_state=onboarding_state,
         ),
+        "server_product_readiness_review": server_product_readiness_review,
         "continuity": {
             "onboarding_state": onboarding_state,
             "load_status": getattr(loaded, "load_status", "generated_default") if loaded is not None else "generated_default",

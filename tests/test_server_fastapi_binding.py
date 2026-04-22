@@ -935,6 +935,10 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['step_state_banner']['action_target'] == 'runtime.result'
     assert payload['step_state_banner']['action_kind'] == 'focus_section'
     assert 'Result is ready.' in payload['step_state_banner']['summary']
+    assert payload['server_product_readiness_review']['authority'] == 'server'
+    assert payload['server_product_readiness_review']['review_state'] == 'product_surface_stable'
+    assert payload['server_product_readiness_review']['next_bottleneck_stage'] is None
+    assert payload['server_product_readiness_review']['stages'][2]['stage_state'] == 'complete'
     assert payload['client_continuity']['enabled'] is True
     assert payload['client_continuity']['storage_key'] == 'nexa.runtime_shell.ws-001'
     assert payload['client_continuity']['version'] == 'phase6-batch15'

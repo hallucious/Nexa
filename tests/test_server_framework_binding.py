@@ -1621,6 +1621,10 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['step_state_banner']['action_target'] == 'runtime.result'
     assert parsed['step_state_banner']['action_kind'] == 'focus_section'
     assert 'Result is ready.' in parsed['step_state_banner']['summary']
+    assert parsed['server_product_readiness_review']['authority'] == 'server'
+    assert parsed['server_product_readiness_review']['review_state'] == 'product_surface_stable'
+    assert parsed['server_product_readiness_review']['next_bottleneck_stage'] is None
+    assert parsed['server_product_readiness_review']['stages'][2]['stage_state'] == 'complete'
     assert parsed['client_continuity']['enabled'] is True
     assert parsed['client_continuity']['storage_key'] == 'nexa.runtime_shell.ws-001'
     assert parsed['client_continuity']['version'] == 'phase6-batch15'
@@ -1659,6 +1663,10 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['step_state_banner']['action_target'] == 'designer'
     assert parsed['step_state_banner']['action_kind'] == 'focus_section'
     assert 'prepare your first workflow' in parsed['step_state_banner']['summary']
+    assert parsed['server_product_readiness_review']['review_state'] == 'hold_first_success_setup'
+    assert parsed['server_product_readiness_review']['next_bottleneck_stage'] == 'first_success_setup'
+    assert parsed['server_product_readiness_review']['stages'][0]['stage_state'] == 'goal_entry_needed'
+    assert parsed['server_product_readiness_review']['recommended_action_target'] == 'designer'
 
 
 def test_framework_binding_workspace_shell_uses_server_backed_onboarding_step_for_navigation() -> None:
