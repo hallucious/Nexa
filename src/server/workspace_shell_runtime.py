@@ -2724,6 +2724,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     recent_activity_section_json = json.dumps(payload.get("recent_activity_section"), ensure_ascii=False)
     history_summary_section_json = json.dumps(payload.get("history_summary_section"), ensure_ascii=False)
     provider_readiness_section_json = json.dumps(payload.get("provider_readiness_section"), ensure_ascii=False)
+    first_success_setup_section_json = json.dumps(payload.get("first_success_setup_section"), ensure_ascii=False)
+    first_success_run_section_json = json.dumps(payload.get("first_success_run_section"), ensure_ascii=False)
     return_use_continuity_section_json = json.dumps(payload.get("return_use_continuity_section"), ensure_ascii=False)
     product_surface_review_section_json = json.dumps(payload.get("product_surface_review_section"), ensure_ascii=False)
     feedback_continuity_section_json = json.dumps(payload.get("feedback_continuity_section"), ensure_ascii=False)
@@ -2993,6 +2995,20 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <pre id="provider-readiness-detail">{escape(ui_text("server.shell.provider_readiness_detail", app_language=app_language, fallback_text="Provider readiness detail will appear here."))}</pre>
         <div id="provider-readiness-controls" class="actions"></div>
       </section>
+      <section id="first-success-setup-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="first-success-setup-title">
+        <h2 id="first-success-setup-title">{escape(ui_text("server.shell.first_success_setup", app_language=app_language, fallback_text="First-success setup"))}</h2>
+        <pre id="first-success-setup-summary">{escape(ui_text("server.shell.first_success_setup_pending", app_language=app_language, fallback_text="First-success setup guidance will appear here once the workspace shell is available."))}</pre>
+        <pre id="first-success-setup-detail">{escape(ui_text("server.shell.first_success_setup_pending", app_language=app_language, fallback_text="First-success setup guidance will appear here once the workspace shell is available."))}</pre>
+        <div id="first-success-setup-controls" class="actions"></div>
+      </section>
+      <section id="first-success-run-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="first-success-run-title">
+        <h2 id="first-success-run-title">{escape(ui_text("server.shell.first_success_run", app_language=app_language, fallback_text="First-success run"))}</h2>
+        <pre id="first-success-run-summary">{escape(ui_text("server.shell.first_success_run_pending", app_language=app_language, fallback_text="First-success run guidance will appear here once the workspace shell is available."))}</pre>
+        <pre id="first-success-run-detail">{escape(ui_text("server.shell.first_success_run_pending", app_language=app_language, fallback_text="First-success run guidance will appear here once the workspace shell is available."))}</pre>
+        <div id="first-success-run-controls" class="actions"></div>
+      </section>
+    </div>
+    <div class="row">
       <section id="return-use-continuity-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="return-use-continuity-title">
         <h2 id="return-use-continuity-title">{escape(ui_text("server.shell.return_use_continuity", app_language=app_language, fallback_text="Return-use continuity"))}</h2>
         <pre id="return-use-continuity-summary">{escape(ui_text("server.shell.return_use_continuity_summary", app_language=app_language, fallback_text="Return-use continuity will appear here."))}</pre>
@@ -3039,6 +3055,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRecentActivitySection = {recent_activity_section_json};
     const initialHistorySummarySection = {history_summary_section_json};
     const initialProviderReadinessSection = {provider_readiness_section_json};
+    const initialFirstSuccessSetupSection = {first_success_setup_section_json};
+    const initialFirstSuccessRunSection = {first_success_run_section_json};
     const initialReturnUseContinuitySection = {return_use_continuity_section_json};
     const initialProductSurfaceReviewSection = {product_surface_review_section_json};
     const initialFeedbackContinuitySection = {feedback_continuity_section_json};
@@ -3078,6 +3096,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const providerReadinessSummaryEl = document.getElementById('provider-readiness-summary');
     const providerReadinessDetailEl = document.getElementById('provider-readiness-detail');
     const providerReadinessControlsEl = document.getElementById('provider-readiness-controls');
+    const firstSuccessSetupSummaryEl = document.getElementById('first-success-setup-summary');
+    const firstSuccessSetupDetailEl = document.getElementById('first-success-setup-detail');
+    const firstSuccessSetupControlsEl = document.getElementById('first-success-setup-controls');
+    const firstSuccessRunSummaryEl = document.getElementById('first-success-run-summary');
+    const firstSuccessRunDetailEl = document.getElementById('first-success-run-detail');
+    const firstSuccessRunControlsEl = document.getElementById('first-success-run-controls');
     const returnUseContinuitySummaryEl = document.getElementById('return-use-continuity-summary');
     const returnUseContinuityDetailEl = document.getElementById('return-use-continuity-detail');
     const returnUseContinuityControlsEl = document.getElementById('return-use-continuity-controls');
@@ -3119,6 +3143,8 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentRecentActivitySection = initialRecentActivitySection || null;
     let currentHistorySummarySection = initialHistorySummarySection || null;
     let currentProviderReadinessSection = initialProviderReadinessSection || null;
+    let currentFirstSuccessSetupSection = initialFirstSuccessSetupSection || null;
+    let currentFirstSuccessRunSection = initialFirstSuccessRunSection || null;
     let currentReturnUseContinuitySection = initialReturnUseContinuitySection || null;
     let currentProductSurfaceReviewSection = initialProductSurfaceReviewSection || null;
     let currentFeedbackContinuitySection = initialFeedbackContinuitySection || null;
@@ -3399,8 +3425,17 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     function writeProviderReadinessSection(section) {{
       currentProviderReadinessSection = writeShellSection(section, currentProviderReadinessSection, providerReadinessSummaryEl, providerReadinessDetailEl, providerReadinessControlsEl, 'Provider readiness will appear here.', 'Provider readiness detail will appear here.');
     }}
+    function writeFirstSuccessSetupSection(section) {{
+      currentFirstSuccessSetupSection = writeShellSection(section, currentFirstSuccessSetupSection, firstSuccessSetupSummaryEl, firstSuccessSetupDetailEl, firstSuccessSetupControlsEl, 'First-success setup guidance will appear here once the workspace shell is available.', 'First-success setup guidance will appear here once the workspace shell is available.');
+    }}
+    function writeFirstSuccessRunSection(section) {{
+      currentFirstSuccessRunSection = writeShellSection(section, currentFirstSuccessRunSection, firstSuccessRunSummaryEl, firstSuccessRunDetailEl, firstSuccessRunControlsEl, 'First-success run guidance will appear here once the workspace shell is available.', 'First-success run guidance will appear here once the workspace shell is available.');
+    }}
     function writeReturnUseContinuitySection(section) {{
       currentReturnUseContinuitySection = writeShellSection(section, currentReturnUseContinuitySection, returnUseContinuitySummaryEl, returnUseContinuityDetailEl, returnUseContinuityControlsEl, 'Return-use continuity will appear here.', 'Return-use continuity detail will appear here.');
+    }}
+    function writeProductSurfaceReviewSection(section) {{
+      currentProductSurfaceReviewSection = writeShellSection(section, currentProductSurfaceReviewSection, productSurfaceReviewSummaryEl, productSurfaceReviewDetailEl, productSurfaceReviewControlsEl, 'Product surface review will appear here.', 'Product surface review detail will appear here.');
     }}
     function writeFeedbackContinuitySection(section) {{
       currentFeedbackContinuitySection = writeShellSection(section, currentFeedbackContinuitySection, feedbackContinuitySummaryEl, feedbackContinuityDetailEl, feedbackContinuityControlsEl, 'Feedback continuity will appear here.', 'Feedback continuity detail will appear here.');
@@ -3820,7 +3855,11 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeRecentActivitySection(initialRecentActivitySection);
     writeHistorySummarySection(initialHistorySummarySection);
     writeProviderReadinessSection(initialProviderReadinessSection);
+    writeFirstSuccessSetupSection(initialFirstSuccessSetupSection);
+    writeFirstSuccessRunSection(initialFirstSuccessRunSection);
     writeReturnUseContinuitySection(initialReturnUseContinuitySection);
+    writeProductSurfaceReviewSection(initialProductSurfaceReviewSection);
+    writeFeedbackContinuitySection(initialFeedbackContinuitySection);
     writeDesignerSection(initialDesignerSection);
     writeValidationSection(initialValidationSection);
     writeStepStateBanner(initialStepStateBanner);
@@ -3853,8 +3892,20 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       if (body.provider_readiness_section) {{
         writeProviderReadinessSection(body.provider_readiness_section);
       }}
+      if (body.first_success_setup_section) {{
+        writeFirstSuccessSetupSection(body.first_success_setup_section);
+      }}
+      if (body.first_success_run_section) {{
+        writeFirstSuccessRunSection(body.first_success_run_section);
+      }}
       if (body.return_use_continuity_section) {{
         writeReturnUseContinuitySection(body.return_use_continuity_section);
+      }}
+      if (body.product_surface_review_section) {{
+        writeProductSurfaceReviewSection(body.product_surface_review_section);
+      }}
+      if (body.feedback_continuity_section) {{
+        writeFeedbackContinuitySection(body.feedback_continuity_section);
       }}
       if (body.designer_section) {{
         writeDesignerSection(body.designer_section);
