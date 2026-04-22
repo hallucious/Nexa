@@ -96,6 +96,20 @@ class EditorWorkspaceHandoffView:
 
 
 @dataclass(frozen=True)
+class EditorAttentionTargetView:
+    attention_kind: str = "general"
+    urgency: str = "low"
+    target_ref: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    destination_workspace: str = "visual_editor"
+    destination_panel: str | None = None
+    action_id: str | None = None
+    action_label: str | None = None
+    blocking: bool = False
+
+
+@dataclass(frozen=True)
 class VisualEditorWorkspaceViewModel:
     workspace_status: str = "ready"
     workspace_status_label: str | None = None
@@ -112,6 +126,7 @@ class VisualEditorWorkspaceViewModel:
     focus_hint: EditorFocusHintView = field(default_factory=EditorFocusHintView)
     selection_summary: EditorSelectionSummaryView = field(default_factory=EditorSelectionSummaryView)
     workspace_handoff: EditorWorkspaceHandoffView = field(default_factory=EditorWorkspaceHandoffView)
+    attention_targets: list[EditorAttentionTargetView] = field(default_factory=list)
     local_actions: list[BuilderActionView] = field(default_factory=list)
     action_shortcuts: list[EditorActionShortcutView] = field(default_factory=list)
     can_edit_graph: bool = False
@@ -796,6 +811,109 @@ def _editor_workspace_handoff(
     )
 
 
+def _editor_attention_targets(
+    *,
+    workspace_status: str,
+    selection_summary: EditorSelectionSummaryView,
+    workspace_handoff: EditorWorkspaceHandoffView,
+    comparison_state: EditorComparisonStateView,
+    local_actions: list[BuilderActionView],
+    app_language: str,
+) -> list[EditorAttentionTargetView]:
+    action_map = {action.action_id: action for action in local_actions}
+
+    def attention(
+        attention_kind: str,
+        *,
+        urgency: str,
+        title_key: str,
+        fallback_title: str,
+        summary_key: str,
+        fallback_summary: str,
+        action_id: str | None,
+        blocking: bool = False,
+        **params,
+    ) -> EditorAttentionTargetView:
+        action = action_map.get(action_id) if action_id is not None else None
+        return EditorAttentionTargetView(
+            attention_kind=attention_kind,
+            urgency=urgency,
+            target_ref=selection_summary.target_ref,
+            title=ui_text(title_key, app_language=app_language, fallback_text=fallback_title, **params),
+            summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary, **params),
+            destination_workspace=workspace_handoff.destination_workspace,
+            destination_panel=workspace_handoff.destination_panel,
+            action_id=action_id,
+            action_label=_action_label(action, app_language=app_language),
+            blocking=blocking,
+        )
+
+    if workspace_status == "empty":
+        return [attention(
+            "start", urgency="medium",
+            title_key="workspace.visual_editor.attention.start.title",
+            fallback_title="Start from the designer entry",
+            summary_key="workspace.visual_editor.attention.start.summary",
+            fallback_summary="Use the designer entry surface to create the first workflow shape.",
+            action_id="create_circuit_from_template",
+        )]
+    if workspace_status == "blocked":
+        return [attention(
+            "repair_selection", urgency="high",
+            title_key="workspace.visual_editor.attention.repair.title",
+            fallback_title="Repair the selected step first",
+            summary_key="workspace.visual_editor.attention.repair.summary",
+            fallback_summary="A blocking issue is attached to the current selection. Open configuration and fix it before continuing.",
+            action_id="open_node_configuration", blocking=True,
+        )]
+    if workspace_status == "previewing":
+        return [attention(
+            "preview_review", urgency="medium",
+            title_key="workspace.visual_editor.attention.preview.title",
+            fallback_title="Review the pending graph changes",
+            summary_key="workspace.visual_editor.attention.preview.summary",
+            fallback_summary="Open diff to inspect {change_count} pending graph changes before committing.",
+            action_id="open_diff", change_count=comparison_state.change_count,
+        )]
+    if selection_summary.selection_mode == "run_focus":
+        urgency = "high" if selection_summary.status in {"failed", "running", "blocked"} else "medium"
+        return [attention(
+            "runtime_investigation", urgency=urgency,
+            title_key="workspace.visual_editor.attention.runtime.title",
+            fallback_title="Inspect the run-linked focus",
+            summary_key="workspace.visual_editor.attention.runtime.summary",
+            fallback_summary="Recent execution evidence points to {label}. Open runtime monitoring to inspect it.",
+            action_id="open_runtime_monitoring",
+            label=selection_summary.label or selection_summary.target_ref or "this step",
+        )]
+    if workspace_status == "reviewing":
+        return [attention(
+            "review_comparison", urgency="medium",
+            title_key="workspace.visual_editor.attention.review.title",
+            fallback_title="Compare the reviewed graph",
+            summary_key="workspace.visual_editor.attention.review.summary",
+            fallback_summary="Use diff to compare the current reviewed graph with its surrounding context.",
+            action_id="open_diff",
+        )]
+    if selection_summary.selection_mode in {"node", "edge"}:
+        return [attention(
+            "inspect_selection", urgency="medium",
+            title_key="workspace.visual_editor.attention.selection.title",
+            fallback_title="Inspect the current selection",
+            summary_key="workspace.visual_editor.attention.selection.summary",
+            fallback_summary="The current selection has the clearest next step. Open configuration to inspect it in detail.",
+            action_id="open_node_configuration",
+        )]
+    return [attention(
+        "graph_overview", urgency="low",
+        title_key="workspace.visual_editor.attention.overview.title",
+        fallback_title="Choose the next graph focus",
+        summary_key="workspace.visual_editor.attention.overview.summary",
+        fallback_summary="Select a step or open configuration to move from overview into concrete editing work.",
+        action_id="open_node_configuration",
+    )]
+
+
 def read_visual_editor_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -954,6 +1072,14 @@ def read_visual_editor_workspace_view_model(
         local_actions=local_actions,
         app_language=app_language,
     )
+    attention_targets = _editor_attention_targets(
+        workspace_status=workspace_status,
+        selection_summary=selection_summary,
+        workspace_handoff=workspace_handoff,
+        comparison_state=comparison_state,
+        local_actions=local_actions,
+        app_language=app_language,
+    )
 
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -971,6 +1097,7 @@ def read_visual_editor_workspace_view_model(
         focus_hint=focus_hint,
         selection_summary=selection_summary,
         workspace_handoff=workspace_handoff,
+        attention_targets=attention_targets,
         local_actions=local_actions,
         action_shortcuts=action_shortcuts,
         can_edit_graph=storage_role == "working_save",

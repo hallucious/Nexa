@@ -362,3 +362,60 @@ def test_visual_editor_workspace_handoff_routes_run_focus_to_runtime_monitoring(
     assert vm.workspace_handoff.destination_panel == "execution"
     assert vm.workspace_handoff.target_ref == "node:n2"
     assert vm.workspace_handoff.action_id == "open_runtime_monitoring"
+
+
+
+def test_visual_editor_workspace_attention_targets_prioritize_repair_when_blocked() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_blocking_validation())
+
+    assert vm.attention_targets[0].attention_kind == "repair_selection"
+    assert vm.attention_targets[0].urgency == "high"
+    assert vm.attention_targets[0].destination_workspace == "node_configuration"
+    assert vm.attention_targets[0].destination_panel == "inspector"
+    assert vm.attention_targets[0].action_id == "open_node_configuration"
+    assert vm.attention_targets[0].blocking is True
+
+
+def test_visual_editor_workspace_attention_targets_review_preview_changes() -> None:
+    overlay = GraphPreviewOverlay(
+        overlay_id="preview-4",
+        summary="preview more changes",
+        added_node_ids=["n3"],
+        updated_node_ids=["n2"],
+        removed_edge_ids=[],
+    )
+
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+
+    assert vm.attention_targets[0].attention_kind == "preview_review"
+    assert vm.attention_targets[0].urgency == "medium"
+    assert vm.attention_targets[0].destination_workspace == "visual_editor"
+    assert vm.attention_targets[0].destination_panel == "diff"
+    assert vm.attention_targets[0].summary == "커밋하기 전에 diff를 열어 대기 중인 그래프 변경 2개를 확인하세요."
+
+
+def test_visual_editor_workspace_attention_targets_raise_runtime_investigation_for_run_focus() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run_with_focus())
+
+    assert vm.attention_targets[0].attention_kind == "runtime_investigation"
+    assert vm.attention_targets[0].urgency == "high"
+    assert vm.attention_targets[0].destination_workspace == "runtime_monitoring"
+    assert vm.attention_targets[0].action_id == "open_runtime_monitoring"
+
+
+def test_visual_editor_workspace_attention_targets_keep_empty_state_in_designer_entry() -> None:
+    working = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "en-US"}),
+    )
+
+    vm = read_visual_editor_workspace_view_model(working)
+
+    assert vm.attention_targets[0].attention_kind == "start"
+    assert vm.attention_targets[0].destination_workspace == "visual_editor"
+    assert vm.attention_targets[0].destination_panel == "designer"
+    assert vm.attention_targets[0].action_id == "create_circuit_from_template"
