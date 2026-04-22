@@ -178,3 +178,76 @@ def test_visual_editor_workspace_exposes_suggested_actions_for_empty_state() -> 
         "open_provider_setup",
         "open_file_input",
     ]
+
+
+
+def _blocking_validation() -> ValidationReport:
+    return ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="ERR_NODE", category="structural", severity="high", blocking=True, location="node:n2", message="missing provider")],
+        blocking_count=1,
+        warning_count=0,
+        result="blocked",
+    )
+
+
+def test_visual_editor_workspace_exposes_local_actions_for_empty_state() -> None:
+    working = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "en-US"}),
+    )
+
+    vm = read_visual_editor_workspace_view_model(working)
+
+    assert vm.readiness.posture == "creation"
+    assert [action.action_id for action in vm.local_actions[:3]] == [
+        "create_circuit_from_template",
+        "open_provider_setup",
+        "open_file_input",
+    ]
+    assert vm.focus_hint.hint_kind == "empty_canvas"
+    assert vm.focus_hint.suggested_action_id == "create_circuit_from_template"
+
+
+def test_visual_editor_workspace_surfaces_selection_focused_editing_guidance() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation())
+
+    assert vm.workspace_status == "editing"
+    assert vm.readiness.posture == "active_editing"
+    assert vm.readiness.selected_object_count == 1
+    assert vm.focus_hint.hint_kind == "node_selection"
+    assert vm.focus_hint.target_ref == "node:n2"
+    assert vm.focus_hint.suggested_action_id == "open_node_configuration"
+    assert [action.action_id for action in vm.suggested_actions] == [
+        "open_node_configuration",
+        "run_current",
+        "review_draft",
+    ]
+
+
+def test_visual_editor_workspace_prioritizes_repair_actions_when_blocked() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_blocking_validation())
+
+    assert vm.workspace_status == "blocked"
+    assert vm.readiness.posture == "repair"
+    assert [action.action_id for action in vm.suggested_actions] == [
+        "open_node_configuration",
+        "request_revision",
+        "open_provider_setup",
+    ]
+    assert vm.suggested_actions[1].enabled is False
+
+
+def test_visual_editor_workspace_exposes_run_linked_review_posture_and_runtime_action() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run_with_focus())
+
+    assert vm.workspace_status == "reviewing"
+    assert vm.readiness.posture == "run_linked_review"
+    assert vm.focus_hint.hint_kind == "run_focus"
+    assert vm.focus_hint.target_ref == "node:n2"
+    assert vm.focus_hint.suggested_action_id == "open_runtime_monitoring"
+    assert any(action.action_id == "open_runtime_monitoring" and action.enabled for action in vm.local_actions)

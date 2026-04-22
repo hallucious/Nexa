@@ -435,7 +435,7 @@ Policy rules (default):
 
 ---
 
-## 6. Universal Artifact Diff Architecture (NEW)
+## 6. Universal Artifact Diff Architecture
 
 Nexa defines artifact comparison as a first-class architectural component.
 
