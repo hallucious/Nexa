@@ -1056,6 +1056,105 @@ def _first_success_run_section(
 
 
 
+def _return_use_continuity_section(
+    server_product_readiness_review: Mapping[str, Any] | None,
+    *,
+    recent_run_rows: Sequence[Mapping[str, Any]],
+    result_rows_by_run_id: Mapping[str, Mapping[str, Any]] | None,
+    feedback_rows: Sequence[Mapping[str, Any]],
+    onboarding_state: Mapping[str, Any] | None,
+    workspace_id: str,
+    routes: Mapping[str, Any],
+    app_language: str = "en",
+) -> dict[str, Any]:
+    result_rows_by_run_id = result_rows_by_run_id or {}
+    return_stage = {}
+    if isinstance(server_product_readiness_review, Mapping):
+        stages = server_product_readiness_review.get("stages") or ()
+        if len(stages) > 2 and isinstance(stages[2], Mapping):
+            return_stage = dict(stages[2])
+
+    return_state = str(return_stage.get("stage_state") or "inactive").strip() or "inactive"
+    return_summary = str(return_stage.get("summary") or "").strip()
+    recent_runs = list(_recent_run_rows_for_workspace(recent_run_rows, workspace_id, limit=5))
+    result_entries = [
+        {
+            "run_id": run_id,
+            "result_state": str((result_rows_by_run_id.get(run_id) or {}).get("result_state") or "missing").strip() or "missing",
+            "summary": str((result_rows_by_run_id.get(run_id) or {}).get("result_summary") or (result_rows_by_run_id.get(run_id) or {}).get("final_status") or "").strip() or None,
+        }
+        for run_id in [str(row.get("run_id") or "").strip() for row in recent_runs]
+        if run_id
+    ]
+    latest_result = result_entries[0] if result_entries else None
+    latest_feedback = (_feedback_continuity_entries(feedback_rows, workspace_id) or [None])[0]
+    onboarding_step = _normalized_onboarding_current_step(onboarding_state)
+    library_page = str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or "").strip() or None
+    result_history_page = str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or "").strip() or None
+    feedback_page = str(routes.get("workspace_feedback_page") or routes.get("workspace_feedback") or "").strip() or None
+    onboarding_route = str(routes.get("onboarding") or "").strip() or None
+
+    controls: list[dict[str, Any]] = []
+
+    def _append_control(control_id: str, label: str | None, action_target: str | None):
+        if not label or not action_target:
+            return
+        if any(item.get("action_target") == action_target for item in controls):
+            return
+        controls.append({
+            "control_id": control_id,
+            "label": label,
+            "action_kind": "open_route" if action_target.startswith("/") else "focus_section",
+            "action_target": action_target,
+        })
+
+    if return_state == "inactive":
+        _append_control("return-use-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), onboarding_route)
+        _append_control("return-use-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
+    elif return_state == "history_needed":
+        _append_control("return-use-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_page)
+        _append_control("return-use-open-library", ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"), library_page)
+    else:
+        _append_control("return-use-open-library", ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"), library_page)
+        _append_control("return-use-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_page)
+        _append_control("return-use-open-feedback", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_page)
+
+    lines = _summary_lines(
+        ui_text(
+            "server.shell.return_use_continuity_state_prefix",
+            app_language=app_language,
+            fallback_text="Return-use state: {state}",
+            state=ui_text(f"shell.product_readiness.stage_state.{return_state}", app_language=app_language, fallback_text=return_state.replace("_", " ")),
+        ),
+        return_summary or None,
+        ui_text("server.shell.return_use_recent_runs_prefix", app_language=app_language, fallback_text="Recent runs: {count}", count=str(len(recent_runs))),
+        ui_text("server.shell.return_use_recent_results_prefix", app_language=app_language, fallback_text="Recent results: {count}", count=str(len(result_entries))),
+        ui_text("server.shell.return_use_feedback_prefix", app_language=app_language, fallback_text="Feedback items: {count}", count=str(len(_feedback_continuity_entries(feedback_rows, workspace_id)))),
+    )
+    detail_items = _summary_lines(
+        ui_text("server.shell.return_use_onboarding_prefix", app_language=app_language, fallback_text="Onboarding step: {step}", step=onboarding_step) if onboarding_step else None,
+        ui_text("server.shell.return_use_latest_run_prefix", app_language=app_language, fallback_text="Latest run: {run_id}", run_id=str(recent_runs[0].get("run_id") or "").strip()) if recent_runs else None,
+        ui_text("server.shell.return_use_latest_result_prefix", app_language=app_language, fallback_text="Latest result: {state}", state=str(latest_result.get("result_state") or "unknown")) if latest_result else None,
+        ui_text("server.shell.return_use_latest_result_summary_prefix", app_language=app_language, fallback_text="Latest result summary: {summary}", summary=str(latest_result.get("summary") or "")) if latest_result and latest_result.get("summary") else None,
+        ui_text("server.shell.return_use_latest_feedback_prefix", app_language=app_language, fallback_text="Latest feedback: {category}", category=str(latest_feedback.get("category") or "feedback")) if latest_feedback else None,
+    )
+    section = build_shell_section(
+        headline=ui_text("server.shell.return_use_continuity", app_language=app_language, fallback_text="Return-use continuity"),
+        lines=lines,
+        detail_title=ui_text("server.shell.return_use_continuity_detail", app_language=app_language, fallback_text="Return-use continuity detail"),
+        detail_items=detail_items,
+        controls=controls,
+        summary_empty=ui_text("server.shell.return_use_continuity_pending", app_language=app_language, fallback_text="Return-use continuity guidance will appear here once first success is established."),
+        detail_empty=ui_text("server.shell.return_use_continuity_pending", app_language=app_language, fallback_text="Return-use continuity guidance will appear here once first success is established."),
+    )
+    section["return_use_state"] = return_state
+    section["recommended_action_target"] = return_stage.get("recommended_action_target")
+    section["recommended_action_label"] = return_stage.get("recommended_action_label")
+    section["blocker_count"] = int(return_stage.get("blocker_count") or 0)
+    section["pending_count"] = int(return_stage.get("pending_count") or 0)
+    return section
+
+
 def _feedback_continuity_entries(
     feedback_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
@@ -2435,6 +2534,7 @@ def build_workspace_shell_runtime_payload(
         "provider_readiness_section": _provider_readiness_section(provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
         "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, workspace_id=workspace_id, routes=routes, app_language=app_language),
+        "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "feedback_continuity_section": _feedback_continuity_section(feedback_rows, workspace_id, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
@@ -2497,6 +2597,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     recent_activity_section_json = json.dumps(payload.get("recent_activity_section"), ensure_ascii=False)
     history_summary_section_json = json.dumps(payload.get("history_summary_section"), ensure_ascii=False)
     provider_readiness_section_json = json.dumps(payload.get("provider_readiness_section"), ensure_ascii=False)
+    return_use_continuity_section_json = json.dumps(payload.get("return_use_continuity_section"), ensure_ascii=False)
     feedback_continuity_section_json = json.dumps(payload.get("feedback_continuity_section"), ensure_ascii=False)
     designer_section_json = json.dumps(payload.get("designer_section"), ensure_ascii=False)
     validation_section_json = json.dumps(payload.get("validation_section"), ensure_ascii=False)
@@ -2764,6 +2865,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <pre id="provider-readiness-detail">{escape(ui_text("server.shell.provider_readiness_detail", app_language=app_language, fallback_text="Provider readiness detail will appear here."))}</pre>
         <div id="provider-readiness-controls" class="actions"></div>
       </section>
+      <section id="return-use-continuity-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="return-use-continuity-title">
+        <h2 id="return-use-continuity-title">{escape(ui_text("server.shell.return_use_continuity", app_language=app_language, fallback_text="Return-use continuity"))}</h2>
+        <pre id="return-use-continuity-summary">{escape(ui_text("server.shell.return_use_continuity_summary", app_language=app_language, fallback_text="Return-use continuity will appear here."))}</pre>
+        <pre id="return-use-continuity-detail">{escape(ui_text("server.shell.return_use_continuity_detail", app_language=app_language, fallback_text="Return-use continuity detail will appear here."))}</pre>
+        <div id="return-use-continuity-controls" class="actions"></div>
+      </section>
       <section id="feedback-continuity-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="feedback-continuity-title">
         <h2 id="feedback-continuity-title">{escape(ui_text("server.shell.feedback_continuity", app_language=app_language, fallback_text="Feedback continuity"))}</h2>
         <pre id="feedback-continuity-summary">{escape(ui_text("server.shell.feedback_continuity_summary", app_language=app_language, fallback_text="Feedback continuity will appear here."))}</pre>
@@ -2798,6 +2905,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialRecentActivitySection = {recent_activity_section_json};
     const initialHistorySummarySection = {history_summary_section_json};
     const initialProviderReadinessSection = {provider_readiness_section_json};
+    const initialReturnUseContinuitySection = {return_use_continuity_section_json};
     const initialFeedbackContinuitySection = {feedback_continuity_section_json};
     const initialDesignerSection = {designer_section_json};
     const initialValidationSection = {validation_section_json};
@@ -2835,6 +2943,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const providerReadinessSummaryEl = document.getElementById('provider-readiness-summary');
     const providerReadinessDetailEl = document.getElementById('provider-readiness-detail');
     const providerReadinessControlsEl = document.getElementById('provider-readiness-controls');
+    const returnUseContinuitySummaryEl = document.getElementById('return-use-continuity-summary');
+    const returnUseContinuityDetailEl = document.getElementById('return-use-continuity-detail');
+    const returnUseContinuityControlsEl = document.getElementById('return-use-continuity-controls');
     const feedbackContinuitySummaryEl = document.getElementById('feedback-continuity-summary');
     const feedbackContinuityDetailEl = document.getElementById('feedback-continuity-detail');
     const feedbackContinuityControlsEl = document.getElementById('feedback-continuity-controls');
@@ -2870,6 +2981,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentRecentActivitySection = initialRecentActivitySection || null;
     let currentHistorySummarySection = initialHistorySummarySection || null;
     let currentProviderReadinessSection = initialProviderReadinessSection || null;
+    let currentReturnUseContinuitySection = initialReturnUseContinuitySection || null;
     let currentFeedbackContinuitySection = initialFeedbackContinuitySection || null;
     let currentDesignerSection = initialDesignerSection || null;
     let currentValidationSection = initialValidationSection || null;
@@ -3147,6 +3259,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     }}
     function writeProviderReadinessSection(section) {{
       currentProviderReadinessSection = writeShellSection(section, currentProviderReadinessSection, providerReadinessSummaryEl, providerReadinessDetailEl, providerReadinessControlsEl, 'Provider readiness will appear here.', 'Provider readiness detail will appear here.');
+    }}
+    function writeReturnUseContinuitySection(section) {{
+      currentReturnUseContinuitySection = writeShellSection(section, currentReturnUseContinuitySection, returnUseContinuitySummaryEl, returnUseContinuityDetailEl, returnUseContinuityControlsEl, 'Return-use continuity will appear here.', 'Return-use continuity detail will appear here.');
     }}
     function writeFeedbackContinuitySection(section) {{
       currentFeedbackContinuitySection = writeShellSection(section, currentFeedbackContinuitySection, feedbackContinuitySummaryEl, feedbackContinuityDetailEl, feedbackContinuityControlsEl, 'Feedback continuity will appear here.', 'Feedback continuity detail will appear here.');
@@ -3566,6 +3681,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     writeRecentActivitySection(initialRecentActivitySection);
     writeHistorySummarySection(initialHistorySummarySection);
     writeProviderReadinessSection(initialProviderReadinessSection);
+    writeReturnUseContinuitySection(initialReturnUseContinuitySection);
     writeDesignerSection(initialDesignerSection);
     writeValidationSection(initialValidationSection);
     writeStepStateBanner(initialStepStateBanner);
@@ -3597,6 +3713,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
       }}
       if (body.provider_readiness_section) {{
         writeProviderReadinessSection(body.provider_readiness_section);
+      }}
+      if (body.return_use_continuity_section) {{
+        writeReturnUseContinuitySection(body.return_use_continuity_section);
       }}
       if (body.designer_section) {{
         writeDesignerSection(body.designer_section);
