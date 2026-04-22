@@ -136,6 +136,18 @@ class EditorClosureBarrierView:
 
 
 @dataclass(frozen=True)
+class EditorClosureVerdictView:
+    closure_state: str = "hold_visual_editor"
+    closure_label: str | None = None
+    should_move_on: bool = False
+    move_on_target_workspace: str | None = None
+    pending_barrier_count: int = 0
+    blocking_barrier_count: int = 0
+    dominant_barrier_kind: str | None = None
+    summary: str | None = None
+
+
+@dataclass(frozen=True)
 class VisualEditorWorkspaceViewModel:
     workspace_status: str = "ready"
     workspace_status_label: str | None = None
@@ -155,6 +167,7 @@ class VisualEditorWorkspaceViewModel:
     attention_targets: list[EditorAttentionTargetView] = field(default_factory=list)
     progress_stages: list[EditorProgressStageView] = field(default_factory=list)
     closure_barriers: list[EditorClosureBarrierView] = field(default_factory=list)
+    closure_verdict: EditorClosureVerdictView = field(default_factory=EditorClosureVerdictView)
     local_actions: list[BuilderActionView] = field(default_factory=list)
     action_shortcuts: list[EditorActionShortcutView] = field(default_factory=list)
     can_edit_graph: bool = False
@@ -1190,6 +1203,69 @@ def _editor_closure_barriers(
 
     return barriers[:2]
 
+
+
+def _editor_closure_verdict(
+    *,
+    workspace_status: str,
+    closure_barriers: list[EditorClosureBarrierView],
+    selection_summary: EditorSelectionSummaryView,
+    can_run: bool,
+    review_ready: bool,
+    has_execution_context: bool,
+    app_language: str,
+) -> EditorClosureVerdictView:
+    pending_barrier_count = len(closure_barriers)
+    blocking_barrier_count = sum(1 for barrier in closure_barriers if barrier.blocking)
+    dominant_barrier = closure_barriers[0] if closure_barriers else None
+    dominant_barrier_kind = dominant_barrier.barrier_kind if dominant_barrier is not None else None
+
+    if workspace_status == "empty":
+        closure_state = "hold_visual_editor"
+        should_move_on = False
+        move_on_target = None
+        summary_key = "workspace.visual_editor.closure.hold_empty"
+        fallback_summary = "The visual editor is still in first-shape setup. Keep working here before moving to another workspace."
+    elif workspace_status == "blocked" or blocking_barrier_count > 0:
+        closure_state = "hold_visual_editor"
+        should_move_on = False
+        move_on_target = None
+        summary_key = "workspace.visual_editor.closure.hold_blocked"
+        fallback_summary = "Blocking issues inside the visual editor still need repair before this sector can be considered closed."
+    elif workspace_status in {"previewing", "reviewing"}:
+        closure_state = "hold_visual_editor"
+        should_move_on = False
+        move_on_target = None
+        summary_key = "workspace.visual_editor.closure.hold_review"
+        fallback_summary = "Review-oriented work is still active inside the visual editor. Finish it before moving on."
+    elif workspace_status == "editing" and can_run and review_ready and not has_execution_context and selection_summary.selection_mode in {"node", "overview", "edge"}:
+        closure_state = "ready_to_move_on"
+        should_move_on = True
+        move_on_target = "node_configuration"
+        summary_key = "workspace.visual_editor.closure.ready_to_move_on"
+        fallback_summary = "The visual editor is locally healthy enough. Re-evaluate node configuration next while only low-priority editor guidance remains."
+    else:
+        closure_state = "near_closed"
+        should_move_on = False
+        move_on_target = None
+        summary_key = "workspace.visual_editor.closure.near_closed"
+        fallback_summary = "The visual editor is close to closure, but it still needs one more local pass before moving on."
+
+    return EditorClosureVerdictView(
+        closure_state=closure_state,
+        closure_label=ui_text(
+            f"workspace.visual_editor.closure.state.{closure_state}",
+            app_language=app_language,
+            fallback_text=closure_state.replace("_", " "),
+        ),
+        should_move_on=should_move_on,
+        move_on_target_workspace=move_on_target,
+        pending_barrier_count=pending_barrier_count,
+        blocking_barrier_count=blocking_barrier_count,
+        dominant_barrier_kind=dominant_barrier_kind,
+        summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary),
+    )
+
 def read_visual_editor_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -1377,6 +1453,15 @@ def read_visual_editor_workspace_view_model(
         local_actions=local_actions,
         app_language=app_language,
     )
+    closure_verdict = _editor_closure_verdict(
+        workspace_status=workspace_status,
+        closure_barriers=closure_barriers,
+        selection_summary=selection_summary,
+        can_run=can_run,
+        review_ready=review_ready,
+        has_execution_context=has_execution_context,
+        app_language=app_language,
+    )
 
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -1397,6 +1482,7 @@ def read_visual_editor_workspace_view_model(
         attention_targets=attention_targets,
         progress_stages=progress_stages,
         closure_barriers=closure_barriers,
+        closure_verdict=closure_verdict,
         local_actions=local_actions,
         action_shortcuts=action_shortcuts,
         can_edit_graph=storage_role == "working_save",
@@ -1417,6 +1503,7 @@ __all__ = [
     "EditorAttentionTargetView",
     "EditorProgressStageView",
     "EditorClosureBarrierView",
+    "EditorClosureVerdictView",
     "VisualEditorWorkspaceViewModel",
     "read_visual_editor_workspace_view_model",
 ]

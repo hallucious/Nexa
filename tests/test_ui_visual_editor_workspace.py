@@ -479,3 +479,54 @@ def test_visual_editor_workspace_editing_progress_and_barrier_follow_attention()
     assert vm.progress_stages[2].action_id == "run_current"
     assert vm.closure_barriers[0].barrier_kind == "follow_attention"
     assert vm.closure_barriers[0].action_id == "open_node_configuration"
+
+
+def test_visual_editor_workspace_closure_verdict_holds_when_empty() -> None:
+    working = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "en-US"}),
+    )
+
+    vm = read_visual_editor_workspace_view_model(working)
+
+    assert vm.closure_verdict.closure_state == "hold_visual_editor"
+    assert vm.closure_verdict.should_move_on is False
+    assert vm.closure_verdict.move_on_target_workspace is None
+    assert vm.closure_verdict.pending_barrier_count == 1
+    assert vm.closure_verdict.summary == "The visual editor is still in first-shape setup. Keep working here before moving to another workspace."
+
+
+
+def test_visual_editor_workspace_closure_verdict_holds_when_blocked() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_blocking_validation())
+
+    assert vm.closure_verdict.closure_state == "hold_visual_editor"
+    assert vm.closure_verdict.should_move_on is False
+    assert vm.closure_verdict.blocking_barrier_count == 1
+    assert vm.closure_verdict.dominant_barrier_kind == "repair"
+
+
+
+def test_visual_editor_workspace_closure_verdict_marks_editing_surface_ready_to_move_on() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation())
+
+    assert vm.closure_verdict.closure_state == "ready_to_move_on"
+    assert vm.closure_verdict.should_move_on is True
+    assert vm.closure_verdict.move_on_target_workspace == "node_configuration"
+    assert vm.closure_verdict.pending_barrier_count == 1
+    assert vm.closure_verdict.blocking_barrier_count == 0
+    assert vm.closure_verdict.summary == "비주얼 에디터는 로컬 기준으로 충분히 안정화되었습니다. 이제 낮은 우선순위 안내만 남았으니 node configuration을 다시 평가하세요."
+
+
+
+def test_visual_editor_workspace_closure_verdict_holds_reviewing_state_until_runtime_focus_is_resolved() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run_with_focus())
+
+    assert vm.closure_verdict.closure_state == "hold_visual_editor"
+    assert vm.closure_verdict.should_move_on is False
+    assert vm.closure_verdict.move_on_target_workspace is None
+    assert vm.closure_verdict.dominant_barrier_kind == "runtime_focus"
