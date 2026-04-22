@@ -1599,6 +1599,11 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert 'openai — reachable' in '\n'.join(parsed['provider_readiness_section']['detail']['items'])
     assert parsed['provider_readiness_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/provider-bindings'
     assert parsed['provider_readiness_section']['controls'][1]['action_target'] == '/api/workspaces/ws-001/provider-bindings/health'
+    assert parsed['first_success_setup_section']['summary']['headline'] == 'First-success setup'
+    assert any(line.startswith('Starter templates: ') for line in parsed['first_success_setup_section']['summary']['lines'])
+    assert any(line.startswith('Connected providers: ') for line in parsed['first_success_setup_section']['summary']['lines'])
+    assert parsed['first_success_setup_section']['controls'][0]['action_target'] == 'designer'
+    assert parsed['first_success_setup_section']['controls'][1]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
     assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'
@@ -1667,6 +1672,10 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['server_product_readiness_review']['next_bottleneck_stage'] == 'first_success_setup'
     assert parsed['server_product_readiness_review']['stages'][0]['stage_state'] == 'goal_entry_needed'
     assert parsed['server_product_readiness_review']['recommended_action_target'] == 'designer'
+    assert parsed['first_success_setup_section']['setup_state'] == 'goal_entry_needed'
+    assert parsed['first_success_setup_section']['summary']['headline'] == 'First-success setup'
+    assert parsed['first_success_setup_section']['controls'][0]['action_target'] == 'designer'
+    assert parsed['first_success_setup_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/starter-templates?app_language=en'
 
 
 def test_framework_binding_workspace_shell_uses_server_backed_onboarding_step_for_navigation() -> None:

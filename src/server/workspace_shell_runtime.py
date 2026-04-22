@@ -864,6 +864,97 @@ def _provider_readiness_section(
 
 
 
+def _first_success_setup_section(
+    shell_map: Mapping[str, Any],
+    template_gallery: Mapping[str, Any] | None,
+    server_product_readiness_review: Mapping[str, Any] | None,
+    *,
+    onboarding_state: Mapping[str, Any] | None,
+    provider_binding_rows: Sequence[Mapping[str, Any]],
+    managed_secret_rows: Sequence[Mapping[str, Any]],
+    provider_probe_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
+    routes: Mapping[str, Any],
+    app_language: str = "en",
+) -> dict[str, Any]:
+    designer = shell_map.get("designer") or {}
+    request_state = designer.get("request_state") or {}
+    provider_inline = designer.get("provider_inline_key_entry") or {}
+    provider_guidance = designer.get("provider_setup_guidance") or {}
+    gallery = template_gallery or designer.get("template_gallery") or {}
+    templates = tuple(gallery.get("templates") or ())
+    connected_inline = int(provider_inline.get("connected_count") or 0)
+    continuity = _provider_continuity_summary_for_workspace(
+        workspace_id,
+        provider_binding_rows=provider_binding_rows,
+        managed_secret_rows=managed_secret_rows,
+        provider_probe_rows=provider_probe_rows,
+    )
+    connected_server = int(getattr(continuity, "provider_binding_count", 0) or 0)
+    latest_probe = str(getattr(continuity, "latest_probe_status", "") or "").strip() or None
+    setup_stage = {}
+    if isinstance(server_product_readiness_review, Mapping):
+        stages = server_product_readiness_review.get("stages") or ()
+        if len(stages) > 0 and isinstance(stages[0], Mapping):
+            setup_stage = dict(stages[0])
+    setup_state = str(setup_stage.get("stage_state") or "inactive").strip() or "inactive"
+    setup_summary = str(setup_stage.get("summary") or "").strip()
+    onboarding_step = _normalized_onboarding_current_step(onboarding_state)
+    controls: list[dict[str, Any]] = []
+
+    def _append_control(control_id: str, label: str | None, action_target: str | None):
+        if not label or not action_target:
+            return
+        if any(item.get("action_target") == action_target for item in controls):
+            return
+        controls.append({
+            "control_id": control_id,
+            "label": label,
+            "action_kind": "open_route" if action_target.startswith("/") else "focus_section",
+            "action_target": action_target,
+        })
+
+    if setup_state == "goal_entry_needed":
+        _append_control("setup-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
+        _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), str(routes.get("starter_template_catalog_page") or "").strip() or None)
+    elif setup_state == "provider_setup_needed":
+        _append_control("setup-open-provider-bindings", ui_text("server.shell.open_provider_bindings", app_language=app_language, fallback_text="Open provider bindings"), str(routes.get("workspace_provider_bindings") or "").strip() or None)
+        _append_control("setup-open-provider-health", ui_text("server.shell.open_provider_health", app_language=app_language, fallback_text="Open provider health"), str(routes.get("workspace_provider_health") or "").strip() or None)
+    else:
+        _append_control("setup-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
+
+    _append_control("setup-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), str(routes.get("onboarding") or "").strip() or None)
+
+    lines = _summary_lines(
+        ui_text("server.shell.first_success_setup_state_prefix", app_language=app_language, fallback_text="Setup state: {state}", state=ui_text(f"shell.product_readiness.stage_state.{setup_state}", app_language=app_language, fallback_text=setup_state.replace("_", " ")) if setup_state != "inactive" else ui_text("shell.product_readiness.stage_state.inactive", app_language=app_language, fallback_text="Inactive")),
+        setup_summary or None,
+        ui_text("server.shell.first_success_setup_templates_prefix", app_language=app_language, fallback_text="Starter templates: {count}", count=str(len(templates))),
+        ui_text("server.shell.first_success_setup_providers_prefix", app_language=app_language, fallback_text="Connected providers: {count}", count=str(max(connected_inline, connected_server))),
+    )
+    detail_items = _summary_lines(
+        ui_text("server.shell.first_success_setup_request_prefix", app_language=app_language, fallback_text="Request status: {status}", status=str(request_state.get("request_status") or "empty")),
+        ui_text("server.shell.first_success_setup_onboarding_prefix", app_language=app_language, fallback_text="Onboarding step: {step}", step=onboarding_step) if onboarding_step else None,
+        ui_text("server.shell.first_success_setup_provider_guidance_prefix", app_language=app_language, fallback_text="Provider setup summary: {summary}", summary=str(provider_guidance.get("summary") or setup_summary or "")) if provider_guidance.get("summary") or setup_summary else None,
+        ui_text("server.shell.first_success_setup_probe_prefix", app_language=app_language, fallback_text="Latest provider probe: {status}", status=latest_probe) if latest_probe else None,
+        ui_text("server.shell.first_success_setup_inline_prefix", app_language=app_language, fallback_text="Inline provider options: {count}", count=str(len(tuple(provider_inline.get("preset_options") or ())))) if provider_inline else None,
+    )
+    section = build_shell_section(
+        headline=ui_text("server.shell.first_success_setup", app_language=app_language, fallback_text="First-success setup"),
+        lines=lines,
+        detail_title=ui_text("server.shell.first_success_setup_detail", app_language=app_language, fallback_text="First-success setup detail"),
+        detail_items=detail_items,
+        controls=controls,
+        summary_empty=ui_text("server.shell.first_success_setup_pending", app_language=app_language, fallback_text="First-success setup guidance will appear here once the workspace shell is available."),
+        detail_empty=ui_text("server.shell.first_success_setup_pending", app_language=app_language, fallback_text="First-success setup guidance will appear here once the workspace shell is available."),
+    )
+    section["setup_state"] = setup_state
+    section["recommended_action_target"] = setup_stage.get("recommended_action_target")
+    section["recommended_action_label"] = setup_stage.get("recommended_action_label")
+    section["blocker_count"] = int(setup_stage.get("blocker_count") or 0)
+    section["pending_count"] = int(setup_stage.get("pending_count") or 0)
+    return section
+
+
 def _feedback_continuity_entries(
     feedback_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
@@ -2227,6 +2318,7 @@ def build_workspace_shell_runtime_payload(
         "recent_activity_section": _recent_activity_section(recent_run_rows, onboarding_rows, workspace_id, app_language=app_language),
         "history_summary_section": _history_summary_section(recent_run_rows, onboarding_rows, share_payload_rows, model, workspace_id, app_language=app_language),
         "provider_readiness_section": _provider_readiness_section(provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
+        "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "feedback_continuity_section": _feedback_continuity_section(feedback_rows, workspace_id, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
