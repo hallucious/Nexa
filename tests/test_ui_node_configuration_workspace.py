@@ -262,3 +262,61 @@ def test_node_configuration_workspace_configuring_state_feels_editable() -> None
         "review_draft",
         "run_current",
     ]
+
+
+
+def test_node_configuration_workspace_exposes_attention_and_barriers_for_blocked_state() -> None:
+    vm = read_node_configuration_workspace_view_model(_working_save(), validation_report=_blocked_validation())
+
+    assert vm.attention_targets[0].attention_kind == "repair_selection"
+    assert vm.attention_targets[0].blocking is True
+    assert vm.progress_stages[1].stage_id == "configure"
+    assert vm.progress_stages[1].state == "blocked"
+    assert vm.closure_barriers[0].barrier_kind == "repair_blocked_configuration"
+    assert vm.closure_barriers[0].blocking is True
+    assert vm.closure_verdict.closure_state == "hold_node_configuration"
+    assert vm.closure_verdict.should_move_on is False
+
+
+def test_node_configuration_workspace_exposes_review_progress_and_hold_verdict() -> None:
+    vm = read_node_configuration_workspace_view_model(
+        _working_save(),
+        selected_ref="node:n1",
+        validation_report=_validation(),
+        session_state_card=_session_card(),
+        intent=_intent(),
+        patch_plan=_patch(),
+        precheck=_precheck(),
+        preview=_preview(),
+        approval_flow=_approval(),
+    )
+
+    assert vm.attention_targets[0].attention_kind == "review_pending_changes"
+    assert [stage.stage_id for stage in vm.progress_stages] == ["select", "configure", "review", "run"]
+    assert vm.progress_stages[2].state == "active"
+    assert vm.closure_barriers[0].barrier_kind == "review_pending_changes"
+    assert vm.closure_verdict.closure_state == "hold_node_configuration"
+    assert vm.closure_verdict.should_move_on is False
+
+
+def test_node_configuration_workspace_exposes_runtime_move_on_verdict() -> None:
+    vm = read_node_configuration_workspace_view_model(_commit_snapshot(), execution_record=_execution_record_context())
+
+    assert vm.attention_targets[0].attention_kind == "inspect_runtime"
+    assert vm.progress_stages[3].stage_id == "run"
+    assert vm.progress_stages[3].state == "active"
+    assert vm.closure_barriers[0].barrier_kind == "inspect_runtime_evidence"
+    assert vm.closure_verdict.closure_state == "ready_to_move_on"
+    assert vm.closure_verdict.should_move_on is True
+    assert vm.closure_verdict.move_on_target_workspace == "runtime_monitoring"
+
+
+def test_node_configuration_workspace_exposes_closure_layers_for_configuring_state() -> None:
+    vm = read_node_configuration_workspace_view_model(_working_save(), selected_ref="node:n1", validation_report=_validation())
+
+    assert vm.attention_targets[0].attention_kind == "edit_selection"
+    assert vm.progress_stages[1].state == "active"
+    assert vm.progress_stages[2].state in {"ready", "pending"}
+    assert vm.closure_verdict.closure_state == "ready_to_move_on"
+    assert vm.closure_verdict.should_move_on is True
+    assert vm.closure_verdict.move_on_target_workspace == "runtime_monitoring"

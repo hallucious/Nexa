@@ -93,6 +93,58 @@ class ConfigurationActionShortcutView:
 
 
 @dataclass(frozen=True)
+class ConfigurationAttentionTargetView:
+    attention_kind: str = "general"
+    urgency: str = "low"
+    target_ref: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    destination_workspace: str = "node_configuration"
+    destination_panel: str | None = None
+    action_id: str | None = None
+    action_label: str | None = None
+    blocking: bool = False
+
+
+@dataclass(frozen=True)
+class ConfigurationProgressStageView:
+    stage_id: str = "select"
+    label: str | None = None
+    state: str = "blocked"
+    state_label: str | None = None
+    action_id: str | None = None
+    action_label: str | None = None
+    target_ref: str | None = None
+    explanation: str | None = None
+
+
+@dataclass(frozen=True)
+class ConfigurationClosureBarrierView:
+    barrier_kind: str = "general"
+    severity: str = "medium"
+    target_ref: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    action_id: str | None = None
+    action_label: str | None = None
+    destination_workspace: str = "node_configuration"
+    destination_panel: str | None = None
+    blocking: bool = False
+
+
+@dataclass(frozen=True)
+class ConfigurationClosureVerdictView:
+    closure_state: str = "hold_node_configuration"
+    closure_label: str | None = None
+    should_move_on: bool = False
+    move_on_target_workspace: str | None = None
+    pending_barrier_count: int = 0
+    blocking_barrier_count: int = 0
+    dominant_barrier_kind: str | None = None
+    summary: str | None = None
+
+
+@dataclass(frozen=True)
 class NodeConfigurationWorkspaceViewModel:
     workspace_status: str = "ready"
     workspace_status_label: str | None = None
@@ -112,6 +164,10 @@ class NodeConfigurationWorkspaceViewModel:
     can_commit_configuration: bool = False
     local_actions: list[BuilderActionView] = field(default_factory=list)
     action_shortcuts: list[ConfigurationActionShortcutView] = field(default_factory=list)
+    attention_targets: list[ConfigurationAttentionTargetView] = field(default_factory=list)
+    progress_stages: list[ConfigurationProgressStageView] = field(default_factory=list)
+    closure_barriers: list[ConfigurationClosureBarrierView] = field(default_factory=list)
+    closure_verdict: ConfigurationClosureVerdictView = field(default_factory=ConfigurationClosureVerdictView)
     explanation: str | None = None
     suggested_actions: list[BuilderActionView] = field(default_factory=list)
 
@@ -633,6 +689,184 @@ def _configuration_action_shortcuts(
 
 
 
+
+
+def _configuration_attention_targets(
+    *,
+    workspace_status: str,
+    selection_summary: ConfigurationSelectionSummaryView,
+    workspace_handoff: ConfigurationWorkspaceHandoffView,
+    local_actions: list[BuilderActionView],
+    app_language: str,
+) -> list[ConfigurationAttentionTargetView]:
+    action_map = {action.action_id: action for action in local_actions}
+
+    def attention(attention_kind: str, *, urgency: str, title_key: str, fallback_title: str, summary_key: str, fallback_summary: str, action_id: str | None, blocking: bool = False, **params) -> ConfigurationAttentionTargetView:
+        action = action_map.get(action_id) if action_id is not None else None
+        return ConfigurationAttentionTargetView(
+            attention_kind=attention_kind,
+            urgency=urgency,
+            target_ref=selection_summary.selected_ref,
+            title=ui_text(title_key, app_language=app_language, fallback_text=fallback_title, **params),
+            summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary, **params),
+            destination_workspace=workspace_handoff.destination_workspace,
+            destination_panel=workspace_handoff.destination_panel,
+            action_id=action_id,
+            action_label=_action_label(action, app_language=app_language),
+            blocking=blocking,
+        )
+
+    label = selection_summary.selected_ref or ui_text("workspace.node_configuration.name.beginner", app_language=app_language, fallback_text="step settings")
+    if workspace_status == "awaiting_selection":
+        return [attention("choose_target", urgency="medium", title_key="workspace.configuration.attention.select.title", fallback_title="Choose a target to configure", summary_key="workspace.configuration.attention.select.summary", fallback_summary="Return to the visual editor and pick the exact step or connection you want to configure.", action_id="open_visual_editor")]
+    if workspace_status == "blocked":
+        return [attention("repair_selection", urgency="high", title_key="workspace.configuration.attention.repair.title", fallback_title="Repair the blocked selection first", summary_key="workspace.configuration.attention.repair.summary", fallback_summary="{label} still has blocking findings. Repair it here before continuing.", action_id="request_revision", blocking=True, label=label)]
+    if workspace_status == "designer_review":
+        return [attention("review_pending_changes", urgency="medium", title_key="workspace.configuration.attention.review.title", fallback_title="Review the pending configuration changes", summary_key="workspace.configuration.attention.review.summary", fallback_summary="Review the proposed changes for {label} before committing or requesting another revision.", action_id="review_draft", label=label)]
+    if workspace_status == "run_review":
+        return [attention("inspect_runtime", urgency="high", title_key="workspace.configuration.attention.runtime.title", fallback_title="Inspect runtime evidence first", summary_key="workspace.configuration.attention.runtime.summary", fallback_summary="This configuration is linked to execution evidence. Inspect runtime monitoring before treating the review as settled.", action_id="open_runtime_monitoring")]
+    return [attention("edit_selection", urgency="medium", title_key="workspace.configuration.attention.edit.title", fallback_title="Keep refining the selected configuration", summary_key="workspace.configuration.attention.edit.summary", fallback_summary="Continue editing {label}, then move into review or run when the fields look right.", action_id="review_draft" if any(a.action_id == "review_draft" for a in local_actions) else "run_current", label=label)]
+
+
+
+def _configuration_progress_stages(
+    *,
+    workspace_status: str,
+    selection_summary: ConfigurationSelectionSummaryView,
+    review_state: ConfigurationReviewStateView,
+    local_actions: list[BuilderActionView],
+    app_language: str,
+) -> list[ConfigurationProgressStageView]:
+    action_map = {action.action_id: action for action in local_actions}
+    def stage(stage_id: str, *, state: str, action_id: str | None, explanation_key: str, fallback_explanation: str) -> ConfigurationProgressStageView:
+        action = action_map.get(action_id) if action_id is not None else None
+        return ConfigurationProgressStageView(
+            stage_id=stage_id,
+            label=ui_text(f"workspace.configuration.progress.stage.{stage_id}", app_language=app_language, fallback_text=stage_id.replace("_", " ")),
+            state=state,
+            state_label=ui_text(f"workspace.configuration.progress.state.{state}", app_language=app_language, fallback_text=state.replace("_", " ")),
+            action_id=action_id,
+            action_label=_action_label(action, app_language=app_language),
+            target_ref=selection_summary.selected_ref,
+            explanation=ui_text(explanation_key, app_language=app_language, fallback_text=fallback_explanation),
+        )
+    if workspace_status == "awaiting_selection":
+        return [
+            stage("select", state="active", action_id="open_visual_editor", explanation_key="workspace.configuration.progress.select.awaiting", fallback_explanation="Choose the exact object you want to configure first."),
+            stage("configure", state="blocked", action_id=None, explanation_key="workspace.configuration.progress.configure.awaiting", fallback_explanation="Configuration cannot start until a target is selected."),
+            stage("review", state="blocked", action_id=None, explanation_key="workspace.configuration.progress.review.awaiting", fallback_explanation="Review starts after a concrete configuration target exists."),
+            stage("run", state="blocked", action_id=None, explanation_key="workspace.configuration.progress.run.awaiting", fallback_explanation="Running comes after selection and configuration."),
+        ]
+    if workspace_status == "blocked":
+        return [
+            stage("select", state="completed", action_id="open_visual_editor", explanation_key="workspace.configuration.progress.select.done", fallback_explanation="A configuration target is already selected."),
+            stage("configure", state="blocked", action_id="request_revision", explanation_key="workspace.configuration.progress.configure.blocked", fallback_explanation="Repair the blocked configuration before treating editing as stable."),
+            stage("review", state="blocked", action_id="open_diff", explanation_key="workspace.configuration.progress.review.blocked", fallback_explanation="Review is blocked until the current selection is repaired."),
+            stage("run", state="blocked", action_id="open_runtime_monitoring", explanation_key="workspace.configuration.progress.run.blocked", fallback_explanation="Execution follow-up should wait until the blocking configuration issue is repaired."),
+        ]
+    if workspace_status == "designer_review":
+        return [
+            stage("select", state="completed", action_id="open_visual_editor", explanation_key="workspace.configuration.progress.select.done", fallback_explanation="A configuration target is already selected."),
+            stage("configure", state="completed", action_id="review_draft", explanation_key="workspace.configuration.progress.configure.done", fallback_explanation="Field-level configuration work is already represented in this proposal."),
+            stage("review", state="active", action_id="review_draft", explanation_key="workspace.configuration.progress.review.active", fallback_explanation="Review the pending proposed changes for this selection now."),
+            stage("run", state="pending", action_id="commit_snapshot", explanation_key="workspace.configuration.progress.run.pending", fallback_explanation="Running should follow after the configuration review is resolved."),
+        ]
+    if workspace_status == "run_review":
+        return [
+            stage("select", state="completed", action_id="open_visual_editor", explanation_key="workspace.configuration.progress.select.done", fallback_explanation="A configuration target is already selected."),
+            stage("configure", state="completed", action_id="open_visual_editor", explanation_key="workspace.configuration.progress.configure.done", fallback_explanation="The configuration is already established for this reviewed selection."),
+            stage("review", state="completed", action_id="open_runtime_monitoring", explanation_key="workspace.configuration.progress.review.done", fallback_explanation="Configuration review has already advanced into execution-linked inspection."),
+            stage("run", state="active", action_id="open_runtime_monitoring", explanation_key="workspace.configuration.progress.run.active", fallback_explanation="Execution evidence is now the primary surface for this selection."),
+        ]
+    review_action = "review_draft" if any(a.action_id == "review_draft" and a.enabled for a in local_actions) else None
+    run_action = "run_current" if any(a.action_id == "run_current" and a.enabled for a in local_actions) else None
+    review_state_value = "ready" if review_action is not None else "pending"
+    run_state_value = "ready" if run_action is not None and review_state.blocking_count == 0 else "pending"
+    return [
+        stage("select", state="completed", action_id="open_visual_editor", explanation_key="workspace.configuration.progress.select.done", fallback_explanation="A configuration target is already selected."),
+        stage("configure", state="active", action_id=review_action or run_action or "open_visual_editor", explanation_key="workspace.configuration.progress.configure.active", fallback_explanation="You are actively refining the selected configuration fields now."),
+        stage("review", state=review_state_value, action_id=review_action, explanation_key="workspace.configuration.progress.review.ready" if review_action else "workspace.configuration.progress.review.pending", fallback_explanation="Move into review when the current fields look right." if review_action else "Review will become available after configuration work is stable."),
+        stage("run", state=run_state_value, action_id=run_action, explanation_key="workspace.configuration.progress.run.ready" if run_action else "workspace.configuration.progress.run.pending", fallback_explanation="This configuration is healthy enough to support running the workflow." if run_action else "Running should wait until review and configuration readiness are stronger."),
+    ]
+
+
+
+def _configuration_closure_barriers(
+    *,
+    workspace_status: str,
+    selection_summary: ConfigurationSelectionSummaryView,
+    workspace_handoff: ConfigurationWorkspaceHandoffView,
+    attention_targets: list[ConfigurationAttentionTargetView],
+    review_state: ConfigurationReviewStateView,
+    local_actions: list[BuilderActionView],
+    app_language: str,
+) -> list[ConfigurationClosureBarrierView]:
+    action_map = {action.action_id: action for action in local_actions}
+    def barrier(barrier_kind: str, *, severity: str, title_key: str, fallback_title: str, summary_key: str, fallback_summary: str, action_id: str | None, destination_workspace: str, destination_panel: str | None, blocking: bool = False, **params) -> ConfigurationClosureBarrierView:
+        action = action_map.get(action_id) if action_id is not None else None
+        return ConfigurationClosureBarrierView(
+            barrier_kind=barrier_kind,
+            severity=severity,
+            target_ref=selection_summary.selected_ref,
+            title=ui_text(title_key, app_language=app_language, fallback_text=fallback_title, **params),
+            summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary, **params),
+            action_id=action_id,
+            action_label=_action_label(action, app_language=app_language),
+            destination_workspace=destination_workspace,
+            destination_panel=destination_panel,
+            blocking=blocking,
+        )
+    barriers=[]
+    primary_attention = attention_targets[0] if attention_targets else None
+    label = selection_summary.selected_ref or ui_text("workspace.node_configuration.name.beginner", app_language=app_language, fallback_text="step settings")
+    if workspace_status == "awaiting_selection":
+        return [barrier("choose_target", severity="medium", title_key="workspace.configuration.barrier.select.title", fallback_title="Choose a configuration target first", summary_key="workspace.configuration.barrier.select.summary", fallback_summary="Node configuration cannot progress until a concrete step or connection is selected.", action_id="open_visual_editor", destination_workspace="visual_editor", destination_panel="graph", blocking=True)]
+    if workspace_status == "blocked":
+        return [barrier("repair_blocked_configuration", severity="high", title_key="workspace.configuration.barrier.repair.title", fallback_title="Repair the blocked configuration", summary_key="workspace.configuration.barrier.repair.summary", fallback_summary="{label} still has blocking findings. Repair this configuration before treating the workspace as healthy.", action_id="request_revision", destination_workspace="node_configuration", destination_panel="validation", blocking=True, label=label)]
+    if workspace_status == "designer_review":
+        return [barrier("review_pending_changes", severity="medium", title_key="workspace.configuration.barrier.review.title", fallback_title="Resolve the pending configuration review", summary_key="workspace.configuration.barrier.review.summary", fallback_summary="Proposed changes for {label} still need review or revision before this workspace can be treated as settled.", action_id="review_draft", destination_workspace="node_configuration", destination_panel="designer", label=label)]
+    if workspace_status == "run_review":
+        return [barrier("inspect_runtime_evidence", severity="medium", title_key="workspace.configuration.barrier.runtime.title", fallback_title="Inspect runtime evidence", summary_key="workspace.configuration.barrier.runtime.summary", fallback_summary="Execution-linked evidence is still the active context for this selection. Review it in runtime monitoring before calling configuration work done.", action_id="open_runtime_monitoring", destination_workspace="runtime_monitoring", destination_panel="execution")]
+    if review_state.warning_count > 0:
+        barriers.append(barrier("address_warnings", severity="low", title_key="workspace.configuration.barrier.warning.title", fallback_title="Review the remaining warnings", summary_key="workspace.configuration.barrier.warning.summary", fallback_summary="Warnings remain attached to this selection. Review them before widening scope away from node configuration.", action_id=workspace_handoff.action_id, destination_workspace=workspace_handoff.destination_workspace, destination_panel=workspace_handoff.destination_panel))
+    if primary_attention is not None and primary_attention.action_id is not None:
+        barriers.append(barrier("follow_attention", severity="low", title_key="workspace.configuration.barrier.attention.title", fallback_title="Follow the current configuration priority", summary_key="workspace.configuration.barrier.attention.summary", fallback_summary="The current configuration priority is the cleanest path forward from this workspace state.", action_id=primary_attention.action_id, destination_workspace=primary_attention.destination_workspace, destination_panel=primary_attention.destination_panel, blocking=primary_attention.blocking))
+    return barriers[:2]
+
+
+
+def _configuration_closure_verdict(*, workspace_status: str, selection_summary: ConfigurationSelectionSummaryView, closure_barriers: list[ConfigurationClosureBarrierView], app_language: str) -> ConfigurationClosureVerdictView:
+    pending_barrier_count = len(closure_barriers)
+    blocking_barrier_count = sum(1 for barrier in closure_barriers if barrier.blocking)
+    dominant_barrier = closure_barriers[0] if closure_barriers else None
+    dominant_barrier_kind = dominant_barrier.barrier_kind if dominant_barrier is not None else None
+    if workspace_status == "awaiting_selection":
+        closure_state = "hold_node_configuration"; should_move_on=False; move_on_target=None
+        summary_key="workspace.configuration.closure.hold_selection"; fallback_summary="Node configuration still needs a real target before this sector can be considered healthy."
+    elif workspace_status == "blocked" or blocking_barrier_count > 0:
+        closure_state = "hold_node_configuration"; should_move_on=False; move_on_target=None
+        summary_key="workspace.configuration.closure.hold_blocked"; fallback_summary="Blocking configuration issues still need repair before moving on from this workspace sector."
+    elif workspace_status == "designer_review":
+        closure_state = "hold_node_configuration"; should_move_on=False; move_on_target=None
+        summary_key="workspace.configuration.closure.hold_review"; fallback_summary="Configuration review is still active here. Resolve it before moving on to the next workspace sector."
+    elif workspace_status in {"run_review", "configuring"} and selection_summary.object_type not in {"none", "unknown"}:
+        closure_state = "ready_to_move_on"; should_move_on=True; move_on_target="runtime_monitoring"
+        summary_key="workspace.configuration.closure.ready_to_move_on"; fallback_summary="Node configuration is locally healthy enough. Re-evaluate runtime monitoring next unless new cross-workspace evidence reopens this sector."
+    else:
+        closure_state = "near_closed"; should_move_on=False; move_on_target=None
+        summary_key="workspace.configuration.closure.near_closed"; fallback_summary="Node configuration is close to closure, but it still needs one more local pass before moving on."
+    return ConfigurationClosureVerdictView(
+        closure_state=closure_state,
+        closure_label=ui_text(f"workspace.configuration.closure.state.{closure_state}", app_language=app_language, fallback_text=closure_state.replace("_", " ")),
+        should_move_on=should_move_on,
+        move_on_target_workspace=move_on_target,
+        pending_barrier_count=pending_barrier_count,
+        blocking_barrier_count=blocking_barrier_count,
+        dominant_barrier_kind=dominant_barrier_kind,
+        summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary),
+    )
+
+
 def read_node_configuration_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -756,6 +990,35 @@ def read_node_configuration_workspace_view_model(
         local_actions=local_actions,
         app_language=app_language,
     )
+    attention_targets = _configuration_attention_targets(
+        workspace_status=workspace_status,
+        selection_summary=selection_summary,
+        workspace_handoff=workspace_handoff,
+        local_actions=local_actions,
+        app_language=app_language,
+    )
+    progress_stages = _configuration_progress_stages(
+        workspace_status=workspace_status,
+        selection_summary=selection_summary,
+        review_state=review_state,
+        local_actions=local_actions,
+        app_language=app_language,
+    )
+    closure_barriers = _configuration_closure_barriers(
+        workspace_status=workspace_status,
+        selection_summary=selection_summary,
+        workspace_handoff=workspace_handoff,
+        attention_targets=attention_targets,
+        review_state=review_state,
+        local_actions=local_actions,
+        app_language=app_language,
+    )
+    closure_verdict = _configuration_closure_verdict(
+        workspace_status=workspace_status,
+        selection_summary=selection_summary,
+        closure_barriers=closure_barriers,
+        app_language=app_language,
+    )
     workspace_explanation = explanation or _workspace_explanation(
         workspace_status=workspace_status,
         app_language=app_language,
@@ -786,6 +1049,10 @@ def read_node_configuration_workspace_view_model(
         can_commit_configuration=can_commit_configuration,
         local_actions=local_actions,
         action_shortcuts=action_shortcuts,
+        attention_targets=attention_targets,
+        progress_stages=progress_stages,
+        closure_barriers=closure_barriers,
+        closure_verdict=closure_verdict,
         explanation=workspace_explanation,
         suggested_actions=suggested_actions,
     )
@@ -793,7 +1060,11 @@ def read_node_configuration_workspace_view_model(
 
 __all__ = [
     "ConfigurationActionShortcutView",
+    "ConfigurationAttentionTargetView",
+    "ConfigurationClosureBarrierView",
+    "ConfigurationClosureVerdictView",
     "ConfigurationFocusHintView",
+    "ConfigurationProgressStageView",
     "ConfigurationReadinessView",
     "ConfigurationReviewStateView",
     "ConfigurationSelectionSummaryView",
