@@ -521,3 +521,70 @@ def test_builder_shell_projects_workspace_chain_stable_when_current_chain_is_loc
     assert vm.workspace_chain.chain_state == "workspace_chain_stable"
     assert vm.workspace_chain.next_bottleneck_workspace is None
     assert vm.workspace_chain.recommended_action_id is None
+
+
+def test_builder_shell_projects_product_readiness_hold_for_first_success_setup(monkeypatch) -> None:
+    for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "PERPLEXITY_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty-ready", name="Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={}),
+    )
+
+    vm = read_builder_shell_view_model(source)
+
+    assert vm.product_readiness.review_state == "hold_first_success_setup"
+    assert vm.product_readiness.next_bottleneck_stage == "first_success_setup"
+    assert vm.product_readiness.stages[0].stage_id == "first_success_setup"
+    assert vm.product_readiness.stages[0].stage_state in {"provider_setup_needed", "goal_entry_needed"}
+
+
+def test_builder_shell_projects_product_readiness_hold_for_first_success_run(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    source = _working_save()
+    report = ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="BLOCK", category="structural", severity="high", blocking=True, location="node:n1", message="Choose an AI model for step 1")],
+        blocking_count=1,
+        warning_count=0,
+        result="blocked",
+    )
+
+    vm = read_builder_shell_view_model(source, validation_report=report)
+
+    assert vm.product_readiness.review_state == "hold_first_success_run"
+    assert vm.product_readiness.next_bottleneck_stage == "first_success_run"
+    assert vm.product_readiness.recommended_action_id == "open_node_configuration"
+    assert vm.product_readiness.stages[1].stage_state == "fix_before_run"
+
+
+def test_builder_shell_projects_product_readiness_hold_for_return_use() -> None:
+    source = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-return-use", name="Reusable"),
+        circuit=CircuitModel(nodes=[{"id": "n1"}], edges=[], entry="n1", outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"beginner_first_success_achieved": True}),
+    )
+
+    vm = read_builder_shell_view_model(source)
+
+    assert vm.product_readiness.review_state == "hold_return_use"
+    assert vm.product_readiness.next_bottleneck_stage == "return_use"
+    assert vm.product_readiness.recommended_action_id == "open_result_history"
+    assert vm.product_readiness.stages[2].stage_state == "history_needed"
+
+
+def test_builder_shell_projects_product_readiness_stable_for_historical_result_surface() -> None:
+    vm = read_builder_shell_view_model(_run())
+
+    assert vm.product_readiness.review_state == "product_surface_stable"
+    assert vm.product_readiness.next_bottleneck_stage is None
+    assert vm.product_readiness.recommended_action_id is None
+    assert vm.product_readiness.stages[2].stage_state == "complete"

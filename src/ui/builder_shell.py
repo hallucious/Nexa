@@ -110,6 +110,33 @@ class WorkspaceChainReviewView:
     summary: str | None = None
 
 
+@dataclass(frozen=True)
+class ProductSurfaceStageView:
+    stage_id: str
+    stage_label: str | None = None
+    stage_state: str = "inactive"
+    stage_state_label: str | None = None
+    blocker_count: int = 0
+    pending_count: int = 0
+    summary: str | None = None
+    recommended_action_id: str | None = None
+    recommended_action_label: str | None = None
+    preferred_workspace_id: str | None = None
+    preferred_panel_id: str | None = None
+
+
+@dataclass(frozen=True)
+class ProductReadinessReviewView:
+    review_state: str = "hold_first_success_setup"
+    review_label: str | None = None
+    next_bottleneck_stage: str | None = None
+    next_bottleneck_label: str | None = None
+    recommended_action_id: str | None = None
+    recommended_action_label: str | None = None
+    stages: tuple[ProductSurfaceStageView, ...] = ()
+    summary: str | None = None
+
+
 
 
 @dataclass(frozen=True)
@@ -141,6 +168,7 @@ class BuilderShellViewModel:
     result_history: ResultHistoryViewModel | None = None
     feedback_channel: FeedbackChannelViewModel | None = None
     workspace_chain: WorkspaceChainReviewView = field(default_factory=WorkspaceChainReviewView)
+    product_readiness: ProductReadinessReviewView = field(default_factory=ProductReadinessReviewView)
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
     beginner_onboarding: BeginnerOnboardingHintView = field(default_factory=BeginnerOnboardingHintView)
@@ -547,6 +575,251 @@ def _workspace_chain_review(*, storage_role: str, shell_mode: str, visual_editor
     )
 
 
+def _product_stage(*, stage_id: str, stage_label: str | None, stage_state: str, blocker_count: int, pending_count: int, summary: str | None, recommended_action_id: str | None, recommended_action_label: str | None, preferred_workspace_id: str | None, preferred_panel_id: str | None, app_language: str) -> ProductSurfaceStageView:
+    return ProductSurfaceStageView(
+        stage_id=stage_id,
+        stage_label=stage_label,
+        stage_state=stage_state,
+        stage_state_label=ui_text(f"shell.product_readiness.stage_state.{stage_state}", app_language=app_language, fallback_text=stage_state.replace("_", " ")),
+        blocker_count=blocker_count,
+        pending_count=pending_count,
+        summary=summary,
+        recommended_action_id=recommended_action_id,
+        recommended_action_label=recommended_action_label,
+        preferred_workspace_id=preferred_workspace_id,
+        preferred_panel_id=preferred_panel_id,
+    )
+
+
+def _first_success_achieved(*, source, execution_record: ExecutionRecordModel | None, execution_vm: ExecutionPanelViewModel | None) -> bool:
+    if isinstance(source, WorkingSaveModel):
+        metadata = _ui_metadata(source)
+        if bool(metadata.get("beginner_first_success_achieved")):
+            return True
+    if execution_vm is not None and execution_vm.result_reading.visible and execution_vm.result_reading.state == "ready":
+        return True
+    if isinstance(execution_record, ExecutionRecordModel):
+        return execution_record.meta.status in {"completed", "partial"}
+    return False
+
+
+def _run_action_enabled(execution_vm: ExecutionPanelViewModel | None) -> bool:
+    if execution_vm is None:
+        return False
+    if execution_vm.control_state.can_run:
+        return True
+    return any(action.action_id == "run" and action.enabled for action in execution_vm.control_state.available_actions)
+
+
+def _product_readiness_review(*, source, execution_record: ExecutionRecordModel | None, beginner_mode: bool, empty_workspace_mode: bool, designer_vm: DesignerPanelViewModel | None, validation_vm: ValidationPanelViewModel | None, execution_vm: ExecutionPanelViewModel | None, circuit_library_vm: CircuitLibraryViewModel | None, result_history_vm: ResultHistoryViewModel | None, feedback_channel_vm: FeedbackChannelViewModel | None, contextual_help: ContextualHelpView, privacy_transparency: PrivacyTransparencyView, mobile_first_run: MobileFirstRunView, app_language: str) -> ProductReadinessReviewView:
+    first_success = _first_success_achieved(source=source, execution_record=execution_record, execution_vm=execution_vm)
+
+    provider_setup_needed = bool(designer_vm is not None and designer_vm.provider_setup_guidance.visible and not designer_vm.provider_inline_key_entry.has_connected_provider)
+    template_available = bool(designer_vm is not None and designer_vm.template_gallery.visible and designer_vm.template_gallery.templates)
+    external_input_available = bool(designer_vm is not None and designer_vm.external_input_guidance.visible)
+
+    if first_success:
+        setup_state = "complete"
+        setup_blockers = 0
+        setup_pending = 0
+        setup_summary = ui_text("shell.product_readiness.summary.entry_complete", app_language=app_language, fallback_text="The beginner entry path is already crossed. Reuse the existing workflow surfaces instead of reopening first-step setup.")
+        setup_action_id = None
+        setup_action_label = None
+    elif provider_setup_needed:
+        setup_state = "provider_setup_needed"
+        setup_blockers = 1
+        setup_pending = 0
+        setup_summary = (designer_vm.provider_setup_guidance.summary if designer_vm is not None else None) or ui_text("shell.product_readiness.summary.provider_setup_needed", app_language=app_language, fallback_text="Connect an AI model before the first workflow can run successfully.")
+        setup_action_id = "open_provider_setup"
+        setup_action_label = ui_text("builder.action.open_provider_setup", app_language=app_language, fallback_text="Connect AI model")
+    elif empty_workspace_mode:
+        setup_state = "goal_entry_needed"
+        setup_blockers = 0
+        setup_pending = 1
+        setup_summary = contextual_help.summary or ui_text("shell.product_readiness.summary.goal_entry_needed", app_language=app_language, fallback_text="Start from a goal, starter template, file, or web address so the first workflow shape exists.")
+        setup_action_id = "browse_templates" if template_available else None
+        setup_action_label = ui_text("phase6.help.start.templates" if template_available else "beginner.onboarding.start.action", app_language=app_language, fallback_text=("Browse templates" if template_available else "Open Designer"))
+    elif template_available or external_input_available:
+        setup_state = "entry_ready"
+        setup_blockers = 0
+        setup_pending = 0
+        setup_summary = ui_text("shell.product_readiness.summary.entry_ready", app_language=app_language, fallback_text="Starter entry surfaces are available. You can continue from a template, file, URL, or direct goal entry.")
+        setup_action_id = "browse_templates" if template_available else None
+        setup_action_label = ui_text("phase6.help.start.templates" if template_available else "beginner.onboarding.start.action", app_language=app_language, fallback_text=("Browse templates" if template_available else "Open Designer"))
+    else:
+        setup_state = "ready"
+        setup_blockers = 0
+        setup_pending = 0
+        setup_summary = ui_text("shell.product_readiness.summary.entry_ready", app_language=app_language, fallback_text="Starter entry surfaces are available. You can continue from a template, file, URL, or direct goal entry.")
+        setup_action_id = None
+        setup_action_label = None
+
+    setup_stage = _product_stage(
+        stage_id="first_success_setup",
+        stage_label=ui_text("shell.product_readiness.stage.first_success_setup", app_language=app_language, fallback_text="First success setup"),
+        stage_state=setup_state,
+        blocker_count=setup_blockers,
+        pending_count=setup_pending,
+        summary=setup_summary,
+        recommended_action_id=setup_action_id,
+        recommended_action_label=setup_action_label,
+        preferred_workspace_id="node_configuration" if beginner_mode else "visual_editor",
+        preferred_panel_id="designer",
+        app_language=app_language,
+    )
+
+    if validation_vm is not None and validation_vm.overall_status == "blocked":
+        run_state = "fix_before_run"
+        run_blockers = 1
+        run_pending = 0
+        run_summary = validation_vm.beginner_summary.cause or contextual_help.summary or ui_text("shell.product_readiness.summary.fix_before_run", app_language=app_language, fallback_text="Fix the blocking issue before the first run can continue.")
+        run_action_id = "open_node_configuration"
+        run_action_label = ui_text("builder.action.open_node_configuration", app_language=app_language, fallback_text="Open step settings")
+    elif execution_vm is not None and execution_vm.waiting_feedback.visible:
+        run_state = "run_in_progress"
+        run_blockers = 1
+        run_pending = 0
+        run_summary = execution_vm.waiting_feedback.summary or ui_text("shell.product_readiness.summary.run_in_progress", app_language=app_language, fallback_text="A run is still active. Keep monitoring it before treating the first-success path as settled.")
+        run_action_id = "open_runtime_monitoring"
+        run_action_label = ui_text("builder.action.open_runtime_monitoring", app_language=app_language, fallback_text="Open run monitor")
+    elif execution_vm is not None and execution_vm.result_reading.visible and execution_vm.result_reading.state == "ready":
+        run_state = "complete"
+        run_blockers = 0
+        run_pending = 0
+        run_summary = execution_vm.result_reading.summary or ui_text("shell.product_readiness.summary.result_ready", app_language=app_language, fallback_text="A readable result is already available for the first-success path.")
+        run_action_id = "open_result_history" if result_history_vm is not None and result_history_vm.visible else None
+        run_action_label = ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results") if run_action_id is not None else None
+    elif _run_action_enabled(execution_vm):
+        run_state = "ready_to_run"
+        run_blockers = 0
+        run_pending = 1
+        run_summary = (execution_vm.cost_visibility.summary if execution_vm is not None and execution_vm.cost_visibility.visible and execution_vm.cost_visibility.summary else None) or ui_text("shell.product_readiness.summary.ready_to_run", app_language=app_language, fallback_text="The workflow is ready enough to run. Review the expected usage, then launch it and read the result.")
+        run_action_id = "run_current"
+        run_action_label = ui_text("builder.action.run_current", app_language=app_language, fallback_text="Run current")
+    elif first_success:
+        run_state = "complete"
+        run_blockers = 0
+        run_pending = 0
+        run_summary = ui_text("shell.product_readiness.summary.result_ready", app_language=app_language, fallback_text="A readable result is already available for the first-success path.")
+        run_action_id = None
+        run_action_label = None
+    else:
+        run_state = "waiting"
+        run_blockers = 0
+        run_pending = 1
+        run_summary = contextual_help.summary or ui_text("shell.product_readiness.summary.run_waiting", app_language=app_language, fallback_text="The run path is not active yet. Keep moving through review and approval until the run action becomes available.")
+        run_action_id = None
+        run_action_label = None
+
+    if privacy_transparency.visible and privacy_transparency.requires_acknowledgement and run_state not in {"complete", "run_in_progress"}:
+        run_pending = max(run_pending, 1)
+        if privacy_transparency.summary:
+            run_summary = f"{run_summary} {privacy_transparency.summary}" if run_summary else privacy_transparency.summary
+
+    if mobile_first_run.visible and mobile_first_run.summary and run_state in {"ready_to_run", "waiting"}:
+        run_summary = mobile_first_run.summary
+
+    run_stage = _product_stage(
+        stage_id="first_success_run",
+        stage_label=ui_text("shell.product_readiness.stage.first_success_run", app_language=app_language, fallback_text="First success run"),
+        stage_state=run_state,
+        blocker_count=run_blockers,
+        pending_count=run_pending,
+        summary=run_summary,
+        recommended_action_id=run_action_id,
+        recommended_action_label=run_action_label,
+        preferred_workspace_id="runtime_monitoring" if run_action_id in {"run_current", "open_runtime_monitoring", "open_result_history"} else "node_configuration",
+        preferred_panel_id="execution" if run_action_id in {"run_current", "open_runtime_monitoring"} else "result_history",
+        app_language=app_language,
+    )
+
+    return_use_unlocked = first_success or isinstance(source, ExecutionRecordModel) or (result_history_vm is not None and result_history_vm.visible)
+    has_history = bool(result_history_vm is not None and result_history_vm.visible and result_history_vm.returned_count > 0)
+    has_library = bool(circuit_library_vm is not None and circuit_library_vm.visible)
+    has_feedback = bool(feedback_channel_vm is not None and feedback_channel_vm.visible)
+
+    if not return_use_unlocked:
+        return_state = "inactive"
+        return_blockers = 0
+        return_pending = 0
+        return_summary = ui_text("shell.product_readiness.summary.return_use_inactive", app_language=app_language, fallback_text="Return-use surfaces unlock after the first successful run and result reading path are established.")
+        return_action_id = None
+        return_action_label = None
+    elif has_history and has_library and has_feedback:
+        return_state = "complete"
+        return_blockers = 0
+        return_pending = 0
+        return_summary = ui_text("shell.product_readiness.summary.return_use_ready", app_language=app_language, fallback_text="Library, recent results, and feedback routes are all available for return visits.")
+        return_action_id = "open_circuit_library"
+        return_action_label = ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library")
+    elif has_library and has_feedback:
+        return_state = "history_needed"
+        return_blockers = 1
+        return_pending = 0
+        return_summary = (result_history_vm.empty_summary if result_history_vm is not None else None) or ui_text("shell.product_readiness.summary.history_needed", app_language=app_language, fallback_text="The return-use path still needs readable result history so people can reopen what happened last time without entering deep trace tooling.")
+        return_action_id = "open_result_history"
+        return_action_label = ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results")
+    else:
+        return_state = "return_use_ready"
+        return_blockers = 0
+        return_pending = 1
+        return_summary = ui_text("shell.product_readiness.summary.return_use_ready", app_language=app_language, fallback_text="Library, recent results, and feedback routes are all available for return visits.")
+        return_action_id = "open_circuit_library" if has_library else None
+        return_action_label = ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library") if return_action_id is not None else None
+
+    return_stage = _product_stage(
+        stage_id="return_use",
+        stage_label=ui_text("shell.product_readiness.stage.return_use", app_language=app_language, fallback_text="Return use"),
+        stage_state=return_state,
+        blocker_count=return_blockers,
+        pending_count=return_pending,
+        summary=return_summary,
+        recommended_action_id=return_action_id,
+        recommended_action_label=return_action_label,
+        preferred_workspace_id="library" if return_action_id in {"open_circuit_library", "open_feedback_channel"} else "runtime_monitoring",
+        preferred_panel_id="circuit_library" if return_action_id == "open_circuit_library" else ("feedback_channel" if return_action_id == "open_feedback_channel" else "result_history"),
+        app_language=app_language,
+    )
+
+    stages = (setup_stage, run_stage, return_stage)
+    if run_stage.stage_state == "fix_before_run" and not empty_workspace_mode and not first_success:
+        review_state = "hold_first_success_run"
+        bottleneck_stage = run_stage
+        summary_key = "shell.product_readiness.summary.hold_first_success_run"
+        fallback_summary = "The next real product bottleneck is still inside the first-success run path. Finish review, run, and readable result follow-through before widening scope."
+    elif setup_stage.blocker_count or setup_stage.stage_state in {"goal_entry_needed", "provider_setup_needed"}:
+        review_state = "hold_first_success_setup"
+        bottleneck_stage = setup_stage
+        summary_key = "shell.product_readiness.summary.hold_first_success_setup"
+        fallback_summary = "The next real product bottleneck is still inside the first-success setup path. Finish goal entry or provider setup before widening scope."
+    elif (run_stage.blocker_count or run_stage.stage_state in {"ready_to_run", "run_in_progress", "fix_before_run", "waiting"}) and not first_success:
+        review_state = "hold_first_success_run"
+        bottleneck_stage = run_stage
+        summary_key = "shell.product_readiness.summary.hold_first_success_run"
+        fallback_summary = "The next real product bottleneck is still inside the first-success run path. Finish review, run, and readable result follow-through before widening scope."
+    elif return_stage.blocker_count:
+        review_state = "hold_return_use"
+        bottleneck_stage = return_stage
+        summary_key = "shell.product_readiness.summary.hold_return_use"
+        fallback_summary = "The first-success path is healthy enough, but return-use is still the next product bottleneck. Strengthen library/result-history/feedback continuity before widening scope."
+    else:
+        review_state = "product_surface_stable"
+        bottleneck_stage = return_stage
+        summary_key = "shell.product_readiness.summary.product_surface_stable"
+        fallback_summary = "The current beginner-first and return-use product surfaces are provisionally stable. Choose the next true project bottleneck instead of polishing these paths further."
+
+    return ProductReadinessReviewView(
+        review_state=review_state,
+        review_label=ui_text(f"shell.product_readiness.state.{review_state}", app_language=app_language, fallback_text=review_state.replace("_", " ")),
+        next_bottleneck_stage=None if review_state == "product_surface_stable" else bottleneck_stage.stage_id,
+        next_bottleneck_label=None if review_state == "product_surface_stable" else bottleneck_stage.stage_label,
+        recommended_action_id=None if review_state == "product_surface_stable" else bottleneck_stage.recommended_action_id,
+        recommended_action_label=None if review_state == "product_surface_stable" else bottleneck_stage.recommended_action_label,
+        stages=stages,
+        summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary),
+    )
+
+
 def _selected_ref_from_validation(validation_report: ValidationReport | None) -> str | None:
     if validation_report is None:
         return None
@@ -895,6 +1168,22 @@ def read_builder_shell_view_model(
         runtime_monitoring_vm=runtime_monitoring_vm,
         app_language=app_language,
     )
+    product_readiness_vm = _product_readiness_review(
+        source=source_unwrapped if source_unwrapped is not None else execution_record,
+        execution_record=execution_record,
+        beginner_mode=beginner_mode,
+        empty_workspace_mode=empty_workspace_mode,
+        designer_vm=designer_vm,
+        validation_vm=validation_vm,
+        execution_vm=execution_vm,
+        circuit_library_vm=circuit_library_vm,
+        result_history_vm=result_history_vm,
+        feedback_channel_vm=feedback_channel_vm,
+        contextual_help=contextual_help,
+        privacy_transparency=privacy_transparency,
+        mobile_first_run=mobile_first_run,
+        app_language=app_language,
+    )
 
     return BuilderShellViewModel(
         shell_status=shell_status,
@@ -924,6 +1213,7 @@ def read_builder_shell_view_model(
         result_history=result_history_vm,
         feedback_channel=feedback_channel_vm,
         workspace_chain=workspace_chain_vm,
+        product_readiness=product_readiness_vm,
         layout=layout_vm,
         diagnostics=diagnostics,
         beginner_onboarding=beginner_onboarding,
@@ -940,6 +1230,8 @@ __all__ = [
     "BeginnerOnboardingHintView",
     "WorkspaceChainStageView",
     "WorkspaceChainReviewView",
+    "ProductSurfaceStageView",
+    "ProductReadinessReviewView",
     "BuilderShellViewModel",
     "read_builder_shell_view_model",
 ]
