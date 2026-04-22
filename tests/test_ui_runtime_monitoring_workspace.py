@@ -4,8 +4,8 @@ from src.storage.models.commit_snapshot_model import CommitApprovalModel, Commit
 from src.storage.models.execution_record_model import ArtifactRecordCard, ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel, NodeTimingCard, OutputResultCard
 from src.storage.models.shared_sections import CircuitModel, ResourcesModel, StateModel
 from src.storage.models.working_save_model import RuntimeModel, UIModel, WorkingSaveMeta, WorkingSaveModel
+from src.contracts.nex_contract import ValidationFinding, ValidationReport
 from src.ui.runtime_monitoring_workspace import read_runtime_monitoring_workspace_view_model
-
 
 
 
@@ -19,6 +19,7 @@ def _working_save() -> WorkingSaveModel:
         ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
     )
 
+
 def _commit() -> CommitSnapshotModel:
     return CommitSnapshotModel(
         meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001"),
@@ -29,6 +30,7 @@ def _commit() -> CommitSnapshotModel:
         approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
         lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
     )
+
 
 
 def _run_running() -> ExecutionRecordModel:
@@ -51,6 +53,23 @@ def _run_running() -> ExecutionRecordModel:
     )
 
 
+
+def _run_completed() -> ExecutionRecordModel:
+    run = _run_running()
+    return ExecutionRecordModel(
+        meta=ExecutionMetaModel(**{**run.meta.__dict__, "status": "completed", "finished_at": "2026-04-07T00:00:05Z"}),
+        source=run.source,
+        input=run.input,
+        timeline=run.timeline,
+        node_results=run.node_results,
+        outputs=run.outputs,
+        artifacts=run.artifacts,
+        diagnostics=run.diagnostics,
+        observability=run.observability,
+    )
+
+
+
 def test_runtime_monitoring_workspace_projects_phase5_monitoring_surface() -> None:
     vm = read_runtime_monitoring_workspace_view_model(
         _working_save(),
@@ -69,6 +88,16 @@ def test_runtime_monitoring_workspace_projects_phase5_monitoring_surface() -> No
     assert vm.health.cancel_available is True
     assert vm.health.execution_status == "running"
     assert vm.workspace_status_label == "실시간 모니터링"
+    assert vm.readiness.posture == "active_monitoring"
+    assert vm.focus_hint.hint_kind == "active_run"
+    assert vm.workspace_handoff.destination_workspace == "runtime_monitoring"
+    assert vm.action_shortcuts[0].action.action_id == "watch_run_progress"
+    assert vm.attention_targets[0].attention_kind == "watch_live_run"
+    assert vm.progress_stages[1].stage_id == "monitor"
+    assert vm.progress_stages[1].state == "current"
+    assert vm.closure_barriers[0].barrier_kind == "run_in_progress"
+    assert vm.closure_verdict.closure_state == "hold_runtime_monitoring"
+
 
 
 def test_runtime_monitoring_workspace_marks_commit_snapshot_as_launch_ready_when_execution_can_start() -> None:
@@ -78,26 +107,27 @@ def test_runtime_monitoring_workspace_marks_commit_snapshot_as_launch_ready_when
     assert vm.workspace_status == "launch_ready"
     assert vm.health.launch_available is True
     assert vm.workspace_status_label == "Launch ready"
+    assert vm.readiness.posture == "ready_to_launch"
+    assert vm.local_actions[0].action_id == "run_current"
+    assert vm.progress_stages[0].stage_id == "launch"
+    assert vm.progress_stages[0].state == "current"
+    assert vm.closure_barriers[0].barrier_kind == "run_not_started"
+    assert vm.closure_verdict.closure_state == "hold_runtime_monitoring"
+
 
 
 def test_runtime_monitoring_workspace_marks_execution_record_as_terminal_review_when_not_live() -> None:
-    run = _run_running()
-    run = ExecutionRecordModel(
-        meta=ExecutionMetaModel(**{**run.meta.__dict__, "status": "completed", "finished_at": "2026-04-07T00:00:05Z"}),
-        source=run.source,
-        input=run.input,
-        timeline=run.timeline,
-        node_results=run.node_results,
-        outputs=run.outputs,
-        artifacts=run.artifacts,
-        diagnostics=run.diagnostics,
-        observability=run.observability,
-    )
-    vm = read_runtime_monitoring_workspace_view_model(run)
+    vm = read_runtime_monitoring_workspace_view_model(_run_completed())
 
     assert vm.storage_role == "execution_record"
     assert vm.workspace_status == "terminal_review"
     assert vm.workspace_status_label == "Terminal history review"
+    assert vm.readiness.posture == "terminal_inspection"
+    assert vm.focus_hint.hint_kind in {"artifact_review", "timeline_overview"}
+    assert vm.progress_stages[2].stage_id == "inspect"
+    assert vm.progress_stages[2].state == "current"
+    assert vm.closure_verdict.closure_state == "workspace_chain_stable"
+
 
 
 def test_runtime_monitoring_workspace_exposes_launch_guidance() -> None:
@@ -107,24 +137,13 @@ def test_runtime_monitoring_workspace_exposes_launch_guidance() -> None:
     assert vm.explanation == "This approved workflow is ready to run. Start it to monitor progress here."
 
 
-def test_runtime_monitoring_workspace_exposes_terminal_review_guidance() -> None:
-    run = _run_running()
-    run = ExecutionRecordModel(
-        meta=ExecutionMetaModel(**{**run.meta.__dict__, "status": "completed", "finished_at": "2026-04-07T00:00:05Z"}),
-        source=run.source,
-        input=run.input,
-        timeline=run.timeline,
-        node_results=run.node_results,
-        outputs=run.outputs,
-        artifacts=run.artifacts,
-        diagnostics=run.diagnostics,
-        observability=run.observability,
-    )
 
-    vm = read_runtime_monitoring_workspace_view_model(run)
+def test_runtime_monitoring_workspace_exposes_terminal_review_guidance() -> None:
+    vm = read_runtime_monitoring_workspace_view_model(_run_completed())
 
     assert vm.workspace_status == "terminal_review"
     assert vm.explanation == "Review the finished run results, outputs, and artifacts here."
+
 
 
 def test_runtime_monitoring_workspace_exposes_suggested_actions_for_launch_ready() -> None:
@@ -135,6 +154,7 @@ def test_runtime_monitoring_workspace_exposes_suggested_actions_for_launch_ready
         "run_current",
         "open_visual_editor",
     ]
+
 
 
 def test_runtime_monitoring_workspace_exposes_suggested_actions_for_live_monitoring() -> None:
@@ -148,21 +168,9 @@ def test_runtime_monitoring_workspace_exposes_suggested_actions_for_live_monitor
     ]
 
 
-def test_runtime_monitoring_workspace_exposes_suggested_actions_for_terminal_review() -> None:
-    run = _run_running()
-    run = ExecutionRecordModel(
-        meta=ExecutionMetaModel(**{**run.meta.__dict__, "status": "completed", "finished_at": "2026-04-07T00:00:05Z"}),
-        source=run.source,
-        input=run.input,
-        timeline=run.timeline,
-        node_results=run.node_results,
-        outputs=run.outputs,
-        artifacts=run.artifacts,
-        diagnostics=run.diagnostics,
-        observability=run.observability,
-    )
 
-    vm = read_runtime_monitoring_workspace_view_model(run)
+def test_runtime_monitoring_workspace_exposes_suggested_actions_for_terminal_review() -> None:
+    vm = read_runtime_monitoring_workspace_view_model(_run_completed())
 
     assert vm.workspace_status == "terminal_review"
     assert [action.action_id for action in vm.suggested_actions] == [
@@ -170,3 +178,30 @@ def test_runtime_monitoring_workspace_exposes_suggested_actions_for_terminal_rev
         "replay_latest",
         "open_feedback_channel",
     ]
+
+
+
+def test_runtime_monitoring_workspace_failed_review_holds_workspace_chain() -> None:
+    report = ValidationReport(
+        role="working_save",
+        findings=[
+            ValidationFinding(
+                code="runtime_block",
+                category="runtime",
+                severity="error",
+                blocking=True,
+                location="execution",
+                message="Run review still blocked.",
+                hint="Inspect the runtime evidence.",
+            )
+        ],
+        blocking_count=1,
+        warning_count=0,
+        result="fail",
+    )
+    vm = read_runtime_monitoring_workspace_view_model(_working_save(), execution_record=_run_completed(), validation_report=report)
+
+    assert vm.workspace_status == "failed_review"
+    assert vm.readiness.posture == "failure_investigation"
+    assert vm.attention_targets[0].attention_kind == "failure_review"
+    assert vm.closure_verdict.closure_state == "hold_runtime_monitoring"
