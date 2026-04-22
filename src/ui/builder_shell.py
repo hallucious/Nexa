@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from types import SimpleNamespace
 from typing import Any
 
@@ -408,6 +408,37 @@ def _selected_ref_from_validation(validation_report: ValidationReport | None) ->
     return None
 
 
+
+
+def _explicit_panel_id_for_workspace_action(selected_action_id: str | None, *, shell_vm_inputs: dict[str, object] | None = None) -> str | None:
+    if selected_action_id == "open_visual_editor":
+        return "graph"
+    if selected_action_id == "open_runtime_monitoring":
+        return "execution"
+    if selected_action_id == "open_node_configuration":
+        shell_vm_inputs = shell_vm_inputs or {}
+        inspector_vm = shell_vm_inputs.get("inspector_vm")
+        designer_vm = shell_vm_inputs.get("designer_vm")
+        validation_vm = shell_vm_inputs.get("validation_vm")
+        if inspector_vm is not None and getattr(inspector_vm, "object_type", "none") not in {"none", "unknown"}:
+            return "inspector"
+        if validation_vm is not None and getattr(validation_vm, "overall_status", None) == "blocked":
+            return "validation"
+        if designer_vm is not None:
+            return "designer"
+        return "inspector"
+    return None
+
+
+def _coordination_with_explicit_workspace_focus(coordination_vm: BuilderPanelCoordinationStateView, *, selected_action_id: str | None, shell_vm_inputs: dict[str, object] | None = None) -> BuilderPanelCoordinationStateView:
+    panel_id = _explicit_panel_id_for_workspace_action(selected_action_id, shell_vm_inputs=shell_vm_inputs)
+    if panel_id is None:
+        return coordination_vm
+    visible_panels = list(coordination_vm.visible_panels)
+    if panel_id not in visible_panels:
+        visible_panels.append(panel_id)
+    panel_order = [panel_id, *[existing for existing in coordination_vm.panel_order if existing != panel_id]]
+    return replace(coordination_vm, active_panel=panel_id, visible_panels=visible_panels, panel_order=panel_order, focus_mode="workspace_navigation")
 def _requested_workspace_id_from_action(selected_action_id: str | None, *, action_schema: BuilderActionSchemaView) -> str | None:
     if not selected_action_id:
         return None
@@ -531,6 +562,16 @@ def read_builder_shell_view_model(
         execution_view=execution_vm,
         designer_view=designer_vm,
         app_language=app_language,
+    )
+
+    coordination_vm = _coordination_with_explicit_workspace_focus(
+        coordination_vm,
+        selected_action_id=selected_action_id,
+        shell_vm_inputs={
+            "inspector_vm": inspector_vm,
+            "designer_vm": designer_vm,
+            "validation_vm": validation_vm,
+        },
     )
 
     metadata = _ui_metadata(source_unwrapped)

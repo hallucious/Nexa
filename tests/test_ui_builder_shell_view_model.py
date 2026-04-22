@@ -452,6 +452,8 @@ def test_builder_shell_honors_explicit_open_visual_editor_action() -> None:
     vm = read_builder_shell_view_model(source, selected_action_id="open_visual_editor")
 
     assert vm.active_workspace_id == "visual_editor"
+    assert vm.coordination.active_panel == "graph"
+    assert vm.coordination.panel_order[0] == "graph"
 
 
 def test_builder_shell_honors_explicit_open_node_configuration_action() -> None:
@@ -459,6 +461,8 @@ def test_builder_shell_honors_explicit_open_node_configuration_action() -> None:
     vm = read_builder_shell_view_model(source, selected_action_id="open_node_configuration")
 
     assert vm.active_workspace_id == "node_configuration"
+    assert vm.coordination.active_panel in {"inspector", "designer", "validation"}
+    assert vm.coordination.panel_order[0] == vm.coordination.active_panel
 
 
 def test_builder_shell_honors_explicit_open_runtime_monitoring_action() -> None:
@@ -466,3 +470,5 @@ def test_builder_shell_honors_explicit_open_runtime_monitoring_action() -> None:
     vm = read_builder_shell_view_model(source, execution_record=_run(), selected_action_id="open_runtime_monitoring")
 
     assert vm.active_workspace_id == "runtime_monitoring"
+    assert vm.coordination.active_panel == "execution"
+    assert vm.coordination.panel_order[0] == "execution"
