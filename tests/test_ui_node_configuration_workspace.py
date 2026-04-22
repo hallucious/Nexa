@@ -33,6 +33,16 @@ def _validation() -> ValidationReport:
     )
 
 
+def _blocked_validation() -> ValidationReport:
+    return ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="BLOCK_NODE", category="structural", severity="high", blocking=True, location="node:n1", message="Node 1 is blocked")],
+        blocking_count=1,
+        warning_count=0,
+        result="blocked",
+    )
+
+
 def _session_card() -> DesignerSessionStateCard:
     return DesignerSessionStateCard(
         card_version="0.1",
@@ -114,6 +124,37 @@ def _approval() -> DesignerApprovalFlowState:
     return DesignerApprovalFlowState(approval_id="approval-001", intent_ref="intent-001", patch_ref="patch-001", precheck_ref="pre-001", preview_ref="preview-001", current_stage="awaiting_decision", final_outcome="approved_for_commit")
 
 
+def _execution_record_context() -> ExecutionRecordModel:
+    from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionIssue, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel
+
+    return ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-07T00:00:00Z", started_at="2026-04-07T00:00:00Z", finished_at="2026-04-07T00:00:05Z", status="completed"),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(),
+        node_results=NodeResultsModel(results=[NodeResultCard(node_id="n1", status="failed", output_summary="failed", error_count=1)]),
+        outputs=ExecutionOutputModel(),
+        artifacts=ExecutionArtifactsModel(),
+        diagnostics=ExecutionDiagnosticsModel(errors=[ExecutionIssue(issue_code="RUNTIME_ERROR", category="runtime", severity="high", location="node:n1", message="failed")], warnings=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+
+def _commit_snapshot() -> object:
+    from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
+
+    working = _working_save()
+    return CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
+        circuit=working.circuit,
+        resources=working.resources,
+        state=working.state,
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
+
+
 def test_node_configuration_workspace_projects_phase5_configuration_surface() -> None:
     vm = read_node_configuration_workspace_view_model(
         _working_save(),
@@ -133,47 +174,35 @@ def test_node_configuration_workspace_projects_phase5_configuration_surface() ->
     assert vm.validation is not None
     assert vm.designer is not None
     assert vm.selection_summary.object_type == "node"
+    assert vm.selection_summary.constraint_count == 0
+    assert vm.selection_summary.finding_count == 1
     assert vm.can_edit_configuration is True
     assert vm.can_submit_designer_request is True
     assert vm.review_state.commit_eligible is True
+    assert vm.readiness.posture == "review_configuration"
+    assert vm.focus_hint.hint_kind == "designer_review"
+    assert vm.workspace_handoff.destination_panel == "designer"
+    assert [action.action_id for action in vm.local_actions[:3]] == [
+        "review_draft",
+        "commit_snapshot",
+        "request_revision",
+    ]
     assert vm.workspace_status_label == "Designer 검토 진행 중"
 
 
-
-def _execution_record_context() -> ExecutionRecordModel:
-    from src.storage.models.execution_record_model import ExecutionArtifactsModel, ExecutionDiagnosticsModel, ExecutionIssue, ExecutionInputModel, ExecutionMetaModel, ExecutionObservabilityModel, ExecutionOutputModel, ExecutionRecordModel, ExecutionSourceModel, ExecutionTimelineModel, NodeResultCard, NodeResultsModel
-    return ExecutionRecordModel(
-        meta=ExecutionMetaModel(run_id="run-001", record_format_version="1.0.0", created_at="2026-04-07T00:00:00Z", started_at="2026-04-07T00:00:00Z", finished_at="2026-04-07T00:00:05Z", status="completed"),
-        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
-        input=ExecutionInputModel(),
-        timeline=ExecutionTimelineModel(),
-        node_results=NodeResultsModel(results=[NodeResultCard(node_id="n1", status="failed", output_summary="failed", error_count=1)]),
-        outputs=ExecutionOutputModel(),
-        artifacts=ExecutionArtifactsModel(),
-        diagnostics=ExecutionDiagnosticsModel(errors=[ExecutionIssue(issue_code="RUNTIME_ERROR", category="runtime", severity="high", location="node:n1", message="failed")], warnings=[]),
-        observability=ExecutionObservabilityModel(),
-    )
-
-
 def test_node_configuration_workspace_uses_execution_record_focus_for_commit_snapshot_context() -> None:
-    from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
-    working = _working_save()
-    snapshot = CommitSnapshotModel(
-        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
-        circuit=working.circuit,
-        resources=working.resources,
-        state=working.state,
-        validation=CommitValidationModel(validation_result="passed", summary={}),
-        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
-        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
-    )
-
+    snapshot = _commit_snapshot()
     vm = read_node_configuration_workspace_view_model(snapshot, execution_record=_execution_record_context())
 
     assert vm.selection_summary.selected_ref == "node:n1"
     assert vm.selection_summary.object_type == "node"
+    assert vm.selection_summary.has_execution_context is True
     assert vm.workspace_status == "run_review"
     assert vm.can_edit_configuration is False
+    assert vm.readiness.posture == "run_readonly"
+    assert vm.focus_hint.hint_kind == "run_review"
+    assert vm.workspace_handoff.destination_workspace == "runtime_monitoring"
+    assert vm.workspace_handoff.action_id == "open_runtime_monitoring"
 
 
 def test_node_configuration_workspace_exposes_selection_guidance() -> None:
@@ -182,23 +211,13 @@ def test_node_configuration_workspace_exposes_selection_guidance() -> None:
     assert vm.workspace_status == "awaiting_selection"
     assert vm.workspace_status_label == "구성할 대상을 선택하세요"
     assert vm.explanation == "단계나 연결을 선택하면 세부 내용을 보고 구성할 수 있습니다."
+    assert vm.readiness.posture == "select_target"
+    assert vm.focus_hint.suggested_action_id == "open_visual_editor"
+    assert vm.workspace_handoff.destination_workspace == "visual_editor"
 
 
 def test_node_configuration_workspace_exposes_run_review_explanation() -> None:
-    from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
-
-    working = _working_save()
-    snapshot = CommitSnapshotModel(
-        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
-        circuit=working.circuit,
-        resources=working.resources,
-        state=working.state,
-        validation=CommitValidationModel(validation_result="passed", summary={}),
-        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
-        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
-    )
-
-    vm = read_node_configuration_workspace_view_model(snapshot, execution_record=_execution_record_context())
+    vm = read_node_configuration_workspace_view_model(_commit_snapshot(), execution_record=_execution_record_context())
 
     assert vm.workspace_status == "run_review"
     assert vm.workspace_status_label == "Reviewing executed configuration"
@@ -210,7 +229,36 @@ def test_node_configuration_workspace_exposes_suggested_actions_for_awaiting_sel
 
     assert vm.workspace_status == "awaiting_selection"
     assert [action.action_id for action in vm.suggested_actions] == [
+        "open_visual_editor",
         "save_working_save",
-        "run_current",
         "open_file_input",
+    ]
+
+
+def test_node_configuration_workspace_prioritizes_blocked_repair_flow() -> None:
+    vm = read_node_configuration_workspace_view_model(_working_save(), validation_report=_blocked_validation())
+
+    assert vm.workspace_status == "blocked"
+    assert vm.readiness.posture == "repair_selection"
+    assert vm.focus_hint.hint_kind == "repair_selection"
+    assert vm.workspace_handoff.destination_panel == "validation"
+    assert [shortcut.action.action_id for shortcut in vm.action_shortcuts[:3]] == [
+        "request_revision",
+        "open_diff",
+        "open_visual_editor",
+    ]
+
+
+def test_node_configuration_workspace_configuring_state_feels_editable() -> None:
+    vm = read_node_configuration_workspace_view_model(_working_save(), selected_ref="node:n1", validation_report=_validation())
+
+    assert vm.workspace_status == "configuring"
+    assert vm.selection_summary.editability == "editable"
+    assert vm.readiness.posture == "edit_configuration"
+    assert vm.focus_hint.hint_kind == "edit_selection"
+    assert vm.workspace_handoff.destination_workspace == "node_configuration"
+    assert vm.workspace_handoff.destination_panel == "inspector"
+    assert [action.action_id for action in vm.local_actions[:2]] == [
+        "review_draft",
+        "run_current",
     ]
