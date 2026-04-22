@@ -1529,42 +1529,169 @@ def _feedback_continuity_entries(
 
 
 def _feedback_continuity_section(
+    server_product_readiness_review: Mapping[str, Any] | None,
     feedback_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
     *,
+    recent_run_rows: Sequence[Mapping[str, Any]],
+    onboarding_state: Mapping[str, Any] | None,
+    routes: Mapping[str, Any],
     app_language: str = "en",
 ) -> dict[str, Any]:
     entries = _feedback_continuity_entries(feedback_rows, workspace_id)
     latest = entries[0] if entries else None
-    return build_shell_section(
+    recent_runs = list(_recent_run_rows_for_workspace(recent_run_rows, workspace_id, limit=5))
+    latest_run = recent_runs[0] if recent_runs else None
+    latest_run_status_family = str((latest_run or {}).get("status_family") or (latest_run or {}).get("status") or "").strip() or None
+    onboarding_step = _normalized_onboarding_current_step(onboarding_state)
+    review = dict(server_product_readiness_review or {})
+    stages = tuple(review.get("stages") or ())
+    setup_stage = dict(stages[0]) if len(stages) > 0 and isinstance(stages[0], Mapping) else {}
+    run_stage = dict(stages[1]) if len(stages) > 1 and isinstance(stages[1], Mapping) else {}
+    return_stage = dict(stages[2]) if len(stages) > 2 and isinstance(stages[2], Mapping) else {}
+    first_success_established = bool((onboarding_state or {}).get("first_success_achieved")) or str(return_stage.get("return_path_kind") or "").strip() not in {"", "first_success_prerequisite"}
+
+    feedback_api_target = str(routes.get("workspace_feedback") or f"/api/workspaces/{workspace_id}/feedback").strip() or None
+    feedback_page_target = str(routes.get("workspace_feedback_page") or f"/app/workspaces/{workspace_id}/feedback").strip() or None
+    onboarding_target = str(routes.get("onboarding") or "").strip() or None
+    result_history_target = str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or routes.get("latest_run_result") or "").strip() or None
+    designer_target = "designer"
+    setup_continue_target = str(setup_stage.get("recommended_action_target") or "").strip() or onboarding_target or designer_target
+    setup_continue_label = str(setup_stage.get("recommended_action_label") or "").strip() or ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding")
+
+    controls: list[dict[str, Any]] = []
+
+    def _append_control(control_id: str, label: str | None, action_target: str | None):
+        if not label or not action_target:
+            return
+        if any(item.get("action_target") == action_target for item in controls):
+            return
+        controls.append({
+            "control_id": control_id,
+            "label": label,
+            "action_kind": "open_route" if action_target.startswith("/") else "focus_section",
+            "action_target": action_target,
+        })
+
+    if entries:
+        feedback_state = "feedback_thread_reentry"
+        feedback_path_kind = "feedback_thread_reentry"
+        current_step_id = "reopen_feedback_thread"
+        next_step_id = "reopen_result" if result_history_target else None
+        feedback_summary = ui_text(
+            "server.shell.feedback_summary.feedback_thread_reentry",
+            app_language=app_language,
+            fallback_text="A feedback thread already exists. Reopen it first so follow-up context stays attached to the original report.",
+        )
+        _append_control("feedback-open-page", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_page_target)
+        _append_control("feedback-open-api", ui_text("server.shell.open_feedback", app_language=app_language, fallback_text="Open feedback"), feedback_api_target)
+        _append_control("feedback-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
+    elif not first_success_established:
+        feedback_state = "blocked_help"
+        feedback_path_kind = "blocked_help"
+        current_step_id = "report_confusion"
+        next_step_id = "continue_setup"
+        feedback_summary = ui_text(
+            "server.shell.feedback_summary.blocked_help",
+            app_language=app_language,
+            fallback_text="Use the feedback path to report confusing or blocked first-success screens while you continue setup.",
+        )
+        _append_control("feedback-open-page", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_page_target)
+        _append_control("feedback-open-api", ui_text("server.shell.open_feedback", app_language=app_language, fallback_text="Open feedback"), feedback_api_target)
+        _append_control("feedback-continue-setup", setup_continue_label, setup_continue_target)
+    elif latest_run_status_family == "terminal_failure" and not entries:
+        feedback_state = "run_issue_followup"
+        feedback_path_kind = "run_issue_followup"
+        current_step_id = "report_run_issue"
+        next_step_id = "reopen_result"
+        feedback_summary = ui_text(
+            "server.shell.feedback_summary.run_issue_followup",
+            app_language=app_language,
+            fallback_text="A recent run failed after first success. Capture the issue so the product path does not lose the failure context.",
+        )
+        _append_control("feedback-open-page", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_page_target)
+        _append_control("feedback-open-api", ui_text("server.shell.open_feedback", app_language=app_language, fallback_text="Open feedback"), feedback_api_target)
+        _append_control("feedback-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
+    else:
+        feedback_state = "product_learning_followup"
+        feedback_path_kind = "product_learning_followup"
+        current_step_id = "share_friction_note"
+        next_step_id = "reopen_result" if result_history_target else None
+        feedback_summary = ui_text(
+            "server.shell.feedback_summary.product_learning_followup",
+            app_language=app_language,
+            fallback_text="Leave a quick friction note so the next return-use pass keeps the product-learning signal from this session.",
+        )
+        _append_control("feedback-open-page", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_page_target)
+        _append_control("feedback-open-api", ui_text("server.shell.open_feedback", app_language=app_language, fallback_text="Open feedback"), feedback_api_target)
+        _append_control("feedback-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
+
+    path_fallbacks = {
+        "blocked_help": "Blocked help",
+        "run_issue_followup": "Run issue follow-up",
+        "feedback_thread_reentry": "Feedback thread reentry",
+        "product_learning_followup": "Product learning follow-up",
+    }
+    step_fallbacks = {
+        "report_confusion": "Report confusing screen",
+        "continue_setup": "Continue first-success setup",
+        "report_run_issue": "Report recent run issue",
+        "reopen_feedback_thread": "Reopen feedback thread",
+        "share_friction_note": "Share a quick friction note",
+        "reopen_result": "Reopen a recent result",
+    }
+    path_label = ui_text(
+        f"server.shell.feedback_path.{feedback_path_kind}",
+        app_language=app_language,
+        fallback_text=path_fallbacks.get(feedback_path_kind, feedback_path_kind.replace("_", " ").title()),
+    )
+    current_step_label = ui_text(
+        f"server.shell.feedback_step.{current_step_id}",
+        app_language=app_language,
+        fallback_text=step_fallbacks.get(current_step_id, current_step_id.replace("_", " ").title()),
+    )
+    next_step_label = ui_text(
+        f"server.shell.feedback_step.{next_step_id}",
+        app_language=app_language,
+        fallback_text=step_fallbacks.get(next_step_id, next_step_id.replace("_", " ").title()),
+    ) if next_step_id else None
+    step_order = [current_step_id] + ([next_step_id] if next_step_id else [])
+    step_order_summary = " → ".join(
+        f"{index + 1}. {ui_text(f'server.shell.feedback_step.{step_id}', app_language=app_language, fallback_text=step_fallbacks.get(step_id, step_id.replace('_', ' ').title()))}"
+        for index, step_id in enumerate(step_order)
+    )
+
+    section = build_shell_section(
         headline=ui_text("server.shell.feedback_continuity", app_language=app_language, fallback_text="Feedback continuity"),
         lines=_summary_lines(
-            ui_text("server.shell.feedback_items_prefix", app_language=app_language, fallback_text="Feedback items: ") + str(len(entries)) if entries else ui_text("server.shell.no_feedback_continuity", app_language=app_language, fallback_text="No feedback has been recorded yet."),
-            ui_text("server.shell.latest_feedback_prefix", app_language=app_language, fallback_text="Latest feedback: ") + f"{latest['category']} — {latest['feedback_id'] or 'feedback'}" if latest else None,
+            ui_text("server.shell.feedback_state_prefix", app_language=app_language, fallback_text="Feedback state: {state}", state=ui_text(f"server.shell.feedback_state.{feedback_state}", app_language=app_language, fallback_text=feedback_state.replace("_", " "))),
+            ui_text("server.shell.feedback_path_prefix", app_language=app_language, fallback_text="Current path: {path}", path=path_label),
+            ui_text("server.shell.feedback_current_step_prefix", app_language=app_language, fallback_text="Current step: {step}", step=current_step_label),
+            ui_text("server.shell.feedback_next_step_prefix", app_language=app_language, fallback_text="Next after this: {step}", step=next_step_label) if next_step_label else None,
+            feedback_summary,
+            ui_text("server.shell.feedback_items_count_prefix", app_language=app_language, fallback_text="Feedback items: {count}", count=str(len(entries))),
+            ui_text("server.shell.feedback_onboarding_prefix", app_language=app_language, fallback_text="Onboarding step: {step}", step=onboarding_step) if onboarding_step else None,
+            ui_text("server.shell.feedback_latest_run_prefix", app_language=app_language, fallback_text="Latest run state: {state}", state=latest_run_status_family) if latest_run_status_family else None,
         ),
         detail_title=ui_text("server.shell.feedback_continuity_detail", app_language=app_language, fallback_text="Feedback continuity detail"),
-        detail_items=[
-            f"{index + 1}. {entry['category']} — {entry['surface']} — {entry['status']}"
-            + (f" — {entry['feedback_id']}" if entry.get('feedback_id') else "")
-            for index, entry in enumerate(entries[:3])
-        ],
+        detail_items=_summary_lines(
+            ui_text("server.shell.feedback_step_order_prefix", app_language=app_language, fallback_text="Step order: {steps}", steps=step_order_summary),
+            ui_text("server.shell.latest_feedback_prefix", app_language=app_language, fallback_text="Latest feedback: {feedback}", feedback=f"{latest['category']} — {latest['feedback_id'] or 'feedback'}") if latest else None,
+            *[
+                f"{index + 1}. {entry['category']} — {entry['surface']} — {entry['status']}" + (f" — {entry['feedback_id']}" if entry.get('feedback_id') else "")
+                for index, entry in enumerate(entries[:3])
+            ],
+        ),
         detail_empty=ui_text("server.shell.feedback_continuity_pending", app_language=app_language, fallback_text="Feedback continuity will appear here after product notes are sent."),
-        controls=[
-            {
-                "control_id": "feedback-open-route",
-                "label": ui_text("server.shell.open_feedback", app_language=app_language, fallback_text="Open feedback"),
-                "action_kind": "open_route",
-                "action_target": f"/api/workspaces/{workspace_id}/feedback",
-            },
-            {
-                "control_id": "feedback-open-page",
-                "label": ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"),
-                "action_kind": "open_route",
-                "action_target": f"/app/workspaces/{workspace_id}/feedback",
-            },
-        ],
+        controls=controls,
         history=entries[:3],
     )
+    section["feedback_state"] = feedback_state
+    section["feedback_path_kind"] = feedback_path_kind
+    section["current_step_id"] = current_step_id
+    section["next_step_id"] = next_step_id
+    section["step_order"] = step_order
+    return section
 
 def _matching_share_history_entries(
     share_payload_rows: Sequence[Mapping[str, Any]],
@@ -2975,7 +3102,7 @@ def build_workspace_shell_runtime_payload(
         "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "product_surface_review_section": _product_surface_review_section(server_product_readiness_review, routes=routes, app_language=app_language),
-        "feedback_continuity_section": _feedback_continuity_section(feedback_rows, workspace_id, app_language=app_language),
+        "feedback_continuity_section": _feedback_continuity_section(server_product_readiness_review, feedback_rows, workspace_id, recent_run_rows=recent_run_rows, onboarding_state=onboarding_state, routes=routes, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
         "validation_section": _validation_section(asdict(shell_vm), runnable=launch_request_template is not None, persisted_state=server_backed_state.get("validation")),

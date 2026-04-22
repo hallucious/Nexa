@@ -884,10 +884,13 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['routes']['workspace_feedback'] == '/api/workspaces/ws-001/feedback'
     assert payload['routes']['workspace_feedback_page'] == '/app/workspaces/ws-001/feedback'
     assert payload['feedback_continuity_section']['summary']['headline'] == 'Feedback continuity'
+    assert payload['feedback_continuity_section']['feedback_path_kind'] == 'feedback_thread_reentry'
+    assert payload['feedback_continuity_section']['current_step_id'] == 'reopen_feedback_thread'
+    assert any(line.startswith('Current path: Feedback thread reentry') for line in payload['feedback_continuity_section']['summary']['lines'])
     assert 'Feedback items: 1' in payload['feedback_continuity_section']['summary']['lines']
     assert 'friction_note — workspace_shell — received — fb-shell-fastapi-001' in '\n'.join(payload['feedback_continuity_section']['detail']['items'])
-    assert payload['feedback_continuity_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/feedback'
-    assert payload['feedback_continuity_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/feedback'
+    assert payload['feedback_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/feedback'
+    assert payload['feedback_continuity_section']['controls'][1]['action_target'] == '/api/workspaces/ws-001/feedback'
     assert payload['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
     assert 'Configured providers: 1' in payload['provider_readiness_section']['summary']['lines']
     assert 'Recent provider probes: 1' in payload['provider_readiness_section']['summary']['lines']

@@ -1589,10 +1589,13 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['routes']['workspace_feedback'] == '/api/workspaces/ws-001/feedback'
     assert parsed['routes']['workspace_feedback_page'] == '/app/workspaces/ws-001/feedback'
     assert parsed['feedback_continuity_section']['summary']['headline'] == 'Feedback continuity'
+    assert parsed['feedback_continuity_section']['feedback_path_kind'] == 'feedback_thread_reentry'
+    assert parsed['feedback_continuity_section']['current_step_id'] == 'reopen_feedback_thread'
+    assert any(line.startswith('Current path: Feedback thread reentry') for line in parsed['feedback_continuity_section']['summary']['lines'])
     assert 'Feedback items: 1' in parsed['feedback_continuity_section']['summary']['lines']
     assert 'friction_note — workspace_shell — received — fb-shell-framework-001' in '\n'.join(parsed['feedback_continuity_section']['detail']['items'])
-    assert parsed['feedback_continuity_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/feedback'
-    assert parsed['feedback_continuity_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/feedback'
+    assert parsed['feedback_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/feedback'
+    assert parsed['feedback_continuity_section']['controls'][1]['action_target'] == '/api/workspaces/ws-001/feedback'
     assert parsed['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
     assert 'Configured providers: 1' in parsed['provider_readiness_section']['summary']['lines']
     assert 'Recent provider probes: 1' in parsed['provider_readiness_section']['summary']['lines']
@@ -1704,10 +1707,73 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['return_use_continuity_section']['current_step_id'] == 'complete_first_success'
     assert any(line.startswith('Current path: First-success prerequisite') for line in parsed['return_use_continuity_section']['summary']['lines'])
     assert parsed['return_use_continuity_section']['controls'][0]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
+    assert parsed['feedback_continuity_section']['feedback_path_kind'] == 'blocked_help'
+    assert parsed['feedback_continuity_section']['current_step_id'] == 'report_confusion'
+    assert any(line.startswith('Current path: Blocked help') for line in parsed['feedback_continuity_section']['summary']['lines'])
+    assert parsed['feedback_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/feedback'
+    assert parsed['feedback_continuity_section']['controls'][2]['action_target'] == 'designer'
     assert parsed['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert parsed['product_surface_review_section']['review_state'] == 'hold_first_success_setup'
     assert parsed['product_surface_review_section']['controls'][0]['action_target'] == 'designer'
 
+
+
+def test_framework_binding_workspace_shell_prioritizes_feedback_for_recent_run_failure() -> None:
+    response = FrameworkRouteBindings.handle_workspace_shell(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shell", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+        },
+        onboarding_rows=({
+            "onboarding_state_id": "onboard-001",
+            "user_id": "user-owner",
+            "workspace_id": "ws-001",
+            "first_success_achieved": True,
+            "advanced_surfaces_unlocked": True,
+            "dismissed_guidance_state": {},
+            "current_step": "read_result",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+        },),
+        recent_run_rows=({
+            "run_id": "run-009",
+            "workspace_id": "ws-001",
+            "status": "failed",
+            "status_family": "terminal_failure",
+            "created_at": "2026-04-11T12:10:00+00:00",
+            "updated_at": "2026-04-11T12:12:00+00:00",
+        },),
+        result_rows_by_run_id={
+            "run-009": {
+                "run_id": "run-009",
+                "result_state": "failed",
+                "result_summary": "Provider timeout",
+            }
+        },
+        feedback_rows=(),
+        artifact_rows_lookup=lambda run_id: (),
+        trace_rows_lookup=lambda run_id: (),
+        artifact_source={
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [{"node_id": "n1"}], "edges": [], "entry": "n1", "outputs": []},
+            "resources": {"prompts": {}, "providers": {"p1": {}}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "failed", "validation_summary": {"overall_status": "pass"}, "last_run": {"run_id": "run-009"}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "desktop"}},
+        },
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed['feedback_continuity_section']['feedback_path_kind'] == 'run_issue_followup'
+    assert parsed['feedback_continuity_section']['current_step_id'] == 'report_run_issue'
+    assert any(line.startswith('Current path: Run issue follow-up') for line in parsed['feedback_continuity_section']['summary']['lines'])
+    assert parsed['feedback_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/feedback'
+    assert parsed['feedback_continuity_section']['controls'][2]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
 
 def test_framework_binding_workspace_shell_uses_server_backed_onboarding_step_for_navigation() -> None:
     response = FrameworkRouteBindings.handle_workspace_shell(
