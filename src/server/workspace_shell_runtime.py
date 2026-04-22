@@ -1041,17 +1041,27 @@ def _first_success_run_section(
     latest_run_result_preview: Mapping[str, Any] | None,
     latest_run_trace_preview: Mapping[str, Any] | None,
     latest_run_artifacts_preview: Mapping[str, Any] | None,
+    onboarding_state: Mapping[str, Any] | None,
     workspace_id: str,
     routes: Mapping[str, Any],
     app_language: str = "en",
 ) -> dict[str, Any]:
     validation = shell_map.get("validation") or {}
     validation_summary = (validation.get("summary") or {}).get("headline")
+    setup_stage = {}
     run_stage = {}
     if isinstance(server_product_readiness_review, Mapping):
         stages = server_product_readiness_review.get("stages") or ()
+        if len(stages) > 0 and isinstance(stages[0], Mapping):
+            setup_stage = dict(stages[0])
         if len(stages) > 1 and isinstance(stages[1], Mapping):
             run_stage = dict(stages[1])
+
+    setup_state = str(setup_stage.get("stage_state") or "inactive").strip() or "inactive"
+    setup_action_label = str(setup_stage.get("recommended_action_label") or "").strip() or None
+    setup_action_target = str(setup_stage.get("recommended_action_target") or "").strip() or None
+    setup_current_step_id = str(setup_stage.get("current_step_id") or "").strip() or None
+    onboarding_step = _normalized_onboarding_current_step(onboarding_state)
 
     run_state = str(run_stage.get("stage_state") or "inactive").strip() or "inactive"
     run_summary = str(run_stage.get("summary") or "").strip()
@@ -1087,30 +1097,105 @@ def _first_success_run_section(
             "action_target": action_target,
         })
 
-    if run_state in {"fix_before_run", "waiting", "inactive"}:
-        _append_control("first-success-run-open-validation", ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail"), "validation.detail")
-        _append_control("first-success-run-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
+    onboarding_target = str(routes.get("onboarding") or "").strip() or None
+    validation_target = "validation.detail"
+    launch_target = str(routes.get("workspace_shell_launch") or routes.get("launch_run") or "").strip() or None
+    run_status_target = str(routes.get("latest_run_status") or "").strip() or None
+    result_history_target = str(routes.get("workspace_result_history_page") or "").strip() or None
+
+    if run_state in {"waiting", "inactive"}:
+        run_path_kind = "setup_prerequisite"
+        current_step_id = setup_current_step_id or ("review_draft" if setup_state in {"entry_ready", "ready", "starter_template_path", "onboarding_continuation"} else "choose_entry_path")
+        next_step_id = "run" if current_step_id == "review_draft" else "review_draft"
+        if setup_action_target:
+            _append_control(f"first-success-run-return-to-{setup_state}", setup_action_label, setup_action_target)
+        else:
+            _append_control("first-success-run-open-validation", ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail"), validation_target)
+            _append_control("first-success-run-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
+        _append_control("first-success-run-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), onboarding_target)
+    elif run_state == "fix_before_run":
+        if onboarding_step in {"review_preview", "approve"}:
+            run_path_kind = "review_before_run"
+            current_step_id = "review_draft"
+            next_step_id = "run"
+            _append_control("first-success-run-open-review", ui_text("server.shell.review_preview_action", app_language=app_language, fallback_text="Review preview"), validation_target)
+            _append_control("first-success-run-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), onboarding_target)
+        else:
+            run_path_kind = "validation_fix"
+            current_step_id = "review_draft"
+            next_step_id = "run"
+            _append_control("first-success-run-open-validation", ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail"), validation_target)
+            _append_control("first-success-run-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
     elif run_state == "ready_to_run":
-        _append_control("first-success-run-launch", ui_text("server.shell.launch_run", app_language=app_language, fallback_text="Launch run"), str(routes.get("workspace_shell_launch") or routes.get("launch_run") or "") or None)
-        _append_control("first-success-run-open-validation", ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail"), "validation.detail")
+        run_path_kind = "launch_run"
+        current_step_id = "run"
+        next_step_id = "read_result"
+        _append_control("first-success-run-launch", ui_text("server.shell.launch_run", app_language=app_language, fallback_text="Launch run"), launch_target)
+        _append_control("first-success-run-open-validation", ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail"), validation_target)
     elif run_state == "run_in_progress":
-        _append_control("first-success-run-open-status", ui_text("server.shell.open_run_status", app_language=app_language, fallback_text="Open run status"), str(routes.get("latest_run_status") or "") or None)
+        run_path_kind = "monitor_run"
+        current_step_id = "run"
+        next_step_id = "read_result"
+        _append_control("first-success-run-open-status", ui_text("server.shell.open_run_status", app_language=app_language, fallback_text="Open run status"), run_status_target)
         _append_control("first-success-run-open-trace", ui_text("server.shell.open_trace", app_language=app_language, fallback_text="Open Trace"), "runtime.trace")
-    elif run_state in {"complete", "result_ready"}:
+    else:
+        run_path_kind = "read_result"
+        current_step_id = "read_result"
+        next_step_id = None
         _append_control("first-success-run-open-result", ui_text("server.shell.open_result", app_language=app_language, fallback_text="Open Result"), "runtime.result")
-        _append_control("first-success-run-open-results-page", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), str(routes.get("workspace_result_history_page") or "") or None)
+        _append_control("first-success-run-open-results-page", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
 
     if run_action_target:
         _append_control(f"first-success-run-{run_action_id or 'primary'}", run_action_label, run_action_target)
 
+    path_fallbacks = {
+        "setup_prerequisite": "Setup prerequisite",
+        "validation_fix": "Validation fix",
+        "review_before_run": "Review before run",
+        "launch_run": "Launch run",
+        "monitor_run": "Monitor active run",
+        "read_result": "Read result",
+    }
+    step_fallbacks = {
+        "choose_entry_path": "Choose entry path",
+        "connect_provider": "Connect AI model if needed",
+        "review_draft": "Review draft or proposal",
+        "run": "Run",
+        "read_result": "Read result",
+    }
+    path_label = ui_text(
+        f"server.shell.run_path.{run_path_kind}",
+        app_language=app_language,
+        fallback_text=path_fallbacks.get(run_path_kind, run_path_kind.replace("_", " ").title()),
+    )
+    current_step_label = ui_text(
+        f"server.shell.run_step.{current_step_id}",
+        app_language=app_language,
+        fallback_text=step_fallbacks.get(current_step_id, current_step_id.replace("_", " ").title()),
+    )
+    next_step_label = ui_text(
+        f"server.shell.run_step.{next_step_id}",
+        app_language=app_language,
+        fallback_text=step_fallbacks.get(next_step_id, next_step_id.replace("_", " ").title()),
+    ) if next_step_id else None
+    step_order = ["review_draft", "run", "read_result"]
+    step_order_summary = " → ".join(
+        f"{index + 1}. {ui_text(f'server.shell.run_step.{step_id}', app_language=app_language, fallback_text=step_fallbacks.get(step_id, step_id.replace('_', ' ').title()))}"
+        for index, step_id in enumerate(step_order)
+    )
+
     lines = _summary_lines(
         ui_text("server.shell.first_success_run_state_prefix", app_language=app_language, fallback_text="Run state: {state}", state=ui_text(f"shell.product_readiness.stage_state.{run_state}", app_language=app_language, fallback_text=run_state.replace("_", " "))),
+        ui_text("server.shell.first_success_run_path_prefix", app_language=app_language, fallback_text="Current path: {path}", path=path_label),
+        ui_text("server.shell.first_success_run_current_step_prefix", app_language=app_language, fallback_text="Current step: {step}", step=current_step_label),
+        ui_text("server.shell.first_success_run_next_step_prefix", app_language=app_language, fallback_text="Next after this: {step}", step=next_step_label) if next_step_label else None,
         run_summary or None,
         ui_text("server.shell.first_success_run_validation_prefix", app_language=app_language, fallback_text="Validation: {status}", status=str(validation_summary or "unknown")),
         ui_text("server.shell.first_success_run_status_prefix", app_language=app_language, fallback_text="Current run status: {status}", status=latest_status) if latest_status else None,
     )
 
     detail_items = _summary_lines(
+        ui_text("server.shell.first_success_run_step_order_prefix", app_language=app_language, fallback_text="Step order: {steps}", steps=step_order_summary),
         ui_text("server.shell.first_success_run_run_id_prefix", app_language=app_language, fallback_text="Latest run id: {run_id}", run_id=latest_run_id) if latest_run_id else None,
         ui_text("server.shell.first_success_run_result_prefix", app_language=app_language, fallback_text="Latest result: {state}", state=latest_result_state) if latest_result_state else None,
         ui_text("server.shell.first_success_run_result_summary_prefix", app_language=app_language, fallback_text="Result summary: {summary}", summary=latest_result_summary) if latest_result_summary else None,
@@ -1128,6 +1213,10 @@ def _first_success_run_section(
         detail_empty=ui_text("server.shell.first_success_run_pending", app_language=app_language, fallback_text="First-success run guidance will appear here once the workflow is ready to execute."),
     )
     section["run_state"] = run_state
+    section["run_path_kind"] = run_path_kind
+    section["current_step_id"] = current_step_id
+    section["next_step_id"] = next_step_id
+    section["step_order"] = step_order
     section["recommended_action_id"] = run_action_id
     section["recommended_action_target"] = run_action_target
     return section
@@ -2808,7 +2897,7 @@ def build_workspace_shell_runtime_payload(
         "history_summary_section": _history_summary_section(recent_run_rows, onboarding_rows, share_payload_rows, model, workspace_id, app_language=app_language),
         "provider_readiness_section": _provider_readiness_section(provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
         "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language, persisted_state=server_backed_state.get("designer")),
-        "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, workspace_id=workspace_id, routes=routes, app_language=app_language),
+        "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "product_surface_review_section": _product_surface_review_section(server_product_readiness_review, routes=routes, app_language=app_language),
         "feedback_continuity_section": _feedback_continuity_section(feedback_rows, workspace_id, app_language=app_language),

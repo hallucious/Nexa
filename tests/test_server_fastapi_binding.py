@@ -903,6 +903,8 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['first_success_setup_section']['current_step_id'] == 'run'
     assert payload['first_success_run_section']['summary']['headline'] == 'First-success run'
     assert payload['first_success_run_section']['run_state'] == 'complete'
+    assert payload['first_success_run_section']['run_path_kind'] == 'read_result'
+    assert payload['first_success_run_section']['current_step_id'] == 'read_result'
     assert payload['first_success_run_section']['controls'][0]['action_target'] == 'runtime.result'
     assert payload['return_use_continuity_section']['summary']['headline'] == 'Return-use continuity'
     assert payload['return_use_continuity_section']['return_use_state'] == 'complete'
@@ -3437,3 +3439,7 @@ def test_fastapi_binding_workspace_shell_template_path_promotes_provider_setup_n
     assert payload['first_success_setup_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/provider-bindings'
     assert payload['first_success_setup_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/starter-templates?app_language=en'
     assert any(line.startswith('Selected starter template: Text Summarizer') for line in payload['first_success_setup_section']['summary']['lines'])
+    assert payload['first_success_run_section']['run_state'] in {'waiting', 'inactive'}
+    assert payload['first_success_run_section']['run_path_kind'] == 'setup_prerequisite'
+    assert payload['first_success_run_section']['current_step_id'] == 'connect_provider'
+    assert payload['first_success_run_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/provider-bindings'
