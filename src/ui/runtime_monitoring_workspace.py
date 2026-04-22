@@ -71,6 +71,10 @@ def _storage_role(source) -> str:
 
 
 
+def _workspace_explanation(*, workspace_status: str, app_language: str) -> str | None:
+    return ui_text(f"workspace.runtime.explanation.{workspace_status}", app_language=app_language, fallback_text=None)
+
+
 def read_runtime_monitoring_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -156,6 +160,11 @@ def read_runtime_monitoring_workspace_view_model(
     else:
         workspace_status = "historical_review"
 
+    workspace_explanation = explanation or _workspace_explanation(
+        workspace_status=workspace_status,
+        app_language=app_language,
+    )
+
     return RuntimeMonitoringWorkspaceViewModel(
         workspace_status=workspace_status,
         workspace_status_label=ui_text(f"workspace.runtime.status.{workspace_status}", app_language=app_language, fallback_text=workspace_status.replace("_", " ")),
@@ -168,7 +177,7 @@ def read_runtime_monitoring_workspace_view_model(
         action_schema=action_schema,
         focus=focus,
         health=health,
-        explanation=explanation,
+        explanation=workspace_explanation,
     )
 
 

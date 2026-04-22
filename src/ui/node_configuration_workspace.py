@@ -79,6 +79,28 @@ def _storage_role(source) -> str:
 
 
 
+def _workspace_explanation(
+    *,
+    workspace_status: str,
+    app_language: str,
+    validation_vm: ValidationPanelViewModel | None,
+    designer_vm: DesignerPanelViewModel | None,
+) -> str | None:
+    if workspace_status == "awaiting_selection":
+        return ui_text("workspace.configuration.explanation.awaiting_selection", app_language=app_language)
+    if workspace_status == "blocked":
+        if validation_vm is not None and validation_vm.beginner_summary.cause:
+            return validation_vm.beginner_summary.cause
+        return ui_text("workspace.configuration.explanation.blocked", app_language=app_language)
+    if workspace_status == "designer_review":
+        if designer_vm is not None and designer_vm.preview_state.one_sentence_summary:
+            return designer_vm.preview_state.one_sentence_summary
+        return ui_text("workspace.configuration.explanation.designer_review", app_language=app_language)
+    if workspace_status == "run_review":
+        return ui_text("workspace.configuration.explanation.run_review", app_language=app_language)
+    return None
+
+
 def read_node_configuration_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -161,6 +183,12 @@ def read_node_configuration_workspace_view_model(
 
     can_submit_designer_request = designer_vm.request_state.can_submit if designer_vm is not None else False
     can_commit_configuration = any(action.action_id == "commit_snapshot" and action.enabled for action in [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions])
+    workspace_explanation = explanation or _workspace_explanation(
+        workspace_status=workspace_status,
+        app_language=app_language,
+        validation_vm=validation_vm,
+        designer_vm=designer_vm,
+    )
 
     return NodeConfigurationWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -176,7 +204,7 @@ def read_node_configuration_workspace_view_model(
         can_edit_configuration=storage_role == "working_save" and selection_summary.object_type not in {"none", "unknown"},
         can_submit_designer_request=can_submit_designer_request,
         can_commit_configuration=can_commit_configuration,
-        explanation=explanation,
+        explanation=workspace_explanation,
     )
 
 

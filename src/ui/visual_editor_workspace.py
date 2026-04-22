@@ -72,6 +72,28 @@ def _storage_role(source) -> str:
 
 
 
+def _workspace_explanation(
+    *,
+    workspace_status: str,
+    app_language: str,
+    validation_vm: ValidationPanelViewModel | None,
+    preview_overlay: GraphPreviewOverlay | None,
+) -> str | None:
+    if workspace_status == "empty":
+        return ui_text("workspace.visual_editor.explanation.empty", app_language=app_language)
+    if workspace_status == "blocked":
+        if validation_vm is not None and validation_vm.beginner_summary.cause:
+            return validation_vm.beginner_summary.cause
+        return ui_text("workspace.visual_editor.explanation.blocked", app_language=app_language)
+    if workspace_status == "previewing":
+        if preview_overlay is not None and preview_overlay.summary:
+            return preview_overlay.summary
+        return ui_text("workspace.visual_editor.explanation.previewing", app_language=app_language)
+    if workspace_status == "reviewing":
+        return ui_text("workspace.visual_editor.explanation.reviewing", app_language=app_language)
+    return None
+
+
 def read_visual_editor_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -141,6 +163,8 @@ def read_visual_editor_workspace_view_model(
 
     if graph_vm is None:
         workspace_status = "empty"
+    elif storage_role == "working_save" and graph_vm.graph_metrics.node_count == 0 and graph_vm.graph_metrics.edge_count == 0:
+        workspace_status = "empty"
     elif validation_vm is not None and validation_vm.overall_status == "blocked":
         workspace_status = "blocked"
     elif graph_vm.preview_overlay is not None:
@@ -158,6 +182,13 @@ def read_visual_editor_workspace_view_model(
         else:
             workspace_status = "viewing"
 
+    workspace_explanation = explanation or _workspace_explanation(
+        workspace_status=workspace_status,
+        app_language=app_language,
+        validation_vm=validation_vm,
+        preview_overlay=(graph_vm.preview_overlay if graph_vm is not None else preview_overlay),
+    )
+
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,
         workspace_status_label=ui_text(f"workspace.visual_editor.status.{workspace_status}", app_language=app_language, fallback_text=workspace_status.replace("_", " ")),
@@ -172,7 +203,7 @@ def read_visual_editor_workspace_view_model(
         comparison_state=comparison_state,
         can_edit_graph=storage_role == "working_save",
         can_preview_changes=graph_vm is not None and graph_vm.preview_overlay is not None,
-        explanation=explanation,
+        explanation=workspace_explanation,
     )
 
 

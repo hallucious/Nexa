@@ -174,3 +174,32 @@ def test_node_configuration_workspace_uses_execution_record_focus_for_commit_sna
     assert vm.selection_summary.object_type == "node"
     assert vm.workspace_status == "run_review"
     assert vm.can_edit_configuration is False
+
+
+def test_node_configuration_workspace_exposes_selection_guidance() -> None:
+    vm = read_node_configuration_workspace_view_model(_working_save())
+
+    assert vm.workspace_status == "awaiting_selection"
+    assert vm.workspace_status_label == "구성할 대상을 선택하세요"
+    assert vm.explanation == "단계나 연결을 선택하면 세부 내용을 보고 구성할 수 있습니다."
+
+
+def test_node_configuration_workspace_exposes_run_review_explanation() -> None:
+    from src.storage.models.commit_snapshot_model import CommitApprovalModel, CommitLineageModel, CommitSnapshotMeta, CommitSnapshotModel, CommitValidationModel
+
+    working = _working_save()
+    snapshot = CommitSnapshotModel(
+        meta=CommitSnapshotMeta(format_version="1.0.0", storage_role="commit_snapshot", commit_id="commit-001", source_working_save_id="ws-001", name="Approved"),
+        circuit=working.circuit,
+        resources=working.resources,
+        state=working.state,
+        validation=CommitValidationModel(validation_result="passed", summary={}),
+        approval=CommitApprovalModel(approval_completed=True, approval_status="approved", summary={}),
+        lineage=CommitLineageModel(source_working_save_id="ws-001", metadata={}),
+    )
+
+    vm = read_node_configuration_workspace_view_model(snapshot, execution_record=_execution_record_context())
+
+    assert vm.workspace_status == "run_review"
+    assert vm.workspace_status_label == "Reviewing executed configuration"
+    assert vm.explanation == "This configuration is read-only because you are reviewing an execution result."
