@@ -1318,6 +1318,9 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
     assert payload['first_success_run_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/shell/launch'
     assert payload['return_use_continuity_section']['summary']['headline'] == 'Return-use continuity'
     assert payload['return_use_continuity_section']['return_use_state'] == 'inactive'
+    assert payload['return_use_continuity_section']['return_path_kind'] == 'first_success_prerequisite'
+    assert payload['return_use_continuity_section']['current_step_id'] == 'complete_first_success'
+    assert any(line.startswith('Current path: First-success prerequisite') for line in payload['return_use_continuity_section']['summary']['lines'])
     assert payload['return_use_continuity_section']['controls'][0]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
     assert payload['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert payload['product_surface_review_section']['review_state'] == 'hold_first_success_run'

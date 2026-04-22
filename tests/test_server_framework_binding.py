@@ -1611,10 +1611,13 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['first_success_run_section']['controls'][0]['action_target'] == 'runtime.result'
     assert parsed['return_use_continuity_section']['summary']['headline'] == 'Return-use continuity'
     assert parsed['return_use_continuity_section']['return_use_state'] == 'complete'
-    assert parsed['return_use_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/library?app_language=en'
+    assert parsed['return_use_continuity_section']['return_path_kind'] == 'result_reentry'
+    assert parsed['return_use_continuity_section']['current_step_id'] == 'reopen_result'
+    assert any(line.startswith('Current path: Result reentry') for line in parsed['return_use_continuity_section']['summary']['lines'])
+    assert parsed['return_use_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
     assert parsed['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert parsed['product_surface_review_section']['review_state'] == 'product_surface_stable'
-    assert parsed['product_surface_review_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/library?app_language=en'
+    assert parsed['product_surface_review_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
     assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'
@@ -1697,6 +1700,9 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['first_success_run_section']['controls'][0]['action_target'] == 'designer'
     assert parsed['return_use_continuity_section']['summary']['headline'] == 'Return-use continuity'
     assert parsed['return_use_continuity_section']['return_use_state'] == 'inactive'
+    assert parsed['return_use_continuity_section']['return_path_kind'] == 'first_success_prerequisite'
+    assert parsed['return_use_continuity_section']['current_step_id'] == 'complete_first_success'
+    assert any(line.startswith('Current path: First-success prerequisite') for line in parsed['return_use_continuity_section']['summary']['lines'])
     assert parsed['return_use_continuity_section']['controls'][0]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
     assert parsed['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert parsed['product_surface_review_section']['review_state'] == 'hold_first_success_setup'
@@ -1854,6 +1860,60 @@ def test_framework_binding_workspace_shell_surfaces_onboarding_continuation_path
     assert parsed['first_success_run_section']['current_step_id'] == 'review_draft'
     assert parsed['first_success_run_section']['controls'][0]['action_target'] == 'validation.detail'
 
+
+
+def test_framework_binding_workspace_shell_keeps_return_use_inactive_until_first_success_even_with_failed_history() -> None:
+    response = FrameworkRouteBindings.handle_workspace_shell(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shell", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+        },
+        recent_run_rows=({
+            "run_id": "run-001",
+            "workspace_id": "ws-001",
+            "execution_target_type": "commit_snapshot",
+            "execution_target_ref": "snap-001",
+            "status": "failed",
+            "status_family": "failed",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "started_at": "2026-04-11T12:00:05+00:00",
+            "updated_at": "2026-04-11T12:00:10+00:00",
+            "finished_at": "2026-04-11T12:00:12+00:00",
+            "requested_by_user_id": "user-owner",
+            "trace_available": False,
+        },),
+        result_rows_by_run_id={},
+        artifact_rows_lookup=lambda run_id: (),
+        trace_rows_lookup=lambda run_id: (),
+        artifact_source=_commit_snapshot("snap-001"),
+        provider_binding_rows=({
+            "binding_id": "binding-001",
+            "workspace_id": "ws-001",
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "credential_source": "managed",
+            "secret_ref": "secret://ws-001/openai",
+            "secret_version_ref": "v1",
+            "enabled": True,
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "updated_by_user_id": "user-owner",
+        },),
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed['first_success_run_section']['run_state'] == 'ready_to_run'
+    assert parsed['return_use_continuity_section']['return_use_state'] == 'inactive'
+    assert parsed['return_use_continuity_section']['return_path_kind'] == 'first_success_prerequisite'
+    assert parsed['return_use_continuity_section']['current_step_id'] == 'complete_first_success'
+    assert parsed['return_use_continuity_section']['controls'][0]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
+    assert parsed['product_surface_review_section']['review_state'] == 'hold_first_success_run'
 
 
 def test_framework_binding_put_workspace_shell_draft_persists_template_and_validation_state() -> None:

@@ -1243,6 +1243,10 @@ def _return_use_continuity_section(
 
     return_state = str(return_stage.get("stage_state") or "inactive").strip() or "inactive"
     return_summary = str(return_stage.get("summary") or "").strip()
+    return_path_kind = str(return_stage.get("return_path_kind") or "first_success_prerequisite").strip() or "first_success_prerequisite"
+    current_step_id = str(return_stage.get("current_step_id") or "complete_first_success").strip() or "complete_first_success"
+    next_step_id = str(return_stage.get("next_step_id") or "").strip() or None
+    step_order = tuple(return_stage.get("step_order") or ("complete_first_success", "reopen_result", "reopen_workflow", "share_feedback"))
     recent_runs = list(_recent_run_rows_for_workspace(recent_run_rows, workspace_id, limit=5))
     result_entries = [
         {
@@ -1255,10 +1259,11 @@ def _return_use_continuity_section(
     ]
     latest_result = result_entries[0] if result_entries else None
     latest_feedback = (_feedback_continuity_entries(feedback_rows, workspace_id) or [None])[0]
+    feedback_count = len(_feedback_continuity_entries(feedback_rows, workspace_id))
     onboarding_step = _normalized_onboarding_current_step(onboarding_state)
-    library_page = str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or "").strip() or None
-    result_history_page = str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or "").strip() or None
-    feedback_page = str(routes.get("workspace_feedback_page") or routes.get("workspace_feedback") or "").strip() or None
+    library_target = str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or routes.get("workspace_circuit_library") or routes.get("circuit_library") or "").strip() or None
+    result_history_target = str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or routes.get("latest_run_result") or "").strip() or None
+    feedback_target = str(routes.get("workspace_feedback_page") or routes.get("workspace_feedback") or "").strip() or None
     onboarding_route = str(routes.get("onboarding") or "").strip() or None
 
     controls: list[dict[str, Any]] = []
@@ -1275,16 +1280,54 @@ def _return_use_continuity_section(
             "action_target": action_target,
         })
 
-    if return_state == "inactive":
+    if return_path_kind == "first_success_prerequisite":
         _append_control("return-use-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), onboarding_route)
         _append_control("return-use-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
-    elif return_state == "history_needed":
-        _append_control("return-use-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_page)
-        _append_control("return-use-open-library", ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"), library_page)
+    elif return_path_kind in {"result_history_setup", "result_reentry"}:
+        _append_control("return-use-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
+        _append_control("return-use-open-library", ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"), library_target)
+        _append_control("return-use-open-feedback", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_target)
+    elif return_path_kind == "feedback_followup":
+        _append_control("return-use-open-feedback", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_target)
+        _append_control("return-use-open-library", ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"), library_target)
+        _append_control("return-use-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
     else:
-        _append_control("return-use-open-library", ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"), library_page)
-        _append_control("return-use-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_page)
-        _append_control("return-use-open-feedback", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_page)
+        _append_control("return-use-open-library", ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"), library_target)
+        _append_control("return-use-open-results", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), result_history_target)
+        _append_control("return-use-open-feedback", ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"), feedback_target)
+
+    path_fallbacks = {
+        "first_success_prerequisite": "First-success prerequisite",
+        "result_history_setup": "Result history setup",
+        "result_reentry": "Result reentry",
+        "workflow_reentry": "Workflow reentry",
+        "feedback_followup": "Feedback follow-up",
+    }
+    step_fallbacks = {
+        "complete_first_success": "Complete first success",
+        "reopen_result": "Reopen a recent result",
+        "reopen_workflow": "Reopen a saved workflow",
+        "share_feedback": "Capture follow-up feedback",
+    }
+    path_label = ui_text(
+        f"server.shell.return_path.{return_path_kind}",
+        app_language=app_language,
+        fallback_text=path_fallbacks.get(return_path_kind, return_path_kind.replace("_", " ").title()),
+    )
+    current_step_label = ui_text(
+        f"server.shell.return_step.{current_step_id}",
+        app_language=app_language,
+        fallback_text=step_fallbacks.get(current_step_id, current_step_id.replace("_", " ").title()),
+    )
+    next_step_label = ui_text(
+        f"server.shell.return_step.{next_step_id}",
+        app_language=app_language,
+        fallback_text=step_fallbacks.get(next_step_id, next_step_id.replace("_", " ").title()),
+    ) if next_step_id else None
+    step_order_summary = " → ".join(
+        f"{index + 1}. {ui_text(f'server.shell.return_step.{step_id}', app_language=app_language, fallback_text=step_fallbacks.get(step_id, step_id.replace('_', ' ').title()))}"
+        for index, step_id in enumerate(step_order)
+    )
 
     lines = _summary_lines(
         ui_text(
@@ -1293,12 +1336,16 @@ def _return_use_continuity_section(
             fallback_text="Return-use state: {state}",
             state=ui_text(f"shell.product_readiness.stage_state.{return_state}", app_language=app_language, fallback_text=return_state.replace("_", " ")),
         ),
+        ui_text("server.shell.return_use_path_prefix", app_language=app_language, fallback_text="Current path: {path}", path=path_label),
+        ui_text("server.shell.return_use_current_step_prefix", app_language=app_language, fallback_text="Current step: {step}", step=current_step_label),
+        ui_text("server.shell.return_use_next_step_prefix", app_language=app_language, fallback_text="Next after this: {step}", step=next_step_label) if next_step_label else None,
         return_summary or None,
         ui_text("server.shell.return_use_recent_runs_prefix", app_language=app_language, fallback_text="Recent runs: {count}", count=str(len(recent_runs))),
         ui_text("server.shell.return_use_recent_results_prefix", app_language=app_language, fallback_text="Recent results: {count}", count=str(len(result_entries))),
-        ui_text("server.shell.return_use_feedback_prefix", app_language=app_language, fallback_text="Feedback items: {count}", count=str(len(_feedback_continuity_entries(feedback_rows, workspace_id)))),
+        ui_text("server.shell.return_use_feedback_prefix", app_language=app_language, fallback_text="Feedback items: {count}", count=str(feedback_count)),
     )
     detail_items = _summary_lines(
+        ui_text("server.shell.return_use_step_order_prefix", app_language=app_language, fallback_text="Step order: {steps}", steps=step_order_summary),
         ui_text("server.shell.return_use_onboarding_prefix", app_language=app_language, fallback_text="Onboarding step: {step}", step=onboarding_step) if onboarding_step else None,
         ui_text("server.shell.return_use_latest_run_prefix", app_language=app_language, fallback_text="Latest run: {run_id}", run_id=str(recent_runs[0].get("run_id") or "").strip()) if recent_runs else None,
         ui_text("server.shell.return_use_latest_result_prefix", app_language=app_language, fallback_text="Latest result: {state}", state=str(latest_result.get("result_state") or "unknown")) if latest_result else None,
@@ -1315,6 +1362,10 @@ def _return_use_continuity_section(
         detail_empty=ui_text("server.shell.return_use_continuity_pending", app_language=app_language, fallback_text="Return-use continuity guidance will appear here once first success is established."),
     )
     section["return_use_state"] = return_state
+    section["return_path_kind"] = return_path_kind
+    section["current_step_id"] = current_step_id
+    section["next_step_id"] = next_step_id
+    section["step_order"] = list(step_order)
     section["recommended_action_target"] = return_stage.get("recommended_action_target")
     section["recommended_action_label"] = return_stage.get("recommended_action_label")
     section["blocker_count"] = int(return_stage.get("blocker_count") or 0)
@@ -1416,14 +1467,14 @@ def _product_surface_review_section(
 
     if review_state == "product_surface_stable":
         _append_control(
+            "product-surface-open-results",
+            ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"),
+            str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or "").strip() or None,
+        )
+        _append_control(
             "product-surface-open-library",
             ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"),
             str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or "").strip() or None,
-        )
-        _append_control(
-            "product-surface-open-results",
-            ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"),
-            str(routes.get("workspace_result_history_page") or "").strip() or None,
         )
     else:
         _append_control(
@@ -2637,7 +2688,11 @@ def _server_product_readiness_review(
         app_language=app_language,
     )
 
-    if not first_success and not has_history:
+    library_target = str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or routes.get("workspace_circuit_library") or routes.get("circuit_library") or "").strip() or None
+    result_history_target = str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or routes.get("latest_run_result") or "").strip() or None
+    feedback_target = str(routes.get("workspace_feedback_page") or routes.get("workspace_feedback") or "").strip() or None
+
+    if not first_success:
         return_state = "inactive"
         return_blockers = 0
         return_pending = 0
@@ -2649,6 +2704,9 @@ def _server_product_readiness_review(
         return_action_id = None
         return_action_label = None
         return_action_target = None
+        return_path_kind = "first_success_prerequisite"
+        return_current_step_id = "complete_first_success"
+        return_next_step_id = "reopen_result"
     elif not has_history or not has_result_history_route:
         return_state = "history_needed"
         return_blockers = 1
@@ -2660,31 +2718,44 @@ def _server_product_readiness_review(
         )
         return_action_id = "open_result_history"
         return_action_label = ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page")
-        return_action_target = str(routes.get("workspace_result_history_page") or "") or None
-    elif has_library_route and has_feedback_route:
-        return_state = "complete"
+        return_action_target = result_history_target
+        return_path_kind = "result_history_setup"
+        return_current_step_id = "reopen_result"
+        return_next_step_id = "reopen_workflow"
+    elif latest_run_row is not None:
+        return_state = "complete" if has_library_route and has_feedback_route else "return_use_ready"
         return_blockers = 0
-        return_pending = 0
+        return_pending = 0 if return_state == "complete" else 1
         return_summary = ui_text(
             "shell.product_readiness.summary.return_use_ready",
             app_language=app_language,
             fallback_text="Library, recent results, and feedback routes are all available for return visits.",
         )
-        return_action_id = "open_circuit_library"
-        return_action_label = ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library")
-        return_action_target = str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or "") or None
+        return_action_id = "open_result_history"
+        return_action_label = ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page")
+        return_action_target = result_history_target
+        return_path_kind = "result_reentry"
+        return_current_step_id = "reopen_result"
+        return_next_step_id = "reopen_workflow"
     else:
-        return_state = "return_use_ready"
+        return_state = "complete" if has_library_route and has_feedback_route else "return_use_ready"
         return_blockers = 0
-        return_pending = 1
+        return_pending = 0 if return_state == "complete" else 1
         return_summary = ui_text(
             "shell.product_readiness.summary.return_use_ready",
             app_language=app_language,
             fallback_text="Library, recent results, and feedback routes are all available for return visits.",
         )
-        return_action_id = "open_feedback"
-        return_action_label = ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page")
-        return_action_target = str(routes.get("workspace_feedback_page") or routes.get("workspace_feedback") or "") or None
+        return_action_id = "open_circuit_library" if library_target else "open_feedback"
+        return_action_label = ui_text(
+            "builder.action.open_circuit_library" if library_target else "server.shell.open_feedback_page",
+            app_language=app_language,
+            fallback_text=("Open workflow library" if library_target else "Open feedback page"),
+        )
+        return_action_target = library_target or feedback_target
+        return_path_kind = "workflow_reentry" if library_target else "feedback_followup"
+        return_current_step_id = "reopen_workflow" if library_target else "share_feedback"
+        return_next_step_id = "share_feedback" if library_target and feedback_target else None
 
     return_stage = _server_product_stage(
         stage_id="return_use",
@@ -2698,6 +2769,10 @@ def _server_product_readiness_review(
         recommended_action_target=return_action_target,
         app_language=app_language,
     )
+    return_stage["return_path_kind"] = return_path_kind
+    return_stage["current_step_id"] = return_current_step_id
+    return_stage["next_step_id"] = return_next_step_id
+    return_stage["step_order"] = ["complete_first_success", "reopen_result", "reopen_workflow", "share_feedback"]
 
     stages = [setup_stage, run_stage, return_stage]
     if (setup_stage["blocker_count"] or setup_stage["stage_state"] in {"goal_entry_needed", "provider_setup_needed"}) and not has_history:
