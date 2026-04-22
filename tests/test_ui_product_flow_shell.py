@@ -369,3 +369,28 @@ def test_product_flow_shell_focuses_result_history_surface_when_history_panel_is
     assert vm.focus.active_workspace_id == "runtime_monitoring"
     assert vm.focus.active_right_panel_id == "result_history"
     assert any(target.target_id == "result_history" for target in vm.right_stack_targets + vm.bottom_dock_targets)
+
+
+
+def test_product_flow_shell_preserves_explicit_visual_editor_action_focus() -> None:
+    source = _working_save()
+    vm = read_product_flow_shell_view_model(source, selected_action_id="open_visual_editor")
+
+    assert vm.focus.active_workspace_id == "visual_editor"
+    assert vm.focus.focus_reason == "explicit_core_workspace_surface"
+
+
+def test_product_flow_shell_preserves_explicit_node_configuration_action_focus() -> None:
+    source = _working_save()
+    vm = read_product_flow_shell_view_model(source, selected_action_id="open_node_configuration")
+
+    assert vm.focus.active_workspace_id == "node_configuration"
+    assert vm.focus.focus_reason == "explicit_core_workspace_surface"
+
+
+def test_product_flow_shell_preserves_explicit_runtime_monitoring_action_focus() -> None:
+    source = _working_save()
+    vm = read_product_flow_shell_view_model(source, execution_record=_run_completed(), selected_action_id="open_runtime_monitoring")
+
+    assert vm.focus.active_workspace_id == "runtime_monitoring"
+    assert vm.focus.focus_reason == "explicit_core_workspace_surface"

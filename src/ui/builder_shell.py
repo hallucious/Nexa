@@ -408,6 +408,24 @@ def _selected_ref_from_validation(validation_report: ValidationReport | None) ->
     return None
 
 
+def _requested_workspace_id_from_action(selected_action_id: str | None, *, action_schema: BuilderActionSchemaView) -> str | None:
+    if not selected_action_id:
+        return None
+    mapping = {
+        "open_visual_editor": "visual_editor",
+        "open_node_configuration": "node_configuration",
+        "open_runtime_monitoring": "runtime_monitoring",
+    }
+    workspace_id = mapping.get(selected_action_id)
+    if workspace_id is None:
+        return None
+    actions = [*action_schema.primary_actions, *action_schema.secondary_actions, *action_schema.contextual_actions]
+    for action in actions:
+        if action.action_id == selected_action_id and action.enabled:
+            return workspace_id
+    return None
+
+
 def read_builder_shell_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -429,6 +447,7 @@ def read_builder_shell_view_model(
     explanation: str | None = None,
     session_keys: dict | None = None,
     app_language: str | None = None,
+    selected_action_id: str | None = None,
 ) -> BuilderShellViewModel:
     source_unwrapped = _unwrap(source)
     role = _storage_role(source_unwrapped)
@@ -603,7 +622,10 @@ def read_builder_shell_view_model(
     elif diagnostics.panel_coordination_warning or warning_count > 0:
         shell_status = "partial"
 
-    if coordination_vm.active_panel in {"circuit_library", "feedback_channel"}:
+    requested_workspace_id = _requested_workspace_id_from_action(selected_action_id, action_schema=action_schema)
+    if requested_workspace_id is not None:
+        active_workspace_id = requested_workspace_id
+    elif coordination_vm.active_panel in {"circuit_library", "feedback_channel"}:
         active_workspace_id = "library"
     elif coordination_vm.active_panel in {"result_history", "execution", "trace_timeline", "artifact"} or shell_mode in {"runtime_monitoring", "run_review"}:
         active_workspace_id = "runtime_monitoring"

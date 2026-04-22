@@ -178,7 +178,24 @@ def _change_count(shell_vm: BuilderShellViewModel | None) -> int:
     return shell_vm.diff.summary.total_change_count
 
 
-def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_action_id: str | None, recommended_flow_id: str | None, *, app_language: str, source=None, execution_record=None, handoff: ProductFlowHandoffViewModel | None = None) -> ProductFlowFocusView:
+def _requested_core_workspace_focus(selected_action_id: str | None, shell_vm: BuilderShellViewModel | None, *, app_language: str) -> ProductFlowFocusView | None:
+    if shell_vm is None or selected_action_id is None:
+        return None
+    if selected_action_id == "open_visual_editor":
+        right_panel_id = "inspector" if shell_vm.inspector is not None and shell_vm.inspector.object_type not in {"none", "unknown"} else "designer"
+        bottom_panel_id = "diff" if shell_vm.diff is not None else ("validation" if shell_vm.validation is not None and (shell_vm.validation.summary.blocking_count or shell_vm.validation.summary.warning_count or shell_vm.validation.summary.confirmation_count) else "storage")
+        return ProductFlowFocusView(active_workspace_id="visual_editor", active_workspace_label=_workspace_label("visual_editor", app_language=app_language), active_right_panel_id=right_panel_id, active_right_panel_label=_panel_label(right_panel_id, app_language=app_language), active_bottom_panel_id=bottom_panel_id, active_bottom_panel_label=_panel_label(bottom_panel_id, app_language=app_language), focus_reason="explicit_core_workspace_surface")
+    if selected_action_id == "open_node_configuration":
+        right_panel_id = shell_vm.coordination.active_panel if shell_vm.coordination.active_panel in {"designer", "validation", "inspector"} else ("inspector" if shell_vm.inspector is not None and shell_vm.inspector.object_type not in {"none", "unknown"} else "designer")
+        bottom_panel_id = "diff" if shell_vm.diff is not None else ("validation" if shell_vm.validation is not None else "storage")
+        return ProductFlowFocusView(active_workspace_id="node_configuration", active_workspace_label=_workspace_label("node_configuration", app_language=app_language), active_right_panel_id=right_panel_id, active_right_panel_label=_panel_label(right_panel_id, app_language=app_language), active_bottom_panel_id=bottom_panel_id, active_bottom_panel_label=_panel_label(bottom_panel_id, app_language=app_language), focus_reason="explicit_core_workspace_surface")
+    if selected_action_id == "open_runtime_monitoring":
+        bottom_panel_id = "trace_timeline" if shell_vm.trace_timeline is not None and shell_vm.trace_timeline.events else ("artifact" if shell_vm.artifact is not None and shell_vm.artifact.artifact_list else "storage")
+        return ProductFlowFocusView(active_workspace_id="runtime_monitoring", active_workspace_label=_workspace_label("runtime_monitoring", app_language=app_language), active_right_panel_id="execution", active_right_panel_label=_panel_label("execution", app_language=app_language), active_bottom_panel_id=bottom_panel_id, active_bottom_panel_label=_panel_label(bottom_panel_id, app_language=app_language), focus_reason="explicit_core_workspace_surface")
+    return None
+
+
+def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_action_id: str | None, recommended_flow_id: str | None, *, app_language: str, source=None, execution_record=None, handoff: ProductFlowHandoffViewModel | None = None, selected_action_id: str | None = None) -> ProductFlowFocusView:
     if shell_vm is None:
         return ProductFlowFocusView()
 
@@ -209,6 +226,9 @@ def _focus(shell_vm: BuilderShellViewModel | None, stage_id: str, recommended_ac
             recommended_flow_id=recommended_flow_id,
             focus_reason="explicit_return_use_surface",
         )
+    explicit_core_focus = _requested_core_workspace_focus(selected_action_id, shell_vm, app_language=app_language)
+    if explicit_core_focus is not None:
+        return ProductFlowFocusView(active_workspace_id=explicit_core_focus.active_workspace_id, active_workspace_label=explicit_core_focus.active_workspace_label, active_right_panel_id=explicit_core_focus.active_right_panel_id, active_right_panel_label=explicit_core_focus.active_right_panel_label, active_bottom_panel_id=explicit_core_focus.active_bottom_panel_id, active_bottom_panel_label=explicit_core_focus.active_bottom_panel_label, recommended_action_id=recommended_action_id, recommended_flow_id=recommended_flow_id, focus_reason=explicit_core_focus.focus_reason)
     beginner_empty_designer = (
         shell_vm.diagnostics.beginner_mode
         and shell_vm.diagnostics.empty_workspace_mode
@@ -402,6 +422,7 @@ def read_product_flow_shell_view_model(
     preview: CircuitDraftPreview | None = None,
     approval_flow: DesignerApprovalFlowState | None = None,
     explanation: str | None = None,
+    selected_action_id: str | None = None,
 ) -> ProductFlowShellViewModel:
     source_unwrapped = _unwrap(source)
     storage_role = _storage_role(source_unwrapped)
@@ -424,6 +445,7 @@ def read_product_flow_shell_view_model(
         precheck=precheck,
         preview=preview,
         approval_flow=approval_flow,
+        selected_action_id=selected_action_id,
     ) if (source_unwrapped is not None or execution_record is not None) else None
 
     workflow_hub = read_builder_workflow_hub_view_model(
@@ -590,7 +612,7 @@ def read_product_flow_shell_view_model(
     stage_id = _stage_id(shell_vm, workflow_hub)
     recommended_flow_id = end_user_flow_hub.recommended_flow_id if end_user_flow_hub is not None else None
     recommended_action_id = (transition_vm.next_action_id if transition_vm is not None else None) or (next((entry.action_id for entry in (runbook_vm.entries if runbook_vm is not None else []) if entry.entry_id == runbook_vm.recommended_entry_id and entry.action_id is not None), None) if runbook_vm is not None else None) or (execution_adapter_hub.recommended_action_id if execution_adapter_hub is not None else None)
-    focus = _focus(shell_vm, stage_id, recommended_action_id, recommended_flow_id, app_language=app_language, source=source_unwrapped, execution_record=execution_record, handoff=handoff_vm)
+    focus = _focus(shell_vm, stage_id, recommended_action_id, recommended_flow_id, app_language=app_language, source=source_unwrapped, execution_record=execution_record, handoff=handoff_vm, selected_action_id=selected_action_id)
     right_stack_targets, bottom_dock_targets = _surface_targets(shell_vm, app_language=app_language, focus=focus)
 
     stage = ProductFlowStageView(

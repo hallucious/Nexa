@@ -444,3 +444,25 @@ def test_builder_shell_projects_result_history_surface_for_recent_runs() -> None
     assert vm.result_history is not None
     assert vm.result_history.visible is True
     assert vm.coordination.active_panel == "result_history"
+
+
+
+def test_builder_shell_honors_explicit_open_visual_editor_action() -> None:
+    source = _working_save()
+    vm = read_builder_shell_view_model(source, selected_action_id="open_visual_editor")
+
+    assert vm.active_workspace_id == "visual_editor"
+
+
+def test_builder_shell_honors_explicit_open_node_configuration_action() -> None:
+    source = _working_save()
+    vm = read_builder_shell_view_model(source, selected_action_id="open_node_configuration")
+
+    assert vm.active_workspace_id == "node_configuration"
+
+
+def test_builder_shell_honors_explicit_open_runtime_monitoring_action() -> None:
+    source = _working_save()
+    vm = read_builder_shell_view_model(source, execution_record=_run(), selected_action_id="open_runtime_monitoring")
+
+    assert vm.active_workspace_id == "runtime_monitoring"
