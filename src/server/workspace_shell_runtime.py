@@ -1155,6 +1155,132 @@ def _return_use_continuity_section(
     return section
 
 
+
+def _product_surface_review_section(
+    server_product_readiness_review: Mapping[str, Any] | None,
+    *,
+    routes: Mapping[str, Any],
+    app_language: str = "en",
+) -> dict[str, Any]:
+    review = dict(server_product_readiness_review or {})
+    review_state = str(review.get("review_state") or "hold_first_success_setup").strip() or "hold_first_success_setup"
+    review_summary = str(review.get("summary") or "").strip()
+    stages = tuple(review.get("stages") or ())
+    next_bottleneck_stage = str(review.get("next_bottleneck_stage") or "").strip() or None
+    recommended_action_target = str(review.get("recommended_action_target") or "").strip() or None
+    recommended_action_label = str(review.get("recommended_action_label") or "").strip() or None
+
+    lines = _summary_lines(
+        ui_text(
+            "server.shell.product_surface_review_state_prefix",
+            app_language=app_language,
+            fallback_text="Review state: {state}",
+            state=ui_text(
+                f"shell.product_readiness.state.{review_state}",
+                app_language=app_language,
+                fallback_text=review_state.replace("_", " "),
+            ),
+        ),
+        review_summary or None,
+        ui_text(
+            "server.shell.product_surface_review_bottleneck_prefix",
+            app_language=app_language,
+            fallback_text="Next bottleneck: {stage}",
+            stage=(
+                ui_text(
+                    f"shell.product_readiness.stage.{next_bottleneck_stage}",
+                    app_language=app_language,
+                    fallback_text=next_bottleneck_stage.replace("_", " "),
+                )
+                if next_bottleneck_stage
+                else ui_text("server.shell.product_surface_review_stable", app_language=app_language, fallback_text="Stable")
+            ),
+        ),
+    )
+
+    detail_items: list[str] = []
+    for stage in stages:
+        if not isinstance(stage, Mapping):
+            continue
+        stage_label = str(stage.get("stage_label") or stage.get("stage_id") or ui_text("server.shell.product_surface_review_stage_fallback", app_language=app_language, fallback_text="Stage")).strip()
+        stage_state = str(stage.get("stage_state") or "inactive").strip() or "inactive"
+        localized_state = ui_text(
+            f"shell.product_readiness.stage_state.{stage_state}",
+            app_language=app_language,
+            fallback_text=stage_state.replace("_", " "),
+        )
+        blocker_count = int(stage.get("blocker_count") or 0)
+        pending_count = int(stage.get("pending_count") or 0)
+        summary = str(stage.get("summary") or "").strip()
+        detail_items.append(
+            ui_text(
+                "server.shell.product_surface_review_stage_line",
+                app_language=app_language,
+                fallback_text="{label}: {state} — blockers {blockers}, pending {pending}",
+                label=stage_label,
+                state=localized_state,
+                blockers=str(blocker_count),
+                pending=str(pending_count),
+            )
+        )
+        if summary:
+            detail_items.append(
+                ui_text(
+                    "server.shell.product_surface_review_stage_summary_prefix",
+                    app_language=app_language,
+                    fallback_text="Summary: {summary}",
+                    summary=summary,
+                )
+            )
+
+    controls: list[dict[str, Any]] = []
+
+    def _append_control(control_id: str, label: str | None, action_target: str | None):
+        if not label or not action_target:
+            return
+        if any(item.get("action_target") == action_target for item in controls):
+            return
+        controls.append({
+            "control_id": control_id,
+            "label": label,
+            "action_kind": "open_route" if action_target.startswith("/") else "focus_section",
+            "action_target": action_target,
+        })
+
+    if review_state == "product_surface_stable":
+        _append_control(
+            "product-surface-open-library",
+            ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"),
+            str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or "").strip() or None,
+        )
+        _append_control(
+            "product-surface-open-results",
+            ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"),
+            str(routes.get("workspace_result_history_page") or "").strip() or None,
+        )
+    else:
+        _append_control(
+            f"product-surface-{next_bottleneck_stage or 'primary'}",
+            recommended_action_label,
+            recommended_action_target,
+        )
+
+    section = build_shell_section(
+        headline=ui_text("server.shell.product_surface_review", app_language=app_language, fallback_text="Product surface review"),
+        lines=lines,
+        detail_title=ui_text("server.shell.product_surface_review_detail", app_language=app_language, fallback_text="Product surface review detail"),
+        detail_items=detail_items,
+        controls=controls,
+        summary_empty=ui_text("server.shell.product_surface_review_pending", app_language=app_language, fallback_text="Product surface review will appear here once the server shell is available."),
+        detail_empty=ui_text("server.shell.product_surface_review_pending", app_language=app_language, fallback_text="Product surface review will appear here once the server shell is available."),
+    )
+    section["review_state"] = review_state
+    section["next_bottleneck_stage"] = next_bottleneck_stage
+    section["recommended_action_target"] = recommended_action_target
+    section["recommended_action_label"] = recommended_action_label
+    return section
+
+
 def _feedback_continuity_entries(
     feedback_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
@@ -2236,7 +2362,7 @@ def _server_product_readiness_review(
         run_action_id = None
         run_action_label = None
         run_action_target = None
-    elif has_server_provider and bool((shell_map.get("action_availability") or {}).get("launch", {}).get("allowed")):
+    elif has_server_provider and has_existing_structure and bool(str(routes.get("workspace_shell_launch") or routes.get("launch_run") or "").strip()):
         run_state = "ready_to_run"
         run_blockers = 0
         run_pending = 1
@@ -2535,6 +2661,7 @@ def build_workspace_shell_runtime_payload(
         "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
+        "product_surface_review_section": _product_surface_review_section(server_product_readiness_review, routes=routes, app_language=app_language),
         "feedback_continuity_section": _feedback_continuity_section(feedback_rows, workspace_id, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
@@ -2598,6 +2725,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     history_summary_section_json = json.dumps(payload.get("history_summary_section"), ensure_ascii=False)
     provider_readiness_section_json = json.dumps(payload.get("provider_readiness_section"), ensure_ascii=False)
     return_use_continuity_section_json = json.dumps(payload.get("return_use_continuity_section"), ensure_ascii=False)
+    product_surface_review_section_json = json.dumps(payload.get("product_surface_review_section"), ensure_ascii=False)
     feedback_continuity_section_json = json.dumps(payload.get("feedback_continuity_section"), ensure_ascii=False)
     designer_section_json = json.dumps(payload.get("designer_section"), ensure_ascii=False)
     validation_section_json = json.dumps(payload.get("validation_section"), ensure_ascii=False)
@@ -2871,6 +2999,12 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
         <pre id="return-use-continuity-detail">{escape(ui_text("server.shell.return_use_continuity_detail", app_language=app_language, fallback_text="Return-use continuity detail will appear here."))}</pre>
         <div id="return-use-continuity-controls" class="actions"></div>
       </section>
+      <section id="product-surface-review-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="product-surface-review-title">
+        <h2 id="product-surface-review-title">{escape(ui_text("server.shell.product_surface_review", app_language=app_language, fallback_text="Product surface review"))}</h2>
+        <pre id="product-surface-review-summary">{escape(ui_text("server.shell.product_surface_review_summary", app_language=app_language, fallback_text="Product surface review will appear here."))}</pre>
+        <pre id="product-surface-review-detail">{escape(ui_text("server.shell.product_surface_review_detail", app_language=app_language, fallback_text="Product surface review detail will appear here."))}</pre>
+        <div id="product-surface-review-controls" class="actions"></div>
+      </section>
       <section id="feedback-continuity-card" tabindex="-1" class="card focus-target" role="region" aria-labelledby="feedback-continuity-title">
         <h2 id="feedback-continuity-title">{escape(ui_text("server.shell.feedback_continuity", app_language=app_language, fallback_text="Feedback continuity"))}</h2>
         <pre id="feedback-continuity-summary">{escape(ui_text("server.shell.feedback_continuity_summary", app_language=app_language, fallback_text="Feedback continuity will appear here."))}</pre>
@@ -2906,6 +3040,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const initialHistorySummarySection = {history_summary_section_json};
     const initialProviderReadinessSection = {provider_readiness_section_json};
     const initialReturnUseContinuitySection = {return_use_continuity_section_json};
+    const initialProductSurfaceReviewSection = {product_surface_review_section_json};
     const initialFeedbackContinuitySection = {feedback_continuity_section_json};
     const initialDesignerSection = {designer_section_json};
     const initialValidationSection = {validation_section_json};
@@ -2946,6 +3081,9 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     const returnUseContinuitySummaryEl = document.getElementById('return-use-continuity-summary');
     const returnUseContinuityDetailEl = document.getElementById('return-use-continuity-detail');
     const returnUseContinuityControlsEl = document.getElementById('return-use-continuity-controls');
+    const productSurfaceReviewSummaryEl = document.getElementById('product-surface-review-summary');
+    const productSurfaceReviewDetailEl = document.getElementById('product-surface-review-detail');
+    const productSurfaceReviewControlsEl = document.getElementById('product-surface-review-controls');
     const feedbackContinuitySummaryEl = document.getElementById('feedback-continuity-summary');
     const feedbackContinuityDetailEl = document.getElementById('feedback-continuity-detail');
     const feedbackContinuityControlsEl = document.getElementById('feedback-continuity-controls');
@@ -2982,6 +3120,7 @@ def render_workspace_shell_runtime_html(payload: Mapping[str, Any]) -> str:
     let currentHistorySummarySection = initialHistorySummarySection || null;
     let currentProviderReadinessSection = initialProviderReadinessSection || null;
     let currentReturnUseContinuitySection = initialReturnUseContinuitySection || null;
+    let currentProductSurfaceReviewSection = initialProductSurfaceReviewSection || null;
     let currentFeedbackContinuitySection = initialFeedbackContinuitySection || null;
     let currentDesignerSection = initialDesignerSection || null;
     let currentValidationSection = initialValidationSection || null;
