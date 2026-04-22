@@ -13,7 +13,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
+from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, read_builder_action_schema
 from src.ui.designer_panel import DesignerPanelViewModel, read_designer_panel_view_model
 from src.ui.graph_workspace import GraphPreviewOverlay
 from src.ui.i18n import ui_language_from_sources, ui_text
@@ -58,6 +58,7 @@ class NodeConfigurationWorkspaceViewModel:
     can_submit_designer_request: bool = False
     can_commit_configuration: bool = False
     explanation: str | None = None
+    suggested_actions: list[BuilderActionView] = field(default_factory=list)
 
 
 
@@ -100,6 +101,17 @@ def _workspace_explanation(
         return ui_text("workspace.configuration.explanation.run_review", app_language=app_language)
     return None
 
+
+
+
+def _workspace_suggested_actions(*, workspace_status: str, app_language: str) -> list[BuilderActionView]:
+    if workspace_status == "awaiting_selection":
+        return [
+            BuilderActionView("save_working_save", ui_text("builder.action.save_working_save", app_language=app_language, fallback_text="Save draft"), "storage", True),
+            BuilderActionView("run_current", ui_text("builder.action.run_current", app_language=app_language, fallback_text="Run current"), "execution", True),
+            BuilderActionView("open_file_input", ui_text("builder.action.open_file_input", app_language=app_language, fallback_text="Use a file"), "builder", True),
+        ]
+    return []
 
 def read_node_configuration_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
@@ -189,6 +201,10 @@ def read_node_configuration_workspace_view_model(
         validation_vm=validation_vm,
         designer_vm=designer_vm,
     )
+    suggested_actions = _workspace_suggested_actions(
+        workspace_status=workspace_status,
+        app_language=app_language,
+    )
 
     return NodeConfigurationWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -205,6 +221,7 @@ def read_node_configuration_workspace_view_model(
         can_submit_designer_request=can_submit_designer_request,
         can_commit_configuration=can_commit_configuration,
         explanation=workspace_explanation,
+        suggested_actions=suggested_actions,
     )
 
 

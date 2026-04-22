@@ -7,7 +7,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
+from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, read_builder_action_schema
 from src.ui.artifact_viewer import ArtifactViewerViewModel, read_artifact_viewer_view_model
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.execution_panel import ExecutionPanelViewModel, read_execution_panel_view_model
@@ -50,6 +50,7 @@ class RuntimeMonitoringWorkspaceViewModel:
     focus: MonitoringFocusView = field(default_factory=MonitoringFocusView)
     health: MonitoringHealthView = field(default_factory=MonitoringHealthView)
     explanation: str | None = None
+    suggested_actions: list[BuilderActionView] = field(default_factory=list)
 
 
 
@@ -74,6 +75,28 @@ def _storage_role(source) -> str:
 def _workspace_explanation(*, workspace_status: str, app_language: str) -> str | None:
     return ui_text(f"workspace.runtime.explanation.{workspace_status}", app_language=app_language, fallback_text=None)
 
+
+
+
+def _workspace_suggested_actions(*, workspace_status: str, app_language: str) -> list[BuilderActionView]:
+    if workspace_status == "launch_ready":
+        return [
+            BuilderActionView("run_current", ui_text("builder.action.run_current", app_language=app_language, fallback_text="Run current"), "execution", True),
+            BuilderActionView("open_visual_editor", ui_text("builder.action.open_visual_editor", app_language=app_language, fallback_text="Open editor"), "navigation", True),
+        ]
+    if workspace_status == "live_monitoring":
+        return [
+            BuilderActionView("watch_run_progress", ui_text("builder.action.watch_run_progress", app_language=app_language, fallback_text="Watch progress"), "execution", True),
+            BuilderActionView("cancel_run", ui_text("builder.action.cancel_run", app_language=app_language, fallback_text="Cancel run"), "execution", True),
+            BuilderActionView("open_result_history", ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results"), "navigation", True),
+        ]
+    if workspace_status in {"terminal_review", "historical_review", "failed_review"}:
+        return [
+            BuilderActionView("open_result_history", ui_text("builder.action.open_result_history", app_language=app_language, fallback_text="Open recent results"), "navigation", True),
+            BuilderActionView("replay_latest", ui_text("builder.action.replay_latest", app_language=app_language, fallback_text="Replay latest"), "execution", True),
+            BuilderActionView("open_feedback_channel", ui_text("builder.action.open_feedback_channel", app_language=app_language, fallback_text="Send feedback"), "navigation", True),
+        ]
+    return []
 
 def read_runtime_monitoring_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
@@ -164,6 +187,10 @@ def read_runtime_monitoring_workspace_view_model(
         workspace_status=workspace_status,
         app_language=app_language,
     )
+    suggested_actions = _workspace_suggested_actions(
+        workspace_status=workspace_status,
+        app_language=app_language,
+    )
 
     return RuntimeMonitoringWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -178,6 +205,7 @@ def read_runtime_monitoring_workspace_view_model(
         focus=focus,
         health=health,
         explanation=workspace_explanation,
+        suggested_actions=suggested_actions,
     )
 
 

@@ -203,3 +203,14 @@ def test_node_configuration_workspace_exposes_run_review_explanation() -> None:
     assert vm.workspace_status == "run_review"
     assert vm.workspace_status_label == "Reviewing executed configuration"
     assert vm.explanation == "This configuration is read-only because you are reviewing an execution result."
+
+
+def test_node_configuration_workspace_exposes_suggested_actions_for_awaiting_selection() -> None:
+    vm = read_node_configuration_workspace_view_model(_working_save())
+
+    assert vm.workspace_status == "awaiting_selection"
+    assert [action.action_id for action in vm.suggested_actions] == [
+        "save_working_save",
+        "run_current",
+        "open_file_input",
+    ]

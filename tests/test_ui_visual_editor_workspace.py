@@ -159,3 +159,22 @@ def test_visual_editor_workspace_exposes_empty_state_explanation() -> None:
 
     assert vm.workspace_status == "empty"
     assert vm.explanation == "Start by describing what you want to build, or open a starter workflow."
+
+
+def test_visual_editor_workspace_exposes_suggested_actions_for_empty_state() -> None:
+    working = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "ko-KR"}),
+    )
+    vm = read_visual_editor_workspace_view_model(working)
+
+    assert vm.workspace_status == "empty"
+    assert [action.action_id for action in vm.suggested_actions] == [
+        "create_circuit_from_template",
+        "open_provider_setup",
+        "open_file_input",
+    ]

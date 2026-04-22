@@ -7,7 +7,7 @@ from src.storage.models.commit_snapshot_model import CommitSnapshotModel
 from src.storage.models.execution_record_model import ExecutionRecordModel
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.models.working_save_model import WorkingSaveModel
-from src.ui.action_schema import BuilderActionSchemaView, read_builder_action_schema
+from src.ui.action_schema import BuilderActionSchemaView, BuilderActionView, read_builder_action_schema
 from src.ui.diff_viewer import DiffViewerViewModel, read_diff_view_model
 from src.ui.i18n import ui_language_from_sources, ui_text
 from src.ui.graph_workspace import GraphPreviewOverlay, GraphWorkspaceViewModel, read_graph_view_model
@@ -51,6 +51,7 @@ class VisualEditorWorkspaceViewModel:
     can_edit_graph: bool = False
     can_preview_changes: bool = False
     explanation: str | None = None
+    suggested_actions: list[BuilderActionView] = field(default_factory=list)
 
 
 
@@ -93,6 +94,17 @@ def _workspace_explanation(
         return ui_text("workspace.visual_editor.explanation.reviewing", app_language=app_language)
     return None
 
+
+
+
+def _workspace_suggested_actions(*, workspace_status: str, app_language: str) -> list[BuilderActionView]:
+    if workspace_status != "empty":
+        return []
+    return [
+        BuilderActionView("create_circuit_from_template", ui_text("builder.action.create_circuit_from_template", app_language=app_language, fallback_text="Choose starter workflow"), "builder", True),
+        BuilderActionView("open_provider_setup", ui_text("builder.action.open_provider_setup", app_language=app_language, fallback_text="Connect AI model"), "builder", True),
+        BuilderActionView("open_file_input", ui_text("builder.action.open_file_input", app_language=app_language, fallback_text="Use a file"), "builder", True),
+    ]
 
 def read_visual_editor_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
@@ -188,6 +200,10 @@ def read_visual_editor_workspace_view_model(
         validation_vm=validation_vm,
         preview_overlay=(graph_vm.preview_overlay if graph_vm is not None else preview_overlay),
     )
+    suggested_actions = _workspace_suggested_actions(
+        workspace_status=workspace_status,
+        app_language=app_language,
+    )
 
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -204,6 +220,7 @@ def read_visual_editor_workspace_view_model(
         can_edit_graph=storage_role == "working_save",
         can_preview_changes=graph_vm is not None and graph_vm.preview_overlay is not None,
         explanation=workspace_explanation,
+        suggested_actions=suggested_actions,
     )
 
 
