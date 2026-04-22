@@ -419,3 +419,63 @@ def test_visual_editor_workspace_attention_targets_keep_empty_state_in_designer_
     assert vm.attention_targets[0].destination_workspace == "visual_editor"
     assert vm.attention_targets[0].destination_panel == "designer"
     assert vm.attention_targets[0].action_id == "create_circuit_from_template"
+
+
+
+def test_visual_editor_workspace_progress_stages_start_in_creation_state_when_empty() -> None:
+    working = WorkingSaveModel(
+        meta=WorkingSaveMeta(format_version="1.0.0", storage_role="working_save", working_save_id="ws-empty", name="Empty"),
+        circuit=CircuitModel(nodes=[], edges=[], entry=None, outputs=[]),
+        resources=ResourcesModel(prompts={}, providers={}, plugins={}),
+        state=StateModel(input={}, working={}, memory={}),
+        runtime=RuntimeModel(status="draft", validation_summary={}, last_run={}, errors=[]),
+        ui=UIModel(layout={}, metadata={"app_language": "en-US"}),
+    )
+
+    vm = read_visual_editor_workspace_view_model(working)
+
+    assert [stage.stage_id for stage in vm.progress_stages] == ["configure", "review", "run"]
+    assert [stage.state for stage in vm.progress_stages] == ["current", "blocked", "blocked"]
+    assert vm.progress_stages[0].action_id == "create_circuit_from_template"
+    assert vm.closure_barriers[0].barrier_kind == "start"
+    assert vm.closure_barriers[0].action_id == "create_circuit_from_template"
+
+
+
+def test_visual_editor_workspace_progress_stages_and_barrier_prioritize_preview_review() -> None:
+    overlay = GraphPreviewOverlay(
+        overlay_id="preview-5",
+        summary="preview changes",
+        added_node_ids=["n3"],
+        updated_node_ids=["n2"],
+        removed_edge_ids=[],
+    )
+
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+
+    assert [stage.state for stage in vm.progress_stages] == ["ready", "current", "blocked"]
+    assert vm.progress_stages[1].action_id == "open_diff"
+    assert vm.closure_barriers[0].barrier_kind == "pending_review"
+    assert vm.closure_barriers[0].action_id == "open_diff"
+
+
+
+def test_visual_editor_workspace_progress_stages_show_run_current_for_run_focus_review() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run_with_focus())
+
+    assert [stage.state for stage in vm.progress_stages] == ["ready", "ready", "current"]
+    assert vm.progress_stages[2].action_id == "open_runtime_monitoring"
+    assert vm.closure_barriers[0].barrier_kind == "runtime_focus"
+    assert vm.closure_barriers[0].action_id == "open_runtime_monitoring"
+
+
+
+def test_visual_editor_workspace_editing_progress_and_barrier_follow_attention() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation())
+
+    assert [stage.state for stage in vm.progress_stages] == ["current", "ready", "ready"]
+    assert vm.progress_stages[0].action_id == "open_node_configuration"
+    assert vm.progress_stages[1].action_id == "review_draft"
+    assert vm.progress_stages[2].action_id == "run_current"
+    assert vm.closure_barriers[0].barrier_kind == "follow_attention"
+    assert vm.closure_barriers[0].action_id == "open_node_configuration"

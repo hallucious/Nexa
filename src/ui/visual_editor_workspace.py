@@ -110,6 +110,32 @@ class EditorAttentionTargetView:
 
 
 @dataclass(frozen=True)
+class EditorProgressStageView:
+    stage_id: str = "configure"
+    label: str | None = None
+    state: str = "blocked"
+    state_label: str | None = None
+    action_id: str | None = None
+    action_label: str | None = None
+    target_ref: str | None = None
+    explanation: str | None = None
+
+
+@dataclass(frozen=True)
+class EditorClosureBarrierView:
+    barrier_kind: str = "general"
+    severity: str = "medium"
+    target_ref: str | None = None
+    title: str | None = None
+    summary: str | None = None
+    action_id: str | None = None
+    action_label: str | None = None
+    destination_workspace: str = "visual_editor"
+    destination_panel: str | None = None
+    blocking: bool = False
+
+
+@dataclass(frozen=True)
 class VisualEditorWorkspaceViewModel:
     workspace_status: str = "ready"
     workspace_status_label: str | None = None
@@ -127,6 +153,8 @@ class VisualEditorWorkspaceViewModel:
     selection_summary: EditorSelectionSummaryView = field(default_factory=EditorSelectionSummaryView)
     workspace_handoff: EditorWorkspaceHandoffView = field(default_factory=EditorWorkspaceHandoffView)
     attention_targets: list[EditorAttentionTargetView] = field(default_factory=list)
+    progress_stages: list[EditorProgressStageView] = field(default_factory=list)
+    closure_barriers: list[EditorClosureBarrierView] = field(default_factory=list)
     local_actions: list[BuilderActionView] = field(default_factory=list)
     action_shortcuts: list[EditorActionShortcutView] = field(default_factory=list)
     can_edit_graph: bool = False
@@ -914,6 +942,254 @@ def _editor_attention_targets(
     )]
 
 
+
+def _editor_progress_stages(
+    *,
+    workspace_status: str,
+    storage_role: str,
+    selection_summary: EditorSelectionSummaryView,
+    local_actions: list[BuilderActionView],
+    review_ready: bool,
+    can_run: bool,
+    has_execution_context: bool,
+    app_language: str,
+) -> list[EditorProgressStageView]:
+    action_map = {action.action_id: action for action in local_actions}
+
+    def stage(
+        stage_id: str,
+        *,
+        state: str,
+        action_id: str | None,
+        target_ref: str | None,
+        explanation_key: str,
+        fallback_explanation: str,
+    ) -> EditorProgressStageView:
+        action = action_map.get(action_id) if action_id is not None else None
+        return EditorProgressStageView(
+            stage_id=stage_id,
+            label=ui_text(
+                f"workspace.visual_editor.progress.stage.{stage_id}",
+                app_language=app_language,
+                fallback_text=stage_id.replace("_", " ").title(),
+            ),
+            state=state,
+            state_label=ui_text(
+                f"workspace.visual_editor.progress.state.{state}",
+                app_language=app_language,
+                fallback_text=state.replace("_", " ").title(),
+            ),
+            action_id=action_id,
+            action_label=_action_label(action, app_language=app_language),
+            target_ref=target_ref,
+            explanation=ui_text(explanation_key, app_language=app_language, fallback_text=fallback_explanation),
+        )
+
+    configure_state = "current" if workspace_status in {"empty", "editing", "blocked"} else "ready"
+    configure_action = "create_circuit_from_template" if workspace_status == "empty" else "open_node_configuration"
+    configure_target = selection_summary.target_ref if workspace_status != "empty" else None
+
+    if workspace_status == "empty":
+        review_state = "blocked"
+    elif workspace_status == "previewing":
+        review_state = "current"
+    elif workspace_status == "reviewing":
+        review_state = "ready"
+    elif review_ready:
+        review_state = "ready"
+    else:
+        review_state = "blocked"
+    review_action = "open_diff" if workspace_status in {"previewing", "reviewing"} else "review_draft"
+
+    if workspace_status in {"empty", "blocked", "previewing"}:
+        run_state = "blocked"
+    elif selection_summary.selection_mode == "run_focus" or (workspace_status == "reviewing" and has_execution_context):
+        run_state = "current"
+    elif can_run:
+        run_state = "ready"
+    else:
+        run_state = "blocked"
+    run_action = "open_runtime_monitoring" if has_execution_context else ("run_current" if storage_role == "working_save" else "replay_latest")
+
+    return [
+        stage(
+            "configure",
+            state=configure_state,
+            action_id=configure_action,
+            target_ref=configure_target,
+            explanation_key="workspace.visual_editor.progress.configure.explanation",
+            fallback_explanation="Move the graph from overview into concrete configuration work.",
+        ),
+        stage(
+            "review",
+            state=review_state,
+            action_id=review_action,
+            target_ref=selection_summary.target_ref,
+            explanation_key="workspace.visual_editor.progress.review.explanation",
+            fallback_explanation="Review pending changes or the current reviewed graph before finalizing decisions.",
+        ),
+        stage(
+            "run",
+            state=run_state,
+            action_id=run_action,
+            target_ref=selection_summary.target_ref,
+            explanation_key="workspace.visual_editor.progress.run.explanation",
+            fallback_explanation="Run the graph when ready, or inspect recent runtime evidence when a run already exists.",
+        ),
+    ]
+
+
+def _editor_closure_barriers(
+    *,
+    workspace_status: str,
+    selection_summary: EditorSelectionSummaryView,
+    workspace_handoff: EditorWorkspaceHandoffView,
+    attention_targets: list[EditorAttentionTargetView],
+    comparison_state: EditorComparisonStateView,
+    can_run: bool,
+    has_execution_context: bool,
+    local_actions: list[BuilderActionView],
+    app_language: str,
+) -> list[EditorClosureBarrierView]:
+    action_map = {action.action_id: action for action in local_actions}
+
+    def barrier(
+        barrier_kind: str,
+        *,
+        severity: str,
+        title_key: str,
+        fallback_title: str,
+        summary_key: str,
+        fallback_summary: str,
+        action_id: str | None,
+        destination_workspace: str,
+        destination_panel: str | None,
+        blocking: bool = False,
+        **params,
+    ) -> EditorClosureBarrierView:
+        action = action_map.get(action_id) if action_id is not None else None
+        return EditorClosureBarrierView(
+            barrier_kind=barrier_kind,
+            severity=severity,
+            target_ref=selection_summary.target_ref,
+            title=ui_text(title_key, app_language=app_language, fallback_text=fallback_title, **params),
+            summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary, **params),
+            action_id=action_id,
+            action_label=_action_label(action, app_language=app_language),
+            destination_workspace=destination_workspace,
+            destination_panel=destination_panel,
+            blocking=blocking,
+        )
+
+    barriers: list[EditorClosureBarrierView] = []
+    primary_attention = attention_targets[0] if attention_targets else None
+
+    if workspace_status == "empty":
+        barriers.append(barrier(
+            "start", severity="medium",
+            title_key="workspace.visual_editor.barrier.start.title",
+            fallback_title="Create the first workflow shape",
+            summary_key="workspace.visual_editor.barrier.start.summary",
+            fallback_summary="The editor cannot progress until the first workflow shape exists.",
+            action_id="create_circuit_from_template",
+            destination_workspace="visual_editor",
+            destination_panel="designer",
+        ))
+        return barriers
+
+    if workspace_status == "blocked":
+        barriers.append(barrier(
+            "repair", severity="high",
+            title_key="workspace.visual_editor.barrier.repair.title",
+            fallback_title="Fix the blocking selection",
+            summary_key="workspace.visual_editor.barrier.repair.summary",
+            fallback_summary="The current selection still carries blocking findings. Repair it before trying to review or run.",
+            action_id="open_node_configuration",
+            destination_workspace="node_configuration",
+            destination_panel="inspector",
+            blocking=True,
+        ))
+        if not can_run and action_map.get("open_provider_setup") is not None:
+            barriers.append(barrier(
+                "prepare_run", severity="medium",
+                title_key="workspace.visual_editor.barrier.prepare_run.title",
+                fallback_title="Prepare the graph for running",
+                summary_key="workspace.visual_editor.barrier.prepare_run.summary",
+                fallback_summary="Provider and configuration readiness still need attention before the graph can run reliably.",
+                action_id="open_provider_setup",
+                destination_workspace="visual_editor",
+                destination_panel="provider_setup",
+            ))
+        return barriers
+
+    if workspace_status == "previewing":
+        barriers.append(barrier(
+            "pending_review", severity="medium",
+            title_key="workspace.visual_editor.barrier.preview.title",
+            fallback_title="Review the pending diff before advancing",
+            summary_key="workspace.visual_editor.barrier.preview.summary",
+            fallback_summary="{change_count} pending graph changes still need review before this preview can be finalized.",
+            action_id="open_diff",
+            destination_workspace="visual_editor",
+            destination_panel="diff",
+            change_count=comparison_state.change_count,
+        ))
+        return barriers
+
+    if selection_summary.selection_mode == "run_focus" and has_execution_context:
+        barriers.append(barrier(
+            "runtime_focus", severity="high",
+            title_key="workspace.visual_editor.barrier.runtime.title",
+            fallback_title="Inspect the active run focus",
+            summary_key="workspace.visual_editor.barrier.runtime.summary",
+            fallback_summary="Recent runtime evidence still points to {label}. Inspect it before treating the review as settled.",
+            action_id="open_runtime_monitoring",
+            destination_workspace="runtime_monitoring",
+            destination_panel="execution",
+            label=selection_summary.label or selection_summary.target_ref or "this step",
+        ))
+        return barriers
+
+    if workspace_status == "reviewing":
+        barriers.append(barrier(
+            "review_compare", severity="medium",
+            title_key="workspace.visual_editor.barrier.review.title",
+            fallback_title="Compare the reviewed graph",
+            summary_key="workspace.visual_editor.barrier.review.summary",
+            fallback_summary="Use diff to verify the reviewed graph against its surrounding context before moving on.",
+            action_id=workspace_handoff.action_id or "open_diff",
+            destination_workspace=workspace_handoff.destination_workspace,
+            destination_panel=workspace_handoff.destination_panel,
+        ))
+        return barriers
+
+    if not can_run and action_map.get("open_provider_setup") is not None:
+        barriers.append(barrier(
+            "prepare_run", severity="medium",
+            title_key="workspace.visual_editor.barrier.prepare_run.title",
+            fallback_title="Prepare the graph for running",
+            summary_key="workspace.visual_editor.barrier.prepare_run.summary",
+            fallback_summary="Provider and configuration readiness still need attention before the graph can run reliably.",
+            action_id="open_provider_setup",
+            destination_workspace="visual_editor",
+            destination_panel="provider_setup",
+        ))
+
+    if primary_attention is not None and primary_attention.action_id is not None:
+        barriers.append(barrier(
+            "follow_attention", severity="low",
+            title_key="workspace.visual_editor.barrier.attention.title",
+            fallback_title="Follow the current editor priority",
+            summary_key="workspace.visual_editor.barrier.attention.summary",
+            fallback_summary="The current editor priority is the cleanest path forward from this graph state.",
+            action_id=primary_attention.action_id,
+            destination_workspace=primary_attention.destination_workspace,
+            destination_panel=primary_attention.destination_panel,
+            blocking=primary_attention.blocking,
+        ))
+
+    return barriers[:2]
+
 def read_visual_editor_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -1080,6 +1356,27 @@ def read_visual_editor_workspace_view_model(
         local_actions=local_actions,
         app_language=app_language,
     )
+    progress_stages = _editor_progress_stages(
+        workspace_status=workspace_status,
+        storage_role=storage_role,
+        selection_summary=selection_summary,
+        local_actions=local_actions,
+        review_ready=review_ready,
+        can_run=can_run,
+        has_execution_context=has_execution_context,
+        app_language=app_language,
+    )
+    closure_barriers = _editor_closure_barriers(
+        workspace_status=workspace_status,
+        selection_summary=selection_summary,
+        workspace_handoff=workspace_handoff,
+        attention_targets=attention_targets,
+        comparison_state=comparison_state,
+        can_run=can_run,
+        has_execution_context=has_execution_context,
+        local_actions=local_actions,
+        app_language=app_language,
+    )
 
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -1098,6 +1395,8 @@ def read_visual_editor_workspace_view_model(
         selection_summary=selection_summary,
         workspace_handoff=workspace_handoff,
         attention_targets=attention_targets,
+        progress_stages=progress_stages,
+        closure_barriers=closure_barriers,
         local_actions=local_actions,
         action_shortcuts=action_shortcuts,
         can_edit_graph=storage_role == "working_save",
@@ -1115,6 +1414,9 @@ __all__ = [
     "EditorSelectionSummaryView",
     "EditorActionShortcutView",
     "EditorWorkspaceHandoffView",
+    "EditorAttentionTargetView",
+    "EditorProgressStageView",
+    "EditorClosureBarrierView",
     "VisualEditorWorkspaceViewModel",
     "read_visual_editor_workspace_view_model",
 ]
