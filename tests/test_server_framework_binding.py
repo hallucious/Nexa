@@ -1685,6 +1685,9 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['first_success_setup_section']['summary']['headline'] == 'First-success setup'
     assert parsed['first_success_setup_section']['controls'][0]['action_target'] == 'designer'
     assert parsed['first_success_setup_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/starter-templates?app_language=en'
+    assert parsed['first_success_setup_section']['entry_path_kind'] == 'goal_entry'
+    assert parsed['first_success_setup_section']['current_step_id'] == 'choose_entry_path'
+    assert any(line.startswith('Current path: Goal entry') for line in parsed['first_success_setup_section']['summary']['lines'])
     assert parsed['first_success_run_section']['summary']['headline'] == 'First-success run'
     assert parsed['first_success_run_section']['run_state'] in {'waiting', 'inactive'}
     assert parsed['first_success_run_section']['controls'][0]['action_target'] == 'validation.detail'
@@ -1739,6 +1742,110 @@ def test_framework_binding_workspace_shell_uses_server_backed_onboarding_step_fo
     assert parsed['step_state_banner']['current_step_id'] == 'review_preview'
     assert parsed['step_state_banner']['action_target'] == 'validation.detail'
     assert parsed['continuity']['onboarding_state']['current_step'] == 'review_preview'
+
+def test_framework_binding_workspace_shell_surfaces_template_path_before_materialized_structure() -> None:
+    response = FrameworkRouteBindings.handle_workspace_shell(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shell", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+        },
+        recent_run_rows=(),
+        result_rows_by_run_id={},
+        artifact_rows_lookup=lambda run_id: (),
+        trace_rows_lookup=lambda run_id: (),
+        artifact_source={
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile"}},
+            "designer": {
+                "server_backed_shell_state": {
+                    "selected_template_id": "text_summarizer",
+                    "selected_template_display_name": "Text Summarizer",
+                    "selected_template_ref": "nexa-curated:text_summarizer@1.0",
+                    "last_action": "apply_template",
+                }
+            },
+        },
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed['server_product_readiness_review']['stages'][0]['stage_state'] == 'provider_setup_needed'
+    assert parsed['server_product_readiness_review']['stages'][0]['entry_path_kind'] == 'starter_template'
+    assert parsed['first_success_setup_section']['setup_state'] == 'provider_setup_needed'
+    assert parsed['first_success_setup_section']['entry_path_kind'] == 'starter_template'
+    assert parsed['first_success_setup_section']['current_step_id'] == 'connect_provider'
+    assert parsed['first_success_setup_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/provider-bindings'
+    assert parsed['first_success_setup_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/starter-templates?app_language=en'
+    assert any(line.startswith('Current path: Starter template') for line in parsed['first_success_setup_section']['summary']['lines'])
+    assert any(line.startswith('Selected starter template: Text Summarizer') for line in parsed['first_success_setup_section']['summary']['lines'])
+
+
+def test_framework_binding_workspace_shell_surfaces_onboarding_continuation_path_in_setup() -> None:
+    response = FrameworkRouteBindings.handle_workspace_shell(
+        request=_request(method="GET", path="/api/workspaces/ws-001/shell", path_params={"workspace_id": "ws-001"}),
+        workspace_context=_workspace(),
+        workspace_row={
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+        },
+        onboarding_rows=({
+            "onboarding_state_id": "onboard-001",
+            "user_id": "user-owner",
+            "workspace_id": "ws-001",
+            "first_success_achieved": False,
+            "advanced_surfaces_unlocked": False,
+            "dismissed_guidance_state": {},
+            "current_step": "review_preview",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+        },),
+        recent_run_rows=(),
+        result_rows_by_run_id={},
+        artifact_rows_lookup=lambda run_id: (),
+        trace_rows_lookup=lambda run_id: (),
+        artifact_source={
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile"}},
+        },
+        provider_binding_rows=({
+            "binding_id": "binding-001",
+            "workspace_id": "ws-001",
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "credential_source": "managed",
+            "secret_ref": "secret://ws-001/openai",
+            "secret_version_ref": "v1",
+            "enabled": True,
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "updated_by_user_id": "user-owner",
+        },),
+    )
+
+    parsed = json.loads(response.body_text)
+    assert response.status_code == 200
+    assert parsed['server_product_readiness_review']['stages'][0]['stage_state'] == 'onboarding_continuation'
+    assert parsed['first_success_setup_section']['setup_state'] == 'onboarding_continuation'
+    assert parsed['first_success_setup_section']['entry_path_kind'] == 'onboarding_continuation'
+    assert parsed['first_success_setup_section']['current_step_id'] == 'review_draft'
+    assert parsed['first_success_setup_section']['controls'][0]['action_target'] == 'validation.detail'
+    assert any(line.startswith('Current path: Onboarding continuation') for line in parsed['first_success_setup_section']['summary']['lines'])
+
 
 
 def test_framework_binding_put_workspace_shell_draft_persists_template_and_validation_state() -> None:

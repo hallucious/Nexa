@@ -876,6 +876,7 @@ def _first_success_setup_section(
     workspace_id: str,
     routes: Mapping[str, Any],
     app_language: str = "en",
+    persisted_state: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     designer = shell_map.get("designer") or {}
     request_state = designer.get("request_state") or {}
@@ -883,6 +884,12 @@ def _first_success_setup_section(
     provider_guidance = designer.get("provider_setup_guidance") or {}
     gallery = template_gallery or designer.get("template_gallery") or {}
     templates = tuple(gallery.get("templates") or ())
+    persisted = dict(persisted_state or {})
+    selected_template_display = str(
+        persisted.get("selected_template_display_name")
+        or persisted.get("selected_template_id")
+        or ""
+    ).strip() or None
     connected_inline = int(provider_inline.get("connected_count") or 0)
     continuity = _provider_continuity_summary_for_workspace(
         workspace_id,
@@ -900,6 +907,11 @@ def _first_success_setup_section(
     setup_state = str(setup_stage.get("stage_state") or "inactive").strip() or "inactive"
     setup_summary = str(setup_stage.get("summary") or "").strip()
     onboarding_step = _normalized_onboarding_current_step(onboarding_state)
+    entry_path_kind = str(setup_stage.get("entry_path_kind") or "goal_entry").strip() or "goal_entry"
+    current_step_id = str(setup_stage.get("current_step_id") or "choose_entry_path").strip() or "choose_entry_path"
+    next_step_id = str(setup_stage.get("next_step_id") or "").strip() or None
+    provider_step_needed = bool(setup_stage.get("provider_step_needed"))
+    step_order = tuple(setup_stage.get("step_order") or ("choose_entry_path", "connect_provider", "review_draft", "run"))
     controls: list[dict[str, Any]] = []
 
     def _append_control(control_id: str, label: str | None, action_target: str | None):
@@ -914,24 +926,86 @@ def _first_success_setup_section(
             "action_target": action_target,
         })
 
+    starter_templates_target = str(routes.get("starter_template_catalog_page") or routes.get("starter_template_catalog") or "").strip() or None
+    provider_bindings_target = str(routes.get("workspace_provider_bindings") or "").strip() or None
+    provider_health_target = str(routes.get("workspace_provider_health") or "").strip() or None
+    onboarding_target = str(routes.get("onboarding") or "").strip() or None
+
     if setup_state == "goal_entry_needed":
         _append_control("setup-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
-        _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), str(routes.get("starter_template_catalog_page") or "").strip() or None)
-    elif setup_state == "provider_setup_needed":
-        _append_control("setup-open-provider-bindings", ui_text("server.shell.open_provider_bindings", app_language=app_language, fallback_text="Open provider bindings"), str(routes.get("workspace_provider_bindings") or "").strip() or None)
-        _append_control("setup-open-provider-health", ui_text("server.shell.open_provider_health", app_language=app_language, fallback_text="Open provider health"), str(routes.get("workspace_provider_health") or "").strip() or None)
-    else:
+        _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), starter_templates_target)
+    elif setup_state == "starter_template_path":
+        _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), starter_templates_target)
         _append_control("setup-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
+    elif setup_state == "provider_setup_needed":
+        _append_control("setup-open-provider-bindings", ui_text("server.shell.open_provider_bindings", app_language=app_language, fallback_text="Open provider bindings"), provider_bindings_target)
+        if entry_path_kind == "starter_template":
+            _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), starter_templates_target)
+        else:
+            _append_control("setup-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
+        _append_control("setup-open-provider-health", ui_text("server.shell.open_provider_health", app_language=app_language, fallback_text="Open provider health"), provider_health_target)
+    elif setup_state == "onboarding_continuation":
+        _append_control("setup-open-review", ui_text("server.shell.review_preview_action", app_language=app_language, fallback_text="Review preview"), "validation.detail")
+        if provider_step_needed:
+            _append_control("setup-open-provider-bindings", ui_text("server.shell.open_provider_bindings", app_language=app_language, fallback_text="Open provider bindings"), provider_bindings_target)
+        _append_control("setup-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), onboarding_target)
+    else:
+        if entry_path_kind == "starter_template":
+            _append_control("setup-open-starter-templates", ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates"), starter_templates_target)
+        else:
+            _append_control("setup-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
 
-    _append_control("setup-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), str(routes.get("onboarding") or "").strip() or None)
+    if setup_state != "onboarding_continuation":
+        _append_control("setup-open-onboarding", ui_text("server.shell.open_onboarding", app_language=app_language, fallback_text="Open onboarding"), onboarding_target)
+
+    path_fallbacks = {
+        "goal_entry": "Goal entry",
+        "starter_template": "Starter template",
+        "onboarding_continuation": "Onboarding continuation",
+    }
+    step_fallbacks = {
+        "choose_entry_path": "Choose entry path",
+        "connect_provider": "Connect AI model if needed",
+        "review_draft": "Review draft or proposal",
+        "run": "Run",
+    }
+    path_label = ui_text(
+        f"server.shell.setup_path.{entry_path_kind}",
+        app_language=app_language,
+        fallback_text=path_fallbacks.get(entry_path_kind, entry_path_kind.replace("_", " ").title()),
+    )
+    current_step_label = ui_text(
+        f"server.shell.setup_step.{current_step_id}",
+        app_language=app_language,
+        fallback_text=step_fallbacks.get(current_step_id, current_step_id.replace("_", " ").title()),
+    )
+    next_step_label = ui_text(
+        f"server.shell.setup_step.{next_step_id}",
+        app_language=app_language,
+        fallback_text=step_fallbacks.get(next_step_id, next_step_id.replace("_", " ").title()),
+    ) if next_step_id else None
+    ordered_step_labels = [
+        ui_text(
+            f"server.shell.setup_step.{step_id}",
+            app_language=app_language,
+            fallback_text=step_fallbacks.get(step_id, step_id.replace("_", " ").title()),
+        )
+        for step_id in step_order
+    ]
+    step_order_summary = " → ".join(f"{index + 1}. {label}" for index, label in enumerate(ordered_step_labels))
 
     lines = _summary_lines(
         ui_text("server.shell.first_success_setup_state_prefix", app_language=app_language, fallback_text="Setup state: {state}", state=ui_text(f"shell.product_readiness.stage_state.{setup_state}", app_language=app_language, fallback_text=setup_state.replace("_", " ")) if setup_state != "inactive" else ui_text("shell.product_readiness.stage_state.inactive", app_language=app_language, fallback_text="Inactive")),
+        ui_text("server.shell.first_success_setup_path_prefix", app_language=app_language, fallback_text="Current path: {path}", path=path_label),
+        ui_text("server.shell.first_success_setup_current_step_prefix", app_language=app_language, fallback_text="Current step: {step}", step=current_step_label),
+        ui_text("server.shell.first_success_setup_next_step_prefix", app_language=app_language, fallback_text="Next after this: {step}", step=next_step_label) if next_step_label else None,
         setup_summary or None,
+        ui_text("server.shell.first_success_setup_selected_template_prefix", app_language=app_language, fallback_text="Selected starter template: {name}", name=selected_template_display) if selected_template_display else None,
         ui_text("server.shell.first_success_setup_templates_prefix", app_language=app_language, fallback_text="Starter templates: {count}", count=str(len(templates))),
         ui_text("server.shell.first_success_setup_providers_prefix", app_language=app_language, fallback_text="Connected providers: {count}", count=str(max(connected_inline, connected_server))),
     )
     detail_items = _summary_lines(
+        ui_text("server.shell.first_success_setup_step_order_prefix", app_language=app_language, fallback_text="Step order: {steps}", steps=step_order_summary),
         ui_text("server.shell.first_success_setup_request_prefix", app_language=app_language, fallback_text="Request status: {status}", status=str(request_state.get("request_status") or "empty")),
         ui_text("server.shell.first_success_setup_onboarding_prefix", app_language=app_language, fallback_text="Onboarding step: {step}", step=onboarding_step) if onboarding_step else None,
         ui_text("server.shell.first_success_setup_provider_guidance_prefix", app_language=app_language, fallback_text="Provider setup summary: {summary}", summary=str(provider_guidance.get("summary") or setup_summary or "")) if provider_guidance.get("summary") or setup_summary else None,
@@ -948,6 +1022,10 @@ def _first_success_setup_section(
         detail_empty=ui_text("server.shell.first_success_setup_pending", app_language=app_language, fallback_text="First-success setup guidance will appear here once the workspace shell is available."),
     )
     section["setup_state"] = setup_state
+    section["entry_path_kind"] = entry_path_kind
+    section["current_step_id"] = current_step_id
+    section["next_step_id"] = next_step_id
+    section["step_order"] = list(step_order)
     section["recommended_action_target"] = setup_stage.get("recommended_action_target")
     section["recommended_action_label"] = setup_stage.get("recommended_action_label")
     section["blocker_count"] = int(setup_stage.get("blocker_count") or 0)
@@ -2229,6 +2307,7 @@ def _server_product_readiness_review(
     workspace_id: str,
     routes: Mapping[str, Any],
     app_language: str,
+    persisted_designer_state: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     product_readiness = shell_map.get("product_readiness") or {}
     local_stages = list(product_readiness.get("stages") or [])
@@ -2236,11 +2315,31 @@ def _server_product_readiness_review(
     local_run_state = str((local_stages[1].get("stage_state") if len(local_stages) > 1 and isinstance(local_stages[1], Mapping) else "") or "").strip()
 
     onboarding_step = _normalized_onboarding_current_step(onboarding_state)
+    persisted_designer = dict(persisted_designer_state or {})
+    persisted_request_text = str(
+        persisted_designer.get("request_text")
+        or (((shell_map.get("designer") or {}).get("request_state") or {}).get("current_request_text") or "")
+    ).strip()
+    selected_template_id = str(persisted_designer.get("selected_template_id") or "").strip()
+    selected_template_ref = str(persisted_designer.get("selected_template_ref") or "").strip()
+    selected_template_display_name = str(persisted_designer.get("selected_template_display_name") or selected_template_id or "").strip()
+    has_selected_template = bool(selected_template_id or selected_template_ref or selected_template_display_name)
+    entry_path_kind = "goal_entry"
+    if onboarding_step in {"review_preview", "approve"}:
+        entry_path_kind = "onboarding_continuation"
+    elif has_selected_template:
+        entry_path_kind = "starter_template"
     first_success = bool((onboarding_state or {}).get("first_success_achieved")) or str((latest_run_result_preview or {}).get("result_state") or "").strip() in {"ready_success", "ready_partial"}
     has_server_provider = any(
         str(row.get("workspace_id") or "").strip() == workspace_id and bool(row.get("enabled", True))
         for row in provider_binding_rows
     ) or any(str(row.get("workspace_id") or "").strip() == workspace_id for row in managed_secret_rows)
+    provider_step_needed = (not has_server_provider) and bool(
+        has_selected_template
+        or persisted_request_text
+        or onboarding_step in {"review_preview", "approve", "run", "read_result"}
+        or local_setup_state == "provider_setup_needed"
+    )
     has_history = latest_run_row is not None
     has_feedback_route = bool(routes.get("workspace_feedback") and routes.get("workspace_feedback_page"))
     has_library_route = bool(routes.get("circuit_library_page") or routes.get("workspace_circuit_library_page"))
@@ -2264,7 +2363,40 @@ def _server_product_readiness_review(
         setup_action_id = None
         setup_action_label = None
         setup_action_target = None
-    elif (not has_existing_structure) and (local_setup_state == "goal_entry_needed" or onboarding_step == "enter_goal" or str((((shell_map.get("designer") or {}).get("request_state") or {}).get("request_status") or "")).strip() == "empty"):
+        current_step_id = "run"
+        next_step_id = None
+    elif onboarding_step in {"review_preview", "approve"}:
+        setup_state = "onboarding_continuation"
+        setup_blockers = 0
+        setup_pending = 1
+        setup_summary = ui_text(
+            "shell.product_readiness.summary.onboarding_continuation",
+            app_language=app_language,
+            fallback_text="Resume the guided first-run path from review and approval before switching to a different entry surface.",
+        )
+        setup_action_id = "open_validation_detail"
+        setup_action_label = ui_text("server.shell.review_preview_action", app_language=app_language, fallback_text="Review preview")
+        setup_action_target = "validation.detail"
+        current_step_id = "review_draft"
+        next_step_id = "run"
+    elif (not has_existing_structure) and (
+        has_selected_template
+        and not provider_step_needed
+    ):
+        setup_state = "starter_template_path"
+        setup_blockers = 0
+        setup_pending = 1
+        setup_summary = ui_text(
+            "shell.product_readiness.summary.starter_template_path",
+            app_language=app_language,
+            fallback_text="A starter template path is already selected. Continue there so the first workflow shape materializes cleanly.",
+        )
+        setup_action_id = "open_starter_templates"
+        setup_action_label = ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates")
+        setup_action_target = str(routes.get("starter_template_catalog_page") or routes.get("starter_template_catalog") or "") or None
+        current_step_id = "choose_entry_path"
+        next_step_id = "review_draft"
+    elif (not has_existing_structure) and not persisted_request_text and not has_selected_template and (local_setup_state == "goal_entry_needed" or onboarding_step == "enter_goal" or str((((shell_map.get("designer") or {}).get("request_state") or {}).get("request_status") or "")).strip() == "empty"):
         setup_state = "goal_entry_needed"
         setup_blockers = 0
         setup_pending = 1
@@ -2276,7 +2408,9 @@ def _server_product_readiness_review(
         setup_action_id = "open_designer"
         setup_action_label = ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer")
         setup_action_target = "designer"
-    elif not has_server_provider:
+        current_step_id = "choose_entry_path"
+        next_step_id = "connect_provider" if not has_server_provider else "review_draft"
+    elif provider_step_needed:
         setup_state = "provider_setup_needed"
         setup_blockers = 1
         setup_pending = 0
@@ -2288,8 +2422,10 @@ def _server_product_readiness_review(
         setup_action_id = "open_provider_bindings"
         setup_action_label = ui_text("server.shell.open_provider_bindings", app_language=app_language, fallback_text="Open provider bindings")
         setup_action_target = str(routes.get("workspace_provider_bindings") or "") or None
+        current_step_id = "connect_provider"
+        next_step_id = "review_draft"
     else:
-        setup_state = "entry_ready" if local_setup_state in {"", "provider_setup_needed", "entry_ready", "ready"} else local_setup_state
+        setup_state = "entry_ready" if local_setup_state in {"", "provider_setup_needed", "entry_ready", "ready", "starter_template_path", "onboarding_continuation"} else local_setup_state
         setup_blockers = 0
         setup_pending = 0 if setup_state == "complete" else 1
         setup_summary = ui_text(
@@ -2297,9 +2433,15 @@ def _server_product_readiness_review(
             app_language=app_language,
             fallback_text="Starter entry surfaces are available. You can continue from a template, file, URL, or direct goal entry.",
         )
-        setup_action_id = "open_starter_templates"
-        setup_action_label = ui_text("server.shell.open_starter_templates", app_language=app_language, fallback_text="Open starter templates")
-        setup_action_target = str(routes.get("starter_template_catalog_page") or routes.get("starter_template_catalog") or "") or None
+        setup_action_id = "open_starter_templates" if has_selected_template else "open_designer"
+        setup_action_label = ui_text(
+            "server.shell.open_starter_templates" if has_selected_template else "server.shell.open_designer",
+            app_language=app_language,
+            fallback_text=("Open starter templates" if has_selected_template else "Open Designer"),
+        )
+        setup_action_target = (str(routes.get("starter_template_catalog_page") or routes.get("starter_template_catalog") or "") if has_selected_template else "designer") or None
+        current_step_id = "review_draft"
+        next_step_id = "run"
 
     setup_stage = _server_product_stage(
         stage_id="first_success_setup",
@@ -2313,6 +2455,12 @@ def _server_product_readiness_review(
         recommended_action_target=setup_action_target,
         app_language=app_language,
     )
+    setup_stage["entry_path_kind"] = entry_path_kind
+    setup_stage["current_step_id"] = current_step_id
+    setup_stage["next_step_id"] = next_step_id
+    setup_stage["provider_step_needed"] = provider_step_needed
+    setup_stage["selected_template_display_name"] = selected_template_display_name or None
+    setup_stage["step_order"] = ["choose_entry_path", "connect_provider", "review_draft", "run"]
 
     if result_ready:
         run_state = "complete"
@@ -2624,6 +2772,7 @@ def build_workspace_shell_runtime_payload(
         workspace_id=workspace_id,
         routes=routes,
         app_language=app_language,
+        persisted_designer_state=server_backed_state.get("designer"),
     )
 
     payload = {
@@ -2658,7 +2807,7 @@ def build_workspace_shell_runtime_payload(
         "recent_activity_section": _recent_activity_section(recent_run_rows, onboarding_rows, workspace_id, app_language=app_language),
         "history_summary_section": _history_summary_section(recent_run_rows, onboarding_rows, share_payload_rows, model, workspace_id, app_language=app_language),
         "provider_readiness_section": _provider_readiness_section(provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
-        "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language),
+        "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language, persisted_state=server_backed_state.get("designer")),
         "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "product_surface_review_section": _product_surface_review_section(server_product_readiness_review, routes=routes, app_language=app_language),

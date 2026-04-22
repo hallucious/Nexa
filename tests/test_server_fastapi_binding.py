@@ -190,7 +190,7 @@ def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
     assert fastapi_routes == framework_routes == http_surface_routes
 
 
-def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None, saved_public_share_rows_provider=None, saved_public_share_writer=None, saved_public_share_deleter=None) -> TestClient:
+def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None, feedback_store: InMemoryFeedbackStore | None = None, artifact_source=None, public_share_payload_provider=None, public_share_payload_rows_provider=None, public_share_payload_writer=None, public_share_payload_deleter=None, public_share_action_report_rows_provider=None, public_share_action_report_writer=None, saved_public_share_rows_provider=None, saved_public_share_writer=None, saved_public_share_deleter=None, workspace_run_rows=None, workspace_result_rows=None, workspace_provider_binding_rows=None, workspace_provider_probe_rows=None, recent_managed_secret_rows=None) -> TestClient:
     artifact_rows = {
         "run-001": [
             {
@@ -301,7 +301,30 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
             'message': 'Probe completed.',
         },),
     }
-    probe_store = InMemoryProviderProbeHistoryStore.from_rows(provider_probe_rows['ws-001'])
+    workspace_provider_binding_rows = provider_binding_rows.get('ws-001', ()) if workspace_provider_binding_rows is None else workspace_provider_binding_rows
+    workspace_provider_probe_rows = provider_probe_rows.get('ws-001', ()) if workspace_provider_probe_rows is None else workspace_provider_probe_rows
+    recent_managed_secret_rows = recent_managed_secret_rows if recent_managed_secret_rows is not None else ({
+        'workspace_id': 'ws-001',
+        'provider_key': 'openai',
+        'secret_ref': 'secret://ws-001/openai',
+        'last_rotated_at': '2026-04-11T12:06:00+00:00',
+    },)
+    workspace_run_rows = workspace_run_rows if workspace_run_rows is not None else (
+        _run_row(trace_available=True),
+        {**_run_row(status='completed', trace_available=True), 'run_id': 'run-002', 'created_at': '2026-04-11T12:01:00+00:00', 'updated_at': '2026-04-11T12:01:00+00:00'},
+    )
+    workspace_result_rows = workspace_result_rows if workspace_result_rows is not None else {
+        'run-002': {
+            'run_id': 'run-002',
+            'workspace_id': 'ws-001',
+            'result_state': 'ready_success',
+            'final_status': 'completed',
+            'result_summary': 'Success.',
+            'updated_at': '2026-04-11T12:01:05+00:00',
+            'final_output': {'output_key': 'answer', 'value_preview': 'Latest Hello', 'value_type': 'string'},
+        }
+    }
+    probe_store = InMemoryProviderProbeHistoryStore.from_rows(workspace_provider_probe_rows)
 
     def _probe_runner(probe_input):
         return {
@@ -329,17 +352,12 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
         recent_run_rows_provider=lambda: (_run_row(trace_available=True),),
         onboarding_rows_provider=lambda: (),
         provider_catalog_rows_provider=lambda: provider_catalog_rows,
-        workspace_provider_binding_rows_provider=lambda workspace_id: provider_binding_rows.get(workspace_id, ()),
+        workspace_provider_binding_rows_provider=lambda workspace_id: workspace_provider_binding_rows if workspace_id == 'ws-001' else (),
         workspace_provider_binding_row_provider=lambda workspace_id, provider_key: next((row for row in provider_binding_rows.get(workspace_id, ()) if row['provider_key'] == provider_key), None),
-        workspace_provider_probe_rows_provider=lambda workspace_id: provider_probe_rows.get(workspace_id, ()),
-        recent_provider_binding_rows_provider=lambda: provider_binding_rows.get('ws-001', ()),
-        recent_provider_probe_rows_provider=lambda: provider_probe_rows.get('ws-001', ()),
-        recent_managed_secret_rows_provider=lambda: ({
-            'workspace_id': 'ws-001',
-            'provider_key': 'openai',
-            'secret_ref': 'secret://ws-001/openai',
-            'last_rotated_at': '2026-04-11T12:06:00+00:00',
-        },),
+        workspace_provider_probe_rows_provider=lambda workspace_id: workspace_provider_probe_rows if workspace_id == 'ws-001' else (),
+        recent_provider_binding_rows_provider=lambda: workspace_provider_binding_rows,
+        recent_provider_probe_rows_provider=lambda: workspace_provider_probe_rows,
+        recent_managed_secret_rows_provider=lambda: recent_managed_secret_rows,
         workspace_row_provider=lambda workspace_id: {
             'workspace_id': 'ws-001',
             'owner_user_id': 'user-owner',
@@ -363,21 +381,8 @@ def _make_client(*, onboarding_store: InMemoryOnboardingStateStore | None = None
         } if workspace_id == "ws-001" else {},
         run_record_provider=lambda run_id: _run_row(trace_available=True) if run_id == "run-001" else None,
         artifact_rows_provider=lambda run_id: artifact_rows.get(run_id, ()),
-        workspace_run_rows_provider=lambda workspace_id: (
-            _run_row(trace_available=True),
-            {**_run_row(status="completed", trace_available=True), "run_id": "run-002", "created_at": "2026-04-11T12:01:00+00:00", "updated_at": "2026-04-11T12:01:00+00:00"},
-        ) if workspace_id == "ws-001" else (),
-        workspace_result_rows_provider=lambda workspace_id: {
-            "run-002": {
-                "run_id": "run-002",
-                "workspace_id": "ws-001",
-                "result_state": "ready_success",
-                "final_status": "completed",
-                "result_summary": "Success.",
-                "updated_at": "2026-04-11T12:01:05+00:00",
-                "final_output": {"output_key": "answer", "value_preview": "Latest Hello", "value_type": "string"},
-            }
-        } if workspace_id == "ws-001" else {},
+        workspace_run_rows_provider=lambda workspace_id: workspace_run_rows if workspace_id == 'ws-001' else (),
+        workspace_result_rows_provider=lambda workspace_id: workspace_result_rows if workspace_id == 'ws-001' else {},
         artifact_row_provider=lambda artifact_id: artifact_rows["run-001"][0] if artifact_id == "artifact-1" else None,
         trace_rows_provider=lambda run_id: trace_rows.get(run_id, ()),
         engine_status_provider=lambda run_id: EngineRunStatusSnapshot(
@@ -894,6 +899,8 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert any(line.startswith('Connected providers: ') for line in payload['first_success_setup_section']['summary']['lines'])
     assert payload['first_success_setup_section']['controls'][0]['action_target'] == 'designer'
     assert payload['first_success_setup_section']['controls'][1]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
+    assert payload['first_success_setup_section']['entry_path_kind'] == 'goal_entry'
+    assert payload['first_success_setup_section']['current_step_id'] == 'run'
     assert payload['first_success_run_section']['summary']['headline'] == 'First-success run'
     assert payload['first_success_run_section']['run_state'] == 'complete'
     assert payload['first_success_run_section']['controls'][0]['action_target'] == 'runtime.result'
@@ -3390,3 +3397,43 @@ def test_fastapi_binding_workspace_public_share_creation_round_trip() -> None:
     assert payload['links']['workspace_shell_share_legacy'] == '/api/workspaces/ws-001/shell/share'
     get_response = client.get('/api/public-shares/share-fastapi-created-002')
     assert get_response.status_code == 200
+
+
+def test_fastapi_binding_workspace_shell_template_path_promotes_provider_setup_next() -> None:
+    artifact_store = {
+        'ws-001': {
+            "meta": {"format_version": "1.0.0", "storage_role": "working_save", "working_save_id": "ws-001-draft", "name": "Primary Workspace"},
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US", "viewport_tier": "mobile"}},
+            "designer": {
+                "server_backed_shell_state": {
+                    "selected_template_id": "text_summarizer",
+                    "selected_template_display_name": "Text Summarizer",
+                    "selected_template_ref": "nexa-curated:text_summarizer@1.0",
+                    "last_action": "apply_template",
+                }
+            },
+        }
+    }
+    client = _make_client(
+        artifact_source=artifact_store['ws-001'],
+        workspace_run_rows=(),
+        workspace_result_rows={},
+        workspace_provider_binding_rows=(),
+        workspace_provider_probe_rows=(),
+        recent_managed_secret_rows=(),
+    )
+
+    response = client.get('/api/workspaces/ws-001/shell', headers=_session_headers())
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload['first_success_setup_section']['setup_state'] == 'provider_setup_needed'
+    assert payload['first_success_setup_section']['entry_path_kind'] == 'starter_template'
+    assert payload['first_success_setup_section']['current_step_id'] == 'connect_provider'
+    assert payload['first_success_setup_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/provider-bindings'
+    assert payload['first_success_setup_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/starter-templates?app_language=en'
+    assert any(line.startswith('Selected starter template: Text Summarizer') for line in payload['first_success_setup_section']['summary']['lines'])
