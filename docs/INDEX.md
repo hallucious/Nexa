@@ -7,7 +7,7 @@
 1. `README.md` — public project overview and official demo entry
 2. `docs/BLUEPRINT.md` — architecture overview, invariants, active spec list
 3. `docs/architecture/ARCHITECTURE.md` — execution model and runtime structure
-4. `docs/TRACKER.md` — implemented surface, completed milestones, next targets
+4. `docs/strategy/ROADMAP.md` — completed baseline, current direction, next targets
 5. `docs/DEVELOPMENT.md` — local setup, testing, and contributor workflow
 
 ---
@@ -18,7 +18,6 @@
 |---|---|
 | `README.md` | public overview, quick start, official retained demo |
 | `docs/BLUEPRINT.md` | architecture overview, active spec list, invariants |
-| `docs/TRACKER.md` | implementation tracker, release snapshot, next steps |
 | `docs/ARCHITECTURE_CONSTITUTION.md` | non-negotiable architectural principles |
 | `docs/CONTRIBUTING.md` | spec change procedure, PR requirements |
 | `docs/DEVELOPMENT.md` | environment setup, testing, contributor workflow |

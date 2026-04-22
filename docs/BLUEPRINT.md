@@ -60,7 +60,7 @@ The current documentation spine for Nexa is maintained through the top-level ref
 
 * `docs/BLUEPRINT.md`
 * `docs/INDEX.md`
-* `docs/TRACKER.md`
+* `docs/strategy/ROADMAP.md`
 
 When performing structure changes or contract changes, update these spine documents only when they materially affect architecture overview, repository navigation, or implementation status.
 

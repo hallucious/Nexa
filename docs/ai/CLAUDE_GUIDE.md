@@ -86,7 +86,7 @@ utils/
 docs/
 
 BLUEPRINT.md
-TRACKER.md
+INDEX.md
 architecture/
 strategy/
 ai/
@@ -188,7 +188,7 @@ Never describe the system as a "prompt → provider → plugin pipeline".
 
 Relevant documents:
 docs/BLUEPRINT.md
-docs/TRACKER.md
+docs/strategy/ROADMAP.md
 docs/specs/*
 
 If a change affects system architecture, update documentation.

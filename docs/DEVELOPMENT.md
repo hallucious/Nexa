@@ -5,7 +5,7 @@ Before modifying code, read:
 - `docs/BLUEPRINT.md`
 - `docs/architecture/ARCHITECTURE.md`
 - `docs/architecture/FOUNDATION_RULES.md`
-- `docs/TRACKER.md`
+- `docs/strategy/ROADMAP.md`
 
 ---
 
@@ -146,8 +146,8 @@ src/
 
 docs/
     BLUEPRINT.md            INDEX.md
-    TRACKER.md              CONTRIBUTING.md
-    DEVELOPMENT.md          GLOSSARY.md
+    CONTRIBUTING.md         DEVELOPMENT.md
+    GLOSSARY.md
     architecture/           strategy/           ai/
 ```
 
