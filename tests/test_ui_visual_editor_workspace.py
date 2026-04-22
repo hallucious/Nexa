@@ -251,3 +251,61 @@ def test_visual_editor_workspace_exposes_run_linked_review_posture_and_runtime_a
     assert vm.focus_hint.target_ref == "node:n2"
     assert vm.focus_hint.suggested_action_id == "open_runtime_monitoring"
     assert any(action.action_id == "open_runtime_monitoring" and action.enabled for action in vm.local_actions)
+
+
+def test_visual_editor_workspace_exposes_selection_summary_and_shortcuts_for_editing() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation())
+
+    assert vm.selection_summary.selection_mode == "node"
+    assert vm.selection_summary.target_ref == "node:n2"
+    assert vm.selection_summary.label == "n2"
+    assert vm.selection_summary.secondary_label == "unknown"
+    assert vm.selection_summary.next_action_id == "open_node_configuration"
+    assert vm.action_shortcuts[0].action.action_id == "open_node_configuration"
+    assert vm.action_shortcuts[0].priority == "primary"
+    assert vm.action_shortcuts[0].emphasis == "selection"
+
+
+def test_visual_editor_workspace_selection_summary_counts_blocking_findings() -> None:
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_blocking_validation())
+
+    assert vm.selection_summary.selection_mode == "node"
+    assert vm.selection_summary.related_blocking_count == 1
+    assert vm.selection_summary.related_warning_count == 0
+    assert vm.selection_summary.explanation == "선택한 스텝에 차단 문제가 있습니다. 먼저 구성을 열어 수정하세요."
+    assert vm.action_shortcuts[0].emphasis == "repair"
+
+
+def test_visual_editor_workspace_preview_shortcuts_prioritize_review_and_commit() -> None:
+    overlay = GraphPreviewOverlay(
+        overlay_id="preview-2",
+        summary="update review node",
+        added_node_ids=["n3"],
+        updated_node_ids=["n2"],
+        removed_edge_ids=[],
+    )
+
+    vm = read_visual_editor_workspace_view_model(_working_save(), validation_report=_validation(), preview_overlay=overlay)
+
+    assert [shortcut.action.action_id for shortcut in vm.action_shortcuts] == [
+        "review_draft",
+        "commit_snapshot",
+        "open_diff",
+    ]
+    assert vm.action_shortcuts[1].emphasis == "approval"
+
+
+def test_visual_editor_workspace_exposes_run_focus_summary_and_shortcuts() -> None:
+    vm = read_visual_editor_workspace_view_model(_commit(), execution_record=_run_with_focus())
+
+    assert vm.selection_summary.selection_mode == "run_focus"
+    assert vm.selection_summary.target_ref == "node:n2"
+    assert vm.selection_summary.label == "n2"
+    assert vm.selection_summary.has_execution_history is True
+    assert vm.selection_summary.next_action_id == "open_runtime_monitoring"
+    assert [shortcut.action.action_id for shortcut in vm.action_shortcuts] == [
+        "open_runtime_monitoring",
+        "open_diff",
+        "replay_latest",
+    ]
+    assert vm.action_shortcuts[0].emphasis == "runtime"

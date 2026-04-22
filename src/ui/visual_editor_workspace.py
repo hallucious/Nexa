@@ -61,6 +61,31 @@ class EditorFocusHintView:
 
 
 @dataclass(frozen=True)
+class EditorSelectionSummaryView:
+    selection_mode: str = "none"
+    target_ref: str | None = None
+    label: str | None = None
+    secondary_label: str | None = None
+    status: str = "unknown"
+    status_label: str | None = None
+    related_blocking_count: int = 0
+    related_warning_count: int = 0
+    has_execution_history: bool = False
+    next_action_id: str | None = None
+    next_action_label: str | None = None
+    explanation: str | None = None
+
+
+@dataclass(frozen=True)
+class EditorActionShortcutView:
+    action: BuilderActionView
+    target_ref: str | None = None
+    priority: str = "secondary"
+    emphasis: str = "neutral"
+    explanation: str | None = None
+
+
+@dataclass(frozen=True)
 class VisualEditorWorkspaceViewModel:
     workspace_status: str = "ready"
     workspace_status_label: str | None = None
@@ -75,7 +100,9 @@ class VisualEditorWorkspaceViewModel:
     comparison_state: EditorComparisonStateView = field(default_factory=EditorComparisonStateView)
     readiness: EditorReadinessView = field(default_factory=EditorReadinessView)
     focus_hint: EditorFocusHintView = field(default_factory=EditorFocusHintView)
+    selection_summary: EditorSelectionSummaryView = field(default_factory=EditorSelectionSummaryView)
     local_actions: list[BuilderActionView] = field(default_factory=list)
+    action_shortcuts: list[EditorActionShortcutView] = field(default_factory=list)
     can_edit_graph: bool = False
     can_preview_changes: bool = False
     explanation: str | None = None
@@ -424,6 +451,265 @@ def _editor_focus_hint(
 
 
 
+
+def _target_finding_counts(*, validation_report: ValidationReport | None, target_ref: str | None) -> tuple[int, int]:
+    if validation_report is None or target_ref is None:
+        return 0, 0
+    blocking = 0
+    warning = 0
+    for finding in validation_report.findings:
+        if finding.location != target_ref:
+            continue
+        if finding.blocking:
+            blocking += 1
+        else:
+            warning += 1
+    return blocking, warning
+
+
+def _action_label(action: BuilderActionView | None, *, app_language: str) -> str | None:
+    if action is None:
+        return None
+    return action.label or ui_text(
+        f"builder.action.{action.action_id}",
+        app_language=app_language,
+        fallback_text=action.action_id.replace("_", " "),
+    )
+
+
+def _selection_summary_status_label(status: str, *, app_language: str) -> str:
+    return ui_text(
+        f"workspace.visual_editor.selection.status.{status}",
+        app_language=app_language,
+        fallback_text=status.replace("_", " "),
+    )
+
+
+def _editor_selection_summary(
+    *,
+    workspace_status: str,
+    graph_vm: GraphWorkspaceViewModel | None,
+    validation_report: ValidationReport | None,
+    local_actions: list[BuilderActionView],
+    has_execution_context: bool,
+    app_language: str,
+) -> EditorSelectionSummaryView:
+    primary_action = local_actions[0] if local_actions else None
+    if graph_vm is None or (graph_vm.graph_metrics.node_count == 0 and graph_vm.graph_metrics.edge_count == 0):
+        return EditorSelectionSummaryView(
+            selection_mode="none",
+            status="empty",
+            status_label=_selection_summary_status_label("empty", app_language=app_language),
+            next_action_id=(primary_action.action_id if primary_action else "create_circuit_from_template"),
+            next_action_label=_action_label(primary_action, app_language=app_language)
+            or ui_text(
+                "builder.action.create_circuit_from_template",
+                app_language=app_language,
+                fallback_text="Choose starter workflow",
+            ),
+            explanation=ui_text(
+                "workspace.visual_editor.selection.none",
+                app_language=app_language,
+                fallback_text="Nothing is selected yet. Start by creating a workflow or choosing a starter template.",
+            ),
+        )
+
+    node_map = {node.node_id: node for node in graph_vm.nodes}
+    edge_map = {edge.edge_id: edge for edge in graph_vm.edges}
+    run_focus_node_id = (
+        graph_vm.layout_hints.suggested_focus_node_id
+        if workspace_status == "reviewing" and has_execution_context and graph_vm.layout_hints is not None
+        else None
+    )
+
+    if run_focus_node_id is not None and run_focus_node_id in node_map:
+        node = node_map[run_focus_node_id]
+        target_ref = f"node:{node.node_id}"
+        blocking_count, warning_count = _target_finding_counts(
+            validation_report=validation_report,
+            target_ref=target_ref,
+        )
+        runtime_action = next((a for a in local_actions if a.action_id == "open_runtime_monitoring"), primary_action)
+        return EditorSelectionSummaryView(
+            selection_mode="run_focus",
+            target_ref=target_ref,
+            label=node.label,
+            secondary_label=node.kind,
+            status=node.status,
+            status_label=_selection_summary_status_label(node.status, app_language=app_language),
+            related_blocking_count=blocking_count,
+            related_warning_count=warning_count,
+            has_execution_history=(node.has_execution_events or node.execution_state is not None),
+            next_action_id=(runtime_action.action_id if runtime_action else None),
+            next_action_label=_action_label(runtime_action, app_language=app_language),
+            explanation=ui_text(
+                "workspace.visual_editor.selection.run_focus",
+                app_language=app_language,
+                fallback_text="Recent run activity points to {label}. Open runtime monitoring to inspect it.",
+                label=node.label,
+            ),
+        )
+
+    if graph_vm.selected_node_ids:
+        node = node_map[graph_vm.selected_node_ids[0]]
+        target_ref = f"node:{node.node_id}"
+        blocking_count, warning_count = _target_finding_counts(
+            validation_report=validation_report,
+            target_ref=target_ref,
+        )
+        next_action = next((a for a in local_actions if a.action_id == "open_node_configuration"), primary_action)
+        return EditorSelectionSummaryView(
+            selection_mode="node",
+            target_ref=target_ref,
+            label=node.label,
+            secondary_label=node.kind,
+            status=node.status,
+            status_label=_selection_summary_status_label(node.status, app_language=app_language),
+            related_blocking_count=blocking_count,
+            related_warning_count=warning_count,
+            has_execution_history=(node.has_execution_events or node.execution_state is not None),
+            next_action_id=(next_action.action_id if next_action else None),
+            next_action_label=_action_label(next_action, app_language=app_language),
+            explanation=ui_text(
+                "workspace.visual_editor.selection.node_blocked"
+                if blocking_count > 0
+                else "workspace.visual_editor.selection.node",
+                app_language=app_language,
+                fallback_text=(
+                    "The selected step has blocking issues. Open configuration and fix it first."
+                    if blocking_count > 0
+                    else "Selected step {label}. Open configuration to inspect its settings."
+                ),
+                label=node.label,
+            ),
+        )
+
+    if graph_vm.selected_edge_ids:
+        edge = edge_map[graph_vm.selected_edge_ids[0]]
+        target_ref = f"edge:{edge.edge_id}"
+        blocking_count, warning_count = _target_finding_counts(
+            validation_report=validation_report,
+            target_ref=target_ref,
+        )
+        next_action = next((a for a in local_actions if a.action_id == "open_node_configuration"), primary_action)
+        return EditorSelectionSummaryView(
+            selection_mode="edge",
+            target_ref=target_ref,
+            label=edge.label or edge.edge_id,
+            secondary_label=f"{edge.from_node_id} → {edge.to_node_id}",
+            status=edge.status,
+            status_label=_selection_summary_status_label(edge.status, app_language=app_language),
+            related_blocking_count=blocking_count,
+            related_warning_count=warning_count,
+            has_execution_history=False,
+            next_action_id=(next_action.action_id if next_action else None),
+            next_action_label=_action_label(next_action, app_language=app_language),
+            explanation=ui_text(
+                "workspace.visual_editor.selection.edge",
+                app_language=app_language,
+                fallback_text="Selected connection {label}. Review how data moves across this handoff.",
+                label=edge.label or edge.edge_id,
+            ),
+        )
+
+    next_action = primary_action
+    overview_status = "graph_overview_review" if workspace_status == "reviewing" else "graph_overview"
+    return EditorSelectionSummaryView(
+        selection_mode="overview",
+        status=overview_status,
+        status_label=_selection_summary_status_label(overview_status, app_language=app_language),
+        related_blocking_count=validation_report.blocking_count if validation_report is not None else 0,
+        related_warning_count=validation_report.warning_count if validation_report is not None else 0,
+        has_execution_history=has_execution_context,
+        next_action_id=(next_action.action_id if next_action else None),
+        next_action_label=_action_label(next_action, app_language=app_language),
+        explanation=ui_text(
+            "workspace.visual_editor.selection.overview",
+            app_language=app_language,
+            fallback_text="Graph overview: {node_count} steps, {edge_count} connections.",
+            node_count=graph_vm.graph_metrics.node_count,
+            edge_count=graph_vm.graph_metrics.edge_count,
+        ),
+    )
+
+
+def _shortcut_key(action_id: str) -> str:
+    mapping = {
+        "create_circuit_from_template": "create",
+        "open_provider_setup": "setup_provider",
+        "open_file_input": "add_input",
+        "open_node_configuration": "configure_selection",
+        "request_revision": "request_revision",
+        "open_diff": "review_diff",
+        "review_draft": "review_preview",
+        "commit_snapshot": "commit_preview",
+        "run_current": "run_graph",
+        "open_runtime_monitoring": "inspect_run_focus",
+        "replay_latest": "replay_latest",
+    }
+    return mapping.get(action_id, action_id)
+
+
+def _editor_action_shortcuts(
+    *,
+    workspace_status: str,
+    selection_summary: EditorSelectionSummaryView,
+    local_actions: list[BuilderActionView],
+    app_language: str,
+) -> list[EditorActionShortcutView]:
+    if workspace_status == "empty":
+        configs = [
+            ("create_circuit_from_template", "primary", "creation"),
+            ("open_provider_setup", "secondary", "setup"),
+            ("open_file_input", "secondary", "input"),
+        ]
+    elif workspace_status == "blocked":
+        configs = [
+            ("open_node_configuration", "primary", "repair"),
+            ("request_revision", "secondary", "review"),
+            ("open_provider_setup", "secondary", "setup"),
+            ("open_diff", "secondary", "comparison"),
+        ]
+    elif workspace_status == "previewing":
+        configs = [
+            ("review_draft", "primary", "review"),
+            ("commit_snapshot", "secondary", "approval"),
+            ("open_diff", "secondary", "comparison"),
+        ]
+    elif workspace_status == "reviewing":
+        configs = [
+            ("open_runtime_monitoring", "primary", "runtime"),
+            ("open_diff", "secondary", "comparison"),
+            ("replay_latest", "secondary", "runtime"),
+        ]
+    else:
+        configs = [
+            ("open_node_configuration", "primary", "selection"),
+            ("review_draft", "secondary", "review"),
+            ("run_current", "secondary", "run"),
+        ]
+
+    action_map = {action.action_id: action for action in local_actions}
+    out: list[EditorActionShortcutView] = []
+    for action_id, priority, emphasis in configs:
+        action = action_map.get(action_id)
+        if action is None:
+            continue
+        out.append(
+            EditorActionShortcutView(
+                action=action,
+                target_ref=selection_summary.target_ref,
+                priority=priority,
+                emphasis=emphasis,
+                explanation=ui_text(
+                    f"workspace.visual_editor.shortcut.{_shortcut_key(action_id)}",
+                    app_language=app_language,
+                    fallback_text=action.label,
+                ),
+            )
+        )
+    return out
+
 def read_visual_editor_workspace_view_model(
     source: WorkingSaveModel | CommitSnapshotModel | ExecutionRecordModel | LoadedNexArtifact | None,
     *,
@@ -562,6 +848,20 @@ def read_visual_editor_workspace_view_model(
         has_execution_context=has_execution_context,
         app_language=app_language,
     )
+    selection_summary = _editor_selection_summary(
+        workspace_status=workspace_status,
+        graph_vm=graph_vm,
+        validation_report=validation_report,
+        local_actions=local_actions,
+        has_execution_context=has_execution_context,
+        app_language=app_language,
+    )
+    action_shortcuts = _editor_action_shortcuts(
+        workspace_status=workspace_status,
+        selection_summary=selection_summary,
+        local_actions=local_actions,
+        app_language=app_language,
+    )
 
     return VisualEditorWorkspaceViewModel(
         workspace_status=workspace_status,
@@ -577,7 +877,9 @@ def read_visual_editor_workspace_view_model(
         comparison_state=comparison_state,
         readiness=readiness,
         focus_hint=focus_hint,
+        selection_summary=selection_summary,
         local_actions=local_actions,
+        action_shortcuts=action_shortcuts,
         can_edit_graph=storage_role == "working_save",
         can_preview_changes=graph_vm is not None and graph_vm.preview_overlay is not None,
         explanation=workspace_explanation,
@@ -590,6 +892,8 @@ __all__ = [
     "EditorComparisonStateView",
     "EditorReadinessView",
     "EditorFocusHintView",
+    "EditorSelectionSummaryView",
+    "EditorActionShortcutView",
     "VisualEditorWorkspaceViewModel",
     "read_visual_editor_workspace_view_model",
 ]
