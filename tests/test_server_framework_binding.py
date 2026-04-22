@@ -1604,6 +1604,9 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert any(line.startswith('Connected providers: ') for line in parsed['first_success_setup_section']['summary']['lines'])
     assert parsed['first_success_setup_section']['controls'][0]['action_target'] == 'designer'
     assert parsed['first_success_setup_section']['controls'][1]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
+    assert parsed['first_success_run_section']['summary']['headline'] == 'First-success run'
+    assert parsed['first_success_run_section']['run_state'] == 'complete'
+    assert parsed['first_success_run_section']['controls'][0]['action_target'] == 'runtime.result'
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
     assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'
@@ -1676,6 +1679,9 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['first_success_setup_section']['summary']['headline'] == 'First-success setup'
     assert parsed['first_success_setup_section']['controls'][0]['action_target'] == 'designer'
     assert parsed['first_success_setup_section']['controls'][1]['action_target'] == '/app/workspaces/ws-001/starter-templates?app_language=en'
+    assert parsed['first_success_run_section']['summary']['headline'] == 'First-success run'
+    assert parsed['first_success_run_section']['run_state'] in {'waiting', 'inactive'}
+    assert parsed['first_success_run_section']['controls'][0]['action_target'] == 'validation.detail'
 
 
 def test_framework_binding_workspace_shell_uses_server_backed_onboarding_step_for_navigation() -> None:

@@ -1313,6 +1313,9 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
     assert 'friction_note — workspace_shell — received — fb-shell-http-001' in '\n'.join(payload['feedback_continuity_section']['detail']['items'])
     assert payload['provider_readiness_section']['summary']['headline'] == 'Provider readiness'
     assert 'Configured providers: 1' in payload['provider_readiness_section']['summary']['lines']
+    assert payload['first_success_run_section']['summary']['headline'] == 'First-success run'
+    assert payload['first_success_run_section']['run_state'] == 'ready_to_run'
+    assert payload['first_success_run_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/shell/launch'
 
 
 def test_public_share_artifact_route_rejects_effectively_expired_share() -> None:

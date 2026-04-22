@@ -955,6 +955,107 @@ def _first_success_setup_section(
     return section
 
 
+def _first_success_run_section(
+    shell_map: Mapping[str, Any],
+    server_product_readiness_review: Mapping[str, Any] | None,
+    *,
+    latest_run_status_preview: Mapping[str, Any] | None,
+    latest_run_result_preview: Mapping[str, Any] | None,
+    latest_run_trace_preview: Mapping[str, Any] | None,
+    latest_run_artifacts_preview: Mapping[str, Any] | None,
+    workspace_id: str,
+    routes: Mapping[str, Any],
+    app_language: str = "en",
+) -> dict[str, Any]:
+    validation = shell_map.get("validation") or {}
+    validation_summary = (validation.get("summary") or {}).get("headline")
+    run_stage = {}
+    if isinstance(server_product_readiness_review, Mapping):
+        stages = server_product_readiness_review.get("stages") or ()
+        if len(stages) > 1 and isinstance(stages[1], Mapping):
+            run_stage = dict(stages[1])
+
+    run_state = str(run_stage.get("stage_state") or "inactive").strip() or "inactive"
+    run_summary = str(run_stage.get("summary") or "").strip()
+    run_action_id = str(run_stage.get("recommended_action_id") or "").strip() or None
+    run_action_label = str(run_stage.get("recommended_action_label") or "").strip() or None
+    run_action_target = str(run_stage.get("recommended_action_target") or "").strip() or None
+
+    latest_run_status_preview = latest_run_status_preview or {}
+    latest_run_result_preview = latest_run_result_preview or {}
+    latest_run_trace_preview = latest_run_trace_preview or {}
+    latest_run_artifacts_preview = latest_run_artifacts_preview or {}
+    latest_status = str(latest_run_status_preview.get("status") or latest_run_status_preview.get("execution_state") or "").strip() or None
+    latest_run_id = str(latest_run_status_preview.get("run_id") or latest_run_result_preview.get("run_id") or "").strip() or None
+    latest_result_state = str(latest_run_result_preview.get("result_state") or "").strip() or None
+    latest_result_summary = str(latest_run_result_preview.get("result_summary") or latest_run_result_preview.get("final_status") or "").strip() or None
+    latest_trace_events = int(latest_run_trace_preview.get("event_count") or 0)
+    latest_artifact_count = int(latest_run_artifacts_preview.get("artifact_count") or 0)
+
+    controls: list[dict[str, Any]] = []
+
+    def _append_control(control_id: str, label: str | None, action_target: str | None):
+        if not label or not action_target:
+            return
+        if any(item.get("action_target") == action_target for item in controls):
+            return
+        action_kind = "open_route" if action_target.startswith("/") else "focus_section"
+        if action_target == "execution":
+            action_kind = "run_draft"
+        controls.append({
+            "control_id": control_id,
+            "label": label,
+            "action_kind": action_kind,
+            "action_target": action_target,
+        })
+
+    if run_state in {"fix_before_run", "waiting", "inactive"}:
+        _append_control("first-success-run-open-validation", ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail"), "validation.detail")
+        _append_control("first-success-run-open-designer", ui_text("server.shell.open_designer", app_language=app_language, fallback_text="Open Designer"), "designer")
+    elif run_state == "ready_to_run":
+        _append_control("first-success-run-launch", ui_text("server.shell.launch_run", app_language=app_language, fallback_text="Launch run"), str(routes.get("workspace_shell_launch") or routes.get("launch_run") or "") or None)
+        _append_control("first-success-run-open-validation", ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail"), "validation.detail")
+    elif run_state == "run_in_progress":
+        _append_control("first-success-run-open-status", ui_text("server.shell.open_run_status", app_language=app_language, fallback_text="Open run status"), str(routes.get("latest_run_status") or "") or None)
+        _append_control("first-success-run-open-trace", ui_text("server.shell.open_trace", app_language=app_language, fallback_text="Open Trace"), "runtime.trace")
+    elif run_state in {"complete", "result_ready"}:
+        _append_control("first-success-run-open-result", ui_text("server.shell.open_result", app_language=app_language, fallback_text="Open Result"), "runtime.result")
+        _append_control("first-success-run-open-results-page", ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"), str(routes.get("workspace_result_history_page") or "") or None)
+
+    if run_action_target:
+        _append_control(f"first-success-run-{run_action_id or 'primary'}", run_action_label, run_action_target)
+
+    lines = _summary_lines(
+        ui_text("server.shell.first_success_run_state_prefix", app_language=app_language, fallback_text="Run state: {state}", state=ui_text(f"shell.product_readiness.stage_state.{run_state}", app_language=app_language, fallback_text=run_state.replace("_", " "))),
+        run_summary or None,
+        ui_text("server.shell.first_success_run_validation_prefix", app_language=app_language, fallback_text="Validation: {status}", status=str(validation_summary or "unknown")),
+        ui_text("server.shell.first_success_run_status_prefix", app_language=app_language, fallback_text="Current run status: {status}", status=latest_status) if latest_status else None,
+    )
+
+    detail_items = _summary_lines(
+        ui_text("server.shell.first_success_run_run_id_prefix", app_language=app_language, fallback_text="Latest run id: {run_id}", run_id=latest_run_id) if latest_run_id else None,
+        ui_text("server.shell.first_success_run_result_prefix", app_language=app_language, fallback_text="Latest result: {state}", state=latest_result_state) if latest_result_state else None,
+        ui_text("server.shell.first_success_run_result_summary_prefix", app_language=app_language, fallback_text="Result summary: {summary}", summary=latest_result_summary) if latest_result_summary else None,
+        ui_text("server.shell.first_success_run_trace_prefix", app_language=app_language, fallback_text="Trace events: {count}", count=str(latest_trace_events)),
+        ui_text("server.shell.first_success_run_artifacts_prefix", app_language=app_language, fallback_text="Artifacts ready: {count}", count=str(latest_artifact_count)),
+    )
+
+    section = build_shell_section(
+        headline=ui_text("server.shell.first_success_run", app_language=app_language, fallback_text="First-success run"),
+        lines=lines,
+        detail_title=ui_text("server.shell.first_success_run_detail", app_language=app_language, fallback_text="First-success run detail"),
+        detail_items=detail_items,
+        controls=controls,
+        summary_empty=ui_text("server.shell.first_success_run_pending", app_language=app_language, fallback_text="First-success run guidance will appear here once the workflow is ready to execute."),
+        detail_empty=ui_text("server.shell.first_success_run_pending", app_language=app_language, fallback_text="First-success run guidance will appear here once the workflow is ready to execute."),
+    )
+    section["run_state"] = run_state
+    section["recommended_action_id"] = run_action_id
+    section["recommended_action_target"] = run_action_target
+    return section
+
+
+
 def _feedback_continuity_entries(
     feedback_rows: Sequence[Mapping[str, Any]],
     workspace_id: str,
@@ -1923,6 +2024,8 @@ def _server_product_readiness_review(
     run_active = current_status in {"queued", "running", "paused", "claimed", "pending", "in_progress"}
     result_ready = str((latest_run_result_preview or {}).get("result_state") or "").strip() in {"ready_success", "ready_partial"}
     validation_status = str(((shell_map.get("validation") or {}).get("overall_status") or "")).strip()
+    graph_nodes = tuple(((shell_map.get("graph") or {}).get("nodes") or ()))
+    has_existing_structure = bool(graph_nodes) or str(shell_map.get("storage_role") or "").strip() in {"commit_snapshot", "execution_record"}
 
     if first_success:
         setup_state = "complete"
@@ -1936,7 +2039,7 @@ def _server_product_readiness_review(
         setup_action_id = None
         setup_action_label = None
         setup_action_target = None
-    elif local_setup_state == "goal_entry_needed" or onboarding_step == "enter_goal" or str((((shell_map.get("designer") or {}).get("request_state") or {}).get("request_status") or "")).strip() == "empty":
+    elif (not has_existing_structure) and (local_setup_state == "goal_entry_needed" or onboarding_step == "enter_goal" or str((((shell_map.get("designer") or {}).get("request_state") or {}).get("request_status") or "")).strip() == "empty"):
         setup_state = "goal_entry_needed"
         setup_blockers = 0
         setup_pending = 1
@@ -2022,6 +2125,18 @@ def _server_product_readiness_review(
         run_action_id = "open_validation_detail"
         run_action_label = ui_text("server.shell.open_validation_detail", app_language=app_language, fallback_text="Open Validation detail")
         run_action_target = "validation.detail"
+    elif setup_state in {"goal_entry_needed", "provider_setup_needed"}:
+        run_state = "waiting"
+        run_blockers = 0
+        run_pending = 1
+        run_summary = ui_text(
+            "shell.product_readiness.summary.run_waiting",
+            app_language=app_language,
+            fallback_text="The run path is not active yet. Keep moving through review and approval until the run action becomes available.",
+        )
+        run_action_id = None
+        run_action_label = None
+        run_action_target = None
     elif has_server_provider and bool((shell_map.get("action_availability") or {}).get("launch", {}).get("allowed")):
         run_state = "ready_to_run"
         run_blockers = 0
@@ -2319,6 +2434,7 @@ def build_workspace_shell_runtime_payload(
         "history_summary_section": _history_summary_section(recent_run_rows, onboarding_rows, share_payload_rows, model, workspace_id, app_language=app_language),
         "provider_readiness_section": _provider_readiness_section(provider_binding_rows, managed_secret_rows, provider_probe_rows, workspace_id, app_language=app_language),
         "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language),
+        "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "feedback_continuity_section": _feedback_continuity_section(feedback_rows, workspace_id, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),

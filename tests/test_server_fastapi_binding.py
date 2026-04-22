@@ -894,6 +894,9 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert any(line.startswith('Connected providers: ') for line in payload['first_success_setup_section']['summary']['lines'])
     assert payload['first_success_setup_section']['controls'][0]['action_target'] == 'designer'
     assert payload['first_success_setup_section']['controls'][1]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
+    assert payload['first_success_run_section']['summary']['headline'] == 'First-success run'
+    assert payload['first_success_run_section']['run_state'] == 'complete'
+    assert payload['first_success_run_section']['controls'][0]['action_target'] == 'runtime.result'
     assert payload['identity_policy']['surface_family'] == 'workspace-shell'
     assert payload['namespace_policy']['family'] == 'workspace-shell'
     assert payload['routes']['latest_run_artifacts'] == '/api/runs/run-002/artifacts'
@@ -945,6 +948,7 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['server_product_readiness_review']['next_bottleneck_stage'] is None
     assert payload['server_product_readiness_review']['stages'][2]['stage_state'] == 'complete'
     assert payload['first_success_setup_section']['setup_state'] == 'complete'
+    assert payload['first_success_run_section']['run_state'] == 'complete'
     assert payload['client_continuity']['enabled'] is True
     assert payload['client_continuity']['storage_key'] == 'nexa.runtime_shell.ws-001'
     assert payload['client_continuity']['version'] == 'phase6-batch15'
