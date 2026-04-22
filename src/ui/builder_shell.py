@@ -84,6 +84,35 @@ class BeginnerOnboardingHintView:
 
 
 @dataclass(frozen=True)
+class WorkspaceChainStageView:
+    workspace_id: str = "visual_editor"
+    workspace_label: str | None = None
+    closure_state: str | None = None
+    closure_label: str | None = None
+    pending_barrier_count: int = 0
+    blocking_barrier_count: int = 0
+    dominant_barrier_kind: str | None = None
+    summary: str | None = None
+    recommended_action_id: str | None = None
+    recommended_action_label: str | None = None
+
+
+@dataclass(frozen=True)
+class WorkspaceChainReviewView:
+    chain_state: str = "hold_visual_editor"
+    chain_label: str | None = None
+    next_bottleneck_workspace: str | None = None
+    next_bottleneck_label: str | None = None
+    recommended_action_id: str | None = None
+    recommended_action_label: str | None = None
+    reopen_workspace_ids: tuple[str, ...] = ()
+    stages: tuple[WorkspaceChainStageView, ...] = ()
+    summary: str | None = None
+
+
+
+
+@dataclass(frozen=True)
 class BuilderShellViewModel:
     shell_status: str = "ready"
     shell_status_label: str | None = None
@@ -111,6 +140,7 @@ class BuilderShellViewModel:
     circuit_library: CircuitLibraryViewModel | None = None
     result_history: ResultHistoryViewModel | None = None
     feedback_channel: FeedbackChannelViewModel | None = None
+    workspace_chain: WorkspaceChainReviewView = field(default_factory=WorkspaceChainReviewView)
     layout: BuilderShellLayoutView = field(default_factory=BuilderShellLayoutView)
     diagnostics: BuilderShellDiagnosticsView = field(default_factory=BuilderShellDiagnosticsView)
     beginner_onboarding: BeginnerOnboardingHintView = field(default_factory=BeginnerOnboardingHintView)
@@ -387,6 +417,134 @@ def _selected_ref_from_graph(graph_view: GraphWorkspaceViewModel | None) -> str 
     if graph_view.selected_edge_ids:
         return f"edge:{graph_view.selected_edge_ids[0]}"
     return None
+
+
+def _workspace_chain_stage(*, workspace_id: str, workspace_label: str | None, closure_state: str | None, closure_label: str | None, pending_barrier_count: int, blocking_barrier_count: int, dominant_barrier_kind: str | None, summary: str | None, recommended_action_id: str | None, recommended_action_label: str | None) -> WorkspaceChainStageView:
+    return WorkspaceChainStageView(
+        workspace_id=workspace_id,
+        workspace_label=workspace_label,
+        closure_state=closure_state,
+        closure_label=closure_label,
+        pending_barrier_count=pending_barrier_count,
+        blocking_barrier_count=blocking_barrier_count,
+        dominant_barrier_kind=dominant_barrier_kind,
+        summary=summary,
+        recommended_action_id=recommended_action_id,
+        recommended_action_label=recommended_action_label,
+    )
+
+
+
+def _workspace_chain_review(*, storage_role: str, shell_mode: str, visual_editor_vm: VisualEditorWorkspaceViewModel | None, node_configuration_vm: NodeConfigurationWorkspaceViewModel | None, runtime_monitoring_vm: RuntimeMonitoringWorkspaceViewModel | None, app_language: str) -> WorkspaceChainReviewView:
+    visual_stage = _workspace_chain_stage(
+        workspace_id="visual_editor",
+        workspace_label=ui_text("workspace.visual_editor.name", app_language=app_language, fallback_text="Visual editor"),
+        closure_state=getattr(getattr(visual_editor_vm, "closure_verdict", None), "closure_state", None),
+        closure_label=getattr(getattr(visual_editor_vm, "closure_verdict", None), "closure_label", None),
+        pending_barrier_count=getattr(getattr(visual_editor_vm, "closure_verdict", None), "pending_barrier_count", 0),
+        blocking_barrier_count=getattr(getattr(visual_editor_vm, "closure_verdict", None), "blocking_barrier_count", 0),
+        dominant_barrier_kind=getattr(getattr(visual_editor_vm, "closure_verdict", None), "dominant_barrier_kind", None),
+        summary=getattr(getattr(visual_editor_vm, "closure_verdict", None), "summary", None),
+        recommended_action_id="open_visual_editor",
+        recommended_action_label=ui_text("builder.action.open_visual_editor", app_language=app_language, fallback_text="Open editor"),
+    )
+    node_stage = _workspace_chain_stage(
+        workspace_id="node_configuration",
+        workspace_label=ui_text("workspace.node_configuration.name", app_language=app_language, fallback_text="Node configuration"),
+        closure_state=getattr(getattr(node_configuration_vm, "closure_verdict", None), "closure_state", None),
+        closure_label=getattr(getattr(node_configuration_vm, "closure_verdict", None), "closure_label", None),
+        pending_barrier_count=getattr(getattr(node_configuration_vm, "closure_verdict", None), "pending_barrier_count", 0),
+        blocking_barrier_count=getattr(getattr(node_configuration_vm, "closure_verdict", None), "blocking_barrier_count", 0),
+        dominant_barrier_kind=getattr(getattr(node_configuration_vm, "closure_verdict", None), "dominant_barrier_kind", None),
+        summary=getattr(getattr(node_configuration_vm, "closure_verdict", None), "summary", None),
+        recommended_action_id="open_node_configuration",
+        recommended_action_label=ui_text("builder.action.open_node_configuration", app_language=app_language, fallback_text="Open step settings"),
+    )
+    runtime_stage = _workspace_chain_stage(
+        workspace_id="runtime_monitoring",
+        workspace_label=ui_text("workspace.runtime_monitoring.name", app_language=app_language, fallback_text="Runtime monitoring"),
+        closure_state=getattr(getattr(runtime_monitoring_vm, "closure_verdict", None), "closure_state", None),
+        closure_label=getattr(getattr(runtime_monitoring_vm, "closure_verdict", None), "closure_label", None),
+        pending_barrier_count=getattr(getattr(runtime_monitoring_vm, "closure_verdict", None), "pending_barrier_count", 0),
+        blocking_barrier_count=getattr(getattr(runtime_monitoring_vm, "closure_verdict", None), "blocking_barrier_count", 0),
+        dominant_barrier_kind=getattr(getattr(runtime_monitoring_vm, "closure_verdict", None), "dominant_barrier_kind", None),
+        summary=getattr(getattr(runtime_monitoring_vm, "closure_verdict", None), "summary", None),
+        recommended_action_id="open_runtime_monitoring",
+        recommended_action_label=ui_text("builder.action.open_runtime_monitoring", app_language=app_language, fallback_text="Open run monitor"),
+    )
+    stages = (visual_stage, node_stage, runtime_stage)
+
+    runtime_is_primary_context = storage_role == "execution_record" or shell_mode in {"runtime_monitoring", "run_review"}
+
+    if storage_role == "execution_record":
+        if runtime_stage.closure_state == "workspace_chain_stable":
+            chain_state = "workspace_chain_stable"
+            bottleneck_stage = runtime_stage
+            summary_key = "shell.workspace_chain.summary.workspace_chain_stable"
+            fallback_summary = "The current visual editor → node configuration → runtime monitoring chain is provisionally stable. Choose the next true project bottleneck instead of polishing this chain further."
+        else:
+            chain_state = "hold_runtime_monitoring"
+            bottleneck_stage = runtime_stage
+            summary_key = "shell.workspace_chain.summary.hold_runtime_monitoring"
+            fallback_summary = "The workspace chain is still being held by runtime monitoring. Resolve live execution or pending run review before treating the chain as stable."
+    elif runtime_is_primary_context and (runtime_stage.blocking_barrier_count or runtime_stage.closure_state in {"hold_runtime_monitoring", "near_closed"}):
+        chain_state = "hold_runtime_monitoring"
+        bottleneck_stage = runtime_stage
+        summary_key = "shell.workspace_chain.summary.hold_runtime_monitoring"
+        fallback_summary = "The workspace chain is still being held by runtime monitoring. Resolve live execution or pending run review before treating the chain as stable."
+    elif visual_stage.blocking_barrier_count or visual_stage.closure_state == "hold_visual_editor":
+        chain_state = "hold_visual_editor"
+        bottleneck_stage = visual_stage
+        summary_key = "shell.workspace_chain.summary.hold_visual_editor"
+        fallback_summary = "The workspace chain is still being held by the visual editor. Keep the current focus there before widening scope."
+    elif node_stage.blocking_barrier_count or node_stage.closure_state == "hold_node_configuration":
+        chain_state = "hold_node_configuration"
+        bottleneck_stage = node_stage
+        summary_key = "shell.workspace_chain.summary.hold_node_configuration"
+        fallback_summary = "The workspace chain is still being held by node configuration. Finish the current configuration review or repair work before moving on."
+    elif runtime_stage.blocking_barrier_count or runtime_stage.closure_state == "hold_runtime_monitoring":
+        chain_state = "hold_runtime_monitoring"
+        bottleneck_stage = runtime_stage
+        summary_key = "shell.workspace_chain.summary.hold_runtime_monitoring"
+        fallback_summary = "The workspace chain is still being held by runtime monitoring. Resolve live execution or pending run review before treating the chain as stable."
+    elif runtime_stage.closure_state == "workspace_chain_stable" and node_stage.closure_state in {"ready_to_move_on", "near_closed", None} and visual_stage.closure_state in {"ready_to_move_on", "near_closed", None}:
+        chain_state = "workspace_chain_stable"
+        bottleneck_stage = runtime_stage
+        summary_key = "shell.workspace_chain.summary.workspace_chain_stable"
+        fallback_summary = "The current visual editor → node configuration → runtime monitoring chain is provisionally stable. Choose the next true project bottleneck instead of polishing this chain further."
+    elif node_stage.closure_state == "near_closed":
+        chain_state = "hold_node_configuration"
+        bottleneck_stage = node_stage
+        summary_key = "shell.workspace_chain.summary.hold_node_configuration"
+        fallback_summary = "The workspace chain is still being held by node configuration. Finish the current configuration review or repair work before moving on."
+    elif visual_stage.closure_state == "near_closed":
+        chain_state = "hold_visual_editor"
+        bottleneck_stage = visual_stage
+        summary_key = "shell.workspace_chain.summary.hold_visual_editor"
+        fallback_summary = "The workspace chain is still being held by the visual editor. Keep the current focus there before widening scope."
+    elif runtime_stage.closure_state == "near_closed":
+        chain_state = "hold_runtime_monitoring"
+        bottleneck_stage = runtime_stage
+        summary_key = "shell.workspace_chain.summary.hold_runtime_monitoring"
+        fallback_summary = "The workspace chain is still being held by runtime monitoring. Resolve live execution or pending run review before treating the chain as stable."
+    else:
+        chain_state = "hold_visual_editor"
+        bottleneck_stage = visual_stage
+        summary_key = "shell.workspace_chain.summary.hold_visual_editor"
+        fallback_summary = "The workspace chain is still being held by the visual editor. Keep the current focus there before widening scope."
+
+    reopen_workspace_ids = tuple(stage.workspace_id for stage in stages if (stage.pending_barrier_count or stage.blocking_barrier_count) and stage.workspace_id != (bottleneck_stage.workspace_id if chain_state != "workspace_chain_stable" else ""))
+    return WorkspaceChainReviewView(
+        chain_state=chain_state,
+        chain_label=ui_text(f"shell.workspace_chain.state.{chain_state}", app_language=app_language, fallback_text=chain_state.replace("_", " ")),
+        next_bottleneck_workspace=None if chain_state == "workspace_chain_stable" else bottleneck_stage.workspace_id,
+        next_bottleneck_label=None if chain_state == "workspace_chain_stable" else bottleneck_stage.workspace_label,
+        recommended_action_id=None if chain_state == "workspace_chain_stable" else bottleneck_stage.recommended_action_id,
+        recommended_action_label=None if chain_state == "workspace_chain_stable" else bottleneck_stage.recommended_action_label,
+        reopen_workspace_ids=reopen_workspace_ids,
+        stages=stages,
+        summary=ui_text(summary_key, app_language=app_language, fallback_text=fallback_summary),
+    )
 
 
 def _selected_ref_from_validation(validation_report: ValidationReport | None) -> str | None:
@@ -729,6 +887,14 @@ def read_builder_shell_view_model(
         execution_view=execution_vm,
         app_language=app_language,
     )
+    workspace_chain_vm = _workspace_chain_review(
+        storage_role=role,
+        shell_mode=shell_mode,
+        visual_editor_vm=visual_editor_vm,
+        node_configuration_vm=node_configuration_vm,
+        runtime_monitoring_vm=runtime_monitoring_vm,
+        app_language=app_language,
+    )
 
     return BuilderShellViewModel(
         shell_status=shell_status,
@@ -757,6 +923,7 @@ def read_builder_shell_view_model(
         circuit_library=circuit_library_vm,
         result_history=result_history_vm,
         feedback_channel=feedback_channel_vm,
+        workspace_chain=workspace_chain_vm,
         layout=layout_vm,
         diagnostics=diagnostics,
         beginner_onboarding=beginner_onboarding,
@@ -771,6 +938,8 @@ __all__ = [
     "BuilderShellLayoutView",
     "BuilderShellDiagnosticsView",
     "BeginnerOnboardingHintView",
+    "WorkspaceChainStageView",
+    "WorkspaceChainReviewView",
     "BuilderShellViewModel",
     "read_builder_shell_view_model",
 ]

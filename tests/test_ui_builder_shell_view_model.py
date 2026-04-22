@@ -472,3 +472,52 @@ def test_builder_shell_honors_explicit_open_runtime_monitoring_action() -> None:
     assert vm.active_workspace_id == "runtime_monitoring"
     assert vm.coordination.active_panel == "execution"
     assert vm.coordination.panel_order[0] == "execution"
+
+
+def test_builder_shell_projects_workspace_chain_review_when_visual_editor_still_holds() -> None:
+    source = _working_save()
+    report = ValidationReport(
+        role="working_save",
+        findings=[ValidationFinding(code="BLOCK", category="structural", severity="high", blocking=True, location="node:n1", message="blocked")],
+        blocking_count=1,
+        warning_count=0,
+        result="blocked",
+    )
+
+    vm = read_builder_shell_view_model(source, validation_report=report, execution_record=_run())
+
+    assert vm.workspace_chain.chain_state == "hold_visual_editor"
+    assert vm.workspace_chain.next_bottleneck_workspace == "visual_editor"
+    assert vm.workspace_chain.recommended_action_id == "open_visual_editor"
+    assert vm.workspace_chain.stages[0].workspace_id == "visual_editor"
+    assert vm.workspace_chain.stages[1].workspace_id == "node_configuration"
+    assert vm.workspace_chain.stages[2].workspace_id == "runtime_monitoring"
+
+
+def test_builder_shell_projects_workspace_chain_review_when_runtime_monitoring_still_holds() -> None:
+    source = _working_save()
+    record = ExecutionRecordModel(
+        meta=ExecutionMetaModel(run_id="run-live", record_format_version="1.0.0", created_at="2026-04-06T00:00:00Z", started_at="2026-04-06T00:00:00Z", status="running"),
+        source=ExecutionSourceModel(commit_id="commit-001", trigger_type="manual_run"),
+        input=ExecutionInputModel(),
+        timeline=ExecutionTimelineModel(event_count=2),
+        node_results=NodeResultsModel(),
+        outputs=ExecutionOutputModel(output_summary="running"),
+        artifacts=ExecutionArtifactsModel(),
+        diagnostics=ExecutionDiagnosticsModel(warnings=[], errors=[]),
+        observability=ExecutionObservabilityModel(),
+    )
+
+    vm = read_builder_shell_view_model(source, execution_record=record)
+
+    assert vm.workspace_chain.chain_state == "hold_runtime_monitoring"
+    assert vm.workspace_chain.next_bottleneck_workspace == "runtime_monitoring"
+    assert vm.workspace_chain.recommended_action_id == "open_runtime_monitoring"
+
+
+def test_builder_shell_projects_workspace_chain_stable_when_current_chain_is_locally_settled() -> None:
+    vm = read_builder_shell_view_model(_run())
+
+    assert vm.workspace_chain.chain_state == "workspace_chain_stable"
+    assert vm.workspace_chain.next_bottleneck_workspace is None
+    assert vm.workspace_chain.recommended_action_id is None
