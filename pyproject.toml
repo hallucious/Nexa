@@ -23,3 +23,6 @@ package-dir = {"" = "."}
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src*"]
+[project.optional-dependencies]
+aws = ["boto3>=1.34"]
+testing = ["testcontainers[postgres]>=4.0", "pytest-asyncio>=0.23"]
