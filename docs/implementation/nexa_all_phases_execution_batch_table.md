@@ -1,7 +1,7 @@
 # Nexa All-Phases Execution Batch Table v1.0
 
 ## Recommended save path
-`docs/implementation/master/nexa_all_phases_execution_batch_table.md`
+`docs/implementation/nexa_all_phases_execution_batch_table.md`
 
 ## 1. Purpose
 
@@ -24,7 +24,7 @@ This document defines the batch-level execution shape.
 
 Use the following as the planning spine behind this document:
 
-1. `docs/implementation/master/nexa_global_remaining_implementation_master_plan.md`
+1. `docs/implementation/nexa_global_remaining_implementation_master_plan.md`
 2. `saas/nexa_saas_backend_foundation_impl_brief.md`
 3. `saas/saas_implementation_plan_index.md`
 4. `saas/nexa_saas_completion_plan.md`

@@ -5,13 +5,9 @@ from typing import Any, Mapping
 
 from src.server.fastapi_binding_models import FastApiRouteDependencies
 from src.server.health_routes import ReadinessChecks
-
-
-def _not_implemented_postgres_mode() -> RuntimeError:
-    return RuntimeError(
-        "NEXA_DEPENDENCY_MODE=postgres is reserved for the P0 Postgres dependency "
-        "factory, which is not implemented in this batch yet. Use in_memory for now."
-    )
+from src.server.pg.dependencies_factory import build_postgres_dependencies
+from src.server.pg.engine import get_postgres_engine
+from src.server.pg.readiness import build_postgres_readiness_checks
 
 
 def build_default_dependencies() -> FastApiRouteDependencies:
@@ -19,12 +15,7 @@ def build_default_dependencies() -> FastApiRouteDependencies:
     if mode == "in_memory":
         return FastApiRouteDependencies()
     if mode == "postgres":
-        try:
-            from src.server.pg.dependencies_factory import build_postgres_dependencies  # type: ignore
-            from src.server.pg.engine import create_async_engine_from_env  # type: ignore
-        except ModuleNotFoundError as exc:  # pragma: no cover - exercised by tests through RuntimeError branch
-            raise _not_implemented_postgres_mode() from exc
-        engine = create_async_engine_from_env()
+        engine = get_postgres_engine()
         return build_postgres_dependencies(engine)
     raise RuntimeError(f"Unknown NEXA_DEPENDENCY_MODE: {mode!r}")
 
@@ -40,6 +31,7 @@ def build_default_readiness_checks() -> ReadinessChecks:
         )
 
     if mode == "postgres":
-        raise _not_implemented_postgres_mode()
+        engine = get_postgres_engine()
+        return build_postgres_readiness_checks(engine)
 
     raise RuntimeError(f"Unknown NEXA_DEPENDENCY_MODE: {mode!r}")
