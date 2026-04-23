@@ -917,7 +917,11 @@ def test_fastapi_binding_workspace_shell_route_round_trip() -> None:
     assert payload['return_use_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
     assert payload['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert payload['product_surface_review_section']['review_state'] == 'product_surface_stable'
-    assert payload['product_surface_review_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
+    assert payload['product_surface_review_section']['product_path_family'] == 'feedback'
+    assert payload['product_surface_review_section']['product_path_kind'] == 'feedback_thread_reentry'
+    assert payload['product_surface_review_section']['current_step_id'] == 'reopen_feedback_thread'
+    assert any(line.startswith('Current path: Feedback thread reentry') for line in payload['product_surface_review_section']['summary']['lines'])
+    assert payload['product_surface_review_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/feedback'
     assert payload['identity_policy']['surface_family'] == 'workspace-shell'
     assert payload['namespace_policy']['family'] == 'workspace-shell'
     assert payload['routes']['latest_run_artifacts'] == '/api/runs/run-002/artifacts'

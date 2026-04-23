@@ -1327,6 +1327,10 @@ def test_workspace_shell_payload_exposes_role_aware_action_availability() -> Non
     assert payload['return_use_continuity_section']['controls'][0]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
     assert payload['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert payload['product_surface_review_section']['review_state'] == 'hold_first_success_run'
+    assert payload['product_surface_review_section']['product_path_family'] == 'run'
+    assert payload['product_surface_review_section']['product_path_kind'] == 'launch_run'
+    assert payload['product_surface_review_section']['current_step_id'] == 'run'
+    assert any(line.startswith('Current path: Launch run') for line in payload['product_surface_review_section']['summary']['lines'])
     assert payload['product_surface_review_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/shell/launch'
 
 

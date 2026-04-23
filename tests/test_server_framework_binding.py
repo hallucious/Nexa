@@ -1620,7 +1620,11 @@ def test_framework_binding_workspace_shell_includes_latest_run_previews() -> Non
     assert parsed['return_use_continuity_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
     assert parsed['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert parsed['product_surface_review_section']['review_state'] == 'product_surface_stable'
-    assert parsed['product_surface_review_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/results?app_language=en'
+    assert parsed['product_surface_review_section']['product_path_family'] == 'feedback'
+    assert parsed['product_surface_review_section']['product_path_kind'] == 'feedback_thread_reentry'
+    assert parsed['product_surface_review_section']['current_step_id'] == 'reopen_feedback_thread'
+    assert any(line.startswith('Current path: Feedback thread reentry') for line in parsed['product_surface_review_section']['summary']['lines'])
+    assert parsed['product_surface_review_section']['controls'][0]['action_target'] == '/app/workspaces/ws-001/feedback'
     assert parsed['designer_section']['summary']['headline'] == 'Designer workspace'
     assert parsed['designer_section']['detail']['title'] == 'Designer detail'
     assert parsed['designer_section']['controls'][0]['action_kind'] == 'apply_template'
@@ -1714,6 +1718,10 @@ def test_framework_binding_workspace_shell_pre_run_banner_for_empty_mobile_works
     assert parsed['feedback_continuity_section']['controls'][2]['action_target'] == 'designer'
     assert parsed['product_surface_review_section']['summary']['headline'] == 'Product surface review'
     assert parsed['product_surface_review_section']['review_state'] == 'hold_first_success_setup'
+    assert parsed['product_surface_review_section']['product_path_family'] == 'setup'
+    assert parsed['product_surface_review_section']['product_path_kind'] == 'goal_entry'
+    assert parsed['product_surface_review_section']['current_step_id'] == 'choose_entry_path'
+    assert any(line.startswith('Current path: Goal entry') for line in parsed['product_surface_review_section']['summary']['lines'])
     assert parsed['product_surface_review_section']['controls'][0]['action_target'] == 'designer'
 
 
@@ -1980,6 +1988,10 @@ def test_framework_binding_workspace_shell_keeps_return_use_inactive_until_first
     assert parsed['return_use_continuity_section']['current_step_id'] == 'complete_first_success'
     assert parsed['return_use_continuity_section']['controls'][0]['action_target'] == '/api/users/me/onboarding?workspace_id=ws-001'
     assert parsed['product_surface_review_section']['review_state'] == 'hold_first_success_run'
+    assert parsed['product_surface_review_section']['product_path_family'] == 'run'
+    assert parsed['product_surface_review_section']['product_path_kind'] == 'launch_run'
+    assert parsed['product_surface_review_section']['current_step_id'] == 'run'
+    assert any(line.startswith('Current path: Launch run') for line in parsed['product_surface_review_section']['summary']['lines'])
 
 
 def test_framework_binding_put_workspace_shell_draft_persists_template_and_validation_state() -> None:

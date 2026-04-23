@@ -1376,6 +1376,8 @@ def _return_use_continuity_section(
 
 def _product_surface_review_section(
     server_product_readiness_review: Mapping[str, Any] | None,
+    feedback_rows: Sequence[Mapping[str, Any]],
+    workspace_id: str,
     *,
     routes: Mapping[str, Any],
     app_language: str = "en",
@@ -1387,6 +1389,152 @@ def _product_surface_review_section(
     next_bottleneck_stage = str(review.get("next_bottleneck_stage") or "").strip() or None
     recommended_action_target = str(review.get("recommended_action_target") or "").strip() or None
     recommended_action_label = str(review.get("recommended_action_label") or "").strip() or None
+    stage_by_id = {
+        str(stage.get("stage_id") or "").strip(): dict(stage)
+        for stage in stages
+        if isinstance(stage, Mapping) and str(stage.get("stage_id") or "").strip()
+    }
+    setup_stage = stage_by_id.get("first_success_setup", {})
+    run_stage = stage_by_id.get("first_success_run", {})
+    return_stage = stage_by_id.get("return_use", {})
+    feedback_entries = _feedback_continuity_entries(feedback_rows, workspace_id)
+    feedback_target = str(routes.get("workspace_feedback_page") or routes.get("workspace_feedback") or "").strip() or None
+    result_history_target = str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or routes.get("latest_run_result") or "").strip() or None
+    library_target = str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or routes.get("workspace_circuit_library") or routes.get("circuit_library") or "").strip() or None
+
+    def _localize_path(path_family: str, path_kind: str | None) -> str | None:
+        normalized_kind = str(path_kind or "").strip() or None
+        if not normalized_kind:
+            return None
+        if path_family == "setup":
+            fallbacks = {
+                "goal_entry": "Goal entry",
+                "starter_template": "Starter template",
+                "onboarding_continuation": "Onboarding continuation",
+            }
+            return ui_text(
+                f"server.shell.setup_path.{normalized_kind}",
+                app_language=app_language,
+                fallback_text=fallbacks.get(normalized_kind, normalized_kind.replace("_", " ").title()),
+            )
+        if path_family == "run":
+            fallbacks = {
+                "setup_prerequisite": "Setup prerequisite",
+                "validation_fix": "Validation fix",
+                "review_before_run": "Review before run",
+                "launch_run": "Launch run",
+                "monitor_run": "Monitor active run",
+                "read_result": "Read result",
+            }
+            return ui_text(
+                f"server.shell.run_path.{normalized_kind}",
+                app_language=app_language,
+                fallback_text=fallbacks.get(normalized_kind, normalized_kind.replace("_", " ").title()),
+            )
+        if path_family == "return":
+            fallbacks = {
+                "first_success_prerequisite": "First-success prerequisite",
+                "result_history_setup": "Result history setup",
+                "result_reentry": "Result reentry",
+                "workflow_reentry": "Workflow reentry",
+                "feedback_followup": "Feedback follow-up",
+            }
+            return ui_text(
+                f"server.shell.return_path.{normalized_kind}",
+                app_language=app_language,
+                fallback_text=fallbacks.get(normalized_kind, normalized_kind.replace("_", " ").title()),
+            )
+        fallbacks = {
+            "blocked_help": "Blocked help",
+            "run_issue_followup": "Run issue follow-up",
+            "feedback_thread_reentry": "Feedback thread reentry",
+            "product_learning_followup": "Product learning follow-up",
+        }
+        return ui_text(
+            f"server.shell.feedback_path.{normalized_kind}",
+            app_language=app_language,
+            fallback_text=fallbacks.get(normalized_kind, normalized_kind.replace("_", " ").title()),
+        )
+
+    def _localize_step(path_family: str, step_id: str | None) -> str | None:
+        normalized_step = str(step_id or "").strip() or None
+        if not normalized_step:
+            return None
+        if path_family == "setup":
+            fallbacks = {
+                "choose_entry_path": "Choose entry path",
+                "connect_provider": "Connect AI model if needed",
+                "review_draft": "Review draft or proposal",
+                "run": "Run",
+            }
+            return ui_text(
+                f"server.shell.setup_step.{normalized_step}",
+                app_language=app_language,
+                fallback_text=fallbacks.get(normalized_step, normalized_step.replace("_", " ").title()),
+            )
+        if path_family == "run":
+            fallbacks = {
+                "choose_entry_path": "Choose entry path",
+                "connect_provider": "Connect AI model if needed",
+                "review_draft": "Review draft or proposal",
+                "run": "Run",
+                "read_result": "Read result",
+            }
+            return ui_text(
+                f"server.shell.run_step.{normalized_step}",
+                app_language=app_language,
+                fallback_text=fallbacks.get(normalized_step, normalized_step.replace("_", " ").title()),
+            )
+        if path_family == "return":
+            fallbacks = {
+                "complete_first_success": "Complete first success",
+                "reopen_result": "Reopen a recent result",
+                "reopen_workflow": "Reopen a saved workflow",
+                "share_feedback": "Capture follow-up feedback",
+            }
+            return ui_text(
+                f"server.shell.return_step.{normalized_step}",
+                app_language=app_language,
+                fallback_text=fallbacks.get(normalized_step, normalized_step.replace("_", " ").title()),
+            )
+        fallbacks = {
+            "report_confusion": "Report confusing screen",
+            "continue_setup": "Continue first-success setup",
+            "report_run_issue": "Report recent run issue",
+            "reopen_feedback_thread": "Reopen feedback thread",
+            "share_friction_note": "Share a quick friction note",
+            "reopen_result": "Reopen a recent result",
+        }
+        return ui_text(
+            f"server.shell.feedback_step.{normalized_step}",
+            app_language=app_language,
+            fallback_text=fallbacks.get(normalized_step, normalized_step.replace("_", " ").title()),
+        )
+
+    def _stage_path_metadata(stage_id: str | None) -> tuple[str, str | None, str | None, str | None, list[str]]:
+        if stage_id == "first_success_setup":
+            return (
+                "setup",
+                str(setup_stage.get("entry_path_kind") or "goal_entry").strip() or "goal_entry",
+                str(setup_stage.get("current_step_id") or "choose_entry_path").strip() or "choose_entry_path",
+                str(setup_stage.get("next_step_id") or "").strip() or None,
+                list(setup_stage.get("step_order") or ["choose_entry_path", "connect_provider", "review_draft", "run"]),
+            )
+        if stage_id == "first_success_run":
+            return (
+                "run",
+                str(run_stage.get("run_path_kind") or "review_before_run").strip() or "review_before_run",
+                str(run_stage.get("current_step_id") or "review_draft").strip() or "review_draft",
+                str(run_stage.get("next_step_id") or "").strip() or None,
+                list(run_stage.get("step_order") or ["review_draft", "run", "read_result"]),
+            )
+        return (
+            "return",
+            str(return_stage.get("return_path_kind") or "result_reentry").strip() or "result_reentry",
+            str(return_stage.get("current_step_id") or "reopen_result").strip() or "reopen_result",
+            str(return_stage.get("next_step_id") or "").strip() or None,
+            list(return_stage.get("step_order") or ["complete_first_success", "reopen_result", "reopen_workflow", "share_feedback"]),
+        )
 
     lines = _summary_lines(
         ui_text(
@@ -1465,23 +1613,88 @@ def _product_surface_review_section(
             "action_target": action_target,
         })
 
-    if review_state == "product_surface_stable":
+    product_path_family: str
+    product_path_kind: str | None
+    current_step_id: str | None
+    next_step_id: str | None
+    step_order: list[str]
+
+    if review_state == "product_surface_stable" and feedback_entries and feedback_target:
+        product_path_family = "feedback"
+        product_path_kind = "feedback_thread_reentry"
+        current_step_id = "reopen_feedback_thread"
+        next_step_id = "reopen_result" if result_history_target else ("reopen_workflow" if library_target else None)
+        step_order = ["reopen_feedback_thread"] + ([next_step_id] if next_step_id else [])
+        _append_control(
+            "product-surface-open-feedback",
+            ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"),
+            feedback_target,
+        )
         _append_control(
             "product-surface-open-results",
             ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"),
-            str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or "").strip() or None,
+            result_history_target,
         )
         _append_control(
             "product-surface-open-library",
             ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"),
-            str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or "").strip() or None,
+            library_target,
+        )
+    elif review_state == "product_surface_stable":
+        product_path_family, product_path_kind, current_step_id, next_step_id, step_order = _stage_path_metadata("return_use")
+        if product_path_kind == "workflow_reentry":
+            _append_control(
+                "product-surface-open-library",
+                ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"),
+                library_target,
+            )
+            _append_control(
+                "product-surface-open-results",
+                ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"),
+                result_history_target,
+            )
+        else:
+            _append_control(
+                "product-surface-open-results",
+                ui_text("server.shell.open_result_history_page", app_language=app_language, fallback_text="Open result history page"),
+                result_history_target,
+            )
+            _append_control(
+                "product-surface-open-library",
+                ui_text("builder.action.open_circuit_library", app_language=app_language, fallback_text="Open workflow library"),
+                library_target,
+            )
+        _append_control(
+            "product-surface-open-feedback",
+            ui_text("server.shell.open_feedback_page", app_language=app_language, fallback_text="Open feedback page"),
+            feedback_target,
         )
     else:
+        product_path_family, product_path_kind, current_step_id, next_step_id, step_order = _stage_path_metadata(next_bottleneck_stage)
         _append_control(
             f"product-surface-{next_bottleneck_stage or 'primary'}",
             recommended_action_label,
             recommended_action_target,
         )
+
+    path_label = _localize_path(product_path_family, product_path_kind)
+    current_step_label = _localize_step(product_path_family, current_step_id)
+    next_step_label = _localize_step(product_path_family, next_step_id) if next_step_id else None
+    step_order_summary = " → ".join(
+        f"{index + 1}. {_localize_step(product_path_family, step_id) or step_id.replace('_', ' ').title()}"
+        for index, step_id in enumerate(step_order)
+    ) if step_order else None
+
+    lines = _summary_lines(
+        *lines,
+        ui_text("server.shell.product_surface_review_path_prefix", app_language=app_language, fallback_text="Current path: {path}", path=path_label) if path_label else None,
+        ui_text("server.shell.product_surface_review_current_step_prefix", app_language=app_language, fallback_text="Current step: {step}", step=current_step_label) if current_step_label else None,
+        ui_text("server.shell.product_surface_review_next_step_prefix", app_language=app_language, fallback_text="Next after this: {step}", step=next_step_label) if next_step_label else None,
+    )
+    detail_items = _summary_lines(
+        ui_text("server.shell.product_surface_review_step_order_prefix", app_language=app_language, fallback_text="Step order: {steps}", steps=step_order_summary) if step_order_summary else None,
+        *detail_items,
+    )
 
     section = build_shell_section(
         headline=ui_text("server.shell.product_surface_review", app_language=app_language, fallback_text="Product surface review"),
@@ -1496,6 +1709,11 @@ def _product_surface_review_section(
     section["next_bottleneck_stage"] = next_bottleneck_stage
     section["recommended_action_target"] = recommended_action_target
     section["recommended_action_label"] = recommended_action_label
+    section["product_path_family"] = product_path_family
+    section["product_path_kind"] = product_path_kind
+    section["current_step_id"] = current_step_id
+    section["next_step_id"] = next_step_id
+    section["step_order"] = step_order
     return section
 
 
@@ -2814,6 +3032,30 @@ def _server_product_readiness_review(
         recommended_action_target=run_action_target,
         app_language=app_language,
     )
+    if run_state in {"waiting", "inactive"}:
+        run_path_kind = "setup_prerequisite"
+        run_current_step_id = current_step_id if current_step_id in {"choose_entry_path", "connect_provider", "review_draft", "run"} else ("review_draft" if setup_state in {"entry_ready", "ready", "starter_template_path", "onboarding_continuation"} else "choose_entry_path")
+        run_next_step_id = "run" if run_current_step_id == "review_draft" else "review_draft"
+    elif run_state == "fix_before_run":
+        run_path_kind = "review_before_run" if onboarding_step in {"review_preview", "approve"} else "validation_fix"
+        run_current_step_id = "review_draft"
+        run_next_step_id = "run"
+    elif run_state == "ready_to_run":
+        run_path_kind = "launch_run"
+        run_current_step_id = "run"
+        run_next_step_id = "read_result"
+    elif run_state == "run_in_progress":
+        run_path_kind = "monitor_run"
+        run_current_step_id = "run"
+        run_next_step_id = "read_result"
+    else:
+        run_path_kind = "read_result"
+        run_current_step_id = "read_result"
+        run_next_step_id = None
+    run_stage["run_path_kind"] = run_path_kind
+    run_stage["current_step_id"] = run_current_step_id
+    run_stage["next_step_id"] = run_next_step_id
+    run_stage["step_order"] = ["review_draft", "run", "read_result"]
 
     library_target = str(routes.get("workspace_circuit_library_page") or routes.get("circuit_library_page") or routes.get("workspace_circuit_library") or routes.get("circuit_library") or "").strip() or None
     result_history_target = str(routes.get("workspace_result_history_page") or routes.get("workspace_result_history") or routes.get("latest_run_result") or "").strip() or None
@@ -3101,7 +3343,7 @@ def build_workspace_shell_runtime_payload(
         "first_success_setup_section": _first_success_setup_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, server_product_readiness_review, onboarding_state=onboarding_state, provider_binding_rows=provider_binding_rows, managed_secret_rows=managed_secret_rows, provider_probe_rows=provider_probe_rows, workspace_id=workspace_id, routes=routes, app_language=app_language, persisted_state=server_backed_state.get("designer")),
         "first_success_run_section": _first_success_run_section(asdict(shell_vm), server_product_readiness_review, latest_run_status_preview=latest_run_status_preview, latest_run_result_preview=latest_run_result_preview, latest_run_trace_preview=latest_run_trace_preview, latest_run_artifacts_preview=latest_run_artifacts_preview, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
         "return_use_continuity_section": _return_use_continuity_section(server_product_readiness_review, recent_run_rows=recent_run_rows, result_rows_by_run_id=result_rows_by_run_id, feedback_rows=feedback_rows, onboarding_state=onboarding_state, workspace_id=workspace_id, routes=routes, app_language=app_language),
-        "product_surface_review_section": _product_surface_review_section(server_product_readiness_review, routes=routes, app_language=app_language),
+        "product_surface_review_section": _product_surface_review_section(server_product_readiness_review, feedback_rows, workspace_id, routes=routes, app_language=app_language),
         "feedback_continuity_section": _feedback_continuity_section(server_product_readiness_review, feedback_rows, workspace_id, recent_run_rows=recent_run_rows, onboarding_state=onboarding_state, routes=routes, app_language=app_language),
         "share_history_section": _share_history_section(share_payload_rows, model, workspace_id, app_language=app_language),
         "designer_section": _designer_section(asdict(shell_vm), asdict(template_gallery) if template_gallery is not None else None, persisted_state=server_backed_state.get("designer"), app_language=app_language),
