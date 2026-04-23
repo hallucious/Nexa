@@ -5,13 +5,14 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from src.server.auth_models import WorkspaceAuthorizationContext
+from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
 from src.server.managed_secret_metadata_store import InMemoryManagedSecretMetadataStore
 from src.server.onboarding_state_store import InMemoryOnboardingStateStore
 from src.server.provider_binding_store import InMemoryProviderBindingStore
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore
 from src.server.workspace_registry_store import InMemoryWorkspaceRegistryStore
+from src.server.run_admission_models import RunRecordProjection
 
 try:  # pragma: no cover - availability varies by environment
     from sqlalchemy import text
@@ -653,3 +654,219 @@ class PostgresFeedbackStore:
             """,
         )
         return tuple(dict(row) for row in rows)
+
+
+@dataclass(frozen=True)
+class PostgresRunProjectionStore:
+    engine: Engine
+    workspace_registry_store: PostgresWorkspaceRegistryStore
+
+    def write_run_record(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        normalized = RunRecordProjection(
+            run_id=str(row.get("run_id") or "").strip(),
+            workspace_id=str(row.get("workspace_id") or "").strip(),
+            launch_request_id=str(row.get("launch_request_id") or "").strip(),
+            execution_target_type=str(row.get("execution_target_type") or "").strip(),
+            execution_target_ref=str(row.get("execution_target_ref") or "").strip(),
+            status=str(row.get("status") or "").strip(),
+            status_family=str(row.get("status_family") or "unknown").strip(),
+            result_state=str(row.get("result_state") or "").strip() or None,
+            latest_error_family=str(row.get("latest_error_family") or "").strip() or None,
+            requested_by_user_id=str(row.get("requested_by_user_id") or "").strip() or None,
+            auth_context_ref=str(row.get("auth_context_ref") or "").strip() or None,
+            trace_available=bool(row.get("trace_available", False)),
+            artifact_count=int(row.get("artifact_count", 0) or 0),
+            trace_event_count=int(row.get("trace_event_count", 0) or 0),
+            created_at=str(row.get("created_at") or "").strip(),
+            started_at=str(row.get("started_at") or "").strip() or None,
+            finished_at=str(row.get("finished_at") or "").strip() or None,
+            updated_at=str(row.get("updated_at") or "").strip(),
+        ).to_row()
+        _execute(
+            self.engine,
+            """
+            INSERT INTO run_records (
+                run_id, workspace_id, launch_request_id, execution_target_type, execution_target_ref,
+                status, status_family, result_state, latest_error_family, requested_by_user_id, auth_context_ref,
+                trace_available, artifact_count, trace_event_count, created_at, started_at, finished_at, updated_at
+            ) VALUES (
+                :run_id, :workspace_id, :launch_request_id, :execution_target_type, :execution_target_ref,
+                :status, :status_family, :result_state, :latest_error_family, :requested_by_user_id, :auth_context_ref,
+                :trace_available, :artifact_count, :trace_event_count, :created_at, :started_at, :finished_at, :updated_at
+            )
+            ON CONFLICT (run_id) DO UPDATE SET
+                workspace_id = EXCLUDED.workspace_id,
+                launch_request_id = EXCLUDED.launch_request_id,
+                execution_target_type = EXCLUDED.execution_target_type,
+                execution_target_ref = EXCLUDED.execution_target_ref,
+                status = EXCLUDED.status,
+                status_family = EXCLUDED.status_family,
+                result_state = EXCLUDED.result_state,
+                latest_error_family = EXCLUDED.latest_error_family,
+                requested_by_user_id = EXCLUDED.requested_by_user_id,
+                auth_context_ref = EXCLUDED.auth_context_ref,
+                trace_available = EXCLUDED.trace_available,
+                artifact_count = EXCLUDED.artifact_count,
+                trace_event_count = EXCLUDED.trace_event_count,
+                created_at = COALESCE(run_records.created_at, EXCLUDED.created_at),
+                started_at = EXCLUDED.started_at,
+                finished_at = EXCLUDED.finished_at,
+                updated_at = EXCLUDED.updated_at
+            """,
+            normalized,
+        )
+        return dict(normalized)
+
+    def get_run_record(self, run_id: str) -> dict[str, Any] | None:
+        normalized_run_id = str(run_id or "").strip()
+        if not normalized_run_id:
+            return None
+        return _fetch_one(
+            self.engine,
+            """
+            SELECT run_id, workspace_id, launch_request_id, execution_target_type, execution_target_ref,
+                   status, status_family, result_state, latest_error_family, requested_by_user_id, auth_context_ref,
+                   trace_available, artifact_count, trace_event_count, created_at, started_at, finished_at, updated_at
+            FROM run_records
+            WHERE run_id = :run_id
+            """,
+            {"run_id": normalized_run_id},
+        )
+
+    def list_workspace_run_rows(self, workspace_id: str) -> tuple[dict[str, Any], ...]:
+        normalized_workspace_id = str(workspace_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT run_id, workspace_id, launch_request_id, execution_target_type, execution_target_ref,
+                   status, status_family, result_state, latest_error_family, requested_by_user_id, auth_context_ref,
+                   trace_available, artifact_count, trace_event_count, created_at, started_at, finished_at, updated_at
+            FROM run_records
+            WHERE workspace_id = :workspace_id
+            ORDER BY updated_at DESC, created_at DESC, run_id DESC
+            """,
+            {"workspace_id": normalized_workspace_id},
+        )
+        return tuple(dict(row) for row in rows)
+
+    def list_recent_run_rows(self) -> tuple[dict[str, Any], ...]:
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT run_id, workspace_id, launch_request_id, execution_target_type, execution_target_ref,
+                   status, status_family, result_state, latest_error_family, requested_by_user_id, auth_context_ref,
+                   trace_available, artifact_count, trace_event_count, created_at, started_at, finished_at, updated_at
+            FROM run_records
+            ORDER BY updated_at DESC, created_at DESC, run_id DESC
+            """,
+        )
+        return tuple(dict(row) for row in rows)
+
+    def get_workspace_result_rows(self, workspace_id: str) -> dict[str, dict[str, Any]]:
+        normalized_workspace_id = str(workspace_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT run_id, workspace_id, result_state, final_status, result_summary, trace_ref, artifact_count,
+                   failure_info, final_output, metrics, updated_at
+            FROM run_result_index
+            WHERE workspace_id = :workspace_id
+            ORDER BY updated_at DESC, run_id DESC
+            """,
+            {"workspace_id": normalized_workspace_id},
+        )
+        return {str(row.get("run_id") or ""): self._normalize_result_row(row) for row in rows if str(row.get("run_id") or "").strip()}
+
+    def get_result_row(self, run_id: str) -> dict[str, Any] | None:
+        normalized_run_id = str(run_id or "").strip()
+        if not normalized_run_id:
+            return None
+        row = _fetch_one(
+            self.engine,
+            """
+            SELECT run_id, workspace_id, result_state, final_status, result_summary, trace_ref, artifact_count,
+                   failure_info, final_output, metrics, updated_at
+            FROM run_result_index
+            WHERE run_id = :run_id
+            """,
+            {"run_id": normalized_run_id},
+        )
+        return None if row is None else self._normalize_result_row(row)
+
+    def get_run_context(self, run_id: str) -> RunAuthorizationContext | None:
+        row = self.get_run_record(run_id)
+        if row is None:
+            return None
+        workspace_context = self.workspace_registry_store.get_workspace_context(str(row.get("workspace_id") or ""))
+        if workspace_context is None:
+            return None
+        owner = str(row.get("requested_by_user_id") or "").strip() or None
+        return RunAuthorizationContext(run_id=str(row.get("run_id") or "").strip(), workspace_context=workspace_context, run_owner_user_ref=owner)
+
+    @staticmethod
+    def _normalize_result_row(row: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            **dict(row),
+            "artifact_count": int(row.get("artifact_count", 0) or 0),
+            "failure_info": _decode_json(row.get("failure_info"), default=None),
+            "final_output": _decode_json(row.get("final_output"), default=None),
+            "metrics": _decode_json(row.get("metrics"), default=None),
+        }
+
+
+@dataclass(frozen=True)
+class PostgresAppendOnlyProjectionStore:
+    engine: Engine
+
+    def list_artifact_rows(self, run_id: str) -> tuple[dict[str, Any], ...]:
+        normalized_run_id = str(run_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT artifact_id, workspace_id, run_id, artifact_type, producer_node, content_hash,
+                   storage_ref, payload_preview, trace_ref, metadata_json, created_at
+            FROM artifact_index
+            WHERE run_id = :run_id
+            ORDER BY created_at DESC, artifact_id DESC
+            """,
+            {"run_id": normalized_run_id},
+        )
+        return tuple(self._normalize_artifact_row(row) for row in rows)
+
+    def get_artifact_row(self, artifact_id: str) -> dict[str, Any] | None:
+        normalized_artifact_id = str(artifact_id or "").strip()
+        if not normalized_artifact_id:
+            return None
+        row = _fetch_one(
+            self.engine,
+            """
+            SELECT artifact_id, workspace_id, run_id, artifact_type, producer_node, content_hash,
+                   storage_ref, payload_preview, trace_ref, metadata_json, created_at
+            FROM artifact_index
+            WHERE artifact_id = :artifact_id
+            """,
+            {"artifact_id": normalized_artifact_id},
+        )
+        return None if row is None else self._normalize_artifact_row(row)
+
+    def list_trace_rows(self, run_id: str) -> tuple[dict[str, Any], ...]:
+        normalized_run_id = str(run_id or "").strip()
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT trace_event_ref, workspace_id, run_id, event_type, sequence_number, node_id, severity,
+                   message_preview, occurred_at
+            FROM trace_event_index
+            WHERE run_id = :run_id
+            ORDER BY sequence_number ASC, occurred_at ASC, trace_event_ref ASC
+            """,
+            {"run_id": normalized_run_id},
+        )
+        return tuple(dict(row) for row in rows)
+
+    @staticmethod
+    def _normalize_artifact_row(row: Mapping[str, Any]) -> dict[str, Any]:
+        return {
+            **dict(row),
+            "metadata_json": _decode_json(row.get("metadata_json"), default=None),
+        }

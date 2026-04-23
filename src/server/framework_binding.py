@@ -1331,6 +1331,7 @@ class FrameworkRouteBindings:
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
         artifact_source: Any | None = None,
+        run_record_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_launch_workspace_shell(
             http_request=cls.to_http_route_request(request),
@@ -1347,6 +1348,7 @@ class FrameworkRouteBindings:
             provider_probe_rows=list(provider_probe_rows),
             onboarding_rows=list(onboarding_rows),
             artifact_source=artifact_source,
+            run_record_writer=run_record_writer,
         )
         return cls.to_framework_response(response)
 
@@ -1922,6 +1924,7 @@ class FrameworkRouteBindings:
         workspace_row_provider=None,
         workspace_artifact_source_writer=None,
         public_share_payload_provider=None,
+        run_record_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_import_public_share(
             http_request=cls.to_http_route_request(request),
@@ -1929,6 +1932,7 @@ class FrameworkRouteBindings:
             workspace_row_provider=workspace_row_provider,
             workspace_artifact_source_writer=workspace_artifact_source_writer,
             public_share_payload_provider=public_share_payload_provider,
+            run_record_writer=run_record_writer,
         )
         return cls.to_framework_response(response)
 
@@ -1988,6 +1992,7 @@ class FrameworkRouteBindings:
         provider_probe_rows_provider=None,
         onboarding_rows_provider=None,
         public_share_payload_provider=None,
+        run_record_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_run_public_share(
             http_request=cls.to_http_route_request(request),
@@ -2005,6 +2010,7 @@ class FrameworkRouteBindings:
             provider_probe_rows_provider=provider_probe_rows_provider,
             onboarding_rows_provider=onboarding_rows_provider,
             public_share_payload_provider=public_share_payload_provider,
+            run_record_writer=run_record_writer,
         )
         return cls.to_framework_response(response)
 
@@ -2118,6 +2124,7 @@ class FrameworkRouteBindings:
         managed_secret_rows: Sequence[Mapping[str, Any]] = (),
         provider_probe_rows: Sequence[Mapping[str, Any]] = (),
         onboarding_rows: Sequence[Mapping[str, Any]] = (),
+        run_record_writer=None,
     ) -> FrameworkOutboundResponse:
         response = RunHttpRouteSurface.handle_launch(
             http_request=cls.to_http_route_request(request),
@@ -2134,6 +2141,7 @@ class FrameworkRouteBindings:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            run_record_writer=run_record_writer,
         )
         return cls.to_framework_response(response)
 

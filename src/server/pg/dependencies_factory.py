@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from src.server.fastapi_binding_models import FastApiRouteDependencies
@@ -10,6 +11,8 @@ from src.server.pg.engine import get_postgres_sync_engine
 from src.server.pg.row_stores import (
     PostgresFeedbackStore,
     PostgresManagedSecretMetadataStore,
+    PostgresAppendOnlyProjectionStore,
+    PostgresRunProjectionStore,
     PostgresOnboardingStateStore,
     PostgresProviderBindingStore,
     PostgresProviderProbeHistoryStore,
@@ -34,9 +37,10 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     resolved_sync_engine = sync_engine if sync_engine is not None else get_postgres_sync_engine()
 
     dependencies = FastApiRouteDependencies()
+    workspace_registry_store = PostgresWorkspaceRegistryStore(resolved_sync_engine)
     dependencies = bind_workspace_registry_store(
         dependencies=dependencies,
-        store=PostgresWorkspaceRegistryStore(resolved_sync_engine),
+        store=workspace_registry_store,
     )
     dependencies = bind_onboarding_state_store(
         dependencies=dependencies,
@@ -57,5 +61,20 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     dependencies = bind_feedback_store(
         dependencies=dependencies,
         store=PostgresFeedbackStore(resolved_sync_engine),
+    )
+    run_projection_store = PostgresRunProjectionStore(resolved_sync_engine, workspace_registry_store=workspace_registry_store)
+    append_only_projection_store = PostgresAppendOnlyProjectionStore(resolved_sync_engine)
+    dependencies = replace(
+        dependencies,
+        run_context_provider=run_projection_store.get_run_context,
+        run_record_provider=run_projection_store.get_run_record,
+        result_row_provider=run_projection_store.get_result_row,
+        workspace_run_rows_provider=run_projection_store.list_workspace_run_rows,
+        workspace_result_rows_provider=run_projection_store.get_workspace_result_rows,
+        recent_run_rows_provider=run_projection_store.list_recent_run_rows,
+        artifact_rows_provider=append_only_projection_store.list_artifact_rows,
+        artifact_row_provider=append_only_projection_store.get_artifact_row,
+        trace_rows_provider=append_only_projection_store.list_trace_rows,
+        run_record_writer=run_projection_store.write_run_record,
     )
     return dependencies

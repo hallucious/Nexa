@@ -2627,6 +2627,7 @@ class RunHttpRouteSurface:
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         artifact_source: Any | None = None,
+        run_record_writer=None,
     ) -> HttpRouteResponse:
         guard = cls._workspace_shell_launch_guard(
             http_request,
@@ -2696,6 +2697,7 @@ class RunHttpRouteSurface:
             managed_secret_rows=managed_secret_rows,
             provider_probe_rows=provider_probe_rows,
             onboarding_rows=onboarding_rows,
+            run_record_writer=run_record_writer,
         )
         if isinstance(response.body, Mapping):
             body_payload = dict(response.body)
@@ -4492,6 +4494,7 @@ class RunHttpRouteSurface:
         workspace_row_provider=None,
         workspace_artifact_source_writer: Callable[[str, Any], Any] | None = None,
         public_share_payload_provider=None,
+        run_record_writer=None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share import route only supports POST."})
@@ -4674,6 +4677,7 @@ class RunHttpRouteSurface:
         provider_probe_rows_provider=None,
         onboarding_rows_provider=None,
         public_share_payload_provider=None,
+        run_record_writer=None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Public share run route only supports POST."})
@@ -4749,6 +4753,7 @@ class RunHttpRouteSurface:
             managed_secret_rows=managed_secret_rows_provider() if managed_secret_rows_provider is not None else (),
             provider_probe_rows=provider_probe_rows_provider(workspace_id) if provider_probe_rows_provider is not None else (),
             onboarding_rows=onboarding_rows_provider() if onboarding_rows_provider is not None else (),
+            run_record_writer=run_record_writer,
         )
         if launch_response.status_code != 202:
             return launch_response
@@ -5349,6 +5354,7 @@ class RunHttpRouteSurface:
         managed_secret_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         provider_probe_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
         onboarding_rows: list[Mapping[str, Any]] | tuple[Mapping[str, Any], ...] = (),
+        run_record_writer=None,
     ) -> HttpRouteResponse:
         if http_request.method != "POST":
             return _route_response(405, {"error_family": "route_error", "reason_code": "route.method_not_allowed", "message": "Launch route only supports POST."})
@@ -5386,6 +5392,8 @@ class RunHttpRouteSurface:
         )
         if outcome.accepted:
             assert outcome.accepted_response is not None
+            if run_record_writer is not None and outcome.run_record is not None:
+                run_record_writer(outcome.run_record.to_row())
             accepted_payload = asdict(outcome.accepted_response)
             accepted_payload["identity_policy"] = _run_launch_identity_policy_body()
             accepted_payload["namespace_policy"] = _run_launch_namespace_policy_body()

@@ -7,6 +7,8 @@ from src.server.pg.row_stores import (
     PostgresFeedbackStore,
     PostgresManagedSecretMetadataStore,
     PostgresOnboardingStateStore,
+    PostgresAppendOnlyProjectionStore,
+    PostgresRunProjectionStore,
     PostgresProviderBindingStore,
     PostgresProviderProbeHistoryStore,
     PostgresWorkspaceRegistryStore,
@@ -103,6 +105,71 @@ def _build_sqlite_engine():
             workspace_id TEXT,
             provider_key TEXT,
             secret_authority TEXT
+        )
+        """,
+        """
+        CREATE TABLE run_records (
+            run_id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            launch_request_id TEXT NOT NULL,
+            execution_target_type TEXT NOT NULL,
+            execution_target_ref TEXT NOT NULL,
+            status TEXT NOT NULL,
+            status_family TEXT NOT NULL,
+            result_state TEXT,
+            latest_error_family TEXT,
+            requested_by_user_id TEXT,
+            auth_context_ref TEXT,
+            trace_available BOOLEAN DEFAULT FALSE,
+            artifact_count INTEGER DEFAULT 0,
+            trace_event_count INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            started_at TEXT,
+            finished_at TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE run_result_index (
+            run_id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            result_state TEXT NOT NULL,
+            final_status TEXT,
+            result_summary TEXT,
+            trace_ref TEXT,
+            artifact_count INTEGER DEFAULT 0,
+            failure_info TEXT,
+            final_output TEXT,
+            metrics TEXT,
+            updated_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE artifact_index (
+            artifact_id TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            artifact_type TEXT NOT NULL,
+            producer_node TEXT,
+            content_hash TEXT,
+            storage_ref TEXT,
+            payload_preview TEXT,
+            trace_ref TEXT,
+            metadata_json TEXT,
+            created_at TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE trace_event_index (
+            trace_event_ref TEXT PRIMARY KEY,
+            workspace_id TEXT NOT NULL,
+            run_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            sequence_number INTEGER DEFAULT 0,
+            node_id TEXT,
+            severity TEXT,
+            message_preview TEXT,
+            occurred_at TEXT NOT NULL
         )
         """,
         """
@@ -273,6 +340,126 @@ def test_postgres_feedback_store_round_trips_rows() -> None:
     assert row["template_id"] == "tpl-1"
 
 
+
+def test_postgres_run_projection_store_round_trips_rows_and_context() -> None:
+    engine = _build_sqlite_engine()
+    workspace_store = PostgresWorkspaceRegistryStore(engine)
+    workspace_store.write_workspace_bundle(
+        {
+            "workspace_id": "ws-run",
+            "owner_user_id": "user-owner",
+            "title": "Workspace Run",
+            "created_at": "2026-04-23T10:00:00+00:00",
+            "updated_at": "2026-04-23T10:00:00+00:00",
+        },
+        {
+            "membership_id": "membership-run",
+            "workspace_id": "ws-run",
+            "user_id": "user-owner",
+            "role": "owner",
+            "created_at": "2026-04-23T10:00:00+00:00",
+            "updated_at": "2026-04-23T10:00:00+00:00",
+        },
+    )
+    store = PostgresRunProjectionStore(engine, workspace_registry_store=workspace_store)
+    store.write_run_record(
+        {
+            "run_id": "run-1",
+            "workspace_id": "ws-run",
+            "launch_request_id": "req-1",
+            "execution_target_type": "commit_snapshot",
+            "execution_target_ref": "snap-1",
+            "status": "queued",
+            "status_family": "pending",
+            "requested_by_user_id": "user-owner",
+            "auth_context_ref": "auth-1",
+            "trace_available": False,
+            "artifact_count": 0,
+            "trace_event_count": 0,
+            "created_at": "2026-04-23T10:00:00+00:00",
+            "updated_at": "2026-04-23T10:00:00+00:00",
+        }
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO run_result_index (run_id, workspace_id, result_state, final_status, result_summary, trace_ref, artifact_count, failure_info, final_output, metrics, updated_at) "
+                "VALUES (:run_id, :workspace_id, :result_state, :final_status, :result_summary, :trace_ref, :artifact_count, :failure_info, :final_output, :metrics, :updated_at)"
+            ),
+            {
+                "run_id": "run-1",
+                "workspace_id": "ws-run",
+                "result_state": "ready_success",
+                "final_status": "completed",
+                "result_summary": "Success.",
+                "trace_ref": "trace-1",
+                "artifact_count": 1,
+                "failure_info": None,
+                "final_output": '{"answer": "ok"}',
+                "metrics": '{"latency_ms": 10}',
+                "updated_at": "2026-04-23T10:00:05+00:00",
+            },
+        )
+    row = store.get_run_record("run-1")
+    assert row is not None
+    assert row["workspace_id"] == "ws-run"
+    assert store.list_workspace_run_rows("ws-run")[0]["run_id"] == "run-1"
+    assert store.list_recent_run_rows()[0]["run_id"] == "run-1"
+    assert store.get_result_row("run-1")["result_summary"] == "Success."
+    assert store.get_workspace_result_rows("ws-run")["run-1"]["final_output"] == {"answer": "ok"}
+    context = store.get_run_context("run-1")
+    assert context is not None
+    assert context.run_id == "run-1"
+
+
+def test_postgres_append_only_projection_store_reads_artifacts_and_trace() -> None:
+    engine = _build_sqlite_engine()
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO artifact_index (artifact_id, workspace_id, run_id, artifact_type, producer_node, content_hash, storage_ref, payload_preview, trace_ref, metadata_json, created_at) "
+                "VALUES (:artifact_id, :workspace_id, :run_id, :artifact_type, :producer_node, :content_hash, :storage_ref, :payload_preview, :trace_ref, :metadata_json, :created_at)"
+            ),
+            {
+                "artifact_id": "artifact-1",
+                "workspace_id": "ws-run",
+                "run_id": "run-1",
+                "artifact_type": "text",
+                "producer_node": "node-1",
+                "content_hash": None,
+                "storage_ref": None,
+                "payload_preview": "Preview",
+                "trace_ref": "trace-1",
+                "metadata_json": '{"label": "Artifact"}',
+                "created_at": "2026-04-23T10:00:05+00:00",
+            },
+        )
+        connection.execute(
+            text(
+                "INSERT INTO trace_event_index (trace_event_ref, workspace_id, run_id, event_type, sequence_number, node_id, severity, message_preview, occurred_at) "
+                "VALUES (:trace_event_ref, :workspace_id, :run_id, :event_type, :sequence_number, :node_id, :severity, :message_preview, :occurred_at)"
+            ),
+            {
+                "trace_event_ref": "trace-evt-1",
+                "workspace_id": "ws-run",
+                "run_id": "run-1",
+                "event_type": "started",
+                "sequence_number": 1,
+                "node_id": "node-1",
+                "severity": "info",
+                "message_preview": "Started",
+                "occurred_at": "2026-04-23T10:00:06+00:00",
+            },
+        )
+    store = PostgresAppendOnlyProjectionStore(engine)
+    artifacts = store.list_artifact_rows("run-1")
+    assert artifacts[0]["artifact_id"] == "artifact-1"
+    assert artifacts[0]["metadata_json"] == {"label": "Artifact"}
+    assert store.get_artifact_row("artifact-1")["payload_preview"] == "Preview"
+    trace_rows = store.list_trace_rows("run-1")
+    assert trace_rows[0]["trace_event_ref"] == "trace-evt-1"
+
+
 def test_build_postgres_dependencies_wires_sql_backed_continuity_stores() -> None:
     sync_engine = _build_sqlite_engine()
     async_engine = object()
@@ -333,3 +520,22 @@ def test_build_postgres_dependencies_wires_sql_backed_continuity_stores() -> Non
     assert deps.workspace_provider_binding_row_provider("ws-9", "openai") is not None
     assert deps.managed_secret_metadata_reader(str(receipt["secret_ref"])) is not None
     assert deps.feedback_rows_provider()[0]["feedback_id"] == "fb-9"
+    deps.run_record_writer({
+        "run_id": "run-9",
+        "workspace_id": "ws-9",
+        "launch_request_id": "req-9",
+        "execution_target_type": "commit_snapshot",
+        "execution_target_ref": "snap-9",
+        "status": "queued",
+        "status_family": "pending",
+        "requested_by_user_id": "user-owner",
+        "auth_context_ref": "auth-9",
+        "trace_available": False,
+        "artifact_count": 0,
+        "trace_event_count": 0,
+        "created_at": "2026-04-23T10:02:00+00:00",
+        "updated_at": "2026-04-23T10:02:00+00:00",
+    })
+    assert deps.run_record_provider("run-9") is not None
+    assert deps.recent_run_rows_provider()[0]["run_id"] == "run-9"
+    assert deps.run_context_provider("run-9") is not None

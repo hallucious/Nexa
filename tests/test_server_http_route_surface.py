@@ -917,6 +917,74 @@ def test_launch_route_returns_accepted_http_response() -> None:
     assert response.body["source_artifact"]["canonical_ref"] == "snap-001"
 
 
+
+def test_launch_route_writes_run_record_when_writer_is_provided() -> None:
+    written: list[dict[str, object]] = []
+    response = RunHttpRouteSurface.handle_launch(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/runs",
+            json_body={
+                "workspace_id": "ws-001",
+                "execution_target": {"target_type": "approved_snapshot", "target_ref": "snap-001"},
+            },
+        ),
+        workspace_context=_workspace(),
+        target_catalog={
+            "snap-001": ExecutionTargetCatalogEntry(
+                workspace_id="ws-001",
+                target_ref="snap-001",
+                target_type="approved_snapshot",
+                source=_commit_snapshot("snap-001"),
+            )
+        },
+        run_id_factory=lambda: "run-accept-001",
+        run_request_id_factory=lambda: "req-accept-001",
+        now_iso="2026-04-11T12:00:00+00:00",
+        run_record_writer=lambda row: written.append(dict(row)) or dict(row),
+    )
+    assert response.status_code == 202
+    assert written[0]["run_id"] == "run-accept-001"
+
+
+def test_launch_workspace_shell_route_writes_run_record_when_writer_is_provided() -> None:
+    written: list[dict[str, object]] = []
+    response = RunHttpRouteSurface.handle_launch_workspace_shell(
+        http_request=_auth_request(method='POST', path='/api/workspaces/ws-001/shell/launch', path_params={'workspace_id': 'ws-001'}, json_body={'input_payload': {'question': 'hello from shell'}}),
+        workspace_context=_workspace(),
+        workspace_row={'workspace_id': 'ws-001', 'owner_user_id': 'user-owner', 'title': 'Primary Workspace', 'description': 'Main'},
+        artifact_source=_commit_snapshot('snap-shell-launch-010'),
+        run_id_factory=lambda: 'run-shell-010',
+        run_request_id_factory=lambda: 'req-shell-010',
+        now_iso='2026-04-14T09:00:00+00:00',
+        run_record_writer=lambda row: written.append(dict(row)) or dict(row),
+    )
+    assert response.status_code == 202
+    assert written[0]['run_id'] == 'run-shell-010'
+
+
+def test_run_public_share_route_writes_run_record_when_writer_is_provided() -> None:
+    share_payload = _share_payload("share-run-route-store-001")
+    written: list[dict[str, object]] = []
+    response = RunHttpRouteSurface.handle_run_public_share(
+        http_request=_auth_request(
+            method="POST",
+            path="/api/public-shares/share-run-route-store-001/run",
+            path_params={"share_id": "share-run-route-store-001"},
+            json_body={"workspace_id": "ws-001"},
+        ),
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_row_provider=lambda workspace_id: {"workspace_id": workspace_id, "owner_user_id": "user-owner", "title": "Primary Workspace", "continuity_source": "server", "archived": False} if workspace_id == "ws-001" else None,
+        public_share_payload_provider=lambda share_id: share_payload if share_id == "share-run-route-store-001" else None,
+        target_catalog_provider=lambda workspace_id: {},
+        policy=ProductAdmissionPolicy(allow_working_save_execution=True),
+        engine_launch_decider=lambda payload: EngineLaunchAdapter.accepted(run_id="run-public-share-store-001", initial_status="queued"),
+        run_id_factory=lambda: "run-public-share-store-001",
+        run_record_writer=lambda row: written.append(dict(row)) or dict(row),
+    )
+    assert response.status_code == 202
+    assert written[0]["run_id"] == "run-public-share-store-001"
+
 def test_launch_route_returns_engine_rejection_with_distinct_http_shape() -> None:
     def _engine_reject(_request):
         return EngineLaunchAdapter.rejected(

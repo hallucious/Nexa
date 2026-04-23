@@ -195,6 +195,26 @@ def test_framework_binding_exposes_expected_route_definitions() -> None:
 
 
 
+
+
+def test_framework_launch_route_writes_run_record_when_writer_is_provided() -> None:
+    written: list[dict[str, object]] = []
+    outbound = FrameworkRouteBindings.handle_launch(
+        request=_request(
+            method="POST",
+            path="/api/runs",
+            json_body={"workspace_id": "ws-001", "execution_target": {"target_type": "approved_snapshot", "target_ref": "snap-001"}},
+        ),
+        workspace_context=_workspace(),
+        target_catalog={"snap-001": ExecutionTargetCatalogEntry(workspace_id="ws-001", target_ref="snap-001", target_type="approved_snapshot", source=_commit_snapshot("snap-001"))},
+        run_id_factory=lambda: "run-framework-store-001",
+        run_request_id_factory=lambda: "req-framework-store-001",
+        now_iso="2026-04-11T12:00:00+00:00",
+        run_record_writer=lambda row: written.append(dict(row)) or dict(row),
+    )
+    assert outbound.status_code == 202
+    assert written[0]["run_id"] == "run-framework-store-001"
+
 def test_framework_route_definitions_are_unique() -> None:
     definitions = FrameworkRouteBindings.route_definitions()
     route_names = [definition.route_name for definition in definitions]

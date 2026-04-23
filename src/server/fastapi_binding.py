@@ -749,6 +749,7 @@ class FastApiRouteBindings:
                 provider_probe_rows=self.dependencies.workspace_provider_probe_rows_provider(workspace_id),
                 onboarding_rows=self.dependencies.onboarding_rows_provider(),
                 artifact_source=self.dependencies.workspace_artifact_source_provider(workspace_id),
+                run_record_writer=self.dependencies.run_record_writer,
             )
             return self._framework_response(outbound)
 
@@ -1256,6 +1257,7 @@ class FastApiRouteBindings:
                 workspace_row_provider=self.dependencies.workspace_row_provider,
                 workspace_artifact_source_writer=self.dependencies.workspace_artifact_source_writer,
                 public_share_payload_provider=self.dependencies.public_share_payload_provider,
+                run_record_writer=self.dependencies.run_record_writer,
             )
             return self._framework_response(outbound)
 
@@ -2233,6 +2235,7 @@ class FastApiRouteBindings:
                 provider_probe_rows_provider=self.dependencies.workspace_provider_probe_rows_provider,
                 onboarding_rows_provider=self.dependencies.onboarding_rows_provider,
                 public_share_payload_provider=self.dependencies.public_share_payload_provider,
+                run_record_writer=self.dependencies.run_record_writer,
             )
             if outbound.status_code != 202:
                 payload = json.loads(outbound.body_text) if outbound.body_text else {}
