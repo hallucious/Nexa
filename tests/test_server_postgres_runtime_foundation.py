@@ -12,7 +12,9 @@ from src.server.dependency_factory import build_default_readiness_checks
 from src.server.health_routes import ReadinessChecks
 from src.server.pg.engine import (
     build_asyncpg_connection_url,
+    build_psycopg_connection_url,
     get_postgres_engine,
+    get_postgres_sync_engine,
     reset_postgres_engine_cache,
     resolve_database_password,
 )
@@ -136,6 +138,48 @@ def test_check_alembic_head_alignment_reports_matching_and_out_of_date_states(mo
     assert out_of_date["ready"] is False
     assert out_of_date["status"] == "out_of_date"
 
+
+
+
+def test_build_psycopg_connection_url_uses_sync_driver_and_password_redaction() -> None:
+    settings = PostgresConnectionSettings(
+        host="db.internal",
+        port=5432,
+        database_name="nexa_prod",
+        username="nexa_service",
+    )
+
+    url = build_psycopg_connection_url(settings, password="secret")
+    redacted = build_psycopg_connection_url(settings, password="secret", redact_password=True)
+
+    assert url.startswith("postgresql+psycopg://nexa_service:secret@db.internal:5432/nexa_prod?")
+    assert "%2A%2A%2A" in redacted
+
+
+def test_get_postgres_sync_engine_reuses_cached_engine_for_same_redacted_url(monkeypatch) -> None:
+    env = {
+        "NEXA_SERVER_DB_HOST": "db.internal",
+        "NEXA_SERVER_DB_PORT": "5432",
+        "NEXA_SERVER_DB_NAME": "nexa",
+        "NEXA_SERVER_DB_USER": "nexa",
+        "NEXA_SERVER_DB_PASSWORD": "secret",
+    }
+    created = []
+
+    def _fake_create(settings, *, password):
+        engine = object()
+        created.append((settings, password, engine))
+        return engine
+
+    monkeypatch.setattr("src.server.pg.engine.create_sync_engine_from_settings", _fake_create)
+    reset_postgres_engine_cache()
+    try:
+        engine_a = get_postgres_sync_engine(env)
+        engine_b = get_postgres_sync_engine(env)
+        assert engine_a is engine_b
+        assert len(created) == 1
+    finally:
+        reset_postgres_engine_cache()
 
 def test_check_provider_bootstrap_posture_is_degraded_but_ready_without_provider_keys(monkeypatch) -> None:
     for key in ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY"):

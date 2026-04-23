@@ -1,9 +1,13 @@
 from src.server.pg.dependencies_factory import build_postgres_dependencies
 from src.server.pg.engine import (
     build_asyncpg_connection_url,
+    build_psycopg_connection_url,
     create_async_engine_from_env,
     create_async_engine_from_settings,
+    create_sync_engine_from_env,
+    create_sync_engine_from_settings,
     get_postgres_engine,
+    get_postgres_sync_engine,
     reset_postgres_engine_cache,
     resolve_database_password,
 )
@@ -18,12 +22,16 @@ __all__ = [
     "build_asyncpg_connection_url",
     "build_postgres_dependencies",
     "build_postgres_readiness_checks",
+    "build_psycopg_connection_url",
     "check_alembic_head_alignment",
     "check_database_connection",
     "check_provider_bootstrap_posture",
     "create_async_engine_from_env",
     "create_async_engine_from_settings",
+    "create_sync_engine_from_env",
+    "create_sync_engine_from_settings",
     "get_postgres_engine",
+    "get_postgres_sync_engine",
     "reset_postgres_engine_cache",
     "resolve_database_password",
 ]
