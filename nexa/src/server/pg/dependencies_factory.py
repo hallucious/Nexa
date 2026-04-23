@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from typing import Any
+
+from src.server.fastapi_binding_models import FastApiRouteDependencies
+from src.server.feedback_store import bind_feedback_store
+from src.server.managed_secret_metadata_store import bind_managed_secret_metadata_store
+from src.server.onboarding_state_store import bind_onboarding_state_store
+from src.server.pg.engine import get_postgres_sync_engine
+from src.server.pg.row_stores import (
+    PostgresFeedbackStore,
+    PostgresManagedSecretMetadataStore,
+    PostgresOnboardingStateStore,
+    PostgresProviderBindingStore,
+    PostgresProviderProbeHistoryStore,
+    PostgresWorkspaceRegistryStore,
+)
+from src.server.provider_binding_store import bind_provider_binding_store
+from src.server.provider_probe_history_store import bind_probe_history_store
+from src.server.workspace_registry_store import bind_workspace_registry_store
+
+
+# ``async_engine`` is intentionally typed as ``Any`` here so importing this module does
+# not force optional SQLAlchemy async availability in non-Postgres environments.
+def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = None) -> FastApiRouteDependencies:
+    """Return the initial Postgres-backed dependency bundle.
+
+    This batch wires the first persistence-backed continuity stores into the
+    existing FastAPI dependency surface while keeping route/service semantics
+    stable. Higher-level run/result persistence can attach in later batches.
+    """
+
+    _ = async_engine
+    resolved_sync_engine = sync_engine if sync_engine is not None else get_postgres_sync_engine()
+
+    dependencies = FastApiRouteDependencies()
+    dependencies = bind_workspace_registry_store(
+        dependencies=dependencies,
+        store=PostgresWorkspaceRegistryStore(resolved_sync_engine),
+    )
+    dependencies = bind_onboarding_state_store(
+        dependencies=dependencies,
+        store=PostgresOnboardingStateStore(resolved_sync_engine),
+    )
+    dependencies = bind_provider_binding_store(
+        dependencies=dependencies,
+        store=PostgresProviderBindingStore(resolved_sync_engine),
+    )
+    dependencies = bind_probe_history_store(
+        dependencies=dependencies,
+        store=PostgresProviderProbeHistoryStore(resolved_sync_engine),
+    )
+    dependencies = bind_managed_secret_metadata_store(
+        dependencies=dependencies,
+        store=PostgresManagedSecretMetadataStore(resolved_sync_engine),
+    )
+    dependencies = bind_feedback_store(
+        dependencies=dependencies,
+        store=PostgresFeedbackStore(resolved_sync_engine),
+    )
+    return dependencies

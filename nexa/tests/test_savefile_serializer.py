@@ -1,0 +1,135 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from src.contracts.savefile_format import Savefile, SavefileMeta
+from src.contracts.savefile_loader import load_savefile, load_savefile_from_path
+from src.contracts.savefile_serializer import (
+    ROOT_SECTIONS,
+    SavefileSerializationError,
+    save_savefile_file,
+    serialize_savefile,
+)
+from src.savefiles.validator import validate_savefile
+from tests.savefile_test_helpers import make_demo_savefile, make_demo_savefile_payload
+
+
+BASE_DIR = Path(__file__).resolve().parents[1]
+DEMO_DIR = BASE_DIR / "examples" / "real_ai_bug_autopsy_multinode"
+
+
+def _minimal_savefile():
+    return make_demo_savefile()
+
+
+
+def _minimal_savefile_dict():
+    return make_demo_savefile_payload()
+
+
+
+def test_serialize_savefile_emits_explicit_ui_root_section():
+    savefile = _minimal_savefile()
+
+    payload = serialize_savefile(savefile)
+
+    assert tuple(payload.keys()) == ROOT_SECTIONS
+    assert payload["ui"] == {"layout": {}, "metadata": {}}
+
+
+def test_save_savefile_file_roundtrips_with_explicit_ui(tmp_path):
+    savefile = _minimal_savefile()
+    path = tmp_path / "roundtrip.nex"
+
+    save_savefile_file(savefile, str(path))
+
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    assert tuple(raw.keys()) == ROOT_SECTIONS
+    assert "ui" in raw
+    assert raw["ui"] == {"layout": {}, "metadata": {}}
+
+    loaded = load_savefile_from_path(str(path))
+    warnings = validate_savefile(loaded)
+
+    assert warnings == []
+    assert loaded.ui.layout == {}
+    assert loaded.ui.metadata == {}
+
+
+def test_serialize_savefile_rejects_missing_ui_object():
+    baseline = _minimal_savefile()
+    savefile = Savefile(
+        meta=SavefileMeta(name="demo", version="2.0.0"),
+        circuit=baseline.circuit,
+        resources=baseline.resources,
+        state=baseline.state,
+        ui=None,
+    )
+
+    with pytest.raises(SavefileSerializationError, match="savefile.ui must exist"):
+        serialize_savefile(savefile)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        DEMO_DIR / "investment_demo_A.nex",
+        DEMO_DIR / "investment_demo_B.nex",
+    ],
+)
+def test_official_savefile_examples_include_explicit_ui_section(path):
+    raw = json.loads(path.read_text(encoding="utf-8"))
+
+    assert "ui" in raw
+    assert isinstance(raw["ui"], dict)
+
+    savefile = load_savefile(raw)
+    warnings = validate_savefile(savefile)
+    assert warnings == []
+
+
+def test_save_savefile_file_roundtrips_subcircuits_and_outputs(tmp_path):
+    payload = make_demo_savefile_payload()
+    payload["circuit"]["nodes"] = [
+        {
+            "id": "review_bundle_stage",
+            "kind": "subcircuit",
+            "label": "Review Bundle Stage",
+            "execution": {
+                "subcircuit": {
+                    "child_circuit_ref": "internal:review_bundle",
+                    "input_mapping": {"question": "input.question"},
+                    "output_binding": {"result": "child.output.result"},
+                }
+            },
+        }
+    ]
+    payload["circuit"]["edges"] = []
+    payload["circuit"]["entry"] = "review_bundle_stage"
+    payload["circuit"]["outputs"] = [{"name": "final_result", "source": "node.review_bundle_stage.output.result"}]
+    payload["circuit"]["subcircuits"] = {
+        "review_bundle": {
+            "nodes": [
+                {
+                    "id": "critic",
+                    "kind": "provider",
+                    "execution": {
+                        "provider": {"provider_id": "provider.openai", "prompt_ref": "prompt.main"}
+                    },
+                }
+            ],
+            "edges": [],
+            "outputs": [{"name": "result", "source": "node.critic.output.result"}],
+        }
+    }
+
+    savefile = load_savefile(payload)
+    path = tmp_path / "subcircuit_roundtrip.nex"
+    save_savefile_file(savefile, str(path))
+
+    loaded = load_savefile_from_path(str(path))
+    assert loaded.circuit.outputs == [{"name": "final_result", "source": "node.review_bundle_stage.output.result"}]
+    assert "review_bundle" in loaded.circuit.subcircuits
