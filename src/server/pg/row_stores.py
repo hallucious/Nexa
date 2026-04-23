@@ -13,6 +13,8 @@ from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore
 from src.server.workspace_registry_store import InMemoryWorkspaceRegistryStore
 from src.server.run_admission_models import RunRecordProjection
+from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
+from src.storage.serialization import serialize_nex_artifact, validate_serialized_storage_artifact_for_write
 
 try:  # pragma: no cover - availability varies by environment
     from sqlalchemy import text
@@ -240,6 +242,95 @@ class PostgresWorkspaceRegistryStore:
             collaborator_user_refs=tuple(sorted(set(collaborator_user_refs))),
             viewer_user_refs=tuple(sorted(set(viewer_user_refs))),
         )
+
+
+@dataclass(frozen=True)
+class PostgresWorkspaceArtifactSourceStore:
+    engine: Engine
+
+    def write(self, workspace_id: str, artifact_source: Any) -> dict[str, Any]:
+        normalized_workspace_id = str(workspace_id or "").strip()
+        if not normalized_workspace_id:
+            raise ValueError("workspace_artifact_source_store.workspace_id_required")
+        normalized_source = self._normalize_artifact_source(artifact_source)
+        meta = normalized_source.get("meta") if isinstance(normalized_source.get("meta"), dict) else {}
+        storage_role = str(meta.get("storage_role") or "").strip()
+        canonical_ref = self._canonical_ref_for(storage_role, meta)
+        updated_at = str(meta.get("updated_at") or meta.get("created_at") or "").strip() or None
+        _execute(
+            self.engine,
+            f"""
+            INSERT INTO workspace_artifact_sources (
+                workspace_id,
+                storage_role,
+                canonical_ref,
+                artifact_source,
+                updated_at
+            ) VALUES (
+                :workspace_id,
+                :storage_role,
+                :canonical_ref,
+                {_json_placeholder(self.engine, 'artifact_source')},
+                :updated_at
+            )
+            ON CONFLICT (workspace_id) DO UPDATE SET
+                storage_role = EXCLUDED.storage_role,
+                canonical_ref = EXCLUDED.canonical_ref,
+                artifact_source = EXCLUDED.artifact_source,
+                updated_at = EXCLUDED.updated_at
+            """,
+            {
+                "workspace_id": normalized_workspace_id,
+                "storage_role": storage_role,
+                "canonical_ref": canonical_ref,
+                "artifact_source": _serialize_json(normalized_source),
+                "updated_at": updated_at,
+            },
+        )
+        return dict(normalized_source)
+
+    def get(self, workspace_id: str) -> dict[str, Any] | None:
+        normalized_workspace_id = str(workspace_id or "").strip()
+        if not normalized_workspace_id:
+            return None
+        row = _fetch_one(
+            self.engine,
+            """
+            SELECT artifact_source
+            FROM workspace_artifact_sources
+            WHERE workspace_id = :workspace_id
+            """,
+            {"workspace_id": normalized_workspace_id},
+        )
+        if row is None:
+            return None
+        artifact_source = _decode_json(row.get("artifact_source"), default=None)
+        return dict(artifact_source) if isinstance(artifact_source, dict) else None
+
+    @staticmethod
+    def _canonical_ref_for(storage_role: str, meta: Mapping[str, Any]) -> str | None:
+        if storage_role == "working_save":
+            value = str(meta.get("working_save_id") or "").strip()
+            return value or None
+        if storage_role == "commit_snapshot":
+            value = str(meta.get("commit_id") or "").strip()
+            return value or None
+        return None
+
+    @staticmethod
+    def _normalize_artifact_source(artifact_source: Any) -> dict[str, Any]:
+        if isinstance(artifact_source, LoadedNexArtifact):
+            if artifact_source.parsed_model is None:
+                raise ValueError("workspace_artifact_source_store.artifact_unloadable")
+            payload = serialize_nex_artifact(artifact_source.parsed_model)
+        else:
+            payload = serialize_nex_artifact(artifact_source)
+        validated = validate_serialized_storage_artifact_for_write(payload)
+        meta = validated.get("meta") if isinstance(validated.get("meta"), dict) else {}
+        storage_role = str(meta.get("storage_role") or "").strip()
+        if storage_role not in {"working_save", "commit_snapshot"}:
+            raise ValueError("workspace_artifact_source_store.unsupported_storage_role")
+        return dict(validated)
 
 
 @dataclass(frozen=True)

@@ -52,6 +52,13 @@ def validate_schema_families(schema_families: tuple[SchemaFamily, ...]) -> None:
         raise ValueError("Duplicate index names are not allowed across schema families")
 
 
+def _schema_family_by_name(schema_families: tuple[SchemaFamily, ...], family_name: str) -> SchemaFamily:
+    for family in schema_families:
+        if family.family_name == family_name:
+            return family
+    raise ValueError(f"Unknown schema family: {family_name}")
+
+
 def build_initial_server_migration() -> MigrationScript:
     schema_families = get_server_schema_families()
     validate_schema_families(schema_families)
@@ -60,7 +67,7 @@ def build_initial_server_migration() -> MigrationScript:
         migration_id="server_foundation_0001",
         dialect="postgresql",
         summary=(
-            "Initial PostgreSQL foundation for workspace continuity, run continuity, "
+            "Initial PostgreSQL foundation for workspace continuity, workspace shell artifact sources, run continuity, "
             "managed provider bindings, provider probe history, workspace feedback, onboarding state, "
             "artifact index, trace event index, and artifact lineage links."
         ),
@@ -69,6 +76,29 @@ def build_initial_server_migration() -> MigrationScript:
             MigrationStep(
                 step_id="server_foundation_0001_create_tables_and_indexes",
                 description="Create the initial server persistence table families and indexes.",
+                statements=statements,
+            ),
+        ),
+    )
+
+
+def build_workspace_shell_sources_migration() -> MigrationScript:
+    schema_families = get_server_schema_families()
+    validate_schema_families(schema_families)
+    workspace_shell_sources = _schema_family_by_name(schema_families, "workspace_shell_sources")
+    statements = render_postgres_schema_statements((workspace_shell_sources,))
+    return MigrationScript(
+        migration_id="server_foundation_0002_workspace_shell_sources",
+        dialect="postgresql",
+        summary=(
+            "Add PostgreSQL-backed workspace shell artifact source persistence so workspace shell draft, "
+            "commit, checkout, import, and starter-template flows resolve through durable current artifacts."
+        ),
+        schema_families=(workspace_shell_sources,),
+        steps=(
+            MigrationStep(
+                step_id="server_foundation_0002_create_workspace_shell_sources",
+                description="Create the workspace shell artifact source table family and indexes.",
                 statements=statements,
             ),
         ),

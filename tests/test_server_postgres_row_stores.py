@@ -6,6 +6,7 @@ from src.server.pg.dependencies_factory import build_postgres_dependencies
 from src.server.pg.row_stores import (
     PostgresFeedbackStore,
     PostgresManagedSecretMetadataStore,
+    PostgresWorkspaceArtifactSourceStore,
     PostgresOnboardingStateStore,
     PostgresAppendOnlyProjectionStore,
     PostgresRunProjectionStore,
@@ -41,6 +42,15 @@ def _build_sqlite_engine():
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             UNIQUE (workspace_id, user_id)
+        )
+        """,
+        """
+        CREATE TABLE workspace_artifact_sources (
+            workspace_id TEXT PRIMARY KEY,
+            storage_role TEXT NOT NULL,
+            canonical_ref TEXT,
+            artifact_source TEXT NOT NULL,
+            updated_at TEXT
         )
         """,
         """
@@ -224,6 +234,35 @@ def test_postgres_workspace_registry_store_round_trips_rows_and_context() -> Non
     context = store.get_workspace_context("ws-1")
     assert context is not None
     assert context.collaborator_user_refs == ("user-editor",)
+
+
+def test_postgres_workspace_artifact_source_store_round_trips_current_shell_source() -> None:
+    engine = _build_sqlite_engine()
+    store = PostgresWorkspaceArtifactSourceStore(engine)
+
+    stored = store.write(
+        "ws-1",
+        {
+            "meta": {
+                "format_version": "1.0.0",
+                "storage_role": "working_save",
+                "working_save_id": "ws-1-draft",
+                "name": "Workspace One",
+                "updated_at": "2026-04-23T10:00:00+00:00",
+            },
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+        },
+    )
+
+    assert stored["meta"]["working_save_id"] == "ws-1-draft"
+    loaded = store.get("ws-1")
+    assert loaded is not None
+    assert loaded["meta"]["storage_role"] == "working_save"
+    assert loaded["meta"]["working_save_id"] == "ws-1-draft"
 
 
 def test_postgres_onboarding_state_store_round_trips_json_payload() -> None:
@@ -516,6 +555,23 @@ def test_build_postgres_dependencies_wires_sql_backed_continuity_stores() -> Non
     )
 
     assert deps.workspace_row_provider("ws-9") is not None
+    deps.workspace_artifact_source_writer(
+        "ws-9",
+        {
+            "meta": {
+                "format_version": "1.0.0",
+                "storage_role": "working_save",
+                "working_save_id": "ws-9-draft",
+                "name": "Workspace Nine",
+            },
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+        },
+    )
+    assert deps.workspace_artifact_source_provider("ws-9")["meta"]["working_save_id"] == "ws-9-draft"
     assert deps.onboarding_rows_provider()[0]["onboarding_state_id"] == "onb-9"
     assert deps.workspace_provider_binding_row_provider("ws-9", "openai") is not None
     assert deps.managed_secret_metadata_reader(str(receipt["secret_ref"])) is not None

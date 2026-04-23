@@ -13,6 +13,7 @@ from src.server.pg.row_stores import (
     PostgresManagedSecretMetadataStore,
     PostgresAppendOnlyProjectionStore,
     PostgresRunProjectionStore,
+    PostgresWorkspaceArtifactSourceStore,
     PostgresOnboardingStateStore,
     PostgresProviderBindingStore,
     PostgresProviderProbeHistoryStore,
@@ -38,6 +39,7 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
 
     dependencies = FastApiRouteDependencies()
     workspace_registry_store = PostgresWorkspaceRegistryStore(resolved_sync_engine)
+    workspace_artifact_source_store = PostgresWorkspaceArtifactSourceStore(resolved_sync_engine)
     dependencies = bind_workspace_registry_store(
         dependencies=dependencies,
         store=workspace_registry_store,
@@ -66,6 +68,8 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     append_only_projection_store = PostgresAppendOnlyProjectionStore(resolved_sync_engine)
     dependencies = replace(
         dependencies,
+        workspace_artifact_source_provider=workspace_artifact_source_store.get,
+        workspace_artifact_source_writer=workspace_artifact_source_store.write,
         run_context_provider=run_projection_store.get_run_context,
         run_record_provider=run_projection_store.get_run_record,
         result_row_provider=run_projection_store.get_result_row,

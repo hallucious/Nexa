@@ -5,6 +5,7 @@ from src.server import (
     build_initial_server_migration,
     build_migration_file_text,
     build_postgres_connection_url,
+    build_workspace_shell_sources_migration,
     build_server_schema_summary,
     get_server_schema_families,
     load_postgres_connection_settings_from_env,
@@ -63,21 +64,26 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
 
     assert [family.family_name for family in families] == [
         "workspace_registry",
+        "workspace_shell_sources",
         "run_history",
         "provider_credentials",
         "provider_probe_history",
         "workspace_feedback",
         "append_only_outputs",
     ]
-    assert summary["family_count"] == 6
+    assert summary["family_count"] == 7
 
-    workspace_family, run_family, provider_family, probe_family, feedback_family, append_only_family = families
+    workspace_family, workspace_shell_family, run_family, provider_family, probe_family, feedback_family, append_only_family = families
     assert workspace_family.persistence_mode == "mutable_projection"
+    assert workspace_shell_family.persistence_mode == "mutable_projection"
     assert run_family.persistence_mode == "mutable_projection"
     assert provider_family.persistence_mode == "mutable_projection"
     assert probe_family.persistence_mode == "mutable_projection"
     assert feedback_family.persistence_mode == "mutable_projection"
     assert append_only_family.persistence_mode == "append_only"
+
+    workspace_shell_tables = {table.name for table in workspace_shell_family.tables}
+    assert workspace_shell_tables == {"workspace_artifact_sources"}
 
     provider_tables = {table.name for table in provider_family.tables}
     assert provider_tables == {"managed_provider_bindings", "managed_secret_metadata"}
@@ -102,6 +108,7 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
     assert migration.steps[0].step_id == "server_foundation_0001_create_tables_and_indexes"
 
     assert any("CREATE TABLE IF NOT EXISTS workspace_registry" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS workspace_artifact_sources" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS run_records" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS onboarding_state" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS managed_provider_bindings" in statement for statement in statements)
@@ -116,9 +123,21 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
 
     assert "-- migration_id: server_foundation_0001" in migration_text
     assert "workspace continuity" in migration_text.lower()
+    assert "workspace shell" in migration_text.lower()
     assert "provider probe history" in migration_text.lower()
     assert "workspace feedback" in migration_text.lower()
     assert "artifact lineage links" in migration_text.lower()
+
+
+def test_workspace_shell_sources_migration_targets_only_workspace_artifact_source_family() -> None:
+    migration = build_workspace_shell_sources_migration()
+    statements = render_postgres_schema_statements(migration.schema_families)
+
+    assert migration.migration_id == "server_foundation_0002_workspace_shell_sources"
+    assert migration.steps[0].step_id == "server_foundation_0002_create_workspace_shell_sources"
+    assert [family.family_name for family in migration.schema_families] == ["workspace_shell_sources"]
+    assert any("CREATE TABLE IF NOT EXISTS workspace_artifact_sources" in statement for statement in statements)
+    assert all("run_records" not in statement for statement in statements if statement.startswith("CREATE TABLE"))
 
 
 def test_run_artifact_trace_probe_and_workspace_linkage_are_queryable_in_schema_spec() -> None:

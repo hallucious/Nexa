@@ -110,6 +110,29 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
+    workspace_shell_sources = SchemaFamily(
+        family_name="workspace_shell_sources",
+        purpose="Canonical workspace shell artifact sources that anchor current draft/snapshot continuity.",
+        persistence_mode="mutable_projection",
+        tables=(
+            TableSpec(
+                name="workspace_artifact_sources",
+                persistence_mode="mutable_projection",
+                description="Workspace-scoped current .nex artifact source backing shell draft, commit, checkout, and import flows.",
+                columns=(
+                    ColumnSpec("workspace_id", "TEXT", is_primary_key=True, reference_table="workspace_registry", reference_column="workspace_id"),
+                    ColumnSpec("storage_role", "TEXT"),
+                    ColumnSpec("canonical_ref", "TEXT", nullable=True),
+                    ColumnSpec("artifact_source", "JSONB"),
+                    ColumnSpec("updated_at", "TIMESTAMPTZ", nullable=True),
+                ),
+                indexes=(
+                    IndexSpec("idx_workspace_artifact_sources_storage_role", ("storage_role",)),
+                    IndexSpec("idx_workspace_artifact_sources_updated_at", ("updated_at",)),
+                ),
+            ),
+        ),
+    )
     run_history = SchemaFamily(
         family_name="run_history",
         purpose="Mutable run continuity projections queryable by workspace/account scope.",
@@ -417,7 +440,7 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
-    return workspace_registry, run_history, provider_credentials, provider_probe_history, workspace_feedback, append_only_outputs
+    return workspace_registry, workspace_shell_sources, run_history, provider_credentials, provider_probe_history, workspace_feedback, append_only_outputs
 
 
 def build_server_schema_summary() -> dict[str, object]:

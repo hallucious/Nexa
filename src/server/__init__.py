@@ -239,6 +239,7 @@ from src.server.artifact_trace_read_models import (
 from src.server.migration_foundation import (
     build_initial_server_migration,
     build_migration_file_text,
+    build_workspace_shell_sources_migration,
     render_postgres_schema_statements,
     validate_schema_families,
 )
