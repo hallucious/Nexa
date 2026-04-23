@@ -588,3 +588,68 @@ class PostgresManagedSecretMetadataStore:
             """,
         )
         return tuple(dict(row) for row in rows)
+
+
+@dataclass(frozen=True)
+class PostgresFeedbackStore:
+    engine: Engine
+
+    def write(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        from src.server.feedback_store import InMemoryFeedbackStore
+
+        normalized = InMemoryFeedbackStore().write(row)
+        _execute(
+            self.engine,
+            """
+            INSERT INTO workspace_feedback (
+                feedback_id,
+                user_id,
+                workspace_id,
+                workspace_title,
+                category,
+                surface,
+                message,
+                run_id,
+                template_id,
+                status,
+                created_at
+            ) VALUES (
+                :feedback_id,
+                :user_id,
+                :workspace_id,
+                :workspace_title,
+                :category,
+                :surface,
+                :message,
+                :run_id,
+                :template_id,
+                :status,
+                :created_at
+            )
+            ON CONFLICT (feedback_id) DO UPDATE SET
+                user_id = EXCLUDED.user_id,
+                workspace_id = EXCLUDED.workspace_id,
+                workspace_title = EXCLUDED.workspace_title,
+                category = EXCLUDED.category,
+                surface = EXCLUDED.surface,
+                message = EXCLUDED.message,
+                run_id = EXCLUDED.run_id,
+                template_id = EXCLUDED.template_id,
+                status = EXCLUDED.status,
+                created_at = EXCLUDED.created_at
+            """,
+            normalized,
+        )
+        return dict(normalized)
+
+    def list_rows(self) -> tuple[dict[str, Any], ...]:
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT feedback_id, user_id, workspace_id, workspace_title, category, surface,
+                   message, run_id, template_id, status, created_at
+            FROM workspace_feedback
+            ORDER BY created_at DESC, feedback_id DESC
+            """,
+        )
+        return tuple(dict(row) for row in rows)

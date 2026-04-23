@@ -66,15 +66,17 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
         "run_history",
         "provider_credentials",
         "provider_probe_history",
+        "workspace_feedback",
         "append_only_outputs",
     ]
-    assert summary["family_count"] == 5
+    assert summary["family_count"] == 6
 
-    workspace_family, run_family, provider_family, probe_family, append_only_family = families
+    workspace_family, run_family, provider_family, probe_family, feedback_family, append_only_family = families
     assert workspace_family.persistence_mode == "mutable_projection"
     assert run_family.persistence_mode == "mutable_projection"
     assert provider_family.persistence_mode == "mutable_projection"
     assert probe_family.persistence_mode == "mutable_projection"
+    assert feedback_family.persistence_mode == "mutable_projection"
     assert append_only_family.persistence_mode == "append_only"
 
     provider_tables = {table.name for table in provider_family.tables}
@@ -82,6 +84,9 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
 
     probe_tables = {table.name for table in probe_family.tables}
     assert probe_tables == {"provider_probe_events"}
+
+    feedback_tables = {table.name for table in feedback_family.tables}
+    assert feedback_tables == {"workspace_feedback"}
 
     append_only_tables = {table.name for table in append_only_family.tables}
     assert append_only_tables == {"artifact_index", "trace_event_index", "artifact_lineage_links"}
@@ -102,6 +107,7 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
     assert any("CREATE TABLE IF NOT EXISTS managed_provider_bindings" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS managed_secret_metadata" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS provider_probe_events" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS workspace_feedback" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS artifact_index" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS trace_event_index" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS artifact_lineage_links" in statement for statement in statements)
@@ -111,6 +117,7 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
     assert "-- migration_id: server_foundation_0001" in migration_text
     assert "workspace continuity" in migration_text.lower()
     assert "provider probe history" in migration_text.lower()
+    assert "workspace feedback" in migration_text.lower()
     assert "artifact lineage links" in migration_text.lower()
 
 

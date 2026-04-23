@@ -61,8 +61,8 @@ def build_initial_server_migration() -> MigrationScript:
         dialect="postgresql",
         summary=(
             "Initial PostgreSQL foundation for workspace continuity, run continuity, "
-            "managed provider bindings, provider probe history, onboarding state, artifact index, "
-            "trace event index, and artifact lineage links."
+            "managed provider bindings, provider probe history, workspace feedback, onboarding state, "
+            "artifact index, trace event index, and artifact lineage links."
         ),
         schema_families=schema_families,
         steps=(

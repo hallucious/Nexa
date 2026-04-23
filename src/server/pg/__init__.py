@@ -1,3 +1,4 @@
+from src.server.pg.row_stores import PostgresFeedbackStore
 from src.server.pg.dependencies_factory import build_postgres_dependencies
 from src.server.pg.engine import (
     build_asyncpg_connection_url,
@@ -19,6 +20,7 @@ from src.server.pg.readiness import (
 )
 
 __all__ = [
+    "PostgresFeedbackStore",
     "build_asyncpg_connection_url",
     "build_postgres_dependencies",
     "build_postgres_readiness_checks",

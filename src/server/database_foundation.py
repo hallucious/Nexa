@@ -319,6 +319,37 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
+    workspace_feedback = SchemaFamily(
+        family_name="workspace_feedback",
+        purpose="Workspace-scoped product feedback projections used by feedback-channel and continuity routes.",
+        persistence_mode="mutable_projection",
+        tables=(
+            TableSpec(
+                name="workspace_feedback",
+                persistence_mode="mutable_projection",
+                description="Canonical workspace feedback rows for product feedback pages and continuity summaries.",
+                columns=(
+                    ColumnSpec("feedback_id", "TEXT", is_primary_key=True),
+                    ColumnSpec("user_id", "TEXT"),
+                    ColumnSpec("workspace_id", "TEXT", reference_table="workspace_registry", reference_column="workspace_id"),
+                    ColumnSpec("workspace_title", "TEXT", nullable=True),
+                    ColumnSpec("category", "TEXT"),
+                    ColumnSpec("surface", "TEXT"),
+                    ColumnSpec("message", "TEXT"),
+                    ColumnSpec("run_id", "TEXT", nullable=True, reference_table="run_records", reference_column="run_id"),
+                    ColumnSpec("template_id", "TEXT", nullable=True),
+                    ColumnSpec("status", "TEXT", default_sql="'received'"),
+                    ColumnSpec("created_at", "TIMESTAMPTZ"),
+                ),
+                indexes=(
+                    IndexSpec("idx_workspace_feedback_workspace_id_created_at", ("workspace_id", "created_at")),
+                    IndexSpec("idx_workspace_feedback_user_id", ("user_id",)),
+                    IndexSpec("idx_workspace_feedback_surface", ("surface",)),
+                    IndexSpec("idx_workspace_feedback_run_id", ("run_id",)),
+                ),
+            ),
+        ),
+    )
     append_only_outputs = SchemaFamily(
         family_name="append_only_outputs",
         purpose="Append-only output and lineage index tables that preserve artifact and trace meaning.",
@@ -386,7 +417,7 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
-    return workspace_registry, run_history, provider_credentials, provider_probe_history, append_only_outputs
+    return workspace_registry, run_history, provider_credentials, provider_probe_history, workspace_feedback, append_only_outputs
 
 
 def build_server_schema_summary() -> dict[str, object]:

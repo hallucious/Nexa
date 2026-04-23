@@ -4,6 +4,7 @@ from sqlalchemy import create_engine, text
 
 from src.server.pg.dependencies_factory import build_postgres_dependencies
 from src.server.pg.row_stores import (
+    PostgresFeedbackStore,
     PostgresManagedSecretMetadataStore,
     PostgresOnboardingStateStore,
     PostgresProviderBindingStore,
@@ -102,6 +103,21 @@ def _build_sqlite_engine():
             workspace_id TEXT,
             provider_key TEXT,
             secret_authority TEXT
+        )
+        """,
+        """
+        CREATE TABLE workspace_feedback (
+            feedback_id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            workspace_id TEXT NOT NULL,
+            workspace_title TEXT,
+            category TEXT NOT NULL,
+            surface TEXT NOT NULL,
+            message TEXT NOT NULL,
+            run_id TEXT,
+            template_id TEXT,
+            status TEXT NOT NULL,
+            created_at TEXT NOT NULL
         )
         """,
     )
@@ -231,6 +247,32 @@ def test_postgres_managed_secret_metadata_store_round_trips_rows() -> None:
     assert store.list_all_rows()[0]["secret_ref"] == "secret://ws-1/openai"
 
 
+def test_postgres_feedback_store_round_trips_rows() -> None:
+    engine = _build_sqlite_engine()
+    store = PostgresFeedbackStore(engine)
+
+    store.write(
+        {
+            "feedback_id": "fb-1",
+            "user_id": "user-1",
+            "workspace_id": "ws-1",
+            "workspace_title": "Workspace One",
+            "category": "bug_report",
+            "surface": "workspace_shell",
+            "message": "This screen failed.",
+            "run_id": "run-1",
+            "template_id": "tpl-1",
+            "status": "received",
+            "created_at": "2026-04-23T10:00:00+00:00",
+        }
+    )
+
+    row = store.list_rows()[0]
+    assert row["feedback_id"] == "fb-1"
+    assert row["surface"] == "workspace_shell"
+    assert row["template_id"] == "tpl-1"
+
+
 def test_build_postgres_dependencies_wires_sql_backed_continuity_stores() -> None:
     sync_engine = _build_sqlite_engine()
     async_engine = object()
@@ -273,8 +315,21 @@ def test_build_postgres_dependencies_wires_sql_backed_continuity_stores() -> Non
         }
     )
     receipt = deps.managed_secret_writer("ws-9", "openai", "secret-value", {"now_iso": "2026-04-23T10:00:00+00:00"})
+    deps.feedback_writer(
+        {
+            "feedback_id": "fb-9",
+            "user_id": "user-owner",
+            "workspace_id": "ws-9",
+            "workspace_title": "Workspace Nine",
+            "category": "friction_note",
+            "surface": "workspace_shell",
+            "message": "Feedback message.",
+            "created_at": "2026-04-23T10:01:00+00:00",
+        }
+    )
 
     assert deps.workspace_row_provider("ws-9") is not None
     assert deps.onboarding_rows_provider()[0]["onboarding_state_id"] == "onb-9"
     assert deps.workspace_provider_binding_row_provider("ws-9", "openai") is not None
     assert deps.managed_secret_metadata_reader(str(receipt["secret_ref"])) is not None
+    assert deps.feedback_rows_provider()[0]["feedback_id"] == "fb-9"

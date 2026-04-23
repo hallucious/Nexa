@@ -3,10 +3,12 @@ from __future__ import annotations
 from typing import Any
 
 from src.server.fastapi_binding_models import FastApiRouteDependencies
+from src.server.feedback_store import bind_feedback_store
 from src.server.managed_secret_metadata_store import bind_managed_secret_metadata_store
 from src.server.onboarding_state_store import bind_onboarding_state_store
 from src.server.pg.engine import get_postgres_sync_engine
 from src.server.pg.row_stores import (
+    PostgresFeedbackStore,
     PostgresManagedSecretMetadataStore,
     PostgresOnboardingStateStore,
     PostgresProviderBindingStore,
@@ -51,5 +53,9 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     dependencies = bind_managed_secret_metadata_store(
         dependencies=dependencies,
         store=PostgresManagedSecretMetadataStore(resolved_sync_engine),
+    )
+    dependencies = bind_feedback_store(
+        dependencies=dependencies,
+        store=PostgresFeedbackStore(resolved_sync_engine),
     )
     return dependencies
