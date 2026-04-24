@@ -4,6 +4,9 @@ from dataclasses import replace
 from typing import Any
 
 from src.server.fastapi_binding_models import FastApiRouteDependencies
+from src.server.provider_secret_api import default_provider_catalog_rows
+from src.server.run_admission_models import ExecutionTargetCatalogEntry
+from src.storage.nex_api import resolve_nex_execution_target
 from src.server.feedback_store import bind_feedback_store
 from src.server.managed_secret_metadata_store import bind_managed_secret_metadata_store
 from src.server.onboarding_state_store import bind_onboarding_state_store
@@ -16,6 +19,7 @@ from src.server.pg.row_stores import (
     PostgresWorkspaceArtifactSourceStore,
     PostgresOnboardingStateStore,
     PostgresProviderBindingStore,
+    PostgresProviderCatalogStore,
     PostgresProviderProbeHistoryStore,
     PostgresPublicShareActionReportStore,
     PostgresPublicSharePayloadStore,
@@ -43,6 +47,8 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     dependencies = FastApiRouteDependencies()
     workspace_registry_store = PostgresWorkspaceRegistryStore(resolved_sync_engine)
     workspace_artifact_source_store = PostgresWorkspaceArtifactSourceStore(resolved_sync_engine)
+    provider_catalog_store = PostgresProviderCatalogStore(resolved_sync_engine)
+    provider_catalog_store.seed_defaults(default_provider_catalog_rows())
     public_share_payload_store = PostgresPublicSharePayloadStore(resolved_sync_engine)
     public_share_action_report_store = PostgresPublicShareActionReportStore(resolved_sync_engine)
     saved_public_share_store = PostgresSavedPublicShareStore(resolved_sync_engine)
@@ -72,8 +78,27 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     )
     run_projection_store = PostgresRunProjectionStore(resolved_sync_engine, workspace_registry_store=workspace_registry_store)
     append_only_projection_store = PostgresAppendOnlyProjectionStore(resolved_sync_engine)
+    def _target_catalog_provider(workspace_id: str) -> dict[str, ExecutionTargetCatalogEntry]:
+        source = workspace_artifact_source_store.get(workspace_id)
+        if source is None:
+            return {}
+        try:
+            descriptor = resolve_nex_execution_target(source)
+        except ValueError:
+            return {}
+        return {
+            descriptor.target_ref: ExecutionTargetCatalogEntry(
+                workspace_id=str(workspace_id or "").strip(),
+                target_ref=descriptor.target_ref,
+                target_type=descriptor.target_type,
+                source=source,
+            )
+        }
+
     dependencies = replace(
         dependencies,
+        target_catalog_provider=_target_catalog_provider,
+        provider_catalog_rows_provider=provider_catalog_store.list_rows,
         workspace_artifact_source_provider=workspace_artifact_source_store.get,
         workspace_artifact_source_writer=workspace_artifact_source_store.write,
         run_context_provider=run_projection_store.get_run_context,

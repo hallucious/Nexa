@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.server import (
     PostgresConnectionSettings,
+    build_catalog_surfaces_migration,
     build_initial_server_migration,
     build_migration_file_text,
     build_postgres_connection_url,
@@ -69,18 +70,20 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
         "run_history",
         "provider_credentials",
         "provider_probe_history",
+        "catalog_surfaces",
         "public_share_persistence",
         "workspace_feedback",
         "append_only_outputs",
     ]
-    assert summary["family_count"] == 8
+    assert summary["family_count"] == 9
 
-    workspace_family, workspace_shell_family, run_family, provider_family, probe_family, public_share_family, feedback_family, append_only_family = families
+    workspace_family, workspace_shell_family, run_family, provider_family, probe_family, catalog_family, public_share_family, feedback_family, append_only_family = families
     assert workspace_family.persistence_mode == "mutable_projection"
     assert workspace_shell_family.persistence_mode == "mutable_projection"
     assert run_family.persistence_mode == "mutable_projection"
     assert provider_family.persistence_mode == "mutable_projection"
     assert probe_family.persistence_mode == "mutable_projection"
+    assert catalog_family.persistence_mode == "mutable_projection"
     assert public_share_family.persistence_mode == "mutable_projection"
     assert feedback_family.persistence_mode == "mutable_projection"
     assert append_only_family.persistence_mode == "append_only"
@@ -93,6 +96,9 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
 
     probe_tables = {table.name for table in probe_family.tables}
     assert probe_tables == {"provider_probe_events"}
+
+    catalog_tables = {table.name for table in catalog_family.tables}
+    assert catalog_tables == {"provider_catalog_entries"}
 
     public_share_tables = {table.name for table in public_share_family.tables}
     assert public_share_tables == {"public_share_payloads", "public_share_action_reports", "saved_public_shares"}
@@ -120,6 +126,7 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
     assert any("CREATE TABLE IF NOT EXISTS managed_provider_bindings" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS managed_secret_metadata" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS provider_probe_events" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS provider_catalog_entries" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS public_share_payloads" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS public_share_action_reports" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS saved_public_shares" in statement for statement in statements)
@@ -134,6 +141,7 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
     assert "workspace continuity" in migration_text.lower()
     assert "workspace shell" in migration_text.lower()
     assert "provider probe history" in migration_text.lower()
+    assert "provider catalog" in migration_text.lower()
     assert "public-share persistence" in migration_text.lower()
     assert "workspace feedback" in migration_text.lower()
     assert "artifact lineage links" in migration_text.lower()
@@ -191,3 +199,15 @@ def test_public_share_persistence_migration_targets_only_public_share_tables() -
     assert any("CREATE TABLE IF NOT EXISTS public_share_action_reports" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS saved_public_shares" in statement for statement in statements)
     assert all("workspace_artifact_sources" not in statement for statement in statements if statement.startswith("CREATE TABLE"))
+
+
+
+def test_catalog_surfaces_migration_targets_only_provider_catalog_table() -> None:
+    migration = build_catalog_surfaces_migration()
+    statements = render_postgres_schema_statements(migration.schema_families)
+
+    assert migration.migration_id == "server_foundation_0004_catalog_surfaces"
+    assert migration.steps[0].step_id == "server_foundation_0004_create_catalog_surfaces"
+    assert [family.family_name for family in migration.schema_families] == ["catalog_surfaces"]
+    assert any("CREATE TABLE IF NOT EXISTS provider_catalog_entries" in statement for statement in statements)
+    assert all("public_share_payloads" not in statement for statement in statements if statement.startswith("CREATE TABLE"))

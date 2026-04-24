@@ -342,6 +342,33 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
+    catalog_surfaces = SchemaFamily(
+        family_name="catalog_surfaces",
+        purpose="Durable provider catalog surface rows used by product-facing provider setup routes while target catalogs are derived from canonical workspace artifact sources.",
+        persistence_mode="mutable_projection",
+        tables=(
+            TableSpec(
+                name="provider_catalog_entries",
+                persistence_mode="mutable_projection",
+                description="Canonical provider catalog entries backing authenticated provider catalog product routes.",
+                columns=(
+                    ColumnSpec("provider_key", "TEXT", is_primary_key=True),
+                    ColumnSpec("provider_family", "TEXT"),
+                    ColumnSpec("display_name", "TEXT"),
+                    ColumnSpec("managed_supported", "BOOLEAN", default_sql="TRUE"),
+                    ColumnSpec("recommended_scope", "TEXT", default_sql="'workspace'"),
+                    ColumnSpec("local_env_var_hint", "TEXT", nullable=True),
+                    ColumnSpec("default_secret_name_template", "TEXT", nullable=True),
+                    ColumnSpec("lifecycle_state", "TEXT", default_sql="'active'"),
+                    ColumnSpec("updated_at", "TIMESTAMPTZ", nullable=True),
+                ),
+                indexes=(
+                    IndexSpec("idx_provider_catalog_entries_provider_family", ("provider_family",)),
+                    IndexSpec("idx_provider_catalog_entries_lifecycle_state", ("lifecycle_state",)),
+                ),
+            ),
+        ),
+    )
     public_share_persistence = SchemaFamily(
         family_name="public_share_persistence",
         purpose="Durable public-share payload, governance action report, and saved-share projections for product-facing public share routes.",
@@ -504,7 +531,7 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
-    return workspace_registry, workspace_shell_sources, run_history, provider_credentials, provider_probe_history, public_share_persistence, workspace_feedback, append_only_outputs
+    return workspace_registry, workspace_shell_sources, run_history, provider_credentials, provider_probe_history, catalog_surfaces, public_share_persistence, workspace_feedback, append_only_outputs
 
 
 def build_server_schema_summary() -> dict[str, object]:

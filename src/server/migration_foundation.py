@@ -68,7 +68,7 @@ def build_initial_server_migration() -> MigrationScript:
         dialect="postgresql",
         summary=(
             "Initial PostgreSQL foundation for workspace continuity, workspace shell artifact sources, run continuity, "
-            "managed provider bindings, provider probe history, public-share persistence, workspace feedback, onboarding state, "
+            "managed provider bindings, provider probe history, provider catalog surfaces, public-share persistence, workspace feedback, onboarding state, "
             "artifact index, trace event index, and artifact lineage links."
         ),
         schema_families=schema_families,
@@ -127,6 +127,29 @@ def build_public_share_persistence_migration() -> MigrationScript:
         ),
     )
 
+
+
+def build_catalog_surfaces_migration() -> MigrationScript:
+    schema_families = get_server_schema_families()
+    validate_schema_families(schema_families)
+    catalog_surfaces = _schema_family_by_name(schema_families, "catalog_surfaces")
+    statements = render_postgres_schema_statements((catalog_surfaces,))
+    return MigrationScript(
+        migration_id="server_foundation_0004_catalog_surfaces",
+        dialect="postgresql",
+        summary=(
+            "Add PostgreSQL-backed provider catalog surface rows while target catalogs resolve from canonical workspace artifact sources, "
+            "closing remaining provider-catalog and target-catalog dependency seams."
+        ),
+        schema_families=(catalog_surfaces,),
+        steps=(
+            MigrationStep(
+                step_id="server_foundation_0004_create_catalog_surfaces",
+                description="Create the provider catalog surface table family and indexes.",
+                statements=statements,
+            ),
+        ),
+    )
 
 def build_migration_file_text(migration: MigrationScript) -> str:
     parts = [f"-- migration_id: {migration.migration_id}", f"-- summary: {migration.summary}"]

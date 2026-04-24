@@ -6,6 +6,7 @@ from src.server.pg.dependencies_factory import build_postgres_dependencies
 from src.server.pg.row_stores import (
     PostgresFeedbackStore,
     PostgresManagedSecretMetadataStore,
+    PostgresProviderCatalogStore,
     PostgresWorkspaceArtifactSourceStore,
     PostgresOnboardingStateStore,
     PostgresAppendOnlyProjectionStore,
@@ -53,6 +54,19 @@ def _build_sqlite_engine():
             storage_role TEXT NOT NULL,
             canonical_ref TEXT,
             artifact_source TEXT NOT NULL,
+            updated_at TEXT
+        )
+        """,
+        """
+        CREATE TABLE provider_catalog_entries (
+            provider_key TEXT PRIMARY KEY,
+            provider_family TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            managed_supported BOOLEAN DEFAULT TRUE,
+            recommended_scope TEXT NOT NULL,
+            local_env_var_hint TEXT,
+            default_secret_name_template TEXT,
+            lifecycle_state TEXT DEFAULT 'active',
             updated_at TEXT
         )
         """,
@@ -300,6 +314,36 @@ def test_postgres_workspace_artifact_source_store_round_trips_current_shell_sour
     assert loaded is not None
     assert loaded["meta"]["storage_role"] == "working_save"
     assert loaded["meta"]["working_save_id"] == "ws-1-draft"
+
+
+def test_postgres_provider_catalog_store_round_trips_rows() -> None:
+    engine = _build_sqlite_engine()
+    store = PostgresProviderCatalogStore(engine)
+
+    store.seed_defaults(({
+        "provider_key": "openai",
+        "provider_family": "openai",
+        "display_name": "OpenAI GPT",
+        "managed_supported": True,
+        "recommended_scope": "workspace",
+        "local_env_var_hint": "OPENAI_API_KEY",
+        "default_secret_name_template": "nexa/{workspace_id}/providers/openai",
+    },))
+    store.write({
+        "provider_key": "anthropic",
+        "provider_family": "anthropic",
+        "display_name": "Anthropic Claude",
+        "managed_supported": True,
+        "recommended_scope": "workspace",
+        "local_env_var_hint": "ANTHROPIC_API_KEY",
+        "default_secret_name_template": "nexa/{workspace_id}/providers/anthropic",
+        "updated_at": "2026-04-24T00:00:00+00:00",
+    })
+
+    rows = store.list_rows()
+    assert [row["provider_key"] for row in rows] == ["anthropic", "openai"]
+    assert rows[0]["managed_supported"] is True
+    assert rows[0]["local_env_var_hint"] == "ANTHROPIC_API_KEY"
 
 
 def test_postgres_public_share_payload_store_round_trips_payloads() -> None:
@@ -706,6 +750,8 @@ def test_build_postgres_dependencies_wires_sql_backed_continuity_stores() -> Non
         },
     )
     assert deps.workspace_artifact_source_provider("ws-9")["meta"]["working_save_id"] == "ws-9-draft"
+    assert any(row["provider_key"] == "openai" for row in deps.provider_catalog_rows_provider())
+    assert deps.target_catalog_provider("ws-9")["ws-9-draft"].target_type == "working_save"
     assert deps.onboarding_rows_provider()[0]["onboarding_state_id"] == "onb-9"
     assert deps.workspace_provider_binding_row_provider("ws-9", "openai") is not None
     assert deps.managed_secret_metadata_reader(str(receipt["secret_ref"])) is not None

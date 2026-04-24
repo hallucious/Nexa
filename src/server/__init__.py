@@ -237,6 +237,7 @@ from src.server.artifact_trace_read_models import (
     TraceReadOutcome,
 )
 from src.server.migration_foundation import (
+    build_catalog_surfaces_migration,
     build_initial_server_migration,
     build_migration_file_text,
     build_public_share_persistence_migration,
@@ -436,6 +437,7 @@ __all__ = [
     "FrameworkRouteBindings",
     "FrameworkRouteDefinition",
     "build_engine_auth_context_refs",
+    "build_catalog_surfaces_migration",
     "build_initial_server_migration",
     "build_public_share_persistence_migration",
     "build_migration_file_text",

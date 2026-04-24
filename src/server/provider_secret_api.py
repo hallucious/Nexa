@@ -74,6 +74,10 @@ _DEFAULT_PROVIDER_CATALOG_ROWS: tuple[dict[str, Any], ...] = (
 )
 
 
+def default_provider_catalog_rows() -> tuple[dict[str, Any], ...]:
+    return tuple(dict(row) for row in _DEFAULT_PROVIDER_CATALOG_ROWS)
+
+
 def _as_mapping(value: Any) -> Mapping[str, Any]:
     if isinstance(value, Mapping):
         return value
@@ -83,7 +87,7 @@ def _as_mapping(value: Any) -> Mapping[str, Any]:
 
 
 def _provider_catalog_rows(catalog_rows: Sequence[Mapping[str, Any]] | None = None) -> tuple[Mapping[str, Any], ...]:
-    rows = tuple(catalog_rows or _DEFAULT_PROVIDER_CATALOG_ROWS)
+    rows = tuple(catalog_rows or default_provider_catalog_rows())
     return tuple(_as_mapping(row) for row in rows)
 
 

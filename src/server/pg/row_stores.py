@@ -9,6 +9,7 @@ from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizati
 from src.server.managed_secret_metadata_store import InMemoryManagedSecretMetadataStore
 from src.server.onboarding_state_store import InMemoryOnboardingStateStore
 from src.server.provider_binding_store import InMemoryProviderBindingStore
+from src.server.provider_secret_api import default_provider_catalog_rows
 from src.server.provider_probe_history_models import ProviderProbeHistoryRecord
 from src.server.provider_probe_history_store import InMemoryProviderProbeHistoryStore
 from src.server.workspace_registry_store import InMemoryWorkspaceRegistryStore
@@ -641,6 +642,91 @@ class PostgresOnboardingStateStore:
                 "dismissed_guidance_state": _decode_json(row.get("dismissed_guidance_state"), default={}),
             })
         return tuple(normalized)
+
+
+@dataclass(frozen=True)
+class PostgresProviderCatalogStore:
+    engine: Engine
+
+    def write(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        normalized = self._normalize_row(row)
+        _execute(
+            self.engine,
+            """
+            INSERT INTO provider_catalog_entries (
+                provider_key,
+                provider_family,
+                display_name,
+                managed_supported,
+                recommended_scope,
+                local_env_var_hint,
+                default_secret_name_template,
+                lifecycle_state,
+                updated_at
+            ) VALUES (
+                :provider_key,
+                :provider_family,
+                :display_name,
+                :managed_supported,
+                :recommended_scope,
+                :local_env_var_hint,
+                :default_secret_name_template,
+                :lifecycle_state,
+                :updated_at
+            )
+            ON CONFLICT (provider_key) DO UPDATE SET
+                provider_family = EXCLUDED.provider_family,
+                display_name = EXCLUDED.display_name,
+                managed_supported = EXCLUDED.managed_supported,
+                recommended_scope = EXCLUDED.recommended_scope,
+                local_env_var_hint = EXCLUDED.local_env_var_hint,
+                default_secret_name_template = EXCLUDED.default_secret_name_template,
+                lifecycle_state = EXCLUDED.lifecycle_state,
+                updated_at = EXCLUDED.updated_at
+            """,
+            normalized,
+        )
+        return dict(normalized)
+
+    def seed_defaults(self, rows: Sequence[Mapping[str, Any]] | None = None) -> tuple[dict[str, Any], ...]:
+        seeded = rows if rows is not None else default_provider_catalog_rows()
+        return tuple(self.write(row) for row in seeded)
+
+    def list_rows(self) -> tuple[dict[str, Any], ...]:
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT provider_key, provider_family, display_name, managed_supported,
+                   recommended_scope, local_env_var_hint, default_secret_name_template,
+                   lifecycle_state, updated_at
+            FROM provider_catalog_entries
+            WHERE lifecycle_state != 'archived'
+            ORDER BY provider_key ASC
+            """,
+        )
+        return tuple(self._normalize_row(row) for row in rows)
+
+    @staticmethod
+    def _normalize_row(row: Mapping[str, Any]) -> dict[str, Any]:
+        provider_key = str(row.get("provider_key") or "").strip().lower()
+        if not provider_key:
+            raise ValueError("provider_catalog_store.provider_key_required")
+        provider_family = str(row.get("provider_family") or provider_key).strip() or provider_key
+        display_name = str(row.get("display_name") or provider_key).strip() or provider_key
+        recommended_scope = str(row.get("recommended_scope") or "workspace").strip() or "workspace"
+        lifecycle_state = str(row.get("lifecycle_state") or "active").strip() or "active"
+        updated_at = str(row.get("updated_at") or "").strip() or None
+        return {
+            "provider_key": provider_key,
+            "provider_family": provider_family,
+            "display_name": display_name,
+            "managed_supported": bool(row.get("managed_supported", True)),
+            "recommended_scope": recommended_scope,
+            "local_env_var_hint": str(row.get("local_env_var_hint") or "").strip() or None,
+            "default_secret_name_template": str(row.get("default_secret_name_template") or "").strip() or None,
+            "lifecycle_state": lifecycle_state,
+            "updated_at": updated_at,
+        }
 
 
 @dataclass(frozen=True)
