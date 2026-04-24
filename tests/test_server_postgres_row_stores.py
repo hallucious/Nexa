@@ -12,6 +12,9 @@ from src.server.pg.row_stores import (
     PostgresRunProjectionStore,
     PostgresProviderBindingStore,
     PostgresProviderProbeHistoryStore,
+    PostgresPublicShareActionReportStore,
+    PostgresPublicSharePayloadStore,
+    PostgresSavedPublicShareStore,
     PostgresWorkspaceRegistryStore,
 )
 
@@ -51,6 +54,40 @@ def _build_sqlite_engine():
             canonical_ref TEXT,
             artifact_source TEXT NOT NULL,
             updated_at TEXT
+        )
+        """,
+        """
+        CREATE TABLE public_share_payloads (
+            share_id TEXT PRIMARY KEY,
+            issued_by_user_ref TEXT,
+            storage_role TEXT NOT NULL,
+            canonical_ref TEXT,
+            lifecycle_state TEXT NOT NULL,
+            archived BOOLEAN DEFAULT FALSE,
+            expires_at TEXT,
+            created_at TEXT,
+            updated_at TEXT,
+            share_payload TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE public_share_action_reports (
+            report_id TEXT PRIMARY KEY,
+            issuer_user_ref TEXT NOT NULL,
+            action TEXT NOT NULL,
+            scope TEXT NOT NULL,
+            affected_share_count INTEGER DEFAULT 0,
+            created_at TEXT NOT NULL,
+            action_report TEXT NOT NULL
+        )
+        """,
+        """
+        CREATE TABLE saved_public_shares (
+            saved_row_ref TEXT PRIMARY KEY,
+            share_id TEXT NOT NULL,
+            saved_by_user_ref TEXT NOT NULL,
+            saved_at TEXT NOT NULL,
+            UNIQUE (saved_by_user_ref, share_id)
         )
         """,
         """
@@ -263,6 +300,103 @@ def test_postgres_workspace_artifact_source_store_round_trips_current_shell_sour
     assert loaded is not None
     assert loaded["meta"]["storage_role"] == "working_save"
     assert loaded["meta"]["working_save_id"] == "ws-1-draft"
+
+
+def test_postgres_public_share_payload_store_round_trips_payloads() -> None:
+    engine = _build_sqlite_engine()
+    store = PostgresPublicSharePayloadStore(engine)
+
+    stored = store.write(
+        {
+            "share": {
+                "share_family": "nex.public-link-share",
+                "transport": "link",
+                "access_mode": "public_readonly",
+                "share_id": "share-1",
+                "share_path": "/share/share-1",
+                "artifact_format_family": "nex.public-artifact",
+                "storage_role": "working_save",
+                "canonical_ref": "ws-1-draft",
+                "title": "Workspace Share",
+                "summary": "Summary",
+                "viewer_capabilities": ["inspect_metadata", "download_artifact", "import_copy"],
+                "operation_capabilities": ["inspect_metadata", "download_artifact", "import_copy", "run_artifact"],
+                "lifecycle": {
+                    "state": "active",
+                    "created_at": "2026-04-23T10:00:00+00:00",
+                    "updated_at": "2026-04-23T10:00:00+00:00",
+                    "expires_at": None,
+                    "issued_by_user_ref": "user-owner",
+                },
+                "management": {"archived": False, "archived_at": None},
+                "audit": {"history": []},
+            },
+            "artifact": {
+                "meta": {
+                    "format_family": "nex.public-artifact",
+                    "format_version": "1.0.0",
+                    "storage_role": "working_save",
+                    "working_save_id": "ws-1-draft",
+                    "name": "Workspace One",
+                },
+                "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+                "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+                "state": {"input": {}, "working": {}, "memory": {}},
+                "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+                "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+            },
+        }
+    )
+
+    assert stored["share"]["share_id"] == "share-1"
+    assert store.get("share-1")["share"]["title"] == "Workspace Share"
+    assert store.list_rows()[0]["share"]["share_id"] == "share-1"
+    assert store.delete("share-1") is True
+    assert store.get("share-1") is None
+
+
+def test_postgres_public_share_action_report_store_round_trips_reports() -> None:
+    engine = _build_sqlite_engine()
+    store = PostgresPublicShareActionReportStore(engine)
+
+    stored = store.write(
+        {
+            "report_id": "share_report_1",
+            "issuer_user_ref": "user-owner",
+            "action": "revoke",
+            "scope": "issuer_bulk",
+            "created_at": "2026-04-23T10:10:00+00:00",
+            "requested_share_ids": ("share-1",),
+            "affected_share_ids": ("share-1",),
+            "affected_share_count": 1,
+            "before_total_share_count": 2,
+            "after_total_share_count": 1,
+            "actor_user_ref": "user-owner",
+            "expires_at": None,
+            "archived": False,
+        }
+    )
+
+    assert stored["action"] == "revoke"
+    assert store.list_rows()[0]["report_id"] == "share_report_1"
+
+
+def test_postgres_saved_public_share_store_round_trips_rows() -> None:
+    engine = _build_sqlite_engine()
+    store = PostgresSavedPublicShareStore(engine)
+
+    stored = store.write(
+        {
+            "share_id": "share-1",
+            "saved_by_user_ref": "user-owner",
+            "saved_at": "2026-04-23T10:20:00+00:00",
+        }
+    )
+
+    assert stored["share_id"] == "share-1"
+    assert store.list_rows()[0]["saved_by_user_ref"] == "user-owner"
+    assert store.delete("share-1") is True
+    assert store.list_rows() == ()
 
 
 def test_postgres_onboarding_state_store_round_trips_json_payload() -> None:
@@ -592,6 +726,69 @@ def test_build_postgres_dependencies_wires_sql_backed_continuity_stores() -> Non
         "created_at": "2026-04-23T10:02:00+00:00",
         "updated_at": "2026-04-23T10:02:00+00:00",
     })
+    deps.public_share_payload_writer({
+        "share": {
+            "share_family": "nex.public-link-share",
+            "transport": "link",
+            "access_mode": "public_readonly",
+            "share_id": "share-9",
+            "share_path": "/share/share-9",
+            "artifact_format_family": "nex.public-artifact",
+            "storage_role": "working_save",
+            "canonical_ref": "ws-9-draft",
+            "title": "Workspace Nine Share",
+            "summary": "Summary",
+            "viewer_capabilities": ["inspect_metadata", "download_artifact", "import_copy"],
+            "operation_capabilities": ["inspect_metadata", "download_artifact", "import_copy", "run_artifact"],
+            "lifecycle": {
+                "state": "active",
+                "created_at": "2026-04-23T10:03:00+00:00",
+                "updated_at": "2026-04-23T10:03:00+00:00",
+                "expires_at": None,
+                "issued_by_user_ref": "user-owner",
+            },
+            "management": {"archived": False, "archived_at": None},
+            "audit": {"history": []},
+        },
+        "artifact": {
+            "meta": {
+                "format_family": "nex.public-artifact",
+                "format_version": "1.0.0",
+                "storage_role": "working_save",
+                "working_save_id": "ws-9-draft",
+                "name": "Workspace Nine",
+            },
+            "circuit": {"nodes": [], "edges": [], "entry": None, "outputs": []},
+            "resources": {"prompts": {}, "providers": {}, "plugins": {}},
+            "state": {"input": {}, "working": {}, "memory": {}},
+            "runtime": {"status": "draft", "validation_summary": {}, "last_run": {}, "errors": []},
+            "ui": {"layout": {}, "metadata": {"app_language": "en-US"}},
+        },
+    })
+    deps.public_share_action_report_writer({
+        "report_id": "share_report_9",
+        "issuer_user_ref": "user-owner",
+        "action": "revoke",
+        "scope": "issuer_bulk",
+        "created_at": "2026-04-23T10:04:00+00:00",
+        "requested_share_ids": ("share-9",),
+        "affected_share_ids": ("share-9",),
+        "affected_share_count": 1,
+        "before_total_share_count": 1,
+        "after_total_share_count": 0,
+        "actor_user_ref": "user-owner",
+        "expires_at": None,
+        "archived": False,
+    })
+    deps.saved_public_share_writer({
+        "share_id": "share-9",
+        "saved_by_user_ref": "user-owner",
+        "saved_at": "2026-04-23T10:05:00+00:00",
+    })
     assert deps.run_record_provider("run-9") is not None
     assert deps.recent_run_rows_provider()[0]["run_id"] == "run-9"
     assert deps.run_context_provider("run-9") is not None
+    assert deps.public_share_payload_provider("share-9") is not None
+    assert deps.public_share_payload_rows_provider()[0]["share"]["share_id"] == "share-9"
+    assert deps.public_share_action_report_rows_provider()[0]["report_id"] == "share_report_9"
+    assert deps.saved_public_share_rows_provider()[0]["share_id"] == "share-9"

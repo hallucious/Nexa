@@ -5,6 +5,7 @@ from src.server import (
     build_initial_server_migration,
     build_migration_file_text,
     build_postgres_connection_url,
+    build_public_share_persistence_migration,
     build_workspace_shell_sources_migration,
     build_server_schema_summary,
     get_server_schema_families,
@@ -68,17 +69,19 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
         "run_history",
         "provider_credentials",
         "provider_probe_history",
+        "public_share_persistence",
         "workspace_feedback",
         "append_only_outputs",
     ]
-    assert summary["family_count"] == 7
+    assert summary["family_count"] == 8
 
-    workspace_family, workspace_shell_family, run_family, provider_family, probe_family, feedback_family, append_only_family = families
+    workspace_family, workspace_shell_family, run_family, provider_family, probe_family, public_share_family, feedback_family, append_only_family = families
     assert workspace_family.persistence_mode == "mutable_projection"
     assert workspace_shell_family.persistence_mode == "mutable_projection"
     assert run_family.persistence_mode == "mutable_projection"
     assert provider_family.persistence_mode == "mutable_projection"
     assert probe_family.persistence_mode == "mutable_projection"
+    assert public_share_family.persistence_mode == "mutable_projection"
     assert feedback_family.persistence_mode == "mutable_projection"
     assert append_only_family.persistence_mode == "append_only"
 
@@ -90,6 +93,9 @@ def test_server_schema_families_keep_mutable_and_append_only_concerns_separate()
 
     probe_tables = {table.name for table in probe_family.tables}
     assert probe_tables == {"provider_probe_events"}
+
+    public_share_tables = {table.name for table in public_share_family.tables}
+    assert public_share_tables == {"public_share_payloads", "public_share_action_reports", "saved_public_shares"}
 
     feedback_tables = {table.name for table in feedback_family.tables}
     assert feedback_tables == {"workspace_feedback"}
@@ -114,6 +120,9 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
     assert any("CREATE TABLE IF NOT EXISTS managed_provider_bindings" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS managed_secret_metadata" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS provider_probe_events" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS public_share_payloads" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS public_share_action_reports" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS saved_public_shares" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS workspace_feedback" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS artifact_index" in statement for statement in statements)
     assert any("CREATE TABLE IF NOT EXISTS trace_event_index" in statement for statement in statements)
@@ -125,6 +134,7 @@ def test_initial_server_migration_contains_workspace_run_artifact_trace_and_line
     assert "workspace continuity" in migration_text.lower()
     assert "workspace shell" in migration_text.lower()
     assert "provider probe history" in migration_text.lower()
+    assert "public-share persistence" in migration_text.lower()
     assert "workspace feedback" in migration_text.lower()
     assert "artifact lineage links" in migration_text.lower()
 
@@ -168,3 +178,16 @@ def test_run_artifact_trace_probe_and_workspace_linkage_are_queryable_in_schema_
     assert trace_run_column.reference_table == "run_records"
     assert probe_workspace_column.reference_table == "workspace_registry"
     assert probe_binding_column.reference_table == "managed_provider_bindings"
+
+
+def test_public_share_persistence_migration_targets_only_public_share_tables() -> None:
+    migration = build_public_share_persistence_migration()
+    statements = render_postgres_schema_statements(migration.schema_families)
+
+    assert migration.migration_id == "server_foundation_0003_public_share_persistence"
+    assert migration.steps[0].step_id == "server_foundation_0003_create_public_share_persistence"
+    assert [family.family_name for family in migration.schema_families] == ["public_share_persistence"]
+    assert any("CREATE TABLE IF NOT EXISTS public_share_payloads" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS public_share_action_reports" in statement for statement in statements)
+    assert any("CREATE TABLE IF NOT EXISTS saved_public_shares" in statement for statement in statements)
+    assert all("workspace_artifact_sources" not in statement for statement in statements if statement.startswith("CREATE TABLE"))

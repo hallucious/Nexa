@@ -239,6 +239,7 @@ from src.server.artifact_trace_read_models import (
 from src.server.migration_foundation import (
     build_initial_server_migration,
     build_migration_file_text,
+    build_public_share_persistence_migration,
     build_workspace_shell_sources_migration,
     render_postgres_schema_statements,
     validate_schema_families,
@@ -436,6 +437,7 @@ __all__ = [
     "FrameworkRouteDefinition",
     "build_engine_auth_context_refs",
     "build_initial_server_migration",
+    "build_public_share_persistence_migration",
     "build_migration_file_text",
     "build_postgres_connection_url",
     "build_server_schema_summary",

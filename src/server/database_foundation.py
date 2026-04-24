@@ -342,6 +342,70 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
+    public_share_persistence = SchemaFamily(
+        family_name="public_share_persistence",
+        purpose="Durable public-share payload, governance action report, and saved-share projections for product-facing public share routes.",
+        persistence_mode="mutable_projection",
+        tables=(
+            TableSpec(
+                name="public_share_payloads",
+                persistence_mode="mutable_projection",
+                description="Canonical public-share payload rows backing public catalog, detail, artifact, and lifecycle routes.",
+                columns=(
+                    ColumnSpec("share_id", "TEXT", is_primary_key=True),
+                    ColumnSpec("issued_by_user_ref", "TEXT", nullable=True),
+                    ColumnSpec("storage_role", "TEXT"),
+                    ColumnSpec("canonical_ref", "TEXT", nullable=True),
+                    ColumnSpec("lifecycle_state", "TEXT"),
+                    ColumnSpec("archived", "BOOLEAN", default_sql="FALSE"),
+                    ColumnSpec("expires_at", "TIMESTAMPTZ", nullable=True),
+                    ColumnSpec("created_at", "TIMESTAMPTZ", nullable=True),
+                    ColumnSpec("updated_at", "TIMESTAMPTZ", nullable=True),
+                    ColumnSpec("share_payload", "JSONB"),
+                ),
+                indexes=(
+                    IndexSpec("idx_public_share_payloads_issuer_updated_at", ("issued_by_user_ref", "updated_at")),
+                    IndexSpec("idx_public_share_payloads_storage_role", ("storage_role",)),
+                    IndexSpec("idx_public_share_payloads_lifecycle_state", ("lifecycle_state",)),
+                    IndexSpec("idx_public_share_payloads_archived", ("archived",)),
+                ),
+            ),
+            TableSpec(
+                name="public_share_action_reports",
+                persistence_mode="mutable_projection",
+                description="Issuer-scoped governance action reports for public-share revoke/extend/archive/delete flows.",
+                columns=(
+                    ColumnSpec("report_id", "TEXT", is_primary_key=True),
+                    ColumnSpec("issuer_user_ref", "TEXT"),
+                    ColumnSpec("action", "TEXT"),
+                    ColumnSpec("scope", "TEXT"),
+                    ColumnSpec("affected_share_count", "INTEGER", default_sql="0"),
+                    ColumnSpec("created_at", "TIMESTAMPTZ"),
+                    ColumnSpec("action_report", "JSONB"),
+                ),
+                indexes=(
+                    IndexSpec("idx_public_share_action_reports_issuer_created_at", ("issuer_user_ref", "created_at")),
+                    IndexSpec("idx_public_share_action_reports_action", ("action",)),
+                ),
+            ),
+            TableSpec(
+                name="saved_public_shares",
+                persistence_mode="mutable_projection",
+                description="Saved-share collection rows keyed by saving user and public share identity.",
+                columns=(
+                    ColumnSpec("saved_row_ref", "TEXT", is_primary_key=True),
+                    ColumnSpec("share_id", "TEXT", reference_table="public_share_payloads", reference_column="share_id"),
+                    ColumnSpec("saved_by_user_ref", "TEXT"),
+                    ColumnSpec("saved_at", "TIMESTAMPTZ"),
+                ),
+                indexes=(
+                    IndexSpec("uq_saved_public_shares_user_share", ("saved_by_user_ref", "share_id"), unique=True),
+                    IndexSpec("idx_saved_public_shares_share_id", ("share_id",)),
+                    IndexSpec("idx_saved_public_shares_saved_at", ("saved_at",)),
+                ),
+            ),
+        ),
+    )
     workspace_feedback = SchemaFamily(
         family_name="workspace_feedback",
         purpose="Workspace-scoped product feedback projections used by feedback-channel and continuity routes.",
@@ -440,7 +504,7 @@ def get_server_schema_families() -> tuple[SchemaFamily, ...]:
             ),
         ),
     )
-    return workspace_registry, workspace_shell_sources, run_history, provider_credentials, provider_probe_history, workspace_feedback, append_only_outputs
+    return workspace_registry, workspace_shell_sources, run_history, provider_credentials, provider_probe_history, public_share_persistence, workspace_feedback, append_only_outputs
 
 
 def build_server_schema_summary() -> dict[str, object]:

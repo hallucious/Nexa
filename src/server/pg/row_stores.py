@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from src.server.auth_models import RunAuthorizationContext, WorkspaceAuthorizationContext
@@ -15,6 +15,11 @@ from src.server.workspace_registry_store import InMemoryWorkspaceRegistryStore
 from src.server.run_admission_models import RunRecordProjection
 from src.storage.models.loaded_nex_artifact import LoadedNexArtifact
 from src.storage.serialization import serialize_nex_artifact, validate_serialized_storage_artifact_for_write
+from src.storage.share_api import (
+    describe_public_nex_link_share,
+    list_issuer_public_share_management_action_reports_for_issuer,
+    load_public_nex_link_share,
+)
 
 try:  # pragma: no cover - availability varies by environment
     from sqlalchemy import text
@@ -331,6 +336,249 @@ class PostgresWorkspaceArtifactSourceStore:
         if storage_role not in {"working_save", "commit_snapshot"}:
             raise ValueError("workspace_artifact_source_store.unsupported_storage_role")
         return dict(validated)
+
+
+@dataclass(frozen=True)
+class PostgresPublicSharePayloadStore:
+    engine: Engine
+
+    def write(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        normalized = load_public_nex_link_share(dict(payload))
+        descriptor = describe_public_nex_link_share(normalized)
+        lifecycle = normalized.get("share", {}).get("lifecycle", {}) if isinstance(normalized.get("share"), dict) else {}
+        management = normalized.get("share", {}).get("management", {}) if isinstance(normalized.get("share"), dict) else {}
+        _execute(
+            self.engine,
+            f"""
+            INSERT INTO public_share_payloads (
+                share_id,
+                issued_by_user_ref,
+                storage_role,
+                canonical_ref,
+                lifecycle_state,
+                archived,
+                expires_at,
+                created_at,
+                updated_at,
+                share_payload
+            ) VALUES (
+                :share_id,
+                :issued_by_user_ref,
+                :storage_role,
+                :canonical_ref,
+                :lifecycle_state,
+                :archived,
+                :expires_at,
+                :created_at,
+                :updated_at,
+                {_json_placeholder(self.engine, 'share_payload')}
+            )
+            ON CONFLICT (share_id) DO UPDATE SET
+                issued_by_user_ref = EXCLUDED.issued_by_user_ref,
+                storage_role = EXCLUDED.storage_role,
+                canonical_ref = EXCLUDED.canonical_ref,
+                lifecycle_state = EXCLUDED.lifecycle_state,
+                archived = EXCLUDED.archived,
+                expires_at = EXCLUDED.expires_at,
+                created_at = EXCLUDED.created_at,
+                updated_at = EXCLUDED.updated_at,
+                share_payload = EXCLUDED.share_payload
+            """,
+            {
+                "share_id": descriptor.share_id,
+                "issued_by_user_ref": descriptor.issued_by_user_ref,
+                "storage_role": descriptor.storage_role,
+                "canonical_ref": descriptor.canonical_ref,
+                "lifecycle_state": descriptor.stored_lifecycle_state,
+                "archived": descriptor.archived,
+                "expires_at": descriptor.expires_at,
+                "created_at": descriptor.created_at,
+                "updated_at": descriptor.updated_at,
+                "share_payload": _serialize_json(normalized),
+            },
+        )
+        return dict(normalized)
+
+    def get(self, share_id: str) -> dict[str, Any] | None:
+        normalized_share_id = str(share_id or "").strip()
+        if not normalized_share_id:
+            return None
+        row = _fetch_one(
+            self.engine,
+            """
+            SELECT share_payload
+            FROM public_share_payloads
+            WHERE share_id = :share_id
+            """,
+            {"share_id": normalized_share_id},
+        )
+        if row is None:
+            return None
+        payload = _decode_json(row.get("share_payload"), default=None)
+        return dict(payload) if isinstance(payload, dict) else None
+
+    def list_rows(self) -> tuple[dict[str, Any], ...]:
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT share_payload
+            FROM public_share_payloads
+            ORDER BY updated_at DESC, share_id DESC
+            """,
+        )
+        payloads: list[dict[str, Any]] = []
+        for row in rows:
+            payload = _decode_json(row.get("share_payload"), default=None)
+            if isinstance(payload, dict):
+                payloads.append(dict(payload))
+        return tuple(payloads)
+
+    def delete(self, share_id: str) -> bool:
+        normalized_share_id = str(share_id or "").strip()
+        if not normalized_share_id:
+            return False
+        _require_sqlalchemy()
+        with self.engine.begin() as connection:
+            result = connection.execute(text("DELETE FROM public_share_payloads WHERE share_id = :share_id"), {"share_id": normalized_share_id})
+        return bool(getattr(result, "rowcount", 0))
+
+
+@dataclass(frozen=True)
+class PostgresPublicShareActionReportStore:
+    engine: Engine
+
+    def write(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        issuer_user_ref = str(row.get("issuer_user_ref") or "").strip()
+        if not issuer_user_ref:
+            raise ValueError("public_share_action_report_store.issuer_user_ref_required")
+        normalized_entry = list_issuer_public_share_management_action_reports_for_issuer((dict(row),), issuer_user_ref, limit=1, offset=0)[0]
+        normalized = asdict(normalized_entry)
+        _execute(
+            self.engine,
+            f"""
+            INSERT INTO public_share_action_reports (
+                report_id,
+                issuer_user_ref,
+                action,
+                scope,
+                affected_share_count,
+                created_at,
+                action_report
+            ) VALUES (
+                :report_id,
+                :issuer_user_ref,
+                :action,
+                :scope,
+                :affected_share_count,
+                :created_at,
+                {_json_placeholder(self.engine, 'action_report')}
+            )
+            ON CONFLICT (report_id) DO UPDATE SET
+                issuer_user_ref = EXCLUDED.issuer_user_ref,
+                action = EXCLUDED.action,
+                scope = EXCLUDED.scope,
+                affected_share_count = EXCLUDED.affected_share_count,
+                created_at = EXCLUDED.created_at,
+                action_report = EXCLUDED.action_report
+            """,
+            {
+                "report_id": normalized["report_id"],
+                "issuer_user_ref": normalized["issuer_user_ref"],
+                "action": normalized["action"],
+                "scope": normalized["scope"],
+                "affected_share_count": normalized["affected_share_count"],
+                "created_at": normalized["created_at"],
+                "action_report": _serialize_json(normalized),
+            },
+        )
+        return dict(normalized)
+
+    def list_rows(self) -> tuple[dict[str, Any], ...]:
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT action_report
+            FROM public_share_action_reports
+            ORDER BY created_at DESC, report_id DESC
+            """,
+        )
+        reports: list[dict[str, Any]] = []
+        for row in rows:
+            payload = _decode_json(row.get("action_report"), default=None)
+            if isinstance(payload, dict):
+                reports.append(dict(payload))
+        return tuple(reports)
+
+
+@dataclass(frozen=True)
+class PostgresSavedPublicShareStore:
+    engine: Engine
+
+    def write(self, row: Mapping[str, Any]) -> dict[str, Any]:
+        normalized = self._normalize_row(row)
+        _execute(
+            self.engine,
+            """
+            INSERT INTO saved_public_shares (
+                saved_row_ref,
+                share_id,
+                saved_by_user_ref,
+                saved_at
+            ) VALUES (
+                :saved_row_ref,
+                :share_id,
+                :saved_by_user_ref,
+                :saved_at
+            )
+            ON CONFLICT (saved_by_user_ref, share_id) DO UPDATE SET
+                saved_row_ref = EXCLUDED.saved_row_ref,
+                saved_at = EXCLUDED.saved_at
+            """,
+            normalized,
+        )
+        return {
+            "share_id": normalized["share_id"],
+            "saved_by_user_ref": normalized["saved_by_user_ref"],
+            "saved_at": normalized["saved_at"],
+        }
+
+    def list_rows(self) -> tuple[dict[str, Any], ...]:
+        rows = _fetch_all(
+            self.engine,
+            """
+            SELECT share_id, saved_by_user_ref, saved_at
+            FROM saved_public_shares
+            ORDER BY saved_at DESC, share_id DESC
+            """,
+        )
+        return tuple(dict(row) for row in rows)
+
+    def delete(self, share_id: str) -> bool:
+        normalized_share_id = str(share_id or "").strip()
+        if not normalized_share_id:
+            return False
+        _require_sqlalchemy()
+        with self.engine.begin() as connection:
+            result = connection.execute(text("DELETE FROM saved_public_shares WHERE share_id = :share_id"), {"share_id": normalized_share_id})
+        return bool(getattr(result, "rowcount", 0))
+
+    @staticmethod
+    def _normalize_row(row: Mapping[str, Any]) -> dict[str, Any]:
+        share_id = str(row.get("share_id") or "").strip()
+        saved_by_user_ref = str(row.get("saved_by_user_ref") or "").strip()
+        saved_at = str(row.get("saved_at") or "").strip()
+        if not share_id:
+            raise ValueError("saved_public_share_store.share_id_required")
+        if not saved_by_user_ref:
+            raise ValueError("saved_public_share_store.saved_by_user_ref_required")
+        if not saved_at:
+            raise ValueError("saved_public_share_store.saved_at_required")
+        return {
+            "saved_row_ref": f"{saved_by_user_ref}:{share_id}",
+            "share_id": share_id,
+            "saved_by_user_ref": saved_by_user_ref,
+            "saved_at": saved_at,
+        }
 
 
 @dataclass(frozen=True)

@@ -68,7 +68,7 @@ def build_initial_server_migration() -> MigrationScript:
         dialect="postgresql",
         summary=(
             "Initial PostgreSQL foundation for workspace continuity, workspace shell artifact sources, run continuity, "
-            "managed provider bindings, provider probe history, workspace feedback, onboarding state, "
+            "managed provider bindings, provider probe history, public-share persistence, workspace feedback, onboarding state, "
             "artifact index, trace event index, and artifact lineage links."
         ),
         schema_families=schema_families,
@@ -99,6 +99,29 @@ def build_workspace_shell_sources_migration() -> MigrationScript:
             MigrationStep(
                 step_id="server_foundation_0002_create_workspace_shell_sources",
                 description="Create the workspace shell artifact source table family and indexes.",
+                statements=statements,
+            ),
+        ),
+    )
+
+
+def build_public_share_persistence_migration() -> MigrationScript:
+    schema_families = get_server_schema_families()
+    validate_schema_families(schema_families)
+    public_share_persistence = _schema_family_by_name(schema_families, "public_share_persistence")
+    statements = render_postgres_schema_statements((public_share_persistence,))
+    return MigrationScript(
+        migration_id="server_foundation_0003_public_share_persistence",
+        dialect="postgresql",
+        summary=(
+            "Add PostgreSQL-backed public-share payload, governance action report, and saved-share persistence "
+            "so catalog, issuer-management, and saved-share product flows resolve through durable rows."
+        ),
+        schema_families=(public_share_persistence,),
+        steps=(
+            MigrationStep(
+                step_id="server_foundation_0003_create_public_share_persistence",
+                description="Create the public-share payload, governance action report, and saved-share table families and indexes.",
                 statements=statements,
             ),
         ),

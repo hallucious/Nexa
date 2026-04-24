@@ -17,6 +17,9 @@ from src.server.pg.row_stores import (
     PostgresOnboardingStateStore,
     PostgresProviderBindingStore,
     PostgresProviderProbeHistoryStore,
+    PostgresPublicShareActionReportStore,
+    PostgresPublicSharePayloadStore,
+    PostgresSavedPublicShareStore,
     PostgresWorkspaceRegistryStore,
 )
 from src.server.provider_binding_store import bind_provider_binding_store
@@ -40,6 +43,9 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
     dependencies = FastApiRouteDependencies()
     workspace_registry_store = PostgresWorkspaceRegistryStore(resolved_sync_engine)
     workspace_artifact_source_store = PostgresWorkspaceArtifactSourceStore(resolved_sync_engine)
+    public_share_payload_store = PostgresPublicSharePayloadStore(resolved_sync_engine)
+    public_share_action_report_store = PostgresPublicShareActionReportStore(resolved_sync_engine)
+    saved_public_share_store = PostgresSavedPublicShareStore(resolved_sync_engine)
     dependencies = bind_workspace_registry_store(
         dependencies=dependencies,
         store=workspace_registry_store,
@@ -80,5 +86,14 @@ def build_postgres_dependencies(async_engine: Any, *, sync_engine: Any | None = 
         artifact_row_provider=append_only_projection_store.get_artifact_row,
         trace_rows_provider=append_only_projection_store.list_trace_rows,
         run_record_writer=run_projection_store.write_run_record,
+        public_share_payload_provider=public_share_payload_store.get,
+        public_share_payload_rows_provider=public_share_payload_store.list_rows,
+        public_share_payload_writer=public_share_payload_store.write,
+        public_share_payload_deleter=public_share_payload_store.delete,
+        public_share_action_report_rows_provider=public_share_action_report_store.list_rows,
+        public_share_action_report_writer=public_share_action_report_store.write,
+        saved_public_share_rows_provider=saved_public_share_store.list_rows,
+        saved_public_share_writer=saved_public_share_store.write,
+        saved_public_share_deleter=saved_public_share_store.delete,
     )
     return dependencies
