@@ -27,6 +27,7 @@ from src.server.public_hub_runtime import render_public_hub_html
 from src.server.public_integration_runtime import render_public_integration_hub_html
 from src.server.feedback_runtime import render_workspace_feedback_html
 from src.server.run_admission_models import ExecutionTargetCatalogEntry
+from src.server.provider_probe_runtime import build_provider_probe_runner
 from src.server.public_share_runtime import (
     _canonical_ref_for_workspace_artifact,
     build_workspace_public_share_history_payload,
@@ -484,7 +485,7 @@ class FastApiRouteBindings:
                 binding_rows=self.dependencies.workspace_provider_binding_rows_provider(workspace_id),
                 provider_catalog_rows=self.dependencies.provider_catalog_rows_provider(),
                 secret_metadata_reader=self._resolve_managed_secret_metadata_reader(),
-                probe_runner=self.dependencies.provider_probe_runner,
+                probe_runner=self._resolve_provider_probe_runner(),
                 probe_event_id_factory=self.dependencies.probe_event_id_factory,
                 probe_history_writer=self.dependencies.provider_probe_history_writer,
                 now_iso=now_iso,
@@ -3156,6 +3157,20 @@ class FastApiRouteBindings:
             config = self.dependencies.aws_secrets_manager_config or AwsSecretsManagerBindingConfig()
             return AwsSecretsManagerSecretAuthority.build_secret_metadata_reader(client=client, config=config)
         return None
+
+    def _resolve_provider_probe_runner(self):
+        if self.dependencies.provider_probe_runner is not None:
+            return self.dependencies.provider_probe_runner
+        if self.dependencies.aws_secrets_manager_client_provider is not None:
+            client = self.dependencies.aws_secrets_manager_client_provider()
+            config = self.dependencies.aws_secrets_manager_config or AwsSecretsManagerBindingConfig()
+            return build_provider_probe_runner(
+                secret_value_reader=AwsSecretsManagerSecretAuthority.build_secret_value_reader(
+                    client=client,
+                    config=config,
+                )
+            )
+        return build_provider_probe_runner(secret_value_reader=None)
 
     def _resolve_session_claims(self, request: Request) -> Optional[Mapping[str, Any]]:
         if self.dependencies.session_claims_resolver is not None:

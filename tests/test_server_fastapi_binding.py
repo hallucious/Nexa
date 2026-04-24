@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -162,6 +164,9 @@ class _FakeSecretsClient:
 
     def create_secret(self, Name: str, SecretString: str, Description: str, Tags, **kwargs):
         return {"ARN": "arn:aws:secretsmanager:region:acct:secret:" + Name, "VersionId": "v1"}
+
+    def get_secret_value(self, SecretId: str):
+        return {"ARN": "arn:aws:secretsmanager:region:acct:secret:" + SecretId, "Name": SecretId, "SecretString": "aws-probe-key"}
 
 
 def test_fastapi_binding_matches_framework_and_http_route_definitions() -> None:
@@ -3453,3 +3458,117 @@ def test_fastapi_binding_workspace_shell_template_path_promotes_provider_setup_n
     assert payload['first_success_run_section']['run_path_kind'] == 'setup_prerequisite'
     assert payload['first_success_run_section']['current_step_id'] == 'connect_provider'
     assert payload['first_success_run_section']['controls'][0]['action_target'] == '/api/workspaces/ws-001/provider-bindings'
+
+
+def test_fastapi_binding_provider_probe_auto_resolves_aws_runner(monkeypatch) -> None:
+    import urllib.request
+
+    class _FakeHttpResponse:
+        def __init__(self, payload: dict) -> None:
+            self._payload = json.dumps(payload).encode("utf-8")
+
+        def read(self) -> bytes:
+            return self._payload
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def _fake_urlopen(req, timeout=0):
+        assert req.full_url == "https://api.openai.com/v1/responses"
+        assert req.headers.get("Authorization") == "Bearer aws-probe-key"
+        body = json.loads(req.data.decode("utf-8"))
+        assert body["model"] == "gpt-4.1"
+        return _FakeHttpResponse({"output_text": "OK", "usage": {"output_tokens": 1}})
+
+    monkeypatch.setattr(urllib.request, "urlopen", _fake_urlopen)
+
+    probe_store = InMemoryProviderProbeHistoryStore()
+    binding_store = InMemoryProviderBindingStore.from_rows((
+        {
+            "binding_id": "binding-auto-probe",
+            "workspace_id": "ws-001",
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "credential_source": "managed",
+            "secret_ref": "aws-secretsmanager://nexa/ws-001/providers/openai",
+            "secret_version_ref": "v1",
+            "enabled": True,
+            "default_model_ref": "gpt-4.1",
+            "allowed_model_refs": ("gpt-4.1",),
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "updated_by_user_id": "user-owner",
+        },
+    ))
+
+    deps = FastApiRouteDependencies(
+        workspace_context_provider=lambda workspace_id: _workspace() if workspace_id == "ws-001" else None,
+        workspace_rows_provider=lambda: ({
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "continuity_source": "server",
+            "archived": False,
+        },),
+        workspace_row_provider=lambda workspace_id: {
+            "workspace_id": "ws-001",
+            "owner_user_id": "user-owner",
+            "title": "Primary Workspace",
+            "description": "Main",
+            "created_at": "2026-04-11T12:00:00+00:00",
+            "updated_at": "2026-04-11T12:05:00+00:00",
+            "continuity_source": "server",
+            "archived": False,
+        } if workspace_id == "ws-001" else None,
+        provider_catalog_rows_provider=lambda: ({
+            "provider_key": "openai",
+            "provider_family": "openai",
+            "display_name": "OpenAI GPT",
+            "managed_supported": True,
+            "recommended_scope": "workspace",
+            "local_env_var_hint": "OPENAI_API_KEY",
+            "default_secret_name_template": "nexa/{workspace_id}/providers/openai",
+        },),
+        aws_secrets_manager_client_provider=lambda: _FakeSecretsClient(),
+        aws_secrets_manager_config=AwsSecretsManagerBindingConfig(),
+        recent_run_rows_provider=lambda: (),
+        recent_managed_secret_rows_provider=lambda: ({
+            "workspace_id": "ws-001",
+            "provider_key": "openai",
+            "secret_ref": "aws-secretsmanager://nexa/ws-001/providers/openai",
+            "last_rotated_at": "2026-04-11T12:06:00+00:00",
+        },),
+        now_iso_provider=lambda: "2026-04-11T12:09:00+00:00",
+        probe_event_id_factory=lambda: "probe-auto-aws",
+    )
+    deps = bind_provider_binding_store(dependencies=deps, store=binding_store)
+    deps = bind_probe_history_store(dependencies=deps, store=probe_store)
+    client = TestClient(create_fastapi_app(dependencies=deps))
+
+    response = client.post(
+        "/api/workspaces/ws-001/provider-bindings/openai/probe",
+        headers=_session_headers(),
+        json={"model_ref": "gpt-4.1"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["probe_status"] == "reachable"
+    assert payload["connectivity_state"] == "ok"
+    assert payload["effective_model_ref"] == "gpt-4.1"
+
+    history = client.get(
+        "/api/workspaces/ws-001/provider-bindings/openai/probe-history?limit=1",
+        headers=_session_headers(),
+    )
+    assert history.status_code == 200
+    history_payload = history.json()
+    assert history_payload["items"][0]["probe_event_id"] == "probe-auto-aws"
+    assert history_payload["items"][0]["probe_status"] == "reachable"

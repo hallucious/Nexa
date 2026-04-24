@@ -17,7 +17,7 @@ class ResourceNotFoundException(Exception):
 class FakeSecretsManagerClient:
     def __init__(self, existing_names: tuple[str, ...] = ()) -> None:
         self.secrets = {
-            name: {"arn": f"arn:aws:secretsmanager:us-east-1:123456789012:secret:{name}", "versions": ["v1"]}
+            name: {"arn": f"arn:aws:secretsmanager:us-east-1:123456789012:secret:{name}", "versions": ["v1"], "value": "seed-secret"}
             for name in existing_names
         }
         self.created: list[dict] = []
@@ -32,6 +32,7 @@ class FakeSecretsManagerClient:
         self.secrets[Name] = {
             "arn": f"arn:aws:secretsmanager:us-east-1:123456789012:secret:{Name}",
             "versions": ["v1"],
+            "value": SecretString,
         }
         payload = {
             "Name": Name,
@@ -47,8 +48,14 @@ class FakeSecretsManagerClient:
         versions = self.secrets[SecretId]["versions"]
         version = f"v{len(versions) + 1}"
         versions.append(version)
+        self.secrets[SecretId]["value"] = SecretString
         self.rotated.append({"SecretId": SecretId, "SecretString": SecretString, "VersionId": version})
         return {"ARN": self.secrets[SecretId]["arn"], "Name": SecretId, "VersionId": version}
+
+    def get_secret_value(self, SecretId: str):
+        if SecretId not in self.secrets:
+            raise ResourceNotFoundException()
+        return {"ARN": self.secrets[SecretId]["arn"], "Name": SecretId, "SecretString": self.secrets[SecretId].get("value") or ""}
 
 
 def test_aws_secrets_manager_binding_creates_secret_and_returns_canonical_refs() -> None:
@@ -122,3 +129,15 @@ def test_fastapi_provider_binding_route_can_use_aws_secrets_manager_writer() -> 
     assert payload["binding"]["secret_ref"] == "aws-secretsmanager://nexa/ws-001/providers/openai"
     assert payload["binding"]["secret_version_ref"].endswith("#version:v1")
     assert client.created[0]["SecretString"] == "aws-secret"
+
+
+def test_aws_secrets_manager_binding_reads_secret_value_via_reader() -> None:
+    client = FakeSecretsManagerClient(existing_names=("nexa/ws-001/providers/openai",))
+    client.secrets["nexa/ws-001/providers/openai"]["value"] = "probe-secret"
+
+    reader = AwsSecretsManagerSecretAuthority.build_secret_value_reader(
+        client=client,
+        config=AwsSecretsManagerBindingConfig(region_name="us-east-1"),
+    )
+
+    assert reader("aws-secretsmanager://nexa/ws-001/providers/openai") == "probe-secret"

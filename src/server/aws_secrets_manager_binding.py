@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+
 from collections.abc import Callable, Mapping
 from typing import Any, Optional
 
@@ -142,6 +144,57 @@ class AwsSecretsManagerSecretAuthority:
             "last_rotated_at": str(last_rotated or "").strip() or None,
             "secret_authority": "aws_secrets_manager",
         }
+
+    @classmethod
+    def read_secret_value(
+        cls,
+        *,
+        client: Any,
+        secret_ref: Optional[str] = None,
+        secret_name: Optional[str] = None,
+        config: AwsSecretsManagerBindingConfig | None = None,
+    ) -> Optional[str]:
+        resolved = config or AwsSecretsManagerBindingConfig()
+        resolved_secret_name = str(secret_name or '').strip()
+        if not resolved_secret_name and secret_ref is not None:
+            resolved_secret_name = cls.secret_name_from_ref(secret_ref, resolved)
+        if not resolved_secret_name:
+            raise ValueError('aws_secret.secret_name_missing')
+        try:
+            secret_value = client.get_secret_value(SecretId=resolved_secret_name)
+        except Exception as exc:  # pragma: no cover - exercised via fake client
+            if cls._is_not_found_error(exc):
+                return None
+            raise
+        secret_string = secret_value.get('SecretString')
+        if secret_string is not None:
+            return str(secret_string)
+        secret_binary = secret_value.get('SecretBinary')
+        if secret_binary is None:
+            return None
+        if isinstance(secret_binary, str):
+            try:
+                decoded = base64.b64decode(secret_binary)
+            except Exception:
+                return secret_binary
+            return decoded.decode('utf-8', errors='replace')
+        if isinstance(secret_binary, (bytes, bytearray)):
+            return bytes(secret_binary).decode('utf-8', errors='replace')
+        return str(secret_binary)
+
+    @classmethod
+    def build_secret_value_reader(
+        cls,
+        *,
+        client: Any,
+        config: AwsSecretsManagerBindingConfig | None = None,
+    ) -> Callable[[str], Optional[str]]:
+        resolved = config or AwsSecretsManagerBindingConfig()
+
+        def _reader(secret_ref: str) -> Optional[str]:
+            return cls.read_secret_value(client=client, secret_ref=secret_ref, config=resolved)
+
+        return _reader
 
     @classmethod
     def build_secret_metadata_reader(
